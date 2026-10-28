@@ -23,6 +23,11 @@ def install() -> None:
     def model_validate(cls, value, *args, **kwargs):
         return cls.parse_obj(value)
 
+    def model_copy(self, *args, **kwargs):
+        # OpenAver calls v2's model_copy(update=...) while merging scraper
+        # results. Pydantic v1 exposes the equivalent API as copy().
+        return self.copy(*args, **kwargs)
+
     def field_validator(*fields, mode="after", **kwargs):
         if mode == "before":
             kwargs["pre"] = True
@@ -33,5 +38,6 @@ def install() -> None:
 
     BaseModel.model_dump = model_dump
     BaseModel.model_validate = classmethod(model_validate)
+    BaseModel.model_copy = model_copy
     pydantic.field_validator = field_validator
     pydantic.ConfigDict = dict
