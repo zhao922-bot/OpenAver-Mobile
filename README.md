@@ -11,29 +11,29 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r2.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r3.apk)
 
 当前发布包：
 
-- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r2.apk`
+- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r3.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18`（versionCode `17019`）
+- 版本：`0.17.18-r3`（versionCode `17020`）
 - 架构：仅 `arm64-v8a`
-- 最低系统：Android 11（API 30）
+- 最低系统：Android 10（API 29）
 - SHA-256：
-  `EA5CB9025AD55F07159E5654354B5491C6F47A4DC43EA78654D80372514F15D9`
+  `7E7C5119EF72E4F430EB2FCB5C8191F26E0784D5F526C7FA6DA713EEF5D50CA7`
 
 ## 安装
 
-1. 在 64 位 ARM Android 11+ 手机上打开 APK，并允许安装未知应用。
-2. 启动后点击“打开‘所有文件访问权限’设置”。
-3. 在系统设置中授予“所有文件访问权限”，然后返回 App。
+1. 在 64 位 ARM Android 10+ 手机上打开 APK，并允许安装未知应用。
+2. Android 11+：授予“所有文件访问权限”。
+3. Android 10：授予读取和写入手机存储权限。
 4. 进入“列表生成”，点击文件夹按钮。
 5. 从 `/storage/emulated/0` 或 SD 卡选择视频目录并生成列表。
 
 如果系统没有直接显示权限页，请手动进入：
 
-`设置 → 应用 → OpenAver 移动版 → 特殊权限 → 所有文件访问权限`
+`设置 → 应用 → OpenAver 移动版 → 权限`
 
 ## 已实现
 
@@ -48,6 +48,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - AVBase 女优资料 `requests` fallback 和 UTF-8 修复
 - 自定义来源 `fetch: cf` 的普通浏览器请求兼容模式
 - 简体中文、繁体中文、日文和英文界面；首次启动默认简体中文
+- Android 10 / API 29 上的安装、首次界面、存储授权、本地服务启动和视频扫描
 - Android 16 / API 36 模拟器上的启动、扫描、NFO 写入与播放验证
 
 ## 限制
@@ -61,7 +62,8 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 自动检查更新已关闭；升级需安装新 APK。
 - 播放能力取决于手机系统 WebView 编解码器。MP4/H.264/AAC 已验证；MKV、AVI、
   RMVB 等格式即使能扫描，也可能无法在 WebView 中解码。
-- APK 使用 `MANAGE_EXTERNAL_STORAGE`，面向手动侧载，不适合直接上架 Google Play。
+- Android 11+ 使用 `MANAGE_EXTERNAL_STORAGE`，Android 10 使用传统存储读写权限；
+  APK 面向手动侧载，不适合直接上架 Google Play。
 - 这是非官方构建，与 OpenAver 上游作者没有隶属或背书关系。
 
 ## 构建

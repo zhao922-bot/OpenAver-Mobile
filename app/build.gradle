@@ -19,10 +19,10 @@ android {
 
     defaultConfig {
         applicationId "dev.openaver.mobile"
-        minSdk 30
+        minSdk 29
         targetSdk 36
-        versionCode 17019
-        versionName "0.17.18"
+        versionCode 17020
+        versionName "0.17.18-r3"
 
         buildConfigField "String", "OPENAVER_RELEASE", "\"${openaverRelease}\""
         buildConfigField "String", "OPENAVER_COMMIT", "\"${openaverCommit}\""

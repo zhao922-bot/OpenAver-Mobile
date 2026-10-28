@@ -1,5 +1,6 @@
 package dev.openaver.mobile;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -8,6 +9,7 @@ import android.app.DownloadManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -65,6 +67,7 @@ public final class MainActivity extends Activity {
     private static final String LOCAL_BASE_URL = "http://" + LOCAL_HOST + ":" + LOCAL_PORT;
     private static final int REQUEST_FILE_CHOOSER = 4101;
     private static final int REQUEST_ALL_FILES_ACCESS = 4102;
+    private static final int REQUEST_LEGACY_STORAGE = 4103;
     private static final long EXIT_BACK_WINDOW_MS = 2000L;
     private static final long PAGE_LOAD_TIMEOUT_MS = 30000L;
     private static final boolean NATIVE_LOADED;
@@ -88,6 +91,11 @@ public final class MainActivity extends Activity {
 
     private FrameLayout root;
     private ScrollView setupScroll;
+    private TextView permissionLabel;
+    private TextView permissionTitle;
+    private TextView permissionBody;
+    private TextView localStep1Title;
+    private TextView localStep1Body;
     private TextView permissionStatus;
     private TextView storagePathText;
     private Button permissionButton;
@@ -145,7 +153,7 @@ public final class MainActivity extends Activity {
         configureWebView();
         updatePermissionUi();
 
-        if (hasAllFilesAccess()) {
+        if (hasStorageAccess()) {
             mainHandler.postDelayed(this::startEmbeddedRuntime, 250L);
         }
     }
@@ -153,6 +161,11 @@ public final class MainActivity extends Activity {
     private void bindViews() {
         root = findViewById(R.id.root);
         setupScroll = findViewById(R.id.setupScroll);
+        permissionLabel = findViewById(R.id.permissionLabel);
+        permissionTitle = findViewById(R.id.permissionTitle);
+        permissionBody = findViewById(R.id.permissionBody);
+        localStep1Title = findViewById(R.id.localStep1Title);
+        localStep1Body = findViewById(R.id.localStep1Body);
         permissionStatus = findViewById(R.id.permissionStatus);
         storagePathText = findViewById(R.id.storagePathText);
         permissionButton = findViewById(R.id.permissionButton);
@@ -171,34 +184,54 @@ public final class MainActivity extends Activity {
         window.setStatusBarColor(getColor(R.color.bg));
         window.setNavigationBarColor(getColor(R.color.bg));
         window.setNavigationBarContrastEnforced(false);
-        window.setDecorFitsSystemWindows(false);
-        root.setOnApplyWindowInsetsListener((view, insets) -> {
-            android.graphics.Insets bars = insets.getInsets(
-                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
-            );
-            view.setPadding(0, bars.top, 0, bars.bottom);
-            return insets;
-        });
-        root.requestApplyInsets();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false);
+            root.setOnApplyWindowInsetsListener((view, insets) -> {
+                android.graphics.Insets bars = insets.getInsets(
+                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
+                );
+                view.setPadding(0, bars.top, 0, bars.bottom);
+                return insets;
+            });
+            root.requestApplyInsets();
+        } else {
+            root.setFitsSystemWindows(true);
+        }
     }
 
     private void configureSetupUi() {
+        boolean legacyStorage = usesLegacyStorage();
         TextView releasePill = findViewById(R.id.releasePill);
         releasePill.setText(getString(R.string.release_badge, BuildConfig.OPENAVER_RELEASE));
+        permissionLabel.setText(legacyStorage
+                ? R.string.permission_label_legacy
+                : R.string.permission_label);
+        permissionTitle.setText(legacyStorage
+                ? R.string.permission_title_legacy
+                : R.string.permission_title);
+        permissionBody.setText(legacyStorage
+                ? R.string.permission_body_legacy
+                : R.string.permission_body);
+        localStep1Title.setText(legacyStorage
+                ? R.string.local_step1_title_legacy
+                : R.string.local_step1_title);
+        localStep1Body.setText(legacyStorage
+                ? R.string.local_step1_body_legacy
+                : R.string.local_step1_body);
         storagePathText.setText(getString(
                 R.string.storage_root,
                 Environment.getExternalStorageDirectory().getAbsolutePath()
         ));
-        permissionButton.setOnClickListener(view -> openAllFilesSettings());
+        permissionButton.setOnClickListener(view -> openStoragePermission());
     }
 
     private void configureErrorUi() {
         Button retryButton = findViewById(R.id.errorRetryButton);
         Button storageButton = findViewById(R.id.errorServerButton);
         retryButton.setOnClickListener(view -> {
-            if (!hasAllFilesAccess()) {
+            if (!hasStorageAccess()) {
                 showPermissionUi();
-                openAllFilesSettings();
+                openStoragePermission();
                 return;
             }
             webError.setVisibility(View.GONE);
@@ -208,18 +241,24 @@ public final class MainActivity extends Activity {
                 startEmbeddedRuntime();
             }
         });
-        storageButton.setOnClickListener(view -> openAllFilesSettings());
+        storageButton.setText(storagePermissionButtonText());
+        storageButton.setOnClickListener(view -> openStoragePermission());
         menuHandle.setOnClickListener(view -> showWebMenu());
     }
 
     private void updatePermissionUi() {
-        boolean granted = hasAllFilesAccess();
+        boolean granted = hasStorageAccess();
+        boolean legacyStorage = usesLegacyStorage();
         permissionButton.setText(granted
                 ? R.string.menu_storage_settings
-                : R.string.open_permission_settings);
+                : storagePermissionButtonText());
         permissionStatus.setText(granted
-                ? R.string.permission_granted
-                : R.string.permission_required);
+                ? (legacyStorage
+                    ? R.string.permission_granted_legacy
+                    : R.string.permission_granted)
+                : (legacyStorage
+                    ? R.string.permission_required_legacy
+                    : R.string.permission_required));
         permissionStatus.setTextColor(getColor(granted ? R.color.accent_mint : R.color.warm));
         permissionStatus.setVisibility(View.VISIBLE);
     }
@@ -231,11 +270,41 @@ public final class MainActivity extends Activity {
         updatePermissionUi();
     }
 
-    private boolean hasAllFilesAccess() {
+    private boolean hasStorageAccess() {
+        if (usesLegacyStorage()) {
+            return checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    == PackageManager.PERMISSION_GRANTED
+                    && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    == PackageManager.PERMISSION_GRANTED;
+        }
         return Environment.isExternalStorageManager();
     }
 
-    private void openAllFilesSettings() {
+    private boolean usesLegacyStorage() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.R;
+    }
+
+    private int storagePermissionButtonText() {
+        return usesLegacyStorage()
+                ? R.string.open_permission_settings_legacy
+                : R.string.open_permission_settings;
+    }
+
+    private void openStoragePermission() {
+        if (usesLegacyStorage()) {
+            if (hasStorageAccess()) {
+                openAppPermissionSettings();
+                return;
+            }
+            requestPermissions(
+                    new String[]{
+                            Manifest.permission.READ_EXTERNAL_STORAGE,
+                            Manifest.permission.WRITE_EXTERNAL_STORAGE
+                    },
+                    REQUEST_LEGACY_STORAGE
+            );
+            return;
+        }
         try {
             Intent intent = new Intent(
                     Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
@@ -254,11 +323,27 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void openAppPermissionSettings() {
+        try {
+            Intent intent = new Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + getPackageName())
+            );
+            startActivity(intent);
+        } catch (Exception ignored) {
+            permissionStatus.setText(usesLegacyStorage()
+                    ? R.string.permission_open_failed_legacy
+                    : R.string.permission_open_failed);
+            permissionStatus.setTextColor(getColor(R.color.danger));
+            permissionStatus.setVisibility(View.VISIBLE);
+        }
+    }
+
     private void startEmbeddedRuntime() {
         if (runtimeStarting || runtimeReady) {
             return;
         }
-        if (!hasAllFilesAccess()) {
+        if (!hasStorageAccess()) {
             showPermissionUi();
             return;
         }
@@ -430,7 +515,7 @@ public final class MainActivity extends Activity {
         });
         dialog.findViewById(R.id.menuStorageSettings).setOnClickListener(view -> {
             dialog.dismiss();
-            openAllFilesSettings();
+            openStoragePermission();
         });
         dialog.findViewById(R.id.menuAbout).setOnClickListener(view -> {
             dialog.dismiss();
@@ -605,19 +690,34 @@ public final class MainActivity extends Activity {
     }
 
     private void hideSystemBars() {
-        WindowInsetsController controller = getWindow().getInsetsController();
-        if (controller != null) {
-            controller.hide(WindowInsets.Type.systemBars());
-            controller.setSystemBarsBehavior(
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.systemBars());
+                controller.setSystemBarsBehavior(
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                );
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                            | View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
             );
         }
     }
 
     private void showSystemBars() {
-        WindowInsetsController controller = getWindow().getInsetsController();
-        if (controller != null) {
-            controller.show(WindowInsets.Type.systemBars());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.show(WindowInsets.Type.systemBars());
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
         }
     }
 
@@ -701,7 +801,7 @@ public final class MainActivity extends Activity {
             webView.onResume();
         }
         updatePermissionUi();
-        if (hasAllFilesAccess() && !runtimeReady && !runtimeStarting) {
+        if (hasStorageAccess() && !runtimeReady && !runtimeStarting) {
             mainHandler.postDelayed(this::startEmbeddedRuntime, 250L);
         }
     }
@@ -744,11 +844,26 @@ public final class MainActivity extends Activity {
         }
         if (requestCode == REQUEST_ALL_FILES_ACCESS) {
             updatePermissionUi();
-            if (hasAllFilesAccess()) {
+            if (hasStorageAccess()) {
                 startEmbeddedRuntime();
             } else {
                 showPermissionUi();
             }
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_LEGACY_STORAGE) {
+            return;
+        }
+        updatePermissionUi();
+        if (hasStorageAccess()) {
+            startEmbeddedRuntime();
+        } else {
+            showPermissionUi();
         }
     }
 
