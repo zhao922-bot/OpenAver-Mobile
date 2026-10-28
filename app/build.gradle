@@ -21,8 +21,8 @@ android {
         applicationId "dev.openaver.mobile"
         minSdk 29
         targetSdk 36
-        versionCode 17020
-        versionName "0.17.18-r3"
+        versionCode 17021
+        versionName "0.17.18-r4"
 
         buildConfigField "String", "OPENAVER_RELEASE", "\"${openaverRelease}\""
         buildConfigField "String", "OPENAVER_COMMIT", "\"${openaverCommit}\""
@@ -101,7 +101,7 @@ chaquopy {
             install("PyYAML==6.0.3")
         }
         pyc {
-            src = false
+            src = true
         }
     }
 }

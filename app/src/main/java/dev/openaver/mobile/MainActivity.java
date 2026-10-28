@@ -21,6 +21,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -62,6 +63,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
+    private static final String TAG = "OpenAverStartup";
     private static final String LOCAL_HOST = "127.0.0.1";
     private static final int LOCAL_PORT = 8765;
     private static final String LOCAL_BASE_URL = "http://" + LOCAL_HOST + ":" + LOCAL_PORT;
@@ -70,6 +72,7 @@ public final class MainActivity extends Activity {
     private static final int REQUEST_LEGACY_STORAGE = 4103;
     private static final long EXIT_BACK_WINDOW_MS = 2000L;
     private static final long PAGE_LOAD_TIMEOUT_MS = 30000L;
+    private static final long LOCAL_START_TIMEOUT_MS = 300_000L;
     private static final boolean NATIVE_LOADED;
     private static final String PREFS_NAME = "openaver_mobile";
     private static final String PREF_UI_LOCALE = "ui_locale";
@@ -117,6 +120,7 @@ public final class MainActivity extends Activity {
     private boolean webPageLoading;
     private boolean runtimeStarting;
     private boolean runtimeReady;
+    private boolean runtimeFailed;
     private long lastBackPressMs;
 
     private static native String nativeAbi();
@@ -222,7 +226,13 @@ public final class MainActivity extends Activity {
                 R.string.storage_root,
                 Environment.getExternalStorageDirectory().getAbsolutePath()
         ));
-        permissionButton.setOnClickListener(view -> openStoragePermission());
+        permissionButton.setOnClickListener(view -> {
+            if (runtimeFailed && hasStorageAccess() && !runtimeStarting) {
+                startEmbeddedRuntime();
+            } else {
+                openStoragePermission();
+            }
+        });
     }
 
     private void configureErrorUi() {
@@ -249,9 +259,11 @@ public final class MainActivity extends Activity {
     private void updatePermissionUi() {
         boolean granted = hasStorageAccess();
         boolean legacyStorage = usesLegacyStorage();
-        permissionButton.setText(granted
-                ? R.string.menu_storage_settings
-                : storagePermissionButtonText());
+        permissionButton.setText(runtimeFailed && granted
+                ? R.string.retry_start_local
+                : (granted
+                    ? R.string.menu_storage_settings
+                    : storagePermissionButtonText()));
         permissionStatus.setText(granted
                 ? (legacyStorage
                     ? R.string.permission_granted_legacy
@@ -349,19 +361,34 @@ public final class MainActivity extends Activity {
         }
 
         runtimeStarting = true;
+        runtimeFailed = false;
         showLoading(getString(R.string.starting_local));
         runtimeExecutor.execute(() -> {
+            String stage = getString(R.string.starting_python);
             try {
+                updateLoadingText(stage);
                 Python py = Python.getInstance();
+                stage = getString(R.string.loading_openaver_service);
+                updateLoadingText(stage);
                 PyObject boot = py.getModule("openaver_boot");
                 String dataDir = new File(getFilesDir(), "openaver_data").getAbsolutePath();
+                stage = getString(R.string.starting_local_server);
+                updateLoadingText(stage);
                 boot.callAttr("start_server", LOCAL_HOST, LOCAL_PORT, dataDir);
-                if (!waitForHealth(120_000L)) {
-                    throw new IllegalStateException("local health check timed out");
+                stage = getString(R.string.waiting_local_server);
+                updateLoadingText(stage);
+                if (!waitForHealth(LOCAL_START_TIMEOUT_MS, boot)) {
+                    String serverError = serverErrorMessage(boot);
+                    if (serverError.isEmpty()) {
+                        serverError = "local health check timed out after "
+                                + (LOCAL_START_TIMEOUT_MS / 1000L) + " seconds";
+                    }
+                    throw new IllegalStateException(serverError);
                 }
                 mainHandler.post(() -> {
                     runtimeStarting = false;
                     runtimeReady = true;
+                    runtimeFailed = false;
                     hideLoading();
                     setupScroll.setVisibility(View.GONE);
                     webContainer.setVisibility(View.VISIBLE);
@@ -369,14 +396,17 @@ public final class MainActivity extends Activity {
                     openLocalPath("/scanner");
                 });
             } catch (Throwable error) {
+                final String failureStage = stage;
+                Log.e(TAG, failureStage, error);
                 mainHandler.post(() -> {
                     runtimeStarting = false;
                     runtimeReady = false;
+                    runtimeFailed = true;
                     hideLoading();
                     showPermissionUi();
                     permissionStatus.setText(getString(
                             R.string.local_runtime_failed_detail,
-                            error.toString()
+                            failureStage + "\n" + error
                     ));
                     permissionStatus.setTextColor(getColor(R.color.danger));
                     permissionStatus.setVisibility(View.VISIBLE);
@@ -385,9 +415,21 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private boolean waitForHealth(long timeoutMs) {
-        long deadline = SystemClock.elapsedRealtime() + timeoutMs;
+    private boolean waitForHealth(long timeoutMs, PyObject boot) {
+        long startedAt = SystemClock.elapsedRealtime();
+        long deadline = startedAt + timeoutMs;
+        long lastElapsedSecond = -1L;
         while (SystemClock.elapsedRealtime() < deadline) {
+            long elapsedMs = SystemClock.elapsedRealtime() - startedAt;
+            long elapsedSecond = elapsedMs / 1000L;
+            if (elapsedSecond >= 5L && elapsedSecond / 5L != lastElapsedSecond / 5L) {
+                lastElapsedSecond = elapsedSecond;
+                final long statusSecond = elapsedSecond;
+                mainHandler.post(() -> loadingText.setText(getString(
+                        R.string.waiting_local_server_elapsed,
+                        statusSecond
+                )));
+            }
             HttpURLConnection connection = null;
             try {
                 URL url = new URL(LOCAL_BASE_URL + "/api/mobile/health");
@@ -414,9 +456,35 @@ public final class MainActivity extends Activity {
                     connection.disconnect();
                 }
             }
+            if (!isServerAlive(boot)) {
+                return false;
+            }
             SystemClock.sleep(700L);
         }
         return false;
+    }
+
+    private boolean isServerAlive(PyObject boot) {
+        try {
+            return boot.callAttr("is_server_alive").toBoolean();
+        } catch (Throwable error) {
+            Log.w(TAG, "server liveness probe failed", error);
+            return true;
+        }
+    }
+
+    private String serverErrorMessage(PyObject boot) {
+        try {
+            String value = boot.callAttr("server_error").toString();
+            return value == null ? "" : value;
+        } catch (Throwable error) {
+            Log.w(TAG, "server error probe failed", error);
+            return "";
+        }
+    }
+
+    private void updateLoadingText(String text) {
+        mainHandler.post(() -> loadingText.setText(text));
     }
 
     private void openLocalPath(String path) {

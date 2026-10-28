@@ -32,6 +32,12 @@
     <string name="privacy_note">The Python server, SQLite database, logs, and generated data stay inside this app’s private storage. Video files remain in their original phone folders.</string>
     <string name="disclaimer">Unofficial Android build · OpenAver v0.17.18 · MIT licensed</string>
     <string name="starting_local">Starting local OpenAver…</string>
+    <string name="starting_python">Initializing the Python runtime…</string>
+    <string name="loading_openaver_service">Loading the OpenAver service…</string>
+    <string name="starting_local_server">Starting the local server…</string>
+    <string name="waiting_local_server">Waiting for the local server…</string>
+    <string name="waiting_local_server_elapsed">Waiting for the local server… %1$d s</string>
+    <string name="retry_start_local">Retry local startup</string>
     <string name="local_runtime_failed">The embedded OpenAver server could not start. Check Logcat or the app log for details.</string>
     <string name="local_runtime_failed_detail">The embedded OpenAver server could not start.\n\n%1$s</string>
     <string name="page_error_title">The local page could not load</string>

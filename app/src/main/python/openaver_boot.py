@@ -10,6 +10,24 @@ import uvicorn
 
 _server = None
 _thread = None
+_server_error = ""
+
+
+def is_server_alive() -> bool:
+    return _thread is not None and _thread.is_alive()
+
+
+def server_error() -> str:
+    return _server_error
+
+
+def _run_server() -> None:
+    global _server_error
+    try:
+        _server.run()
+    except BaseException as exc:
+        _server_error = f"{type(exc).__name__}: {exc}"
+        raise
 
 
 def start_server(host: str, port: int, data_dir: str) -> int:
@@ -55,7 +73,7 @@ def start_server(host: str, port: int, data_dir: str) -> int:
     _server = uvicorn.Server(config)
     _server.install_signal_handlers = lambda: None
     _thread = threading.Thread(
-        target=_server.run,
+        target=_run_server,
         name="openaver-uvicorn",
         daemon=True,
     )

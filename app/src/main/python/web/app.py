@@ -224,16 +224,29 @@ async def lifespan(app: FastAPI):
     # event loop 只持 weak ref，task 可能執行中途被 GC 回收）。
     app.state.auto_organize_task = asyncio.create_task(auto_organize_loop())
 
-    try:
-        await source_reachability.schedule_reprobe_if_stale()
-    except Exception:
-        logger.warning("lifespan: source reachability startup probe failed unexpectedly", exc_info=True)
+    async def _startup_source_reachability() -> None:
+        try:
+            await source_reachability.schedule_reprobe_if_stale()
+        except Exception:
+            logger.warning(
+                "lifespan: source reachability startup probe failed unexpectedly",
+                exc_info=True,
+            )
+
+    # Network reachability is useful but must not gate the local server becoming ready.
+    app.state.source_reachability_task = asyncio.create_task(
+        _startup_source_reachability()
+    )
 
     yield
     # ── shutdown ──────────────────────────────────────────────
     # 每一步各自 try/except（同 startup 的既有精神）：通知 drain 失敗不可擋住
     # 排程 task 的 cancel，反之亦然。
-    for _task_name in ("nfo_backfill_task", "metatube_reconnect_task"):
+    for _task_name in (
+        "nfo_backfill_task",
+        "metatube_reconnect_task",
+        "source_reachability_task",
+    ):
         try:
             _task = getattr(app.state, _task_name)
             _task.cancel()

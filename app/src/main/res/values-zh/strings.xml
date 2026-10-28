@@ -32,6 +32,12 @@
     <string name="privacy_note">Python 服务、SQLite 数据库、日志和生成数据都保存在 App 私有目录；视频仍留在手机原文件夹中。</string>
     <string name="disclaimer">非官方 Android 构建 · OpenAver v0.17.18 · MIT 授权</string>
     <string name="starting_local">正在启动本地 OpenAver…</string>
+    <string name="starting_python">正在初始化 Python 环境…</string>
+    <string name="loading_openaver_service">正在加载 OpenAver 服务…</string>
+    <string name="starting_local_server">正在启动本地服务…</string>
+    <string name="waiting_local_server">正在等待本地服务响应…</string>
+    <string name="waiting_local_server_elapsed">正在等待本地服务响应… %1$d 秒</string>
+    <string name="retry_start_local">重试启动本地服务</string>
     <string name="local_runtime_failed">内嵌 OpenAver 服务启动失败，请查看 Logcat 或 App 日志。</string>
     <string name="local_runtime_failed_detail">内嵌 OpenAver 服务启动失败。\n\n%1$s</string>
     <string name="page_error_title">本地页面无法加载</string>
