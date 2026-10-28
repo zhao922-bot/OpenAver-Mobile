@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import socket
 import sys
 import threading
 import traceback
@@ -12,6 +13,8 @@ import uvicorn
 
 _server = None
 _thread = None
+_server_socket = None
+_server_port = 0
 _server_error = ""
 _startup_status = "python_loaded"
 
@@ -22,6 +25,10 @@ def is_server_alive() -> bool:
 
 def server_error() -> str:
     return _server_error
+
+
+def server_port() -> int:
+    return _server_port
 
 
 def set_startup_status(status: str) -> None:
@@ -42,20 +49,41 @@ def server_stack() -> str:
     return "".join(traceback.format_stack(frame, limit=8))
 
 
-def _run_server() -> None:
+def _bind_server_socket(host: str, preferred_port: int):
+    """Bind before Uvicorn starts so a busy port is a normal retry, not exit(1)."""
+    last_error = None
+    for port in range(preferred_port, preferred_port + 21):
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind((host, port))
+            listener.listen(128)
+            listener.setblocking(False)
+            return listener, port
+        except OSError as exc:
+            last_error = exc
+            listener.close()
+    if last_error is None:
+        raise OSError("no local port was available")
+    raise OSError(
+        f"no free loopback port in {preferred_port}-{preferred_port + 20}: "
+        f"{last_error}"
+    ) from last_error
+
+
+def _run_server(listener) -> None:
     global _server_error
     try:
         set_startup_status("uvicorn_running")
-        _server.run()
+        _server.run(sockets=[listener])
     except BaseException as exc:
-        _server_error = f"{type(exc).__name__}: {exc}"
-        raise
+        _server_error = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
 
 
 def start_server(host: str, port: int, data_dir: str) -> int:
-    global _server, _thread
+    global _server, _thread, _server_socket, _server_port, _server_error
     if _server is not None and _thread is not None and _thread.is_alive():
-        return port
+        return _server_port or port
 
     os.makedirs(data_dir, exist_ok=True)
     runtime_home = os.path.join(os.path.dirname(data_dir), "openaver_home")
@@ -86,10 +114,15 @@ def start_server(host: str, port: int, data_dir: str) -> int:
             }
         )
 
+    listener, actual_port = _bind_server_socket(host, port)
+    _server_socket = listener
+    _server_port = actual_port
+    _server_error = ""
+
     config = uvicorn.Config(
         app,
         host=host,
-        port=port,
+        port=actual_port,
         log_level="info",
         access_log=False,
         lifespan="on",
@@ -98,8 +131,9 @@ def start_server(host: str, port: int, data_dir: str) -> int:
     _server.install_signal_handlers = lambda: None
     _thread = threading.Thread(
         target=_run_server,
+        args=(listener,),
         name="openaver-uvicorn",
         daemon=True,
     )
     _thread.start()
-    return port
+    return actual_port

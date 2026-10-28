@@ -11,17 +11,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r5.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r6.apk)
 
 当前发布包：
 
-- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r5.apk`
+- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r6.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r5`（versionCode `17022`）
+- 版本：`0.17.18-r6`（versionCode `17023`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - SHA-256：
-  `17790A33D7241BBC546EC0306C4A2F7371465F8C25FCFFF272FB03139AEC257C`
+  `15FA8431BF2D45C4B6D0FB9835C25722E128E5CD0F46305263B0C80663E0C699`
 
 ## 安装
 
@@ -37,7 +37,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 
 ## 已实现
 
-- 完全本地运行的 Python/FastAPI 服务，仅监听 `127.0.0.1:8765`
+- 完全本地运行的 Python/FastAPI 服务，仅监听 `127.0.0.1` 的本机端口（优先 8765，占用时自动切换）
 - 使用真实文件路径扫描手机内部存储和 SD 卡视频
 - SQLite 片库、列表生成、扫描结果持久化
 - 元数据搜索、NFO 与封面读取/写入、文件重命名
@@ -52,6 +52,8 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - Android 16 / API 36 模拟器上的启动、扫描、NFO 写入与播放验证
 - Python 源码预编译、非关键网络探测后台化、5 分钟启动等待和启动失败重试按钮
 - 启动诊断细化到数据目录、数据库、通知、权限表和后台任务阶段，并支持长按复制错误
+- 端口被残留服务占用时自动切换到后续空闲端口，并同步 WebView、健康检查和 Cloudflare 代理
+- 修复 `phase=ready` 后绑定端口失败导致的 `SystemExit: 1`
 
 ## 限制
 

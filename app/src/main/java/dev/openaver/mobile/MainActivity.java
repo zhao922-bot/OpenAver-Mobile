@@ -66,7 +66,6 @@ public final class MainActivity extends Activity {
     private static final String TAG = "OpenAverStartup";
     private static final String LOCAL_HOST = "127.0.0.1";
     private static final int LOCAL_PORT = 8765;
-    private static final String LOCAL_BASE_URL = "http://" + LOCAL_HOST + ":" + LOCAL_PORT;
     private static final int REQUEST_FILE_CHOOSER = 4101;
     private static final int REQUEST_ALL_FILES_ACCESS = 4102;
     private static final int REQUEST_LEGACY_STORAGE = 4103;
@@ -121,6 +120,7 @@ public final class MainActivity extends Activity {
     private boolean runtimeStarting;
     private boolean runtimeReady;
     private boolean runtimeFailed;
+    private volatile int localPort = LOCAL_PORT;
     private long lastBackPressMs;
 
     private static native String nativeAbi();
@@ -375,10 +375,13 @@ public final class MainActivity extends Activity {
                 String dataDir = new File(getFilesDir(), "openaver_data").getAbsolutePath();
                 stage = getString(R.string.starting_local_server);
                 updateLoadingText(stage);
-                boot.callAttr("start_server", LOCAL_HOST, LOCAL_PORT, dataDir);
+                int serverPort = boot.callAttr(
+                        "start_server", LOCAL_HOST, LOCAL_PORT, dataDir
+                ).toInt();
+                localPort = serverPort;
                 stage = getString(R.string.waiting_local_server);
                 updateLoadingText(stage);
-                if (!waitForHealth(LOCAL_START_TIMEOUT_MS, boot)) {
+                if (!waitForHealth(LOCAL_START_TIMEOUT_MS, boot, serverPort)) {
                     String serverError = serverErrorMessage(boot);
                     if (serverError.isEmpty()) {
                         serverError = "local health check timed out after "
@@ -420,7 +423,7 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private boolean waitForHealth(long timeoutMs, PyObject boot) {
+    private boolean waitForHealth(long timeoutMs, PyObject boot, int port) {
         long startedAt = SystemClock.elapsedRealtime();
         long deadline = startedAt + timeoutMs;
         long lastElapsedSecond = -1L;
@@ -446,7 +449,7 @@ public final class MainActivity extends Activity {
             }
             HttpURLConnection connection = null;
             try {
-                URL url = new URL(LOCAL_BASE_URL + "/api/mobile/health");
+                URL url = new URL(localBaseUrl(port) + "/api/mobile/health");
                 connection = (HttpURLConnection) url.openConnection();
                 connection.setConnectTimeout(1200);
                 connection.setReadTimeout(1500);
@@ -545,7 +548,7 @@ public final class MainActivity extends Activity {
         webError.setVisibility(View.GONE);
         webPageLoading = true;
         pageProgress.setVisibility(View.VISIBLE);
-        webView.loadUrl(LOCAL_BASE_URL + path);
+        webView.loadUrl(localBaseUrl() + path);
         mainHandler.removeCallbacks(pageLoadTimeout);
         mainHandler.postDelayed(pageLoadTimeout, PAGE_LOAD_TIMEOUT_MS);
     }
@@ -603,7 +606,7 @@ public final class MainActivity extends Activity {
             return;
         }
         cfTransport = new AndroidCfTransport(this, root);
-        cfShell = new CfShellAgent(LOCAL_BASE_URL, cfTransport);
+        cfShell = new CfShellAgent(localBaseUrl(), cfTransport);
         cfShell.start();
     }
 
@@ -624,7 +627,7 @@ public final class MainActivity extends Activity {
         TextView serverText = dialog.findViewById(R.id.menuServer);
         serverText.setText(getString(
                 R.string.menu_connected_to,
-                LOCAL_HOST + ":" + LOCAL_PORT
+                LOCAL_HOST + ":" + localPort
         ));
 
         dialog.findViewById(R.id.menuRefresh).setOnClickListener(view -> {
@@ -731,7 +734,15 @@ public final class MainActivity extends Activity {
             return false;
         }
         int port = target.getPort();
-        return port == -1 || port == LOCAL_PORT;
+        return port == -1 || port == localPort;
+    }
+
+    private String localBaseUrl() {
+        return localBaseUrl(localPort);
+    }
+
+    private String localBaseUrl(int port) {
+        return "http://" + LOCAL_HOST + ":" + port;
     }
 
     private void download(String url, String userAgent, String contentDisposition,
