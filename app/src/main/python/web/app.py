@@ -36,6 +36,15 @@ setup_logging()
 
 logger = get_logger(__name__)
 
+
+def _mark_mobile_startup(status: str) -> None:
+    try:
+        from openaver_boot import set_startup_status
+    except ImportError:
+        return
+    set_startup_status(status)
+
+
 from core.config import load_config, mutate_config
 from core.data_layout import bootstrap_data_layout, consume_pending_bootstrap_result, consume_reset_access_auth_marker
 from core.focal import device_state
@@ -172,6 +181,7 @@ async def _startup_metatube_reconnect():
 async def lifespan(app: FastAPI):
     # ── startup ───────────────────────────────────────────────
     # 資料根定版必須在 init_db()／任何 request 之前（CD-B2）；失敗走固定 stderr + os._exit。
+    _mark_mobile_startup("data_layout")
     try:
         bootstrap_data_layout()
     except Exception as e:
@@ -183,7 +193,9 @@ async def lifespan(app: FastAPI):
     # init_db() 必須在任何 request 前執行：執行 DROP COLUMN migration（v0.8.7：
     # 移除 legacy clip_embedding / clip_model_id），確保 Video.from_row cls(**data)
     # 不會因 legacy schema 欄位收到未知 keyword 而 500。CD-57b-8 contract。
+    _mark_mobile_startup("database")
     init_db()
+    _mark_mobile_startup("notifications")
     start_notification_persistence()
 
     _pending = consume_pending_bootstrap_result()
@@ -197,6 +209,7 @@ async def lifespan(app: FastAPI):
     # TASK-114a-T2: 認證閘門的 schema 就緒動作，與 init_db() 同一段落一起跑
     # （CD-114a-3：兩者刻意不合併成同一支函式，但啟動時機一致）。idempotent
     # CREATE TABLE IF NOT EXISTS + 首次 load_snapshot() 暖 cache。
+    _mark_mobile_startup("access_auth")
     ensure_schema()
 
     try:
@@ -224,6 +237,8 @@ async def lifespan(app: FastAPI):
     # event loop 只持 weak ref，task 可能執行中途被 GC 回收）。
     app.state.auto_organize_task = asyncio.create_task(auto_organize_loop())
 
+    _mark_mobile_startup("background_tasks")
+
     async def _startup_source_reachability() -> None:
         try:
             await source_reachability.schedule_reprobe_if_stale()
@@ -238,6 +253,7 @@ async def lifespan(app: FastAPI):
         _startup_source_reachability()
     )
 
+    _mark_mobile_startup("ready")
     yield
     # ── shutdown ──────────────────────────────────────────────
     # 每一步各自 try/except（同 startup 的既有精神）：通知 drain 失敗不可擋住

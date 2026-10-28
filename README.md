@@ -11,17 +11,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r4.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r5.apk)
 
 当前发布包：
 
-- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r4.apk`
+- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r5.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r4`（versionCode `17021`）
+- 版本：`0.17.18-r5`（versionCode `17022`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - SHA-256：
-  `3260DF3C06FF3467CB6DE717F7A3F703F327F9AE615AA63C820A81DA5B012332`
+  `17790A33D7241BBC546EC0306C4A2F7371465F8C25FCFFF272FB03139AEC257C`
 
 ## 安装
 
@@ -51,6 +51,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - Android 10 / API 29 上的安装、首次界面、存储授权、本地服务启动和视频扫描
 - Android 16 / API 36 模拟器上的启动、扫描、NFO 写入与播放验证
 - Python 源码预编译、非关键网络探测后台化、5 分钟启动等待和启动失败重试按钮
+- 启动诊断细化到数据目录、数据库、通知、权限表和后台任务阶段，并支持长按复制错误
 
 ## 限制
 

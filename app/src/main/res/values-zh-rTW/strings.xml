@@ -35,6 +35,11 @@
     <string name="starting_python">正在初始化 Python 環境…</string>
     <string name="loading_openaver_service">正在載入 OpenAver 服務…</string>
     <string name="starting_local_server">正在啟動本機服務…</string>
+    <string name="startup_phase_data_layout">正在準備資料目錄…</string>
+    <string name="startup_phase_database">正在初始化資料庫…</string>
+    <string name="startup_phase_notifications">正在恢復通知資料…</string>
+    <string name="startup_phase_access_auth">正在初始化存取資料…</string>
+    <string name="startup_phase_background_tasks">正在啟動背景服務…</string>
     <string name="waiting_local_server">正在等待本機服務回應…</string>
     <string name="waiting_local_server_elapsed">正在等待本機服務回應… %1$d 秒</string>
     <string name="retry_start_local">重試啟動本機服務</string>

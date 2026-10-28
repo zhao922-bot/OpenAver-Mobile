@@ -35,6 +35,11 @@
     <string name="starting_python">Initializing the Python runtime…</string>
     <string name="loading_openaver_service">Loading the OpenAver service…</string>
     <string name="starting_local_server">Starting the local server…</string>
+    <string name="startup_phase_data_layout">Preparing the data directory…</string>
+    <string name="startup_phase_database">Initializing the database…</string>
+    <string name="startup_phase_notifications">Restoring notification data…</string>
+    <string name="startup_phase_access_auth">Initializing access data…</string>
+    <string name="startup_phase_background_tasks">Starting background services…</string>
     <string name="waiting_local_server">Waiting for the local server…</string>
     <string name="waiting_local_server_elapsed">Waiting for the local server… %1$d s</string>
     <string name="retry_start_local">Retry local startup</string>

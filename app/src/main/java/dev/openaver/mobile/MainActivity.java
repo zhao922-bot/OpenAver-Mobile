@@ -171,6 +171,7 @@ public final class MainActivity extends Activity {
         localStep1Title = findViewById(R.id.localStep1Title);
         localStep1Body = findViewById(R.id.localStep1Body);
         permissionStatus = findViewById(R.id.permissionStatus);
+        permissionStatus.setTextIsSelectable(true);
         storagePathText = findViewById(R.id.storagePathText);
         permissionButton = findViewById(R.id.permissionButton);
         webContainer = findViewById(R.id.webContainer);
@@ -383,7 +384,11 @@ public final class MainActivity extends Activity {
                         serverError = "local health check timed out after "
                                 + (LOCAL_START_TIMEOUT_MS / 1000L) + " seconds";
                     }
-                    throw new IllegalStateException(serverError);
+                    String startupPhase = startupStatus(boot);
+                    String serverStack = serverStackSummary(boot);
+                    throw new IllegalStateException(
+                            serverError + "\nphase=" + startupPhase + "\n" + serverStack
+                    );
                 }
                 mainHandler.post(() -> {
                     runtimeStarting = false;
@@ -419,7 +424,16 @@ public final class MainActivity extends Activity {
         long startedAt = SystemClock.elapsedRealtime();
         long deadline = startedAt + timeoutMs;
         long lastElapsedSecond = -1L;
+        String lastPhase = "";
         while (SystemClock.elapsedRealtime() < deadline) {
+            String phase = startupStatus(boot);
+            if (!phase.equals(lastPhase)) {
+                lastPhase = phase;
+                int phaseText = startupPhaseText(phase);
+                if (phaseText != 0) {
+                    updateLoadingText(getString(phaseText));
+                }
+            }
             long elapsedMs = SystemClock.elapsedRealtime() - startedAt;
             long elapsedSecond = elapsedMs / 1000L;
             if (elapsedSecond >= 5L && elapsedSecond / 5L != lastElapsedSecond / 5L) {
@@ -480,6 +494,46 @@ public final class MainActivity extends Activity {
         } catch (Throwable error) {
             Log.w(TAG, "server error probe failed", error);
             return "";
+        }
+    }
+
+    private String startupStatus(PyObject boot) {
+        try {
+            String value = boot.callAttr("startup_status").toString();
+            return value == null ? "unknown" : value;
+        } catch (Throwable error) {
+            Log.w(TAG, "startup status probe failed", error);
+            return "unknown";
+        }
+    }
+
+    private String serverStackSummary(PyObject boot) {
+        try {
+            String value = boot.callAttr("server_stack").toString();
+            return value == null ? "" : value;
+        } catch (Throwable error) {
+            Log.w(TAG, "server stack probe failed", error);
+            return "";
+        }
+    }
+
+    private int startupPhaseText(String phase) {
+        switch (phase) {
+            case "uvicorn_running":
+            case "app_imported":
+                return R.string.starting_local_server;
+            case "data_layout":
+                return R.string.startup_phase_data_layout;
+            case "database":
+                return R.string.startup_phase_database;
+            case "notifications":
+                return R.string.startup_phase_notifications;
+            case "access_auth":
+                return R.string.startup_phase_access_auth;
+            case "background_tasks":
+                return R.string.startup_phase_background_tasks;
+            default:
+                return 0;
         }
     }
 

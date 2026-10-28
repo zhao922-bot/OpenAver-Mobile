@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import sys
 import threading
+import traceback
 
 import uvicorn
 
@@ -11,6 +13,7 @@ import uvicorn
 _server = None
 _thread = None
 _server_error = ""
+_startup_status = "python_loaded"
 
 
 def is_server_alive() -> bool:
@@ -21,9 +24,28 @@ def server_error() -> str:
     return _server_error
 
 
+def set_startup_status(status: str) -> None:
+    global _startup_status
+    _startup_status = status
+
+
+def startup_status() -> str:
+    return _startup_status
+
+
+def server_stack() -> str:
+    if _thread is None or _thread.ident is None:
+        return "server thread is not running"
+    frame = sys._current_frames().get(_thread.ident)
+    if frame is None:
+        return "server thread stack is unavailable"
+    return "".join(traceback.format_stack(frame, limit=8))
+
+
 def _run_server() -> None:
     global _server_error
     try:
+        set_startup_status("uvicorn_running")
         _server.run()
     except BaseException as exc:
         _server_error = f"{type(exc).__name__}: {exc}"
@@ -50,6 +72,8 @@ def start_server(host: str, port: int, data_dir: str) -> int:
     from fastapi.responses import JSONResponse
     from core.version import VERSION
     from web.app import app
+
+    set_startup_status("app_imported")
 
     @app.get("/api/mobile/health")
     def mobile_health():
