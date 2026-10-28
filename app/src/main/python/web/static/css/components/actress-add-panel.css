@@ -1,0 +1,248 @@
+/* ==================== Actress Add Panel (117-T3) ====================
+ *
+ * 從片庫加入女優面板專屬樣式。殼複用 .fluent-modal class-toggle（CD-62-1 / CD-117-5），
+ * 玻璃 backdrop 由 theme.css 的 `.fluent-modal.modal-open` 統一提供。
+ * 尺寸寫法抄 rescrape-modal.css（560 → 680）；overflow 刻意不抄到 box——列表自己捲（AC-2.5）。
+ * 全 token 化；無 pill 造型（CD-117-11）。
+ */
+
+/* ─── Modal box：680 寬 + flex 欄，列表吃剩餘高度 ─── */
+.actress-add-box {
+    width: min(680px, calc(100vw - 2rem));
+    max-height: calc(100vh - 3rem);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* 角落 ✕（抄 .rescrape-x 形狀） */
+.actress-add-x {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 1.9rem;
+    height: 1.9rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    border-radius: var(--fluent-radius-md);
+    transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
+                color var(--fluent-duration-fast) var(--fluent-ease-standard);
+    z-index: 2;
+}
+
+.actress-add-x:hover {
+    background: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+    color: var(--text-primary);
+}
+
+/* 搜尋框（二合一：過濾 + 直接新增；T4 接線） */
+.actress-add-search {
+    width: 100%;
+    margin: 0.75rem 0 0.5rem;
+    padding: 0.55rem 0.8rem;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    background: var(--surface-0);
+    border: 1px solid var(--stroke-default);
+    border-radius: var(--fluent-radius-md);
+    transition: border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+                box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.actress-add-search:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 22%, transparent);
+}
+
+/* 列表：依彈窗可用高度自適應、內部捲動（AC-2.5；min-height:0 是 flex 半場 FE-CSS-12） */
+.actress-add-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    margin: 0.25rem 0;
+}
+
+/* 117b-T8 預取帶：sentinel 的「高度」就是「距底多少 px 開始展開」。
+   不能用 x-intersect 的 rootMargin —— root 是 viewport，而 .actress-add-list 的
+   overflow 裁切發生在 root margin 展開之前，400px 的 root margin 對捲動容器內部
+   完全無效（CDP 實測：只有真的捲到底才觸發，見 TASK-117-T8 現況 I）。
+   負 margin 抵銷版面高度：這條帶子疊在最後 400px 的內容上，不增加捲動長度。
+   pointer-events:none：否則它會吃掉最後 ~7 列的愛心點擊。 */
+.actress-add-sentinel {
+    height: 400px;
+    margin-top: -400px;
+    pointer-events: none;
+}
+
+/* 三欄列：片數 / 名字 / 愛心（CD-117-6；minmax(0,1fr) 不可退回裸 1fr） */
+.actress-add-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.5rem;
+    border-radius: var(--fluent-radius-md);
+    transition: background var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.actress-add-count {
+    text-align: right;
+    min-width: 3ch;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.actress-add-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+/* 愛心：命中區 ≥44×44（AC-4.2）；視覺圖示仍小、靠 flex 置中
+ * reviewer④：min-width 56px 與 .actress-add-status 對齊——每列各自是獨立 grid，
+ * 「排隊中」三字（約 49px）比原本的 44px 寬，若兩者 min-width 不同，翻到 queued 態
+ * 的那一列第三欄會單獨變寬、名字欄跟著縮，連點多列時清單左右參差。min-width 會蓋過
+ * width（CSS 用 max(min-width, width) 當最終寬度），[117-T3] 鎖住的 width:44px/
+ * height:44px 字面不變，只是實際渲染寬度被墊高到 56px，兩態統一，不影響 ≥44×44 契約。
+ */
+.actress-add-heart {
+    width: 44px;
+    height: 44px;
+    min-width: 56px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: var(--fluent-radius-md);
+    transition: color var(--fluent-duration-fast) var(--fluent-ease-standard),
+                opacity var(--fluent-duration-fast) var(--fluent-ease-standard);
+    font-size: 1.05rem;
+    padding: 0;
+}
+
+/* 已收藏：實心色 + 不可點、無 hover 反應（AC-4.1；元素本身已是 <span>） */
+.actress-add-heart.is-favorite {
+    color: var(--color-favorite);
+    cursor: default;
+    pointer-events: none;
+}
+
+/* 只有有 hover 的裝置才降透明度 + 靠 hover 打亮（CD-117-7 / AC-4.2） */
+@media (hover: hover) {
+    .actress-add-heart:not(.is-favorite) { opacity: 0.55; }
+    .actress-add-row:hover {
+        background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+    }
+    .actress-add-row:hover .actress-add-heart:not(.is-favorite) {
+        opacity: 1;
+        color: var(--color-favorite);
+    }
+}
+
+/* 117-T5：排隊中／新增中 狀態文字（第三欄，同愛心命中區尺寸；無 pill 造型，CD-117-11）
+ * reviewer④：min-width 與 .actress-add-heart 一致（56px，見該規則旁註解）——「排隊中」
+ * 三字＋左右 padding 本來就比 44px 寬，統一取兩者較大值，四態切換時第三欄寬度不變。 */
+.actress-add-status {
+    min-width: 56px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    padding: 0 0.4rem;
+}
+
+/* 117-T5：失敗原因，橫跨整列的隱式第二行（grid-template-columns 不動，FE-CSS-12） */
+.actress-add-rowerror {
+    grid-column: 1 / -1;
+    font-size: 0.75rem;
+    color: var(--color-error);
+    padding: 0 0.5rem 0.25rem;
+    overflow-wrap: anywhere;
+}
+
+/* 117-T4：載入中／載入失敗狀態列 */
+.actress-add-state {
+    padding: 0.75rem 0.5rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* 117-T4 AC-5.4：無相符時「直接新增」列（單欄；長名 ellipsis，FE-CSS-12） */
+.actress-add-direct {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    padding: 0.55rem 0.5rem;
+    margin: 0.25rem 0 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--accent);
+    font-size: 0.95rem;
+    border-radius: var(--fluent-radius-md);
+    transition: background var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.actress-add-direct:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+}
+
+.actress-add-direct:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+/* Footer：T4 進度文字 / 展開更多佔位 */
+.actress-add-footer {
+    display: flex;
+    align-items: center;
+    padding-top: 0.5rem;
+    min-height: 1.5rem;
+    flex-shrink: 0;
+}
+
+.actress-add-progress {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+/* Breakpoint 480 matches T6 notification drawer + A-group mobile breakpoints
+ * (360 is the floor, not the breakpoint). */
+@media (max-width: 480px) {
+    .actress-add-row {
+        gap: 0.5rem;
+        padding: 0.35rem 0.25rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .actress-add-x,
+    .actress-add-search,
+    .actress-add-row,
+    .actress-add-heart {
+        transition: none !important;
+    }
+}

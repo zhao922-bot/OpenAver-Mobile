@@ -1,0 +1,861 @@
+/* ==================== Lightbox ==================== */
+
+/* Lightbox Overlay */
+.showcase-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    /* Smoke Backdrop — 匹配 gallery_generator.py 舊版風格 */
+    background: var(--overlay-modal);
+    /* charter §2 仲裁：lightbox backdrop 用 floating-control 12px (非 overlay 30px)，保留 grid spatial reference UX */
+    backdrop-filter: blur(var(--fluent-blur-light));
+    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+
+    /* 初始隱藏 */
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+
+    /* Fluent Design 2 動畫 */
+    transition: opacity var(--duration-normal) var(--ease-out),
+                visibility 0s linear var(--duration-normal);
+}
+
+.showcase-lightbox.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+}
+
+/* Lightbox Content Card — 垂直佈局（大圖上方 + metadata 下方） */
+.lightbox-content {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    overflow-y: auto;
+
+    /* Fluent Design 2 Card */
+    background: var(--surface-2);
+    border: 1px solid var(--stroke-default);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--fluent-shadow-28);
+
+    /* Scale Pop-in 動畫 */
+    transform: scale(0.95);
+    transition: transform var(--duration-normal) var(--ease-out);
+}
+
+.showcase-lightbox.show .lightbox-content {
+    transform: scale(1);
+}
+
+/* D2: GSAP Lightbox 動畫期間關掉 CSS transition（C21） — search 頁面 */
+.search-container .showcase-lightbox.gsap-animating,
+.search-container .showcase-lightbox.gsap-animating .lightbox-content {
+    transition: none !important;
+}
+
+/* B16: GSAP Lightbox 動畫期間關掉 CSS transition（C21） — showcase 頁面 */
+.showcase-container .showcase-lightbox.gsap-animating,
+.showcase-container .showcase-lightbox.gsap-animating .lightbox-content {
+    transition: none !important;
+}
+
+/* 49a-T7: hero card glow pulse / scale settle 期間關掉 CSS transition（C21） */
+.hero-card.gsap-animating {
+    transition: none !important;
+}
+
+/* Close Button */
+.lightbox-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 50%;
+    background: var(--overlay-control);
+    backdrop-filter: blur(var(--fluent-blur-light));
+    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    color: var(--text-inverse);
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out),
+                transform var(--duration-fast) var(--ease-out);
+    z-index: 10;
+}
+
+.lightbox-close:hover {
+    /* hover 升階 0.5 (charter §3 個案保留，控制按鈕 hover 強調) */
+    background: rgba(0, 0, 0, 0.5);
+    transform: scale(1.1);
+}
+
+/* Cover Image Section — 大圖佔主要空間 */
+.lightbox-cover {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* 無封面時保留 floor — placeholder SVG 不塌陷、cover-actions absolute 仍能撐盒 */
+    min-width: min(60vw, 600px);
+    min-height: min(58vh, 460px);
+    /* 124c-T1: 換片箭頭的錨點。燈箱是直欄（封面在上、metadata 在下），視窗中心永遠落在
+     * metadata 第一列＝標題列，箭頭用 top:50% 會壓住 ★ 精選星（手機上完全覆蓋）。
+     * 影片／女優兩分支互斥渲染，同一時刻 DOM 只有一個 .lightbox-cover，無多重 anchor 歧義。 */
+    anchor-name: --lb-cover;
+}
+
+/* 100b Codex P2-2 fix：女優分支 img/placeholder/遮罩 frame wrapper——只設 position:relative，
+ * 不設寬高，讓它作為 .lightbox-cover 的 flex item 隨內容 shrink-to-fit（img 是裡面唯一貢獻
+ * 版面尺寸的內容）。目的：讓 .lb-mask-overlay 的 inset:0 貼齊「這個 wrapper」＝貼齊圖片實際
+ * render 矩形，而非貼齊 .lightbox-cover 的固定地板矩形（min-width:600px 在窄/方形照片上會
+ * 產生兩側留白 gutter，見 showcase.html 內 wrapper 開頭大段註解）。無 z-index → 不建立新
+ * stacking context，.lb-mask-overlay／.cover-actions 兩者 z-index 比較不受影響。 */
+.actress-lb-photo-frame {
+    position: relative;
+}
+
+/* 83a-T3-fix P1: metadata 可變高 → modal 整體捲動修正。
+   83b-T2：:not(.similar-open) gate 已移除（similar-open class 不再使用）；規則無條件命中。
+   metadata 靠 flex:1 1 auto + min-height:0 + overflow-y:auto 自行消化剩餘高度。 */
+.lightbox-content {
+    overflow-y: hidden;
+}
+
+/* 83a-T1fix1 M1+M2+M3: has-cover 時 aspect-box modal-hug 模型（全斷點適用）。
+   修正 T1 的 flex-shrink letterbox bug（CDP 實測：cover box 1139×610 AR=1.869≠圖 AR 1.481
+   → img object-fit:contain 只佔 903px → 左右各 118px 暗死白）。
+   修法 A — flex-shrink:0（禁止 cover 被壓縮）：配合 width-formula 確保 cover 高不超 content。
+   修法 B — width-formula 對齊 content max-height:90vh（vreserve=15rem≈240px）：
+     width = min(90vw, (90dvh − 15rem) × AR) → cover 高 = width/AR；
+     cover 高 + 15rem ≤ 90dvh = content max-height → 不捲動。
+     T1 錯用 100dvh：cover 高 = dvh−15rem，content max-height=90vh < dvh → 溢出捲動。
+   T1fix1 就是把 100dvh/100vh 改 90dvh/90vh 這一行，其餘不變。
+   83b-T2：:not(.similar-open) gate 已移除（similar-open class 不再使用）；規則無條件命中。 */
+.lightbox-content .lightbox-cover.has-cover {
+    flex-shrink: 0;
+    min-width: 0;
+    min-height: 0;
+    aspect-ratio: var(--lb-cover-ar, 1.5);
+    width: min(90vw, calc((90vh - 15rem) * var(--lb-cover-ar, 1.5)));
+    width: min(90vw, calc((90dvh - 15rem) * var(--lb-cover-ar, 1.5)));
+    height: auto;
+}
+
+/* 83a-T1 M1: base img 與 .lb-full 皆填滿 aspect-ratio 正確的盒（兩層疊在 has-cover 盒內）。
+   83b-T2：:not(.similar-open) gate 已移除；此規則無條件命中，接管 T8 block 移除後的 width:100% 供應。
+   盒 AR == 圖 AR → 不 letterbox；border-radius 保留視覺細節。
+   無封面的普通 img（破圖/placeholder）維持舊規則（非 has-cover，不命中此選擇器）。 */
+.lightbox-content .lightbox-cover.has-cover img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+}
+
+/* 83a-T1 M1: 無封面 / 女優分支 base img — 維持舊規則（cover-first，不干擾 has-cover 內 absolute 層疊）。
+   specificity (0,1,1) 低於上方 .has-cover img (0,3,1)，has-cover 時上方規則勝出。 */
+.lightbox-cover img {
+    /* 舊規則保留給無封面路徑（placeholder/破圖）與女優照（.lightbox-cover 無 has-cover class）。
+       height:60vh 讓無封面 lightbox 維持既有視覺氣勢；object-fit:contain 不裁切。 */
+    height: 60vh;
+    width: auto;
+    max-width: 100%;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+}
+
+/* 71-T6 blur-up overlay：原圖（cover_full_url）疊在 base（cover_url 小圖）之上。
+   83a-T1 M1: has-cover 時 .lb-full 填滿 has-cover 盒（盒 AR == 圖 AR，不 letterbox）；
+   opacity 溶接不變；pointer-events:none 確保不擋 cover-actions / sparkle 點擊。
+   transition 用 fluent token；duration-slow=300ms、ease-decel 為進場/淡入角色。
+   83b-T2：similar-open 禁區已移除；has-cover 時 .lb-full 由 .lightbox-content .lightbox-cover.has-cover .lb-full 填滿盒。 */
+.lb-full {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    height: 60vh;
+    width: auto;
+    max-width: 100%;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--fluent-duration-slow) var(--fluent-ease-decel);
+}
+
+/* 83a-T1 M1: has-cover → lb-full 填滿盒（覆寫舊 60vh 規則）。
+   83b-T2：:not(.similar-open) gate 已移除；specificity (0,3,0) 勝 .lb-full (0,1,0)。 */
+.lightbox-content .lightbox-cover.has-cover .lb-full {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    max-width: none;
+}
+
+.lb-full-shown {
+    opacity: 1;
+}
+
+/* 71-T6 blur-up：reduced-motion 下原圖瞬切（無漸變），仍正確蓋上（鏡像既有 PRM 範式）。 */
+@media (prefers-reduced-motion: reduce) {
+    .lb-full {
+        transition: none;
+    }
+}
+
+/* 120a-T1：.lb-full 原圖載不到時的提示 pill。pointer-events:none 是結構保證
+   （不擋 .cover-actions / sparkle 點擊），z-index:9 在 sparkle(8) 之上純視覺。 */
+.lb-full-hint {
+    position: absolute;
+    top: 0.75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9;
+    pointer-events: none;
+    max-width: calc(100% - 1.5rem);
+    padding: 0.35rem 0.85rem;
+    border-radius: var(--radius-pill);
+    background: var(--surface-1);
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+    line-height: 1.4;
+    text-align: center;
+    border: 1px solid var(--stroke-subtle);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Metadata Panel — 緊湊版（匹配原版 gallery） */
+/* 83a-T1 M4: 移除 max-width:600px，改 width:100% 對齊封面寬（modal shrink-to-fit 後即封面寬）。
+   83a-T3-fix P1: flex:1 1 auto + min-height:0 讓 metadata 吃剩餘空間並自行捲動，
+   配合上方 .lightbox-content{overflow-y:hidden} 防 modal 整體捲動（83b-T2 gate 已移除）。 */
+.lightbox-metadata {
+    padding: 0.5rem 0 0 0;
+    width: 100%;
+    border-top: 1px solid var(--stroke-subtle);
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Header row: title + sample gallery button */
+.lightbox-metadata .lb-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+    flex-wrap: wrap;
+}
+
+/* Title */
+.lightbox-metadata .lb-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.4;
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+}
+
+/* Original Title */
+.lightbox-metadata .lb-otitle {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Actress */
+.lightbox-metadata .lb-actor {
+    font-size: 0.8125rem;
+    color: var(--accent);
+    margin-bottom: 0.25rem;
+}
+
+/* 149b-T3（CD-149b-14）：發行時年齡 (28y) —— .lb-actor 本身是 color: var(--accent)，
+   子層 <span> 若不自己宣告 color 會繼承 accent 色，蓋不過去（FE-CSS-02）。 */
+.lightbox-metadata .lb-actor-age {
+    color: var(--text-muted);
+}
+
+/* Meta: Number · Maker · Date — 單行 flex */
+.lightbox-metadata .lb-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.lightbox-metadata .lb-meta span:not(:last-child)::after {
+    content: " · ";
+    margin: 0 0.35em;
+}
+
+/* Details: merged meta row (number · maker · director · duration · series · label · date · size)
+   93-T9：字級層次 + 髮絲線 + 間距（不加色塊/玻璃/accent 底，封面仍主角，ui-conventions §0/§3）。
+   中繼區以髮絲線與上方 actor 區克制分隔。 */
+.lightbox-metadata .lb-details {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--stroke-subtle);   /* 髮絲線區隔，非色塊 */
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;          /* 讓行末 muted icon 鈕（垃圾桶）與 metadata 文字垂直置中 */
+}
+
+/* 番號：比 muted 高一階、輕微加粗，一眼可辨（不放大過頭、不用 accent、不加底色）*/
+.lightbox-metadata .lb-details .lb-detail-num {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* 123-T3／T8：燈箱精選星（無補間）。兩層疊置：outline 永遠顯示、fill 用 --pick-fill clip。
+ * 補間一律由 GSAP 擁有 —— 本區塊禁止任何 transition/animation。
+ * Opus ①：兩層 <i> 必須 display:block（inline box 上 clip-path/transform 無效）。
+ * Opus ④：色值定死走 token；不加陰影／glow／背景／邊框。
+ *
+ * ── T8 為什麼從 .lb-details（番號列）搬到 .lb-title（標題列）──────────────────
+ * 舊做法星是「28px 固定高的方塊，被 .lb-details 的 align-items:center 置中」，
+ * 跟番號文字**沒有共用基線**：兩者各自置中，誤差來自「固定 28px」與「隨字級縮放的文字行」
+ * 置中時的整數吸附。五個字級（xs/sm/md/lg/xl）各需要不同補償——實測「星墨跡底緣 − 番號基線」
+ * 為 +0.82／+0.38／+2.39／+1.34／+2.34 px，**沒有任何單一固定位移能同時對**
+ * （加 −1px 會讓 xs/sm 反向浮起來）。owner 實機也回報 md 下「還是偏下」。
+ *
+ * 現做法：星是標題文字流裡的一個 inline-flex 盒，vertical-align: baseline。
+ * inline-flex 以第一個 flex item 的 glyph 基線當自己的基線，而 bi 星形的墨跡底緣恰好
+ * 落在它自己的基線上（canvas actualBoundingBoxDescent = 0）⇒ 星的底緣＝標題基線。
+ * 實測「星墨跡底緣 − 標題基線」在 xs/md/xl × 星 12/13/14px 共 9 組合下**全部 0.00px**。
+ * 這是構造上為零，不是補償值，所以不需要逐字級校準、也不需要守衛盯著數字。
+ * ⚠️ 因此 vertical-align: baseline 是承重的，不得改成 middle 或拿掉。
+ * ⚠️ 掛載點是**標題列**，不是番號列。spec-123 原文寫「番號前面一顆星」，owner 於 2026-08-21
+ *    改判「標題前更清楚，不管標題有沒有番號」——**不要**假設標題以 [番號] 開頭，正式 scraper
+ *    會刻意剝掉番號前綴（core/scrapers/javdb.py / javbus.py 的 strip_number_prefix、
+ *    core/readonly_producer.py 的 _strip_num_prefixes），多數片的標題根本沒有番號。 */
+.lightbox-metadata .lb-title .pick-star {
+    position: relative;           /* T4 火花 .pick-spark-dot 的定位錨 */
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;  /* glyph 貼左，與下面「原文標題／女優／番號」三列同一條左緣 */
+    width: 28px;                  /* AC-23：pointer:fine 可點區 ≥28×28 */
+    height: 28px;
+    font-size: 0.875rem;          /* 14px。取這個值的理由是量出來的，不是「看起來差不多」： */
+                                  /* 實心星在此字級的墨跡高 10.74px，而標題裡拉丁／數字段（番號） */
+                                  /* 的 cap 墨跡高 10.91px —— 兩者上緣差 0.22px、下緣差 0.38px、 */
+                                  /* 重心差 0.03px，等於邊到邊對齊。13px 會矮 1.1px（上下各內縮、 */
+                                  /* 邊緣對不上，owner 實機讀成「沒對齊」）；15px 則會比 cap 高。 */
+                                  /* 相對 CJK 字身（15.08px）仍然小一階，不搶戲。 */
+    vertical-align: -0.125em;     /* ★ 承重，見上方註解。baseline 為基準再往下 1/8 em —— */
+                                  /* 這個值刻意取 Bootstrap Icons 官方對所有 .bi::before 用的 */
+                                  /* 標準補償值（bootstrap-icons.css:24），不是自己調出來的 magic */
+                                  /* number；owner 2026-08-21 拍板以「Win11 ＋ Chrome 預設字型」 */
+                                  /* 這個最多人用的組合為校準基準（見卡片「環境依賴」段：DPR／字型／ */
+                                  /* 相鄰文字語系三軸合計會讓星相對文字擺動 2–3px，無法在所有環境同時歸零）。*/
+                                  /* 為什麼需要往下補：標題是 CJK 為主，「。」「，」與方括號的墨跡會掉到 */
+                                  /* 排版基線下約 2.7px，純 baseline 對齊在 CJK 行裡目視就是偏上。 */
+                                  /* 用 em 不用 px：這是光學比例修正，必須跟著五個字級一起縮放。 */
+    margin-right: calc(1.45em - 28px);  /* 「glyph 右緣 → 文字」固定 0.45em，與盒寬解耦：
+                                           盒是 28px、glyph 只有 1em，不補這個負值會留下 15px 死空隙
+                                           （owner 實機回報「空隙太大」）。coarse 的 44px 盒另有一份。 */
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.lightbox-metadata .lb-title .pick-star-outline,
+.lightbox-metadata .lb-title .pick-star-fill {
+    display: block;               /* Opus ①：不得留 inline */
+    line-height: 1;
+    font-size: 1em;               /* 跟著 .pick-star 的 0.875rem，不另外定死 */
+    width: 1em;
+    height: 1em;
+}
+
+/* 抵銷 Bootstrap Icons 的 inline 光學補償。bootstrap-icons.css:24 對所有 .bi::before 設
+ * vertical-align: -.125em，那是給「圖示混在一行文字流裡」用的；這兩層是 .pick-star 的
+ * flex item（vertical-align 對 flex item 無效，補償只會落在 ::before 上變成淨誤差）。
+ * 實測：留著 -.125em 時「星底 − 標題基線」是 +1.22～+2.19 px（隨字級變動），歸零後恆為 0.00。
+ * 必須下在 ::before 不是 <i>：glyph 是 ::before 這個 inline-level box 畫的。
+ * 兩層必須一起改，否則 fill 與 outline 錯開、灌滿動畫會出現雙影。
+ * ⚠️ 不得一併套到牆上的 .pick-star-mark：那裡容器脈絡不同，實測 bi 的 -.125em 反而是
+ *    正貢獻（grid -0.86 / table +0.54 / list +0.50 px，歸零後三者都變差）。逐處量，別全域套。 */
+.lightbox-metadata .lb-title .pick-star-outline::before,
+.lightbox-metadata .lb-title .pick-star-fill::before {
+    vertical-align: 0;
+}
+
+.lightbox-metadata .lb-title .pick-star-outline {
+    color: var(--text-muted);     /* 未精選：低調，不與標題（--text-primary）搶 */
+    position: relative;
+    z-index: 1;
+}
+
+.lightbox-metadata .lb-title .pick-star:hover .pick-star-outline,
+.lightbox-metadata .lb-title .pick-star:focus-visible .pick-star-outline,
+.lightbox-metadata .lb-title .pick-star.is-picked .pick-star-outline {
+    color: var(--star-glow);      /* 未精選 hover/focus、已精選：金色 outline */
+}
+
+.lightbox-metadata .lb-title .pick-star-fill {
+    position: absolute;
+    inset: 0 auto 0 0;            /* 靠左：必須跟 outline 那層（justify-content:flex-start）同一個 x */
+    margin: auto 0;               /* 上下 auto ＝ 垂直置中，比照 outline 的 align-items:center */
+    color: var(--star-glow);
+    clip-path: inset(var(--pick-fill, 100%) 0 0 0);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.lightbox-metadata .lb-title .pick-star:focus-visible {
+    outline: 2px solid var(--star-glow);
+    outline-offset: 2px;
+}
+
+/* AC-23 觸控可點區。可以放心撐大盒子：對齊由 vertical-align: baseline（＝按鈕自己的
+ * glyph 基線）決定，**盒子大小完全不影響 glyph 落點**——13／28／44px 三種盒子實測
+ * 「星底 − 標題基線」都是 0.00。這正是搬到標題行之後才成立的性質；舊的 .lb-details
+ * 版本靠盒子被 align-items:center 置中，盒子一改尺寸對齊就跟著跑。 */
+@media (pointer: coarse) {
+    .lightbox-metadata .lb-title .pick-star {
+        width: 44px;
+        height: 44px;
+        margin-right: calc(1.45em - 44px);   /* 同上：維持 0.45em 的視覺間距，換 44px 盒 */
+    }
+}
+
+/* 123-T4：灌滿到頂火花。動態建立、結束後 .remove()。無 transition/animation。 */
+.pick-spark-dot {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 4px;
+    height: 4px;
+    margin: -2px 0 0 -2px;
+    border-radius: 50%;
+    background: var(--star-glow);
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0;
+}
+
+/* 欄位標籤（導演：/系列：/發行商：）：與其值輕微層次，值維持 muted */
+.lightbox-metadata .lb-details b {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* 分隔符由 HTML 中各 span 內部開頭的 " · " 控制，隨 x-show 一起顯示/隱藏 */
+
+/* Tags — pill flex wrap */
+.lightbox-metadata .lb-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+}
+
+.lightbox-metadata .lb-tag {
+    padding: 0.15rem 0.5rem;
+    background: var(--bg-body);
+    border-radius: var(--radius-pill);
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+    border: 1px solid var(--stroke-subtle);
+}
+
+/* Cover Actions Overlay — 預設隱藏，hover / focus-within 時 fade in */
+.lightbox-cover .cover-actions {
+    position: absolute;
+    bottom: 0;
+    left: 0; right: 0;
+    z-index: 1;   /* 99a-T5：基準疊層——非編輯態時遠低於 .lb-mask-overlay 的 2（無遮罩時互不
+                     競爭）；編輯態由 .cover-actions--focal-edit（下）覆寫至 5，見 z-index 契約。 */
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    padding-bottom: 24px;
+    gap: 12px;
+    background: linear-gradient(to top, var(--overlay-gradient) 0%, rgba(0,0,0,0.2) 60%, transparent 100%);
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.lightbox-cover:hover .cover-actions,
+.lightbox-cover:focus-within .cover-actions {
+    opacity: 1;
+}
+
+/* 99a-T3：焦點編輯中常顯 ✓/✗——編輯時滑鼠可能移到別處，純 hover gate 會讓按鈕消失。
+ * 99a-T5（Bug 2 修正）：z-index 明確 > .lb-mask-overlay 的 2，讓 ✓/✗ 46×46 hit box 的
+ * elementFromPoint 命中按鈕本身而非 overlay（否則 overlay 的 @click.self="cancelMask()"
+ * 攔截點擊，✓ 100% 靜默變 ✗，見 TASK-99a-T5 根因分析實測）。5 留 headroom 與 spinner/
+ * wait-burst 的 3 有區隔，非硬性數字，只要 >2 即可。CG-FOCAL-04 鎖此數值關係（z-index 數值
+ * 對不代表 hit-test 對，真正的證明是 T6 e2e 的 elementFromPoint 斷言，本規則只鎖必要條件）。
+ * headless self-verify 實測抓到的第二個 bug：`.cover-actions` 是 left:0/right:0 的 flex
+ * 容器（比按鈕實際佔用的 46×46 大得多），單純拉高整個容器的 z-index 會連按鈕「之間的縫隙」
+ * 也一起蓋過 overlay——縫隙點擊被容器本身（無 click handler）吃掉，變成點了沒反應，而非落回
+ * overlay 觸發 cancelMask()（「點外＝✗」回歸，見「✓/✗ 兩顆按鈕之間的縫隙」邊界條件）。
+ * 修法：容器本身 pointer-events:none（讓 hit-test 穿透到下層 overlay），按鈕靠下面規則
+ * 各自救回 pointer-events:auto（子元素可獨立覆寫祖先的 pointer-events:none，標準 CSS 行為，
+ * 不受祖先 stacking context/z-index 影響——z-index:5 仍讓按鈕的 stacking 位置高於 overlay 的
+ * 2，只是容器本身不再是有效 hit-test 目標）。 */
+.lightbox-cover .cover-actions.cover-actions--focal-edit {
+    opacity: 1;
+    z-index: 5;
+    pointer-events: none;
+}
+
+.lightbox-cover .cover-actions.cover-actions--focal-edit .lb-action-btn {
+    pointer-events: auto;
+}
+
+/* Glass Circle Button — 對齊 theme.css .btn-glass-circle，尺寸略縮為 46px */
+.lb-action-btn {
+    position: relative;
+    width: 46px; height: 46px;
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(var(--fluent-blur-light));
+    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    color: white;
+    font-size: 1.125rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--fluent-shadow-8);
+    transition: background var(--duration-fast) var(--ease-out),
+                border-color var(--duration-fast) var(--ease-out),
+                transform var(--duration-fast) var(--ease-out),
+                box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.lb-action-btn:not(:disabled):hover {
+    background: rgba(255,255,255,0.3);
+    border-color: rgba(255,255,255,0.6);
+    transform: scale(1.08);
+    box-shadow: var(--fluent-shadow-16);
+}
+
+.lb-action-btn:active {
+    transform: scale(0.95);
+}
+
+/* 98b-T4：焦點裁切遮罩 toggle — styled-like .lb-action-btn（上方）但更小，掛 metadata .lb-header。
+ * 低調玻璃圓鈕，退位不搶封面戲（feedback_ui_restraint_taste）。token only（§6）。 */
+.lightbox-metadata .lb-mask-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--stroke-subtle);
+    border-radius: 50%;
+    background: var(--surface-1);
+    backdrop-filter: blur(var(--fluent-blur-light));
+    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: var(--fluent-shadow-8);
+    transition: background var(--duration-fast) var(--ease-out),
+                border-color var(--duration-fast) var(--ease-out),
+                color var(--duration-fast) var(--ease-out),
+                box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.lightbox-metadata .lb-mask-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--stroke-default);
+    box-shadow: var(--fluent-shadow-16);
+}
+
+.lightbox-metadata .lb-mask-btn:active {
+    transform: scale(0.95);
+}
+
+.lightbox-metadata .lb-mask-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px var(--glow-subtle);   /* §6 #5 focus 4px glow */
+}
+
+/* 98b-T4：遮罩 overlay（疊在 .lightbox-cover 已 layout 的封面 rect 上，不裁圖）。 */
+.lb-mask-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+    border-radius: inherit;
+    cursor: pointer;
+}
+
+/* 亮窗＝小格實際保留區；窗以外用超大 spread box-shadow 壓暗（spotlight），窗內原圖維持明亮。
+ * 唯一記憶點：切模式時 transform translateX 左右滑動（Fluent medium 從容揭示 + decel 到位）。 */
+.lb-mask-window {
+    --lb-mask-scrim: rgba(0, 0, 0, 0.55);             /* scrim 半透明黑（§Modal Smoke 語意）；本地變數避開 box-shadow raw-rgba 守衛 */
+    position: absolute;
+    top: 0;
+    left: 0;
+    box-sizing: border-box;
+    border: 1px solid rgba(255, 255, 255, 0.55);      /* 亮框：對齊 .lb-action-btn 玻璃邊 rgba 先例 */
+    box-shadow: 0 0 0 100vmax var(--lb-mask-scrim);   /* 窗外壓暗 spotlight，隨 transform 一起滑 */
+    transition: transform var(--fluent-duration-medium) var(--ease-out);
+    touch-action: none;   /* 99a-T3：拖曳時防手機系統手勢（頁面捲動/swipe-to-back/左右換片）搶走 */
+    cursor: ew-resize;    /* 100c-T3a：Y 軸砍除後（CD-6）唯一可拖方向恆為橫向，游標契約併回基礎規則 */
+}
+
+/* 99a-T3：拖曳中停用 transition——連續 1:1 跟手，套著 transition 會有橡皮筋延遲感，
+ * 不符 spec §3.3「拖曳即時預覽」。拖曳結束（_maskDragging=false）恢復；101b-T2 後
+ * detect resolve 的收斂已改由獨立 GSAP tween 逐 tick 寫 :style（停用同一條 transition
+ * 的理由見下方 --settling 規則，C21），這條 transition 如今只在拖曳結束後的殘留路徑上
+ * 有意義，不再服務「滑到偵測位置」那個已不存在的過渡態。 */
+.lb-mask-window--dragging {
+    transition: none;
+    cursor: grabbing;
+}
+
+/* 101b-T2（CD-5）：收斂補間期間停用 transition，理由同上方 --dragging——GSAP 逐 tick 寫
+ * Alpine :style 會被這條 CSS transition 攔截，觸發雙重 easing + 落點延遲（C21）。 */
+.lb-mask-window--settling {
+    transition: none;
+}
+
+.lb-mask-spinner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 3;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 1.5rem;
+    pointer-events: none;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* 99a-T5：detect-first 星空等待迴圈——沿用 .sparkle-star 視覺語彙（四角星 shape + --star-glow
+ * 香檳金 token），但型態不同：不是 .sparkle-burst 的 0.4s 一次性 timeline，是 start/stop 可控
+ * 的 repeat:-1 loop，佔位 force-detect ~3.0-3.3s 不定長等待（見 ghost-fly.js
+ * playFocalDetectWait/stopFocalDetectWait）。PRM 時 openMask 完全不觸發 GSAP，本容器維持
+ * CSS 預設 opacity:0（連同 .sparkle-star 各自預設 opacity:0）不可見，.lb-mask-spinner 是
+ * PRM 下唯一等待指示。101b-T6 修正 stale 說法：這裡曾誤寫「PRM blanket 規則保證仍渲染不轉」
+ * ——實際上不分 PRM/非 PRM 皆不轉，根因是 .lb-mask-spinner 內 .bi.spin（<i> 元素本身）預設
+ * display:inline（Bootstrap Icons 只把 .bi::before 偽元素設 inline-block，沒動 .bi 本身），
+ * CSS transform 對 non-replaced inline box 不產生視覺效果（W3C transforms spec）——animation
+ * 確實在跑（computed transform 逐 frame 變化），但視覺上靜止，曾兩度騙過只量 computed
+ * transform 的 CDP 驗證。真正修復見下方 .lb-mask-spinner .bi.spin 規則：display:inline-block
+ * 讓它變成可 transform 的盒子，animation !important 蓋過 PRM blanket（theme.css
+ * `*{animation-duration:0.01ms !important}`）——owner 訴求「不存在靜態模式」，PRM 下也要轉。
+ * z-index 與 spinner 同層（3）——純視覺、pointer-events:none，不需要跟 ✓/✗ 按鈕比大小
+ * （見上方 .cover-actions--focal-edit z-index 契約說明）。顆數/尺寸刻意比 .sparkle-burst
+ * （10 顆）少（5 顆，sm/md only）——owner 取向偏克制材質，等待動效份量比一次性慶祝 burst 更輕。 */
+.lb-mask-wait-burst {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 3;
+    opacity: 0;
+}
+
+/* Danger modifier — red tint for remove button (44c-T3) */
+.lb-action-btn--danger {
+    border-color: rgba(255, 100, 100, 0.5);
+    color: var(--color-error-hover);
+}
+
+.lb-action-btn--danger:hover {
+    background: rgba(255, 100, 100, 0.25);
+    border-color: rgba(255, 100, 100, 0.7);
+}
+
+/* Success modifier — green tint for ✓ confirm button (99a-T3). token-based color-mix
+ * (not hardcoded rgba like the --danger modifier above, which pre-dates the 6-role
+ * material system) — --color-success has distinct light/dark values (theme.css),
+ * color-mix tracks theme switch automatically. */
+.lb-action-btn--success {
+    border-color: color-mix(in oklch, var(--color-success) 50%, transparent);
+    color: var(--color-success);
+}
+
+.lb-action-btn--success:hover {
+    background: color-mix(in oklch, var(--color-success) 25%, transparent);
+    border-color: color-mix(in oklch, var(--color-success) 70%, transparent);
+}
+
+/* Touch fallback — cover-actions always visible on touch devices (44c-T3) */
+@media (pointer: coarse) {
+    .lightbox-cover .cover-actions {
+        opacity: 1;
+    }
+}
+
+/* 75a-US3c: touch 裝置 hover-only 三處直達（比照 .lightbox-cover .cover-actions 先例，showcase.css:825-829）*/
+@media (pointer: coarse) {
+    /* (2) 影片卡 footer-hover（標題層）— 常駐顯示，解除 translateY(100%) 入場 transform */
+    .av-card-preview .footer-hover {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    .av-card-preview .footer-default {
+        opacity: 0;    /* touch 裝置：標題層常駐、番號/女優層隱藏 */
+    }
+}
+
+/* 108-T3 (功能B/D-B3): folder 只在能 hover 的裝置顯示。純觸控（無任何 hover 能力）隱藏——
+   folder 在 mobile/LAN 只 clipboard copy 遠端路徑、開不了遠端資料夾（inert）。
+   承重是 any-hover:none（＝沒有任何輸入能 hover ＝真‧純觸控）；不可收窄回裸 pointer:coarse
+   （coarse-primary 但有滑鼠/觸控板的 2-in-1 仍能 openLocal，不該藏）。display:none 不佔位不可點。 */
+@media (pointer: coarse) and (hover: none) and (any-hover: none) {
+    .js-open-folder {
+        display: none !important;
+    }
+}
+
+/* 108-T7（功能B 硬化，Codex pre-merge P2）：純觸控（any-hover:none）裝置點擊會合成／黏住
+   **:hover**（iOS Safari、部分 Android WebKit），讓 base 的 .av-card-preview:hover
+   →opacity:1（theme.css:1133）仍把封面 overlay icon 顯示出來（違反 AC-B1/B7 觸控封面乾淨）。
+   T2 只移 coarse force-show、靠 :hover 委派——對「會合成 hover 的純觸控」不夠（plan gotcha 假設有洞）。
+   影片卡：:not(.missing-cover) 保破圖卡例外常駐；specificity (1,4,0) > theme (1,3,0) 直接勝、不靠 source-order。
+   女優卡：opacity 與 pointer-events 皆壓（其 show 規則 showcase.css:453 帶 pointer-events:auto，
+   只壓 opacity 會留隱形 tap target 攔截點擊）。
+   🔴 只壓 :hover、**不壓 :focus-within**（Codex PR#117 二審 P2 修）：sticky-hover 純是 :hover 現象
+   （會聚焦按鈕的瀏覽器點擊時同一下也設 :hover，:hover 分支已覆蓋）；:focus-within 只在真‧鍵盤/
+   Switch Control 聚焦時成立——女優卡 base（showcase.css:453）刻意用 :focus-within 讓聚焦時顯示
+   overlay 給 a11y 使用者看見焦點，若一併壓 → 使用者 Tab 到透明按鈕、pointer-events:none 擋不住
+   鍵盤 Enter → 停在並觸發看不見的 searchActressFilms（WCAG 違規）。故 focus 一律不壓。
+   gate=any-hover:none（無任何輸入能 hover ＝真‧純觸控，與 T3 folder 同判別）；2-in-1／桌面
+   （any-hover:hover）不套用 → hover 照常浮 icon。sticky-hover CDP 復現不了、真機 hard-gate 收。
+   🔶 scope 刻意用共用 :is(#ds-gallery-components, .ds-gallery-composition)＝**涵蓋所有 gallery grid**
+   （showcase 影片/女優牆 + search 結果牆，search.html 也載本檔）——owner 拍板「觸控模式所有 grid
+   統一 clean-cover、不擋圖片，操作一律點進 lightbox」。search 卡點擊 openLightbox（結果卡）/
+   openActressLightbox（hero），動作在 .cover-actions（switchToDetail/openLocal/openSourceUrl）與
+   actress lightbox（addFavoriteActress），皆觸控常駐、T2/T7 未動 → 功能零損、只多一步進 lightbox。
+   （Codex PR#117 P2 判為 by-design：非 search 頁 regression，是刻意 cross-grid 統一。spec-108
+   Non-Goal「不動 search 頁」隨此 owner 決策放寬為「search grid 觸控呈現一併統一、功能經 lightbox 等價」。）*/
+@media (any-hover: none) {
+    :is(#ds-gallery-components, .ds-gallery-composition) .av-card-preview:not(.missing-cover):hover .av-card-preview-overlay:not(.always-visible) {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    :is(#ds-gallery-components, .ds-gallery-composition) .actress-card:hover .actress-card-overlay {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    /* 108-T7-fix（Codex PR#117 三審 P2）：觸控下把 overlay 的動作鈕設 pointer-events:none，讓整張封面成
+       單一 tap target（tap 穿透到卡片 → openLightbox），不讓看不見的 play/enrich/搜尋鈕被誤觸。
+       根因：.btn-glass-circle base pointer-events:auto（theme.css:1148，無條件）會覆蓋 overlay 的 none，
+       且在 **REST 態** 就是可點命中的 hit target（非只合成 hover）→ 故本規則**不 gate :hover**、無條件套用。
+       排除 :not(.missing-cover)〔破圖卡補資料鈕常駐一 tap〕與 :not(.always-visible)〔hero 收藏愛心常駐〕。
+       specificity (1,4,0) > theme.css:1148 (1,1,0) 直接勝。keyboard/Switch 啟動不受影響
+       （pointer-events 不管鍵盤 Enter，見上 :focus-within a11y 修）。桌面 any-hover:hover 不套用。 */
+    :is(#ds-gallery-components, .ds-gallery-composition) .av-card-preview:not(.missing-cover) .av-card-preview-overlay:not(.always-visible) .btn-glass-circle {
+        pointer-events: none;
+    }
+
+    :is(#ds-gallery-components, .ds-gallery-composition) .actress-card-overlay .btn-glass-circle {
+        pointer-events: none;
+    }
+}
+
+/* US5-75b fix（Codex P1）：真實觸控 ≤480px poster 格——還原 .footer-default（番號可讀層）、
+ * 壓回上方 75a-US3c 的 footer-hover 常駐。
+ * 衝突來源：US3c 在 @media(pointer:coarse) 無條件把 .footer-default opacity:0 + footer-hover opacity:1
+ * （touch 顯示標題層）；但 US5 的 3 欄 poster 格（≤480px）要顯示「番號 caption」（spec §US5 / CD-75b-9），
+ * 標題在 107px 窄格不可讀。故在 ≤480px ∩ pointer:coarse ∩ poster-grid 非 hero 卡，反轉回 footer-default。
+ * scope :is(#id,…) → a=1 勝 US3c .av-card-preview .footer-* 的 (0,2,0)；:not(.hero-card) 不碰女優入口；
+ * 481px+ touch / pointer:fine 桌面皆不受影響（US3c title-on-touch 行為保留）。
+ * T5 的 .av-num ellipsis / .av-actress display:none 規則此時作用在已可見的 .footer-default 上。
+ * US-10 / T10：擴 ≤480 → ≤899 與 poster-crop 樣式同步（481–899 平板 poster 格 footer 行為一致）。 */
+@media (max-width: 899px) and (pointer: coarse) {
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid .av-card-preview:not(.hero-card) .footer-default {
+        opacity: 1;
+    }
+
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid .av-card-preview:not(.hero-card) .footer-hover {
+        opacity: 0;
+    }
+}
+
+/* ─── 56c-T3 / T3fix: Similar Mode 入口按鈕 + Sparkle Burst 預覽 ────────────
+ * .lightbox-similar-btn — 玻璃材質圓鈕，與 .lightbox-close 鏡射對稱（左上 1rem/1rem）
+ *   尺寸 44×44，與 .lightbox-close 鏡射對稱（同尺寸 + 同距邊 1rem）
+ *   icon 用 --star-glow 香檳金，呼應 56b 星空主題（CD-56B-6）
+ * .sparkle-burst — Magic 點擊預演，10 顆四角星 sparkle burst（GSAP 操作 opacity/scale/rotation）
+ */
+.lightbox-similar-btn {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    z-index: 10;
+    width: 44px; height: 44px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(var(--fluent-blur-light));
+    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    box-shadow: var(--fluent-shadow-8);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background var(--duration-fast) var(--ease-out),
+                border-color var(--duration-fast) var(--ease-out),
+                transform var(--duration-fast) var(--ease-out),
+                box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.lightbox-similar-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.6);
+    transform: scale(1.08);
+    box-shadow: var(--fluent-shadow-16);
+}
+
+.lightbox-similar-btn:active {
+    transform: scale(0.95);
+}
+
+.lightbox-similar-btn:focus-visible {
+    outline: 2px solid var(--star-glow);
+    outline-offset: 2px;
+}
+
+.lightbox-similar-btn i {
+    color: var(--star-glow);
+    font-size: 1.25rem;  /* 對齊 .lightbox-close 的 font-size */
+    line-height: 1;
+}
+
+/* 56c-T7 舊手機 grid（.lightbox-similar-mobile / .similar-mobile-grid / .similar-mobile-card 等）
+   已於 83b-T2 移除：T1 改為獨立全螢幕 .similar-mobile-panel；HTML block 已移除，CSS 同步清理。 */
+

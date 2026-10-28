@@ -1,0 +1,2041 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('showcase.page_title') }} - OpenAver{% endblock %}
+
+{% block extra_css %}
+{% include '_showcase_css.html' %}
+{% endblock %}
+
+{% block pre_alpine_module %}
+{# 進階搜尋 SSR 注入（TASK-62a-0）。放 main.js 之前確保 __ADVANCED_SEARCH__ 就緒。 #}
+{% include '_advanced_search_bootstrap.html' %}
+<script type="module" src="/static/js/pages/showcase/main.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="showcase-container ds-gallery-composition page-layer"
+     x-data="showcase"
+     @keydown.window="handleKeydown($event)"
+     @wheel="handleWheel($event)"
+     x-on:showcase:clear-search.window="clearAllFilters()">
+
+    <!-- Loading State (初始顯示) -->
+    <div class="state-page" x-cloak x-show="!showFavoriteActresses && loading && videoCount === 0">
+        <i class="bi bi-hourglass-split state-page-icon"></i>
+        <p class="state-page-text">{{ t('showcase.state.loading') }}</p>
+    </div>
+
+    <!-- Empty State (API 回傳空資料時) -->
+    <div class="state-page" x-cloak x-show="!showFavoriteActresses && !loading && !error && videoCount === 0">
+        <i class="bi bi-collection-play state-page-icon"></i>
+        <p class="state-page-text">{{ t('showcase.state.empty') }}</p>
+        <div class="empty-actions">
+            <a href="/scanner" class="btn btn-outline btn-primary btn-sm">
+                <i class="bi bi-plus-circle"></i> {{ t('showcase.state.generate_action') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Error State (API 錯誤時) -->
+    <div class="state-page error" x-cloak x-show="!loading && error">
+        <i class="bi bi-exclamation-triangle state-page-icon"></i>
+        <p class="state-page-text" x-text="error"></p>
+        <div class="empty-actions">
+            <button class="btn btn-outline btn-primary btn-sm" @click="retry()">
+                <i class="bi bi-arrow-clockwise"></i> {{ t('showcase.state.retry') }}
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content (API 載入後顯示) -->
+    <div x-show="!error && (videoCount > 0 || showFavoriteActresses)" x-cloak>
+
+        <!-- Toolbar -->
+        <div class="showcase-toolbar" :class="{ 'mobile-toolbar-open': $store.ui.toolbarOpen }">
+            <div class="toolbar-section toolbar-search">
+                <div class="spotlight-search spotlight-search--mode-toggle"
+                     :class="{ 'spotlight-search--wide-actions': [!showFavoriteActresses && _isPreciseActressMatch, $store.ui.showcaseHasSearch, libAddBtnVisible()].filter(Boolean).length >= 2 }">
+                    <!-- 模式切換 segmented toggle (44c-T4) -->
+                    <div class="mode-toggle">
+                        <button class="mode-toggle-btn"
+                                :class="{ 'active': !showFavoriteActresses }"
+                                @click="showFavoriteActresses && toggleActressMode()"
+                                :title="t('showcase.mode.video')">
+                            <i class="bi bi-film"></i>
+                        </button>
+                        <button class="mode-toggle-btn"
+                                :class="{ 'active': showFavoriteActresses }"
+                                @click="!showFavoriteActresses && toggleActressMode()"
+                                :title="t('showcase.mode.actress')">
+                            <i class="bi bi-person-circle"></i>
+                        </button>
+                    </div>
+                    <!-- 影片搜尋框 (CD-11) — pill 容器包住 input（TASK-115-T5） -->
+                    <div class="filter-pill-group" x-show="!showFavoriteActresses">
+                        <!-- role="list" 只包 pill，不包 input：list 的合法子元素只有 listitem，
+                             把輸入框圈進去會讓螢幕閱讀器數不對「目前有幾個條件」（spec §6.7 的目的本身）。
+                             pills 為空時整組 x-show 收起，避免報出一個「0 個項目的清單」。 -->
+                        <span class="filter-pill-list" role="list" x-show="pills.length">
+                            <template x-for="pill in pills" :key="pill.dim + '::' + normalizePillValue(pill.value)">
+                                <span class="filter-pill" role="listitem"
+                                      :class="{ 'is-editing': !!_releaseEditor && pill.dim === 'release' }"
+                                      :title="pill.dim === 'pick' ? t('showcase.pick.chip_label') : t('showcase.pill.title', { dim: t('showcase.pill.dim_label.' + pill.dim), value: pillLabel(pill) })">
+                                    <!-- 124a-T3: release pill 依 _pillPopoverEnabled（≤480px 為 false）
+                                         分流成可點／不可點，鏡射女優版 button/span 換型別的既有手法
+                                         （:99-125），不用 :disabled 或 pointer-events。 -->
+                                    <template x-if="pill.dim === 'release' && _pillPopoverEnabled">
+                                        <button type="button" class="filter-pill-value"
+                                                @click.stop="_toggleReleaseEditor(pill)"
+                                                x-text="pillLabel(pill)"></button>
+                                    </template>
+                                    <template x-if="!(pill.dim === 'release' && _pillPopoverEnabled)">
+                                        <span class="filter-pill-value" x-text="pillLabel(pill)"></span>
+                                    </template>
+                                    <button type="button" class="filter-pill-remove"
+                                            @click="removePill(pill.dim, pill.value)"
+                                            :aria-label="pill.dim === 'pick' ? t('showcase.pick.remove_aria') : t('showcase.pill.remove_aria', { value: pillLabel(pill) })">✕</button>
+                                </span>
+                            </template>
+                        </span>
+                        <!-- 靜態 placeholder 是 hydrate 前的 fallback，:placeholder 在 Alpine init 當下覆蓋它。
+                             兩個都要留：只留 `:placeholder` 會讓「首屏就可見」的搜尋框在 Alpine（defer）
+                             跑起來之前完全沒有提示字，而這條路徑每一次頁面載入都會走到。 -->
+                        <input type="text"
+                               placeholder="{{ t('showcase.placeholder.search') }}"
+                               :placeholder="pills.length ? '' : t('showcase.placeholder.search')"
+                               x-model="search"
+                               @input.debounce.300ms="onSearchChange()"
+                               @keydown.backspace="onSearchBackspace($event)">
+                    </div>
+                    <!-- 女優搜尋框 (CD-11) — pill 容器包住 input（TASK-116a-T3） -->
+                    <div class="filter-pill-group actress-filter-pill-group" x-show="showFavoriteActresses">
+                        <span class="filter-pill-list" role="list" x-show="actressPills.length">
+                            <template x-for="pill in actressPills" :key="pill.dim">
+                                <span class="filter-pill" role="listitem"
+                                      :class="{ 'is-editing': _pillEditor && _pillEditor.dim === pill.dim }"
+                                      :title="t('showcase.pill.dim_label.' + pill.dim)">
+                                    <!-- 116b-T3: 桌機（≥481px）可點開浮層編輯；手機（≤480px）純文字不可點
+                                         （spec §5.7，CD-116b-8）。兩個 <template x-if> 換元素型別
+                                         （button/span），不用 :disabled 或 pointer-events:none——那仍是
+                                         可被 Tab 到、進 accessibility tree 的死控制項。
+                                         .is-editing 掛在外層 .filter-pill（CD-116b-12b 逐字）——浮層錨在整條
+                                         搜尋列下方、不黏著被編輯的那一枚，整枚 pill 的 accent 邊框才是
+                                         CD-116b-4 要求的那個「是哪一枚」訊號，文字 tint 太弱。 -->
+                                    <template x-if="_pillPopoverEnabled">
+                                        <button type="button" class="filter-pill-value"
+                                                @click.stop="_togglePillEditor(pill)"
+                                                x-text="_actressPillDisplayText(pill)"></button>
+                                    </template>
+                                    <template x-if="!_pillPopoverEnabled">
+                                        <span class="filter-pill-value" x-text="_actressPillDisplayText(pill)"></span>
+                                    </template>
+                                    <button type="button" class="filter-pill-remove"
+                                            @click="removeActressPill(pill.dim, pill.value)"
+                                            :aria-label="t('showcase.pill.remove_aria', { value: _actressPillDisplayText(pill) })">✕</button>
+                                </span>
+                            </template>
+                        </span>
+                        <input type="text"
+                               :placeholder="actressPills.length ? '' : t('showcase.search.actress')"
+                               x-model="actressSearch"
+                               @input.debounce.300ms="onActressSearchChange()"
+                               @keydown.backspace="onActressSearchBackspace($event)">
+                    </div>
+
+                    <!-- 116b-T3: 女優 pill 浮層編輯器。掛在 .spotlight-search 下、與兩個
+                         .filter-pill-group 同層（不放進任一個裡面）——CD-116b-4：
+                         .filter-pill-group:focus-within { transform: scale(1.02) } 建立新的 containing
+                         block，連 position:fixed 的後代都逃不掉，放進去浮層會被拖著一起縮放位移。
+                         x-show 三合取項是第二道防線（CD-116b-8b：主力 teardown 在 T2 狀態層，這裡只是
+                         讓漏掉一條時畫面上至少看不到）。@click.stop：內部互動元素不得把點擊冒泡到
+                         未來 T4 的 @click.outside 判定（既有慣例見 showcase.html:1139 附近註解）。
+                         x-trap / @click.outside 本身留給 T4（CD-116b-9），本 task 只鋪骨架。 -->
+                    <div class="pill-editor-popover"
+                         x-show="_pillEditor && showFavoriteActresses && _pillPopoverEnabled"
+                         x-cloak
+                         x-transition.opacity.duration.150ms
+                         x-trap="!!_pillEditor"
+                         @click.outside="_pillEditor && _cancelPillEditor()"
+                         @click.stop
+                         role="dialog"
+                         aria-modal="false"
+                         aria-labelledby="pill-editor-title">
+                        <div class="pill-editor-title" id="pill-editor-title" x-text="t('showcase.pill.dim_label.' + (_pillEditor?.dim || ''))"></div>
+
+                        <div class="pill-editor-modes">
+                            <button type="button" class="pill-editor-mode" :class="{ 'is-active': _pillEditor?.op === '=' }"
+                                    @click="_applyPillOp('=')" :aria-label="t('showcase.pill.op.eq')">=</button>
+                            <button type="button" class="pill-editor-mode" :class="{ 'is-active': _pillEditor?.op === '<=' }"
+                                    @click="_applyPillOp('<=')" :aria-label="t('showcase.pill.op.lte')">≤</button>
+                            <button type="button" class="pill-editor-mode" :class="{ 'is-active': _pillEditor?.op === '>=' }"
+                                    @click="_applyPillOp('>=')" :aria-label="t('showcase.pill.op.gte')">≥</button>
+                        </div>
+
+                        <!-- 116c-T3: 自訂區間列常駐（罩杯整組不渲染）。
+                             ⚠ x-if 必須先判 _pillEditor 非 null——浮層本體是 x-show，關閉時 markup 仍在、
+                             綁定仍求值；`_pillEditor?.dim !== 'cup'` 在 null 時為 true 會炸 x-model（CD-116c-5）。 -->
+                        <template x-if="_pillEditor && _pillEditor.dim !== 'cup'">
+                            <div class="pill-editor-custom">
+                                <div class="pill-editor-custom-label">
+                                    <span x-text="t('showcase.pill.op.range')"></span><span class="pill-editor-hint" x-text="_pillDimRangeHint()"></span>
+                                </div>
+                                <div class="pill-editor-range">
+                                    <input type="number" class="input input-bordered input-sm"
+                                           inputmode="numeric"
+                                           x-model="_pillEditor.rangeLo"
+                                           @input="_pillEditor.badLo = $event.target.validity.badInput"
+                                           :aria-label="t('showcase.pill.editor.range_min')">
+                                    <span class="pill-editor-range-sep" aria-hidden="true">~</span>
+                                    <input type="number" class="input input-bordered input-sm"
+                                           inputmode="numeric"
+                                           x-model="_pillEditor.rangeHi"
+                                           @input="_pillEditor.badHi = $event.target.validity.badInput"
+                                           :aria-label="t('showcase.pill.editor.range_max')">
+                                </div>
+                                <div class="pill-editor-actions" x-show="_pillEditorHasRangeInput()">
+                                    <button type="button" class="pill-editor-btn cancel" @click="_cancelPillEditor()"
+                                            :aria-label="t('common.action.cancel')"><i class="bi bi-x-lg"></i></button>
+                                    <button type="button" class="pill-editor-btn confirm" @click="_commitPillEditor()"
+                                            :aria-label="t('common.action.confirm')"><i class="bi bi-check-lg"></i></button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- 124a-T3: 發售日 pill 浮層編輯器。與女優浮層同層（.spotlight-search 下），
+                         互斥條件對稱：女優版 x-show 帶 showFavoriteActresses，這裡帶
+                         !showFavoriteActresses（release 浮層只在影片模式出現）。§3.5 不變式
+                         （兩個 editor slot 恆不同時非 null）已由 T2 保證，這裡是第二層防禦。 -->
+                    <div class="pill-editor-popover"
+                         x-show="_releaseEditor && !showFavoriteActresses && _pillPopoverEnabled"
+                         x-cloak
+                         x-transition.opacity.duration.150ms
+                         x-trap="!!_releaseEditor"
+                         @click.outside="_releaseEditor && _cancelReleaseEditor()"
+                         @click.stop
+                         role="dialog"
+                         aria-modal="false"
+                         aria-labelledby="release-editor-title">
+                        <div class="pill-editor-title" id="release-editor-title" x-text="t('showcase.pill.dim_label.release')"></div>
+
+                        <div class="pill-editor-modes">
+                            <button type="button" class="pill-editor-mode" :class="{ 'is-active': _releaseEditor?.op === '=' }"
+                                    @click="_applyReleaseOp('=')" :aria-label="t('showcase.pill.op.eq')">=</button>
+                            <button type="button" class="pill-editor-mode" :class="{ 'is-active': _releaseEditor?.op === '<=' }"
+                                    @click="_applyReleaseOp('<=')" :aria-label="t('showcase.pill.op.lte')">≤</button>
+                            <button type="button" class="pill-editor-mode" :class="{ 'is-active': _releaseEditor?.op === '>=' }"
+                                    @click="_applyReleaseOp('>=')" :aria-label="t('showcase.pill.op.gte')">≥</button>
+                        </div>
+
+                        <!-- 124a-T3: 四格所在的 x-if 只判 _releaseEditor 非 null（不像女優版還要判
+                             dim !== 'cup'）——_releaseEditor 本身就是唯一閘門。⚠ 必須是裸判斷，不得
+                             寫成 _releaseEditor?.xxx（浮層本體是 x-show，關閉時 markup 仍在文件裡，
+                             x-model 對 null 求值會直接炸 FE-ALPINE-03）。 -->
+                        <template x-if="_releaseEditor">
+                            <div class="pill-editor-custom">
+                                <div class="pill-editor-custom-label">
+                                    <span x-text="t('showcase.pill.op.range')"></span><span class="pill-editor-hint" x-text="_releaseYearHint()"></span>
+                                </div>
+                                <div class="pill-editor-range">
+                                    <input type="number" class="input input-bordered input-sm pe-ym-year"
+                                           inputmode="numeric"
+                                           x-model="_releaseEditor.loYear"
+                                           @input="_releaseEditor.badLoY = $event.target.validity.badInput"
+                                           :aria-label="t('showcase.pill.editor.from_year')">
+                                    <input type="number" class="input input-bordered input-sm pe-ym-month"
+                                           inputmode="numeric"
+                                           x-model="_releaseEditor.loMonth"
+                                           @input="_releaseEditor.badLoM = $event.target.validity.badInput"
+                                           :aria-label="t('showcase.pill.editor.from_month')">
+                                    <span class="pill-editor-range-sep" aria-hidden="true">~</span>
+                                    <input type="number" class="input input-bordered input-sm pe-ym-year"
+                                           inputmode="numeric"
+                                           x-model="_releaseEditor.hiYear"
+                                           @input="_releaseEditor.badHiY = $event.target.validity.badInput"
+                                           :aria-label="t('showcase.pill.editor.to_year')">
+                                    <input type="number" class="input input-bordered input-sm pe-ym-month"
+                                           inputmode="numeric"
+                                           x-model="_releaseEditor.hiMonth"
+                                           @input="_releaseEditor.badHiM = $event.target.validity.badInput"
+                                           :aria-label="t('showcase.pill.editor.to_month')">
+                                </div>
+                                <div class="pill-editor-actions" x-show="_releaseEditorHasInput()">
+                                    <button type="button" class="pill-editor-btn cancel" @click="_cancelReleaseEditor()"
+                                            :aria-label="t('common.action.cancel')"><i class="bi bi-x-lg"></i></button>
+                                    <button type="button" class="pill-editor-btn confirm" @click="_commitReleaseEditor()"
+                                            :aria-label="t('common.action.confirm')"><i class="bi bi-check-lg"></i></button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="search-actions-right">
+                        <!-- 44b: heart icon (precise match) -->
+                        <button class="btn-icon"
+                                x-show="!showFavoriteActresses && _isPreciseActressMatch"
+                                x-cloak
+                                :disabled="_matchedActress?.is_favorite || _favoriteHeartLoading"
+                                @click="addFavoriteFromSearch()"
+                                :title="_matchedActress?.is_favorite ? t('showcase.actress.favorited') : t('showcase.actress.addFavorite')">
+                            <i class="bi" :class="{
+                                'bi-arrow-clockwise spin': _favoriteHeartLoading,
+                                'bi-heart-fill': _matchedActress?.is_favorite && !_favoriteHeartLoading,
+                                'bi-heart': !_matchedActress?.is_favorite && !_favoriteHeartLoading
+                            }" :style="_matchedActress?.is_favorite && !_favoriteHeartLoading ? 'color: var(--color-favorite)' : ''"></i>
+                        </button>
+                        <button class="btn-icon"
+                                x-show="$store.ui.showcaseHasSearch"
+                                @click="clearAllFilters()"
+                                title="{{ t('showcase.action.clear_search') }}">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                        <!-- [+ 新增] 從片庫加入女優面板（117b-T10：搬入 search-actions-right） -->
+                        <button class="btn-icon actress-add-btn"
+                                x-ref="actressAddBtn"
+                                x-show="libAddBtnVisible()"
+                                x-cloak
+                                @click="openActressAddPanel()"
+                                :title="t('showcase.actress.add')"
+                                :class="{ 'active': actressAddPanelOpen }">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                        <button class="btn-icon active"
+                                @click="(showFavoriteActresses ? onActressSearchChange() : onSearchChange()); $store.ui.toolbarOpen = false"
+                                title="{{ t('showcase.action.search') }}">
+                            <i class="bi bi-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="toolbar-section toolbar-controls" x-show="!showFavoriteActresses">
+                <div class="control-group">
+                    <!-- 排序 -->
+                    <div class="toolbar-dropdown-wrap" @click.outside="sortOpen = false">
+                        <button class="btn-icon"
+                                @click="sortOpen = !sortOpen; modeOpen = false"
+                                :title="t('showcase.toolbar.sort_prefix') + ': ' + sort"
+                                :class="{ 'active': sortOpen || _hasPickPill() }">
+                            <i class="bi bi-funnel"></i>
+                        </button>
+                        <div class="toolbar-dropdown" x-show="sortOpen" x-transition.opacity.duration.150ms @click.stop>
+                            <a href="#" class="dropdown-item dropdown-item-pick" :class="{ 'is-checked': _hasPickPill() }"
+                               @click.prevent="togglePickPill(); sortOpen = false">
+                                <i class="bi bi-star-fill"></i> {{ t('showcase.filter.pick_only') }}
+                                <i class="bi bi-check2 dropdown-item-pick-check" x-show="_hasPickPill()"></i>
+                            </a>
+                            <div class="dropdown-divider"></div>
+                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'date' }"
+                               @click.prevent="sort = 'date'; onSortChange(); sortOpen = false">
+                                <i class="bi bi-calendar"></i> {{ t('showcase.sort.date') }}</a>
+                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'num' }"
+                               @click.prevent="sort = 'num'; onSortChange(); sortOpen = false">
+                                <i class="bi bi-hash"></i> {{ t('showcase.sort.num') }}</a>
+                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'title' }"
+                               @click.prevent="sort = 'title'; onSortChange(); sortOpen = false">
+                                <i class="bi bi-type"></i> {{ t('showcase.sort.title') }}</a>
+                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'actor' }"
+                               @click.prevent="sort = 'actor'; onSortChange(); sortOpen = false">
+                                <i class="bi bi-person-circle"></i> {{ t('showcase.sort.actor') }}</a>
+                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'maker' }"
+                               @click.prevent="sort = 'maker'; onSortChange(); sortOpen = false">
+                                <i class="bi bi-building"></i> {{ t('showcase.sort.maker') }}</a>
+                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'size' }"
+                               @click.prevent="sort = 'size'; onSortChange(); sortOpen = false">
+                                <i class="bi bi-file-earmark"></i> {{ t('showcase.sort.size') }}</a>
+                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'mdate' }"
+                               @click.prevent="sort = 'mdate'; onSortChange(); sortOpen = false">
+                                <i class="bi bi-clock"></i> {{ t('showcase.sort.mdate') }}</a>
+                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'random' }"
+                               @click.prevent="sort = 'random'; onSortChange(); sortOpen = false">
+                                <i class="bi bi-shuffle"></i> {{ t('showcase.sort.random') }}</a>
+                        </div>
+                    </div>
+                    <button class="btn-icon" @click="toggleOrder()" title="{{ t('showcase.action.toggle_order') }}">
+                        <i class="bi" :class="order === 'asc' ? 'bi-sort-up' : 'bi-sort-down'"></i>
+                    </button>
+                    <!-- 顯示模式 -->
+                    <button class="btn-icon"
+                            x-show="!showTableList && !_isNarrow"
+                            @click="selectPresentation(cardShape === 'poster' ? 'cover' : 'poster')"
+                            :title="t('showcase.toolbar.mode_prefix') + ': ' + (cardShape === 'poster' ? t('showcase.mode.poster') : t('showcase.mode.cover'))">
+                        <i class="bi" :class="cardShape === 'poster' ? 'bi-person-badge' : 'bi-person-vcard icon-mirror-x'"></i>
+                    </button>
+                    <div class="toolbar-dropdown-wrap" x-show="showTableList" @click.outside="modeOpen = false">
+                        <button class="btn-icon"
+                                @click="modeOpen = !modeOpen; sortOpen = false"
+                                :title="t('showcase.toolbar.mode_prefix') + ': ' + (mode === 'grid' ? (_isNarrow ? t('showcase.mode.grid') : (cardShape === 'poster' ? t('showcase.mode.poster') : t('showcase.mode.cover'))) : mode === 'table' ? t('showcase.mode.table') : t('showcase.mode.list'))"
+                                :class="{ 'active': modeOpen }">
+                            <i class="bi" :class="mode === 'grid' ? 'bi-grid-3x3' : mode === 'table' ? 'bi-table' : 'bi-list-ul'"></i>
+                        </button>
+                        <div class="toolbar-dropdown" x-show="modeOpen" x-transition.opacity.duration.150ms @click.stop>
+                            <a href="#" class="dropdown-item" x-show="showTableList && _isNarrow" :class="{ 'active': mode === 'grid' }"
+                               @click.prevent="selectPresentation(_gridTarget()); modeOpen = false">
+                                <i class="bi bi-grid-3x3"></i> {{ t('showcase.mode.grid') }}</a>
+                            <a href="#" class="dropdown-item" x-show="showTableList && !_isNarrow" :class="{ 'active': mode === 'grid' && cardShape === 'cover' }"
+                               @click.prevent="selectPresentation('cover'); modeOpen = false">
+                                <i class="bi bi-person-vcard icon-mirror-x"></i> {{ t('showcase.mode.cover') }}</a>
+                            <a href="#" class="dropdown-item" x-show="showTableList && !_isNarrow" :class="{ 'active': mode === 'grid' && cardShape === 'poster' }"
+                               @click.prevent="selectPresentation('poster'); modeOpen = false">
+                                <i class="bi bi-person-badge"></i> {{ t('showcase.mode.poster') }}</a>
+                            <a href="#" class="dropdown-item" x-show="showTableList" :class="{ 'active': mode === 'table' }"
+                               @click.prevent="selectPresentation('table'); modeOpen = false">
+                                <i class="bi bi-table"></i> {{ t('showcase.mode.table') }}</a>
+                            <a href="#" class="dropdown-item" x-show="showTableList" :class="{ 'active': mode === 'list' }"
+                               @click.prevent="selectPresentation('list'); modeOpen = false">
+                                <i class="bi bi-list-ul"></i> {{ t('showcase.mode.list') }}</a>
+                        </div>
+                    </div>
+                    <!-- 資訊顯示開關 (僅 Grid 模式) -->
+                    <button class="btn-icon toggle-info-eye-btn"
+                            x-show="mode === 'grid'"
+                            :class="{ 'active': infoVisible }"
+                            @click="toggleInfo()"
+                            title="{{ t('showcase.action.toggle_info') }}">
+                        <i class="bi bi-eye toggle-info-eye-icon" :class="{ 'toggle-info-eye-icon-hidden': infoVisible }" aria-hidden="true"></i>
+                        <i class="bi bi-eye-slash toggle-info-eye-icon" :class="{ 'toggle-info-eye-icon-hidden': !infoVisible }" aria-hidden="true"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 女優模式 Toolbar Controls (T3) -->
+            <div class="toolbar-section toolbar-controls" x-show="showFavoriteActresses">
+                <div class="control-group">
+                    <!-- 女優排序 dropdown（6 選項） -->
+                    <div class="toolbar-dropdown-wrap" x-data="{ actressSortOpen: false }" @click.outside="actressSortOpen = false">
+                        <button class="btn-icon"
+                                @click="actressSortOpen = !actressSortOpen"
+                                :title="t('showcase.toolbar.sort_prefix') + ': ' + actressSort"
+                                :class="{ 'active': actressSortOpen }">
+                            <i class="bi bi-funnel"></i>
+                        </button>
+                        <div class="toolbar-dropdown" x-show="actressSortOpen" x-transition.opacity.duration.150ms @click.stop>
+                            <a href="#" class="dropdown-item" :class="{ 'active': actressSort === 'video_count' }"
+                               @click.prevent="actressSort = 'video_count'; onActressSortChange(); actressSortOpen = false">
+                                <i class="bi bi-film"></i> {{ t('showcase.sort.actress.video_count') }}</a>
+                            <a href="#" class="dropdown-item" :class="{ 'active': actressSort === 'name' }"
+                               @click.prevent="actressSort = 'name'; onActressSortChange(); actressSortOpen = false">
+                                <i class="bi bi-type"></i> {{ t('showcase.sort.actress.name') }}</a>
+                            <a href="#" class="dropdown-item" :class="{ 'active': actressSort === 'added_at' }"
+                               @click.prevent="actressSort = 'added_at'; onActressSortChange(); actressSortOpen = false">
+                                <i class="bi bi-calendar-plus"></i> {{ t('showcase.sort.actress.added_at') }}</a>
+                            <a href="#" class="dropdown-item" :class="{ 'active': actressSort === 'age' }"
+                               @click.prevent="actressSort = 'age'; onActressSortChange(); actressSortOpen = false">
+                                <i class="bi bi-person-circle"></i> {{ t('showcase.sort.actress.age') }}</a>
+                            <a href="#" class="dropdown-item" :class="{ 'active': actressSort === 'height' }"
+                               @click.prevent="actressSort = 'height'; onActressSortChange(); actressSortOpen = false">
+                                <i class="bi bi-arrow-up"></i> {{ t('showcase.sort.actress.height') }}</a>
+                            <a href="#" class="dropdown-item" :class="{ 'active': actressSort === 'cup' }"
+                               @click.prevent="actressSort = 'cup'; onActressSortChange(); actressSortOpen = false">
+                                <i class="bi bi-star"></i> {{ t('showcase.sort.actress.cup') }}</a>
+                        </div>
+                    </div>
+                    <!-- 升降序 toggle -->
+                    <button class="btn-icon" @click="toggleActressOrder()" title="{{ t('showcase.action.toggle_order') }}">
+                        <i class="bi" :class="actressOrder === 'asc' ? 'bi-sort-up' : 'bi-sort-down'"></i>
+                    </button>
+                    <!-- 資訊顯示開關（女優牆恆常顯示，不受 mode 限制） -->
+                    <button class="btn-icon toggle-info-eye-btn"
+                            :class="{ 'active': infoVisible }"
+                            @click="toggleInfo()"
+                            title="{{ t('showcase.action.toggle_info') }}">
+                        <i class="bi bi-eye toggle-info-eye-icon" :class="{ 'toggle-info-eye-icon-hidden': infoVisible }" aria-hidden="true"></i>
+                        <i class="bi bi-eye-slash toggle-info-eye-icon" :class="{ 'toggle-info-eye-icon-hidden': !infoVisible }" aria-hidden="true"></i>
+                    </button>
+                    <!-- [+ 新增] 已搬至 search-actions-right（117b-T10） -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 81-T3: 行動工具列透明 backdrop（≤480，點擊收合）。用 @click（非 @click.outside，避子元素 .stop 吃掉觸發）-->
+        <div class="mobile-toolbar-backdrop" x-show="$store.ui.toolbarOpen" @click="$store.ui.toolbarOpen = false" x-cloak></div>
+
+        <!-- 影片模式：status bar + grid / table / list (CD-2: x-if 避免 Alpine 追蹤隱藏陣列 DOM) -->
+        <template x-if="!showFavoriteActresses">
+        <div>
+
+        <!-- Status Bar 已於 v0.7.8 (49a-T4) 移除，統合至底部 .showcase-footer 三段式 -->
+
+        <!-- Image Grid -->
+        <div class="showcase-grid" :class="{ 'shape-poster': cardShape === 'poster', 'info-open': infoVisible }" x-show="mode === 'grid'">
+            <!-- Hero Card（影片模式精準匹配）— grid 內第一個 child，同 /search pattern -->
+            <div class="av-card-preview hero-card"
+                 x-show="!showFavoriteActresses && _isPreciseActressMatch && _matchedActress?.is_favorite"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="opacity-100 translate-y-0"
+                 x-transition:leave-end="opacity-0 -translate-y-2"
+                 x-cloak
+                 @click="openHeroCardLightbox()">
+              <div class="av-card-preview-img">
+                <!-- 67-A3: hero 三態（actress photo，獨立 _heroCardImageLoaded，CD-67-4）。首屏 eager+high -->
+                <!-- TASK-138-T5（CD-E1/E2）：hero 卡焦點裁切接線。
+                     applyCellFocal 用 2 引數（省略第三參數 ⇒ 預設 --poster-crop-ratio）——
+                     CD-100b：hero 卡要跟同一列的影片卡對齊裁窗，不得抄女優卡 3 引數
+                     --actress-crop-ratio（抄錯不會報錯，只會裁得不一致）。
+                     $watch 路徑一律用 ?.——_matchedActress 在沒有精準命中時是 null，
+                     影片卡／女優卡 watch 的是 x-for 迴圈變數（永遠存在），那個形狀不能照抄。 -->
+                <img :src="_matchedActress?.photo_url || ''"
+                     :alt="_matchedActress?.name"
+                     loading="eager"
+                     fetchpriority="high"
+                     x-show="_matchedActress?.photo_url && !_heroCardImageError"
+                     :class="{ 'cover-loaded': _heroCardImageLoaded }"
+                     @load="_heroCardImageLoaded = true; applyCellFocal($el, _matchedActress)"
+                     @error="if (_matchedActress?.photo_url) _heroCardImageError = true"
+                     x-init="$watch('_matchedActress?.auto_focal', () => applyCellFocal($el, _matchedActress));
+                             $watch('_matchedActress?.crop_mode', () => applyCellFocal($el, _matchedActress))">
+                <!-- 67-A3: skeleton overlay。gate 含 photo_url（空 photo 的 img src="" 不觸發 @load/@error → 不卡 shimmer，鏡射 grid cover_url gate）-->
+                <div class="skeleton-cover shimmer"
+                     x-show="_matchedActress?.photo_url && !_heroCardImageError && !_heroCardImageLoaded"></div>
+                <!-- 67/Codex P2#2: 空 photo_url（src="" 不觸發 @error）或 404 error 皆顯破圖 icon；img x-show 同步 gate photo_url，不顯空白框（鏡射 grid no-cover）-->
+                <div x-show="_matchedActress && (!_matchedActress.photo_url || _heroCardImageError)"
+                     class="av-card-no-cover">
+                  <i class="bi bi-image"></i>
+                  <span x-text="t('common.no_image')"></span>
+                </div>
+                <div class="av-card-preview-overlay always-visible"
+                     x-show="_matchedActress"
+                     @click.stop>
+                  <button class="btn-glass-circle is-favorite"
+                          @click.stop="window.GhostFly && GhostFly.floatingHearts($el)"
+                          :title="t('showcase.actress.favorited')">
+                    <i class="bi bi-heart-fill"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="av-card-preview-footer">
+                <div class="footer-default" x-show="_matchedActress">
+                  <span class="av-num" x-text="_matchedActress?.name || '-'">-</span>
+                  <span class="av-actress"
+                        x-text="_matchedActress?.age ? _matchedActress.age + t('search.unit.age') : ''"></span>
+                </div>
+                <div class="footer-hover" x-show="_matchedActress && !infoVisible">
+                  <div class="hover-title"
+                       x-text="[
+                         _matchedActress?.height || '',
+                         _matchedActress?.cup ? _matchedActress.cup + t('search.unit.cup') : '',
+                         [_matchedActress?.bust, _matchedActress?.waist, _matchedActress?.hip].filter(Boolean).join('-')
+                       ].filter(Boolean).join(' · ') || '-'"></div>
+                </div>
+              </div>
+              <!-- TASK-138-T2（CD-B1/B2/B3/B4）：hero 卡展開資訊區，鏡射女優卡 :796-807，
+                   純顯示不可點（spec #1）。資料直接呼叫既有 _actressInfoParts()，不新增 state。 -->
+              <div class="card-info actress-card-info"
+                   :class="{'has-info': _actressInfoParts(_matchedActress).length || _heroCardTagParts(_matchedActress).length}"
+                   x-cloak @click.stop>
+                  <template x-for="(part, i) in _actressInfoParts(_matchedActress)" :key="i">
+                      <span x-text="part.text"></span>
+                  </template>
+                  <!-- TASK-138-T4（CD-D1〜D8）：hero 卡補白標籤列，鏡射一般影片卡 .info-tags
+                       （:636-641），純顯示不可點（spec 缺口 D）。資料走新純函式
+                       _heroCardTagParts()，不改 _actressInfoParts()。 -->
+                  <div class="info-tags" x-show="_heroCardTagParts(_matchedActress).length" x-cloak>
+                      <template x-for="(part, i) in _heroCardTagParts(_matchedActress)" :key="i">
+                          <span class="tag" x-text="part.text" :title="part.title"></span>
+                      </template>
+                  </div>
+              </div>
+            </div>
+            <template x-for="(video, index) in paginatedVideos" :key="video.path">
+                <div class="av-card-preview"
+                     :class="{ 'missing-cover': !video.has_cover }"
+                     @click="openLightbox(getCurrentFilteredIndex(index))"
+                     :style="`--card-index: ${index}`"
+                     :data-flip-id="video.path">
+                    <div class="av-card-preview-img">
+                        <!-- 67-A2: 三態（CD-67-3）。保留單一 <img> 沿用 handleCoverError 換圖；
+                             淡入靠 _imgLoaded 的 .cover-loaded class（A1 CSS）；首屏前 8 張 eager+high（CD-67-5，不可 lazy+high 並存）。
+                             150b-T3 起「要不要載」改由 _coverRequested / x-intersect 決定，
+                             :loading / :fetchpriority 只決定已通過閘之後的下載優先序 -->
+                        <img :src="((index < 8 && mode === 'grid') || video._coverRequested) ? video.cover_url : null"
+                             :alt="video.number"
+                             :loading="index < 8 ? 'eager' : 'lazy'"
+                             :fetchpriority="index < 8 ? 'high' : 'auto'"
+                             x-show="video.cover_url"
+                             :class="{ 'cover-loaded': video._imgLoaded }"
+                             @load="video._imgLoaded = true; applyCellFocal($el, video)"
+                             @error="handleCoverError(video, $event)"
+                             x-intersect.once.margin.690px="video._coverRequested = true"
+                             x-init="$watch('video.auto_focal', () => applyCellFocal($el, video));
+                                     $watch('video.crop_mode', () => applyCellFocal($el, video))">
+                        <!-- 67-A2: skeleton overlay（pending 時，gate 含 has_cover → stale @error 後 has_cover=false 自動退出）-->
+                        <div class="skeleton-cover shimmer"
+                             x-show="video.cover_url && video.has_cover && !video._imgLoaded && video._coverRequested"></div>
+                        <!-- 67-A2: no-cover（CD-67-3 (a)：DB 缺封面 cover_url="" 空白 img 不發請求；鏡射 hero :272-276）。
+                             與 stale-@error 換 placeholder 路徑互斥（stale 時 cover_url 仍非空 → 不顯示，不雙重渲染）-->
+                        <div x-show="!video.cover_url" class="av-card-no-cover">
+                          <i class="bi bi-image"></i>
+                          <span x-text="t('common.no_image')"></span>
+                        </div>
+                        <template x-if="(video._badges || []).length">
+                            <div class="cover-badges">
+                                <template x-for="b in (video._badges || [])" :key="b.id">
+                                    <span class="cover-badge" x-text="b.display_name"></span>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="(video.part_tokens || []).length">
+                            <div class="cover-badges-part">
+                                <span class="cover-badge" x-text="formatPartLabel(video.part_tokens)"></span>
+                            </div>
+                        </template>
+                        <div class="av-card-preview-overlay">
+                            <button class="btn-glass-circle"
+                                    @click.stop="playVideo(video.path)"
+                                    title="{{ t('showcase.action.play_video') }}">
+                                <i class="bi bi-play-fill"></i>
+                            </button>
+                            <button class="btn-glass-circle js-open-folder"
+                                    @click.stop="openLocal(video.path)"
+                                    title="{{ t('search.action.open_folder') }}">
+                                <i class="bi bi-folder2-open"></i>
+                            </button>
+                            <!-- 74b US4: tap=enrichVideo（自動補缺）；長壓已移除（進階重刮收斂到燈箱齒輪 ⚙）。 -->
+                            <button class="btn-glass-circle enrich-btn"
+                                    x-show="shouldShowEnrichButton(video)"
+                                    :disabled="_enriching"
+                                    @click.stop="enrichVideo(video)"
+                                    title="{{ t('showcase.action.enrich') }}">
+                                <i class="bi" :class="_enriching ? 'bi-arrow-clockwise spin' : 'bi-search'"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="av-card-preview-footer">
+                        <div class="footer-default">
+                            <span class="footer-num-group">
+                                <span class="pick-star-mark bi bi-star-fill" aria-hidden="true"
+                                      x-show="(video.user_rating || 0) > 0"></span>
+                                <span class="av-num" x-text="video.number"></span>
+                            </span>
+                            <span class="av-actress"><span x-text="video.actresses || t('showcase.grid.unknown_actor')"></span><span class="lb-actor-age" x-show="singleActorAge(video) != null" x-text="' (' + singleActorAge(video) + t('showcase.unit.age_suffix') + ')'"></span></span>
+                        </div>
+                        <div class="footer-hover" x-show="!infoVisible">
+                            <div class="hover-title" x-text="video.title || t('showcase.grid.unknown_title')"></div>
+                        </div>
+                    </div>
+                    <!-- Card Info 展開區 (M3i) — footer 同層，展開時撐高卡片 -->
+                    <div class="card-info" x-cloak @click.stop>
+                        <div class="info-title" x-text="video.title || t('showcase.grid.unknown_title')"></div>
+                        <div class="info-row" x-show="video.actresses">
+                            <b>{{ t('showcase.label.actor') }}：</b>
+                            <template x-for="(actress, i) in (video.actresses || '').split(',').filter(a => a.trim())" :key="actress">
+                                <span>
+                                    <span x-show="i > 0">, </span>
+                                    <span class="info-actor-unit">
+                                        <a class="info-link" href="#"
+                                           @click.prevent.stop="searchFromMetadata(actress.trim(), 'actress')"
+                                           x-text="actress.trim()"></a><span class="lb-actor-age" x-show="video._cardActorAges?.[actress.trim()] != null" x-text="' (' + video._cardActorAges?.[actress.trim()] + t('showcase.unit.age_suffix') + ')'"></span>
+                                    </span>
+                                </span>
+                            </template>
+                        </div>
+                        <div class="info-row info-meta">
+                            <span x-show="video.maker">
+                                <b>{{ t('showcase.label.maker') }}：</b>
+                                <a class="info-link" href="#"
+                                   @click.prevent.stop="searchFromMetadata(video.maker, 'maker')"
+                                   x-text="video.maker"></a>
+                            </span>
+                            <span x-show="video.release_date">
+                                <b>{{ t('showcase.label.date') }}：</b><template x-if="_isReleaseClickable(video)">
+                                    <a class="info-link" href="#"
+                                       @click.prevent.stop="searchFromMetadata(video.release_date, 'release')"
+                                       x-text="video.release_date"></a>
+                                </template>
+                                <template x-if="!_isReleaseClickable(video)">
+                                    <span x-text="video.release_date"></span>
+                                </template>
+                            </span>
+                        </div>
+                        <div class="info-row" x-show="video.series">
+                            <b>{{ t('showcase.label.series') }}：</b>
+                            <a class="info-link" href="#"
+                               @click.prevent.stop="searchFromMetadata(video.series, 'series')"
+                               x-text="video.series"></a>
+                        </div>
+                        <div class="info-row" x-show="video.duration">
+                            <b>{{ t('showcase.label.duration') }}：</b><span x-text="video.duration ? video.duration + ' ' + t('showcase.unit.minutes') : ''"></span>
+                        </div>
+                        <div class="info-tags" x-show="video.tags">
+                            <template x-for="tag in (video.tags || '').split(',').filter(t => t.trim())" :key="tag">
+                                <a class="tag info-link" href="#"
+                                   @click.prevent.stop="searchFromMetadata(tag.trim(), 'tag')"
+                                   x-text="tag.trim()"></a>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Detail Table (M3b) -->
+        <div class="showcase-table-wrapper" x-show="mode === 'table'" x-cloak>
+            <div class="table-scroll-container">
+                <table class="table table-zebra table-pin-rows">
+                    <thead>
+                        <tr>
+                            <th class="table-col-index">#</th>
+                            <th class="table-col-number">{{ t('showcase.table.col_number') }}</th>
+                            <th class="table-col-title">{{ t('showcase.table.col_title') }}</th>
+                            <th class="table-col-actor">{{ t('showcase.table.col_actor') }}</th>
+                            <th class="table-col-maker">{{ t('showcase.table.col_maker') }}</th>
+                            <th class="table-col-director">{{ t('showcase.table.col_director') }}</th>
+                            <th class="table-col-duration">{{ t('showcase.table.col_duration') }}</th>
+                            <th class="table-col-date">{{ t('showcase.table.col_date') }}</th>
+                            <th class="table-col-tags">{{ t('showcase.table.col_tags') }}</th>
+                            <th class="table-col-size">{{ t('showcase.table.col_size') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="(video, index) in paginatedVideos" :key="video.path">
+                            <tr @click="openLightbox(getCurrentFilteredIndex(index))" class="table-row-clickable">
+                                <td class="table-cell-index" x-text="getCurrentFilteredIndex(index) + 1"></td>
+                                <!-- 123-T8b：下面兩個 <span> 之間不得留空白字元。<td> 是 inline 格式化
+                                     脈絡，換行縮排會塌成一個空格（實測讓星到番號的距離變成 11.4px，而 grid
+                                     只有 3px）——spec §4.2 要求「一律在番號正前方」，三種呈現必須一致。
+                                     註解刻意放在 <td> 外：它若在 anchor 與 payload 之間會撐破
+                                     [123-T5] AC-4/5 table 守衛的 window。 -->
+                                <td class="table-cell-number">
+                                    <span class="pick-star-mark bi bi-star-fill" aria-hidden="true"
+                                          x-show="(video.user_rating || 0) > 0"></span><span class="table-number-highlight" x-text="video.number"></span>
+                                    <template x-if="(video.part_tokens || []).length">
+                                        <span class="cover-badge" x-text="formatPartLabel(video.part_tokens)"></span>
+                                    </template>
+                                </td>
+                                <td class="table-cell-title" x-text="video.title || t('showcase.grid.unknown_title')"></td>
+                                <td class="table-cell-actor" x-text="video.actresses || t('showcase.grid.unknown_actor')"></td>
+                                <td class="table-cell-maker" x-text="video.maker || '-'"></td>
+                                <td class="table-cell-director" x-text="video.director || '-'"></td>
+                                <td class="table-cell-duration" x-text="video.duration ? video.duration + ' ' + t('showcase.unit.minutes_abbr') : '-'"></td>
+                                <td class="table-cell-date" x-text="video.release_date || '-'"></td>
+                                <td class="table-cell-tags">
+                                    <template x-if="video.tags">
+                                        <div class="table-tags-wrapper">
+                                            <template x-for="tag in video.tags.split(',').slice(0, 3).filter(t => t.trim())" :key="tag">
+                                                <span class="table-tag" x-text="tag.trim()"></span>
+                                            </template>
+                                            <template x-if="video.tags.split(',').length > 3">
+                                                <span class="table-tag-more" x-text="`+${video.tags.split(',').length - 3}`"></span>
+                                            </template>
+                                        </div>
+                                    </template>
+                                    <template x-if="!video.tags">
+                                        <span class="text-muted">-</span>
+                                    </template>
+                                </td>
+                                <td class="table-cell-size">
+                                    <span class="table-size-mono" x-text="formatSize(video.size || 0)"></span>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Text List (M3c) -->
+        <div class="showcase-list-wrapper" x-show="mode === 'list'" x-cloak>
+            <ul class="showcase-list">
+                <template x-for="(video, index) in paginatedVideos" :key="video.path">
+                    <li class="list-item" @click="openLightbox(getCurrentFilteredIndex(index))">
+                        <span class="pick-star-mark bi bi-star-fill" aria-hidden="true"
+                              x-show="(video.user_rating || 0) > 0"></span>
+                        <span class="list-number" x-text="video.number"></span>
+                        <template x-if="(video.part_tokens || []).length">
+                            <span class="cover-badge" x-text="formatPartLabel(video.part_tokens)"></span>
+                        </template>
+                        <span class="list-title" x-text="video.title || t('showcase.grid.unknown_title')"></span>
+                        <span class="list-actor" x-show="video.actresses" x-text="`(${video.actresses})`"></span>
+                    </li>
+                </template>
+            </ul>
+        </div>
+
+        </div>
+        </template><!-- end x-if="!showFavoriteActresses" -->
+
+        <!-- 女優模式：loading / empty state / actress grid (T3) -->
+        <template x-if="showFavoriteActresses">
+          <div>
+            <!-- Loading spinner -->
+            <div class="state-page" x-cloak x-show="actressLoading">
+                <i class="bi bi-hourglass-split state-page-icon"></i>
+            </div>
+            <!-- Empty state -->
+            <div class="state-page" x-cloak x-show="!actressLoading && actressCount === 0">
+                <i class="bi bi-person-heart state-page-icon"></i>
+                <p class="state-page-text" x-text="t('showcase.actress.empty')"></p>
+                <p class="state-page-text" x-text="t('showcase.actress.emptyHint')"></p>
+            </div>
+            <!-- Search/filter empty (T4) -->
+            <div class="state-page" x-cloak x-show="!actressLoading && actressCount > 0 && filteredActressCount === 0">
+                <i class="bi bi-search state-page-icon"></i>
+                <p class="state-page-text" x-text="t('showcase.actress.searchEmpty')"></p>
+            </div>
+            <!-- Actress Grid -->
+            <div class="actress-grid" :class="{ 'info-open': infoVisible }" x-show="!actressLoading && filteredActressCount > 0">
+                <template x-for="(actress, index) in paginatedActresses" :key="actress.name">
+                    <div class="actress-card"
+                         :data-flip-id="'actress:' + actress.name"
+                         @click="openActressLightbox(index)">
+                        <!-- Photo -->
+                        <div class="actress-card-photo">
+                            <template x-if="actress.photo_url">
+                                <!-- 100b-T4（§A／CD-6）：比照 video 牆格三件套（:330-333），ratioVar
+                                     傳 '--actress-crop-ratio'（CD-3）。x-if 只在 photo_url 從無到有時
+                                     掛載一次（女優已有照片、換照片/焦點的常態路徑不重新掛載）——
+                                     @load 蓋首次掛載，$watch 蓋之後所有欄位變動（applyCellFocal.js
+                                     開頭註解：node:test 測不到「resolve 後寫哪個變數」，這裡靠
+                                     paginatedActresses[idx] 本身是 reactive 物件，$watch 才追蹤得到）。 -->
+                                <img :src="actress.photo_url" :alt="actress.name" loading="lazy"
+                                     @load="applyCellFocal($el, actress, '--actress-crop-ratio')"
+                                     x-init="$watch('actress.auto_focal', () => applyCellFocal($el, actress, '--actress-crop-ratio'));
+                                             $watch('actress.crop_mode', () => applyCellFocal($el, actress, '--actress-crop-ratio'))">
+                            </template>
+                            <template x-if="!actress.photo_url">
+                                <div class="actress-no-photo">
+                                    <i class="bi bi-person-circle"></i>
+                                </div>
+                            </template>
+                            <!-- Search films overlay (44c-T7) -->
+                            <div class="actress-card-overlay">
+                                <button class="btn-glass-circle"
+                                        @click.stop="searchActressFilms(actress.name, $el)"
+                                        :disabled="_ghostFlyInFlight"
+                                        :class="{ 'opacity-50 cursor-not-allowed': _ghostFlyInFlight }"
+                                        :title="t('showcase.actress.search_films')">
+                                    <i class="bi bi-camera-reels"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Footer -->
+                        <div class="actress-card-footer">
+                            <div class="footer-default">
+                                <span class="av-num" x-text="actress.name"></span>
+                                <span class="actress-sort-indicator" x-text="_actressCardMiddle(actress)"></span>
+                                <span class="av-actress" x-text="actress.age ? actress.age + t('search.unit.age') : ''"></span>
+                            </div>
+                            <div class="footer-hover" x-show="!infoVisible">
+                                <span class="hover-title" x-text="_actressHoverInfo(actress)"></span>
+                            </div>
+                        </div>
+                        <!-- Card Info 展開區 —— footer 同層，展開時撐高卡片（鏡射影片卡 M3i） -->
+                        <!-- 124b-T4（CD-124b-13/15）：年齡／身高／罩杯可點成女優 pill。
+                             可點與不可點用同一個 wrapper 內的兩個 x-show 兄弟承接（鏡射燈箱
+                             :966-974），不用 x-if——x-if 在 x-for 內每次重建節點。
+                             :key 維持索引（CD-124b-9）：陣列整包重算、長度 ≤5。
+                             不加 · 分隔符——.actress-card-info 靠 gap 分隔（showcase/07-card-info-expand.css）。 -->
+                        <div class="card-info actress-card-info"
+                             :class="{'has-info': _actressInfoParts(actress).length}"
+                             x-cloak @click.stop>
+                            <template x-for="(part, i) in _actressInfoParts(actress)" :key="i">
+                                <span>
+                                    <span x-show="!part.clickable" x-text="part.text"></span>
+                                    <a class="info-link" href="#" x-show="part.clickable"
+                                       @click.prevent.stop="_onActressCardMetadataClick(part.dim, part.value)"
+                                       x-text="part.text"></a>
+                                </span>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+          </div>
+        </template><!-- end x-if="showFavoriteActresses" -->
+
+        <!-- Lightbox (M3a) -->
+        <div class="showcase-lightbox"
+             :class="{ 'show': lightboxOpen }"
+             x-trap.inert="lightboxOpen && !sampleGalleryOpen && !removeActressModalOpen && !rescrapeOpen && !deleteVideoModalOpen && !similarModeMobileOpen"
+             @touchstart.passive="_lbTouchStart($event)"
+             @touchend.passive="_lbTouchEnd($event)"
+             @click="handleLightboxBackdropClick($event)">
+
+            <div class="lightbox-content" @click.stop>
+                <!-- Close Button (shared between actress and video branches) -->
+                <button class="lightbox-close"
+                        @click="closeLightbox()"
+                        title="{{ t('showcase.lightbox.close') }}">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+
+                <!-- 56c-T3fix: Magic 按鈕（與 .lightbox-close 鏡射對稱，video mode only）
+                     56c-T4: 直接呼叫 openSimilarMode()——sparkle burst 已搬至 state-similar openSimilarMode 流程內部統一管理 -->
+                <button class="lightbox-similar-btn"
+                        x-show="currentLightboxVideo && !currentLightboxActress && !showFavoriteActresses"
+                        @click="openSimilarMode()"
+                        :aria-label="t('similar_mode.button_aria_label')">
+                    <i class="bi bi-magic" aria-hidden="true"></i>
+                </button>
+
+                <!-- 44a T4: Actress Lightbox Branch -->
+                <template x-if="currentLightboxActress">
+                    <div style="display:contents">
+                        <!-- Actress Cover -->
+                        <div class="lightbox-cover">
+                            <!-- 100b-T2b（§B-2b lifecycle 契約的另一半，見下）：@load 是
+                                 _actressPhotoLoaded 在「圖未快取」路徑上的唯一 writer，鏡射
+                                 video 側 lightboxCoverFull 的 @load="_lbFullLoaded=true"（:733）。
+                                 🔴 兩個 writer 各司其職、缺一即靜默死掉：
+                                   • $nextTick complete-check（_refreshActressPhotoLoaded）→ 已快取路徑
+                                     （@load 對快取圖不觸發）＝開燈箱／切換女優的常態；
+                                   • @load（本行）→ 未快取路徑＝上傳／換候選成功後的新 cache-bust
+                                     URL（?v={mtime_ns}-{size}，必然 cache miss），此時 $nextTick
+                                     讀到 complete=false，只有 @load 能把旗標翻回 true。
+                                 缺本行 ⇒ 上傳/換候選成功後 focal 按鈕（x-show 綁 _actressPhotoLoaded）
+                                 永久消失到使用者切走再切回為止。同型前例見 :1476 註解
+                                 「讓 cover_full_url（已 bust）重新觸發 @load」。 -->
+                            <!-- 100b Codex P2-2 fix：新增 frame wrapper——.lightbox-cover 對女優分支
+                                 恆有 min-width:min(60vw,600px) 的固定地板（不像 video 分支的
+                                 .has-cover 讓 cover AR 貼合圖片 AR），img 本身用 height:60vh;
+                                 width:auto 置中，寬圖以外（近方形/窄圖）render 後比 cover 窄，
+                                 兩側留白 gutter。舊版遮罩 overlay 直接 include 在 .lightbox-cover
+                                 內、inset:0 貼齊「cover 的」矩形——W/H 卻是用「圖片」的
+                                 getBoundingClientRect() 算（_computeMaskWinStyle），兩套座標系不
+                                 一致：CDP 實測（2026-07-16）佐々木さき（a=1.0 方形）gutter 各
+                                 86px，亮窗中心偏移量與 gutter 完全相等，亮窗近半跑進留白、與圖片
+                                 內容完全不對齊。
+                                 本 wrapper 只包 img/placeholder/遮罩三者（.cover-actions 不動——
+                                 按鈕位置沿用舊版、相對整個 cover 置中，非本次範圍），position:relative
+                                 且不設寬高，作為 flex item 隨內容 shrink-to-fit——img 是裡面唯一
+                                 貢獻版面尺寸的內容，wrapper 版面尺寸=img 實際 render 尺寸（無 x-if/
+                                 x-show 切換問題：img/placeholder 互斥顯示，wrapper 隨當前顯示者定
+                                 尺寸）。遮罩 overlay 的 inset:0 從此貼齊 wrapper＝貼齊圖片本身，
+                                 座標系統一，不動 JS 幾何（_computeMaskWinStyle／
+                                 computeMaskWinGeometry／transform 數學不變，G1 不變量不受影響）；
+                                 video 分支（.has-cover 貼合 AR、無 gutter）完全未觸碰，零回歸。 -->
+                            <div class="actress-lb-photo-frame">
+                                <img x-ref="pickerCoverImg"
+                                     x-show="currentLightboxActress?.photo_url"
+                                     :src="currentLightboxActress?.photo_url"
+                                     @load="_readyActressPhotoState($el)"
+                                     :alt="currentLightboxActress?.name">
+                                <div class="actress-lb-cover-placeholder"
+                                     x-show="!currentLightboxActress?.photo_url">
+                                    <i class="bi bi-person-circle" style="font-size:4rem; opacity:0.3"></i>
+                                </div>
+
+                                <!-- 100b-T2a（§B-1a/§B-1c）：遮罩 DOM 第二次 include（女優分支）。
+                                     T1 曾試著先做這個 include、被 CDP 實測推翻（2026-07-16，2/2 重現閃現）；
+                                     T2a 已同批補上「賦值前同步 _resetMask()」（見 state-actress.js
+                                     _setActressLightboxIndex()／state-lightbox.js prevLightboxVideo()／
+                                     nextLightboxVideo() 三處，gotchas-frontend §8b），兩者必須同批落地
+                                     才安全，故此刻才 include。 -->
+                                {% include '_macros/focal_mask.html' %}
+                            </div>
+
+                            <div class="cover-actions"
+                                 :data-picker-open="_pickerOpen"
+                                 :class="{'cover-actions--focal-edit': _maskVisible}">
+                                <button class="lb-action-btn"
+                                        x-show="actressLightboxSource === 'grid' && !_maskVisible"
+                                        @click.stop="searchActressFilms(currentLightboxActress?.name, $el)"
+                                        :disabled="_ghostFlyInFlight"
+                                        :class="{ 'opacity-50 cursor-not-allowed': _ghostFlyInFlight }"
+                                        :data-tooltip="t('showcase.actress.search_films')"
+                                        :aria-label="t('showcase.actress.search_films')">
+                                    <i class="bi bi-camera-reels"></i>
+                                </button>
+                                <!-- 換照片按鈕（49b T4cd）-->
+                                <button class="lb-action-btn"
+                                        x-show="currentLightboxActress?.is_favorite && !_maskVisible"
+                                        @click.stop="openActressPicker()"
+                                        :data-tooltip="t('showcase.actress.change_photo')"
+                                        :aria-label="t('showcase.actress.change_photo')">
+                                    <i class="bi bi-arrow-clockwise" :class="{ spin: _pickerLoading }"></i>
+                                </button>
+                                <!-- 100b-T2a：✓/✗ 鏡射影片版（:754-767），複用既有 5 個
+                                     showcase.lightbox.mask_* i18n key（裁決4，不新增 key）。 -->
+                                <button class="lb-action-btn lb-action-btn--success"
+                                        x-show="_maskVisible && !_maskDetecting"
+                                        @click.stop="confirmMask()"
+                                        :data-tooltip="t('showcase.lightbox.mask_confirm')"
+                                        :aria-label="t('showcase.lightbox.mask_confirm')">
+                                    <i class="bi bi-check-lg"></i>
+                                </button>
+                                <button class="lb-action-btn lb-action-btn--danger"
+                                        x-show="_maskVisible && !_maskDetecting"
+                                        @click.stop="cancelMask()"
+                                        :data-tooltip="t('showcase.lightbox.mask_cancel')"
+                                        :aria-label="t('showcase.lightbox.mask_cancel')">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Actress Metadata Panel -->
+                        <div class="lightbox-metadata actress-lightbox-meta">
+                            <!-- Row 1: Header — name + name_en + heart icon -->
+                            <div class="actress-lb-header">
+                                <div class="actress-lb-title">
+                                    <span class="lb-name" x-text="currentLightboxActress?.name"></span>
+                                    <span class="lb-name-en"
+                                          x-show="currentLightboxActress?.name_en"
+                                          x-text="currentLightboxActress?.name_en"></span>
+                                </div>
+                                <!-- 100c-T2（CD-1/CD-2/CD-3，spec-100c §3.1 推翻 spec-100 §4-5）：
+                                     女優 focal icon 從 .cover-actions 搬進名字行末，鏡射影片版
+                                     .lb-mask-btn 的位置與 class（非再照抄 .lb-action-btn 的封面
+                                     玻璃鈕樣式——那是為疊在封面圖上設計，純文字列裡尺寸/對比
+                                     皆不搭）。五條件：!_maskVisible ＋ photo_url ＋
+                                     _actressPhotoLoaded ＋ _actressPhotoWideEnough（新，CD-7
+                                     20% 可拖幅度門檻）＋ !_pickerOpen（新，CD-1：picker 開啟時
+                                     CSS opacity gate 鎖死在 .cover-actions，搬出後不受影響，
+                                     必須顯式擋）。:title=（非 data-tooltip 屬性綁定，CD-2 陷阱：
+                                     .lb-action-btn[data-tooltip]::after 只認 .lb-action-btn，
+                                     換 class 不換屬性 tooltip 會靜默消失）。
+                                     🔴 五條件收成 _focalIconVisible() method（不直接寫成 x-show
+                                     的 && 字面鏈）：JS `&&` 短路求值下，一旦前段條件為 false，
+                                     後段條件不會被讀取，Alpine 的 effect 依賴收集因此漏訂閱鏈末
+                                     條件（見該函式定義處說明）。method 內用獨立陳述式無條件讀完
+                                     全部 5 個旗標再組合，保證每次求值都完整訂閱依賴——與影片版
+                                     一樣用 x-show，只是把「讀取」與「短路組合」拆開兩步。 -->
+                                <!-- 101d-T2（反向指引）：女優焦點 gate 用 per-image 門檻（_focalIconVisible() 五條件），
+                                     與影片 _posterModeActive() 刻意不同——女優牆全寬度都裁、影片只 ≤899px 裁
+                                     （見 plan-101d §2.2）。別把兩條 gate「統一」成同一套，那會讓其中一條 icon 出現時機錯掉。 -->
+                                <button class="lb-mask-btn"
+                                        x-show="_focalIconVisible()"
+                                        @click="openMask()"
+                                        :title="t('showcase.lightbox.mask_toggle')"
+                                        :aria-label="t('showcase.lightbox.mask_toggle')">
+                                    <i class="bi bi-person-bounding-box"></i>
+                                </button>
+                                <!-- 117b-T9：刪除鈕從 .cover-actions 搬入名字行末（CD-117b-5/7）-->
+                                <button class="lb-delete-btn"
+                                        x-show="showFavoriteActresses && !_maskVisible"
+                                        @click.stop="openRemoveActressModal()"
+                                        :title="t('showcase.actress.remove')"
+                                        :aria-label="t('showcase.actress.remove')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                            <!-- Row 2: Core metadata (age · birth · height · cup · BWH) -->
+                            <div class="lb-actress-core" x-show="_actressCoreMetadataParts().length">
+                                <template x-for="(part, idx) in _actressCoreMetadataParts()" :key="part.key">
+                                    <span>
+                                        <span x-show="idx > 0"> · </span>
+                                        <span x-show="!part.clickable" x-text="part.text"></span>
+                                        <button type="button" class="lb-actress-core-value lb-link" x-show="part.clickable"
+                                                @click="_onActressMetadataClick(part.dim, part.value)"
+                                                x-text="part.text"></button>
+                                    </span>
+                                </template>
+                            </div>
+                            <!-- Row 3: Aliases chips +N -->
+                            <div class="lb-chips-row"
+                                 x-show="(currentLightboxActress?.aliases || []).length > 0">
+                                <!-- T3: alias label + tooltip -->
+                                <span class="lb-chips-label"
+                                      :title="t('showcase.lightbox.alias_source_hint')"
+                                      x-text="t('showcase.lightbox.alias_label')"></span>
+                                <template x-for="alias in _visibleAliases()" :key="alias">
+                                    <span class="lb-tag" x-text="alias"></span>
+                                </template>
+                                <span class="lb-tag lb-chips-more"
+                                      x-show="_aliasesOverflow() > 0 && !_actressChipsExpanded.aliases"
+                                      x-text="'+' + _aliasesOverflow()"
+                                      @click="_actressChipsExpanded.aliases = true"></span>
+                            </div>
+                            <!-- Row 4: Info chips +N (tags + hometown + nickname + agency + hobby + debut_work) -->
+                            <div class="lb-chips-row"
+                                 x-show="_allInfoChips().length > 0">
+                                <template x-for="chip in _visibleInfoChips()" :key="chip">
+                                    <span class="lb-tag" x-text="chip"></span>
+                                </template>
+                                <span class="lb-tag lb-chips-more"
+                                      x-show="_infoChipsOverflow() > 0 && !_actressChipsExpanded.info"
+                                      x-text="'+' + _infoChipsOverflow()"
+                                      @click="_actressChipsExpanded.info = true"></span>
+                            </div>
+                            <!-- Row 5: URLs -->
+                            <div class="lb-actress-urls"
+                                 x-show="currentLightboxActress?.blog_url || currentLightboxActress?.official_url">
+                                <a x-show="currentLightboxActress?.blog_url"
+                                   :href="currentLightboxActress?.blog_url?.startsWith('http') ? currentLightboxActress.blog_url : ''"
+                                   target="_blank"
+                                   rel="noopener"
+                                   x-text="currentLightboxActress?.blog_url"></a>
+                                <a x-show="currentLightboxActress?.official_url"
+                                   :href="currentLightboxActress?.official_url?.startsWith('http') ? currentLightboxActress.official_url : ''"
+                                   target="_blank"
+                                   rel="noopener"
+                                   x-text="currentLightboxActress?.official_url"></a>
+                            </div>
+                        </div>
+
+                    </div>
+                </template>
+
+                <!-- Video Lightbox Branch (wrapped in x-if to prevent 44b hero card conflict) -->
+                <template x-if="currentLightboxVideo && !currentLightboxActress">
+                    <div style="display:contents">
+                        <!-- Cover Image -->
+                        <!-- T8(Codex P2): has-cover 旗標 — 僅有封面時才讓 ≤480px min-height:0 塌到圖盒；
+                             無封面時保留 min-height 避免 cover 區塌成 0 高（補封面入口會壞）。 -->
+                        <div class="lightbox-cover" :class="{'has-cover': !!currentLightboxVideo?.cover_url}">
+                            <!-- 56c-T3fix: magic 按鈕已搬至 .lightbox-content（與 .lightbox-close sibling 鏡射對稱）；sparkle-burst overlay 留在 .lightbox-cover 以便 inset:0 精準覆蓋封面區（不擴及 metadata） -->
+                            <!-- 71-T6 blur-up: base 層=cover_url（快取開啟=小 webp 秒出、放大略糊；關閉=原圖）。
+                                 撐容器尺寸；x-ref + @error 三態留 base（ghost-fly / 破圖偵測沿用 base src）。 -->
+                            <img x-ref="lightboxCoverImg"
+                                 :src="currentLightboxVideo?.cover_url"
+                                 :alt="currentLightboxVideo?.number"
+                                 @load="_setCoverAspect($event)"
+                                 @error="handleCoverError(currentLightboxVideo, $event)">
+                            <!-- 71-T6 blur-up: overlay 層=cover_full_url（原圖）。@load 後 opacity 0→1 就地淡入蓋上 base；
+                                 用 CSS opacity 切換（非 x-show — display:none 的 img 不載入、@load 永不 fire）；
+                                 pointer-events:none 確保不擋 cover-actions/sparkle 點擊。
+                                 71c: x-ref="lightboxCoverFull" 供 _setLightboxIndex same-URL complete-check 用。 -->
+                            <img class="lb-full"
+                                 x-ref="lightboxCoverFull"
+                                 :src="currentLightboxVideo?.cover_full_url"
+                                 @load="_lbFullLoaded=true"
+                                 :class="{'lb-full-shown':_lbFullLoaded}"
+                                 @error="_handleLbFullError($event)"
+                                 alt=""
+                                 aria-hidden="true">
+                            <div class="lb-full-hint" x-show="_lbFullErrorPill && !_lbFullLoaded && !_maskVisible" x-cloak>{{ t('showcase.lightbox.cover_unavailable') }}</div>
+                            <div class="lb-full-hint" x-show="!currentLightboxVideo?.has_cover && !currentLightboxVideo?.number && !_maskVisible" x-cloak>{{ t('showcase.lightbox.cover_escape_hint') }}</div>
+                            <template x-if="!!currentLightboxVideo?.path && !_maskVisible && (currentLightboxVideo._badges || []).length">
+                                <div class="cover-badges">
+                                    <template x-for="b in (currentLightboxVideo._badges || [])" :key="b.id">
+                                        <span class="cover-badge" x-text="b.display_name"></span>
+                                    </template>
+                                </div>
+                            </template>
+                            <template x-if="!!currentLightboxVideo?.path && !_maskVisible && (currentLightboxVideo.part_tokens || []).length">
+                                <div class="cover-badges-part">
+                                    <span class="cover-badge" x-text="formatPartLabel(currentLightboxVideo.part_tokens)"></span>
+                                </div>
+                            </template>
+
+                            <!-- T1（CD-4/§B-1a）：遮罩 DOM 抽共用 partial，逐字搬移自舊 707-730（含 99a-T3/98b-T6 註解，見 partial 檔案開頭） -->
+                            {% include '_macros/focal_mask.html' %}
+
+                            <!-- 56c-T3fix: Sparkle burst overlay（10 顆四角星，ring 分佈在封面區） -->
+                            <div class="sparkle-burst"
+                                 x-show="!showFavoriteActresses"
+                                 aria-hidden="true">
+                                <svg class="sparkle-star" data-sparkle-size="lg" style="--cx: 22%; --cy: 14%;" viewBox="-12 -12 24 24"><polygon points="0,-10 2,-2 10,0 2,2 0,10 -2,2 -10,0 -2,-2"/></svg>
+                                <svg class="sparkle-star" data-sparkle-size="lg" style="--cx: 64%; --cy: 28%;" viewBox="-12 -12 24 24"><polygon points="0,-10 2,-2 10,0 2,2 0,10 -2,2 -10,0 -2,-2"/></svg>
+                                <svg class="sparkle-star" data-sparkle-size="lg" style="--cx: 38%; --cy: 82%;" viewBox="-12 -12 24 24"><polygon points="0,-10 2,-2 10,0 2,2 0,10 -2,2 -10,0 -2,-2"/></svg>
+                                <svg class="sparkle-star" data-sparkle-size="md" style="--cx: 11%; --cy: 48%;" viewBox="-12 -12 24 24"><polygon points="0,-10 2,-2 10,0 2,2 0,10 -2,2 -10,0 -2,-2"/></svg>
+                                <svg class="sparkle-star" data-sparkle-size="md" style="--cx: 48%; --cy: 8%;" viewBox="-12 -12 24 24"><polygon points="0,-10 2,-2 10,0 2,2 0,10 -2,2 -10,0 -2,-2"/></svg>
+                                <svg class="sparkle-star" data-sparkle-size="md" style="--cx: 82%; --cy: 58%;" viewBox="-12 -12 24 24"><polygon points="0,-10 2,-2 10,0 2,2 0,10 -2,2 -10,0 -2,-2"/></svg>
+                                <svg class="sparkle-star" data-sparkle-size="md" style="--cx: 28%; --cy: 64%;" viewBox="-12 -12 24 24"><polygon points="0,-10 2,-2 10,0 2,2 0,10 -2,2 -10,0 -2,-2"/></svg>
+                                <svg class="sparkle-star" data-sparkle-size="sm" style="--cx: 72%; --cy: 12%;" viewBox="-12 -12 24 24"><polygon points="0,-10 2,-2 10,0 2,2 0,10 -2,2 -10,0 -2,-2"/></svg>
+                                <svg class="sparkle-star" data-sparkle-size="sm" style="--cx: 90%; --cy: 84%;" viewBox="-12 -12 24 24"><polygon points="0,-10 2,-2 10,0 2,2 0,10 -2,2 -10,0 -2,-2"/></svg>
+                                <svg class="sparkle-star" data-sparkle-size="sm" style="--cx: 56%; --cy: 92%;" viewBox="-12 -12 24 24"><polygon points="0,-10 2,-2 10,0 2,2 0,10 -2,2 -10,0 -2,-2"/></svg>
+                            </div>
+                            <!-- Cover Action Buttons -->
+                            <!-- 56c-fix-v2: x-show="!!currentLightboxVideo?.path" guards standalone
+                                 similar-exit mode (path undefined) — regular lightbox items always have
+                                 path so existing behavior is unaffected. -->
+                            <div class="cover-actions" x-show="!!currentLightboxVideo?.path" :class="{'cover-actions--focal-edit': _maskVisible}">
+                                <button class="lb-action-btn" x-show="!_maskVisible" @click="playVideo(currentLightboxVideo?.path)" data-tooltip="{{ t('showcase.action.play') }}" aria-label="{{ t('showcase.action.play') }}">
+                                    <i class="bi bi-play-fill"></i>
+                                </button>
+                                <button class="lb-action-btn js-open-folder" x-show="!_maskVisible" @click="openLocal(currentLightboxVideo?.path)" data-tooltip="{{ t('search.action.open_folder') }}" aria-label="{{ t('search.action.open_folder') }}">
+                                    <i class="bi bi-folder2-open"></i>
+                                </button>
+                                <!-- 74b US4: tap=enrichVideo（自動補缺）；長壓已移除（進階重刮走齒輪 ⚙）。 -->
+                                <button class="lb-action-btn"
+                                        x-show="shouldShowEnrichButton(currentLightboxVideo) && !_maskVisible"
+                                        :disabled="_enriching"
+                                        @click.stop="enrichVideo(currentLightboxVideo)"
+                                        data-tooltip="{{ t('showcase.action.enrich') }}"
+                                        aria-label="{{ t('showcase.action.enrich') }}">
+                                    <i class="bi" :class="_enriching ? 'bi-arrow-clockwise spin' : 'bi-search'"></i>
+                                </button>
+                                <!-- 99a-T3：焦點編輯中的 ✓/✗，取代 98b 的窗內點擊 toggle。
+                                     99a-T5：detect 期間（_maskDetecting）尚無可提交的拖曳結果——
+                                     gate 收窄，等偵測 resolve 才顯示。 -->
+                                <button class="lb-action-btn lb-action-btn--success"
+                                        x-show="_maskVisible && !_maskDetecting"
+                                        @click.stop="confirmMask()"
+                                        :data-tooltip="t('showcase.lightbox.mask_confirm')"
+                                        :aria-label="t('showcase.lightbox.mask_confirm')">
+                                    <i class="bi bi-check-lg"></i>
+                                </button>
+                                <button class="lb-action-btn lb-action-btn--danger"
+                                        x-show="_maskVisible && !_maskDetecting"
+                                        @click.stop="cancelMask()"
+                                        :data-tooltip="t('showcase.lightbox.mask_cancel')"
+                                        :aria-label="t('showcase.lightbox.mask_cancel')">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 83b-T1：舊寄生 .lightbox-similar-mobile x-collapse block 已移除，
+                             改為獨立全螢幕 .similar-mobile-panel（page-level sibling，見 .similar-stage 之後）。 -->
+
+                        <!-- Metadata Panel（緊湊版，匹配原版 gallery） -->
+                        <div class="lightbox-metadata">
+                            <!-- Row 1: Header (title + sample gallery button) -->
+                            <div class="lb-header">
+                                <!-- 123-T8：精選星掛在標題行最前面（owner 拍板：標題前比番號前更清楚，
+                                     與標題有沒有番號前綴無關——scraper 本來就會剝掉前綴，見
+                                     core/scrapers/javdb.py strip_number_prefix）。星與標題文字同屬一個
+                                     inline 格式化脈絡＝共用同一條基線（詳見 showcase.css 該段註解）。
+                                     <button> 與 <span> 之間不得留空白字元，否則會多出一個空格。 -->
+                                <div class="lb-title"><button type="button" class="pick-star"
+                                        :class="{'is-picked': (currentLightboxVideo?.user_rating || 0) > 0}"
+                                        :aria-pressed="(currentLightboxVideo?.user_rating || 0) > 0"
+                                        :aria-label="(currentLightboxVideo?.user_rating||0) > 0 ? t('showcase.pick.remove_aria') : t('showcase.pick.add_aria')"
+                                        :aria-busy="!!_pickInFlight[currentLightboxVideo?.path]"
+                                        @click.stop="togglePickStar()"><i class="bi bi-star pick-star-outline" aria-hidden="true"></i><i class="bi bi-star-fill pick-star-fill" aria-hidden="true"
+                                       :style="{ '--pick-fill': (currentLightboxVideo?.user_rating || 0) > 0 ? '0%' : '100%' }"></i></button><span x-text="currentLightboxVideo?.title || t('showcase.grid.unknown_title')"></span><button type="button" class="lb-translate-btn"
+                                        x-show="lbTrShowOnTitle()"
+                                        @click.stop="lbTranslate()"
+                                        :disabled="lbTrIsBusy()"
+                                        :aria-busy="lbTrIsBusy()"
+                                        data-tooltip="{{ t('showcase.lightbox.translate_tooltip') }}"
+                                        aria-label="{{ t('showcase.lightbox.translate_tooltip') }}"><i class="bi bi-translate" x-show="!lbTrIsBusy()" aria-hidden="true"></i><i class="bi bi-arrow-repeat spin" x-show="lbTrIsBusy()" aria-hidden="true"></i></button></div>
+                                <!-- Sample Gallery 入口按鈕 (T7) -->
+                                <button class="sg-open-btn"
+                                        x-show="(currentLightboxVideo?.sample_images || []).length > 0"
+                                        @click="openSampleGallery(currentLightboxVideo.sample_images, 0)"
+                                        x-text="t('showcase.gallery.sample_prefix') + ' (' + (currentLightboxVideo?.sample_images || []).length + ')'">
+                                </button>
+                                <!-- §b3: 劇照補抓入口（無劇照時顯示） -->
+                                <button class="fetch-samples-btn"
+                                        x-show="(currentLightboxVideo?.sample_images || []).length === 0 && !_fetchSamplesLoading"
+                                        :disabled="!!_fetchSamplesFailed[currentLightboxVideo?.path]"
+                                        @click="fetchSamples(currentLightboxVideo)">
+                                    <i class="bi bi-cloud-download" aria-hidden="true"></i>
+                                    <span x-text="t('showcase.samples.fetch_btn')"></span>
+                                </button>
+                                <span x-show="_fetchSamplesLoading" x-text="t('showcase.samples.fetching')"></span>
+                                <!-- 98b-T4：焦點裁切遮罩 toggle（低調圓鈕，styled-like .lb-action-btn 但更小）-->
+                                <!-- 101d-T2：影片焦點 gate 綁 _posterModeActive()（窄/poster 模式才顯示）。與女優
+                                     _focalIconVisible() 的 per-image 門檻刻意不同——根因：影片只在 ≤899px 裁、
+                                     女優牆全寬度都裁（見 plan-101d §2.2）。改任一邊前先讀那張表，別「對齊」成同一套。 -->
+                                <button class="lb-mask-btn"
+                                        x-show="!!currentLightboxVideo?.path && _lbFullLoaded && _posterModeActive()"
+                                        @click="openMask()"
+                                        :title="t('showcase.lightbox.mask_toggle')"
+                                        :aria-label="t('showcase.lightbox.mask_toggle')">
+                                    <i class="bi bi-person-bounding-box" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <!-- Row 2: Original Title (showcase only) -->
+                            <div class="lb-otitle-row">
+                            <div class="lb-otitle"
+                                 x-show="currentLightboxVideo?.original_title"
+                                 x-text="currentLightboxVideo?.original_title"></div>
+                            <button type="button" class="lb-translate-btn"
+                                        x-show="lbTrShowOnOtitle()"
+                                        @click.stop="lbTranslate()"
+                                        :disabled="lbTrIsBusy()"
+                                        :aria-busy="lbTrIsBusy()"
+                                        data-tooltip="{{ t('showcase.lightbox.translate_tooltip') }}"
+                                        aria-label="{{ t('showcase.lightbox.translate_tooltip') }}"><i class="bi bi-translate" x-show="!lbTrIsBusy()" aria-hidden="true"></i><i class="bi bi-arrow-repeat spin" x-show="lbTrIsBusy()" aria-hidden="true"></i></button>
+                            </div>
+                            <!-- Row 3: Actresses -->
+                            <div class="lb-actor" x-show="currentLightboxVideo?.actresses">
+                                <template x-for="(actress, idx) in (currentLightboxVideo?.actresses || '').split(',').filter(a => a.trim())" :key="actress">
+                                    <span>
+                                        <a href="#" class="lb-link" @click.prevent="searchFromMetadata(actress.trim(), 'actress')" x-text="actress.trim()"></a><span class="lb-actor-age" x-show="_lbActorAges[actress.trim()] != null" x-text="' (' + _lbActorAges[actress.trim()] + t('showcase.unit.age_suffix') + ')'"></span><span x-show="idx < (currentLightboxVideo?.actresses || '').split(',').filter(a => a.trim()).length - 1">, </span>
+                                    </span>
+                                </template>
+                            </div>
+                            <!-- Row 4: Details (merged) -->
+                            <!-- 分隔符 " · " 內嵌於各 span 開頭，隨 x-show 一起顯示/隱藏，避免孤立 · -->
+                            <div class="lb-details">
+                                <!-- 123-T8：精選星已移到 .lb-title（標題行）最前面，此列回到以番號起頭。 -->
+                                <span x-text="currentLightboxVideo?.number || t('showcase.lightbox.unknown_number')"></span>
+                                <!-- 62b-1: 進階重刮 ⚙ 入口（番號旁 inline 細鈕，常駐顯示）-->
+                                <button type="button"
+                                        class="lb-rescrape-gear"
+                                        @click.stop="openRescrape(currentLightboxVideo, 'lightbox')"
+                                        data-tooltip="{{ t('showcase.rescrape.entry_tooltip') }}"
+                                        aria-label="{{ t('showcase.rescrape.entry_tooltip') }}">
+                                    <i class="bi bi-gear" aria-hidden="true"></i>
+                                </button>
+                                <span x-show="currentLightboxVideo?.maker">
+                                    &nbsp;·&nbsp;<a href="#" class="lb-link" @click.prevent="searchFromMetadata(currentLightboxVideo?.maker, 'maker')" x-text="currentLightboxVideo?.maker"></a>
+                                </span>
+                                <span x-show="currentLightboxVideo?.director">
+                                    &nbsp;·&nbsp;<b>{{ t('showcase.label.director') }}：</b>
+                                    <a href="#" class="lb-link"
+                                       @click.prevent="searchFromMetadata(currentLightboxVideo?.director, 'director')"
+                                       x-text="currentLightboxVideo?.director"></a>
+                                </span>
+                                <span x-show="currentLightboxVideo?.duration">
+                                    &nbsp;·&nbsp;<span x-text="currentLightboxVideo?.duration ? currentLightboxVideo.duration + ' ' + t('showcase.unit.minutes') : ''"></span>
+                                </span>
+                                <span x-show="currentLightboxVideo?.series">
+                                    &nbsp;·&nbsp;<b>{{ t('showcase.label.series') }}：</b>
+                                    <a href="#" class="lb-link"
+                                       @click.prevent="searchFromMetadata(currentLightboxVideo?.series, 'series')"
+                                       x-text="currentLightboxVideo?.series"></a>
+                                </span>
+                                <span x-show="currentLightboxVideo?.label && currentLightboxVideo?.label !== currentLightboxVideo?.maker">
+                                    &nbsp;·&nbsp;<b>{{ t('showcase.label.label') }}：</b>
+                                    <a href="#" class="lb-link"
+                                       @click.prevent="searchFromMetadata(currentLightboxVideo?.label, 'label')"
+                                       x-text="currentLightboxVideo?.label"></a>
+                                </span>
+                                <span x-show="currentLightboxVideo?.release_date">
+                                    &nbsp;·&nbsp;<template x-if="_isReleaseClickable(currentLightboxVideo)">
+                                        <a href="#" class="lb-link"
+                                           @click.prevent="searchFromMetadata(currentLightboxVideo?.release_date, 'release')"
+                                           x-text="currentLightboxVideo?.release_date"></a>
+                                    </template>
+                                    <template x-if="!_isReleaseClickable(currentLightboxVideo)">
+                                        <span x-text="currentLightboxVideo?.release_date"></span>
+                                    </template>
+                                </span>
+                                <span class="lb-size" x-show="currentLightboxVideo?.size">
+                                    &nbsp;·&nbsp;<span x-text="formatSize(currentLightboxVideo?.size || 0)"></span>
+                                </span>
+                                <!-- 71b-T1: 從收藏移除（破壞性，只刪 DB row + thumb，不碰磁碟影片/封面）。
+                                     常駐 muted icon，靠右對齊於 metadata size 行末（margin-left:auto 推到行尾）。-->
+                                <button class="lb-delete-btn"
+                                        x-show="!!currentLightboxVideo?.path"
+                                        @click.stop="openDeleteVideoModal()"
+                                        :data-tooltip="t('showcase.video.delete')"
+                                        :aria-label="t('showcase.video.delete')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                            <!-- Row 5: Tags (with +N chips, T4) -->
+                            <div class="lb-tags" x-show="currentLightboxVideo?.tags">
+                                <template x-for="tag in _visibleVideoTags()" :key="tag">
+                                    <a href="#" class="lb-tag lb-link" @click.prevent="searchFromMetadata(tag.trim(), 'tag')" x-text="tag.trim()"></a>
+                                </template>
+                                <span class="lb-tag lb-chips-more"
+                                      x-show="_videoTagsOverflow() > 0 && !_videoChipsExpanded"
+                                      x-text="'+' + _videoTagsOverflow()"
+                                      @click="_videoChipsExpanded = true"></span>
+                            </div>
+
+                            <!-- Row 6: User Tags (T4) -->
+                            <div class="lb-user-tags"
+                                 x-show="!!currentLightboxVideo?.path">
+                                <!-- User tag badges with × remove button -->
+                                <template x-for="tag in (currentLightboxVideo?.user_tags || [])" :key="tag">
+                                    <span class="lb-user-tag">
+                                        <span x-text="tag"></span>
+                                        <button class="lb-tag-remove"
+                                                @click.stop="removeLbUserTag(tag)"
+                                                :title="tag">×</button>
+                                    </span>
+                                </template>
+
+                                <!-- + 新增按鈕（有 path 才顯示） -->
+                                <button class="lb-tag-add-btn"
+                                        x-show="!addingLbTag && !!currentLightboxVideo?.path"
+                                        @click.stop="showAddLbTagInput()"
+                                        :title="t('showcase.lightbox.add_tag')">+</button>
+
+                                <!-- Inline 輸入框 -->
+                                <span class="lb-tag-input-wrapper" x-show="addingLbTag">
+                                    <input class="lb-tag-input"
+                                           x-ref="lbTagInput"
+                                           x-model="newLbTagValue"
+                                           type="text"
+                                           maxlength="20"
+                                           :placeholder="t('showcase.lightbox.tag_placeholder')"
+                                           @keydown.enter.stop="confirmAddLbTag()"
+                                           @keydown.escape.stop="cancelAddLbTag()">
+                                    <button class="lb-tag-confirm"
+                                            @click.stop="confirmAddLbTag()"
+                                            title="✓">✓</button>
+                                    <button class="lb-tag-cancel"
+                                            @click.stop="cancelAddLbTag()"
+                                            title="✕">✕</button>
+                                </span>
+                            </div>
+
+                        </div>
+                    </div>
+                </template>
+
+            </div>
+
+            <!-- Picker Overlay（49c T1：z-axis overlay，fixed position；移出 lightbox-content） -->
+            <div x-ref="pickerArea"
+                 class="actress-picker-overlay"
+                 x-show="currentLightboxActress && _pickerOpen"
+                 @click.stop
+                 @click.outside="currentLightboxActress && _pickerOpen && _cancelPicker()">
+                <!-- 以下沿用原內部 children，class 不變 -->
+                <div class="picker-current-source"
+                     x-show="_pickerCurrentSource">
+                    <span x-text="t('showcase.actress.picker.current_source').replace('{source}', window.__i18n?.showcase?.actress?.picker?.['source_' + _pickerCurrentSource] || _pickerCurrentSource)"></span>
+                </div>
+                <!-- 100b-T4（CD-8／裁決 5）：.picker-candidate-card 是 <div>，HTML `disabled`
+                     只對 form control 生效——掛在 div 上會被瀏覽器靜默忽略（看起來鎖了、其實
+                     沒鎖，不像 G2 的「一開始就死」）。不可比照 .picker-upload-btn 抄 :disabled。
+                     互斥改走 @click guard：_onPickerHoverIn/_onPickerHoverOut/_onPickerSelect
+                     三者開頭皆 `if (this._pickerSelected) return;`（49c-era 既有碼，見各自
+                     函式定義），此為對 <div> 真的有效的機制之一（裁決 5 列出的三選項之一）。
+                     不新增視覺態（opacity/pointer-events class）：資料正確性已由上述 guard
+                     保證，純 UX 錦上添花與 owner「UI 退位、克制材質」的一貫取向不符
+                     （plan-100b.md 技術要點 4b 選項 a）。三處既有 guard 已補 lint 回歸鎖
+                     （static_guard_lint.mjs，防未來重構誤刪）。 -->
+                <div class="picker-candidates-grid" x-ref="pickerGrid">
+                    <template x-for="(c, i) in _candidates" :key="i">
+                        <div class="picker-candidate-card"
+                             @mouseenter="_onPickerHoverIn($el, i)"
+                             @mouseleave="_onPickerHoverOut($el, i)"
+                             @click.stop="_onPickerSelect(c, i)">
+                            <img :src="c.thumb_url" class="picker-candidate-img" loading="lazy" :alt="c.source">
+                            <div class="picker-source-badge">
+                                <i class="bi bi-check-lg picker-check-icon"></i>
+                                <span x-text="t('showcase.actress.picker.source_' + c.source) || c.source"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <!-- Method B（defer-burst）：loading 條件改用 _pickerBurstFired，避免第 1 張 candidate
+                     到達就隱藏 spinner、但 cards 仍 opacity:0（CSS 預設）造成空白 picker（cloud SSE
+                     可達 5s）。Empty 與 refresh 同步用 _pickerBurstFired 為基準。 -->
+                <div x-show="_pickerLoading && !_pickerBurstFired" class="picker-loading">
+                    <i class="bi bi-hourglass-split"></i>
+                    <span x-text="t('showcase.actress.picker.loading')"></span>
+                </div>
+                <div x-show="!_pickerLoading && _pickerOpen && _candidates.length === 0" class="picker-empty">
+                    <i class="bi bi-image"></i>
+                    <p x-text="t('showcase.actress.picker.empty')"></p>
+                    <p class="picker-empty-hint" x-text="t('showcase.actress.picker.empty_hint')"></p>
+                </div>
+                <button class="picker-refresh-btn"
+                        x-show="_pickerBurstFired"
+                        @click.stop="openActressPicker()"
+                        :disabled="_pickerLoading || !!_pickerSelected"
+                        :title="t('showcase.actress.change_photo')"
+                        :aria-label="t('showcase.actress.change_photo')">
+                    <i class="bi bi-arrow-clockwise" :class="{ spin: _pickerLoading }"></i>
+                </button>
+                <!-- 100b-T2b（spec §3.1／裁決 5）：上傳 icon，⟳ 重新整理旁同排。位置/視覺
+                     逐項比照 .picker-refresh-btn 的 §6 5 檢查點（見 showcase.css）。
+                     100b-T4：:disabled 接上互斥鎖（CD-8／G2）——_pickerSelected 初值雖為
+                     false（非 undefined，state-lightbox.js:133），仍一律 !! 強制 boolean，
+                     防未來初始化方式改動時無感死掉（gotchas-frontend「Alpine boolean-attribute
+                     的 undefined 陷阱」）。 -->
+                <button class="picker-upload-btn"
+                        :disabled="!!_pickerSelected"
+                        @click.stop="$refs.actressPhotoUploadInput.click()"
+                        :title="t('showcase.actress.picker.upload_btn')"
+                        :aria-label="t('showcase.actress.picker.upload_btn')">
+                    <i class="bi bi-upload"></i>
+                </button>
+                <!-- 100b-T2b（裁決 6）：隱藏 file input，用 inline display:none 樣式避開
+                     .hidden 的 specificity 坑（gotchas-frontend「CSS .hidden 陷阱」）。
+                     x-ref 掛在 pickerArea 內、不在任何 <template x-if> 分支中（G3），
+                     $refs.actressPhotoUploadInput 永遠可取。圖片限定 accept 值：後端四格式
+                     （JPEG/PNG/WebP/GIF）皆收，spec §3.7-3。 -->
+                <input type="file"
+                       accept="image/*"
+                       x-ref="actressPhotoUploadInput"
+                       style="display:none"
+                       @change="_uploadActressPhoto($event)">
+            </div>
+
+            <!-- Navigation Arrows OUTSIDE lightbox-content (44a T4: dispatch based on showFavoriteActresses) -->
+            <!-- 100c PR#108 nit-1：女優分支的 `!_pickerOpen &&` 是 prev/nextActressLightbox
+                 開頭 `if (this._pickerOpen) return;`（P2-A guard）的**視覺對應**——沒有它，
+                 picker 開著時箭頭仍可見卻點了完全沒反應（不換人也不關 picker：nav 的
+                 @click.stop 壓掉 overlay 的 @click.outside，Alpine .outside 是 bubble-phase），
+                 違反 repo「絕不點了沒反應」。使用者仍可用 Esc／點 overlay 外關 picker，不會被困。
+                 運算元順序（`!_pickerOpen` 在左）純粹是對齊 JS guard 的可讀性選擇，**不承重**：
+                 Alpine effect 每次執行都重新收集依賴，短路未讀到的運算元只在已訂閱的左側
+                 運算元翻轉時才可能改變結果 ⇒ 兩種順序都不會產生 stale 畫面（兩向皆已推演）。
+                 ⚠️ 影片分支（hasVisiblePrev/hasVisibleNext）刻意零改動，理由**僅止於**：影片
+                 模式 hero-card 開 picker 後按箭頭走 prev/nextLightboxVideo（無 P2-A guard）＝
+                 真的會換片、不是死點擊，加可見性 guard 反而藏掉一顆能用的箭頭。
+                 🔴 但那條路徑**並非無恙**（PR#108 fresh review 查證、既有問題非本 PR 引入）：
+                 prev/nextLightboxVideo 未呼叫 _closePicker()（只有 closeLightbox() 有，
+                 state-lightbox.js:413-416）⇒ 切走後 overlay 因 x-show 綁 currentLightboxActress
+                 而隱藏，但 _pickerOpen 永遠停在 true ⇒ SSE 未關、手機 swipe 死、對焦鈕永久隱藏、
+                 Esc 被 _cancelPicker 攔截。正解是在 prev/nextLightboxVideo 開頭補
+                 _closePicker()（用排序讓壞狀態不可能，非加旗標），屬**影片路徑改動、需獨立
+                 CDP 驗證**，已列 follow-up，不在本 PR 範圍。 -->
+            <button class="lightbox-nav lightbox-nav-prev"
+                    @click.stop="showFavoriteActresses ? prevActressLightbox() : prevLightboxVideo()"
+                    x-show="!_maskVisible && (showFavoriteActresses ? (!_pickerOpen && actressLightboxIndex > 0) : hasVisiblePrev())"
+                    title="{{ t('showcase.lightbox.prev') }}">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+            <button class="lightbox-nav lightbox-nav-next"
+                    @click.stop="showFavoriteActresses ? nextActressLightbox() : nextLightboxVideo()"
+                    x-show="!_maskVisible && (showFavoriteActresses ? (!_pickerOpen && actressLightboxIndex < filteredActressCount - 1) : hasVisibleNext())"
+                    title="{{ t('showcase.lightbox.next') }}">
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
+
+    <!-- Sample Gallery Overlay (T7) -->
+    <div class="sample-gallery"
+         :class="{ 'show': sampleGalleryOpen }"
+         x-trap.inert="sampleGalleryOpen && !rescrapeOpen && !removeActressModalOpen && !deleteVideoModalOpen"
+         @click.self="closeSampleGallery()"
+         @touchstart.passive="_sgTouchStart($event)"
+         @touchend.passive="_sgTouchEnd($event)">
+
+        <!-- 關閉按鈕 -->
+        <button class="sg-close" @click="closeSampleGallery()" title="{{ t('showcase.lightbox.close') }}">
+            <i class="bi bi-x-lg"></i>
+        </button>
+
+        <!-- 計數器 -->
+        <div class="sg-counter"
+             x-text="(sampleGalleryIndex + 1) + ' / ' + sampleGalleryImages.length"></div>
+
+        <!-- 主圖 -->
+        <div class="sg-main-wrap" @click.self="closeSampleGallery()">
+            <img class="sg-main-img"
+                 :src="sampleGalleryImages[sampleGalleryIndex]"
+                 :alt="t('showcase.gallery.sample_alt') + ' ' + (sampleGalleryIndex + 1)"
+                 @click.stop>
+        </div>
+
+        <!-- 左右導航 -->
+        <button class="sg-nav sg-prev"
+                x-show="sampleGalleryIndex > 0"
+                @click.stop="prevSampleGallery()"
+                title="{{ t('showcase.gallery.prev') }}">
+            <i class="bi bi-chevron-left"></i>
+        </button>
+        <button class="sg-nav sg-next"
+                x-show="sampleGalleryIndex < sampleGalleryImages.length - 1"
+                @click.stop="nextSampleGallery()"
+                title="{{ t('showcase.gallery.next') }}">
+            <i class="bi bi-chevron-right"></i>
+        </button>
+
+        <!-- 縮圖列 -->
+        <div class="sg-thumbs">
+            <template x-for="(url, idx) in sampleGalleryImages" :key="url">
+                <button class="sg-thumb-btn"
+                        :class="{ 'sg-thumb-active': idx === sampleGalleryIndex }"
+                        @click.stop="jumpSampleGallery(idx)">
+                    <img class="sg-thumb-img" :src="url" :alt="t('showcase.gallery.thumb_alt') + ' ' + (idx + 1)">
+                </button>
+            </template>
+        </div>
+    </div>
+
+    </div>
+
+    <!-- 56c-T4: Similar Stage Sibling（與 .showcase-lightbox / .sample-gallery 同層 fixed
+         z-index:1501 > sample-gallery 1500 > showcase-lightbox 1000；
+         x-show 不用 x-if，DOM 永遠在（gotchas Alpine 8）。
+         x-trap.inert 鎖 focus；x-effect 觸發 init/destroy lifecycle。
+         ESC keydown 由 56c-T6 在 state-lightbox.js handleKeydown 統一路由（不在此綁）。 -->
+    <div class="similar-stage"
+         :class="{ 'show': similarModeOpen }"
+         x-show="similarModeOpen"
+         x-trap.inert="similarModeOpen"
+         x-effect="similarModeOpen ? initSimilarStage() : destroySimilarStage()"
+         @click.self="closeSimilarMode()">
+
+        <!-- X 關閉按鈕（backdrop scope，相對 viewport 角，不在 inner 內） -->
+        <button class="similar-close-btn"
+                @click="closeSimilarMode()"
+                :aria-label="t('similar_mode.close')">
+            <i class="bi bi-x-lg"></i>
+        </button>
+
+        <!-- inner stage：960×620 design-space 容器（spec §1 CD-56C-11） -->
+        <div class="similar-stage-inner">
+
+            <!-- Dust particle layer — 100 static circles (60 seed=56 + 40 seed=9999)，搬遷自 motion_lab.html -->
+            <svg class="similar-stage-dust" viewBox="0 0 960 620" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <circle cx="888" cy="593" r="0.61" style="--dust-base-seed:0.086;--dust-cycle:3.14s;--dust-delay:2.39s"/>
+                <circle cx="450" cy="256" r="0.69" style="--dust-base-seed:0.085;--dust-cycle:3.21s;--dust-delay:1.12s"/>
+                <circle cx="607" cy="232" r="0.62" style="--dust-base-seed:0.083;--dust-cycle:2.7s;--dust-delay:2.56s"/>
+                <circle cx="160" cy="413" r="1.28" style="--dust-base-seed:0.097;--dust-cycle:3.29s;--dust-delay:1.09s"/>
+                <circle cx="116" cy="220" r="1.16" style="--dust-base-seed:0.078;--dust-cycle:3.88s;--dust-delay:0.55s"/>
+                <circle cx="706" cy="84" r="1.38" style="--dust-base-seed:0.081;--dust-cycle:2.92s;--dust-delay:0.77s"/>
+                <circle cx="582" cy="528" r="1.34" style="--dust-base-seed:0.074;--dust-cycle:3.78s;--dust-delay:0.15s"/>
+                <circle cx="397" cy="20" r="1.47" style="--dust-base-seed:0.087;--dust-cycle:3.55s;--dust-delay:0.43s"/>
+                <circle cx="530" cy="414" r="1.28" style="--dust-base-seed:0.079;--dust-cycle:3.27s;--dust-delay:2.26s"/>
+                <circle cx="583" cy="531" r="1.29" style="--dust-base-seed:0.087;--dust-cycle:2.98s;--dust-delay:1.51s"/>
+                <circle cx="734" cy="498" r="0.74" style="--dust-base-seed:0.068;--dust-cycle:2.85s;--dust-delay:1.11s"/>
+                <circle cx="29" cy="153" r="0.63" style="--dust-base-seed:0.093;--dust-cycle:4.15s;--dust-delay:0.72s"/>
+                <circle cx="541" cy="112" r="0.65" style="--dust-base-seed:0.083;--dust-cycle:3.85s;--dust-delay:1.27s"/>
+                <circle cx="824" cy="426" r="0.84" style="--dust-base-seed:0.062;--dust-cycle:3.47s;--dust-delay:3.28s"/>
+                <circle cx="328" cy="242" r="0.66" style="--dust-base-seed:0.088;--dust-cycle:3.34s;--dust-delay:4.11s"/>
+                <circle cx="701" cy="576" r="1.39" style="--dust-base-seed:0.066;--dust-cycle:3.75s;--dust-delay:2.9s"/>
+                <circle cx="62" cy="59" r="1.28" style="--dust-base-seed:0.079;--dust-cycle:2.79s;--dust-delay:0.59s"/>
+                <circle cx="282" cy="172" r="1.37" style="--dust-base-seed:0.097;--dust-cycle:4.31s;--dust-delay:3.55s"/>
+                <circle cx="929" cy="137" r="1.59" style="--dust-base-seed:0.076;--dust-cycle:3.9s;--dust-delay:4.16s"/>
+                <circle cx="232" cy="132" r="1.35" style="--dust-base-seed:0.065;--dust-cycle:2.84s;--dust-delay:3.96s"/>
+                <circle cx="593" cy="134" r="1.52" style="--dust-base-seed:0.077;--dust-cycle:4.29s;--dust-delay:3.15s"/>
+                <circle cx="218" cy="263" r="1.54" style="--dust-base-seed:0.072;--dust-cycle:4.14s;--dust-delay:2.66s"/>
+                <circle cx="102" cy="216" r="0.72" style="--dust-base-seed:0.086;--dust-cycle:3.37s;--dust-delay:3.58s"/>
+                <circle cx="639" cy="166" r="1.44" style="--dust-base-seed:0.083;--dust-cycle:4.32s;--dust-delay:2.38s"/>
+                <circle cx="921" cy="432" r="1.4" style="--dust-base-seed:0.088;--dust-cycle:4.03s;--dust-delay:1.98s"/>
+                <circle cx="794" cy="407" r="1.48" style="--dust-base-seed:0.074;--dust-cycle:3.28s;--dust-delay:1.35s"/>
+                <circle cx="483" cy="149" r="1.03" style="--dust-base-seed:0.093;--dust-cycle:3.25s;--dust-delay:1.36s"/>
+                <circle cx="564" cy="41" r="1.31" style="--dust-base-seed:0.077;--dust-cycle:3.38s;--dust-delay:1.27s"/>
+                <circle cx="651" cy="259" r="1.49" style="--dust-base-seed:0.076;--dust-cycle:2.84s;--dust-delay:1.74s"/>
+                <circle cx="346" cy="565" r="1.41" style="--dust-base-seed:0.091;--dust-cycle:4.39s;--dust-delay:3.41s"/>
+                <circle cx="73" cy="481" r="1.18" style="--dust-base-seed:0.094;--dust-cycle:3.24s;--dust-delay:3.41s"/>
+                <circle cx="46" cy="496" r="0.77" style="--dust-base-seed:0.089;--dust-cycle:4.35s;--dust-delay:0.42s"/>
+                <circle cx="825" cy="181" r="0.95" style="--dust-base-seed:0.067;--dust-cycle:3.46s;--dust-delay:4.12s"/>
+                <circle cx="594" cy="485" r="1.21" style="--dust-base-seed:0.096;--dust-cycle:4.38s;--dust-delay:0.96s"/>
+                <circle cx="779" cy="502" r="1.1" style="--dust-base-seed:0.096;--dust-cycle:2.98s;--dust-delay:3.87s"/>
+                <circle cx="403" cy="46" r="0.84" style="--dust-base-seed:0.076;--dust-cycle:3.18s;--dust-delay:0.28s"/>
+                <circle cx="435" cy="350" r="0.82" style="--dust-base-seed:0.072;--dust-cycle:3.71s;--dust-delay:2.49s"/>
+                <circle cx="71" cy="125" r="1.09" style="--dust-base-seed:0.082;--dust-cycle:3.81s;--dust-delay:0.53s"/>
+                <circle cx="939" cy="345" r="1.13" style="--dust-base-seed:0.09;--dust-cycle:3.93s;--dust-delay:1.2s"/>
+                <circle cx="211" cy="363" r="0.88" style="--dust-base-seed:0.09;--dust-cycle:3.03s;--dust-delay:4.16s"/>
+                <circle cx="701" cy="331" r="1.23" style="--dust-base-seed:0.076;--dust-cycle:3.46s;--dust-delay:3.39s"/>
+                <circle cx="517" cy="328" r="1.58" style="--dust-base-seed:0.082;--dust-cycle:4.13s;--dust-delay:0.74s"/>
+                <circle cx="168" cy="340" r="0.96" style="--dust-base-seed:0.096;--dust-cycle:2.74s;--dust-delay:1.24s"/>
+                <circle cx="919" cy="439" r="0.79" style="--dust-base-seed:0.065;--dust-cycle:3.06s;--dust-delay:1.46s"/>
+                <circle cx="551" cy="579" r="0.7" style="--dust-base-seed:0.067;--dust-cycle:3.35s;--dust-delay:1.83s"/>
+                <circle cx="790" cy="253" r="1.14" style="--dust-base-seed:0.09;--dust-cycle:3.99s;--dust-delay:4.07s"/>
+                <circle cx="836" cy="583" r="1.41" style="--dust-base-seed:0.081;--dust-cycle:2.73s;--dust-delay:3.11s"/>
+                <circle cx="824" cy="365" r="1.29" style="--dust-base-seed:0.094;--dust-cycle:3.02s;--dust-delay:0.71s"/>
+                <circle cx="176" cy="38" r="0.63" style="--dust-base-seed:0.064;--dust-cycle:2.68s;--dust-delay:3.54s"/>
+                <circle cx="160" cy="181" r="1.2" style="--dust-base-seed:0.077;--dust-cycle:3.36s;--dust-delay:2.17s"/>
+                <circle cx="716" cy="558" r="0.6" style="--dust-base-seed:0.089;--dust-cycle:3.12s;--dust-delay:4.08s"/>
+                <circle cx="887" cy="98" r="0.64" style="--dust-base-seed:0.067;--dust-cycle:3.75s;--dust-delay:0.62s"/>
+                <circle cx="937" cy="338" r="0.71" style="--dust-base-seed:0.088;--dust-cycle:2.94s;--dust-delay:3.43s"/>
+                <circle cx="138" cy="461" r="1.15" style="--dust-base-seed:0.099;--dust-cycle:3.52s;--dust-delay:3.47s"/>
+                <circle cx="169" cy="264" r="1.47" style="--dust-base-seed:0.1;--dust-cycle:3.94s;--dust-delay:3.51s"/>
+                <circle cx="541" cy="301" r="0.87" style="--dust-base-seed:0.089;--dust-cycle:3.5s;--dust-delay:3.57s"/>
+                <circle cx="665" cy="353" r="1.46" style="--dust-base-seed:0.062;--dust-cycle:3.89s;--dust-delay:0.58s"/>
+                <circle cx="21" cy="587" r="1.1" style="--dust-base-seed:0.095;--dust-cycle:2.78s;--dust-delay:3.33s"/>
+                <circle cx="24" cy="146" r="0.75" style="--dust-base-seed:0.071;--dust-cycle:4.05s;--dust-delay:1.45s"/>
+                <circle cx="24" cy="295" r="1.1" style="--dust-base-seed:0.081;--dust-cycle:4.26s;--dust-delay:2.68s"/>
+                <circle cx="874" cy="147" r="0.76" style="--dust-base-seed:0.063;--dust-cycle:4.02s;--dust-delay:1.26s"/>
+                <circle cx="214" cy="330" r="1.23" style="--dust-base-seed:0.069;--dust-cycle:3.55s;--dust-delay:0.37s"/>
+                <circle cx="640" cy="504" r="1.04" style="--dust-base-seed:0.092;--dust-cycle:3.63s;--dust-delay:4.26s"/>
+                <circle cx="695" cy="206" r="1.55" style="--dust-base-seed:0.097;--dust-cycle:3.67s;--dust-delay:0.7s"/>
+                <circle cx="20" cy="517" r="1.48" style="--dust-base-seed:0.098;--dust-cycle:3.37s;--dust-delay:1.06s"/>
+                <circle cx="627" cy="600" r="1.24" style="--dust-base-seed:0.088;--dust-cycle:3.62s;--dust-delay:1.16s"/>
+                <circle cx="583" cy="411" r="0.63" style="--dust-base-seed:0.081;--dust-cycle:3.77s;--dust-delay:1.4s"/>
+                <circle cx="767" cy="279" r="0.73" style="--dust-base-seed:0.067;--dust-cycle:3.54s;--dust-delay:3.09s"/>
+                <circle cx="757" cy="32" r="1.38" style="--dust-base-seed:0.094;--dust-cycle:3.19s;--dust-delay:3.04s"/>
+                <circle cx="490" cy="339" r="1.08" style="--dust-base-seed:0.067;--dust-cycle:3.37s;--dust-delay:3.66s"/>
+                <circle cx="315" cy="313" r="0.81" style="--dust-base-seed:0.072;--dust-cycle:3.95s;--dust-delay:2.62s"/>
+                <circle cx="824" cy="99" r="1.0" style="--dust-base-seed:0.064;--dust-cycle:3.53s;--dust-delay:3.67s"/>
+                <circle cx="482" cy="510" r="1.54" style="--dust-base-seed:0.071;--dust-cycle:4.03s;--dust-delay:4.27s"/>
+                <circle cx="54" cy="392" r="1.47" style="--dust-base-seed:0.063;--dust-cycle:3.78s;--dust-delay:0.22s"/>
+                <circle cx="131" cy="395" r="0.89" style="--dust-base-seed:0.091;--dust-cycle:4.13s;--dust-delay:4.0s"/>
+                <circle cx="171" cy="272" r="1.18" style="--dust-base-seed:0.091;--dust-cycle:2.87s;--dust-delay:2.37s"/>
+                <circle cx="435" cy="168" r="0.8" style="--dust-base-seed:0.092;--dust-cycle:3.72s;--dust-delay:0.98s"/>
+                <circle cx="556" cy="295" r="1.5" style="--dust-base-seed:0.07;--dust-cycle:4.37s;--dust-delay:0.9s"/>
+                <circle cx="621" cy="256" r="1.29" style="--dust-base-seed:0.081;--dust-cycle:3.51s;--dust-delay:1.74s"/>
+                <circle cx="803" cy="548" r="1.33" style="--dust-base-seed:0.097;--dust-cycle:3.28s;--dust-delay:0.12s"/>
+                <circle cx="767" cy="117" r="0.69" style="--dust-base-seed:0.068;--dust-cycle:3.27s;--dust-delay:0.86s"/>
+                <circle cx="432" cy="308" r="0.72" style="--dust-base-seed:0.096;--dust-cycle:4.08s;--dust-delay:3.81s"/>
+                <circle cx="648" cy="560" r="0.97" style="--dust-base-seed:0.081;--dust-cycle:2.62s;--dust-delay:1.46s"/>
+                <circle cx="376" cy="391" r="0.69" style="--dust-base-seed:0.093;--dust-cycle:3.53s;--dust-delay:3.99s"/>
+                <circle cx="222" cy="147" r="1.48" style="--dust-base-seed:0.097;--dust-cycle:3.43s;--dust-delay:3.9s"/>
+                <circle cx="27" cy="538" r="1.35" style="--dust-base-seed:0.066;--dust-cycle:3.69s;--dust-delay:1.41s"/>
+                <circle cx="385" cy="557" r="1.43" style="--dust-base-seed:0.093;--dust-cycle:3.49s;--dust-delay:0.07s"/>
+                <circle cx="847" cy="119" r="1.51" style="--dust-base-seed:0.098;--dust-cycle:3.4s;--dust-delay:2.45s"/>
+                <circle cx="273" cy="110" r="1.27" style="--dust-base-seed:0.095;--dust-cycle:4.13s;--dust-delay:4.19s"/>
+                <circle cx="322" cy="164" r="1.21" style="--dust-base-seed:0.097;--dust-cycle:3.32s;--dust-delay:3.06s"/>
+                <circle cx="268" cy="330" r="0.97" style="--dust-base-seed:0.083;--dust-cycle:3.44s;--dust-delay:0.05s"/>
+                <circle cx="601" cy="355" r="1.57" style="--dust-base-seed:0.088;--dust-cycle:3.73s;--dust-delay:4.18s"/>
+                <circle cx="733" cy="336" r="1.12" style="--dust-base-seed:0.063;--dust-cycle:3.73s;--dust-delay:1.59s"/>
+                <circle cx="377" cy="422" r="0.98" style="--dust-base-seed:0.069;--dust-cycle:4.12s;--dust-delay:0.25s"/>
+                <circle cx="763" cy="390" r="1.34" style="--dust-base-seed:0.093;--dust-cycle:3.63s;--dust-delay:4.03s"/>
+                <circle cx="526" cy="170" r="0.65" style="--dust-base-seed:0.07;--dust-cycle:3.37s;--dust-delay:3.32s"/>
+                <circle cx="235" cy="91" r="1.17" style="--dust-base-seed:0.087;--dust-cycle:2.64s;--dust-delay:2.59s"/>
+                <circle cx="417" cy="363" r="1.25" style="--dust-base-seed:0.071;--dust-cycle:2.75s;--dust-delay:2.22s"/>
+                <circle cx="170" cy="140" r="0.73" style="--dust-base-seed:0.075;--dust-cycle:2.98s;--dust-delay:1.43s"/>
+                <circle cx="598" cy="411" r="0.62" style="--dust-base-seed:0.079;--dust-cycle:2.68s;--dust-delay:2.57s"/>
+            </svg>
+
+            <!-- SVG rails 12 條 + 12 sweep lines（id 對映 similar-rail-XX / similar-sweep-XX） -->
+            <svg class="similar-stage-rails" viewBox="0 0 960 620" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <!-- 靜態 12 組 rail + sweep（鏡射 motion_lab.html 無錯 precedent；id 對映 state-similar.js 消費端 'similar-rail-'+idShort / 'similar-sweep-'+idShort，runtime setRailCoords 覆蓋座標，初始為退化點 480,310） -->
+                <line id="similar-rail-01"  class="similar-rail rail--hidden" x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-sweep-01" class="similar-rail-sweep"        x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-rail-02"  class="similar-rail rail--hidden" x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-sweep-02" class="similar-rail-sweep"        x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-rail-03"  class="similar-rail rail--hidden" x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-sweep-03" class="similar-rail-sweep"        x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-rail-04"  class="similar-rail rail--hidden" x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-sweep-04" class="similar-rail-sweep"        x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-rail-05"  class="similar-rail rail--hidden" x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-sweep-05" class="similar-rail-sweep"        x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-rail-06"  class="similar-rail rail--hidden" x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-sweep-06" class="similar-rail-sweep"        x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-rail-07"  class="similar-rail rail--hidden" x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-sweep-07" class="similar-rail-sweep"        x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-rail-08"  class="similar-rail rail--hidden" x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-sweep-08" class="similar-rail-sweep"        x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-rail-09"  class="similar-rail rail--hidden" x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-sweep-09" class="similar-rail-sweep"        x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-rail-10"  class="similar-rail rail--hidden" x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-sweep-10" class="similar-rail-sweep"        x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-rail-11"  class="similar-rail rail--hidden" x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-sweep-11" class="similar-rail-sweep"        x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-rail-12"  class="similar-rail rail--hidden" x1="480" y1="310" x2="480" y2="310" />
+                <line id="similar-sweep-12" class="similar-rail-sweep"        x1="480" y1="310" x2="480" y2="310" />
+            </svg>
+
+            <!-- 56c-T4: main image visual center anchor — single source of truth
+                 for ghost-fly enter target rect。design-space 480,310 200×250 center。 -->
+            <div class="similar-main-anchor" x-ref="similarMainAnchor" aria-hidden="true"></div>
+
+            <!-- 12 slot cards（id 對映 similar-card-XX；@click / @mouseenter / @mouseleave 走 onSimilarCardXxx） -->
+            <template x-for="anchor in SIMILAR_ANCHORS" :key="anchor.id">
+                <div class="similar-slot slot--hidden"
+                     :id="'similar-card-' + anchor.idShort"
+                     @click="onSimilarCardClick(anchor.id)"
+                     @mouseenter="onSimilarCardHoverEnter(anchor.id)"
+                     @mouseleave="onSimilarCardHoverLeave(anchor.id)">
+                    <img class="similar-slot-img"
+                         :src="(_getSlotItem && _getSlotItem(anchor.id))?.cover_url"
+                         :alt="(_getSlotItem && _getSlotItem(anchor.id))?.title"
+                         loading="lazy"
+                         @load="applyCellFocal($el, _getSlotItem(anchor.id))">
+                </div>
+            </template>
+
+            <!-- 56c-T4: play button 在 .similar-stage-inner 內 design-space coords，
+                 跟著 inner scale；CSS inverse scale 維持視覺 44×44；位置 main static 下方中央 -->
+            <button class="similar-play-button"
+                    x-show="similarModeOpen"
+                    @click.stop="playSimilarMainVideo && playSimilarMainVideo()"
+                    :aria-label="t('showcase.action.play')">
+                <i class="bi bi-play-fill" aria-hidden="true"></i>
+            </button>
+
+        </div><!-- /.similar-stage-inner -->
+
+        <!-- 56c-T4 (codex P1-2): .similar-main-overlay 已移除。
+             原 hit area 改由 _buildSimilarMainStatic 在 <img> 上直接掛 click listener，
+             同 stacking context 內 main static z=11 < play button z=12 → 點 button
+             命中 button、點 main static 非 button 區命中 onSimilarMainImgClick → closeSimilarMode。 -->
+    </div><!-- /.similar-stage -->
+
+    <!-- 83b-T1: 行動相似探索面板（Mobile Photo Picker 爆射）
+         page-level sibling of .showcase-lightbox（source order 晚於 lightbox trap，
+         確保 test_t7_xtrap_releases_on_delete_modal 的第一個 x-trap.inert 仍抓 lightbox）。
+         <960px only（CSS @media gate + ≥960 display:none 安全網）。Core 無轉場（飛行轉場留 T3）。 -->
+    <div class="similar-mobile-panel"
+         x-trap.inert="similarModeMobileOpen"
+         :aria-hidden="!similarModeMobileOpen">
+        <!-- scrim：overlay 30px 模糊完全遮住 lightbox（CD-10） -->
+        <div class="similar-mobile-scrim" @click="closeMobilePanel()"></div>
+        <!-- stage：burst origin frame -->
+        <div class="similar-mobile-stage">
+            <!-- 中央右半裁切主圖（FlipReplace 落點 + Burst 原點；點主圖關面板，無文字） -->
+            <!-- T4: cover 不設 overflow:hidden（已移至 img），讓 play-btn 子元素不被裁切 -->
+            <div class="similar-mobile-cover" @click="closeMobilePanel()">
+                <img x-ref="mobilePanelCoverImg" alt="" aria-hidden="true">
+                <!-- T4: 播放按鈕 — cover 子元素；@click.stop 阻冒泡防觸發 cover 的 closeMobilePanel() -->
+                <button class="similar-mobile-play-btn"
+                        x-show="!!currentLightboxVideo?.path"
+                        :disabled="similarModeAnimating"
+                        @click.stop="playVideo(currentLightboxVideo?.path)"
+                        :aria-label="t('showcase.action.play')">
+                    <i class="bi bi-play-fill" aria-hidden="true"></i>
+                </button>
+            </div>
+            <!-- 相似卡（從中央爆射；右半裁切；無文字） -->
+            <div class="similar-mobile-cards">
+                <template x-for="item in similarResults" :key="_mobilePanelRunId + '-' + item.video_id">
+                    <div class="similar-mobile-burst-card"
+                         @click="onMobileDrillClick(item, $event)">
+                        <!-- 99a-T2 範圍限制：此 $watch 只在「面板重開」時 fire，非 lightbox 存檔即時重套。
+                             similarResults 的 item 是每次 fetch 新 JSON 物件，與 currentLightboxVideo
+                             非同參考（不同於 grid 卡直接綁 _filteredVideos 陣列 entry），故 lightbox 焦點
+                             存檔（同參考 mutate currentLightboxVideo）不會觸發這裡的 $watch。實務上焦點
+                             變更會在下次開面板時經 @load 重套（安全 fallback）；$watch 仍保留作為「未來若
+                             改成同參考」的防禦掛鉤，非誤導。 -->
+                        <img :src="item.cover_url" alt="" aria-hidden="true"
+                             @load="applyCellFocal($el, item)"
+                             x-init="$watch('item.auto_focal', () => applyCellFocal($el, item));
+                                     $watch('item.crop_mode', () => applyCellFocal($el, item))">
+                    </div>
+                </template>
+            </div>
+        </div>
+        <!-- 右上 ✕ 關閉鈕（x-trap Tab 目標） -->
+        <button class="similar-mobile-panel-close"
+                @click="closeMobilePanel()"
+                :aria-label="t('similar_mode.close')">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+    </div><!-- /.similar-mobile-panel -->
+
+    <!-- TASK-52.3.3: Remove Actress Confirm Modal（取代原 window.confirm）
+         Esc 雙重防線：handleKeydown 入口攔截 + dialog 自身 @keydown.escape.window 冗餘
+         backdrop click 走 cancelRemoveActressModal() 統一三 dismiss 路徑 -->
+    <dialog class="modal fluent-modal"
+            :class="{ 'modal-open': removeActressModalOpen }"
+            @click.self="cancelRemoveActressModal()"
+            @keydown.escape.window="removeActressModalOpen && cancelRemoveActressModal()">
+        <div class="modal-box fluent-modal-box">
+            <h3 class="fluent-modal-title">
+                <i class="bi bi-exclamation-triangle text-warning"></i>
+                {{ t('showcase.actress.remove_modal.title') }}
+            </h3>
+            <p class="fluent-modal-body"
+               x-text="t('showcase.actress.remove_modal.body').replace('{name}', _pendingRemoveActressName || '')">
+            </p>
+            <div class="modal-action fluent-modal-actions">
+                <button type="button" class="btn btn-ghost" @click="cancelRemoveActressModal()">
+                    {{ t('showcase.actress.remove_modal.cancel') }}
+                </button>
+                <button type="button" class="btn btn-error"
+                        @click="confirmRemoveActress()"
+                        :disabled="_removeActressLoading">
+                    <span x-show="_removeActressLoading" class="loading loading-spinner loading-xs"></span>
+                    <span x-show="!_removeActressLoading"><i class="bi bi-trash3"></i></span>
+                    {{ t('showcase.actress.remove_modal.confirm') }}
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- 71-T7: Delete Video fluent-modal（破壞性確認；只移 DB row + thumb，不刪磁碟檔）-->
+    <dialog class="modal fluent-modal"
+            :class="{ 'modal-open': deleteVideoModalOpen }"
+            @click.self="cancelDeleteVideo()"
+            @keydown.escape.window="deleteVideoModalOpen && cancelDeleteVideo()">
+        <div class="modal-box fluent-modal-box">
+            <h3 class="fluent-modal-title">
+                <i class="bi bi-exclamation-triangle text-warning"></i>
+                {{ t('showcase.video.delete_modal.title') }}
+            </h3>
+            <p class="fluent-modal-body"
+               x-text="t('showcase.video.delete_modal.body').replace('{number}', _pendingDeleteNumber || '')">
+            </p>
+            <p class="fluent-modal-body" x-show="_pendingDeleteParts.length > 1"
+               x-text="t('showcase.video.delete_modal.body_multipart').replace('{tokens}', formatPartLabel(_pendingDeleteParts)).replace('{n}', _pendingDeleteParts.length)">
+            </p>
+            <div class="modal-action fluent-modal-actions">
+                <button type="button" class="btn btn-ghost" @click="cancelDeleteVideo()">
+                    {{ t('showcase.video.delete_modal.cancel') }}
+                </button>
+                <button type="button" class="btn btn-error"
+                        @click="confirmDeleteVideo()"
+                        :disabled="_deleteLoading">
+                    <span x-show="_deleteLoading" class="loading loading-spinner loading-xs"></span>
+                    <span x-show="!_deleteLoading"><i class="bi bi-trash3"></i></span>
+                    {{ t('showcase.video.delete_modal.confirm') }}
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- 117-T3: 從片庫加入女優面板（.fluent-modal class-toggle；x-trap.inert.noscroll） -->
+    <dialog class="modal fluent-modal actress-add-dialog"
+            :class="{ 'modal-open': actressAddPanelOpen }"
+            @click.self="closeActressAddPanel()"
+            @keydown.escape.window="actressAddPanelOpen && closeActressAddPanel()"
+            x-trap.inert.noscroll="actressAddPanelOpen">
+        <div class="modal-box fluent-modal-box actress-add-box">
+            <button type="button" class="actress-add-x"
+                    @click="closeActressAddPanel()"
+                    :aria-label="t('showcase.actress.panel.close')">
+                <i class="bi bi-x-lg"></i>
+            </button>
+            <h3 class="fluent-modal-title">{{ t('showcase.actress.panel.title') }}</h3>
+            <input class="actress-add-search" type="text" autofocus
+                   x-model="_libQuery"
+                   :placeholder="t('showcase.actress.panel.search_placeholder')">
+            <div class="actress-add-list">
+                <!-- 117-T4：載入中／載入失敗（x-for 之前） -->
+                <div class="actress-add-state" x-show="_libLoading"
+                     x-text="t('showcase.actress.panel.loading')"></div>
+                <div class="actress-add-state" x-show="_libError"
+                     x-text="t('showcase.actress.panel.load_failed')"></div>
+                <template x-for="row in libVisibleRows()" :key="row.primary_name">
+                    <div class="actress-add-row">
+                        <span class="actress-add-count" x-text="row.video_count"></span>
+                        <span class="actress-add-name"
+                              x-text="row.primary_name"
+                              @mouseenter="libMaybeTitle($event)"></span>
+                        <!-- 117-T5：第三欄四態切換（先閘 libRowFavorited，再看 libRowState）-->
+                        <!-- ① done：實心（T3 既有 <span>，一個字不動——lint 鎖著這行字面） -->
+                        <span class="actress-add-heart is-favorite"
+                              x-show="libRowFavorited(row)"
+                              :title="t('showcase.actress.favorited')">
+                            <i class="bi bi-heart-fill"></i>
+                        </span>
+                        <!-- ② idle / error：空心可點（error 也回空心＝可重試，AC-4.5） -->
+                        <button type="button" class="actress-add-heart"
+                                x-show="!libRowFavorited(row) && (libRowState(row) === 'idle' || libRowState(row) === 'error')"
+                                @click="libEnqueueFavorite(row)"
+                                :title="t('showcase.actress.addFavorite')">
+                            <i class="bi bi-heart"></i>
+                        </button>
+                        <!-- ③ queued：文字「排隊中」 -->
+                        <span class="actress-add-status"
+                              x-show="!libRowFavorited(row) && libRowState(row) === 'queued'"
+                              x-text="t('showcase.actress.panel.queued')"></span>
+                        <!-- ④ loading：spinner -->
+                        <span class="actress-add-status"
+                              x-show="!libRowFavorited(row) && libRowState(row) === 'loading'"
+                              :title="t('showcase.actress.panel.adding')">
+                            <span class="loading loading-spinner loading-xs"></span>
+                        </span>
+                        <!-- 失敗原因：橫跨整列的第二行，不動三欄定義（reviewer②：與三個兄弟元素一致，
+                             先閘 !libRowFavorited(row)——否則 A 失敗後、B 成功且 covered_names 涵蓋 A 時，
+                             A 變實心但底下留一條空白錯誤列，那一列比鄰居高一截，直到關閉重開才消失） -->
+                        <span class="actress-add-rowerror"
+                              x-show="!libRowFavorited(row) && libRowState(row) === 'error'"
+                              x-text="libRowErrorText(row)"></span>
+                    </div>
+                </template>
+                <!-- 117-T4 AC-5.4：無相符時「直接新增」列；走既有 addFavoriteActress 路徑 -->
+                <button type="button" class="actress-add-direct"
+                        x-show="libShowDirectAdd()" :disabled="_addingActress"
+                        @click="libDirectAdd()"
+                        x-text="t('showcase.actress.panel.direct_add', { name: libDirectAddName() })"></button>
+                <!-- 117b-T8：自動展開 sentinel（取代展開更多按鈕）-->
+                <div class="actress-add-sentinel" aria-hidden="true"
+                     x-show="libHasMore()"
+                     x-intersect="libExpandMore()"></div>
+            </div>
+            <div class="actress-add-footer">
+                <span class="actress-add-progress" x-text="libProgressText()"></span>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Toast (M3h) -->
+    <div class="toast toast-bottom toast-center fluent-toast-container"
+         x-show="$store.toast.visible"
+         x-transition:enter="fluent-toast-enter"
+         x-transition:enter-start="fluent-toast-enter-start"
+         x-transition:enter-end="fluent-toast-enter-end"
+         x-transition:leave="fluent-toast-leave"
+         x-transition:leave-start="fluent-toast-leave-start"
+         x-transition:leave-end="fluent-toast-leave-end">
+        <div class="alert fluent-toast"
+             :class="{
+                 'alert-success': $store.toast.type === 'success',
+                 'alert-error':   $store.toast.type === 'error',
+                 'alert-warning': $store.toast.type === 'warning',
+                 'alert-info':    $store.toast.type === 'info'
+             }">
+            <i class="bi" :class="{
+                'bi-check-circle':         $store.toast.type === 'success',
+                'bi-exclamation-circle':   $store.toast.type === 'error',
+                'bi-exclamation-triangle': $store.toast.type === 'warning',
+                'bi-info-circle':          $store.toast.type === 'info'
+            }"></i>
+            <span x-text="$store.toast.message"></span>
+            <button type="button" class="btn btn-ghost btn-xs"
+                    x-show="$store.toast.action"
+                    @click.stop="$store.toast.action.onClick(); $store.toast.hide()"
+                    x-text="$store.toast.action?.label"></button>
+        </div>
+    </div>
+
+    <!-- Footer 三段式 (49a-T4)：左 count + 中 shortcut + 右 pager -->
+    <!-- ⚠️ 不可加 x-data（會建立 nested Alpine scope，讓 showFavoriteActresses / totalPages / filteredCount 等 state 全變 undefined）。
+         footer 在 showcase.html 頂層 x-data="showcase" 作用域內，直接用父級 state。 -->
+    <div class="showcase-footer">
+        <!-- Left: count pill + mode icon -->
+        <div class="footer-left">
+            <!-- 影片模式 -->
+            <template x-if="!showFavoriteActresses">
+                <span class="footer-count">
+                    <i class="bi bi-film"></i>
+                    <template x-if="!pills.length && !search">
+                        <span><b x-text="filteredCount"></b> {{ t('showcase.status.total_suffix') }}</span>
+                    </template>
+                    <template x-if="!pills.length && search && filteredCount > 0">
+                        <span>{{ t('showcase.status.search_prefix') }}<b class="footer-search-term" x-text="search"></b>{{ t('showcase.status.search_middle') }} <b x-text="filteredCount"></b> {{ t('showcase.status.search_suffix') }}</span>
+                    </template>
+                    <template x-if="!pills.length && search && filteredCount === 0">
+                        <span x-text="t('showcase.status.search_empty')"></span>
+                    </template>
+                    <template x-if="pills.length > 0">
+                        <span>{{ t('showcase.status.pill_prefix') }} <b x-text="pills.length"></b> {{ t('showcase.status.pill_middle') }} <b x-text="filteredCount"></b> {{ t('showcase.status.pill_suffix') }}</span>
+                    </template>
+                </span>
+            </template>
+            <!-- 女優模式（搜尋無結果時整個 pill 隱藏，依 plan-49a TASK-T4 邊界條件 #7 / Codex P2） -->
+            <template x-if="showFavoriteActresses && (!actressSearch || filteredActressCount > 0)">
+                <span class="footer-count footer-count--actress">
+                    <i class="bi bi-person-circle"></i>
+                    <template x-if="!actressSearch && !actressPills.length">
+                        <span><b x-text="filteredActressCount"></b> {{ t('showcase.unit.actresses') }}</span>
+                    </template>
+                    <template x-if="actressSearch && filteredActressCount > 0 && !actressPills.length">
+                        <span>{{ t('showcase.status.search_actresses_prefix') }}<b x-text="filteredActressCount"></b>{{ t('showcase.status.search_actresses_middle') }}<b class="footer-search-term" x-text="actressSearch"></b>{{ t('showcase.status.search_actresses_suffix') }}</span>
+                    </template>
+                    <template x-if="actressPills.length > 0">
+                        <span>{{ t('showcase.status.pill_actresses_prefix') }} <b x-text="actressPills.length"></b> {{ t('showcase.status.pill_actresses_middle') }} <b x-text="filteredActressCount"></b> {{ t('showcase.status.pill_actresses_suffix') }}</span>
+                    </template>
+                </span>
+            </template>
+            <!-- TASK-142-T4: 來源不可達 pill（與 .footer-count 同層；不可加 x-data） -->
+            <template x-if="unreachableSources.length">
+                <span class="footer-count footer-count--unreachable">
+                    <i class="bi bi-plug"></i>
+                    <template x-if="unreachableSources.length <= 2">
+                        <span x-text="unreachableSources.every(s => s.reason === 'no_permission') ? t('showcase.status.source_no_permission_list', { list: unreachableSources.map(s => s.display).join('、') }) + (unreachableSources.find(s => s.dsm_hint)?.dsm_hint ? ' ' + unreachableSources.find(s => s.dsm_hint).dsm_hint : '') : t('showcase.status.source_unreachable_list', { list: unreachableSources.map(s => s.display).join('、') })"></span>
+                    </template>
+                    <template x-if="unreachableSources.length > 2">
+                        <span :title="unreachableSources.map(s => s.display).join('、')"
+                              x-text="unreachableSources.every(s => s.reason === 'no_permission') ? t('showcase.status.source_no_permission_count', { n: unreachableSources.length }) + (unreachableSources.find(s => s.dsm_hint)?.dsm_hint ? ' ' + unreachableSources.find(s => s.dsm_hint).dsm_hint : '') : t('showcase.status.source_unreachable_count', { n: unreachableSources.length })"></span>
+                    </template>
+                </span>
+            </template>
+        </div>
+
+        <!-- Center: shortcut hint（左側在講 DSM 授權步驟時讓位——那句很長，疊在快捷鍵上會讀不完）-->
+        <div class="footer-center" x-show="!unreachableSources.some(s => s.dsm_hint)">
+            <span class="hint-text">
+                <kbd>A</kbd> {{ t('showcase.shortcut.switch_mode') }} ·
+                <kbd>S</kbd> {{ t('showcase.shortcut.toggle_info') }} ·
+                <kbd>←</kbd> <kbd>→</kbd> {{ t('showcase.shortcut.pagination') }} ·
+                <kbd>ESC</kbd> {{ t('showcase.shortcut.close') }}
+            </span>
+        </div>
+
+        <!-- Right: pager pill（影片模式 + totalPages > 1 才顯示）-->
+        <div class="footer-right">
+            <div class="footer-pager" x-show="!showFavoriteActresses && totalPages > 1">
+                <button class="pager-btn"
+                        @click="prevPage()"
+                        :disabled="page === 1"
+                        :aria-label="t('showcase.nav.prev_page')"
+                        :title="t('showcase.nav.prev_page')">‹</button>
+                <span class="pager-current"
+                      @click="openPagePicker($refs.pageSelectFooter)"
+                      :title="t('showcase.shortcut.pagination')">
+                    <b x-text="page"></b>/<b x-text="totalPages"></b>
+                </span>
+                <select class="page-select" x-ref="pageSelectFooter"
+                        @change="goToPage($event.target.value)"
+                        tabindex="-1"
+                        aria-hidden="true"
+                        style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px">
+                    <template x-for="p in totalPages" :key="p">
+                        <option :value="p" x-text="p" :selected="p === page"></option>
+                    </template>
+                </select>
+                <button class="pager-btn"
+                        @click="nextPage()"
+                        :disabled="page === totalPages"
+                        :aria-label="t('showcase.nav.next_page')"
+                        :title="t('showcase.nav.next_page')">›</button>
+            </div>
+        </div>
+    </div>
+
+    {# 進階重新刮削彈窗（62a-2）。放 showcase x-data 作用域內，使 rescrape* hook 在 showcase Alpine root 求值。 #}
+    {% include '_rescrape_modal.html' %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- M2c: 傳遞 config 給 JS -->
+<script>
+window.__SHOWCASE_CONFIG__ = {{ (config.gallery or {}) | tojson | safe }};
+window.__SHOWCASE_TRANSLATE__ = {{ {'enabled': ((config.translate or {}).get('enabled', False) is true)} | tojson | safe }};
+</script>
+<script src="/static/js/shared/grid-motion.js"></script>
+<!-- B5: animations.js 在 ESM main.js 之前載入（透過 extra_js defer） -->
+<script src="/static/js/pages/showcase/animations.js"></script>
+{% endblock %}

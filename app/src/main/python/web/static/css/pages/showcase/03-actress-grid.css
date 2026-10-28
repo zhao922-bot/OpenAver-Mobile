@@ -1,0 +1,218 @@
+/* ==================== Actress Grid — Collection Wall (44c-T6) ====================
+   108-T5（功能C）：女優 grid 承接上方 .showcase-grid 的 base（display/gap 1.5rem/padding 1.5rem/
+   max-width）與 ≤899 的兩段共用斷點（481-899 → 4 欄、≤480 → 3 欄）——那半邊影片走直式 poster
+   0.71 ≈ 女優 0.75，同寬即同高，同欄是對的、維持不動。
+
+   108-T5fix1：≥900px 改用**女優專屬階梯**，不再與影片同欄。理由——≥900 影片卡切橫式 fanart（~3:2）、
+   女優恆為直式 0.75，同寬 ⇒ 女優列高是影片的 1.77 倍（實測 1907px 5 欄：影片列距 284px vs
+   女優 502px，一屏只剩 1.7 列）。故 ≥900 的對齊標的由「卡寬相同」改為「列高/密度相當」：
+
+     斷點        女優欄   無側欄(900-1023) 收合(≥1024)      展開(≥1024)       同寬度影片欄
+     900-1099      3       252 → 282        263 → 298        216 → 252         3（同欄同寬）
+     1100-1349     4       —                218 → 280        183 → 245         4（同欄同寬）
+     1350-1599     5       —                220 → 269        192 → 241         4 / 5
+     1600-1849     6       —                221 → 262        197 → 239         5
+     1850+         7       —                221 →(1920: 231) 201 →(1920: 211)  5
+
+   卡寬 =（視窗 − 側欄 − 96 − 24×(欄數−1)）/ 欄數（96 = .main-content padding 48 + grid padding 48；
+   **側欄 = 0（<1024px 無側欄）/ 60（收合）/ 200（展開）**，三種幾何皆 CDP 實測校準；gap 24 與 padding
+   由 co-listed base 提供 → 本段**只宣告 grid-template-columns**，不得在此宣告 gap/padding/max-width，
+   否則算式與影片脫鉤）。全域最小卡寬 = 183px（1100px 視窗 + 側欄展開），該點影片卡同為 183px（同欄）。
+   ⚠️ 斷點刻意 **sidebar-state agnostic**（owner 2026-07-25 拍板，回應 Codex T5fix1 P1）：側欄展開時
+   卡片變小是**全站既有性質**、影片牆完全一樣（1920px 影片 334→306），女優/影片一起縮；女優:影片
+   寬度比在兩種狀態下相同（1920: 0.69/0.69、1350: 0.78/0.78），故階梯設計目標不受側欄狀態影響。
+   不做 `body.sidebar-collapsed` 條件式斷點——那會再給女優開一套影片沒有的系統（正是功能C 要消滅的分岔）。
+   不變式（取代舊 AC-C1「同欄同寬」）：**每個寬度女優欄數 ≥ 影片欄數** → 女優卡永不比影片卡大。
+   900 / 1100 沿用影片既有斷點數字（該兩段欄數本就相同），新增邊界只有 1350 / 1600 / 1850。
+   裁切比例 0.75 維持（.actress-card-photo 不動，D-C2 defer）。 */
+
+/* 1850px+ → 7 columns */
+@media (min-width: 1850px) {
+    .actress-grid {
+        grid-template-columns: repeat(7, 1fr);
+    }
+}
+
+/* 1600-1849px → 6 columns */
+@media (min-width: 1600px) and (max-width: 1849px) {
+    .actress-grid {
+        grid-template-columns: repeat(6, 1fr);
+    }
+}
+
+/* 1350-1599px → 5 columns */
+@media (min-width: 1350px) and (max-width: 1599px) {
+    .actress-grid {
+        grid-template-columns: repeat(5, 1fr);
+    }
+}
+
+/* 1100-1349px → 4 columns（與影片同欄） */
+@media (min-width: 1100px) and (max-width: 1349px) {
+    .actress-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/* 900-1099px → 3 columns（與影片同欄） */
+@media (min-width: 900px) and (max-width: 1099px) {
+    .actress-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* 108-T1 (功能A) + CD-146b-17：≤899 水平內距統一吃 --layer-inset-mobile（12px）。
+   補償對象（.main-content 1.5rem 水平 padding）已於 T2 歸零，負 margin 已移除；
+   工具列與封面牆共用同一斷點／同一 token，避免 768 vs 899 縫隙。
+   box-sizing / max-width 仍只套 grid（工具列不需要）。
+   .showcase-grid, .actress-grid 併列不變式（T6 G5）保留在第二條規則。
+   置於兩 grid base 定義之後 → 同 specificity 靠 source order 勝 base。 */
+@media (max-width: 899px) {
+    .showcase-toolbar,
+    .showcase-grid,
+    .actress-grid {
+        padding-inline: var(--layer-inset-mobile);
+    }
+    .showcase-grid,
+    .actress-grid {
+        box-sizing: border-box;
+        max-width: none;
+    }
+}
+
+/* ==================== Actress Card (T3) ==================== */
+
+.actress-card {
+    background: var(--bg-card);
+    border-radius: var(--fluent-radius-xl);
+    box-shadow: var(--fluent-shadow-2);
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform var(--fluent-duration-fast) var(--fluent-ease-standard),
+                box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.actress-card:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: var(--fluent-shadow-8);
+}
+
+/* C21: GSAP cascade 進場期間關掉 CSS transition + 阻擋 hover 搶 transform */
+.actress-card.gsap-animating {
+    pointer-events: none;
+    transition: none !important;
+}
+
+.actress-card-photo {
+    aspect-ratio: 3 / 4;   /* portrait，比 video card 的 3/2 更窄 */
+    overflow: hidden;
+    background: var(--surface-1);
+    position: relative;
+}
+
+.actress-card-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.actress-card:hover .actress-card-photo img {
+    transform: scale(1.05);
+}
+
+/* 無照片 placeholder */
+.actress-no-photo {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 3rem;
+}
+
+/* Actress card hover overlay (44c-T7) */
+.actress-card-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    padding-bottom: 12px;
+    background: linear-gradient(to top, var(--overlay-gradient) 0%, rgba(0,0,0,0.2) 60%, transparent 100%); /* mid-stop optical fade */
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    opacity: 0;
+    transition: opacity var(--fluent-duration-fast) var(--fluent-ease-standard);
+    pointer-events: none;
+}
+
+.actress-card:hover .actress-card-overlay,
+.actress-card:focus-within .actress-card-overlay {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.actress-card-footer {
+    position: relative;
+    overflow: hidden;
+    height: 2.5rem;
+    padding: 0 0.75rem;
+}
+
+.actress-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.actress-count-badge {
+    font-size: 0.75rem;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* Actress Card Footer — three-column layout + hover swap (44c-T2, CD-3) */
+.actress-card-footer .footer-default {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 100%;
+    gap: 0.5rem;
+}
+
+.actress-card-footer .footer-default .av-num {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.actress-sort-indicator {
+    font-size: 0.75rem;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.actress-card:hover .footer-hover {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.actress-card:hover .footer-default {
+    opacity: 0;
+}
+

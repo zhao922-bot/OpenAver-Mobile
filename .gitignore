@@ -1,0 +1,45 @@
+# Android / Gradle
+.gradle/
+**/build/
+.cxx/
+.externalNativeBuild/
+local.properties
+*.iml
+.idea/
+captures/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Signing material and generated signatures
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.idsig
+keystore.properties
+signing.properties
+
+# Build and release artifacts
+*.apk
+*.aab
+outputs/
+
+# Local state and logs
+*.log
+**/web/config.json
+**/web/config.local.json
+
+# Local tooling
+tools/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/

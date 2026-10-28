@@ -1,0 +1,158 @@
+/* ==================== Browse Dir Modal (TASK-128-T2) ====================
+ *
+ * 共用「選擇資料夾」彈窗版面。殼複用 .fluent-modal class-toggle；
+ * 玻璃 backdrop 由 theme.css 的 `.fluent-modal.modal-open` 統一提供。
+ * 全 token 化（顏色／圓角／間距／duration／ease）。
+ */
+
+.browse-dir-modal-box {
+    width: min(520px, calc(100vw - 2rem));
+    max-height: calc(100vh - 3rem);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.browse-dir-x {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 1.9rem;
+    height: 1.9rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    border-radius: var(--fluent-radius-md);
+    transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
+                color var(--fluent-duration-fast) var(--fluent-ease-standard);
+    z-index: 2;
+}
+
+.browse-dir-x:hover {
+    background: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+    color: var(--text-primary);
+}
+
+.browse-dir-crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.15rem 0;
+    margin: 0.5rem 0 0.35rem;
+    font-size: 0.85rem;
+    min-width: 0;
+}
+
+.browse-dir-crumb-wrap {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.browse-dir-crumb-sep {
+    color: var(--text-secondary);
+    margin: 0 0.2rem;
+    user-select: none;
+}
+
+.browse-dir-crumb {
+    border: none;
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    padding: 0.1rem 0.25rem;
+    border-radius: var(--fluent-radius-sm);
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: inherit;
+}
+
+.browse-dir-crumb:hover {
+    background: color-mix(in oklch, var(--accent) 12%, transparent);
+}
+
+.browse-dir-toolbar {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.35rem;
+}
+
+.browse-dir-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.browse-dir-loading,
+.browse-dir-error,
+.browse-dir-empty {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1.25rem 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.browse-dir-error {
+    color: var(--color-error);
+}
+
+.browse-dir-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    max-height: min(50vh, 22rem);
+    border: 1px solid var(--stroke-default);
+    border-radius: var(--fluent-radius-md);
+    background: var(--surface-0);
+}
+
+.browse-dir-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border: none;
+    border-bottom: 1px solid var(--stroke-default);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    transition: background var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.browse-dir-entry:last-child {
+    border-bottom: none;
+}
+
+.browse-dir-entry:hover {
+    background: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+}
+
+.browse-dir-entry i {
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.browse-dir-entry-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.browse-dir-actions {
+    margin-top: 0.75rem;
+}

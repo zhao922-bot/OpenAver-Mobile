@@ -1,0 +1,785 @@
+"""
+core/config.py — 設定載入 / 儲存 / 遷移邏輯
+
+提供：
+- CONFIG_PATH, CONFIG_DEFAULT_PATH  — 設定檔路徑常數
+- AppConfig（及全部子 schema）     — Pydantic 設定 schema
+- load_config()                    — 載入設定，含完整 migration 邏輯
+- save_config()                    — 儲存設定至 config.json
+"""
+
+import json
+import shutil
+import threading
+from typing import Callable, Dict, Literal, Optional, List
+
+from pydantic import BaseModel, Field, field_validator
+
+from core.atomic_write import atomic_write
+from core.data_root import get_data_root, get_project_root, is_layout_finalized
+from core.logger import get_logger
+from core.path_utils import is_fs_path_under_dir, coerce_to_file_uri
+from core.source_config import SourceConfig, get_builtin_sources, get_manual_only_sources
+from core.video_extensions import DEFAULT_VIDEO_EXTENSIONS
+
+logger = get_logger(__name__)
+
+# 設定檔路徑：runtime config 在資料根；default template 仍在程式區
+_PROJECT_ROOT = get_project_root()
+CONFIG_PATH = get_data_root() / "config.json"
+CONFIG_DEFAULT_PATH = _PROJECT_ROOT / "web" / "config.default.json"
+
+# 66 TASK-66b-T1（CD-66b-1）：process-wide config.json 寫入序列化鎖。
+# async-offload 把 def 路由移到 threadpool thread 後，event loop 的隱式互斥消失，
+# load_config→mutate→save_config 的 RMW 變成真並發 → lost-update（Race A）。
+# 必須是 threading.Lock（非 asyncio.Lock）：def 路由跑在 threadpool thread，
+# asyncio.Lock 保護不到；且 plain Lock（非 RLock）—— public locked / private
+# unlocked 嚴格分層，鎖內絕不二次 acquire（mutator 契約禁呼 public API）。
+_config_write_lock = threading.Lock()
+
+
+class ConfigRootNotFinalizedError(Exception):
+    """資料根尚未定版時禁止寫入 config.json（BE-DATA-13 / TASK-153b-T3fix1）。"""
+
+
+# 外部管理器模式共用常數（organizer / enricher 引用）
+STEM_IMAGE_MODES = ('jellyfin', 'emby', 'kodi')
+
+
+def normalize_external_manager(value) -> str:
+    """把未驗證的 external_manager 收斂成合法四態之一（'off' 或 STEM_IMAGE_MODES 之一）。
+
+    load_config() 回傳的是 raw dict、不過 Pydantic model_validate（BE-CONFIG-03），
+    所以手改過的 config.json 可能帶進大小寫不符（'Jellyfin'）、未知值（'plex'）、
+    None 或空值，全都會原樣流到下游。合法值恰好是 {'off'} ∪ STEM_IMAGE_MODES，
+    故「不在白名單內一律當 off」不會誤殺任何合法值——fail-closed 方向與
+    CD-111-2（poster/fanart 正向白名單）一致，讓 generate_nfo 的媒體管理器
+    專用欄位（lockdata/uniqueid/sorttitle/country/language）跟圖片 gate 同步收斂。
+
+    ⚠️ 廢棄舊值 'jellyfin_emby' **不會**走到這裡——它在 load_config() 內部就被
+    Fix-72d migration（:364-367）逐字改寫成 'jellyfin'，是合法的媒體伺服器風味、
+    本來就該產圖。別把它當成本函式要收斂的畸形值（Codex PR#123 round-3 踩過）。
+    """
+    return value if value in STEM_IMAGE_MODES else 'off'
+
+
+# ============ Pydantic Schema ============
+
+class ScraperConfig(BaseModel):
+    create_folder: bool = True
+    folder_layers: List[str] = ["{actor}"]
+    folder_format: str = "{actor}"
+    filename_format: str = "{num} {title}"
+    nfo_title_format: str = "[{num}]{title}"
+    download_cover: bool = True
+    cover_filename: str = "poster.jpg"
+    create_nfo: bool = True
+    max_title_length: int = 50
+    max_filename_length: int = 60
+    video_extensions: List[str] = list(DEFAULT_VIDEO_EXTENSIONS)
+    suffix_keywords: List[str] = ["-cd1", "-cd2", "-4k", "-uc"]
+    jellyfin_mode: bool = False
+    external_manager: Literal["off", "jellyfin", "emby", "kodi"] = "off"
+    download_sample_images: bool = False
+    strm_path_mappings: Dict[str, str] = {}
+
+
+AUTO_ORGANIZE_INTERVAL_HOURS = 12  # D7 二次收斂：不給選，寫死；供本檔與
+# web/auto_organize_scheduler.py 共用同一個數字，不重複寫兩份。
+
+
+class AutoOrganizeConfig(BaseModel):
+    enabled: bool = False
+
+
+class SearchConfig(BaseModel):
+    search_filter: str = ""
+    uncensored_mode_enabled: bool = False  # deprecated: read via core.source_settings.is_uncensored_mode_effective()
+    favorite_folder: str = ""  # 我的最愛資料夾 - 空字串 = 使用系統下載資料夾
+    proxy_url: str = ""
+    proxy_scope: Literal['dmm', 'all'] = 'dmm'  # Proxy 套用範圍；鍵存在即「已遷移」標記（feature/163a）
+    auto_organize: AutoOrganizeConfig = AutoOrganizeConfig()
+
+
+class SourceLinksConfig(BaseModel):
+    """各來源連結開關；官方/合法來源預設 true，含盜版連結的站台預設 false"""
+    dmm: bool = True
+    d2pass: bool = True
+    heyzo: bool = True
+    fc2: bool = True
+    javbus: bool = False
+    jav321: bool = False
+    javdb: bool = False
+    avsox: bool = False
+
+
+class OllamaConfig(BaseModel):
+    """串接結構：Ollama 配置"""
+    url: str = "http://localhost:11434"
+    model: str = "qwen3:8b"  # 所有翻譯（單片/批次）都用此模型
+
+
+class GeminiConfig(BaseModel):
+    """串接結構：Gemini 配置"""
+    api_key: str = ""  # Gemini API Key
+    model: str = "gemini-flash-lite-latest"  # 預設使用 latest 別名（自動路由可用版本）
+
+
+class OpenAIConfig(BaseModel):
+    """串接結構：OpenAI Compatible 配置"""
+    base_url: str = ""   # e.g. "https://api.openai.com/v1"
+    api_key: str = ""    # 可為空（本地 LLM 不需要）
+    model: str = "gpt-4o-mini"
+    use_custom_model: bool = False
+
+
+class ClaudeConfig(BaseModel):
+    """串接結構：Claude 配置"""
+    api_key: str = ""
+    model: str = "claude-haiku-5-5"
+
+
+class MetatubeConfig(BaseModel):
+    """串接結構：Metatube HTTP server 配置（CD-63b-3）"""
+    enabled: bool = False  # 使用者在 Settings › Advanced 啟用 metatube（CD-63b-3）
+    url: str = ""    # metatube server URL (persisted; runtime connected state NOT stored here)
+    token: str = ""  # API token（空字串 = 不需驗證）
+    allow_lan: bool = False  # 允許連線至 LAN IP（TASK-63e-1：startup 重連沿用用戶當初的選擇）
+
+
+class TranslateConfig(BaseModel):
+    enabled: bool = False
+    provider: str = "ollama"  # "ollama" | "gemini" | "openai" | "claude"
+    batch_size: int = 10  # 批次翻譯大小
+
+    # 嵌套結構
+    ollama: OllamaConfig = OllamaConfig()
+    gemini: GeminiConfig = GeminiConfig()
+    openai: OpenAIConfig = OpenAIConfig()
+    claude: ClaudeConfig = ClaudeConfig()
+
+    # 舊字段（保留向後兼容）
+    ollama_url: Optional[str] = None
+    ollama_model: Optional[str] = None
+
+
+class DirectoryConfig(BaseModel):
+    """Scanner 來源目錄設定（feature/88）。
+
+    舊 config 的 directories 是純字串清單；本模型把每個目錄升級為帶
+    readonly / output_path 的物件。load_config() 的加法式遷移負責 str → object（T-3
+    落地），iter_gallery_sources helper 則讓呼叫端永遠拿到帶欄位的物件（T-1 起）。
+    """
+    path: str                  # 來源路徑（FS 路徑或 file:/// URI）
+    readonly: bool = False     # 唯讀模式：不寫回來源（88b/88c 才實作生成分流）
+    output_path: str = ""      # 此來源的本地媒體庫輸出根目錄；空 = 未設定
+
+
+class CoverBadgesConfig(BaseModel):
+    enabled: bool = False
+    items: dict[str, bool] = {}      # 稀疏覆寫；缺 id 視為 True
+
+
+class GalleryConfig(BaseModel):
+    directories: List[DirectoryConfig] = []
+
+    @field_validator("directories", mode="before")
+    @classmethod
+    def _coerce_directories(cls, v):
+        """容忍三型元素：str（舊/測試 fixture）、dict（遷移後 raw）、DirectoryConfig。
+        裸 str → {"path": s}，其餘原樣交給 Pydantic 驗證。"""
+        if not isinstance(v, list):
+            return v
+        return [{"path": e} if isinstance(e, str) else e for e in v]
+
+    output_dir: str = ""
+    output_filename: str = "gallery_output.html"
+    path_mappings: dict = {}
+    min_size_mb: int = 0
+    default_mode: str = "image"
+    default_sort: str = "date"
+    default_order: str = "descending"
+    items_per_page: int = 90
+    show_table_list: bool = False
+    cover_badges: CoverBadgesConfig = CoverBadgesConfig()
+
+
+class ShowcaseConfig(BaseModel):
+    player: str = ""  # 播放器路徑，空字串使用系統預設
+
+
+# Valid values for the window close-action preference（feature/82, single source of truth）.
+# Used by GeneralConfig._coerce_close_action (model_validate) AND the additive migration in
+# load_config() so that invalid-or-missing values are always normalised to "ask".
+_CLOSE_ACTIONS = ("ask", "tray", "exit")
+
+
+class GeneralConfig(BaseModel):
+    default_page: str = "search"  # 預設開啟頁面: search, gallery, showcase
+    theme: str = "light"  # 主題模式: light, dark
+    sidebar_collapsed: bool = False  # 側邊欄預設收合 (僅影響 Desktop)
+    tutorial_completed: bool = False  # 新手引導是否已完成
+    font_size: str = "md"  # 全站字體大小: xs, sm, md, lg, xl
+    locale: Literal["zh-TW", "zh-CN", "ja", "en"] = "zh-CN"  # 介面語系
+    server_mode: bool = False  # LAN 伺服器模式開關（feature/80）
+    close_action: Literal["ask", "tray", "exit"] = "ask"  # 視窗關閉行為（feature/82）
+    auto_check_update: bool = True  # 啟動時檢查更新（feature/107）
+    last_notified_update_version: str = ""
+
+    @field_validator("close_action", mode="before")
+    @classmethod
+    def _coerce_close_action(cls, v):
+        return v if v in _CLOSE_ACTIONS else "ask"
+
+
+class FocalDeviceState(BaseModel):
+    disabled: bool = False
+    consecutive_timeout_count: int = 0
+    judged_at_version: str = ""   # 累積目前這個 streak／disabled 狀態時的 App 版本號
+    set_by_user: bool = False  # True = 使用者決定；自動關閉／版本 reset 不得覆寫
+
+
+class AppConfig(BaseModel):
+    scraper: ScraperConfig = ScraperConfig()
+    search: SearchConfig = SearchConfig()
+    source_links: SourceLinksConfig = SourceLinksConfig()
+    translate: TranslateConfig = TranslateConfig()
+    gallery: GalleryConfig = GalleryConfig()
+    showcase: ShowcaseConfig = ShowcaseConfig()
+    general: GeneralConfig = GeneralConfig()
+    sources: list[SourceConfig] = Field(default_factory=get_builtin_sources)
+    thumbnail_cache_enabled: bool = False  # 縮圖快取開關（feature/71 T2）；預設關閉；top-level additive migration 補缺漏
+    metatube: MetatubeConfig = MetatubeConfig()  # CD-63b-3；Pydantic default 自動補缺漏（no migration needed）
+    focal_device: FocalDeviceState = FocalDeviceState()
+
+
+# ============ 載入 / 儲存 ============
+
+def _backfill_update_config_fields(gen: dict) -> bool:
+    """補齊舊設定檔的更新檢查欄位；保留既有 False／版本值。"""
+    changed = False
+    if 'auto_check_update' not in gen:
+        gen['auto_check_update'] = True
+        changed = True
+    if 'last_notified_update_version' not in gen:
+        gen['last_notified_update_version'] = ''
+        changed = True
+    return changed
+
+
+def _migrate_proxy_scope(raw_config: dict) -> bool:
+    """舊設定檔一次性遷移：補 search.proxy_scope='dmm'，並維持 DMM 可用性不變。
+
+    標記規則：search 段已有 proxy_scope 鍵（不看值是否合法）→ 整個函式 no-op、回 False。
+    遷移表（升級前 proxy_url → 升級後）：
+      - 真網址：proxy_url 與 DMM 皆不變
+      - 'direct'（strip＋lower）：proxy_url 清成 ''，DMM 不變
+      - 空白／None／非字串：proxy_url 清成 ''，DMM 若為 on 則關閉（本來就連不上）
+    只改 raw_config、不存檔：由 _load_config_unlocked 結尾單一落盤點一起寫回（I-1）。
+    fail-open：任何例外記 warning 並回 False，不讓啟動失敗。
+    """
+    try:
+        search = raw_config.get('search')
+        if not isinstance(search, dict):
+            return False
+        if 'proxy_scope' in search:
+            return False
+        url = search.get('proxy_url')
+        url = url.strip() if isinstance(url, str) else ''
+        if url.lower() == 'direct':
+            search['proxy_url'] = ''
+        elif not url:
+            search['proxy_url'] = ''
+            sources = raw_config.get('sources')
+            dmm = next((s for s in sources if isinstance(s, dict) and s.get('id') == 'dmm'), None) \
+                if isinstance(sources, list) else None
+            if dmm is not None and dmm.get('enabled') is True:
+                dmm['enabled'] = False
+        search['proxy_scope'] = 'dmm'
+        return True
+    except Exception as exc:
+        logger.warning("[Config] proxy_scope 遷移發生例外，略過：%s", exc)
+        return False
+
+
+def _load_config_unlocked() -> dict:  # noqa: C901 — config 遷移主流程；每加一個設定欄位的向後相容 migration 就得在此多開一支分支，這是它存在的理由而非缺陷；收斂設計已列 backlog（見 OpenAver架構評估-回應.md §七）
+    """載入設定（含 migration / first-init），**不取鎖** —— caller 須已持有 _config_write_lock。
+
+    migration 的寫回必須走 _save_config_unlocked（同樣不取鎖），否則在已持鎖的
+    critical section 內再 acquire 同一 threading.Lock → 自我死鎖（CD-66b-1）。
+    """
+    # 首次啟動：從 config.default.json 初始化。
+    # BE-DATA-13：若 CONFIG_PATH 已落在資料根內、但 layout 尚未定版（無 .layout.json），
+    # 不得落盤——否則會生出一份與 default／legacy 都不相等的 root config，下次
+    # bootstrap 依 spec §4.2 判定衝突而永久阻斷啟動。改讀 default 進記憶體當本次設定。
+    _defer_disk_seed = False
+    if not CONFIG_PATH.exists() and CONFIG_DEFAULT_PATH.exists():
+        if (
+            is_fs_path_under_dir(str(CONFIG_PATH), str(get_data_root()))
+            and not is_layout_finalized(get_data_root())
+        ):
+            _defer_disk_seed = True
+            logger.info("[Config] 資料根尚未定版，略過自動建檔（BE-DATA-13）")
+        else:
+            shutil.copy2(CONFIG_DEFAULT_PATH, CONFIG_PATH)
+            CONFIG_PATH.chmod(0o600)  # CD-114c-9: copy2 保留 0644，強制 0600
+            logger.info("[Config] 首次啟動，已從 config.default.json 初始化設定")
+
+    if CONFIG_PATH.exists() or _defer_disk_seed:
+        if _defer_disk_seed:
+            with open(CONFIG_DEFAULT_PATH, 'r', encoding='utf-8') as f:
+                raw_config = json.load(f)
+        else:
+            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+                raw_config = json.load(f)
+
+        need_save = False
+
+        # Migration: avlist -> gallery
+        if 'avlist' in raw_config and 'gallery' not in raw_config:
+            raw_config['gallery'] = raw_config.pop('avlist')
+            need_save = True
+
+        # Migration: viewer -> showcase
+        if 'viewer' in raw_config and 'showcase' not in raw_config:
+            raw_config['showcase'] = raw_config.pop('viewer')
+            need_save = True
+
+        # Migration: min_size_kb -> min_size_mb (KB 轉 MB)
+        if 'gallery' in raw_config:
+            g = raw_config['gallery']
+            if 'min_size_kb' in g and 'min_size_mb' not in g:
+                # KB -> MB (四捨五入可接受)
+                g['min_size_mb'] = int(round(g.get('min_size_kb', 0) / 1024))
+                del g['min_size_kb']
+                need_save = True
+
+            # Migration: gallery.output_dir 字面 "output" → ""（僅精確相等）
+            if g.get('output_dir') == 'output':
+                g['output_dir'] = ''
+                need_save = True
+
+        # Migration: gallery.directories 純字串 → DirectoryConfig 物件（feature/88）
+        # 加法式、冪等：已是完整 dict 的元素原樣保留；裸 str 升級成物件。
+        # 排在 avlist→gallery 遷移之後，確保 avlist 搬來的 directories 也被正規化。
+        if 'gallery' in raw_config and isinstance(raw_config['gallery'].get('directories'), list):
+            new_dirs = []
+            for d in raw_config['gallery']['directories']:
+                if isinstance(d, str):
+                    new_dirs.append({"path": d, "readonly": False, "output_path": ""})
+                    need_save = True
+                elif isinstance(d, dict):
+                    # 已是物件：補缺省欄位（向前相容未來新欄位）
+                    if 'readonly' not in d or 'output_path' not in d:
+                        d.setdefault('readonly', False)
+                        d.setdefault('output_path', "")
+                        need_save = True
+                    new_dirs.append(d)
+                # 其他型別（理論上不該出現）原樣保留，不阻斷載入
+                else:
+                    new_dirs.append(d)
+            raw_config['gallery']['directories'] = new_dirs
+
+        # Migration: translate 扁平結構 -> 嵌套結構
+        if 'translate' in raw_config:
+            t = raw_config['translate']
+
+            # 遷移 ollama_url -> ollama.url（優先使用舊值）
+            if 'ollama_url' in t or 'ollama_model' in t:
+                # 確保 ollama 嵌套存在
+                if 'ollama' not in t:
+                    t['ollama'] = {}
+
+                # 優先使用舊字段的值來更新嵌套結構（檢查非空）
+                if 'ollama_url' in t:
+                    url = t.pop('ollama_url')
+                    if url:  # 檢查不是 None
+                        t['ollama']['url'] = url.rstrip('/')
+                    need_save = True
+                if 'ollama_model' in t:
+                    model = t.pop('ollama_model')
+                    if model:  # 檢查不是 None
+                        t['ollama']['model'] = model
+                    need_save = True
+
+            # 移除舊的 batch_model 字段（Task 1.3.1 清理）
+            if 'ollama' in t and isinstance(t['ollama'], dict) and 'batch_model' in t['ollama']:
+                del t['ollama']['batch_model']
+                need_save = True
+
+            # 移除廢棄的漸進式翻譯字段（Task 1.3.4 簡化）
+            deprecated_fields = ['auto_progressive', 'progressive_first', 'progressive_range']
+            for field in deprecated_fields:
+                if field in t:
+                    del t[field]
+                    need_save = True
+
+            # 確保 batch_size 存在
+            if 'batch_size' not in t:
+                t['batch_size'] = 10
+                need_save = True
+
+            # 確保 ollama 嵌套存在
+            if 'ollama' not in t:
+                t['ollama'] = {
+                    'url': 'http://localhost:11434',
+                    'model': 'qwen3:8b'
+                }
+                need_save = True
+
+            # Task 2.4：確保 gemini 嵌套存在（Gemini 支持遷移）
+            if 'gemini' not in t:
+                t['gemini'] = {
+                    'api_key': '',
+                    'model': 'gemini-flash-lite-latest'
+                }
+                need_save = True
+                logger.info("[Config] 遷移配置：添加 Gemini 支持")
+
+            # Task T2：確保 openai 嵌套存在（OpenAI Compatible 支援遷移）
+            if 'openai' not in t:
+                t['openai'] = {
+                    'base_url': '',
+                    'api_key': '',
+                    'model': 'gpt-4o-mini'
+                }
+                need_save = True
+                logger.info("[Config] 遷移配置：添加 OpenAI Compatible 支持")
+
+            # TASK-170-T2：確保 claude 嵌套存在（Claude 支援遷移）
+            if 'claude' not in t:
+                t['claude'] = {
+                    'api_key': '',
+                    'model': 'claude-haiku-5-5'
+                }
+                need_save = True
+                logger.info("[Config] 遷移配置：添加 Claude 支持")
+
+        # Migration: folder_format → folder_layers（舊版只存 folder_format）
+        s = raw_config.get('scraper', {})
+        if 'folder_layers' not in s and 'folder_format' in s:
+            fmt = s['folder_format'].replace('\\', '/')
+            s['folder_layers'] = [p.strip() for p in fmt.split('/') if p.strip()]
+            need_save = True
+
+        # 確保 scraper.suffix_keywords 存在（Fix-1 版本標記）
+        s = raw_config.get('scraper', {})
+        if 'suffix_keywords' not in s:
+            s['suffix_keywords'] = ['-cd1', '-cd2', '-4k', '-uc']
+            need_save = True
+
+        # 確保 scraper.jellyfin_mode 存在（Fix-6 Jellyfin 圖片模式）
+        s = raw_config.get('scraper', {})
+        if 'jellyfin_mode' not in s:
+            s['jellyfin_mode'] = False
+            need_save = True
+
+        # Migration: scraper.jellyfin_mode(bool) → scraper.external_manager(str)（Fix-72b）
+        s = raw_config.get('scraper', {})
+        if 'external_manager' not in s:
+            s['external_manager'] = 'jellyfin' if s.get('jellyfin_mode', False) else 'off'
+            need_save = True
+
+        # Migration: scraper.external_manager 'jellyfin_emby' → 'jellyfin'（Fix-72d）
+        if s.get('external_manager') == 'jellyfin_emby':
+            s['external_manager'] = 'jellyfin'
+            need_save = True
+
+        # 確保 scraper.download_sample_images 存在（Task 38e 拆分 extrafanart 下載）
+        s = raw_config.get('scraper', {})
+        if 'download_sample_images' not in s:
+            s['download_sample_images'] = False
+            need_save = True
+
+        # 確保 scraper.strm_path_mappings 存在（TASK-90a-T2：strm 路徑映射表）
+        s = raw_config.get('scraper', {})
+        if 'strm_path_mappings' not in s:
+            s['strm_path_mappings'] = {}
+            need_save = True
+
+        # Migration: source_links 區段新增 + 深層合併保證（T18b-pre）
+        sl_defaults = SourceLinksConfig().model_dump()
+        if 'source_links' not in raw_config or not isinstance(raw_config.get('source_links'), dict):
+            # 層 1：整個區段缺少，或值不是 dict（如 null）→ 補整個預設 dict
+            raw_config['source_links'] = sl_defaults
+            need_save = True
+        else:
+            # 層 2：區段存在但個別 key 缺少 → 逐一補缺少的 key
+            sl = raw_config['source_links']
+            for key, default_val in sl_defaults.items():
+                if key not in sl:
+                    sl[key] = default_val
+                    need_save = True
+
+        # Migration: primary_source 一次性移除（feature/65 CD-plan-65-7）
+        # 欄位已徹底移除；load_config() 直接 return raw dict（不 model_validate），
+        # 故舊 config.json 殘留的 primary_source key 不會被 Pydantic 自動剝除 → 顯式 strip。
+        if 'search' not in raw_config or not isinstance(raw_config.get('search'), dict):
+            raw_config['search'] = {}
+        search_section = raw_config['search']
+        if 'primary_source' in search_section:
+            del search_section['primary_source']
+            need_save = True
+
+        # Migration: advanced_search_enabled 一次性移除（feature/74 US6；畢業為永久常駐）
+        # 覆寫舊值（含 false）——畢業核心功能不被舊偏好半殘（反轉 v0.9.8 保留偏好）。
+        # top-level（非巢狀），load_config() return raw dict 不過 model_validate → 顯式 strip。
+        if 'advanced_search_enabled' in raw_config:
+            del raw_config['advanced_search_enabled']
+            need_save = True
+
+        # Migration: sources 段（TASK-61a-2）— US1-critical，fail-open
+        # 缺段 → 8 builtin 全 enabled（不讀 source_links，CD-61-6）；
+        # uncensored_mode_enabled=true 升級 → 4 有碼初始 disabled（CD-61-7）；
+        # 合法既有段 → 冪等不動；損壞 → 備份 sources_bak + 重設全 enabled + warning。
+        try:
+            from core.scrapers.utils import CENSORED_SOURCES
+
+            def _default_sources() -> list:
+                return [s.model_dump() for s in get_builtin_sources()]
+
+            def _is_valid_sources(value) -> bool:
+                if not isinstance(value, list) or not value:
+                    return False
+                for item in value:
+                    if not isinstance(item, dict):
+                        return False
+                    if not isinstance(item.get('id'), str):
+                        return False
+                    if not isinstance(item.get('enabled'), bool):
+                        return False
+                    # Full schema validation: catch any field-level corruption
+                    # (e.g. wrong types, missing required fields) that id/enabled
+                    # checks above cannot detect. On any error → treat segment as
+                    # corrupt → existing fallback regenerates 8 builtin + backs up.
+                    try:
+                        SourceConfig.model_validate(item)
+                    except Exception:
+                        return False
+                return True
+
+            if 'sources' not in raw_config:
+                # 缺段：生成 8 builtin 全 enabled
+                new_sources = _default_sources()
+                # uncensored 轉換（僅缺段升級時觸發，冪等）
+                if raw_config.get('search', {}).get('uncensored_mode_enabled') is True:
+                    for item in new_sources:
+                        if item.get('id') in CENSORED_SOURCES:
+                            item['enabled'] = False
+                raw_config['sources'] = new_sources
+                need_save = True
+            elif _is_valid_sources(raw_config.get('sources')):
+                # 合法既有段：冪等，不動
+                pass
+            else:
+                # 損壞：備份原值（不覆寫首次備份）+ 重設全 enabled
+                if 'sources_bak' not in raw_config:
+                    raw_config['sources_bak'] = raw_config.get('sources')
+                logger.warning(
+                    "[Config] sources 段格式不合法，已備份至 sources_bak 並重設為預設值"
+                )
+                raw_config['sources'] = _default_sources()
+                need_save = True
+        except Exception as exc:  # fail-open：絕不讓啟動失敗
+            logger.warning("[Config] sources migration 發生例外，套用安全預設：%s", exc)
+            try:
+                raw_config['sources'] = [s.model_dump() for s in get_builtin_sources()]
+            except Exception:
+                raw_config['sources'] = []
+            need_save = True
+
+        # Additive migration：manual_only builtin 來源追加（若缺席）。
+        # 防禦性、獨立於上方三分支（缺段/合法/損壞），保證全部路徑都能走到。
+        # fail-open：不讓啟動失敗。遍歷清單，避免只補得到第一筆（CD-118a-9）。
+        try:
+            if isinstance(raw_config.get('sources'), list):
+                existing_ids = {s.get('id') for s in raw_config['sources'] if isinstance(s, dict)}
+                for manual_source in get_manual_only_sources():
+                    if manual_source.id not in existing_ids:
+                        raw_config['sources'].append(manual_source.model_dump())
+                        need_save = True
+        except Exception as exc:
+            logger.warning("[Config] manual_only additive migration 發生例外，略過：%s", exc)
+
+        # 舊檔一次性補 search.proxy_scope 並維持 DMM 可用性（需在 sources 段之後）。
+        if _migrate_proxy_scope(raw_config):
+            need_save = True
+
+        # Additive migration（feature/71 T2）：top-level thumbnail_cache_enabled 補預設。
+        # load_config() 直接 return raw dict（不 model_validate），故舊 config.json 缺此 key
+        # 時 Pydantic default 不會在 GET /api/config 補上 → 顯式補 False（作用於 raw_config 本身）。
+        if 'thumbnail_cache_enabled' not in raw_config:
+            raw_config['thumbnail_cache_enabled'] = False
+            need_save = True
+
+        # Additive migration（feature/82 T4）：general.close_action 補預設。
+        # load_config() return raw dict（不 model_validate），舊 config 缺此 key 時 Pydantic default
+        # 不補 → 顯式補 "ask"。general 段缺失或非 dict 時安全建立。
+        gen = raw_config.get('general')
+        if not isinstance(gen, dict):
+            gen = {}
+            raw_config['general'] = gen
+        if gen.get('close_action') not in _CLOSE_ACTIONS:
+            gen['close_action'] = 'ask'
+            need_save = True
+
+        # load_config 回傳 raw dict，需顯式補齊新欄位。
+        if _backfill_update_config_fields(gen):
+            need_save = True
+
+        # Additive migration（feature/152c TASK-3）：top-level focal_device 補預設。
+        # load_config() 直接 return raw dict（不 model_validate），故舊 config.json 缺此 key
+        # 時 Pydantic default 不會在 GET /api/config 補上 → 顯式補 FocalDeviceState().model_dump()。
+        if 'focal_device' not in raw_config:
+            raw_config['focal_device'] = FocalDeviceState().model_dump()
+            need_save = True
+
+        if 'scraper' in raw_config and 'nfo_title_format' not in raw_config['scraper']:
+            raw_config['scraper']['nfo_title_format'] = '[{num}]{title}'
+            need_save = True
+
+        # Save migrated config（已持鎖 → 用 unlocked 版避免自我死鎖）
+        # _defer_disk_seed：記憶體遷移可跑，但一個字都不准寫回資料根（BE-DATA-13）。
+        if need_save and not _defer_disk_seed:
+            _save_config_unlocked(raw_config)
+
+        return raw_config
+    # 返回預設設定（沒有 default 檔案時）
+    return AppConfig().model_dump()
+
+
+def load_config() -> dict:
+    """載入設定，包含自動遷移邏輯和首次啟動初始化（process-wide 序列化）"""
+    with _config_write_lock:
+        return _load_config_unlocked()
+
+
+def _save_config_unlocked(config: dict) -> None:
+    """原子寫 config.json，**不取鎖** —— caller 須已持有 _config_write_lock。
+
+    原子寫本體委派 core.atomic_write.atomic_write()（TASK-113d-T1 起的單一
+    所有權：同目錄 mkstemp → 關 fd → os.replace → 任何失敗清 temp 並讓原例外
+    往上傳）。本函式保留的部分：不取鎖（由 caller 持 _config_write_lock）、
+    text mode + encoding='utf-8'、以及「例外一路往上拋」的失敗語意。
+    """
+    if (
+        is_fs_path_under_dir(str(CONFIG_PATH), str(get_data_root()))
+        and not is_layout_finalized(get_data_root())
+    ):
+        raise ConfigRootNotFinalizedError(
+            f"資料根尚未定版，禁止寫入設定檔（BE-DATA-13）：{CONFIG_PATH}"
+        )
+
+    with atomic_write(CONFIG_PATH, mode='w', encoding='utf-8') as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+
+
+def save_config(config: dict) -> None:
+    """儲存設定（原子寫 + process-wide 序列化）"""
+    with _config_write_lock:
+        _save_config_unlocked(config)
+
+
+def mutate_config(mutator: Callable[[dict], None]) -> None:
+    """在單一 critical section 內 read-modify-write config.json（消除 RMW 競態）。
+
+    load → mutator(cfg)（原地修改 dict）→ save 全程持 _config_write_lock，
+    兩個並發 mutate_config 不再讀到同一 v0 → 無 lost-update（Race A）。
+
+    mutator 契約：`mutator(cfg: dict) -> None`，僅做純記憶體 dict 操作；
+    **不得**呼叫任何 public locked API（load_config / save_config /
+    mutate_config / reset_config_file）—— 會在已持鎖時二次 acquire → 自我死鎖。
+    """
+    with _config_write_lock:
+        cfg = _load_config_unlocked()
+        mutator(cfg)
+        _save_config_unlocked(cfg)
+
+
+def reset_config_file() -> None:
+    """刪除 config.json（恢復原廠）—— 在鎖內檢查 + 刪除，無 exists/unlink TOCTOU。"""
+    with _config_write_lock:
+        if CONFIG_PATH.exists():
+            CONFIG_PATH.unlink()
+
+
+# ============ Gallery source helpers（feature/88, plan §3）============
+
+
+def iter_gallery_sources(gallery_config) -> List[DirectoryConfig]:
+    """把 gallery 設定的 directories 正規化成 DirectoryConfig 清單。
+
+    gallery_config: dict（load_config 回傳的 raw gallery 段）或 GalleryConfig 模型皆可。
+    元素: str / dict / DirectoryConfig 皆可 —— 永久容忍裸 str（舊 config、測試 fixture）。
+    回傳: List[DirectoryConfig]，呼叫端永遠拿到帶 .path/.readonly/.output_path 的物件。
+    未知型別元素（如 42、None）跳過，不阻斷、不拋例外。
+
+    安全性：丟棄沒有「可用非空字串 path」的元素（缺 path / path=null / path=""
+    / path 非字串）。空 path 會被 to_file_uri('') 變成 'file:///'，而 file:/// 是
+    任意 file URI 的前綴 —— 會讓 image/video proxy allowlist、showcase 篩選、
+    settings-link 比對全部命中任意路徑（CWE-allowlist bypass）。故在這個讀取路徑
+    chokepoint 直接 skip。readonly / output_path 欄位型別不對（如 null）則容忍降級，
+    不讓單一髒元素拋 ValidationError 連坐所有 consumer。
+    """
+    if gallery_config is None:
+        return []
+    raw = (
+        gallery_config.get('directories', [])
+        if isinstance(gallery_config, dict)
+        else getattr(gallery_config, 'directories', [])
+    )
+    out: List[DirectoryConfig] = []
+    for d in raw or []:
+        if isinstance(d, DirectoryConfig):
+            if d.path:
+                out.append(d)
+        elif isinstance(d, str):
+            if d:
+                out.append(DirectoryConfig(path=d))
+        elif isinstance(d, dict):
+            path = d.get('path')
+            if not isinstance(path, str) or not path:
+                continue  # 缺 path / null / 空 / 非字串 → skip（避免 file:/// allowlist 全命中）
+            readonly = d.get('readonly', False)
+            if not isinstance(readonly, bool):
+                readonly = False  # null / 型別錯誤 → 降級 False
+            output_path = d.get('output_path', '')
+            if not isinstance(output_path, str):
+                output_path = ''  # null / 型別錯誤 → 降級 ''
+            out.append(DirectoryConfig(
+                path=path,
+                readonly=readonly,
+                output_path=output_path,
+            ))
+        # 其他型別跳過（不阻斷）
+    return out
+
+
+def get_gallery_source_paths(gallery_config) -> List[str]:
+    """只取來源 path 字串清單（給只關心路徑的舊 call site）。
+
+    行為與舊「純字串 directories 清單」逐位元等價。
+    """
+    return [d.path for d in iter_gallery_sources(gallery_config)]
+
+
+def get_configured_gallery_dirs(config: dict) -> tuple[set, dict]:
+    """從 config 取出 configured_dir_uris 與 path_mappings（列表與單筆端點共用）。
+
+    升格自 web.routers.showcase._get_configured_dirs（CD-156-2.1）：簽名與回傳值
+    逐字不變，供 showcase／insights 共用，避免兩份母體篩選邏輯。
+    """
+    gallery_config = config.get('gallery', {})
+    path_mappings = gallery_config.get('path_mappings', {})
+
+    configured_dir_uris: set = set()
+    for p in get_gallery_source_paths(gallery_config):
+        try:
+            # coerce_to_file_uri：來源 path 可能已是 file:/// URI（DirectoryConfig.path
+            # schema「FS 路徑或 URI」）。已是 URI 就原樣回，避免 to_file_uri 二次包成
+            # file:///file:/// 把 readonly 來源的列從 Showcase 過濾掉（PR#91 P2-D 同源）。
+            configured_dir_uris.add(coerce_to_file_uri(p, path_mappings))  # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
+        except ValueError:
+            continue
+
+    return configured_dir_uris, path_mappings

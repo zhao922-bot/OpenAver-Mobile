@@ -1,0 +1,76 @@
+{# ═══════════════ 選擇資料夾彈窗（TASK-128-T2；三頁共用）═══════════════
+   沿用 fluent-modal + :class modal-open 開關（非原生 dialog 開窗 API）。
+   state 由各頁 main.js import browseDirState() 併入 mergeState；本 partial 不另掛模組腳本。 #}
+<dialog class="modal fluent-modal browse-dir-dialog" x-cloak
+        :class="{ 'modal-open': browseDirOpen }"
+        @click.self="closeBrowseDir()"
+        @keydown.escape.window="browseDirOpen && closeBrowseDir()">
+  <div class="modal-box fluent-modal-box browse-dir-modal-box">
+    <button type="button" class="browse-dir-x" @click="closeBrowseDir()"
+            :aria-label="t('common.browse_dir.close')">
+      <i class="bi bi-x-lg"></i>
+    </button>
+
+    <h3 class="fluent-modal-title">
+      <i class="bi bi-folder2-open"></i>
+      <span x-text="t('common.browse_dir.title')"></span>
+    </h3>
+
+    <nav class="browse-dir-crumbs" aria-label="breadcrumb">
+      <template x-for="(c, idx) in browseDirCrumbs()" :key="c.path + '-' + idx">
+        <span class="browse-dir-crumb-wrap">
+          <span class="browse-dir-crumb-sep" x-show="idx > 0" aria-hidden="true">/</span>
+          <button type="button" class="browse-dir-crumb"
+                  :disabled="browseDirLoading"
+                  @click="navigateBrowseDir(c.path)"
+                  x-text="c.label"></button>
+        </span>
+      </template>
+    </nav>
+
+    <div class="browse-dir-toolbar">
+      <button type="button" class="btn btn-ghost btn-sm browse-dir-up"
+              :disabled="browseDirParentPath === null || browseDirLoading"
+              @click="browseDirUp()">
+        <i class="bi bi-arrow-up-short"></i>
+        <span x-text="t('common.browse_dir.up')"></span>
+      </button>
+    </div>
+
+    <div class="browse-dir-body">
+      <div class="browse-dir-loading" x-show="browseDirLoading" x-cloak>
+        <span class="loading loading-spinner loading-sm"></span>
+        <span x-text="t('common.browse_dir.loading')"></span>
+      </div>
+
+      <div class="browse-dir-error" x-show="browseDirError" x-cloak>
+        <i class="bi bi-exclamation-circle"></i>
+        <span x-text="browseDirError"></span>
+      </div>
+
+      <div class="browse-dir-empty"
+           x-show="!browseDirLoading && !browseDirError && browseDirEntries.length === 0"
+           x-cloak
+           x-text="t('common.browse_dir.empty')"></div>
+
+      <div class="browse-dir-list" x-show="!browseDirLoading && browseDirEntries.length > 0">
+        <template x-for="e in browseDirEntries" :key="e.path">
+          <button type="button" class="browse-dir-entry"
+                  @click="navigateBrowseDir(e.path)">
+            <i class="bi bi-folder-fill" aria-hidden="true"></i>
+            <span class="browse-dir-entry-name" x-text="e.name"></span>
+          </button>
+        </template>
+      </div>
+    </div>
+
+    <div class="modal-action fluent-modal-actions browse-dir-actions">
+      <button type="button" class="btn btn-ghost" @click="closeBrowseDir()"
+              x-text="t('common.browse_dir.close')"></button>
+      <button type="button" class="btn btn-primary"
+              :disabled="!browseDirCanSelect()"
+              @click="selectBrowseDir()"
+              x-text="t('common.browse_dir.select_this')"></button>
+    </div>
+  </div>
+</dialog>

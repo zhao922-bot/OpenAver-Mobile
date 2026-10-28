@@ -1,0 +1,2084 @@
+/* ==================== Light / Dim 主題適配 ==================== */
+/* 使用 theme.css 定義的 CSS 變數，無需額外覆寫 */
+/* --bg-header 已在 theme.css 定義：color-mix(in oklch, var(--color-base-200) 85%, transparent) */
+/* 主題切換時自動過渡（transition 在 theme.css body 定義）*/
+
+/* Dim 模式：降低背景光暈透明度（對齊 design-system.css L18-23） */
+[data-theme="dim"] .showcase-container {
+    background:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(var(--ds-glow-rgb), 0.08), transparent),
+        radial-gradient(ellipse 60% 40% at 80% 100%, oklch(55% 0.2 280 / 0.06), transparent),
+        var(--bg-body);
+}
+
+/* ==================== Showcase Footer 三段式 (49a-T4) ==================== */
+/* 取代原 .shortcut-hint：左 count + 中 shortcut + 右 pager */
+
+.showcase-footer {
+    position: fixed;
+    bottom: 0;
+    /* 對齊 .main-content 的 margin-left 模式，避免被 sidebar (z-index 1000) 覆蓋左側 */
+    left: var(--sidebar-width, 200px);
+    right: 0;
+    z-index: 50;
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- token var() with token-derived fallback (200ms = Fluent normal), 2026-05-03 */
+    transition: left var(--fluent-duration-normal, 0.2s) var(--fluent-ease-standard, ease);
+
+    /* 背景 - 使用 Design System token */
+    background: var(--bg-header);
+    backdrop-filter: blur(var(--fluent-blur-light));
+    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    border-top: 1px solid var(--stroke-subtle);
+
+    /* 間距 */
+    padding: 0.5rem 1rem;
+
+    /* 三段 flexbox；.footer-center 用 absolute 居中（fixed 本身即錨點） */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+/* sidebar collapsed 時 footer 跟著縮 left（同 .main-content 模式） */
+body.sidebar-collapsed .showcase-footer {
+    left: var(--sidebar-collapsed-width, 60px);
+}
+
+/* Left: count pill */
+.footer-left {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0; /* 不縮減，解耦 left/right 讓 center absolute 居中 */
+}
+
+.footer-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px; /* micro: icon + 數字緊鄰，charter §4 micro 子網格 */
+    white-space: nowrap;
+}
+
+.footer-count i {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.footer-count b {
+    font-size: 1.0625rem;   /* 17px 數字主導 */
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-weight: 700;       /* 600 → 700 */
+    padding: 0 2px;
+    line-height: 1;         /* 避免大字撐高 footer */
+}
+
+/* TASK-142-T4: 來源不可達 pill（warning token；一次性進場淡入，非 infinite） */
+.footer-count--unreachable {
+    color: var(--color-warning);
+    animation: sourceUnreachableFadeIn var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.footer-count--unreachable i {
+    color: var(--color-warning);
+}
+
+/* 文字本身也要是 warning 色。後面的 `.footer-count > span` 把 label 降階成 muted，
+   那對「2114 部影片」是對的，對「無法存取：\\192.168.1.177」是錯的——
+   只有圖示變琥珀、句子維持半透明灰，等於把這句話藏在旁邊。 */
+.footer-count.footer-count--unreachable > span {
+    color: var(--color-warning);
+}
+
+@keyframes sourceUnreachableFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Center: shortcut hint — absolute 居中，解耦 left/right */
+.footer-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    justify-content: center;
+    pointer-events: none; /* 不擋 flex 兩側點擊 */
+}
+
+.footer-center .hint-text {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Keyboard Key Styling — 對齊原 .shortcut-hint kbd 視覺 */
+.showcase-footer kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.75rem;
+    padding: 0.125rem 0.375rem;
+
+    background: var(--surface-1);
+    border: 1px solid var(--stroke-default);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--fluent-shadow-2);
+
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+/* Right: pager pill */
+.footer-right {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.footer-pager {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    position: relative;
+}
+
+.pager-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.75rem;
+    height: 1.75rem;
+    padding: 0 0.5rem;
+    background: transparent;
+    border: 1px solid var(--stroke-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+}
+
+.pager-btn:hover:not(:disabled) {
+    background: var(--glow-subtle);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.pager-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.pager-current {
+    font-size: 0.8125rem;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    padding: 0 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: color var(--duration-fast) var(--ease-out);
+}
+
+.pager-current:hover {
+    color: var(--accent);
+}
+
+.pager-current b {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* 響應式：≤1023.98px sidebar 隱藏，footer 也要回到 left:0（對齊 .main-content margin-left:0）*/
+@media (max-width: 1023.98px) {
+    .showcase-footer,
+    body.sidebar-collapsed .showcase-footer {
+        left: 0;
+    }
+}
+
+/* 響應式：中段 shortcut hint — 768px 以下隱藏 */
+@media (max-width: 767px) {
+    .footer-center {
+        display: none;
+    }
+}
+
+/* 響應式：手機 <640px 只留右側 pager */
+@media (max-width: 640px) {
+    .showcase-footer {
+        justify-content: flex-end;
+        padding: 0.4rem 0.75rem;
+    }
+    .footer-left,
+    .footer-center {
+        display: none;
+    }
+    .showcase-container {
+        /* layout 對齊 fixed footer 真實渲染高度 (charter §4 例外) */
+        padding-bottom: 44px;
+    }
+}
+
+/* label 文字（位/部/共 X 頁 等）視覺降階 */
+.footer-count > span {
+    font-size: 0.75rem;   /* 12px */
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+/* 女優模式：數字改粉色識別 */
+.footer-count--actress b {
+    color: var(--accent-pink);
+}
+
+/* 搜尋詞 <b> — 壓回正常字體，避免被 mono 17px 700 渲染 */
+.footer-count b.footer-search-term {
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 600;
+    color: var(--text-secondary);
+    line-height: inherit;
+    /* 限制搜尋詞長度，避免 footer-left 無上限撐寬撞上 absolute center（Codex P2） */
+    display: inline-block;
+    max-width: clamp(80px, 16vw, 200px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+
+/* ==================== Background Atmosphere ==================== */
+
+/* 噪點紋理覆蓋層（對齊 design-system.css L93-101） */
+.showcase-container::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    opacity: 0.02;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* 確保內容層在噪點紋理之上 */
+/* 注意：.showcase-toolbar 已有 position:sticky + z-index:100，不需加入 */
+.showcase-status-bar,
+.showcase-grid,
+.showcase-table-wrapper,
+.showcase-list-wrapper {
+    position: relative;
+    z-index: 1;
+}
+
+/* ==================== Sample Gallery (T7) ==================== */
+
+/* Overlay — 初始隱藏，高於 showcase-lightbox（z-index: 1000）*/
+.sample-gallery {
+    position: fixed;
+    inset: 0;
+    z-index: 1500;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--overlay-gallery);
+    backdrop-filter: blur(var(--fluent-blur));
+    -webkit-backdrop-filter: blur(var(--fluent-blur));
+
+    /* 初始隱藏 */
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity var(--fluent-duration-fast) var(--fluent-ease-standard),
+                visibility var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.sample-gallery.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: all;
+    transition-delay: 0s;
+}
+
+/* 主圖包裝 */
+.sample-gallery .sg-main-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+    max-height: calc(100vh - 100px);
+    width: 100%;
+    padding: 0 3rem;
+}
+
+/* 主圖 */
+.sample-gallery .sg-main-img {
+    max-width: 100%;
+    max-height: calc(100vh - 160px);
+    object-fit: contain;
+    display: block;
+    border-radius: var(--fluent-radius-md);
+    user-select: none;
+}
+
+/* 縮圖列 */
+.sample-gallery .sg-thumbs {
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    height: 80px;
+    overflow-x: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+    align-items: center;
+}
+
+.sample-gallery .sg-thumbs::-webkit-scrollbar {
+    height: 4px;
+}
+
+.sample-gallery .sg-thumbs::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: var(--fluent-radius-sm);
+}
+
+/* 縮圖按鈕 */
+.sample-gallery .sg-thumb-btn {
+    flex-shrink: 0;
+    width: 60px;
+    height: 60px;
+    padding: 0;
+    background: none;
+    border: 2px solid transparent;
+    border-radius: var(--fluent-radius-md);
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+                opacity var(--fluent-duration-fast) var(--fluent-ease-standard);
+    opacity: 0.6;
+}
+
+.sample-gallery .sg-thumb-btn:hover {
+    opacity: 0.9;
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* 縮圖 active 高亮 */
+.sample-gallery .sg-thumb-active {
+    border-color: var(--accent);
+    opacity: 1;
+}
+
+.sample-gallery .sg-thumb-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+}
+
+/* 計數器 */
+.sample-gallery .sg-counter {
+    position: absolute;
+    top: 1rem;
+    right: 4rem;
+    background: var(--overlay-gradient);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--radius-pill);
+    pointer-events: none;
+    user-select: none;
+}
+
+/* 關閉按鈕 */
+.sample-gallery .sg-close {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    background: var(--overlay-control);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    width: 2.25rem;
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
+                color var(--fluent-duration-fast) var(--fluent-ease-standard);
+    font-size: 1rem;
+    z-index: 10;
+}
+
+.sample-gallery .sg-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 1);
+}
+
+/* 左右導航箭頭 */
+.sample-gallery .sg-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--overlay-control);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
+                color var(--fluent-duration-fast) var(--fluent-ease-standard);
+    font-size: 1.1rem;
+    z-index: 10;
+    /* 避免縮圖列遮到箭頭 */
+    margin-bottom: 40px;
+}
+
+.sample-gallery .sg-nav:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 1);
+}
+
+.sample-gallery .sg-prev {
+    left: 0.75rem;
+}
+
+.sample-gallery .sg-next {
+    right: 0.75rem;
+}
+
+/* 入口按鈕（在 lightbox metadata .lb-header 內，pill 風格） */
+.sg-open-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--glow-primary);
+    background: var(--glow-subtle);
+    color: var(--accent);
+    cursor: pointer;
+    transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
+                border-color var(--fluent-duration-fast) var(--fluent-ease-standard);
+    white-space: nowrap;
+}
+
+.sg-open-btn:hover {
+    background: var(--glow-primary);
+    border-color: var(--accent);
+}
+
+/* fetch-samples-btn：鏡像 sg-open-btn pill 結構，藍色差異化（--accent-secondary = Apple Blue） */
+.fetch-samples-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: var(--radius-pill);
+    border: 1px solid color-mix(in oklch, var(--accent-secondary) 40%, transparent);
+    background: color-mix(in oklch, var(--accent-secondary) 15%, transparent);
+    color: var(--accent-secondary);
+    cursor: pointer;
+    transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
+                border-color var(--fluent-duration-fast) var(--fluent-ease-standard);
+    white-space: nowrap;
+}
+
+.fetch-samples-btn:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--accent-secondary) 30%, transparent);
+    border-color: var(--accent-secondary);
+}
+
+/* Dark theme (dim) calibration — feature/69 T4: 近黑底吃光低% tint，提 tint% + border%。
+   mix partner 用 transparent（同 base 慣例，色相安全）。accent-secondary 無 dim override
+   （Apple Blue 暗底可見），只補背景物理隱形。
+   hover override 必要：base hover (3 class) specificity 高於 dim resting，否則 hover 反更淡。 */
+[data-theme="dim"] .fetch-samples-btn {
+    background: color-mix(in oklch, var(--accent-secondary) 25%, transparent);
+    border-color: color-mix(in oklch, var(--accent-secondary) 55%, transparent);
+}
+
+[data-theme="dim"] .fetch-samples-btn:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--accent-secondary) 40%, transparent);
+}
+
+.fetch-samples-btn:disabled {
+    filter: grayscale(1);
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* C21 guard：GSAP 動畫期間禁用 sg-main-img 的 CSS transition */
+.sample-gallery .sg-main-img.gsap-animating {
+    transition: none !important;
+}
+
+/* === User Tags in Lightbox (T4) === */
+
+/* 整個 user tags 容器 — flex wrap，與 lb-tags 間距一致 */
+.lightbox-metadata .lb-user-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+}
+
+/* 單個 user tag badge — accent 色背景，與 scraper tag 明顯區分 */
+.lb-user-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.15rem 0.5rem;
+    background: var(--accent);
+    color: var(--color-primary-content);
+    border-radius: var(--radius-pill);
+    font-size: 0.6875rem;
+}
+
+/* × 刪除按鈕 */
+.lb-tag-remove {
+    cursor: pointer;
+    opacity: 0.7;
+    line-height: 1;
+    padding: 0;
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 0.75rem;
+}
+
+.lb-tag-remove:hover {
+    opacity: 1;
+}
+
+/* + 新增按鈕 — dashed border */
+.lb-tag-add-btn {
+    /* chip optical 6px (charter §4 micro chip 級例外保留) */
+    padding: 1px 6px;
+    font-size: 0.7rem;
+    line-height: 1.4;
+    background: transparent;
+    border: 1px dashed var(--text-muted);
+    color: var(--text-muted);
+    border-radius: var(--radius-sm, 4px);
+    cursor: pointer;
+}
+
+.lb-tag-add-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* 輸入框包裝 */
+.lb-tag-input-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+/* 輸入框 */
+.lb-tag-input {
+    width: 80px;
+    padding: 1px 4px;
+    font-size: 0.7rem;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm, 4px);
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+/* ✓ 確認 / ✕ 取消按鈕 */
+.lb-tag-confirm,
+.lb-tag-cancel {
+    padding: 0 4px;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}
+
+.lb-tag-confirm {
+    color: var(--color-success);
+}
+
+.lb-tag-cancel {
+    color: var(--color-error);
+}
+
+/* T3: 無封面卡片 overlay 常駐顯示（pointer-events 必須補 auto，否則不可點擊）*/
+:is(#ds-gallery-components, .ds-gallery-composition)
+.av-card-preview.missing-cover
+.av-card-preview-overlay {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* ==================== Phase 44a T4: Actress Lightbox ==================== */
+.actress-lightbox-meta .actress-lb-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* 100c-T2（CD-3）：當年用女優限定 `.lb-mask-btn { margin-left: auto }` 把 focal 推到
+ * .actress-lb-header 行末（靠右），比照 .lb-delete-btn 先例（showcase.css:1586／今 :1706）。
+ * 選女優限定選擇器（非共用 .lightbox-metadata .lb-mask-btn）——影片版 .lb-header 是
+ * justify-content:space-between + .lb-title flex:1，加在共用選擇器上有機會改變短標題時的
+ * flex 自由空間分配；女優 .actress-lb-header 無 justify-content，當年加 margin-left 語意
+ * 單純、零風險，完全不接觸影片版 CSS 規則。30px 圓鈕樣式靠 .lightbox-metadata .lb-mask-btn
+ * 祖先鏈自動命中。
+ * 117b-T9（CD-117b-6）：名字行改為「標題 wrapper 吃剩餘空間 ＋ 尾端動作」——
+ * `.actress-lb-title { flex: 1 1 0; min-width: 0 }`（不得寫 auto，理由見下方規則的行內註解），並移除 mask 的 margin-left:auto。
+ * 原因：第二顆尾端按鈕（delete）若也掛 margin-left:auto，flex 會把剩餘主軸空間平分給
+ * 兩顆 auto margin，focal 停中間、delete 最右，不是「兩鈕並排靠右」。min-width:0 不可省，
+ * 否則長名 min-content 不收縮、把按鈕擠出行外（spec-115 同類）。 */
+.actress-lightbox-meta .actress-lb-title {
+    flex: 1 1 0;    /* 不得寫 auto，header 有 flex-wrap:wrap，auto 會讓長名獨佔一行把按鈕擠到第二行（＝影片版 .lb-title { flex: 1 } 同義） */
+    min-width: 0;   /* 不可省：否則長名把按鈕擠出行外（CD-117b-6 / spec-115 同類） */
+}
+/* 117b-T9（CD-117b-7）：delete 在 focal 之後，明確左間距。
+ * 必須勝過 .lightbox-metadata .lb-delete-btn { margin-left: auto }（:1706），
+ * 否則 auto 在「標題已 flex-grow」時雖多半算成 0，但與 gap 的交互不直觀，且
+ * 若日後標題 flex 被改掉會突然吞掉兩鈕之間的全部剩餘空間。 */
+.actress-lightbox-meta .actress-lb-header .lb-delete-btn {
+    margin-left: 12px;
+    flex-shrink: 0;
+}
+.actress-lightbox-meta .lb-name-en { font-size: 0.9em; opacity: 0.7; }
+.actress-lightbox-meta .lb-actress-core { font-size: 0.95em; margin: 8px 0; opacity: 0.85; }
+/* TASK-116a-T3: 燈箱 core metadata 可點格（年齡/身高/罩杯）——重置 button 預設樣式，貼合純文字視覺，
+ * hover/focus-visible 才顯示可點提示色（token 比照 .filter-pill-remove，showcase.css:2957-2986）。 */
+.lb-actress-core-value {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+.lb-actress-core-value:focus-visible {
+    outline: 2px solid var(--stroke-default);
+    outline-offset: 1px;
+}
+.actress-lightbox-meta .lb-chips-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.actress-lightbox-meta .lb-chips-more {
+    cursor: pointer; font-size: 0.85em; padding: 2px 8px;
+    border-radius: var(--radius-md); border: 1px solid currentColor; opacity: 0.6;
+}
+.actress-lightbox-meta .lb-chips-more:hover { opacity: 1; }
+.actress-lightbox-meta .lb-actress-urls { margin-top: 8px; }
+.actress-lightbox-meta .lb-actress-urls a { display: block; font-size: 0.8em; word-break: break-all; opacity: 0.7; }
+.actress-lightbox-meta .lb-actress-urls a:hover { opacity: 1; text-decoration: underline; }
+
+/* Actress Lightbox no-photo placeholder */
+.actress-lb-cover-placeholder {
+    display: flex; align-items: center; justify-content: center;
+    min-width: min(60vw, 600px); min-height: min(58vh, 460px);
+}
+
+/* lb-chips-more shared rule for video lightbox tags +N */
+.lightbox-metadata .lb-chips-more {
+    cursor: pointer; font-size: 0.85em; padding: 2px 8px;
+    border-radius: var(--radius-md); border: 1px solid currentColor; opacity: 0.6;
+}
+
+/* ==================== Mode Toggle Capsule (44c-T4) ==================== */
+
+.spotlight-search .mode-toggle {
+    position: absolute;
+    left: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-pill);
+    padding: 2px;
+}
+
+.mode-toggle-btn {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.mode-toggle-btn.active {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(var(--fluent-blur-light));
+    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    color: var(--text-primary);
+    box-shadow: var(--fluent-shadow-2);
+}
+
+.mode-toggle-btn:not(.active):hover {
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* Variant: mode-toggle — wider left slot for capsule toggle (44c-T8) */
+.spotlight-search--mode-toggle {
+    --spotlight-left-slot: 5.5rem;
+    --spotlight-right-slot: 8.5rem;
+}
+
+/* 129-T6 / CD-129-5：手機把左右預留壓到控制項的「實際佔位」
+ *
+ * 上面那兩個值是照最壞情況寫死的：左 5.5rem 給 70px 的模式切換膠囊、
+ * 右 8.5rem 給「四顆鈕都在」的情形。但右側四顆鈕是條件顯示的
+ * （❤ 只在搜尋字精準命中女優時、＋ 只在女優模式、✕ 只在有東西可清時、→ 永遠在），
+ * 常態只有兩顆 ⇒ 手機上白白空掉 44px，而 390px 的內容區總共才 119px。
+ *
+ * Opus CDP 實測（390×844，工具列展開）各元件的真實佔位：
+ *   左 .mode-toggle    left:8px + 寬 70          = 78px  → 給 82px（4px 淨空）
+ *   右 .search-actions-right right:8px + 40+4+40 = 92px  → 給 92px（貼齊，與桌機同慣例）
+ * ⇒ 內容區 119px → 169px（+42%）。
+ *
+ * 逃生口（下面那條）：愛心鈕出現時右側變成三顆（136px），
+ * 若不還原 slot，標籤會滑到愛心底下被蓋住（spec S4 驗收條件 2 禁止）。
+ */
+@media (max-width: 480px) {
+    .spotlight-search--mode-toggle {
+        --spotlight-left-slot: 5.125rem;
+        --spotlight-right-slot: 5.75rem;
+    }
+
+    /* 三顆鈕的唯一情形：影片模式 ＋ 搜尋字精準命中女優 → 右側回到原本的 8.5rem */
+    .spotlight-search--mode-toggle.spotlight-search--wide-actions {
+        --spotlight-right-slot: 8.5rem;
+    }
+}
+.lightbox-metadata .lb-chips-more:hover { opacity: 1; }
+
+/* ==================== Filter pills (TASK-115-T5 shell + T6 appearance) =====
+   Shared spotlight frame lives on .filter-pill-group (not the inner input).
+   .filter-pill is neutral tint + thin border — deliberately NOT solid --accent
+   (that fill is .lb-user-tag, which permanently deletes a tag). ✕ is always
+   visible with a ≥24×24 CSS-px hit target (no hover-reveal). */
+.filter-pill-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    /* Shared frame — moved from .spotlight-search input (theme.css).
+       min-height (not fixed height) so multi-pill wrap can grow the bar. */
+    min-height: 3.5rem;
+    padding-left: var(--spotlight-left-slot);
+    padding-right: var(--spotlight-right-slot);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-pill);
+    background: var(--bg-card);
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Heavy acrylic 20px spotlight frame (mirrors theme.css .spotlight-search input), TASK-115-T6 */
+    backdrop-filter: blur(20px);
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Safari prefix mirror, TASK-115-T6 */
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 10%, transparent),
+        var(--shadow-sm);
+    transition:
+        border-color var(--duration-normal) var(--ease-out),
+        box-shadow var(--duration-normal) var(--ease-out),
+        transform var(--duration-normal) var(--ease-out);
+}
+
+/* Focus ring wraps the whole group (pills + input), not just the text field. */
+.filter-pill-group:focus-within {
+    border-color: var(--accent);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 15%, transparent),
+        0 0 0 4px color-mix(in oklch, var(--color-primary) 15%, transparent),
+        0 0 20px var(--glow-primary),
+        var(--shadow-md);
+    transform: scale(1.02);
+}
+
+/* role="list" 包裝層：與外層同為 wrap flex，讓 pill 仍以扁平方式換行 */
+.filter-pill-list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* Neutral tint + thin border — opposite of .lb-user-tag solid --accent fill. */
+.filter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0.1rem 0.2rem 0.1rem 0.55rem;
+    background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+    border: 1px solid var(--stroke-default);
+    border-radius: var(--radius-pill);
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.3;
+}
+
+.filter-pill-value {
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Always-visible remove control. Glyph stays ~12px; hit box ≥24×24 via min-*.
+   Forbidden on resting rule: width:0 / opacity:0 / display:none / visibility:hidden
+   and any :hover-gated reveal (alias-pill-remove is the anti-pattern). */
+.filter-pill-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    min-width: 24px;
+    min-height: 24px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        color var(--fluent-duration-fast) var(--fluent-ease-standard),
+        background-color var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.filter-pill-remove:hover {
+    color: var(--text-primary);
+    background-color: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+}
+
+.filter-pill-remove:focus-visible {
+    outline: 2px solid var(--stroke-default);
+    outline-offset: 1px;
+}
+
+/* Neutralise the theme frame on the inner input — group owns the chrome now.
+   Equal specificity (0,1,1) to .spotlight-search input; showcase.css source-order wins. */
+.filter-pill-group > input {
+    flex: 1 1 8rem;
+    min-width: 8rem;
+    height: auto;
+    min-height: 0;
+    padding-left: 0;
+    padding-right: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+    transform: none;
+}
+
+.filter-pill-group > input:focus {
+    border: none;
+    box-shadow: none;
+    transform: none;
+    outline: none;
+}
+
+/* ==================== 116b-T3: Actress pill editor popover ====================
+   Anchored to .spotlight-search (position:relative, theme.css:217), NOT to
+   .filter-pill-group or the pill itself — CD-116b-4: .filter-pill-group's
+   :focus-within { transform: scale(1.02) } (above) establishes a new CSS
+   containing block, which would drag even a position:fixed descendant along
+   with it. Token language copied from the project's one existing anchored
+   popover, .toolbar-dropdown (:81-96 above). */
+.pill-editor-popover {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: min(280px, 100%);
+    margin-top: 0.5rem;
+    background: var(--surface-2);
+    border: 1px solid var(--stroke-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: 0.75rem;
+    z-index: 200;
+}
+
+.pill-editor-title {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.pill-editor-modes {
+    display: flex;
+    gap: 4px;
+}
+
+.pill-editor-mode {
+    height: 32px;
+    padding: 0 0.5rem;   /* 8pt grid（§4 layout 級）——0.6rem=9.6px 不落在任何合法帶 */
+    border: 1px solid var(--stroke-default);
+    border-radius: var(--fluent-radius-md);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition:
+        background-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+        border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+        color var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.pill-editor-mode:hover:not(.is-active) {
+    background: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+}
+
+.pill-editor-mode.is-active {
+    background: color-mix(in oklch, var(--color-primary) 15%, transparent);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.pill-editor-mode:focus-visible {
+    outline: 2px solid var(--stroke-default);
+    outline-offset: 1px;
+}
+
+/* 116c-T3: 自訂區間列。三顆鈕是「點了就生效」的觸發器，這一列要按 ✓ 才生效——
+   兩種提交行為必須在視覺上分得開（spec-116c §4），1px 分隔線是最輕的做法。 */
+.pill-editor-custom {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--stroke-subtle);
+}
+
+.pill-editor-custom-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;            /* micro 級（§4） */
+}
+
+/* 提示是一句說明、不是控制項 —— 比標籤再退一階 */
+.pill-editor-hint { color: var(--text-muted); }
+
+.pill-editor-range {
+    display: flex;
+    align-items: center;
+    gap: 4px;                      /* ~ 要黏著兩個框 */
+}
+
+.pill-editor-range-sep {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+}
+
+/* CD-116c-9：.spotlight-search input（theme.css:240）是裸後代選擇器，給主搜尋框預留
+   左右 icon 位置，變數值又被 .spotlight-search--mode-toggle 覆寫成 5.5rem/8.5rem；
+   浮層錨在 .spotlight-search 底下（CD-116b-4）就被它掃到，content box 只剩約 2px。
+   同 specificity（0,1,1）＋ showcase.css 後載入 → source order 勝（同 :3005
+   .filter-pill-group > input 的既有手法）。
+   ⚠ flex 必須一起改：flex-basis: 0 在 row 方向優先於 width（FE-CSS-06）。 */
+.pill-editor-range input {
+    flex: 0 0 auto;
+    width: 7ch;                    /* ch：與 PIN 欄同一手法，survive 字級 13→20px */
+    height: 32px;                  /* 與 .pill-editor-mode 對齊 */
+    padding: 0 4px;
+    text-align: center;
+    appearance: textfield;         /* CD-116c-10：3 位數寬放不下 spinner */
+}
+
+.pill-editor-range input::-webkit-outer-spin-button,
+.pill-editor-range input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* TASK-124a-T3: 發售日浮層四格年月寬度，比女優版 7ch（單一數值欄）窄——年月各自只需
+   4 位數／2 位數的顯示寬度，5ch/4ch 是估算值（plan §4.4），最終視覺由 owner 真機驗。 */
+.pill-editor-range .pe-ym-year { width: 5ch; }
+.pill-editor-range .pe-ym-month { width: 4ch; }
+
+.pill-editor-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 0.75rem;
+}
+
+/* Borrow .rescrape-confirm-btn's layout (circle, inline-flex centering,
+   transition shape — rescrape-modal.css:306-319) but NOT its visual weight.
+   CD-116b-10: this ✓/✗ commits a fully reversible draft edit, not an
+   irreversible write like rescrape's — so no solid fill at rest, no
+   transform:scale() bounce, 32px instead of 48px. */
+.pill-editor-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--fluent-radius-circle);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    cursor: pointer;
+    border: 1px solid;
+    background: transparent;
+    transition: background-color var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.pill-editor-btn.cancel {
+    color: var(--color-error);
+    border-color: color-mix(in oklch, var(--color-error) 30%, transparent);
+}
+
+.pill-editor-btn.cancel:hover {
+    background: color-mix(in oklch, var(--color-error) 10%, transparent);
+}
+
+.pill-editor-btn.confirm {
+    color: var(--color-success);
+    border-color: color-mix(in oklch, var(--color-success) 30%, transparent);
+}
+
+.pill-editor-btn.confirm:hover {
+    background: color-mix(in oklch, var(--color-success) 10%, transparent);
+}
+
+.pill-editor-btn:focus-visible {
+    outline: 2px solid var(--stroke-default);
+    outline-offset: 1px;
+}
+
+/* Pill body switches <span> → <button> when the popover is available
+   (_pillPopoverEnabled, ≥481px, CD-116b-8) — reset browser button chrome so
+   it stays visually identical to the plain-text span it replaces on mobile. */
+.filter-pill-group button.filter-pill-value {
+    border: none;
+    padding: 0;
+    font: inherit;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+/* Editing state sits on the whole pill (CD-116b-12b: ".filter-pill 上、不新開元素").
+   The popover is anchored under the entire search row rather than to the pill it
+   edits (CD-116b-4), so this border is the only thing telling the user *which*
+   pill is open — a tint on the text alone reads as too weak a signal for that job.
+   Same --accent language as .pill-editor-mode.is-active, one step lighter on the
+   fill so the pill's own text stays legible. */
+.filter-pill.is-editing {
+    border-color: var(--accent);
+    background: color-mix(in oklch, var(--color-primary) 10%, transparent);
+}
+
+/* ==================== Phase 44b T3: Hero Card ==================== */
+
+/* Grid Mode Hero Card — cursor pointer */
+.hero-card {
+    cursor: pointer;
+}
+
+/* Hero Card 圖片：contain 完整顯示（不裁切女優照片） */
+:is(#ds-gallery-components, .ds-gallery-composition) .hero-card .av-card-preview-img {
+    background: var(--bg-card, rgba(0, 0, 0, 0.05));
+}
+
+:is(#ds-gallery-components, .ds-gallery-composition) .hero-card .av-card-preview-img img {
+    object-fit: contain;
+    transform-origin: center center;
+}
+
+/* Hero Card 愛心 overlay 常駐（已收藏時不需 hover） */
+.hero-card .av-card-preview-overlay.always-visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* 已收藏愛心按鈕 — 紅色，可點擊（浮動愛心粒子效果） */
+.hero-card .btn-glass-circle.is-favorite {
+    color: var(--color-favorite);
+    cursor: pointer;
+}
+
+/* TASK-138-T4（CD-D1）：hero 卡標籤補白列強制獨占一行——.actress-card-info 是
+   flex-wrap 容器（:2564），不加這條會跟既有 age/height/cup/bwh 幾個 <span> 擠同一行。
+   scope 限定 .hero-card，不影響女優牆 .actress-card（Non-Goal，spec 缺口 D）。 */
+.hero-card .card-info.actress-card-info > .info-tags {
+    flex-basis: 100%;
+}
+
+/* No-cover fallback placeholder（Hero Card 圖片載入失敗） */
+.av-card-no-cover {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    gap: 0.25rem;
+}
+
+.av-card-no-cover i {
+    font-size: 1.5rem;
+    opacity: 0.4;
+}
+
+/* 49a-T3: Actress Lightbox alias label（Row 3 chips 前方淡色標籤 + tooltip） */
+.lb-chips-row .lb-chips-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-right: 4px;
+    cursor: default;
+    align-self: center;
+}
+
+/* ── 49b T4cd / 49c T5fix.B (V2 viewport overlay)：Actress Photo Picker ── */
+.actress-picker-overlay {
+    position: fixed;
+    z-index: 1100;
+    bottom: 5vh;
+    left: max(10vw, calc(50vw - 600px));
+    width: min(80vw, 1200px);
+    pointer-events: auto;
+    padding: 12px;
+    box-sizing: border-box;          /* 顯式宣告，防 Tailwind preflight 失效時 width 計算偏差（gotchas） */
+}
+
+.actress-picker-overlay .picker-candidates-grid {
+    /* desktop ≥1280：grid N 固定 col 取代 flex justify-content:center
+     * --picker-cols 由 JS 在 SSE 收齊後依實際 count 設（_burstAllPickerCandidates）
+     * fallback 6（首次 burst 前 / partial 階段）。
+     * tablet/mobile 由 media query 自行覆蓋為 repeat(3, ...)，不引用此 var，
+     * 因此 desktop→tablet resize 時 inline var 不會洩漏蓋掉媒體查詢規則。
+     */
+    display: grid;
+    grid-template-columns: repeat(var(--picker-cols, 6), 150px);
+    justify-content: center;
+    gap: 20px;
+    overflow-x: visible;             /* 覆寫全域 overflow-x: auto */
+    overflow-y: visible;
+    margin-top: 0;                   /* V2 不再 -38px overlap */
+}
+
+.actress-picker-overlay .picker-candidate-card {
+    width: 150px;
+    aspect-ratio: 4 / 5;             /* 188px tall on 150 wide */
+    height: auto;                    /* 覆寫全域 height: 140px */
+    border-radius: var(--radius-md);
+    flex: none;                      /* grid 不需 flex，覆寫全域 flex: 0 0 100px */
+}
+
+.actress-picker-overlay .picker-candidate-img {
+    object-fit: cover;
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-md);
+}
+
+.picker-current-source {
+    font-size: 0.85em;
+    opacity: 0.8;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.picker-candidates-grid {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    padding: 4px 0;
+}
+
+/* 候選卡：opacity 0 + transition none（GSAP-only 防 1-frame paint glitch） */
+.picker-candidate-card {
+    position: relative;
+    flex: 0 0 100px;
+    width: 100px;
+    height: 140px;
+    border-radius: var(--fluent-radius-lg);
+    overflow: hidden;
+    cursor: pointer;
+    opacity: 0;
+    transition: none;
+    background: rgba(0, 0, 0, 0.2); /* sub-tier dim hint, below §3 4-stop overlay range */
+}
+
+.picker-candidate-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.picker-source-badge {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 4px 8px;
+    background: var(--overlay-badge);
+    font-size: 0.7em;
+    color: var(--text-inverse);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.picker-check-icon {
+    opacity: 0;
+    margin-right: 3px;
+    font-size: 0.6rem;
+    transition: opacity var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.picker-candidate-card:hover .picker-source-badge {
+    background: var(--color-success);
+    color: var(--text-inverse);
+}
+
+.picker-candidate-card:hover .picker-check-icon {
+    opacity: 1;
+}
+
+.picker-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    font-size: 0.9em;
+    opacity: 0.7;
+    gap: 8px;
+}
+
+.picker-loading i {
+    font-size: 1.5em;
+}
+
+.picker-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    text-align: center;
+    opacity: 0.6;
+}
+
+.picker-empty i {
+    font-size: 2em;
+    margin-bottom: 8px;
+    opacity: 0.5;
+}
+
+.picker-empty p {
+    margin: 4px 0;
+    font-size: 0.9em;
+}
+
+.picker-empty-hint {
+    font-size: 0.8em;
+    opacity: 0.7;
+    margin-top: 8px;
+}
+
+/* Phase 51 T1.4 §6 5 檢查點 — picker-refresh-btn（非 DaisyUI，照 §6 精神對齊）
+ * Radius: var(--fluent-radius-md) ✅（T1.2 已 token 化）
+ * Surface: rgba(255,255,255,0.1) 白 tint（floating-control 薄膜語義，§3 觀察項保留）
+ * Stroke: 1px solid rgba(255,255,255,0.2)（width/style + tint border）
+ * Shadow: dual-layer inset + var(--fluent-shadow-2)；hover 升 var(--fluent-shadow-4)
+ * Focus: 2px outline + 4px glow（charter §6 Checkpoint 5 精確規格）
+ */
+.picker-refresh-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--fluent-radius-md);
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (default state), 2026-05-03 */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--fluent-shadow-2);
+    cursor: pointer;
+    color: var(--text-inverse);
+    transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.picker-refresh-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (hover state), 2026-05-03 */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), var(--fluent-shadow-4);
+    transform: translateY(-1px);
+}
+
+.picker-refresh-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight + Fluent shadow + glow ring (focus-visible), 2026-05-03 */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--fluent-shadow-2), 0 0 0 4px var(--glow-primary);
+}
+
+.picker-refresh-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.picker-refresh-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 100b-T2b（spec §3.1／裁決 5，選項 A）：picker-upload-btn——逐項複製 .picker-refresh-btn
+ * 的 §6 5 檢查點（不自創按鈕視覺，owner 取向：UI 退位、拒環境光/玻璃卡/鮮藍 primary/裝飾 noise）。
+ * .picker-refresh-btn 是 position:absolute 單顆定位、非 flex row（見發現 4），故「同排」靠
+ * right 向左偏移一個按鈕寬度+間距達成，不新建 flex 容器（不動既有 .picker-refresh-btn）。
+ * Radius: var(--fluent-radius-md) ✅
+ * Surface: rgba(255,255,255,0.1) 白 tint（同 .picker-refresh-btn）
+ * Stroke: 1px solid rgba(255,255,255,0.2)
+ * Shadow: dual-layer inset + var(--fluent-shadow-2)；hover 升 var(--fluent-shadow-4)
+ * Focus: 2px outline + 4px glow
+ */
+.picker-upload-btn {
+    position: absolute;
+    top: 12px;
+    /* Micro 級間距註記（ui-conventions §4）：52px = .picker-refresh-btn 的 12px right 起點
+       + 32px 按鈕寬 + 8px gap，讓上傳鈕緊貼在其左側同排，非任意值。 */
+    right: 52px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--fluent-radius-md);
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (default state), 100b-T2b */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--fluent-shadow-2);
+    cursor: pointer;
+    color: var(--text-inverse);
+    transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.picker-upload-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (hover state), 100b-T2b */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), var(--fluent-shadow-4);
+    transform: translateY(-1px);
+}
+
+.picker-upload-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight + Fluent shadow + glow ring (focus-visible), 100b-T2b */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--fluent-shadow-2), 0 0 0 4px var(--glow-primary);
+}
+
+.picker-upload-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.picker-upload-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Cover-actions 淡出（picker open 時） */
+.lightbox-cover .cover-actions[data-picker-open="true"] {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+/* 49c T5fix.B：tablet 兩行 wrap (768–1279px) */
+@media (min-width: 768px) and (max-width: 1279px) {
+    /* 49c Codex T5fix.B follow-up：強制 3 column 防 1024 5+1 / 1180-1279 6 卡單行
+     * 違反「tablet 兩行」contract（flex-wrap 在大寬度不會 wrap）。grid 明確契約。
+     */
+    .actress-picker-overlay .picker-candidates-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 140px);
+        justify-content: center;
+        gap: 16px;
+    }
+    .actress-picker-overlay .picker-candidate-card {
+        width: 140px;
+        flex: none;        /* grid 不需 flex */
+    }
+}
+
+/* 49c T5fix.B：mobile bottom-sheet (<768px)，從 <640 擴大涵蓋 phone + portrait tablet */
+@media (max-width: 767px) {
+    .actress-picker-overlay {
+        position: fixed;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        top: auto !important;
+        width: 100% !important;
+        z-index: 1100;
+        background: var(--surface-2);
+        border-top: 1px solid var(--stroke-default);
+        padding: 0.75rem 1rem;
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        max-height: 50vh;
+        overflow-y: auto;
+    }
+    /* 49c T6 follow-up：mobile 也用 grid + repeat(3, minmax(0, 1fr)) 強制 3+3，
+     * 同 tablet pattern。flex-wrap 在 600-700 寬度範圍會 wrap 成 4+2 不平衡
+     * （相同 Codex P2 echo）。minmax(0, 1fr) 在極窄 phone (320px) 自動縮小卡片不溢出。
+     */
+    .actress-picker-overlay .picker-candidates-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        justify-content: center;
+        gap: 10px;
+    }
+    .actress-picker-overlay .picker-candidate-card {
+        width: 100%;
+        max-width: 130px;
+        flex: none;
+        justify-self: center;
+    }
+    .actress-picker-overlay .picker-current-source {
+        position: static;
+        background: transparent;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        color: inherit;
+        padding: 0;
+        margin-bottom: 8px;
+        pointer-events: auto;
+    }
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.bi.spin,
+.picker-refresh-btn i.spin {
+    animation: spin 1s linear infinite;
+}
+
+/* 101b-T6：.lb-mask-spinner .bi.spin 修復——CDP 像素驗證證實前兩次修法（PRM 例外 / 無條件
+ * !important）都沒解到真正病灶：<i class="bi spin"> 預設 display:inline（Bootstrap Icons
+ * 只把 .bi::before 偽元素設 inline-block，沒動 .bi 本身），CSS transform 對 non-replaced
+ * inline box 不產生視覺效果（W3C transforms spec）——animation 確實在跑（computed transform
+ * 逐 frame 變化，這正是曾騙過 CDP「量 computed transform 判定在轉」驗證法的原因），但視覺上
+ * 靜止。display:inline-block 才是承重修復：讓它變成可 transform 的盒子。animation 加
+ * !important 蓋過 theme.css PRM blanket（`*{animation-duration:0.01ms !important}`）——
+ * owner 訴求「不存在靜態模式」，PRM 下也要轉，不只是「不留死白」。 */
+.lb-mask-spinner .bi.spin {
+    display: inline-block;
+    animation: spin 1s linear infinite !important;
+}
+
+/* ==================== Phase 50 T5 §6 5 檢查點 — DaisyUI Component Override ==================== */
+/* Fluent 覆寫 .showcase-container 內 DaisyUI .btn / .input（charter §6 5 檢查點：radius/surface/stroke/shadow/hover-focus）*/
+/* CD-4 限制：scoped 在 .showcase-container 內，不影響其他頁面 */
+/* P1b fix: 補齊 Stroke token、Surface token、修正 Focus 為 2px outline + 4px glow（charter §6） */
+
+/* §6 Checkpoint 1 Radius: var(--fluent-radius-md) */
+/* §6 Checkpoint 2 Surface: DaisyUI variant 提供 .btn background；.input 補 var(--surface-1) */
+/* §6 Checkpoint 3 Stroke: border var(--stroke-default) + inset 0 1px 0 dual-layer 內框 */
+/* §6 Checkpoint 4 Shadow: var(--fluent-shadow-2)，hover 升 --fluent-shadow-4 */
+/* §6 Checkpoint 5 Hover/Focus: hover 升 shadow + translateY；focus 2px outline + 4px glow */
+
+.showcase-container .btn {
+    border-radius: var(--fluent-radius-md);
+    /* Stroke: width/style only — 保留 DaisyUI variant border-color (.btn-outline.btn-primary 等) */
+    border-width: 1px;
+    border-style: solid;
+    /* Shadow: 底階 + dual-layer 內框 */
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+        var(--fluent-shadow-2);
+    transition:
+        background var(--fluent-duration-fast) var(--fluent-ease-standard),
+        border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+        box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard),
+        transform var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.showcase-container .btn:hover:not(:disabled) {
+    /* hover 不覆寫 border-color，DaisyUI variant 自管 (.btn-outline.btn-primary primary 強調保留) */
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
+        var(--fluent-shadow-4);
+    transform: translateY(-1px);
+}
+
+.showcase-container .btn:focus-visible {
+    /* Focus: 2px outline + 4px glow（charter §6 Checkpoint 5 精確規格） */
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+        var(--fluent-shadow-2),
+        0 0 0 4px var(--glow-primary);
+}
+
+.showcase-container .btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
+        var(--fluent-shadow-2);
+}
+
+.showcase-container .input {
+    border-radius: var(--fluent-radius-md);
+    /* Surface: 輸入框用 surface-1 基底（charter §6 Checkpoint 2） */
+    background: var(--surface-1);
+    /* Stroke: width/style only — 保留 DaisyUI .input-bordered variant border-color */
+    border-width: 1px;
+    border-style: solid;
+    /* Shadow: 輸入框底階（charter §6 Checkpoint 4） */
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
+        var(--fluent-shadow-2);
+    transition:
+        border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+        box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.showcase-container .input:focus,
+.showcase-container .input:focus-visible {
+    /* Focus: 2px outline + 4px glow（charter §6 Checkpoint 5 精確規格） */
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-color: var(--accent);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+        var(--fluent-shadow-2),
+        0 0 0 4px var(--glow-primary);
+}
+
+/* ─── 57c-T4: Similar Stage — fullscreen takeover (z-index:1501) ─────────── */
+
+/* fullscreen backdrop（spec §1 CD-56C-1）*/
+.similar-stage {
+    position: fixed;
+    inset: 0;
+    z-index: 1501;  /* > sample-gallery 1500 > showcase-lightbox 1000 */
+    /* 56c-T4: 星空 backdrop 全屏鋪滿（從 .similar-stage-inner 搬上來，
+       避免 inner box 與外圍 backdrop 兩種灰色） */
+    background:
+        radial-gradient(ellipse at 30% 40%, color-mix(in oklch, var(--star-line-bright) 8%, transparent) 0%, transparent 55%),
+        radial-gradient(ellipse at 70% 65%, color-mix(in oklch, var(--star-glow) 6%, transparent) 0%, transparent 50%),
+        var(--color-base-200);
+
+    /* 初始隱藏（與 sample-gallery 一致 pattern） */
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity var(--fluent-duration-fast) var(--fluent-ease-standard),
+                visibility var(--fluent-duration-fast) var(--fluent-ease-standard);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 56c-T4: vignette 覆蓋整個 viewport（從 .similar-stage-inner::before 搬上來） */
+.similar-stage::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: radial-gradient(ellipse at 50% 50%,
+        transparent 35%,
+        rgba(0, 0, 0, 0.45) 100%);
+}
+
+.similar-stage.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: all;
+    transition-delay: 0s;
+}
+
+/* inner stage 960×620 design-space（spec §1 CD-56C-11）
+   data-theme="dim" 強制 dust dim variant（搬遷自 motion-lab .clip-lab-stage[data-theme="dim"]） */
+.similar-stage-inner {
+    position: relative;
+    width: 960px;
+    height: 620px;
+    overflow: visible;
+    /* 56c-T4: 純座標容器，背景/box-shadow/border-radius 已搬到 .similar-stage 全屏層 */
+    /* 56c-T4: 視窗等比放大充滿 viewport（design-space 不動，視覺層 scale） */
+    transform: scale(var(--similar-stage-scale, 1));
+    transform-origin: center center;
+}
+
+/* X 關閉按鈕（backdrop scope 不在 inner 內，玻璃配方對齊 .lb-action-btn） */
+.similar-close-btn {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    z-index: 10;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    background: var(--overlay-control);
+    backdrop-filter: blur(var(--fluent-blur-light));
+    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
+                color var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.similar-close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 1);
+}
+
+.similar-close-btn:focus-visible {
+    outline: 2px solid var(--star-glow);
+    outline-offset: 2px;
+}
+
+/* lightbox 內容隱藏（既有 takeover pattern） */
+.showcase-lightbox.similar-mode-active .lightbox-content {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+}
+
+/* ── Dust particle layer（搬遷自 .clip-lab-dust）─────────────────────────────
+ * indirection 模型：inline 寫 --dust-base-seed，CSS rule 用 --dust-base 計算
+ * resolved value，dim selector 才能 override --dust-base 而非永遠輸給 inline */
+.similar-stage-dust {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.7;
+    z-index: 0;
+}
+
+.similar-stage-dust circle {
+    --dust-base: var(--dust-base-seed, 0.08);
+    fill: var(--star-line-fade);
+    opacity: var(--dust-base);
+    animation: dust-twinkle var(--dust-cycle, 6s) ease-in-out var(--dust-delay, 0s) infinite;
+}
+
+@keyframes dust-twinkle {
+    0%, 100% { opacity: var(--dust-base); }
+    50%      { opacity: calc(var(--dust-base) * 1.5); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .similar-stage-dust circle {
+        animation: none;
+        opacity: var(--dust-base);
+    }
+}
+
+/* dim theme override（similar-stage 永遠暗底 — Constellation 是星空場景） */
+[data-theme="dim"] .similar-stage-dust circle,
+.similar-stage .similar-stage-dust circle {
+    fill: var(--star-line-bright);
+    --dust-base: 0.10;
+}
+
+/* T6 Hover constellation bright state — corridor dust 切到 .in-constellation
+   覆寫 stylesheet 級 --dust-base（不動 inline --dust-base-seed）；
+   keyframe dust-twinkle-bright 引用 var(--dust-base)，自動拉高 peak。 */
+.similar-stage-dust circle.in-constellation {
+    --dust-base: 0.70;
+    --dust-halo-opacity: 0.45;
+    filter: drop-shadow(0 0 4px rgba(232, 201, 137, var(--dust-halo-opacity)));
+    transition: filter var(--fluent-duration-slow) var(--fluent-ease-standard);
+    animation-name: dust-twinkle-bright;
+}
+
+@keyframes dust-twinkle-bright {
+    0%, 100% { opacity: var(--dust-base); }
+    50%      { opacity: 1.00; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .similar-stage-dust circle.in-constellation {
+        animation: none;
+        opacity: var(--dust-base);
+    }
+}
+
+/* T7 pulse 期間暫停 CSS dust-twinkle，讓 GSAP inline opacity / scale 生效 */
+.similar-stage-dust circle.dust-pulsing {
+    animation: none;
+}
+
+/* ── Rails（搬遷自 .clip-lab-rails / .clip-lab-rail / .clip-lab-rail-sweep）── */
+.similar-stage-rails {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 2;
+}
+
+.similar-rail {
+    stroke: var(--star-line-fade);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-opacity: 0;
+    fill: none;
+    /* 注意：禁加 transition: stroke-opacity（gotchas C21）— GSAP 直接動，
+       CSS transition 會與 GSAP tick 賽跑，抹平 ease */
+}
+
+.similar-rail.rail--bright {
+    stroke: var(--star-line-bright);
+    stroke-opacity: 0.85;
+}
+
+.similar-rail.rail--neighbor {
+    stroke: var(--star-line-bright);
+    stroke-opacity: 0.55;
+}
+
+.similar-rail-sweep {
+    stroke: var(--star-line-bright);
+    stroke-width: 2;
+    stroke-linecap: round;
+    fill: none;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Rail 初始隱藏狀態（搬遷自 motion-lab .rail--hidden，namespaced 避免污染全域）
+   SVG <line> opacity 影響顯示；pointer-events 對 SVG 預設無關但保留無害 */
+.similar-rail.rail--hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* ── Slot cards（搬遷自 .clip-lab-slot）─────────────────────────────────
+ * 注意：禁加 transition: transform（gotchas C21）— hover scale 走 GSAP，
+ * CSS transition 會與 GSAP tick 賽跑。box-shadow 走 CSS transition 安全。 */
+.similar-slot {
+    position: absolute;
+    width: 107px;
+    height: 150px;
+    transform: translate(-50%, -50%);
+    background: var(--color-base-100);
+    border-radius: var(--fluent-radius-xl);
+    box-shadow: var(--fluent-shadow-4);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    --card-glow-opacity: 0;
+    overflow: visible;
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 15%, transparent);
+    transition: box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+    z-index: 10;
+}
+
+.similar-slot::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: var(--fluent-radius-xl);
+    background: radial-gradient(ellipse at 50% 50%,
+        color-mix(in oklch, var(--star-glow) 55%, transparent) 0%,
+        transparent 70%);
+    opacity: var(--card-glow-opacity);
+    pointer-events: none;
+    z-index: -1;
+    will-change: opacity;
+}
+
+.similar-slot:hover {
+    box-shadow: var(--fluent-shadow-8);
+}
+
+.similar-slot-img {
+    position: relative;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* 101d-T2：相似卡刻意固定右裁（桌面 .similar-slot-img）、不接 applyCellFocal——
+       要讓相似卡也對臉是新工作、非漏接線（plan-101d §5.3）。 */
+    object-position: right center;
+    display: block;
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+/* 56c-T4fix7: dim overlay — ::after opacity tween via --slot-dim-opacity CSS var。
+   取代 filter: brightness() 兩段式 race，消除 enter→enter 亮閃。
+   gotchas C21：transition: none — 動畫純走 GSAP CSS var tween，禁加 CSS transition。
+   z-index 1 蓋在 .similar-slot-img (z=0) 之上；::before halo 既有 z=-1 不受影響。 */
+.similar-slot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: rgba(0, 0, 0, 0.45);
+    opacity: var(--slot-dim-opacity, 0);
+    pointer-events: none;
+    z-index: 1;
+    transition: none;
+}
+
+/* Slot 初始隱藏狀態（搬遷自 motion-lab .slot--hidden，namespaced 避免污染全域） */
+.similar-slot.slot--hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* 56c-T4: main image visual center anchor — single source of truth
+   for ghost-fly enter target rect。invisible / non-interactive，
+   design-space 480/310 200×250 居中，吃 .similar-stage-inner 的 transform: scale */
+.similar-main-anchor {
+    position: absolute;
+    left: 480px;
+    top: 310px;
+    width: 200px;
+    height: 250px;
+    transform: translate(-50%, -50%);
+    transform-origin: center center;
+    pointer-events: none;
+    opacity: 0;
+    /* z-index 不指定 — 純座標 anchor 不需參與堆疊 */
+}
+
+/* 56c-T4: similar mode 停留期間的 main image — .similar-stage-inner 子元素，
+   與 8 cards 走同一 design-space layout 路徑，resize 自動跟隨 inner scale。
+   codex 改良：不用 transform: translate(-50%,-50%)，避免與 GSAP scale tween
+   混疊；改 left:380 top:185（中心點數學等價於 design-space (480, 310)）。
+   codex P1-2：pointer-events 改 auto（從 _buildSimilarMainStatic 接 click → onSimilarMainImgClick），
+   同 stacking context 內 z=11 < play button z=12，play button 仍在上層命中正確。 */
+.similar-main-static {
+    position: absolute;
+    left: 380px;
+    top: 185px;
+    width: 178px;
+    height: 250px;
+    object-fit: cover;
+    object-position: right center;  /* 沿用 cropMode: 'right-half' 視覺一致 */
+    transform-origin: center center;
+    border-radius: var(--fluent-radius-lg);
+    box-shadow: var(--fluent-shadow-16);
+    z-index: 11;  /* > .similar-slot z=10；play button z=12 > 11 → button 在上 */
+    cursor: pointer;
+}
+
+/* 56c-T4 (codex P1-2)：.similar-main-overlay 已移除。
+   原本是 .similar-stage 直屬子層 z=2001，會在 root stacking context 蓋住
+   被 .similar-stage-inner transform stacking context 囚禁的 play button (z=12)，
+   導致點擊 play button 實際打到 overlay → onSimilarMainImgClick → closeSimilarMode，
+   而非 playSimilarMainVideo。改用 main static 直接接 click（同 inner stacking 內，
+   play button z=12 仍在 main static z=11 之上），點擊命中正確。 */
+
+/* 56c-T4: play button 在 .similar-stage-inner 內 design-space coords，
+   位置 main image (480,310) 下方中央 (480,410)；inverse scale 抵消 inner
+   transform: scale，維持 44×44 視覺尺寸；對齊 lightbox cover 內 play
+   button 的視覺語意（在主圖下方而非 viewport 下方） */
+.similar-play-button {
+    position: absolute;
+    left: 480px;
+    top: 410px;
+    transform: translate(-50%, -50%) scale(calc(1 / var(--similar-stage-scale, 1)));
+    transform-origin: center center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+    background: var(--overlay-control);
+    backdrop-filter: blur(var(--fluent-blur-light));
+    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    color: white;
+    font-size: 1.25rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--fluent-shadow-8);
+    z-index: 12;  /* > .similar-main-static z=11 (inner stacking)；ghost 飛行期間蓋過 acceptable */
+    transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
+                border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+                box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.similar-play-button:hover {
+    background: rgba(0, 0, 0, 0.5);
+    border-color: rgba(255, 255, 255, 0.6);
+    box-shadow: var(--fluent-shadow-16);
+    transform: translate(-50%, -50%) scale(calc(1.1 / var(--similar-stage-scale, 1)));
+}
+
+.similar-play-button:focus-visible {
+    outline: 2px solid var(--star-glow);
+    outline-offset: 2px;
+}
+
+/* < 960px：similar-stage-inner 寬 960px，視窗不足以完整顯示
+   56c-T7 才實作手機 < 768px 降級（x-collapse 平面化）；本 task 桌面優先，
+   < 960px 暫時隱藏（沿用 motion-lab 慣例） */
+@media (max-width: 959px) {
+    .similar-stage-inner { display: none; }
+}
+
+/* ==================== 67-A1: Cover Loading UX — skeleton/shimmer + per-image 淡入 + PRM guard ==================== */
+/* skeleton/shimmer 複製自 search.css:682-702，補 overlay 定位：showcase 的封面 img 淡入時 opacity:0
+   仍佔 flow（CD-67-3 用 x-show=cover_url + _imgLoaded 淡入，非互斥 x-show）→ skeleton 須 absolute overlay。
+   容器 aspect-ratio:3/2 由 theme.css:1017 提供、img height:100% 撐滿 → A1 不重複宣告（G1：無 height 互斥、不需 height:auto）。
+   容器 position:relative（theme.css:1016）+ overflow:hidden（:1018）→ overlay 定位 context + 圓角裁切皆現成。 */
+.av-card-preview-img .skeleton-cover {
+    position: absolute;
+    inset: 0;
+    background: var(--color-base-300);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.shimmer {
+    background: linear-gradient(
+        90deg,
+        var(--color-base-300) 25%,
+        var(--color-base-200) 50%,
+        var(--color-base-300) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* per-image 淡入（CSS transition，不用 GSAP — CD-67-1/G3）：掛 img 層；
+   .av-card-preview 容器 opacity 由 GSAP playEntry 專屬（animations.js:142/177/193），此處零容器 transition。
+   ⚠️ 選擇器須對齊 theme.css:1022 的 :is(#ds-gallery-components,.ds-gallery-composition) scope，否則裸
+   .av-card-preview-img img(0,1,1) 的 transition:opacity 蓋不過 theme 的 transition:transform → 淡入失效。
+   ⚠️ Codex P2#1 修正：再 compound .showcase-container（showcase.html:16 同元素同時帶兩 class）——showcase.css
+   也被 search.html / design-system.html 載入且共用 ds scope，但那兩頁的卡 img 無 .cover-loaded 機制；若不
+   收斂，opacity:0 會讓 search 搜尋封面整片隱形、design-system demo 隱形。compound 後 specificity (1,2,1)>theme
+   (1,1,1) 仍贏，且只命中 showcase 頁（search/design-system 容器無 .showcase-container）。
+   合併保留 transform transition（hover-zoom 過渡不回歸）。 */
+:is(#ds-gallery-components, .ds-gallery-composition).showcase-container .av-card-preview-img img {
+    opacity: 0;
+    transition:
+        opacity var(--fluent-duration-fast) var(--fluent-ease-standard),
+        transform var(--fluent-duration-slow) var(--fluent-ease-standard);
+}
+:is(#ds-gallery-components, .ds-gallery-composition).showcase-container .av-card-preview-img img.cover-loaded {
+    opacity: 1;
+}
+
+/* reduced-motion：shimmer + 淡入皆退化靜態（per-rule，可被 inspection/lint 驗證；DoD A-4）。
+   兩條都要——只 guard .shimmer 不夠，淡入也是動畫。 */
+@media (prefers-reduced-motion: reduce) {
+    .shimmer {
+        animation: none;
+    }
+    :is(#ds-gallery-components, .ds-gallery-composition).showcase-container .av-card-preview-img img {
+        transition: none;
+        opacity: 1;
+    }
+}
+
+/* 121c-T5: `.cover-badges` 定位容器 — 常駐顯示於封面左上角（spec §4.5，不掛 hover）。
+   掛載點 showcase.html:443（`.av-card-preview-img` 內、`.av-card-preview-overlay` 之前）。
+   定位脈絡沿用既有 `.av-card-preview-img { position: relative }`（theme.css:1064），本層不需重複宣告。
+   pointer-events:none 是結構保證：不擋卡片點擊（開燈箱）、不擋 overlay 三顆 `.btn-glass-circle`。
+   z-index 給低值純保險（比照 .lb-full-hint 的 9 再退一階，可能被 skeleton/no-cover 蓋住時保底浮上）；
+   `.cover-badge` 本身無 box-shadow/blur，不會像 lb-full-hint 那樣需要嚴格排在最上層。
+   badge 是 img 的 sibling 非後代，hover `scale(1.08)`（theme.css:1079）不會波及（技術要點 A 已保證，這裡零 transform）。 */
+.cover-badges {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    pointer-events: none;
+}
+
+/* 122-T3: 分集標記錨在封面左下（CD-122-9：不重用 .cover-badges）。
+   hover 淡出只掛 .av-card-preview，燈箱（.lightbox-cover）天然不命中（AC-17）。 */
+.cover-badges-part {
+    position: absolute;
+    bottom: 0.5rem;
+    left: 0.5rem;
+    z-index: 2;
+    display: flex;
+    pointer-events: none;
+    transition: opacity var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+.av-card-preview:hover .cover-badges-part { opacity: 0; }
+
+/* 121d-T2: 燈箱標籤整組下移，讓開常駐的魔法棒。只覆寫 top，其餘繼承 base。
+   為什麼是兩個值：魔法棒 `.lightbox-similar-btn` 相對 `.lightbox-content` 的 padding box
+   定位（top:1rem、高 44px ⇒ 下緣恆在內距邊起算 60px）；封面 `.lightbox-cover` 是該 flex
+   容器的第一個 in-flow 項目（上緣＝padding 值）。桌機 padding 1.5rem ⇒ 需淨距 60−24＝36px、
+   取 44px（間距 8px）；≤768px padding 降成 1rem（showcase.css:1894-1899）⇒ 需淨距
+   60−16＝44px、取 52px（間距 8px）。只寫一個 2.75rem 的話手機上間距會歸零。 */
+.lightbox-cover .cover-badges { top: 2.75rem; }
+
+@media (max-width: 768px) {
+    .lightbox-cover .cover-badges { top: 3.25rem; }
+}

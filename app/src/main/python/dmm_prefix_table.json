@@ -1,0 +1,871 @@
+{
+  "_meta": {
+    "corrected": "2026-08-29",
+    "count": 164,
+    "crawl_date": "2026-07-03"
+  },
+  "makers": {
+    "AGA": {
+      "naga": {
+        "dmm_prefix": "h_1566",
+        "sample": "NAGA-265"
+      }
+    },
+    "BOTAN": {
+      "tldc": {
+        "dmm_prefix": "1",
+        "sample": "TLDC-057"
+      }
+    },
+    "Bravo": {
+      "brv": {
+        "dmm_prefix": "h_1755",
+        "sample": "BRV-166"
+      }
+    },
+    "CHoBitcH": {
+      "bth": {
+        "dmm_prefix": "h_1435",
+        "sample": "BTH-368"
+      },
+      "clo": {
+        "dmm_prefix": "h_1435",
+        "sample": "CLO-377"
+      }
+    },
+    "Catch": {
+      "hnhu": {
+        "dmm_prefix": "h_1658",
+        "sample": "HNHU-0212"
+      }
+    },
+    "Center Village": {
+      "cvda": {
+        "dmm_prefix": "h_086",
+        "sample": "CVDA-052"
+      },
+      "cvdx": {
+        "dmm_prefix": "h_086",
+        "sample": "CVDX-650"
+      },
+      "jrze": {
+        "dmm_prefix": "h_086",
+        "sample": "JRZE-309"
+      },
+      "jura": {
+        "dmm_prefix": "h_086",
+        "sample": "JURA-204"
+      }
+    },
+    "Cinema Unit Gas": {
+      "gas": {
+        "dmm_prefix": "71",
+        "sample": "GAS-543"
+      }
+    },
+    "Cosmos": {
+      "hawa": {
+        "dmm_prefix": "1",
+        "sample": "HAWA-382"
+      }
+    },
+    "DAHLIA": {
+      "dldss": {
+        "dmm_prefix": "1",
+        "sample": "DLDSS-522"
+      }
+    },
+    "DANDY": {
+      "dandya": {
+        "dmm_prefix": "1",
+        "sample": "DANDYA-038"
+      }
+    },
+    "DOC": {
+      "docd": {
+        "dmm_prefix": "h_1711",
+        "sample": "DOCD-095"
+      },
+      "fch": {
+        "dmm_prefix": "h_1711",
+        "sample": "FCH-125"
+      },
+      "maan": {
+        "dmm_prefix": "h_1711",
+        "sample": "MAAN-1182"
+      },
+      "mgtd": {
+        "dmm_prefix": "h_1711",
+        "sample": "MGTD-080"
+      }
+    },
+    "Denno Rasputin": {
+      "drpt": {
+        "dmm_prefix": "1",
+        "sample": "DRPT-118"
+      }
+    },
+    "Dynamite Enterprise": {
+      "dinm": {
+        "dmm_prefix": "h_1386",
+        "sample": "DINM-924"
+      }
+    },
+    "FALENO": {
+      "favr": {
+        "dmm_prefix": "1",
+        "sample": "FAVR-003"
+      },
+      "fns": {
+        "dmm_prefix": "1",
+        "sample": "FNS-224"
+      },
+      "mgold": {
+        "dmm_prefix": "1",
+        "sample": "MGOLD-062"
+      }
+    },
+    "FALENO TUBE": {
+      "ftht": {
+        "dmm_prefix": "1",
+        "sample": "FTHT-352"
+      },
+      "fthtd": {
+        "dmm_prefix": "1",
+        "sample": "FTHTD-218"
+      },
+      "ftkd": {
+        "dmm_prefix": "1",
+        "sample": "FTKD-040"
+      }
+    },
+    "FLAVORY": {
+      "svfla": {
+        "dmm_prefix": "1",
+        "sample": "SVFLA-021"
+      }
+    },
+    "First Star": {
+      "chuc": {
+        "dmm_prefix": "h_491",
+        "sample": "CHUC-180"
+      },
+      "kdmn": {
+        "dmm_prefix": "h_491",
+        "sample": "KDMN-051"
+      },
+      "knmb": {
+        "dmm_prefix": "h_491",
+        "sample": "KNMB-127"
+      },
+      "tenn": {
+        "dmm_prefix": "h_491",
+        "sample": "TENN-049"
+      }
+    },
+    "Gallery": {
+      "gmdms": {
+        "dmm_prefix": "h_1780",
+        "sample": "GMDMS-005"
+      },
+      "gmzst": {
+        "dmm_prefix": "h_1780",
+        "sample": "GMZST-005"
+      },
+      "gscsg": {
+        "dmm_prefix": "h_1780",
+        "sample": "GSCSG-005"
+      },
+      "gsumk": {
+        "dmm_prefix": "h_1780",
+        "sample": "GSUMK-004"
+      },
+      "gurhd": {
+        "dmm_prefix": "h_1780",
+        "sample": "GURHD-009"
+      }
+    },
+    "Goonies": {
+      "dg": {
+        "dmm_prefix": "h_1596",
+        "sample": "DG-546"
+      }
+    },
+    "Graffiti Japan": {
+      "mdvij": {
+        "dmm_prefix": "48",
+        "sample": "MDVIJ-032"
+      }
+    },
+    "HMN WORKS": {
+      "cnstv": {
+        "dmm_prefix": "h_1472",
+        "sample": "CNSTV-024"
+      },
+      "erofv": {
+        "dmm_prefix": "h_1472",
+        "sample": "EROFV-381"
+      },
+      "hmdnv": {
+        "dmm_prefix": "h_1472",
+        "sample": "HMDNV-939"
+      },
+      "instv": {
+        "dmm_prefix": "h_1472",
+        "sample": "INSTV-721"
+      },
+      "nizx": {
+        "dmm_prefix": "h_1472",
+        "sample": "NIZX-014"
+      }
+    },
+    "Harassment": {
+      "hrsm": {
+        "dmm_prefix": "h_1745",
+        "sample": "HRSM-149"
+      }
+    },
+    "Hibino": {
+      "hbad": {
+        "dmm_prefix": "1",
+        "sample": "HBAD-737"
+      },
+      "nph": {
+        "dmm_prefix": "1",
+        "sample": "NPH-243"
+      }
+    },
+    "Honnaka": {
+      "hodv": {
+        "dmm_prefix": "5642",
+        "sample": "HODV-22100"
+      }
+    },
+    "Hot Entertainment": {
+      "dht": {
+        "dmm_prefix": "59",
+        "sample": "DHT-1348"
+      },
+      "hez": {
+        "dmm_prefix": "59",
+        "sample": "HEZ-906"
+      }
+    },
+    "IENA RISING": {
+      "ienfa": {
+        "dmm_prefix": "1",
+        "sample": "IENFA-44501"
+      },
+      "ienfr": {
+        "dmm_prefix": "1",
+        "sample": "IENFR-45102"
+      }
+    },
+    "INITIUM": {
+      "jksr": {
+        "dmm_prefix": "57",
+        "sample": "JKSR-741-01"
+      },
+      "mcsr": {
+        "dmm_prefix": "57",
+        "sample": "MCSR-042-01"
+      }
+    },
+    "KUKI": {
+      "gl": {
+        "dmm_prefix": "47",
+        "sample": "GL-014"
+      }
+    },
+    "Lotus": {
+      "wa": {
+        "dmm_prefix": "h_047",
+        "sample": "WA-591"
+      }
+    },
+    "MAGNOLIA": {
+      "mgnl": {
+        "dmm_prefix": "1",
+        "sample": "MGNL-173"
+      }
+    },
+    "MARLO MEDIA": {
+      "nmsl": {
+        "dmm_prefix": "h_1814",
+        "sample": "NMSL-043"
+      }
+    },
+    "MAXING": {
+      "httm": {
+        "dmm_prefix": "h_068",
+        "sample": "HTTM-0061"
+      },
+      "mxgs": {
+        "dmm_prefix": "h_068",
+        "sample": "MXGS-1433"
+      }
+    },
+    "MBM": {
+      "mbma": {
+        "dmm_prefix": "h_460",
+        "sample": "MBMA-269"
+      },
+      "mbmp": {
+        "dmm_prefix": "h_460",
+        "sample": "MBMP-173"
+      },
+      "mbmu": {
+        "dmm_prefix": "h_460",
+        "sample": "MBMU-321"
+      },
+      "oem": {
+        "dmm_prefix": "h_460",
+        "sample": "OEM-055"
+      }
+    },
+    "MERCURY": {
+      "honb": {
+        "dmm_prefix": "h_1133",
+        "sample": "HONB-493"
+      },
+      "yako": {
+        "dmm_prefix": "h_1133",
+        "sample": "YAKO-095"
+      }
+    },
+    "MILK": {
+      "milk": {
+        "dmm_prefix": "h_1240",
+        "sample": "MILK-294"
+      }
+    },
+    "Mother": {
+      "san": {
+        "dmm_prefix": "h_796",
+        "sample": "SAN-466"
+      }
+    },
+    "Mr.michiru": {
+      "mist": {
+        "dmm_prefix": "1",
+        "sample": "MIST-523"
+      }
+    },
+    "NANA": {
+      "seven": {
+        "dmm_prefix": "1",
+        "sample": "SEVEN-036"
+      }
+    },
+    "NON": {
+      "ysn": {
+        "dmm_prefix": "h_127",
+        "sample": "YSN-661"
+      }
+    },
+    "Natural High": {
+      "nhdtc": {
+        "dmm_prefix": "1",
+        "sample": "NHDTC-219"
+      }
+    },
+    "OFFICE K’S": {
+      "doks": {
+        "dmm_prefix": "36",
+        "sample": "DOKS-681"
+      }
+    },
+    "Offside Trap": {
+      "oftr": {
+        "dmm_prefix": "1",
+        "sample": "OFTR-012"
+      }
+    },
+    "Olympus": {
+      "olm": {
+        "dmm_prefix": "h_1757",
+        "sample": "OLM-343M"
+      }
+    },
+    "Oppai Gold": {
+      "opg": {
+        "dmm_prefix": "h_1157",
+        "sample": "opg-0029-03"
+      }
+    },
+    "Peters": {
+      "ptes": {
+        "dmm_prefix": "h_021",
+        "sample": "PTES-024"
+      },
+      "pts": {
+        "dmm_prefix": "h_021",
+        "sample": "PTS-551"
+      }
+    },
+    "Planet Plus": {
+      "nact": {
+        "dmm_prefix": "h_237",
+        "sample": "NACT-160"
+      },
+      "nacx": {
+        "dmm_prefix": "h_237",
+        "sample": "NACX-174"
+      },
+      "zmar": {
+        "dmm_prefix": "h_237",
+        "sample": "ZMAR-163"
+      }
+    },
+    "Plum": {
+      "cb": {
+        "dmm_prefix": "h_113",
+        "sample": "CB-125"
+      },
+      "sy": {
+        "dmm_prefix": "h_113",
+        "sample": "SY-225"
+      }
+    },
+    "Primo": {
+      "pmft": {
+        "dmm_prefix": "h_283",
+        "sample": "PMFT-444"
+      },
+      "pym": {
+        "dmm_prefix": "h_283",
+        "sample": "PYM-572"
+      }
+    },
+    "REbecca": {
+      "rebd": {
+        "dmm_prefix": "h_346",
+        "sample": "REBD-1053"
+      }
+    },
+    "ROCKET": {
+      "rctd": {
+        "dmm_prefix": "1",
+        "sample": "RCTD-741"
+      }
+    },
+    "Radix": {
+      "neo": {
+        "dmm_prefix": "433",
+        "sample": "NEO-951"
+      }
+    },
+    "SEX MACHINE": {
+      "tpi": {
+        "dmm_prefix": "h_1422",
+        "sample": "TPI-244"
+      }
+    },
+    "SHIGEKI": {
+      "sgki": {
+        "dmm_prefix": "1",
+        "sample": "SGKI-094"
+      }
+    },
+    "SILK LABO": {
+      "silk": {
+        "dmm_prefix": "1",
+        "sample": "SILK-204-2"
+      }
+    },
+    "SOD": {
+      "sdam": {
+        "dmm_prefix": "1",
+        "sample": "SDAM-175"
+      },
+      "sdjs": {
+        "dmm_prefix": "1",
+        "sample": "SDJS-371"
+      },
+      "sdmm": {
+        "dmm_prefix": "1",
+        "sample": "SDMM-234"
+      },
+      "sdnm": {
+        "dmm_prefix": "1",
+        "sample": "SDNM-552"
+      },
+      "stars": {
+        "dmm_prefix": "1",
+        "sample": "STARS-627"
+      },
+      "start": {
+        "dmm_prefix": "1",
+        "sample": "START-605"
+      }
+    },
+    "SOD Create": {
+      "mogi": {
+        "dmm_prefix": "1",
+        "sample": "MOGI-160"
+      },
+      "sdab": {
+        "dmm_prefix": "1",
+        "sample": "SDAB-351"
+      },
+      "sddm": {
+        "dmm_prefix": "1",
+        "sample": "SDDM-497"
+      }
+    },
+    "SWITCH": {
+      "sw": {
+        "dmm_prefix": "1",
+        "sample": "SW-1060"
+      }
+    },
+    "Sadistic Village": {
+      "svmgm": {
+        "dmm_prefix": "1",
+        "sample": "SVMGM-051"
+      }
+    },
+    "TMA": {
+      "id": {
+        "dmm_prefix": "h_113",
+        "sample": "ID-060"
+      },
+      "tmavr": {
+        "dmm_prefix": "55",
+        "sample": "TMAVR-284"
+      }
+    },
+    "VERONICA": {
+      "vrnc": {
+        "dmm_prefix": "1",
+        "sample": "VRNC-093"
+      }
+    },
+    "VIP": {
+      "godr": {
+        "dmm_prefix": "78",
+        "sample": "GODR-1267"
+      },
+      "hhh": {
+        "dmm_prefix": "78",
+        "sample": "HHH-418"
+      }
+    },
+    "WAAP Salon": {
+      "aifxd": {
+        "dmm_prefix": "h_1639",
+        "sample": "AIFXD-041"
+      }
+    },
+    "Wanz Factory": {
+      "ie": {
+        "dmm_prefix": "3",
+        "sample": "IE-115"
+      }
+    },
+    "Youare": {
+      "koja": {
+        "dmm_prefix": "1",
+        "sample": "KOJA-055"
+      }
+    },
+    "ZOOO": {
+      "zooo": {
+        "dmm_prefix": "h_1515",
+        "sample": "ZOOO-281"
+      }
+    },
+    "あいすまん": {
+      "beaf": {
+        "dmm_prefix": "h_1615",
+        "sample": "BEAF-222"
+      }
+    },
+    "いきなりエロざんまい": {
+      "bdsr": {
+        "dmm_prefix": "57",
+        "sample": "BDSR-500-01"
+      },
+      "bdst": {
+        "dmm_prefix": "57",
+        "sample": "BDST-111-01"
+      },
+      "husr": {
+        "dmm_prefix": "57",
+        "sample": "HUSR-304-04"
+      },
+      "hust": {
+        "dmm_prefix": "57",
+        "sample": "HUST-082-02"
+      },
+      "itsr": {
+        "dmm_prefix": "57",
+        "sample": "ITSR-153-03"
+      },
+      "sgsr": {
+        "dmm_prefix": "57",
+        "sample": "SGSR-401-06"
+      }
+    },
+    "うらキン": {
+      "urkn": {
+        "dmm_prefix": "1",
+        "sample": "URKN-014"
+      }
+    },
+    "ぎがdeれいん": {
+      "jjgg": {
+        "dmm_prefix": "h_1758",
+        "sample": "JJGG-004"
+      }
+    },
+    "しろうと派遣.com": {
+      "siron": {
+        "dmm_prefix": "h_1492",
+        "sample": "SIRON-090"
+      }
+    },
+    "なまなま": {
+      "namh": {
+        "dmm_prefix": "1",
+        "sample": "NAMH-069"
+      }
+    },
+    "ひょっとこアへ顔でフェラする女": {
+      "htf": {
+        "dmm_prefix": "h_1728",
+        "sample": "HTF-038"
+      }
+    },
+    "アテナ映像": {
+      "aias": {
+        "dmm_prefix": "149",
+        "sample": "AIAS-359"
+      },
+      "rd": {
+        "dmm_prefix": "149",
+        "sample": "RD-1361"
+      }
+    },
+    "アマTV": {
+      "erkr": {
+        "dmm_prefix": "h_1838",
+        "sample": "ERKR-1119"
+      }
+    },
+    "アングラ本舗": {
+      "ugh": {
+        "dmm_prefix": "h_1795",
+        "sample": "UGH-050"
+      }
+    },
+    "カマタ映像": {
+      "kmds": {
+        "dmm_prefix": "h_1380",
+        "sample": "KMDS-20702"
+      }
+    },
+    "サディヴィレナウ！": {
+      "king": {
+        "dmm_prefix": "1",
+        "sample": "KING-334"
+      },
+      "totte": {
+        "dmm_prefix": "1",
+        "sample": "TOTTE-305"
+      }
+    },
+    "ズボズバ": {
+      "zzza": {
+        "dmm_prefix": "h_1510",
+        "sample": "ZZZA-002"
+      }
+    },
+    "ティッシュシコレール": {
+      "tssr": {
+        "dmm_prefix": "h_1825",
+        "sample": "TSSR-045-09"
+      }
+    },
+    "ディレクターズ": {
+      "lkb": {
+        "dmm_prefix": "1",
+        "sample": "LKB-153"
+      }
+    },
+    "ネクスト": {
+      "doki": {
+        "dmm_prefix": "h_1664",
+        "sample": "DOKI-036"
+      },
+      "kanz": {
+        "dmm_prefix": "h_1664",
+        "sample": "KANZ-347"
+      },
+      "ofku": {
+        "dmm_prefix": "h_1664",
+        "sample": "OFKU-247"
+      },
+      "spz": {
+        "dmm_prefix": "h_1664",
+        "sample": "SPZ-1177"
+      },
+      "vnds": {
+        "dmm_prefix": "h_1664",
+        "sample": "VNDS-5237"
+      }
+    },
+    "ペロネ": {
+      "esk": {
+        "dmm_prefix": "h_1651",
+        "sample": "esk09-4"
+      },
+      "hnf": {
+        "dmm_prefix": "h_1651",
+        "sample": "hnf06-2"
+      },
+      "kist": {
+        "dmm_prefix": "h_1651",
+        "sample": "kist05-1"
+      },
+      "y": {
+        "dmm_prefix": "h_1651",
+        "sample": "Y-402"
+      }
+    },
+    "ムラっch": {
+      "grmo": {
+        "dmm_prefix": "h_1534",
+        "sample": "GRMO-333"
+      }
+    },
+    "メディアブランド": {
+      "mbdd": {
+        "dmm_prefix": "301",
+        "sample": "MBDD-2187"
+      }
+    },
+    "メンエス・オナクラ盗撮": {
+      "msoc": {
+        "dmm_prefix": "h_1832",
+        "sample": "MSOC-061"
+      }
+    },
+    "モデスト": {
+      "tr": {
+        "dmm_prefix": "h_125",
+        "sample": "TR-2621"
+      }
+    },
+    "ルーブル": {
+      "lou": {
+        "dmm_prefix": "h_1802",
+        "sample": "LOU-121"
+      }
+    },
+    "ワー": {
+      "awaw": {
+        "dmm_prefix": "h_1819",
+        "sample": "AWAW-025"
+      }
+    },
+    "ヲナサポベスト": {
+      "ncmc": {
+        "dmm_prefix": "h_1836",
+        "sample": "NCMC-043"
+      }
+    },
+    "一角獣": {
+      "fto": {
+        "dmm_prefix": "h_1784",
+        "sample": "FTO-051"
+      }
+    },
+    "中目黒人妻メンズエステ": {
+      "nhmsg": {
+        "dmm_prefix": "h_1597",
+        "sample": "NHMSG-117"
+      }
+    },
+    "五次元": {
+      "goji": {
+        "dmm_prefix": "h_1729",
+        "sample": "GOJI-108"
+      }
+    },
+    "俺の素人-Z- SECOND IMPACT": {
+      "orecs": {
+        "dmm_prefix": "h_1732",
+        "sample": "ORECS-621"
+      }
+    },
+    "光夜蝶": {
+      "yst": {
+        "dmm_prefix": "540",
+        "sample": "YST-354"
+      }
+    },
+    "切り売りのおかず屋さん": {
+      "sbp": {
+        "dmm_prefix": "1",
+        "sample": "SBP-394"
+      }
+    },
+    "夕焼けジェラシー": {
+      "jera": {
+        "dmm_prefix": "1",
+        "sample": "JERA-036"
+      }
+    },
+    "熟女LABO": {
+      "meko": {
+        "dmm_prefix": "h_1160",
+        "sample": "MEKO-403"
+      }
+    },
+    "穢土-EDO-": {
+      "emth": {
+        "dmm_prefix": "h_1638",
+        "sample": "EMTH-265"
+      }
+    },
+    "素人39": {
+      "stsk": {
+        "dmm_prefix": "h_1605",
+        "sample": "STSK-235"
+      }
+    },
+    "素人CLOVER": {
+      "stcvs": {
+        "dmm_prefix": "1",
+        "sample": "STCVS-049"
+      }
+    },
+    "素人Pro": {
+      "spro": {
+        "dmm_prefix": "h_1594",
+        "sample": "SPRO-180"
+      }
+    },
+    "親父の個撮": {
+      "okb": {
+        "dmm_prefix": "1",
+        "sample": "OKB-192"
+      },
+      "okk": {
+        "dmm_prefix": "1",
+        "sample": "OKK-119"
+      },
+      "oks": {
+        "dmm_prefix": "1",
+        "sample": "OKS-196"
+      }
+    },
+    "赤面女子": {
+      "skmj": {
+        "dmm_prefix": "h_1324",
+        "sample": "SKMJ-760"
+      }
+    }
+  }
+}

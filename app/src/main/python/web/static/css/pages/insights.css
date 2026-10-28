@@ -1,0 +1,1342 @@
+/* Insights - 片庫分析頁面 CSS (156a-T3 / 156b-T3) */
+
+/* stylelint-disable color-no-hex -- 片商分類色盤 source-of-truth token，色值取自
+   poc/index.sonnet4.html 設計稿、非由既有 --color-* token 衍生；echarts.min.js 不支援
+   oklch()（見上方說明），刻意維持 hex 字面而非轉換，2026-09-25 */
+:root {
+  --insights-maker-1: #2a78d6; --insights-maker-2: #eb6834; --insights-maker-3: #1baf7a;
+  --insights-maker-4: #eda100; --insights-maker-5: #e87ba4; --insights-maker-6: #008300;
+  --insights-maker-7: #4a3aa7; --insights-maker-8: #e34948;
+}
+[data-theme="dim"] {
+  --insights-maker-1: #3987e5; --insights-maker-2: #d95926; --insights-maker-3: #199e70;
+  --insights-maker-4: #c98500; --insights-maker-5: #d55181; --insights-maker-6: #008300;
+  --insights-maker-7: #9085e9; --insights-maker-8: #e66767;
+}
+/* stylelint-enable color-no-hex */
+
+/* Page Container */
+.insights-container {
+    /* TASK-156e-F2：掉榜替身／飛行頭像改掛這裡當直接子元素，
+       用 position:absolute + 容器相對座標飛行/淡出。position:relative 只建立
+       定位祖先，不影響 flex 版面；.insights-preview 是 position:fixed（不吃
+       transform/filter 以外的祖先影響），.gantt-name-cell 的 position:sticky
+       吃的是更近的 .gantt-wrap（overflow:auto）scroll 容器，兩者都不受影響。 */
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-block: 0.5rem 1.5rem;
+    padding-inline: var(--layer-inset);
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+/* Fluent Card Styling (settings.css:19-46) */
+.insights-container .card {
+    border: 1px solid var(--stroke-default);
+    border-radius: var(--radius-lg);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+        var(--fluent-shadow-4);
+    overflow: hidden;
+    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+}
+
+[data-theme="dim"] .insights-container .card {
+    background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
+}
+
+.insights-container .card-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem 0.25rem;
+    gap: 0.5rem;
+}
+
+.insights-container .card-head h2 {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    margin: 0;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+.insights-container .card-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    padding: 0.25rem 0.75rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    color: var(--text-primary);
+}
+
+/* ===== Row 1: 常駐五格 ===== */
+.insights-container .row1 {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.insights-container .row1 .card {
+    min-height: 100px;
+}
+
+.insights-container .row1 .card-body {
+    justify-content: center;
+    padding: 0.5rem 0.75rem;
+}
+
+/* OpenAver 品牌格：滿版字樣，視覺份量對齊旁邊片數數字（156d-T1 / CD-156d-8）
+   .card-body 沿用 base（column + stretch）＋ .row1 .card-body 的 justify-content:center
+   垂直置中；不再需要 row-direction/space-between（原本服務「文字 vs 空按鈕位」兩個子元素，
+   移除空按鈕位後只剩一個子元素，交給 stretch 預設值即可滿版寬度）。*/
+.insights-brand-row {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.insights-brand-row .title {
+    /* vw-based 線性擬合（非任意值）：對這格 .card-body 內容寬（扣 padding）在 1025–1440
+       三個實測寬度做最小平方回歸，目標是文字 scrollWidth 落在內容寬 80%–100%（spec-156d
+       §3.1，主 session 2026-09-27 裁決）。斷點切換時內容寬跳變（4欄→2欄→1欄，格子變寬），
+       字級隨之跳變是該跳變的必然結果，不是校準誤差。
+       161a-T7：頂排由四格改五格，格寬縮小，係數依 1025／1280／1440 實測（文字寬約 4.95×字級）重擬合，
+       目標 scrollWidth ≈ 內容寬 91%。 */
+    font-size: clamp(1.5rem, calc(3.7vw - 12.5px), 3.3rem);
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 常駐五格共用字級（片數數字／年份選中值／焦點名字）——單一 class，spec §3.1 */
+.insights-container .insights-tile-value {
+    font-size: 2.75rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+}
+
+.insights-container .insights-big-number {
+    display: flex;
+    align-items: baseline;
+    gap: 0.375rem;
+}
+
+.insights-container .insights-tile-unit {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* TASK-161a-T7：片數格可點態（游標＋既有淡染＋陰影升一階；停用態不另寫規則） */
+.insights-container #tileCount {
+    cursor: default;
+}
+
+.insights-container #tileCount.is-clickable {
+    cursor: pointer;
+    transition: box-shadow var(--duration-fast) var(--fluent-ease-standard);
+}
+
+.insights-container #tileCount.is-clickable.is-scoped {
+    background-image: linear-gradient(
+        color-mix(in oklch, var(--color-primary) 3%, transparent),
+        color-mix(in oklch, var(--color-primary) 3%, transparent)
+    );
+}
+
+.insights-container #tileCount.is-clickable:hover {
+    background-image: linear-gradient(
+        color-mix(in oklch, var(--color-primary) 6%, transparent),
+        color-mix(in oklch, var(--color-primary) 6%, transparent)
+    );
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+        var(--fluent-shadow-8);
+}
+
+/* 「↗」只在可點時顯示（純符號、aria-hidden；不用 x-show，FE-ALPINE-17） */
+.insights-container #tileCount .insights-open-arrow {
+    display: none;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text-muted);
+}
+
+.insights-container #tileCount.is-clickable .insights-open-arrow {
+    display: inline;
+}
+
+.insights-container #tileCount.is-clickable.is-scoped .insights-open-arrow {
+    color: var(--text-primary); /* ↗ 與數字同字色 */
+}
+
+.insights-container .insights-tile-error-msg {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+/* 片數格主數字下方小字「全庫 N 部」（spec §3.1） */
+.insights-container .insights-tile-sub {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+.insights-container .insights-year-value {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.insights-container .insights-muted-big {
+    font-size: 2.25rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+}
+
+.insights-container .insights-focus-row {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 0;
+    width: 100%;
+}
+
+.insights-container .insights-focus-main {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.insights-container .insights-focus-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.insights-container .insights-focus-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    overflow: hidden;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+}
+
+.insights-container .insights-focus-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.insights-container .insights-focus-avatar.mk {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+/* 177-T4：焦點卡頭像格的收藏愛心。元件本體預設 44x56 會撐破 52px 圓形槽，
+   這裡只覆寫尺寸；色票／透明度沿用 actress-add-panel.css。
+   :focus-visible 的全站 outline／box-shadow 畫在邊框外，會被槽的 overflow:hidden 整圈裁掉，
+   改成內縮，鍵盤 Tab 到愛心才看得到焦點框。
+   hover 打亮在元件本體綁 .actress-add-row:hover，分析頁沒有 row，這裡補同一組數值。 */
+.insights-container .insights-focus-avatar .actress-add-heart {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+}
+
+.insights-container .insights-focus-avatar .actress-add-heart:focus-visible {
+    outline-offset: -2px;
+    box-shadow: none;
+    opacity: 1;
+    color: var(--color-favorite);
+}
+
+@media (hover: hover) {
+    .insights-container .insights-focus-avatar .actress-add-heart:hover:not(:disabled) {
+        opacity: 1;
+        color: var(--color-favorite);
+    }
+}
+
+.insights-container .insights-x-btn {
+    border: none;
+    background: var(--surface-2);
+    color: var(--text-secondary);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 0.8125rem;
+    line-height: 1;
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.insights-container .insights-x-btn:hover {
+    color: var(--text-primary);
+}
+
+/* ===== Row 2: 年份長條 + 片商甜甜圈 ===== */
+.insights-container .row2 {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 0.5rem;
+    align-items: stretch;
+    min-width: 0;
+}
+
+.insights-container .years-chart-wrap {
+    flex: 1 1 auto;
+    min-height: 220px;
+    position: relative;
+    cursor: pointer;
+}
+
+.insights-container .donut-head-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+}
+
+.insights-container .donut-legend {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    line-height: 1.3;
+}
+
+.insights-container .donut-chart-wrap {
+    flex: 1 1 auto;
+    min-height: 220px;
+    position: relative;
+}
+
+.insights-container .echart {
+    width: 100%;
+    height: 100%;
+}
+
+/* ===== Row 3: 女優榜（頒獎台＋精簡名單）+ 標籤 treemap ===== */
+.insights-container .row3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    align-items: stretch;
+    min-width: 0;
+}
+
+/* TASK-156d-T2：row3 左半格從單一 board-card 拆成頒獎台／精簡名單兩張卡，
+   兩卡在 row3 的 1fr 欄位裡當一個 grid item，內部自己上下堆疊。 */
+.insights-container .board-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+/* TASK-156d-T3／CD-156d-2：row3 左半格是單一 grid item（.row3-board-slot），
+   內部兩個佔用者（副本 A wrapper／#costarCard）任何時刻只顯示一個，用 :class
+   切換 .is-hidden，不用 x-show（FE-ALPINE-17：vendored Alpine 的 x-show 結構上
+   晚一幀且一翻轉就立即 display:none，來不及讓淡出播完）。 */
+.insights-container .row3-board-slot {
+    display: flex;
+    min-width: 0;
+}
+
+/* P3 修正（156d Codex review）：原本這裡是 display:contents，讓既有 .board-group
+   （T2 已定，flex column，本卡不重寫）直接當 .row3-board-slot 的 flex item——但
+   display:contents 沒有可繪製的盒子，`_handleActressFocusChange`（state.js）對
+   它 `motion.playFadeTo(opacity)` 完全沒有視覺效果（CDP 實測：子元素
+   `.podium-slot` 的 computed opacity 全程仍是 1，wrapper 自己的 opacity 補間
+   降到 0 後直接跳 display:none，使用者看到的是「舊卡片維持不透明到動畫結束那
+   一瞬間直接消失」，不是淡出）。改 display:flex 讓 wrapper 自己有盒子承接
+   opacity；width:100% 補回主軸（水平）尺寸（理由同下方 .board-group/#costarCard
+   的 width:100% 規則）。.row3-board-slot 預設 align-items:stretch 依然讓這個
+   wrapper 桌面撐滿 --board-slot-h、窄螢幕維持自然高度，wrapper 內部同一個
+   stretch 再把高度傳給唯一子元素 .board-group（它沒有覆寫 height/align-self）
+   ——1440／390 寬 CDP 實測修正前後幾何零差異。 */
+.insights-container .board-row3-wrap {
+    display: flex;
+    width: 100%;
+}
+
+/* 三個可切換顯示元素共用的顯示開關（row3 副本 A wrapper／#costarCard／row7 副本 B
+   wrapper）。用 !important 蓋過 .board-row3-wrap／.card 的 display:flex（沿用
+   既有 [x-cloak]{display:none!important} 慣例，見 input.css:182）。 */
+.insights-container .is-hidden {
+    display: none !important;
+}
+
+/* 156d-T3 定稿輪數 2 修正（主 session 用幾何 oracle 抓到）：row3-board-slot 是
+   flex row，單一可見佔用者（.board-group／#costarCard）預設主軸（水平）尺寸是
+   content-based shrink-to-fit，不會自動撐滿整格寬度——先前只有 costarCard 露餡
+   （縮在左上角，右側與下方全是空洞；.board-group 的內容湊巧夠寬，目測沒發現同一個
+   問題），兩者都明確 width:100% 才不靠內容寬度巧合。
+   高度：原本 #costarCard 有一條「CD-156c-6：align-self:start，自然高度不被拉伸」
+   規則，那是舊 row6（costarCard 與分布表並列兩個 grid item）的產物；T3 搬進
+   row3-board-slot 後，同一時刻只有一個可見佔用者，不再有「被更高的鄰居拉伸」的
+   問題，align-self:start 反而擋住桌面 --board-slot-h 固定高度該有的撐滿行為，
+   已整條移除——移除後預設 align-items:stretch 生效：桌面（插槽有 height:
+   var(--board-slot-h)）撐滿固定格，窄螢幕（插槽無固定高度、單一可見項）stretch
+   對唯一項是 no-op，等同自然高度，兩種斷點各自正確、不需要額外的 media query。 */
+.insights-container .row3-board-slot .board-group,
+.insights-container .row3-board-slot #costarCard {
+    width: 100%;
+}
+
+/* D156d-9：row3 左半格桌面固定高度、窄螢幕自然高度（真互斥，FE-CSS-22，與下方
+   @media (max-width:1024px) 不重疊，1024／1025 邊界各驗一次）。calc() 由既有 rem
+   常數組成，不是量出來的 px 魔術數字；使用者放大瀏覽器字級時要等比例放大，
+   名單列不能因此擠出捲動。組成（1440 寬 CDP 實測校準）：
+   頒獎台卡（頭 + .podium min-height 9.25rem + 內距）＋精簡名單卡頭與內距＋
+   名單列數由 --board-rest-rows 決定，乘以單列實測高度＋兩卡間 gap（.board-group 0.5rem）。 */
+@media (min-width: 1025px) {
+    .insights-container {
+        /* 頒獎台卡（head+podium+內距）＋精簡名單卡自己的 head/內距與 list-rows
+           以外的開銷合計 17rem（CDP 實測校準，補回名單內容高度落差並留一點餘裕）＋
+           由 --board-rest-rows 決定的名單列數 × 單列實測高度 2.5625rem＋兩卡間 gap 0.5rem。 */
+        --board-slot-h: calc(17rem + var(--board-rest-rows) * 2.5625rem + 0.5rem);
+    }
+
+    .insights-container .row3-board-slot {
+        height: var(--board-slot-h);
+    }
+}
+
+/* 女優榜列（TASK-156b-T5）——名字與片數共用字級來源 */
+.insights-container {
+    --board-rest-rows: 20;
+}
+
+.insights-container.is-podium-3 {
+    --board-rest-rows: 22;
+}
+
+.insights-container {
+    --board-text-size: 0.8125rem;
+    --insights-preview-ratio: 0.8;
+}
+
+.insights-container .board-rank {
+    width: 1.25rem;
+    flex: 0 0 auto;
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.insights-container .board-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    overflow: hidden;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.insights-container .board-avatar img,
+.insights-container .podium-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.insights-container .board-text {
+    font-size: var(--board-text-size);
+    font-weight: 700;
+}
+
+.insights-container .board-name {
+    width: 6.875rem;
+    flex: 0 0 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.insights-container .board-count {
+    width: 2.5rem;
+    flex: 0 0 auto;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.insights-container .board-empty {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    padding: 0.75rem 0.25rem;
+}
+
+/* 頒獎台（TASK-156e-T1a／CD-156e-1 v3 方案 A：台座層＋人員層 CSS Grid 疊放；
+   人員層 flex + order 視覺重排成左2／中1／右3） */
+.insights-container .podium {
+    flex: 1 1 auto;
+    min-height: 148px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    padding-top: 0.5rem;
+    position: relative;
+}
+
+.insights-container .podium-stands,
+.insights-container .podium-people {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 1rem;
+    min-width: 0;
+    width: 100%;
+}
+
+.insights-container .podium-stands {
+    z-index: 0;
+    pointer-events: none;
+}
+
+.insights-container .podium-people {
+    z-index: 1;
+}
+
+.insights-container .podium-stand--2 {
+    order: 1;
+}
+
+.insights-container .podium-stand--1 {
+    order: 2;
+}
+
+.insights-container .podium-stand--3 {
+    order: 3;
+}
+
+.insights-container .podium > .board-empty {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+    justify-self: center;
+}
+
+.insights-container .podium-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    width: 5.5rem;
+    min-width: 0;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    padding: 0.25rem 0.25rem 0;
+    box-sizing: border-box;
+}
+
+/* FE-CSS-27：人員節點 order（必須在 .podium-slot 之後，避免被 shorthand padding 蓋掉）。
+   padding-bottom = 對應台座高度 + 原 slot gap(0.25rem)，讓頭像/名字/片數貼在台座上緣上方。 */
+.insights-container .podium-slot--left {
+    order: 1;
+    padding-bottom: calc(56px + 0.25rem);
+}
+
+.insights-container .podium-slot--center {
+    order: 2;
+    padding-bottom: calc(72px + 0.25rem);
+}
+
+.insights-container .podium-slot--right {
+    order: 3;
+    padding-bottom: calc(40px + 0.25rem);
+}
+
+.insights-container .podium-slot:hover {
+    background: color-mix(in oklch, var(--color-primary) 6%, transparent);
+}
+
+.insights-container .podium-slot.is-active {
+    background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+}
+
+.insights-container .podium-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    overflow: hidden;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.insights-container .podium-name {
+    font-size: var(--board-text-size);
+    font-weight: 700;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.insights-container .podium-count {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 台座是獨立可定位元素（不與頭像/名字/片數合併），供進場 scaleY 動效；
+   三階固定高度（8pt grid），中間最高，不按名次片數比例。
+   方案 A 下台座寬度與人員節點同寬（5.5rem），不再吃父層 100%。 */
+.insights-container .podium-stand {
+    width: 5.5rem;
+    flex: 0 0 5.5rem;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 0.375rem;
+    border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+    background: color-mix(in oklch, var(--color-primary) 16%, var(--surface-2));
+    box-sizing: border-box;
+}
+
+.insights-container .podium-stand--1 {
+    height: 72px;
+    background: color-mix(in oklch, var(--color-primary) 26%, var(--surface-2));
+}
+
+.insights-container .podium-stand--2 {
+    height: 56px;
+}
+
+.insights-container .podium-stand--3 {
+    height: 40px;
+}
+
+.insights-container .podium-rank {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* TASK-161b-T4：五人版兩層共用間距與槽寬，三人版沿用既有宣告。 */
+.insights-container .podium--5 .podium-stands,
+.insights-container .podium--5 .podium-people {
+    column-gap: 0.5rem;
+}
+
+.insights-container .podium--5 .podium-slot,
+.insights-container .podium--5 .podium-stand {
+    width: auto;
+    flex: 0 1 5.5rem;
+    min-width: calc(5 * var(--board-text-size) + 0.75rem);
+}
+
+.insights-container .podium--5 .podium-slot--far-left {
+    order: 0;
+    padding-bottom: calc(24px + 0.25rem);
+}
+
+.insights-container .podium--5 .podium-slot--left {
+    order: 1;
+    padding-bottom: calc(56px + 0.25rem);
+}
+
+.insights-container .podium--5 .podium-slot--center {
+    order: 2;
+    padding-bottom: calc(72px + 0.25rem);
+}
+
+.insights-container .podium--5 .podium-slot--right {
+    order: 3;
+    padding-bottom: calc(40px + 0.25rem);
+}
+
+.insights-container .podium--5 .podium-slot--far-right {
+    order: 4;
+    padding-bottom: calc(24px + 0.25rem);
+}
+
+.insights-container .podium--5 .podium-stand--4 {
+    height: 24px;
+    order: 0;
+}
+
+.insights-container .podium--5 .podium-stand--5 {
+    height: 24px;
+    order: 4;
+}
+
+/* 精簡名單（第 4–20 名）——形狀照舊女優榜排行列，拿掉長條相關兩個節點 */
+.insights-container .board-rest-list {
+    flex: 1 1 auto;
+    min-height: 220px;
+}
+
+.insights-container .board-rest-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.125rem;
+    border-bottom: 1px solid var(--stroke-subtle);
+    cursor: pointer;
+    min-width: 0;
+}
+
+.insights-container .board-rest-row:last-child {
+    border-bottom: none;
+}
+
+.insights-container .board-rest-row:hover {
+    background: color-mix(in oklch, var(--color-primary) 6%, transparent);
+}
+
+.insights-container .board-rest-row.is-active {
+    background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+}
+
+/* Codex review P2（156d-T2）：拿掉長條後 .board-rest-row 沒有東西撐開列寬，片數貼不到右緣。
+   只在 .board-rest-row 範圍內覆寫，不動共用的 .board-name 全域規則（其他呼叫處维持原寬）。 */
+.insights-container .board-rest-row .board-name {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* 全頁共用照片預覽浮層（position:fixed，不佔文件流） */
+.insights-preview {
+    position: fixed;
+    z-index: 40;
+    width: 160px;
+    pointer-events: none;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--fluent-shadow-16);
+    background: var(--surface-1);
+    border: 1px solid var(--stroke-default);
+    box-sizing: border-box;
+}
+
+.insights-preview-photo {
+    width: 160px;
+    height: 200px;
+    overflow: hidden;
+    background: var(--surface-2);
+}
+
+.insights-preview-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.insights-preview-name {
+    box-sizing: border-box;
+    height: 22px;
+    padding: 0 0.5rem;
+    display: flex;
+    align-items: center;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.insights-container .treemap-card .tags-coverage-hint,
+.insights-container .row4-card .tags-coverage-hint {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.insights-container .tags-pulled {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    flex: 0 0 auto;
+    margin-bottom: 0.125rem;
+    line-height: 1.4;
+}
+
+.insights-container .tags-pulled:empty {
+    display: none;
+}
+
+.insights-container .tags-pulled .tags-pulled-chip {
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+
+.insights-container .tags-pulled .tags-pulled-chip:hover {
+    text-decoration: underline;
+}
+
+.insights-container .tags-pulled .tags-pulled-chip:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.insights-container .treemap-chart-wrap {
+    flex: 1 1 auto;
+    min-height: 360px;
+    position: relative;
+}
+
+/* ===== Row 4: 年齡 / 導演 / 系列 ===== */
+.insights-container .row4 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.insights-container .age-chart-wrap,
+.insights-container .bar-chart-wrap {
+    flex: 1 1 auto;
+    min-height: 200px;
+    position: relative;
+}
+
+/* ===== Section Divider ===== */
+.insights-container .section-divider {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 0.25rem 0.25rem 0;
+    letter-spacing: 0.02em;
+}
+
+/* ===== Row 5: 主要片商年表（全寬） ===== */
+.insights-container .row5 {
+    display: grid;
+    grid-template-columns: 1fr;
+    min-width: 0;
+}
+
+.insights-container .gantt-card {
+    grid-column: 1 / -1;
+    width: 100%;
+}
+
+.insights-container .gantt-card .card-head {
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.insights-container .gantt-wrap {
+    flex: 1 1 auto;
+    min-height: 120px;
+    overflow: auto;
+}
+
+.insights-container .gantt-table {
+    --gantt-name-w: 7.5rem;
+    --gantt-cell-min-w: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 100%;
+    font-size: 0.6875rem;
+}
+
+.insights-container .gantt-row {
+    display: grid;
+    align-items: center;
+}
+
+.insights-container .gantt-row:not(.gantt-head-row) {
+    cursor: pointer;
+}
+
+.insights-container .gantt-row.is-active .gantt-name-cell {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.insights-container .gantt-name-cell {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    width: var(--gantt-name-w);
+    min-width: var(--gantt-name-w);
+    padding: 0.125rem 0.375rem 0.125rem 0;
+    background: var(--surface-1);
+    color: var(--text-secondary);
+    overflow: hidden;
+}
+
+.insights-container .gantt-head-label {
+    height: 1.25rem;
+}
+
+.insights-container .gantt-avatar {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: var(--radius-pill);
+    flex: 0 0 auto;
+    overflow: hidden;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.625rem;
+    color: var(--text-secondary);
+}
+
+.insights-container .gantt-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.insights-container .gantt-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.insights-container .gantt-head-cell {
+    min-width: var(--gantt-cell-min-w);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.625rem;
+    padding-bottom: 0.125rem;
+    white-space: nowrap;
+}
+
+.insights-container .gantt-head-cell.is-selected {
+    background: color-mix(in oklch, var(--color-primary) 10%, transparent);
+}
+
+.insights-container .gantt-cell {
+    min-width: var(--gantt-cell-min-w);
+    height: 1.375rem;
+    border-bottom: 1px solid var(--stroke-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+.insights-container .gantt-cell.is-dimmed {
+    opacity: 0.35;
+}
+
+.insights-container .gantt-cell--main {
+    border-radius: var(--fluent-radius-md);
+}
+
+.insights-container .gantt-cell--dot::after {
+    content: '';
+    width: 0.3125rem;
+    height: 0.3125rem;
+    border-radius: var(--radius-pill);
+    background: var(--text-muted);
+    opacity: 0.55;
+}
+
+.insights-container .gantt-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-end;
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+}
+
+.insights-container .gantt-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+}
+
+.insights-container .gantt-legend-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: var(--radius-pill);
+    flex: 0 0 auto;
+}
+
+.insights-container .insights-gantt-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in oklch, var(--surface-1) 60%, transparent);
+    border: 1px solid var(--stroke-subtle);
+    flex: 0 0 auto;
+}
+
+.insights-container .insights-gantt-toggle button {
+    padding: 0.25rem 0.75rem;
+    border-radius: calc(var(--radius-pill) - 2px);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: var(--font-size-sm, 0.85rem);
+    font-weight: 500;
+    line-height: 1.4;
+    transition: color var(--fluent-duration-fast) var(--fluent-ease-standard),
+                background var(--fluent-duration-fast) var(--fluent-ease-standard),
+                box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.insights-container .insights-gantt-toggle button:hover:not(.is-on) {
+    color: var(--text-primary);
+    background: color-mix(in oklch, var(--surface-2) 50%, transparent);
+}
+
+.insights-container .insights-gantt-toggle button.is-on {
+    background: color-mix(in oklch, var(--surface-2) 80%, transparent);
+    backdrop-filter: blur(var(--fluent-blur-light));
+    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    color: var(--text-primary);
+    box-shadow: var(--fluent-shadow-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .insights-container .insights-gantt-toggle button {
+        transition: none;
+    }
+}
+
+.insights-container .gantt-empty {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    padding: 0.5rem 0;
+}
+
+.insights-container .gantt-note {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    padding-top: 0.25rem;
+    flex: 0 0 auto;
+}
+
+/* ===== Row 6: 女優片商分布（「與她同片」TASK-156d-T3 搬進 row3 左半格插槽） ===== */
+/* TASK-156d-T3：row6 現在只剩分布表一張卡（「與她同片」搬去 row3 跟副本 A 共用插槽），
+   永遠獨佔整列——原本只在無女優焦點時（用一個現已移除的條件 class）套用的單欄＋
+   內部兩欄排列，現在是唯一狀態，直接併入 base rule（CD-156c-1／CD-156c-6 的排版
+   形狀不變，只是不再需要那個條件 class）。 */
+.insights-container .row6 {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.insights-container .row6 .list-rows {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 16px;
+    align-content: start;
+}
+
+.insights-container .list-rows {
+    flex: 1 1 auto;
+    min-height: 120px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 女優片商分布列（TASK-156c-T4）——DOM/CSS 形狀照 POC 同檔 .solo-row 系列，
+   class 名改用 .solo-segment 避免與其他卡撞名。 */
+.insights-container .solo-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 2px;
+    border-bottom: 1px solid var(--stroke-subtle);
+    cursor: pointer;
+    min-width: 0;
+}
+
+.insights-container .solo-row:last-child {
+    border-bottom: none;
+}
+
+.insights-container .solo-row:hover {
+    background: color-mix(in oklch, var(--color-primary) 6%, transparent);
+}
+
+.insights-container .solo-row.is-active {
+    background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+}
+
+.insights-container .solo-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    overflow: hidden;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.625rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.insights-container .solo-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.insights-container .solo-name {
+    width: 5.25rem;
+    flex: 0 0 auto;
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.insights-container .solo-bar-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 0.75rem;
+    background: var(--stroke-subtle);
+    border-radius: var(--radius-xs);
+    overflow: hidden;
+    display: flex;
+}
+
+.insights-container .solo-segment {
+    height: 100%;
+}
+
+.insights-container .solo-segment:not(:last-child) {
+    border-right: 2px solid var(--surface-1);
+    box-sizing: border-box;
+}
+
+.insights-container .solo-segment--other {
+    background: color-mix(in oklch, var(--color-base-content) 22%, transparent);
+}
+
+.insights-container .solo-segment--unknown {
+    background: color-mix(in oklch, var(--color-base-content) 12%, transparent);
+}
+
+.insights-container .solo-end {
+    width: 5.75rem;
+    flex: 0 0 auto;
+    text-align: right;
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 與她同片（TASK-156c-T5 / CD-156c-1／6） */
+.insights-container .costar-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 2px;
+    border-bottom: 1px solid var(--stroke-subtle);
+    cursor: pointer;
+    min-width: 0;
+}
+
+.insights-container .costar-row:last-child {
+    border-bottom: none;
+}
+
+.insights-container .costar-row:hover {
+    background: color-mix(in oklch, var(--color-primary) 6%, transparent);
+}
+
+.insights-container .costar-row.is-active {
+    background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+}
+
+.insights-container .costar-avatars {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+
+.insights-container .costar-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: var(--radius-pill);
+    flex: 0 0 auto;
+    overflow: hidden;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.625rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.insights-container .costar-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.insights-container .costar-names {
+    width: 9.5rem;
+    flex: 0 0 auto;
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.insights-container .costar-bar-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 0.75rem;
+    background: var(--stroke-subtle);
+    border-radius: var(--radius-xs);
+    overflow: hidden;
+}
+
+.insights-container .costar-bar {
+    display: block;
+    height: 100%;
+    background: var(--color-primary);
+    border-radius: var(--radius-xs);
+}
+
+.insights-container .costar-end {
+    width: 4rem;
+    flex: 0 0 auto;
+    text-align: right;
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.insights-container .solo-empty,
+.insights-container .costar-empty {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    padding: 0.75rem 0.25rem;
+}
+
+/* ===== Row 7：女優焦點期間頁尾多出現的頒獎台＋名單全貌
+   （TASK-156d-T3／CD-156d-2 副本 B，與 row3 副本 A 同一份資料、獨立可見性、不互斥） =====
+   全寬版面不需要重寫 .board-group 內部排版——.board-rest-row 的 .board-name 已在 T2
+   套用 flex:1 1 auto（Codex review P2 修正），.podium 本身 justify-content:center，
+   兩者在全寬容器下自然依既有規則撐開／置中，不需要額外 grid-template-columns。 */
+.insights-container .row7 {
+    min-width: 0;
+}
+
+/* TASK-156d-T9／CD-156d-10c：女優焦點時 row4（年齡/導演/系列）移到 row2 之後、
+   row3（標籤樹圖）之前；片商焦點或無焦點時維持現況（row4 在 row3 之後）。
+   `.insights-container` 是 flex column，全部「直接子元素」都先給明確基準
+   order（與目前 DOM 順序一致，視覺零改變），只交換 row3／row4 的 order 值——
+   只改 row4 一條規則會讓它排到所有預設 order:0 的 row 最前面，不是插入
+   row2／row3 之間。純 CSS 幾何屬性，不分寬度（見 CD-156d-10d），不加動畫。
+   `.insights-container` 的直接子元素共 9 個：row1-row7、`.section-divider`
+   （純文字分隔列，在 row4 與 row5 之間）、`.insights-preview`（女優照片
+   預覽浮層，`position:fixed`——不參與 flex 排版，out-of-flow，不受 order
+   影響，不需要給值）。`.section-divider` 的 order 固定在 row3/row4 那組
+   （3/4）之後、row5（6）之前，兩種模式下都夾在正確位置，不隨女優焦點切換。 */
+.insights-container .row1 { order: 1; }
+.insights-container .row2 { order: 2; }
+.insights-container .row3 { order: 3; }
+.insights-container .row4 { order: 4; }
+.insights-container .section-divider { order: 5; }
+.insights-container .row5 { order: 6; }
+.insights-container .row6 { order: 7; }
+.insights-container .row7 { order: 8; }
+
+.insights-container.is-actress-focused .row3 { order: 4; }
+.insights-container.is-actress-focused .row4 { order: 3; }
+
+/* ===== 響應式斷點 ===== */
+@media (max-width: 1024px) {
+    .insights-container .row1 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .insights-container .row1 > :last-child {
+        grid-column: 1 / -1;
+    }
+
+    .insights-container .row2,
+    .insights-container .row3,
+    .insights-container .row4,
+    .insights-container .row6 {
+        grid-template-columns: 1fr;
+    }
+
+    /* ≤1024（2 欄／1 欄皆含，640 斷點的同一條規則合併於此——max-width:640 恆蘊含
+       max-width:1024，不需重複宣告）：不再用內容寬回歸撐滿比例（640 單欄時內容寬暴衝到
+       551px，回歸值會把字級推到 99px，跟旁邊固定 44px 的「2,103」不成比例、還把整列拉爆）。
+       改成「份量與片數數字相當」：上限落在 .insights-tile-value 實際 computed 44px 的
+       1.0–1.25 倍（44–55px）之間，用純 rem/vw clamp 表達，不用回歸 calc（主 session
+       2026-09-27 二次裁決）。 */
+    .insights-brand-row .title {
+        font-size: clamp(2.25rem, 5vw, 3rem);
+    }
+}
+
+@media (max-width: 640px) {
+    .insights-container .row1 {
+        grid-template-columns: 1fr;
+    }
+}

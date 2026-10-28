@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en" data-oa-gate="1">
+<head>
+<meta charset="utf-8">
+<title></title>
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: #202124;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .g {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+  }
+  input {
+    width: 120px;
+    padding: 10px 14px;
+    font-size: 22px;
+    letter-spacing: 10px;
+    text-align: center;
+    color: #d0d0d0;
+    background: #2c2d30;
+    border: 1px solid #3c3d40;
+    border-radius: 4px;
+    outline: none;
+  }
+  input:focus {
+    border-color: #5c5d60;
+  }
+  svg {
+    opacity: 0.35;
+  }
+</style>
+</head>
+<body>
+<div class="g">
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" stroke="#5c5d60" stroke-width="1.5"></circle>
+    <path d="M12 7v5l3 3" stroke="#5c5d60" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+  </svg>
+  {# deliberately NOT type=password: that summons the browser's password-manager
+     UI (autofill chip / "save password?" prompt), which outs this page as a
+     login form and breaks the disguise. Do not "fix" this back.
+
+     autocapitalize=off is load-bearing, not cosmetic (T7fix): the PIN is 4
+     ASCII alphanumerics and the comparison is case-sensitive, so a phone
+     keyboard auto-capitalising the first letter silently turns "abcd" into
+     "Abcd" and the owner never gets in — on a page that shows no error by
+     design. There is deliberately no inputmode: forcing the numeric keypad
+     would make an alphanumeric PIN untypeable on a phone.
+
+     Written as a Jinja comment on purpose, never a raw HTML comment tag —
+     this page is server-rendered and a raw HTML comment survives into the
+     response body, where "view source" would hand a curious visitor this
+     exact explanation. A Jinja comment is stripped before the response is
+     ever sent, so it can only ever be read by someone reading this file. #}
+  <input id="v" maxlength="4" autocomplete="off" autocapitalize="off"
+         autocorrect="off" spellcheck="false" autofocus>
+</div>
+<script>
+(function () {
+  var el = document.getElementById('v');
+  var sent = false;
+  document.addEventListener('keydown', function (e) {
+    if (!window.pywebview) {
+      return;
+    }
+    var isF5 = e.key === 'F5';
+    var isCtrlR = (e.ctrlKey || e.metaKey) && typeof e.key === 'string' && e.key.toLowerCase() === 'r';
+    if (!isF5 && !isCtrlR) {
+      return;
+    }
+    e.preventDefault();
+    location.reload();
+  });
+  el.addEventListener('input', function () {
+    if (sent) {
+      return;
+    }
+    if (el.value.length === 4) {
+      sent = true;
+      fetch('/api/access/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: el.value })
+      }).catch(function () {}).finally(function () {
+        location.reload();
+      });
+    }
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,198 @@
+/* ==================== Image Grid - 5 段響應式斷點 ==================== */
+/* 參考 gallery_generator.py L1177-1216 */
+
+.showcase-grid,
+.actress-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+    padding: 1.5rem var(--layer-inset);
+
+    /* 防止卡片過寬 */
+    max-width: 100%;
+}
+
+/* 響應式斷點 - 5 段固定欄位 */
+
+/* 1500px+ → 5 columns */
+@media (min-width: 1500px) {
+    .showcase-grid {
+        grid-template-columns: repeat(5, 1fr);
+    }
+}
+
+/* 1100-1499px → 4 columns */
+@media (min-width: 1100px) and (max-width: 1499px) {
+    .showcase-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/* 900-1099px → 3 columns */
+@media (min-width: 900px) and (max-width: 1099px) {
+    .showcase-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* 481-899px → 4 columns 直式右裁 poster 格（US-10 / CD-11；T10 合併原 481-679 / 680-899 兩段） */
+@media (min-width: 481px) and (max-width: 899px) {
+    .showcase-grid,
+    .actress-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+    }
+}
+
+/* ≤480px → 3 column poster 格（US5-75b，比照 .actress-grid 的 ≤480 斷點） */
+@media (max-width: 480px) {
+    .showcase-grid,
+    .actress-grid {
+        grid-template-columns: repeat(3, 1fr); /* US5-75b：1fr → 3-col（CD-75b-7） */
+        gap: 0.5rem;
+        padding-block: 0.75rem; /* 水平由 ≤899 --layer-inset-mobile 接管（CD-146b-17） */
+    }
+}
+
+/* US-10 / T10：poster-crop 樣式從 ≤480 擴到 ≤899（481–899 4 欄直式右裁與 ≤480 一致）。
+   欄數靠各自 @media（≤480 = 3 欄 / 481–899 = 4 欄）；poster-crop 卡裁切 + img 右裁 + caption + hero
+   為兩段共用樣式，故移入 ≤899 區塊。selector 形式不變（showcase 後代 :is(…) .showcase-grid，有空格）。 */
+@media (max-width: 899px) {
+    /* US5-75b：影片卡切直式 poster 比例。
+       數值來源 = plan-75a US2 poster-crop（--poster-crop-ratio），**不可獨立修改**（單一真理）。
+       Codex P1（specificity）：selector 必帶 :is(#ds-gallery-components, .ds-gallery-composition) scope。
+         :is() 含 #id → a=1（無論其他 arg），:not(.hero-card) 的 .hero-card 計入 b。
+         theme.css 基準 :is(#id,…) .av-card-preview-img = (1,0,1)；本規則 4 個 class（showcase-grid /
+         av-card-preview / .hero-card(:not) / av-card-preview-img）= (1,4,0) 贏。
+         若漏 :is() 前綴 → (0,4,0)，a=0 輸給基準 a=1 → aspect-ratio silent no-op、手機卡仍 3:2。
+       Codex F5：:not(.hero-card) 排除女優精準匹配 hero 卡（其圖 object-fit:contain，不可被裁成 0.71）。
+       .av-card-preview-img 是 <div> → aspect-ratio 寫 div；object-position 只對 replaced element 生效 → 寫子 img。 */
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid .av-card-preview:not(.hero-card) .av-card-preview-img {
+        aspect-ratio: var(--poster-crop-ratio, 0.71);
+        height: auto;   /* aspect-ratio 與 explicit height 互斥，明確 auto 防其他規則殘留高度 */
+    }
+
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid .av-card-preview:not(.hero-card) .av-card-preview-img img {
+        object-position: right center; /* (1,4,1) 贏 theme.css 基準 img (1,0,2)；基準本無 object-position（此為加值）；只露封面正面 */
+    }
+
+    /* US5-75b：3 欄 poster 格 caption（CD-75b-9）——番號單行 ellipsis、女優名次行隱藏。
+       次行 class = .av-actress（非 .av-maker；grid 卡無 .av-maker，誤用會 silent no-op）。
+       同帶 :is(…) scope + :not(.hero-card) 防誤殺 hero footer（其 footer 也有 .av-num/.av-actress，Codex F5）。 */
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid .av-card-preview:not(.hero-card) .av-card-preview-footer .footer-default .av-num {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 0.7rem; /* 略縮字型容納番號（3 欄每欄 ≈107px） */
+    }
+
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid .av-card-preview:not(.hero-card) .av-card-preview-footer .footer-default .av-actress {
+        display: none; /* narrow 下次要資訊，空間不足 */
+    }
+
+    /* 女優牆 footer（鏡射上方影片 caption 食譜，CD-124b-1 共用同一個既有斷點）——
+       窄螢幕收合態只留名字，作品數／年齡不顯示，名字滿寬單行 ellipsis（AC7）。 */
+    :is(#ds-gallery-components, .ds-gallery-composition) .actress-card-footer .footer-default .av-num { font-size: 0.7rem; }
+    :is(#ds-gallery-components, .ds-gallery-composition) .actress-card-footer .footer-default .actress-sort-indicator,
+    :is(#ds-gallery-components, .ds-gallery-composition) .actress-card-footer .footer-default .av-actress { display: none; }
+    .actress-card > .actress-card-info { font-size: 0.7rem; }   /* (0,2,0) 勝後方的 .card-info (0,1,0)，CD-124b-8② */
+    .hero-card > .actress-card-info { font-size: 0.7rem; }
+
+    /* T11：≤480px hero 卡（女優精準匹配入口）改直式 poster 比例，對齊同列 0.71 鄰卡 → 消 row 死白/錯位。
+       值引用 --poster-crop-ratio（與鄰卡同源，單一真理）。img 改 object-fit:cover（女優照 0.826 略寬胖，
+       cover 填滿僅輕裁上下、無 letterbox），覆蓋 hero 既有 contain（L2342）。
+       selector 帶 :is(#id,…) scope → (1,4,0) 勝 theme.css 基準 (1,0,1)；showcase 的 ds-gallery-composition
+       在 .showcase-container 祖先 → 用後代 :is(…) .showcase-grid（與 L313 同 pattern）。
+       hero 在女優收藏模式不存在（showFavoriteActresses gate），故只影響 video-mode grid。
+       🔴 100b（plan-100b §A ⚠️，theme.css 另有 --actress-crop-ratio: 0.75 供女優收藏牆/燈箱編輯用）：
+       這裡刻意**不**改用 --actress-crop-ratio。此 hero 卡是「video-mode grid 裡精準匹配到的女優卡」，
+       要跟同一列的一般影片卡對齊裁窗、不然這一格會比鄰卡窄/高造成 row 錯位；影片卡用的是
+       --poster-crop-ratio，故 hero 卡也必須用同一個值才能對齊，跟「女優本人是不是 3/4 比例」無關。
+       範圍外、本 plan 不動這行，純補這條註解防下個人以為是漏改。 */
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid .av-card-preview.hero-card .av-card-preview-img {
+        aspect-ratio: var(--poster-crop-ratio, 0.71);
+        height: auto;
+    }
+
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid .av-card-preview.hero-card .av-card-preview-img img {
+        object-fit: cover;             /* 覆蓋 hero 桌面 contain（L2342）；女優照填滿、無 letterbox */
+        transform-origin: center center;
+    }
+}
+
+/* 119-T1 / CD-119-3 / CD-119-7 / AC-6.1 / AC-6.4
+   Desktop `.showcase-grid.shape-poster` (≥900px). Selector 形狀鏡射 L348 起 ≤899 poster-crop，
+   只在 `.showcase-grid` 後直接接 `.shape-poster`（無空格）。
+   specificity：:is() 含 #id → a=1；非 hero 5 class（showcase-grid / shape-poster /
+   av-card-preview / :not(.hero-card) / av-card-preview-img）= (1,5,0) 勝 theme.css
+   基準 (1,0,1)；hero img = (1,5,1) 勝桌面 contain 基準 (1,2,1)。禁用 !important。
+   AC-6.1：.av-num 不可寫 font-size（維持 theme 0.9rem）。
+   AC-6.4：hero 用 --poster-crop-ratio，不用 --actress-crop-ratio。
+   CD-119-7：下方六段欄數階梯每段只宣告 grid-template-columns。 */
+@media (min-width: 900px) {
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid.shape-poster .av-card-preview:not(.hero-card) .av-card-preview-img {
+        aspect-ratio: var(--poster-crop-ratio, 0.71);
+        height: auto;
+    }
+
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid.shape-poster .av-card-preview:not(.hero-card) .av-card-preview-img img {
+        object-position: right center;
+    }
+
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid.shape-poster .av-card-preview:not(.hero-card) .av-card-preview-footer .footer-default .av-num {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid.shape-poster .av-card-preview:not(.hero-card) .av-card-preview-footer .footer-default .av-actress {
+        display: none;
+    }
+
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid.shape-poster .av-card-preview.hero-card .av-card-preview-img {
+        aspect-ratio: var(--poster-crop-ratio, 0.71);
+        height: auto;
+    }
+
+    :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid.shape-poster .av-card-preview.hero-card .av-card-preview-img img {
+        object-fit: cover;
+        transform-origin: center center;
+    }
+}
+
+@media (min-width: 2100px) {
+    .showcase-grid.shape-poster {
+        grid-template-columns: repeat(8, 1fr);
+    }
+}
+
+@media (min-width: 1850px) and (max-width: 2099px) {
+    .showcase-grid.shape-poster {
+        grid-template-columns: repeat(7, 1fr);
+    }
+}
+
+@media (min-width: 1600px) and (max-width: 1849px) {
+    .showcase-grid.shape-poster {
+        grid-template-columns: repeat(6, 1fr);
+    }
+}
+
+@media (min-width: 1350px) and (max-width: 1599px) {
+    .showcase-grid.shape-poster {
+        grid-template-columns: repeat(5, 1fr);
+    }
+}
+
+@media (min-width: 1100px) and (max-width: 1349px) {
+    .showcase-grid.shape-poster {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media (min-width: 900px) and (max-width: 1099px) {
+    .showcase-grid.shape-poster {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+

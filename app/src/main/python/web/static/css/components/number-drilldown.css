@@ -1,0 +1,155 @@
+/* Number Drilldown — 數字清單浮層共用元件（155b-T2）
+   從 design-system.css .ds-dd-* 畢業；token only。
+   定位基準：呼叫端的統計列（position:relative），浮層 left:0 / top:100% /
+   width:min(28rem, 100%)——100% 是統計列寬度，右緣不超出版面。 */
+
+/* ── design-system／呼叫端 mock 統計列 ── */
+.number-drilldown-mock-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    background: color-mix(in oklch, var(--surface-1) 50%, transparent);
+    border-radius: var(--fluent-radius-lg);
+    border: 1px solid var(--stroke-subtle);
+}
+
+/* position: relative 讓浮層以「整條統計列」為定位基準；
+   不加 base z-index——會形成 stacking context，同列多鈕時被後面兄弟蓋住。
+   開啟時由 :has(aria-expanded) 拉高（呼叫端不必綁 is-open）。 */
+.number-drilldown-stat-line {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* FE-CSS-24 保險：任一觸發鈕開著時，把這一整條統計列的 stacking 拉到本節其他兄弟之上 */
+.number-drilldown-stat-line:has(.number-drilldown-number-btn[aria-expanded="true"]) {
+    z-index: 20;
+}
+
+.number-drilldown-anchor {
+    display: inline-flex;
+    align-items: center;
+}
+
+.number-drilldown-number-btn {
+    background: none;
+    border: none;
+    padding: 0 0.125rem;
+    margin: 0;
+    font: inherit;
+    font-weight: 600;
+    color: var(--color-primary);
+    cursor: pointer;
+    border-radius: var(--fluent-radius-sm);
+}
+
+.number-drilldown-number-btn:hover {
+    text-decoration: underline;
+}
+
+.number-drilldown-number-btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* 浮層本體：貼齊 help-popover 視覺語彙；寬度 min(28rem, 100%) */
+.number-drilldown-popover {
+    width: min(28rem, 100%);
+    top: 100%;
+    left: 0;
+    margin-top: 0.5rem;
+}
+
+/* ── 清單本體（CD-155b-4：頭與捲動區同層 sibling，不用 sticky）── */
+.number-drilldown-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.number-drilldown-list-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.number-drilldown-list-head > .number-drilldown-list-title {
+    margin: 0;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    letter-spacing: normal;
+}
+
+.number-drilldown-list-head > .number-drilldown-list-title::before {
+    content: none;
+}
+
+.number-drilldown-list-count {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-right: auto;
+}
+
+.number-drilldown-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    background: none;
+    border: none;
+    padding: 0.25rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--fluent-radius-sm);
+}
+
+.number-drilldown-copy-btn:hover {
+    color: var(--text-primary);
+    background: color-mix(in oklch, var(--surface-2) 60%, transparent);
+}
+
+.number-drilldown-copy-btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.number-drilldown-list-scroll {
+    max-height: min(20rem, 50vh);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding-right: 0.25rem;
+}
+
+.number-drilldown-list-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: var(--fluent-radius-sm);
+    background: color-mix(in oklch, var(--surface-1) 40%, transparent);
+}
+
+.number-drilldown-row-id {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.number-drilldown-row-note {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.number-drilldown-footnote {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin: 0.25rem 0 0 0;
+}

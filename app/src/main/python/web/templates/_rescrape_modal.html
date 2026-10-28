@@ -1,0 +1,263 @@
+{# ═══════════════ 進階重新刮削彈窗（62a-2 HTML/CSS；Alpine 行為是 62a-3）═══════════════
+   兩步換頁（pick → preview，非疊加；解決 metatube B3 +30 pill 撐長）。沿用 fluent-modal +
+   :class modal-open 開關（CD-62-1，非原生 dialog 開窗 API）+ 既有 .fluent-modal::backdrop 模糊。
+   hook 引用 62a-3 的 state contract（rescrapeOpen/rescrapeStep/...）—— 在 62a-3 完成前 partial
+   渲染為 inert（state 未定義、按鈕無反應），這是預期。state 名統一 rescrape* 前綴，跨頁可辨識，
+   不寫 showcase 專屬 state 名，使 search 入口（62c）也能 include 同一份。
+   preview cover 必走 /api/proxy-image（CD-62-14 #8）—— search_jav 回的 cover 是遠端 URL。 #}
+{% from '_macros/source_pill.html' import source_pill %}
+<dialog class="modal fluent-modal rescrape-dialog" x-cloak
+        :class="{ 'modal-open': rescrapeOpen }"
+        @click.self="closeRescrape()"
+        @keydown.escape.window="rescrapeOpen && closeRescrape()">
+  <div class="modal-box fluent-modal-box rescrape-modal-box">
+    <button type="button" class="rescrape-x" @click="closeRescrape()"
+            :aria-label="t('showcase.rescrape.close')">
+      <i class="bi bi-x-lg"></i>
+    </button>
+
+    {# ───────── 步驟 1：pick（番號 + 來源 pill，各入口共用） ───────── #}
+    <div x-show="rescrapeStep === 'pick'">
+      {# 標題依入口切換（US-A2）：搜尋框入口=「進階搜尋」，其餘重刮入口=「進階重新刮削」 #}
+      <h3 class="fluent-modal-title"><i class="bi bi-gear"></i> <span x-text="rescrapeEntryPoint === 'search' ? t('showcase.rescrape.search_title') : t('showcase.rescrape.modal_title')"></span></h3>
+
+      <div class="rescrape-section">
+        <label class="rescrape-label">{{ t('showcase.rescrape.number_label') }}</label>
+        {# US2：番號永遠可編輯（無鉛筆、不因 loading 鎖）；改動即清掉上次 not-found 結果。
+           62c-3 US7（2026-05-31 修訂）：switch-source 入口番號改為可編輯。原拍板#1 鎖唯讀，
+           但實測「拖入檔名解析錯 → 搜尋無結果 → 想在當前卡改正番號重抓」是真實工作流，
+           故放開唯讀，讓 🔄 長壓 = 改番號 + 挑來源、只替換當前卡（仍不重設結果列，與 US5 區隔）。 #}
+        <input class="rescrape-num-input" type="text" x-model="rescrapeNumber"
+               @input="onRescrapeNumberInput()">
+        <div class="rescrape-hint">{{ t('showcase.rescrape.filename_hint') }}：<code x-text="rescrapeOriginalFilename"></code></div>
+      </div>
+
+      <div class="rescrape-section">
+        <label class="rescrape-label">{{ t('showcase.rescrape.source_question') }}</label>
+        <div class="source-pill-row">
+          {# auto pill：自動選來源 #}
+          <button type="button" class="source-pill source-pill--action" data-enabled="true"
+                  :class="{ 'is-loading': rescrapeLoadingSource === 'auto' }"
+                  :disabled="rescrapeLoadingSource !== null && rescrapeLoadingSource !== 'auto'"
+                  @click="rescrapeWithSource('auto')">
+            <span class="pill-spin" x-show="rescrapeLoadingSource === 'auto'"></span>
+            <i class="bi bi-stars" x-show="rescrapeLoadingSource !== 'auto'" aria-hidden="true"></i>
+            <span class="pill-name">{{ t('showcase.rescrape.auto_source') }}</span>
+          </button>
+          {# builtin pill：picker 依 usability 不依 promotion（CD-64-A4），恆 data-enabled=true 正常可選，不反映 Settings 開關 #}
+          <template x-for="s in rescrapeBuiltinSources()" :key="s.id">
+            <button type="button"
+                    :class="{
+                        'source-pill': true,
+                        'source-pill--action': !isJlUnavailable(s),
+                        'source-pill--manual-only': isJlUnavailable(s),
+                        'source-pill--uncensored': !s.is_censored,
+                        'is-loading': rescrapeLoadingSource === s.id
+                    }"
+                    data-enabled="true"
+                    :aria-disabled="isJlUnavailable(s) ? 'true' : 'false'"
+                    :title="isJlUnavailable(s) ? window.t(cfUnavailableMessageKey(s.id)) : ''"
+                    :disabled="rescrapeLoadingSource !== null && rescrapeLoadingSource !== s.id"
+                    @click="onCfPillClick(s)">
+              <span class="pill-spin" x-show="rescrapeLoadingSource === s.id"></span>
+              <i class="bi bi-slash-circle slash-icn" x-show="rescrapeLoadingSource !== s.id && !isJlUnavailable(s)" aria-hidden="true"></i>
+              {# 品牌名（display_name_raw → display_name_key fallback；不走 i18n，CD-62-12） #}
+              <span class="pill-name" x-text="s.display_name_raw || s.display_name_key || s.id"></span>
+              {# 118a-T7（spec F3）：BETA 徽章已移除。「這個來源可能要你完成一次驗證」改由上面那組
+                 aria-disabled / :title / @click toast 在真正需要的時刻交付；虛線外框（manual-only）
+                 負責視覺區隔。徽章是常駐裝飾，說的又是偶爾才發生的事。 #}
+            </button>
+          </template>
+        </div>
+
+        {# Metatube 分組（62c-5 data-driven；品牌名不走 i18n，CD-62-12）。
+           pill 鏡射 builtin（45-56）+ metatube `m` type badge。連線態 chrome
+           （斷線灰標 / Parts Bin 星標）留 B3（依賴 B3 才定義的連線狀態資料 shape）。 #}
+        <div class="rescrape-group-sep">Metatube</div>
+        <div class="source-pill-row" x-show="rescrapeMetatubeSources().length > 0">
+          <template x-for="s in rescrapeMetatubeSources()" :key="s.id">
+            <button type="button" class="source-pill source-pill--action"
+                    :class="{ 'source-pill--uncensored': !s.is_censored, 'is-loading': rescrapeLoadingSource === s.id }"
+                    :data-enabled="s.available ? 'true' : 'false'"
+                    :aria-disabled="s.available ? 'false' : 'true'"
+                    :title="!s.available ? t('showcase.rescrape.offline_tooltip') : ''"
+                    :disabled="rescrapeLoadingSource !== null && rescrapeLoadingSource !== s.id"
+                    @click="s.available ? rescrapeWithSource(s.id) : null">
+              <span class="pill-spin" x-show="rescrapeLoadingSource === s.id"></span>
+              <i class="bi bi-slash-circle slash-icn" x-show="rescrapeLoadingSource !== s.id" aria-hidden="true"></i>
+              {# 品牌名（display_name_raw → display_name_key fallback；不走 i18n，CD-62-12） #}
+              <span class="pill-name" x-text="s.display_name_raw || s.display_name_key || s.id"></span>
+              {# metatube `m` type badge（純 type marker；連線態 chrome 留 B3） #}
+              <span class="source-pill-mt-badge" aria-hidden="true">m</span>
+            </button>
+          </template>
+        </div>
+        {# 空組 note：僅當 metatube 來源為 0 時顯示（B2 無 metatube → 仍顯示；B3 註冊後自動隱） #}
+        <div class="rescrape-empty-note" x-show="rescrapeMetatubeSources().length === 0">{{ t('settings.advanced_search.group_metatube_empty') }}</div>
+
+        {# 自訂來源分組（165-T10）：<template x-if>＝零自訂來源時不輸出任何節點。
+           格式不符灰化由後端 applicable 判斷（aria-disabled＋title），擋點在 rescrapeWithSource。 #}
+        <template x-if="rescrapeCustomSources().length > 0">
+          <div>
+            <div class="rescrape-group-sep">{{ t('showcase.rescrape.group_custom') }}</div>
+            <div class="source-pill-row">
+              <template x-for="s in rescrapeCustomSources()" :key="s.id">
+                <button type="button" class="source-pill source-pill--action source-pill--manual-only"
+                        :class="{ 'is-loading': rescrapeLoadingSource === s.id }"
+                        data-enabled="true"
+                        :aria-disabled="rescrapeCustomApplicable[s.id] === false ? 'true' : 'false'"
+                        :title="rescrapeCustomApplicable[s.id] === false ? t('showcase.rescrape.custom_pattern_mismatch') : ''"
+                        :disabled="rescrapeLoadingSource !== null && rescrapeLoadingSource !== s.id"
+                        @click="rescrapeWithSource(s.id)">
+                  <span class="pill-spin" x-show="rescrapeLoadingSource === s.id"></span>
+                  <i class="bi bi-slash-circle slash-icn" x-show="rescrapeLoadingSource !== s.id" aria-hidden="true"></i>
+                  <span class="pill-name" x-text="s.display_name_raw || s.id"></span>
+                  <span class="source-pill-custom-badge" aria-hidden="true">c</span>
+                </button>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        {# 70-T6: CF waiting 態（JavLibrary CF 解題中） #}
+        <div x-show="rescrapeCfWaiting" class="rescrape-cf-waiting">
+          <span class="pill-spin" aria-hidden="true"></span>
+          <span x-text="window.t('showcase.rescrape.jl_cf_solving')"></span>
+          <button type="button" class="btn btn-ghost btn-sm"
+                  @click="cancelCfPoll()">{{ t('common.action.cancel') }}</button>
+        </div>
+
+        {# 被拒／連不到：與 not-found 並列、互斥（紅字，不用 x-html） #}
+        <div class="rescrape-inline-error" x-show="rescrapeAccessError" x-cloak>
+          <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+          <span>
+            <span x-text="rescrapeAccessMessage(rescrapeAccessError)"></span>
+            <span x-show="rescrapeAccessAdvice(rescrapeAccessError)" x-text="rescrapeAccessAdvice(rescrapeAccessError)"></span>
+          </span>
+        </div>
+
+        {# not-found：留在 pick + inline error（不換頁） #}
+        <div class="rescrape-inline-error" x-show="rescrapeNotFound" x-cloak>
+          <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+          <span>{{ t('showcase.rescrape.not_found') }}</span>
+        </div>
+
+        {# 自訂來源失敗句（查無／站方改版／預檢拒絕）：與上兩塊互斥 #}
+        <div class="rescrape-inline-error" x-show="rescrapeCustomError" x-cloak>
+          <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+          <span x-text="rescrapeCustomMessage(rescrapeCustomError)"></span>
+        </div>
+      </div>
+
+      {# Search 入口專屬 footer：無預覽，搜完直接進結果區（spec US5）；loading 中仍可取消 #}
+      <div class="modal-action fluent-modal-actions" x-show="rescrapeEntryPoint === 'search'">
+        <span class="rescrape-search-status" x-show="rescrapeLoadingSource !== null">
+          <span class="pill-spin"></span> {{ t('showcase.rescrape.searching') }}
+        </span>
+        <button type="button" class="btn btn-ghost" @click="closeRescrape()">{{ t('common.action.cancel') }}</button>
+      </div>
+    </div>
+
+    {# ───────── 步驟 2：preview（換頁，Showcase + search 入口皆可進入；86-T4） ───────── #}
+    <div x-show="rescrapeStep === 'preview'" x-cloak>
+      <button type="button" class="rescrape-back" @click="rescrapeBackToPick()">
+        <i class="bi bi-arrow-left" aria-hidden="true"></i> {{ t('showcase.rescrape.back_to_pick') }}
+      </button>
+
+      {# §7.3：scraper 倒回的欄位全放（user tag 不放）。metadata 復用 lightbox class，
+         綁 rescrapePreview transient（CD-62-2，絕不碰 currentLightboxVideo）。 #}
+      <div class="rescrape-preview" x-show="rescrapePreview">
+        <div class="pv-cover">
+          {# CD-62-14 #8：cover 必走 /api/proxy-image?url=encodeURIComponent(...)，
+             禁直連遠端 URL、禁 DB-only gallery image 端點。內聯建構。 #}
+          <img :src="rescrapePreview && ('/api/proxy-image?url=' + encodeURIComponent(resolveRescrapeCoverUrl()))"
+               @error="handleRescrapePreviewError($event)"
+               :alt="rescrapePreview && rescrapePreview.number">
+          {# 86-T4: 版本切換器 ‹ › 鈕（CD-86-7 D5；swipe 不做 CD-86-15） #}
+          <button type="button" class="rescrape-ver-btn rescrape-ver-prev"
+                  x-show="rescrapeHasVersions()"
+                  @click="rescrapeVersionGo(-1)"
+                  :aria-label="t('showcase.rescrape.version_prev_aria')"
+                  :disabled="rescrapeVersionIdx <= 0">
+            <i class="bi bi-chevron-left" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="rescrape-ver-btn rescrape-ver-next"
+                  x-show="rescrapeHasVersions()"
+                  @click="rescrapeVersionGo(1)"
+                  :aria-label="t('showcase.rescrape.version_next_aria')"
+                  :disabled="rescrapeVersionIdx >= rescrapeCandidates.length - 1">
+            <i class="bi bi-chevron-right" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="lightbox-metadata">
+          {# 86-T4: versions_found + N/M 指示（CD-86-7 D5；多版本才顯示） #}
+          <div class="rescrape-version-status" x-show="rescrapeHasVersions()">
+            <span x-text="t('showcase.rescrape.versions_found', { count: rescrapeCandidates.length })"></span>
+            <span class="rescrape-ver-indicator"
+                  x-text="(rescrapeVersionIdx + 1) + '/' + rescrapeCandidates.length"></span>
+          </div>
+          <div class="lb-title" x-text="rescrapePreview && rescrapePreview.title"></div>
+          <div class="lb-otitle" x-show="rescrapePreview && rescrapePreview.original_title"
+               x-text="rescrapePreview && rescrapePreview.original_title"></div>
+          <div class="lb-actor" x-show="rescrapePreview && rescrapePreview.actors">
+            <span x-text="rescrapePreview && rescrapePreview.actors"></span>
+          </div>
+          {# 分隔符 " · " 內嵌於各 span 開頭，隨 x-show 一起顯隱，避免孤立 · #}
+          <div class="lb-details">
+            <span x-text="rescrapePreview && rescrapePreview.number"></span>
+            <span x-show="rescrapePreview && rescrapePreview.maker">&nbsp;·&nbsp;<span x-text="rescrapePreview && rescrapePreview.maker"></span></span>
+            <span x-show="rescrapePreview && rescrapePreview.director">&nbsp;·&nbsp;<span x-text="rescrapePreview && rescrapePreview.director"></span></span>
+            <span x-show="rescrapePreview && rescrapePreview.series">&nbsp;·&nbsp;<span x-text="rescrapePreview && rescrapePreview.series"></span></span>
+            <span x-show="rescrapePreview && rescrapePreview.label">&nbsp;·&nbsp;<span x-text="rescrapePreview && rescrapePreview.label"></span></span>
+            <span x-show="rescrapePreview && rescrapePreview.date">&nbsp;·&nbsp;<span x-text="rescrapePreview && rescrapePreview.date"></span></span>
+            <span x-show="rescrapePreview && rescrapePreview.duration">&nbsp;·&nbsp;<span x-text="rescrapePreview && rescrapePreview.duration"></span> {{ t('showcase.unit.minutes') }}</span>
+            {# 74b US3：換源預覽「剛挑的來源」改 source_pill flat 唯讀膠囊（取代純文字 · sourceName）。
+               flat=無 hover/pointer/focus（唯讀）；有碼藍/無碼綠走動態 :class（sourceCensored）；
+               name null-safe（CD-74b-11，pick 步驟 rescrapePreview 為 null）。 #}
+            {{ source_pill(
+                name="rescrapePreview && rescrapePreview.sourceName",
+                variant='flat',
+                extra_classes='rescrape-preview-source-pill',
+                attrs='x-show="rescrapePreview && rescrapePreview.sourceName" tabindex="-1" :class="{ \'source-pill--uncensored\': !(rescrapePreview && rescrapePreview.sourceCensored) }"'
+            ) }}
+          </div>
+          <div class="lb-tags" x-show="rescrapePreview && rescrapePreview.tags">
+            <template x-for="tag in (rescrapePreview ? rescrapePreview.tags : [])" :key="tag">
+              <span class="lb-tag" x-text="tag"></span>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      {# 86-T4 CD-86-9: lightbox 入口顯示不可逆警告 + ✗/✓；search 入口顯示「採用此版本」單鈕 #}
+      {# lightbox 入口：不可逆提示（僅 lightbox 入口顯示） #}
+      <div class="rescrape-caption" x-show="rescrapeEntryPoint === 'lightbox'">
+        <i class="bi bi-exclamation-octagon-fill" aria-hidden="true"></i> {{ t('showcase.rescrape.overwrite_warning') }}
+      </div>
+      <div x-show="rescrapeShowPreserveTitle()">
+        <label>
+          <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="rescrapePreserveTitle">
+          <span x-text="t('showcase.rescrape.preserve_title', { title: rescrapeCurrentTitleStripped() })"></span>
+        </label>
+      </div>
+      {# lightbox 入口：✗/✓ 兩圓鈕 #}
+      <div class="rescrape-confirm-row" x-show="rescrapeEntryPoint === 'lightbox'">
+        <button type="button" class="rescrape-confirm-btn cancel" @click="rescrapeBackToPick()"
+                :aria-label="t('showcase.rescrape.back_to_pick')"><i class="bi bi-x-lg"></i></button>
+        <button type="button" class="rescrape-confirm-btn confirm" @click="rescrapeConfirm()"
+                :aria-label="t('showcase.rescrape.confirm')"><i class="bi bi-check-lg"></i></button>
+      </div>
+      {# search 入口：採用此版本單鈕（✓ icon，無不可逆警告，CD-86-9；86-T6 icon 化防破版） #}
+      <div class="rescrape-confirm-row" x-show="rescrapeEntryPoint === 'search'">
+        <button type="button" class="rescrape-confirm-btn confirm" @click="rescrapeConfirm()"
+                :aria-label="t('showcase.rescrape.adopt_version')"><i class="bi bi-check-lg" aria-hidden="true"></i></button>
+      </div>
+      {# switch-source 入口：替換此版本單鈕（無不可逆警語；只替換結果列 slot 非寫檔）#}
+      <div class="rescrape-confirm-row" x-show="rescrapeEntryPoint === 'switch-source'">
+        <button type="button" class="rescrape-confirm-btn confirm" @click="rescrapeConfirm()"
+                :aria-label="t('showcase.rescrape.adopt_switch_source')"><i class="bi bi-check-lg" aria-hidden="true"></i></button>
+      </div>
+    </div>
+
+  </div>
+</dialog>

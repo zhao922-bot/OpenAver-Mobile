@@ -1,0 +1,1478 @@
+"""
+Organizer 模組 - 檔案整理功能（重命名、資料夾、封面、NFO）
+從 jav_scraper.py 簡化而來，只處理檔案操作，不含搜尋功能
+"""
+
+import os
+import re
+import sys
+import shutil
+import threading
+import time
+import requests
+import html
+from pathlib import Path
+from PIL import Image
+from typing import Optional, Dict, Any, List, Tuple
+from urllib.parse import urlparse
+
+from core.atomic_write import atomic_move
+from core.config import STEM_IMAGE_MODES
+from core.cover_attributes import effective_tags
+from core.cover_layout import resolve_cover_target, same_target_verdict
+from core.image_codec import decode_image_payload, looks_like_image
+from core.image_host_policy import codec_for_host
+from core.path_utils import normalize_path, is_fs_path_under_dir
+from core.scrapers.utils import has_chinese, check_subtitle, strip_subtitle_markers, normalize_number_impl
+from core.focal import device_state, requires_face_detection
+from core.focal.subprocess_runner import run_detection
+from core.logger import get_logger
+from core.platform_info import is_synology, DSM_PERMISSION_HINT
+from core.proxy_policy import proxy_kwargs
+
+logger = get_logger(__name__)
+
+
+# HTTP 請求設定
+REQUEST_TIMEOUT = 30
+CONNECT_TIMEOUT = 5  # CD-126-5c：只縮 connect；可達 host 的 handshake ≪ 5s
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+}
+
+# Process-level failed-host memory (CD-126-5 / 5b / 5c). Key = (scheme, hostname, port).
+_HOST_FAILURE_TTL = 300
+_failed_hosts: Dict[Tuple[str, str, int], float] = {}
+_failed_hosts_lock = threading.Lock()
+_now = time.monotonic  # injectable clock for TTL tests (no sleep)
+
+
+def sanitize_filename(name: str) -> str:
+    """清理檔名中的非法字元"""
+    illegal_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
+    for char in illegal_chars:
+        name = name.replace(char, ' ')
+    name = re.sub(r'\s+', ' ', name).strip()
+    return name
+
+
+def _strip_windows_trailing(name: str) -> str:
+    # Win32 directory creation silently strips trailing dots/spaces, so target
+    # path string and on-disk name diverge → shutil.move WinError 3. See #31.
+    if sys.platform == 'win32':
+        return name.rstrip('. ')
+    return name
+
+
+def truncate_title(title: str, max_len: int = 50) -> str:
+    """截斷標題長度"""
+    if not title:
+        return ''
+    if len(title) <= max_len:
+        return title
+    return _strip_windows_trailing(title[:max_len - 3] + '...')
+
+
+def truncate_to_chars(text: str, max_chars: int = 60) -> str:
+    """按字符截斷，確保不超過指定長度"""
+    if max_chars <= 0:
+        return ''
+    if max_chars <= 3:
+        return text[:max_chars]
+    if len(text) <= max_chars:
+        return text
+    return _strip_windows_trailing(text[:max_chars - 3] + '...')
+
+
+def clean_source_suffix(text: str) -> str:
+    """清除無意義的來源後綴"""
+    patterns = [
+        r'\s*-\s*Jable\s*TV.*$',
+        r'\s*-\s*Jable.*$',
+        r'\s*-\s*Hayav\s*AV.*$',
+        r'\s*-\s*Hayav.*$',
+        r'\s*-\s*MissAV.*$',
+        r'\s*-\s*J片.*$',
+        r'\s*-\s*免費.*$',
+        r'\s*-\s*Netflav.*$',
+        r'\s*-\s*AV看到飽.*$',
+        r'\s*-\s*Free\s*Japan.*$',
+        r'\s*-\s*Streaming.*$',
+        r'\s*-\s*[A-Za-z]{1,3}\.?$',
+        r'\s*-\s*$',
+        r'\s+-\d+$',
+    ]
+    for p in patterns:
+        text = re.sub(p, '', text, flags=re.IGNORECASE)
+    return text.strip()
+
+
+def extract_chinese_title(filename: str, number: str, actors: List[str] = None) -> Optional[str]:
+    """
+    從檔名提取原始中文片名
+
+    Args:
+        filename: 檔案名稱（不含路徑）
+        number: 番號
+        actors: 演員名單（用於移除）
+
+    Returns:
+        提取的中文片名，如果沒有則返回 None
+    """
+    if not filename:
+        return None
+
+    # 移除副檔名
+    name = os.path.splitext(filename)[0]
+
+    # 移除番號（各種格式）
+    if number:
+        name = re.sub(rf'\[?{re.escape(number)}\]?\s*', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\[?[A-Za-z]{2,7}-?\d{3,5}\]?\s*', '', name)
+
+    # 清除來源後綴
+    name = clean_source_suffix(name)
+
+    # 清理多餘空格
+    name = re.sub(r'\s+', ' ', name).strip()
+
+    # 剝除字幕標記（bracket / 純文字 / -C 後綴）
+    name = strip_subtitle_markers(name)
+
+    # 移除開頭和結尾的演員名
+    if actors:
+        for actor in actors:
+            name = re.sub(rf'^{re.escape(actor)}\s*-\s*', '', name)
+            name = re.sub(rf'\s+{re.escape(actor)}$', '', name)
+
+    # 移除結尾可能的 2-4 字中文名（演員名）
+    name = re.sub(r'\s+[\u4e00-\u9fff]{2,4}$', '', name)
+
+    name = name.strip()
+
+    # 只有包含中文才返回
+    if name and has_chinese(name):
+        return name
+
+    return None
+
+
+def _detect_suffixes(filename: str, keywords: list) -> str:
+    """
+    從原始檔名偵測版本標記關鍵字。
+    邊界正則避免 -cd1 匹配 -cd10。
+    """
+    lower = filename.lower()
+    matched = []
+    for kw in keywords:
+        kw_lower = kw.lower().strip()
+        if not kw_lower:
+            continue
+        if re.search(re.escape(kw_lower) + r'(?=[-_.\s]|$)', lower):
+            matched.append(kw_lower)
+    return ''.join(matched)
+
+
+# ---------------------------------------------------------------------------
+# B2：標題 junk-validation + 前綴剝除 helpers（plan-72c FIX A / FIX B）
+# ---------------------------------------------------------------------------
+
+def _extracted_has_organize_junk(
+    extracted: str,
+    number: str,
+    metadata: dict,
+    config: dict,
+) -> bool:
+    """
+    判斷 extract_chinese_title 的結果是否殘留 organize 模板 artifact。
+    回 True（= 應丟棄 extracted）IFF 以下任一命中：
+      (i)  日期 token：YYYY[-.]MM[-.]DD 格式
+      (ii) 刮削 maker 殘留：maker 非空且出現在提取結果中（大小寫不敏感）
+      (iii) suffix token 殘留：config['suffix_keywords'] 中帶前導 '-' 的 token
+            以整段帶 dash 比對（不去 dash），尾端加 boundary——
+            避免誤殺生檔 standalone '4K'（B-1）。
+    mode-agnostic：不讀 external_manager。
+    """
+    if not extracted:
+        return False
+
+    # (i) 日期 token
+    if re.search(r'\d{4}[-.]\d{2}[-.]\d{2}', extracted):
+        return True
+
+    # (ii) maker 殘留（非空才比對）
+    maker = (metadata.get('maker') or '').strip()
+    if maker and maker.lower() in extracted.lower():
+        return True
+
+    # (iii) suffix token 殘留（保留前導 '-'，帶 boundary）
+    for kw in config.get('suffix_keywords', []):
+        kw_l = kw.lower().strip()
+        if not kw_l:
+            continue
+        if re.search(re.escape(kw_l) + r'(?=[-_.\s]|$)', extracted.lower()):
+            return True
+
+    return False
+
+
+def _strip_num_prefixes(s: str, number: str) -> str:
+    """
+    迴圈剝除字串開頭的番號前綴層，直到 fixpoint。
+    支援 bracket 形式 [number] 及裸 number（後接非英數邊界）。
+    使用 re.escape(number) 防特殊番號（如 FC2-PPV-123）。
+    邊界 guard 保證不 over-strip 真標題、不誤命中 ABC-1234 開頭的 ABC-123。
+    """
+    if not s or not number:
+        return s
+    _re = re.compile(
+        r'^(?:\[' + re.escape(number) + r'\]|' + re.escape(number) + r'(?![0-9A-Za-z]))[\s\-_]*',
+        re.IGNORECASE,
+    )
+    while s:
+        nxt = _re.sub('', s, count=1)
+        if nxt == s:
+            break
+        s = nxt
+    return s
+
+
+# ---------------------------------------------------------------------------
+# 多段（multi-part）token 偵測與剝除（CD-8 / plan-72b §1.4）
+# ---------------------------------------------------------------------------
+
+#: 支援的多段 token 前綴集合（全小寫）
+MULTIPART_TOKENS: frozenset = frozenset({'cd', 'dvd', 'part', 'pt', 'disc'})
+
+# 共用編譯正則：前後邊界皆檢查，數字限 1-9 且後不可再接數字
+# - 前緣 (?<![A-Za-z0-9])：避免 apartment1 誤命中 part1
+# - 後緣 (?=[-_.\s\[\]()]|$)：token 後須為分隔符 / bracket / 字串終點
+_MULTIPART_RE = re.compile(
+    r'(?<![A-Za-z0-9])(cd|dvd|part|pt|disc)([1-9])(?![0-9])(?=[-_.\s\[\]()]|$)',
+    re.IGNORECASE,
+)
+
+
+def _detect_multipart_token(filename: str) -> Optional[Tuple[str, int]]:
+    """
+    偵測原始檔名中的多段 token（cd/dvd/part/pt/disc 後接 1-9）。
+
+    Args:
+        filename: 原始檔名（含副檔名，如 ``MIRD-151-cd1.mkv``）。
+
+    Returns:
+        ``(raw_token_lower, part_number)`` — 如 ``("cd1", 1)``；無匹配回 ``None``。
+        多個匹配時取 stem 中位置最靠後者（避免標題中段巧合字串蓋過尾端 token）。
+    """
+    if not filename:
+        return None
+    stem = os.path.splitext(filename)[0]
+    lower_stem = stem.lower()
+    matches = list(_MULTIPART_RE.finditer(lower_stem))
+    if not matches:
+        return None
+    # 取最靠後（span 最大 start）的匹配
+    last = matches[-1]
+    prefix = last.group(1).lower()
+    digit = int(last.group(2))
+    return (f'{prefix}{digit}', digit)
+
+
+def _strip_part_token(stem: str) -> str:
+    """
+    從已去副檔名的 stem 剝除最靠後的多段 token（含其前導分隔符）。
+
+    與 ``_detect_multipart_token`` 共用同一套邊界正則，確保契約一致。
+
+    Args:
+        stem: 已去副檔名的字串（如 ``MIRD-151-cd1``）。
+
+    Returns:
+        剝除多段 token 及其前導分隔符後的 stem；無 token 時原樣回傳（no-op）。
+        保留 base 段原始大小寫。
+    """
+    if not stem:
+        return stem
+    lower_stem = stem.lower()
+    matches = list(_MULTIPART_RE.finditer(lower_stem))
+    if not matches:
+        return stem
+    last = matches[-1]
+    token_start = last.start()  # token 本體在 lower_stem 的起始位置
+    token_end = last.end()      # 不含後緣 lookahead（lookahead 不消耗）
+    # 若 token 前有分隔符，一併剝除（[-_.\s\[(]）
+    if token_start > 0 and stem[token_start - 1] in '-_. \t([':
+        strip_from = token_start - 1
+    else:
+        strip_from = token_start
+    return stem[:strip_from] + stem[token_end:]
+
+
+def _is_multipart_kw(kw: str) -> bool:
+    """
+    判斷一個 suffix keyword 是否為多段 token（cd/dvd/part/pt/disc 後接 1-9）。
+
+    外部模式下用來濾掉 suffix_keywords 中的多段 token，避免與 part_tail 雙寫。
+    複用 `_MULTIPART_RE` 與 `MULTIPART_TOKENS`，確保契約與 `_detect_multipart_token` 一致。
+
+    Args:
+        kw: suffix keyword，如 ``'-cd1'``、``'_uc'``、``'-4k'``。
+
+    Returns:
+        True 若 keyword 是多段 token（strip 前導分隔符後 fullmatch）；否則 False。
+        ``'-cd1'`` / ``'-dvd1'`` / ``'part2'`` → True；``'-4k'`` / ``'_uc'`` → False。
+    """
+    if not kw:
+        return False
+    # strip 前導分隔符（keyword 慣例帶 -/_/.，也允許無前綴如 'cd1'）
+    stripped = kw.lstrip('-_. ')
+    if not stripped:
+        return False
+    # fullmatch：整個 stripped 字串必須是 (prefix)(1-9)，且後不再接數字
+    # 與 _MULTIPART_RE 用同一 MULTIPART_TOKENS 集合、同一數字規則（1-9，不含 cd10+）
+    m = re.fullmatch(r'(cd|dvd|part|pt|disc)([1-9])', stripped, re.IGNORECASE)
+    return m is not None
+
+
+_VR_UNIQUE: frozenset = frozenset({
+    'mkx200', 'mkx220', 'vrca220', 'rf52', 'fisheye190', 'fisheye',
+    'f180', '180f', '180x180', 'eac360', '360eac', 'mono180', '180mono',
+    'mono360', '360mono', '3dh', '3dv', 'lrf', 'sbsf', 'fsbs', 'hsbs',
+    'tbf', 'ftab', 'htab',
+})
+
+_VR_AMBIGUOUS: frozenset = frozenset({
+    '180', '360', 'sbs', 'lr', 'rl', 'tb', 'bt', 'ou',
+})
+
+
+def _detect_vr_cluster(filename: str) -> Optional[str]:
+    """
+    偵測檔名中的 VR 投影 token cluster，回傳首個~末個 confirmed run 的 raw 子字串。
+    無 VR token 或不滿足共現條件時回傳 None（守零變化）。
+
+    演算法（CD-68-1/2/3，Codex P2 修正）：
+    1. 去副檔名取 stem
+    2. 以 [_.-空格[]()] 為分隔符切詞，取 (token, start, end) 序列
+    3. 逐 token 分類：unique / ambiguous / none
+    4. 將連續的 VR token（unique 或 ambiguous，中間無 none token）聚成 maximal run。
+       遇到 none token 立即斷開當前 run。
+    5. 每個 run 的「confirmed」條件：含 ≥1 unique 或 ≥2 ambiguous。
+       單一孤立 ambiguous 自成一 run，不 confirmed。
+    6. 無任何 confirmed run → return None。
+    7. 有 confirmed run → 回傳「第一個 confirmed run 的首 token start」到
+       「最後一個 confirmed run 的末 token end」之間的 raw 子字串（stem[start:end]）。
+
+    共現限定在連續 run 內（high-precision「same cluster」契約），
+    取代原 whole-stem min/max（Codex P2 修正）。
+    """
+    stem = os.path.splitext(filename)[0]
+    tokens = [(m.group(), m.start(), m.end()) for m in re.finditer(r'[^_.\-\s\[\]()]+', stem)]
+
+    # 建立每個 token 的 VR 類別
+    classified = []  # (tok, s, e, kind)  kind: 'unique' | 'ambiguous' | 'none'
+    for tok, s, e in tokens:
+        low = tok.lower()
+        if low in _VR_UNIQUE:
+            classified.append((tok, s, e, 'unique'))
+        elif low in _VR_AMBIGUOUS:
+            classified.append((tok, s, e, 'ambiguous'))
+        else:
+            classified.append((tok, s, e, 'none'))
+
+    # 聚成 maximal 連續 VR run（none token 斷開）
+    runs = []  # list of [(tok, s, e, kind), ...]
+    current_run = []
+    for entry in classified:
+        _, _, _, kind = entry
+        if kind != 'none':
+            current_run.append(entry)
+        else:
+            if current_run:
+                runs.append(current_run)
+                current_run = []
+    if current_run:
+        runs.append(current_run)
+
+    # 判斷每個 run 是否 confirmed
+    confirmed_runs = []
+    for run in runs:
+        has_unique = any(kind == 'unique' for _, _, _, kind in run)
+        ambiguous_count = sum(1 for _, _, _, kind in run if kind == 'ambiguous')
+        if has_unique or ambiguous_count >= 2:
+            confirmed_runs.append(run)
+
+    if not confirmed_runs:
+        return None
+
+    # 只取第一個 confirmed run（避免兩個被 non-VR token 隔開的 confirmed run
+    # 被 span 在一起、把中間非 VR 文字包進 cluster，Codex P3）。
+    # 真實 VR 命名 cluster 為單一連續 run；多 confirmed run 屬非常規命名。
+    first_run = confirmed_runs[0]
+    start = first_run[0][1]    # 首 token start
+    end = first_run[-1][2]     # 末 token end
+    return stem[start:end]
+
+
+FALLBACKS = {
+    'actor':  '未知女優',
+    'actors': '未知女優',
+    'maker':  '未知片商',
+    'title':  '未知標題',
+    'date':   '未知日期',
+    'year':   '未知年份',
+    'month':  '未知月份',
+    'day':    '未知日',
+}
+
+
+def format_string(template: str, data: Dict[str, Any], use_fallback: bool = False) -> str:
+    """
+    根據模板格式化字串
+
+    支援變數:
+    - {num}: 番號
+    - {title}: 標題
+    - {actor}: 第一位演員
+    - {actors}: 所有演員
+    - {maker}: 片商
+    - {date}: 發行日期
+    - {year}: 年份
+    - {month}: 月份（2位）
+    - {day}: 日（2位）
+    - {suffix}: 版本後綴（Fix-1）
+
+    Args:
+        use_fallback: True 時空值使用 FALLBACKS（僅資料夾層級傳 True）。
+                      False 時空值保持空字串（檔名格式用，避免 [未知片商] 等雜訊）。
+    """
+    result = template
+    fb = FALLBACKS if use_fallback else {}
+
+    # 番號（保證非空，不需 fallback）
+    result = result.replace('{num}', data.get('number', ''))
+
+    # 標題
+    title = data.get('title', '') or fb.get('title', '')
+    result = result.replace('{title}', title)
+
+    # 演員
+    actors = data.get('actors', [])
+    if actors:
+        result = result.replace('{actor}', actors[0])
+        result = result.replace('{actors}', ', '.join(actors))
+    else:
+        result = result.replace('{actor}', fb.get('actor', ''))
+        result = result.replace('{actors}', fb.get('actors', ''))
+
+    # 片商
+    maker = data.get('maker', '') or fb.get('maker', '')
+    result = result.replace('{maker}', maker)
+
+    # 日期
+    date = data.get('date', '')
+    result = result.replace('{date}', date or fb.get('date', ''))
+    result = result.replace('{year}', date[:4] if date else fb.get('year', ''))
+    result = result.replace('{month}', date[5:7] if len(date) >= 7 else fb.get('month', ''))
+    result = result.replace('{day}',   date[8:10] if len(date) >= 10 else fb.get('day', ''))
+
+    # 後綴（Fix-1，空值就是空字串，不需 fallback）
+    result = result.replace('{suffix}', data.get('suffix', ''))
+
+    return sanitize_filename(result.strip())
+
+
+def _poster_window_ratio(w: int, h: int) -> Optional[float]:
+    """算出 crop_to_poster 分支2/3 的裁切窗比例（餵給 detect_focal / crop_image_position 用）。
+
+    分支1（h/w >= 1.4，已直向、不裁）回 None。
+    分支2（1.0 <= h/w < 1.4，方形/無碼）：置中窗寬 int(h/1.5)，比例化為 int(h/1.5)/h。
+    分支3（h/w < 1.0，標準橫向/有碼）：右裁起點 int(w/1.9)，窗比例化為 (w-int(w/1.9))/h。
+
+    只負責算「要餵給偵測/平移的比例」，不參與退化路（gate False／無臉）實際裁切算式
+    ——那條路徑維持既有原碼一字不動，避免 float round-trip 造成 byte-for-byte 位移。
+    """
+    ratio = h / w
+    if ratio >= 1.4:
+        return None
+    elif ratio >= 1.0:
+        return int(h / 1.5) / h
+    else:
+        return (w - int(w / 1.9)) / h
+
+
+_DETECT_TIMEOUT_S = 5.0  # CD-152b-4 / D2: unattended batch path④ hard-cap
+
+
+def crop_to_poster(src_path: str, dst_path: str, number: str = '', maker: str = '') -> bool:
+    """
+    從橫向封面裁切直向海報（Jellyfin poster）。
+
+    裁切模式（純比例自動判斷）：
+    - h/w >= 1.4 → 已是直向，直接複製
+    - h/w >= 1.0 → 方形（FC2/無碼），裁中間（寬度 = h/1.5，置中）
+    - h/w <  1.0 → 標準橫向（有碼），裁右側（起點 = w/1.9 ≈ 右47%）
+
+    無碼片（gate 命中）會 inline 跑一次 pigo 人臉偵測，把上述裁切窗平移到臉的位置
+    （CD-5：只平移既有窗，不改窗寬）；有碼／偵測不到臉／未傳 number 三條退化路
+    完全落回既有裁法，poster 位元級不變（spec-101 §3.2 stateless：不讀寫 DB 焦點）。
+    """
+    try:
+        with Image.open(src_path) as img:
+            w, h = img.size
+            ratio = h / w
+
+            if ratio >= 1.4:
+                shutil.copy2(src_path, dst_path)
+                return True
+
+            r_window = _poster_window_ratio(w, h)
+
+            focal = None
+            if requires_face_detection(normalize_number_impl(number), maker):
+                outcome = run_detection(
+                    src_path, r_window, job_key=src_path, timeout_s=_DETECT_TIMEOUT_S,
+                    pre_spawn_check=device_state.is_disabled, on_outcome=device_state.record_outcome,
+                )
+                if outcome.kind == "FOUND":
+                    focal = outcome.focal
+
+            rgb = img.convert("RGB")
+            if ratio >= 1.0:
+                crop_w = int(h / 1.5)
+                default_x0 = (w - crop_w) // 2
+            else:
+                crop_w = w - int(w / 1.9)
+                default_x0 = int(w / 1.9)
+
+            if focal is not None:
+                # CD-5「只平移既有窗，不改窗寬」：用與退化路完全相同的整數 crop_w，只把 x0 平移到臉，
+                # 不經 crop_image_position 的 float ratio→px round-trip（會 ±1px 改窗寬/比例，Codex PR#110 P2）。
+                x0 = max(min(int(w * focal[0]) - crop_w // 2, w - crop_w), 0)
+            else:
+                x0 = default_x0
+
+            cropped = rgb.crop((x0, 0, x0 + crop_w, h))
+
+            cropped.save(dst_path, 'JPEG', quality=95, subsampling=0)
+            return True
+    except Exception as e:
+        logger.warning(f"[!] crop_to_poster 失敗: {e}")
+        return False
+
+
+def generate_jellyfin_images(cover_path: str, base_stem: str, number: str = '', maker: str = '') -> dict:
+    """為單部影片產生 Jellyfin poster + fanart（供批次補齊用）。
+
+    Args:
+        cover_path: 封面圖片的完整檔案系統路徑
+        base_stem: 目標檔名 stem（不含副檔名，已移除 -poster/-fanart 後綴）
+
+    同檔情境（CD-112-8 / feature/112 T2c；Codex PR review 三輪 P1 逐步收斂而成）
+    ——**兩個 slot 都必須先用 `cover_layout.same_target_verdict()` preflight，
+    絕不可只靠底層函式自己的同檔偵測**：
+
+    - **共同的 preflight（`same_target_verdict`）**：字串相等 **或**
+      `os.path.samefile`；回傳 `(is_same, certain)` 雙訊號（Stage 2 review P1，
+      2026-08-04，推翻前身 `is_same_target` 單一布林設計）——`is_same` 決定
+      要不要跳過寫入，`certain` 決定能不能把這格宣稱成功。**未知 `OSError`
+      （權限被拒／網路磁碟逾時／短暫 I/O 錯誤）時 `is_same=True, certain=False`**：
+      寧可少產一張衍生圖也不冒毀損原檔的險，但同時**不得謊報成功**——`result[...]`
+      必須落在 `certain`，不能不分青紅皂白地落在 `is_same`（理由見該函式
+      docstring：混成同一個布林時，未知錯誤會被 `readonly_producer.py` 轉成
+      `generate_nfo(has_poster=True, ...)`，NFO 寫出指向不存在檔案的懸空 tag；
+      `_clean_stale_singletons` 也會因此把舊檔當「已被新檔取代」而刪掉，兩者
+      同時發生就是「新的沒產出、舊的被砍」的洞）。
+
+    - **fanart（`copy2`）**：preflight 判定「不同檔」之後**另加**
+      `except shutil.SameFileError`，承接「preflight 通過之後、`copy2` 執行之前
+      才變成同檔」的 race。
+      ⚠️ **`SameFileError` 不能取代 preflight**（Codex PR review 第三輪 P1，已實測
+      重現）：`shutil.copyfile` 靠 `shutil._samefile()` 判同檔，而後者
+      （`/usr/lib/python3.12/shutil.py:214`）把 `os.path.samefile` 的**任何
+      `OSError` 吞掉並回傳 `False`** → `copyfile` 照常往下走、以 `'wb'` 開啟 dst
+      → **截斷共用的 inode**。實測：hardlink 別名 + `samefile` 拋 `PermissionError`
+      → 封面 **7427 bytes → 0 bytes**，而回傳值仍是 `fanart: True`。
+      也就是說 `SameFileError` 只保護「`samefile()` 成功辨識出同檔」那一種情況，
+      未知錯誤下它完全不會被觸發。
+
+    - **poster（`crop_to_poster`）**：只有 preflight，**沒有** race backstop——
+      `crop_to_poster` 不是單純複製，是**讀了就地裁切存檔**，不會拋「動作前失敗」
+      的訊號；src/dst 同檔時它會直接把裁切結果寫回同一個檔案（實測
+      800×538 → 379×538、md5 改變），沒有事後補救的可能，直接違反 prd.md
+      技術決策 #6 承重牆「衍生產物不回寫原檔」。
+      可達路徑：外部庫某片只有 `<stem>-poster.jpg` → `find_cover_image` L1 miss、
+      L1.5 命中 `-poster`（`core/gallery_scanner.py:499`）→ DB `cover_path` 指向該檔；
+      或外部庫工具（MDCX/Javinizer 等）把 `<stem>-poster.jpg` 建成 `<stem>.jpg` 的
+      hardlink／symlink，DB `cover_path` 仍指向 `<stem>.jpg`，字串因此不相等。
+
+    **兩側的差別只在 race backstop，不在 preflight**：`copy2` 有「動作前失敗」的
+    訊號可以補接，`crop_to_poster` 沒有。**不要把任一側的 preflight 拿掉**——
+    本函式在 review 過程中曾經把 fanart 的 preflight 拔掉、只留 `SameFileError`，
+    當場被上面那條 0-byte 毀損打回。
+    """
+    result = {'fanart': False, 'poster': False}
+
+    fanart_path = base_stem + '-fanart.jpg'
+    poster_path = base_stem + '-poster.jpg'
+
+    # fanart = 原圖複製。preflight（same_target_verdict）不可省——shutil 內部的
+    # _samefile() 會把 os.path.samefile 的未知 OSError 吞成 False 並照常寫入，
+    # 對同 inode 別名會截斷原檔（見上方 docstring「同檔情境」段落的實測）。
+    # SameFileError 只是 preflight 之後才變成同檔的 race backstop，不是替代品；
+    # 它繼承 OSError/Exception，必須排在 except Exception 之前才不會被吃掉。
+    is_same, certain = same_target_verdict(cover_path, fanart_path)
+    if is_same:
+        # 只有確定同檔（certain=True）才敢宣稱成功；未知 OSError 之下 is_same
+        # 仍是 True（跳過寫入），但 certain=False，result['fanart'] 老實回 False。
+        result['fanart'] = certain
+        if certain:
+            result['fanart_path'] = fanart_path
+    else:
+        try:
+            shutil.copy2(cover_path, fanart_path)
+            result['fanart'] = True
+            result['fanart_path'] = fanart_path
+        except shutil.SameFileError:
+            result['fanart'] = True
+            result['fanart_path'] = fanart_path
+        except Exception as e:
+            logger.warning(f"[!] generate_jellyfin_images fanart 複製失敗: {e}")
+
+    # poster = 裁切；src/dst 同檔（字串相等或 inode 別名）代表這張本來就是 poster，
+    # 不該再裁一次（絕不可就地寫）
+    is_same, certain = same_target_verdict(cover_path, poster_path)
+    if is_same:
+        result['poster'] = certain
+        if certain:
+            result['poster_path'] = poster_path
+    elif crop_to_poster(cover_path, poster_path, number=number, maker=maker):
+        result['poster'] = True
+        result['poster_path'] = poster_path
+
+    return result
+
+
+def _host_key(url: str) -> Optional[Tuple[str, str, int]]:
+    """Failure-memory key: (scheme, hostname, effective_port)。組不出就回 None。
+
+    Stage 2 review P3-1：`urlparse(...).port` 對非數字 port（`http://h:abc/x.jpg`）
+    **拋 ValueError**，而唯一的呼叫點 `download_image()` 的 `skip_primary = ...`
+    那行不在任何 try 內——例外會一路穿出 `organize_file()`，而那時
+    `shutil.move()`（:1219）**已經把影片檔搬到新資料夾了**，NFO 卻還沒寫。
+    使用者看到「整理失敗」，但檔案在新位置、資料夾是半成品，得自己收拾。
+    改動前這種髒網址只會讓封面抓不到，整理照樣完成——所以這是本 branch 引入的回歸。
+    回 None 即代表「這個網址沒有可記憶的 host」，兩個消費端都已經吃 None。
+    """
+    try:
+        parsed = urlparse(url)
+        scheme = (parsed.scheme or "").lower()
+        hostname = (parsed.hostname or "").lower()
+        if not scheme or not hostname:
+            return None
+        port = parsed.port or (443 if scheme == "https" else 80)
+    except ValueError:
+        return None
+    return (scheme, hostname, port)
+
+
+def _host_recently_failed(key: Optional[Tuple[str, str, int]]) -> bool:
+    if key is None:
+        return False
+    now = _now()
+    with _failed_hosts_lock:
+        expiry = _failed_hosts.get(key)
+        if expiry is None:
+            return False
+        if now >= expiry:
+            _failed_hosts.pop(key, None)
+            return False
+        return True
+
+
+def _record_host_failure(key: Optional[Tuple[str, str, int]]) -> None:
+    if key is None:
+        return
+    expiry = _now() + _HOST_FAILURE_TTL
+    with _failed_hosts_lock:
+        _failed_hosts[key] = expiry
+    logger.debug("image host connect failure recorded: %s (ttl=%ss)", key, _HOST_FAILURE_TTL)
+
+
+def build_download_headers(url: str, referer: str = "") -> dict:
+    headers = HEADERS.copy()
+    effective_referer = referer
+    if not effective_referer:
+        if "javbus.com" in url:
+            effective_referer = "https://www.javbus.com/"
+        elif "dmm.co.jp" in url:
+            effective_referer = "https://www.dmm.co.jp/"
+        elif "jav321.com" in url:
+            effective_referer = "https://www.jav321.com/"
+    if effective_referer:
+        headers["Referer"] = effective_referer
+    return headers
+
+
+def _attempt_download_image(
+    url: str, save_path: str, referer: str = "", *, short_connect: bool = False
+) -> bool:
+    """Try one URL. Record host only on connect-stage failures.
+
+    `short_connect` 只在「這次嘗試有代理可退」時為 True（CD-126-6 ＋ Codex PR review P2）。
+
+    **為什麼不無條件縮**：AC-5 要求非 metatube 來源「逐字元相同」。沒有 fallback 的
+    呼叫端（自家 9 源）縮成 5 秒 connect **等於改變結果**——連線慢但 TCP 接得起來的
+    使用者會從「30 秒後成功」變成「5 秒失敗」，而且**沒有代理可以救**。
+    短逾時的收益只存在於「失敗了還有第二條路」的情境，成本卻落在沒有第二條路的人身上。
+    """
+    headers = build_download_headers(url, referer)
+    timeout = (CONNECT_TIMEOUT, REQUEST_TIMEOUT) if short_connect else REQUEST_TIMEOUT
+    try:
+        resp = requests.get(url, headers=headers, timeout=timeout, **proxy_kwargs('image', url=url))
+        if resp.status_code == 200 and len(resp.content) > 1000:
+            # 解碼用的 host 走 urlparse——與 proxy 端（web/routers/search.py）同一種取法。
+            # **刻意不重用 `_host_key()`**：那支對畸形 port 回 None（理由見它自己的
+            # docstring），而「畸形 port」不該讓「解碼 → 驗魔數」整組被跳過——那會讓
+            # registry 標了 codec 的 host 靜默寫出一個打不開的檔，正是 CD-132b-16
+            # 承諾不存在的那個狀態。（pre-merge branch review P3 實測到的不對稱。）
+            try:
+                url_host = (urlparse(url).hostname or "").lower()
+            except Exception:
+                url_host = ""
+            # 只有 registry 標了 payload_codec 的 host 才走「解碼 → 驗魔數」。
+            # 既有 28 筆條目的 payload_codec 都是 None ⇒ 它們**結構上走不進這裡**，
+            # 寫進磁碟的位元組與改動前逐位元相同。
+            #
+            # 為什麼不對全部 host 一視同仁（plan §T4 的爆炸半徑限制）：魔數表只認
+            # JPEG/PNG/GIF/WebP。哪天某個既有圖床改用 AVIF 之類的新格式，全站閘一開
+            # 就是「那個來源整排破圖」——那會是本 branch 引進的**新**回歸，而它要修的
+            # 「明文 CDN 回 200 錯誤頁」是本來就存在的曝險。後者列 backlog，不在本 branch 做。
+            payload = resp.content
+            if codec_for_host(url_host) is not None:
+                payload = decode_image_payload(url_host, payload)
+                if not looks_like_image(payload):
+                    logger.warning("[!] 下載圖片失敗：解碼後不是圖片 host=%s", url_host)
+                    return False
+            with open(save_path, "wb") as f:
+                f.write(payload)
+            return True
+    except requests.exceptions.ConnectionError as e:
+        # ConnectTimeout is a ConnectionError subclass; ReadTimeout is not.
+        _record_host_failure(_host_key(url))
+        logger.warning(f"[!] 下載圖片失敗: {e}")
+    except Exception as e:
+        logger.warning(f"[!] 下載圖片失敗: {e}")
+    return False
+
+
+def download_image(
+    url: str, save_path: str, referer: str = "", fallback_url: str = ""
+) -> bool:
+    """下載圖片。
+
+    metatube 的 `/v1/images/` 會重新編碼 JPEG（實測 +3% 體積、尺寸不變），所以先試原址，取不到才用代理副本。
+    """
+    if not url:
+        return False
+
+    # CD-126-8: original-first; proxy is a re-encoded JPEG rescue copy.
+    skip_primary = bool(fallback_url) and _host_recently_failed(_host_key(url))
+
+    if not skip_primary:
+        # 只有「有代理可退」的那一次原址嘗試才用短 connect（見 _attempt_download_image
+        # 的 docstring）。沒有 fallback 時逐字元維持改動前的 timeout=REQUEST_TIMEOUT。
+        if _attempt_download_image(
+            url, save_path, referer, short_connect=bool(fallback_url)
+        ):
+            return True
+        if not fallback_url:
+            return False
+        # 代理那一次用正常 timeout（plan §2.3）——它通常在區網內，且已經是最後一條路。
+        return _attempt_download_image(fallback_url, save_path, referer)
+
+    return _attempt_download_image(fallback_url, save_path, referer)
+
+
+# NFO-CTRL-01（PR #191 CodeRabbit F1/加固；BE-GUARD-01：閘門寫在 sink，不寫在上游白名單）：
+# XML 1.0 合法字元只有 \t(0x09) \n(0x0A) \r(0x0D) 與 0x20 以上（另排除 surrogate 區段
+# 0xD800–0xDFFF 與 0xFFFE/0xFFFF）。含裸控制字元（\x07/\x0b/\x0c/\x1b/\x00 等）的欄位值
+# 目前會讓 generate_nfo() 寫出成功（回 True）但整份 XML 解析失敗——ET.parse 與
+# core.nfo_updater.parse_nfo 都讀不到任何欄位，Jellyfin/Kodi/OpenAver 自己全部看不到。
+# 這是既有病（core/enricher.py:528 批次補完／進階重刮早就會把 _summary 寫進 <plot>），
+# 本次一併在唯一 sink（generate_nfo）收斂，不分兩處補。
+_ILLEGAL_XML_CHARS_RE = re.compile(
+    '[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]'
+)
+
+
+def _strip_illegal_xml_chars(value):
+    """剝除字串裡 XML 1.0 不合法的字元，保留 \\t/\\n/\\r（簡介換行不可被吃掉）。
+
+    **非字串一律先收斂成字串**（`None` → `''`，其餘 → `str(value)`）。理由與
+    147c-T2 的 `<rating>` 型別防護同一條（BE-GUARD-01：閘門寫在 sink）：
+    `POST /api/scrape-single` 對 `metadata` **零驗證**（`web/routers/scraper.py:222`，
+    與 `enrich_single` 的嚴格白名單不對稱），AI 送 `{"_summary": null}` 進來時
+    `metadata.get('_summary', '')` 會回 `None`（key 存在，default 不生效），
+    而 `generate_nfo()` 在 `atomic_move()` **之後**才跑 —— `html.escape(None)` 拋
+    `AttributeError` 會讓畫面顯示「整理失敗」，但影片檔其實已經改名搬走了。
+    CodeRabbit PR #191 的 P2 提對了這條鏈，只是把觸發前提歸給 scraper 端
+    （`Video.summary` 是 `str = Field(default='')` 且 frozen，那半確實不可能）。
+    """
+    if value is None:
+        return ''
+    if not isinstance(value, str):
+        value = str(value)
+    return _ILLEGAL_XML_CHARS_RE.sub('', value)
+
+
+def _clean_xml_str_list(value):
+    """把「應該是字串清單」的參數收斂成乾淨的 list[str]，非清單一律回 `[]`。
+
+    與 `_strip_illegal_xml_chars()` 同一條理由（BE-GUARD-01：閘門寫在 sink），
+    但守的是**容器型別**而不是元素內容：`POST /api/scrape-single` 對 `metadata`
+    零驗證，送 `{"user_tags": 123}` 進來時 `core/organizer.py` 是在
+    **`atomic_move()` 之後**才取出 user_tags 交給 `generate_nfo()`，而
+    `user_tags or []` 會原樣保留非零整數 ⇒ 迭代整數拋 `TypeError`
+    ⇒ 又是「畫面說整理失敗、但影片檔已經搬走」。
+    bare `str` 也會被擋掉（否則會被逐字元迭代成一堆單字元 tag）。
+    """
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [_strip_illegal_xml_chars(v) for v in value]
+
+
+def generate_nfo(
+    number: str,
+    title: str,
+    original_title: str = '',
+    actors: List[str] = None,
+    tags: List[str] = None,
+    date: str = '',
+    maker: str = '',
+    url: str = '',
+    has_subtitle: bool = False,
+    has_vr: bool = False,
+    output_path: str = '',
+    has_poster: bool = False,
+    has_fanart: bool = False,
+    director: str = '',
+    duration: Optional[int] = None,
+    series: str = '',
+    label: str = '',
+    user_tags: List[str] = None,
+    summary: str = '',
+    rating: Optional[float] = None,
+    mpaa: str = 'JP-18+',
+    external_manager: str = 'off',
+    nfo_title_format: str = '[{num}]{title}',
+) -> bool:
+    """
+    生成 NFO 檔案
+
+    Args:
+        number: 番號
+        title: 標題（中文）
+        original_title: 原始標題（日文）
+        actors: 演員列表
+        tags: 標籤列表
+        date: 發行日期（YYYY-MM-DD）
+        maker: 片商
+        url: 來源 URL
+        has_subtitle: 是否有字幕
+        output_path: NFO 輸出路徑
+        external_manager: 外部媒體管理器模式（"off" / "jellyfin" / "emby" / "kodi"）
+            - "off"（預設）：最小輸出，無 F3 欄位
+            - "jellyfin" / "emby"：附加 F3 五欄位，poster/fanart 使用 stem 長格式命名
+            - "kodi"：附加 F3 五欄位；poster/fanart 與 jellyfin/emby 相同（stem 長格式），
+              Kodi 在所有資料夾 layout 下均識別 {basename}-poster.jpg/{basename}-fanart.jpg
+    """
+    if not output_path:
+        return False
+
+    actors = actors or []
+    tags = tags or []
+    user_tags = user_tags or []
+
+    # NFO-CTRL-01：sink 端統一剝除 XML 不合法控制字元（見上方模組層註解），
+    # 涵蓋所有會被寫進本份 NFO 的字串欄位；非字串（如 None）原樣通過。
+    number = _strip_illegal_xml_chars(number)
+    title = _strip_illegal_xml_chars(title)
+    original_title = _strip_illegal_xml_chars(original_title)
+    date = _strip_illegal_xml_chars(date)
+    maker = _strip_illegal_xml_chars(maker)
+    url = _strip_illegal_xml_chars(url)
+    director = _strip_illegal_xml_chars(director)
+    series = _strip_illegal_xml_chars(series)
+    label = _strip_illegal_xml_chars(label)
+    summary = _strip_illegal_xml_chars(summary)
+    actors = _clean_xml_str_list(actors)
+    tags = _clean_xml_str_list(tags)
+    user_tags = _clean_xml_str_list(user_tags)
+
+    year = date[:4] if date else ''
+
+    # 封面檔名（不含副檔名）
+    # NFO-CTRL-01b：basename 衍生自 output_path，而 sanitize_filename()（:47）只移除
+    # Windows 禁用符號，BEL/ESC 之類控制字元穿得過去 ⇒ 帶控制字元的 title 會讓影片被搬到
+    # 帶控制字元的檔名，再由 basename 把同一個字元寫回 <poster>/<thumb>/<fanart>。
+    # title 那一格淨化了也沒用，整份 XML 還是壞的，所以這裡要再過一次。
+    basename = _strip_illegal_xml_chars(
+        os.path.splitext(os.path.basename(output_path))[0]
+    )
+
+    # 顯示標題（belt-and-suspenders：剝除前置番號前綴後組 display_title，B2 FIX B CD-c7）
+    from core.nfo_title_format import build_display_title  # 延遲：反向模組層 import 會循環
+    display_title, _t = build_display_title(
+        number, title, original_title, actors, maker, date, nfo_title_format,
+    )
+
+    poster_suffix = '-poster' if has_poster else ''
+    fanart_suffix = '-fanart' if has_fanart else ''
+
+    # poster/fanart tag：所有模式（off / jellyfin / emby / kodi）均使用 stem 長格式。
+    # off → poster_suffix='' → {basename}.jpg；jellyfin/emby/kodi → {basename}-poster.jpg。
+    poster_tag = f'{html.escape(basename)}{poster_suffix}.jpg'
+    fanart_tag = f'{html.escape(basename)}{fanart_suffix}.jpg'
+
+    set_tag = (
+        f"<set><name>{html.escape(series)}</name></set>" if series else "<set></set>"
+    )
+    # NFO-CTRL-01c：<runtime> 是全函式唯一的裸插值（見 TestGenerateNfoNoUnescapedInterpolation
+    # 的窮舉守衛）。`duration: Optional[int]` 只是宣告——`POST /api/scrape-single` 對
+    # metadata 零驗證（`web/routers/scraper.py:222`），送 {"duration": "1&2"} 進來會在
+    # **atomic_move() 之後**（`core/organizer.py:1423` 取值）寫出 `<runtime>1&2</runtime>`：
+    # 函式回 True，但整份 NFO 解析失敗。契約逐字比照 enrich_single 的 duration 驗證
+    # （`web/routers/scraper.py:515-517`：整數或 null），非整數一律當成「沒有」。
+    _duration = duration if (isinstance(duration, int) and not isinstance(duration, bool)) else None
+    runtime_tag = f"<runtime>{_duration}</runtime>" if _duration is not None else "<runtime></runtime>"
+    director_tag = f"<director>{html.escape(director)}</director>" if director else "<director></director>"
+    label_tag = f"<label>{html.escape(label)}</label>"
+    # 63c-5（CD-63c-10）：metatube summary→<plot>，rating×2→<rating>（0-10 Jellyfin scale，
+    # 僅有值才寫），<mpaa>JP-18+ 無條件寫（所有 JAV 共通）。rating_line 含 \n + 2-space 縮排，
+    # 空時不留空行（embedded 在 <plot> 之前）。
+    rating_line = f"  <rating>{rating * 2:.1f}</rating>\n" if (isinstance(rating, (int, float)) and not isinstance(rating, bool) and rating > 0) else ""
+
+    nfo_content = f'''<?xml version="1.0" encoding="utf-8"?>
+<movie>
+  <title>{html.escape(display_title)}</title>
+  <originaltitle>{html.escape(original_title)}</originaltitle>
+  {set_tag}
+  <studio>{html.escape(maker)}</studio>
+  {label_tag}
+  <year>{html.escape(year)}</year>
+  <premiered>{html.escape(date)}</premiered>
+{rating_line}  <plot>{html.escape(summary)}</plot>
+  <mpaa>{html.escape(mpaa)}</mpaa>
+  {runtime_tag}
+  {director_tag}
+  <poster>{poster_tag}</poster>
+  <thumb>{fanart_tag}</thumb>
+  <fanart>{fanart_tag}</fanart>
+'''
+
+    # 演員
+    for actor in actors:
+        nfo_content += f'''  <actor>
+    <name>{html.escape(actor)}</name>
+    <role></role>
+  </actor>
+'''
+
+    # 標籤
+    for tag in tags:
+        nfo_content += f'  <tag>{html.escape(tag)}</tag>\n'
+
+    if has_subtitle and not any(t.strip() == '中文字幕' for t in tags):
+        nfo_content += '  <tag>中文字幕</tag>\n'
+
+    if has_vr and not any(t.strip().lower() == 'vr' for t in tags):
+        nfo_content += '  <tag>VR</tag>\n'
+
+    # 用戶自訂標籤（獨立於 scraper tags，其他平台忽略）
+    for ut in user_tags:
+        nfo_content += f'  <user_tag>{html.escape(ut)}</user_tag>\n'
+
+    # Genre
+    for tag in tags:
+        nfo_content += f'  <genre>{html.escape(tag)}</genre>\n'
+
+    if has_subtitle and not any(t.strip() == '中文字幕' for t in tags):
+        nfo_content += '  <genre>中文字幕</genre>\n'
+
+    if has_vr and not any(t.strip().lower() == 'vr' for t in tags):
+        nfo_content += '  <genre>VR</genre>\n'
+
+    # T3：F3 五欄位區塊（僅 external_manager != "off" 時輸出）
+    # 注意：這會造成 NFO 內同時有兩個 default="true" 的 uniqueid（home + num）。
+    # POC 實證 Jellyfin 容忍（兩個 ProviderId 都正確讀到），故意保留 home 行不動。
+    if external_manager != 'off':
+        external_block = (
+            f'  <lockdata>true</lockdata>\n'
+            f'  <uniqueid type="num" default="true">{html.escape(number)}</uniqueid>\n'
+            f'  <sorttitle>{html.escape(display_title)}</sorttitle>\n'
+            f'  <country>Japan</country>\n'
+            f'  <language>ja</language>\n'
+        )
+    else:
+        external_block = ''
+
+    title_record_block = ''
+    if nfo_title_format != '[{num}]{title}':
+        title_record_block = (
+            f'  <openaver_title_record>\n'
+            f'    <written>{html.escape(display_title)}</written>\n'
+            f'    <body>{html.escape(_t)}</body>\n'
+            f'  </openaver_title_record>\n'
+        )
+
+    nfo_content += f'''  <num>{html.escape(number)}</num>
+  <release>{html.escape(date)}</release>
+  <cover></cover>
+  <website>{html.escape(url)}</website>
+{external_block}  <uniqueid type="home" default="true">{html.escape(number)}</uniqueid>
+{title_record_block}</movie>'''
+
+    try:
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(nfo_content)
+        return True
+    except Exception as e:
+        logger.error(f"[!] 生成 NFO 失敗: {e}")
+        return False
+
+
+def find_subtitle_files(video_path: str) -> List[str]:
+    """
+    找出與影片同名的字幕檔（.srt/.ass/.ssa）。
+
+    匹配規則：
+    - {stem}.srt / {stem}.ass / {stem}.ssa  （完全同名）
+    - {stem}.*.srt / {stem}.*.ass / {stem}.*.ssa  （帶語言後綴，如 .cht.srt）
+
+    不匹配：
+    - 不同名字幕（bbb.srt）
+    - 底線分隔（aaa_chs.srt）
+
+    Args:
+        video_path: 影片完整路徑
+
+    Returns:
+        符合規則的字幕路徑列表（影片不存在時回傳空列表）
+    """
+    p = Path(video_path)
+    if not p.parent.exists():
+        return []
+
+    stem = p.stem
+    # escape glob 特殊字元（如 [ ] ? *），防止檔名被誤解讀
+    from glob import escape as glob_escape
+    stem_esc = glob_escape(stem)
+    results = []
+    for ext in ('srt', 'ass', 'ssa'):
+        # 完全同名：aaa.srt
+        for match in p.parent.glob(f"{stem_esc}.{ext}"):
+            results.append(str(match))
+        # 帶語言後綴：aaa.*.srt（.cht.srt, .chs.srt 等）
+        for match in p.parent.glob(f"{stem_esc}.*.{ext}"):
+            results.append(str(match))
+    return results
+
+
+def _permission_error_message() -> str:
+    """`os.makedirs` 因權限被拒時的錯誤訊息；Synology 版附加 DSM 操作指引（CD-159-11）。"""
+    msg = '無法建立資料夾，請確認目標路徑的寫入權限'
+    if is_synology():
+        msg += '（' + DSM_PERMISSION_HINT + '）'
+    return msg
+
+
+def _containment_error(candidate_fs_path: str, root_fs_path: str) -> Optional[str]:
+    """
+    整理流程的寫入錨點防線（CD-110b-8 抽出的小函式，供 organize_file 呼叫兩次）。
+
+    包住 T3 的 is_fs_path_under_dir：candidate_fs_path／root_fs_path 原樣傳入，
+    不得先 normalize_path()（正規化疊加，BE-PATH-01 #1）。
+
+    Args:
+        candidate_fs_path: 待檢查的寫入目標（target_dir 或 target_path），原生 FS path。
+        root_fs_path: 允許範圍的根目錄（organize_file 的 original_dir），原生 FS path。
+
+    Returns:
+        None 表示在範圍內（放行）；否則回傳硬編碼繁中錯誤訊息，
+        比照 organize_file 既有錯誤分支（result['error'] + return result，不 raise）。
+    """
+    if is_fs_path_under_dir(candidate_fs_path, root_fs_path):
+        return None
+    return '目標路徑超出允許範圍，請確認命名格式設定'
+
+
+def organize_file(  # noqa: C901 — 整理主流程；Phase 2（110b）會在其中加 containment 防線，加的是「呼叫一個新的小函式」，不得讓本函式本身更複雜（見 plan-110b）
+    file_path: str,
+    metadata: Dict[str, Any],
+    config: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    整理單個檔案
+
+    Args:
+        file_path: 原始檔案路徑
+        metadata: 影片元數據 {number, title, actors, tags, date, maker, img, url}
+        config: 設定 {create_folder, folder_format, filename_format, download_cover,
+                      cover_filename, create_nfo, max_title_length, max_filename_length}
+
+    Returns:
+        {success, original_path, new_folder, new_filename, cover_path, nfo_path, error}
+    """
+    result = {
+        'success': False,
+        'original_path': file_path,
+        'new_folder': None,
+        'new_filename': None,
+        'cover_path': None,
+        'nfo_path': None,
+        'error': None,
+        'used_fallbacks': []
+    }
+
+    # 轉換路徑為當前環境格式
+    try:
+        file_path = normalize_path(file_path)
+    except ValueError:
+        logger.exception("normalize_path 失敗")
+        result['error'] = '路徑格式不支援，請確認路徑設定'
+        return result
+
+    if not os.path.exists(file_path):
+        result['error'] = '檔案不存在'
+        return result
+
+    # 提取必要資訊
+    number = metadata.get('number', '')
+    if not number:
+        result['error'] = '缺少番號'
+        return result
+
+    # 原始檔案資訊
+    original_dir = os.path.dirname(file_path)
+    original_ext = os.path.splitext(file_path)[1]
+    original_filename = os.path.basename(file_path)
+
+    # 外部管理器模式（單一來源，早偵測層；CD-72b-T5）
+    ext_mode = config.get('external_manager', 'off')
+
+    # 偵測 VR cluster（CD-68-5/6/7）：算一次，作用域涵蓋 title 剝除、組裝段與 nfo 呼叫（GA）
+    # 上移至 extract_chinese_title 之前，用於剝除 extracted_title 尾端的 VR token（Codex P2）
+    vr_cluster = _detect_vr_cluster(original_filename)
+    vr_tail = f'_{vr_cluster}' if vr_cluster else ''
+
+    # 多段（multipart）token 早偵測（CD-72b-T5）；off 模式恆不啟用（part_tail=''）
+    part_match = _detect_multipart_token(original_filename) if ext_mode != 'off' else None
+    part_tail = f'-{part_match[0]}' if part_match else ''   # e.g. '-cd1'；off 模式恆 ''
+
+    # budget reserve：兩分支共用，part_tail 也預留；off 模式 part_tail='' → 等同現狀（CD-68-7/CD-72b-T5）
+    reserve = len(vr_tail) + len(part_tail)
+
+    # 準備格式化資料
+    actors = metadata.get('actors', [])
+
+    # 標題優先順序：翻譯 > 檔名提取 > 日文原始
+    original_title = metadata.get('title', '')  # 日文原始標題
+    translated_title = metadata.get('translated_title', '')  # LLM 翻譯/優化的標題
+    extracted_title = extract_chinese_title(original_filename, number, actors)
+
+    # 剝除 extracted_title 尾端的 VR cluster（含可選 bracket/paren 包裝，Codex P2 二次修正）
+    # _detect_vr_cluster 把 []() 當分隔符 → cluster 不含 bracket，但 extracted_title 保留 bracket，
+    # 故需匹配可選的開/閉 bracket/paren 包裝；否則 _[180_LR] 不被剝 → 與尾端 vr_tail 雙寫。
+    if vr_cluster and extracted_title:
+        _vr_tail_re = re.compile(r'[\[(]?' + re.escape(vr_cluster) + r'[\])]?[\s_.\-]*$')
+        _m = _vr_tail_re.search(extracted_title)
+        if _m:
+            _trimmed = extracted_title[:_m.start()].rstrip('_-. ')
+            extracted_title = _trimmed or extracted_title
+
+    # FIX A：B2 junk-validation（CD-c5/c6）
+    # 若提取結果殘留 organize 模板 artifact（日期/maker/suffix），丟棄改用翻譯/刮削源
+    if extracted_title and _extracted_has_organize_junk(extracted_title, number, metadata, config):
+        extracted_title = None   # fall through 到翻譯/刮削源（CD-c6）
+
+    # 決定最終使用的標題
+    if translated_title:
+        title = translated_title
+        result['title_source'] = 'translated'
+    elif extracted_title:
+        title = extracted_title
+        result['title_source'] = 'extracted'
+        result['extracted_title'] = extracted_title
+    else:
+        title = original_title
+        result['title_source'] = 'original'
+
+    # FIX B：B2 標題決定段去前綴（CD-c7）
+    # 勝出 title 若帶 [{number}]/{number} 前綴，迴圈剝盡至本體
+    # → 檔名（format_data['title']）、NFO <title>、<sorttitle> 同時受惠
+    # → 迴圈剝盡可修復舊 bug 寫進磁碟/DB 的 [ABC-123][ABC-123]Title 雙重堆疊
+    if title:
+        title = _strip_num_prefixes(title, number)
+
+    format_data = {
+        'number': number,
+        'title': truncate_title(title, config.get('max_title_length', 50)),
+        'actors': actors,
+        'maker': metadata.get('maker', ''),
+        'date': metadata.get('date', ''),
+    }
+
+    # 偵測版本後綴；外部模式過濾掉多段 token 避免 {suffix}+part_tail 雙寫（CD-72b-T5）
+    # 注意：絕不 mutate config['suffix_keywords']，只過濾傳入 _detect_suffixes 的區域變數
+    suffix_keywords = config.get('suffix_keywords', [])
+    if ext_mode != 'off':
+        detect_keywords = [kw for kw in suffix_keywords if not _is_multipart_kw(kw)]
+    else:
+        detect_keywords = suffix_keywords   # off 模式：原始未過濾 list，byte-identical
+    suffix = _detect_suffixes(original_filename, detect_keywords)
+    format_data['suffix'] = suffix
+
+    # 記錄哪些欄位實際用了 fallback（僅資料夾層級會觸發 fallback）
+    used_fallbacks = []
+    if config.get('create_folder', True):
+        # 解析資料夾層級中實際使用的 placeholder
+        layers = config.get('folder_layers', [])
+        if not layers:
+            old_format = config.get('folder_format', '{num}')
+            layers = [p.strip() for p in old_format.replace('\\', '/').split('/') if p.strip()]
+        folder_template = ' '.join(layers)  # 合併所有層級一次檢查
+
+        if ('{actor}' in folder_template or '{actors}' in folder_template) and not format_data.get('actors'):
+            used_fallbacks.append('女優')
+        if '{maker}' in folder_template and not format_data.get('maker'):
+            used_fallbacks.append('片商')
+        date_val = format_data.get('date', '') or ''
+        date_missing = (
+            ('{date}' in folder_template and not date_val) or
+            ('{year}' in folder_template and len(date_val) < 4) or
+            ('{month}' in folder_template and len(date_val) < 7) or
+            ('{day}' in folder_template and len(date_val) < 10)
+        )
+        if date_missing:
+            used_fallbacks.append('日期')
+        if '{title}' in folder_template and not format_data.get('title'):
+            used_fallbacks.append('標題')
+
+    # 字幕偵測：先看 metadata，再補檔案系統級偵測
+    has_subtitle = metadata.get('has_subtitle')
+    subtitle_files = find_subtitle_files(file_path)
+    if has_subtitle is None:
+        has_subtitle = check_subtitle(original_filename) or bool(subtitle_files)
+    elif subtitle_files:
+        has_subtitle = True  # sidecar 字幕存在 → 覆寫上游 False
+
+    _base_tags = list(metadata.get('tags', []) or [])
+    if has_subtitle:
+        _base_tags.append('中文字幕')
+    if vr_cluster is not None:
+        _base_tags.append('VR')
+    metadata['tags'] = effective_tags(original_filename, _base_tags)
+
+    # 計算目標路徑
+    if config.get('create_folder', True):
+        # 優先使用新格式 folder_layers
+        layers = config.get('folder_layers', [])
+        if not layers:
+            # 相容舊格式：folder_format 可能含 / 分隔
+            old_format = config.get('folder_format', '{num}')
+            layers = [p.strip() for p in old_format.replace('\\', '/').split('/') if p.strip()]
+
+        # 過濾空值，分別格式化每層
+        # 讀取設定，但上限 120 字符
+        max_folder_chars = min(config.get('max_filename_length', 60), 120)
+        path_parts = []
+        for layer in layers[:3]:  # 限制最多 3 層
+            if layer:
+                part = truncate_to_chars(format_string(layer, format_data, use_fallback=True), max_folder_chars)
+                if part:
+                    path_parts.append(part)
+
+        target_dir = os.path.join(original_dir, *path_parts) if path_parts else original_dir
+    else:
+        target_dir = original_dir
+
+    # 計算新檔名（suffix 保護：先截斷 base，再接回 suffix）
+    filename_template = config.get('filename_format', '{num} {title}')
+    max_filename_chars = min(config.get('max_filename_length', 60), 120)
+    max_chars = max_filename_chars - len(original_ext)
+
+    suffix = format_data.get('suffix', '')
+    if suffix and '{suffix}' in filename_template:
+        # 先用空 suffix 產生 base，截斷後再接回 suffix；base_budget 扣 reserve（CD-68-5/7）
+        no_suffix_data = dict(format_data, suffix='')
+        base_without_suffix = format_string(filename_template, no_suffix_data)
+        base_budget = max(0, max_chars - len(suffix) - reserve)
+        if base_budget == 0:
+            filename_base = truncate_to_chars(suffix, max(0, max_chars - reserve))
+        else:
+            base_without_suffix = truncate_to_chars(base_without_suffix, base_budget)
+            filename_base = base_without_suffix + suffix
+    else:
+        filename_base = format_string(filename_template, format_data)
+        filename_base = truncate_to_chars(filename_base, max(0, max_chars - reserve))
+    # VR tail 永遠最後接（CD-68-6）；vr_tail='' 時零變化（CD-68-9）
+    filename_base = filename_base + vr_tail
+    # P1-A 修正（Codex）：{title} 欄位（尤其是 extracted_title）可能殘留多段 token
+    # （如 extract_chinese_title 保留 '某中文標題-part2[HD]'），導致 part_tail 雙寫。
+    # 在接 part_tail 之前，先從 filename_base 剝除最靠後的多段 token（_strip_part_token
+    # 無 token 時為 no-op → 乾淨標題案例完全不影響輸出）。
+    # off 模式 part_tail='' → if 分支不進入，行為與修前 byte-identical。
+    # 注意：不需另在 extracted_title 層剝除，組裝後整體剝更穩健（任何欄位來源均覆蓋）。
+    if part_tail:
+        filename_base = _strip_part_token(filename_base)  # 移除 {title} 等欄位遺留的多段 token
+    # part token 接在 VR tail 之後（最末）；off 模式 part_tail='' → no-op（CD-72b-T5）
+    # 順序：{base}{vr_tail}{part_tail}；Jellyfin stacking 要求 part token 落在 stem 最末
+    filename_base = filename_base + part_tail
+    # 最終長度上限保護（Codex PR P2）：即使退化情形也不突破 max_filename_length。
+    # 正常/spec 情形 reserve 已預留 → base+vr_tail+part_tail == max_chars → 此為 no-op；
+    # 僅 max_filename_length 被設到連 ext+VR cluster+part token 都裝不下時才作用。
+    filename_base = truncate_to_chars(filename_base, max_chars)
+
+    new_filename = filename_base + original_ext
+    target_path = os.path.join(target_dir, new_filename)
+
+    try:
+        # 建立資料夾
+        if config.get('create_folder', True):
+            containment_error = _containment_error(target_dir, original_dir)
+            if containment_error:
+                result['error'] = containment_error
+                return result
+            try:
+                os.makedirs(target_dir, exist_ok=True)
+            except PermissionError:
+                result['error'] = _permission_error_message()
+                return result
+            result['new_folder'] = target_dir
+
+        # 移動並重命名檔案
+        if file_path != target_path:
+            containment_error = _containment_error(target_path, original_dir)
+            if containment_error:
+                result['error'] = containment_error
+                return result
+            try:
+                fd = os.open(target_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                result['success'] = False
+                result['duplicate'] = True
+                result['duplicate_target'] = os.path.basename(target_path)
+                return result
+            os.close(fd)
+            atomic_move(file_path, target_path)
+
+            # 搬移字幕檔（影片有搬移時才執行）
+            subs_to_move = subtitle_files
+            video_stem = Path(file_path).stem
+            for sub_path in subs_to_move:
+                try:
+                    sub_name = os.path.basename(sub_path)
+                    sub_suffix = sub_name[len(video_stem):]  # e.g. ".cht.srt" or ".srt"
+                    sub_target = os.path.join(target_dir, filename_base + sub_suffix)
+                    shutil.move(sub_path, sub_target)
+                except Exception as e:
+                    logger.warning(f"字幕搬移失敗 {sub_path}: {e}")
+
+        result['new_filename'] = target_path
+
+        # 下載封面（檔名跟隨影片命名）
+        img_url = metadata.get('cover', '')
+        if img_url:
+            cover_path = resolve_cover_target(os.path.join(target_dir, filename_base), ext_mode)
+            # CD-126-3（owner 2026-08-23 裁決納入）：原址優先，取不到才退 metatube 代理。
+            # 後端重刮與前端整理（`buildOrganizeMetadata()`）**兩條都有值**——Codex PR
+            # review P2-1 之後前端不再剝除 preview 欄位。113c-T3b 的不變式是「代理網址
+            # 不落磁碟」，剝除只是當時採用的手段；改由 TestT6PreviewNotPersisted 直接
+            # 斷言 NFO／new_folder 下所有文字檔都不含代理 URL 來守。
+            # 讀不到（非 metatube 來源）就跟今天完全一樣，不需要 if-else 去分辨來源。
+            preview_cover = metadata.get('preview_cover_url') or ''
+            cover_ok = (
+                download_image(img_url, cover_path, fallback_url=preview_cover)
+                if preview_cover
+                else download_image(img_url, cover_path)
+            )
+            if cover_ok:
+                result['cover_path'] = cover_path
+
+        # 外部管理器模式：依 ext_mode 決定 poster/fanart 命名規則（ext_mode 已在早偵測層定義）
+        # jellyfin/emby 與 kodi 均使用 stem 長格式（{stem}-poster.jpg / {stem}-fanart.jpg），
+        # Kodi 在所有資料夾 layout 下均識別此命名，無需 per-folder 偵測。
+        if ext_mode in STEM_IMAGE_MODES and result.get('cover_path'):
+            cover_jpg = result['cover_path']
+            imgs = generate_jellyfin_images(
+                cover_jpg, os.path.join(target_dir, filename_base),
+                number=number, maker=metadata.get('maker', ''),
+            )
+            if imgs.get('fanart_path'):
+                result['fanart_path'] = imgs['fanart_path']
+            if imgs.get('poster_path'):
+                result['poster_path'] = imgs['poster_path']
+
+        # extrafanart 下載（download_sample_images 控制，需 create_folder=True 才有 per-video 目錄）
+        # create_folder=False 時多片共用同一資料夾，fanart1.jpg 會互相覆蓋，故禁用
+        if config.get('download_sample_images') and config.get('create_folder'):
+            sample_images = metadata.get('sample_images', [])
+            if sample_images:
+                extrafanart_dir = os.path.join(target_dir, 'extrafanart')
+                # 同上：逐張 index 配對（不用裸 zip，長度不等不得截斷下載張數）
+                sample_previews = metadata.get('preview_sample_images') or []
+                try:
+                    os.makedirs(extrafanart_dir, exist_ok=True)
+                    for i, url in enumerate(sample_images, 1):
+                        try:
+                            dest = os.path.join(extrafanart_dir, f'fanart{i}.jpg')
+                            pv = sample_previews[i - 1] if i - 1 < len(sample_previews) else ''
+                            if pv:
+                                download_image(url, dest, fallback_url=pv)
+                            else:
+                                download_image(url, dest)
+                        except Exception as e:
+                            logger.warning(f"extrafanart {i} 下載失敗: {e}")
+                except Exception as e:
+                    logger.warning(f"extrafanart 目錄建立失敗: {e}")
+
+        # 生成 NFO（檔名跟隨影片命名）
+        nfo_path = os.path.join(target_dir, filename_base + '.nfo')
+        tags = metadata.get('tags', [])
+        user_tags = metadata.get('user_tags', [])
+        if generate_nfo(
+            number=number,
+            title=title,
+            original_title=original_title,  # 日文原始標題
+            actors=actors,
+            tags=tags,
+            user_tags=user_tags,
+            date=metadata.get('date', ''),
+            maker=metadata.get('maker', ''),
+            url=metadata.get('url', ''),
+            has_subtitle=has_subtitle,
+            has_vr=(vr_cluster is not None),
+            output_path=nfo_path,
+            has_poster=bool(result.get('poster_path')),
+            has_fanart=bool(result.get('fanart_path')),
+            director=metadata.get('director', ''),
+            duration=metadata.get('duration'),
+            series=metadata.get('series', ''),
+            label=metadata.get('label', ''),
+            # 63c-5：metadata 是 raw search_jav 結果 dict，summary/rating 走 _ 前綴 carrier
+            # （兩條路徑現在都帶值；該剝除機制已於 0.15.16 退場）
+            summary=metadata.get('_summary', ''), rating=metadata.get('_rating'),
+            external_manager=ext_mode,
+            nfo_title_format=config.get('nfo_title_format', '[{num}]{title}'),
+        ):
+            result['nfo_path'] = nfo_path
+
+        result['used_fallbacks'] = used_fallbacks
+        result['success'] = True
+
+    except Exception:
+        logger.exception("organize_file 失敗: %s → %s", file_path, target_dir)
+        result['error'] = '檔案整理失敗，請查看日誌'
+
+    return result

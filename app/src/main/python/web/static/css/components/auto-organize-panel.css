@@ -1,0 +1,54 @@
+/* Auto Organize Panel — surface 配方逐字沿用 .help-popover（TASK-144-T7） */
+
+.auto-organize-panel {
+    position: absolute;
+    top: 100%;
+    /* 向左展開，不是向右。這顆鈕是空狀態鈕列**最右邊**那一顆：
+       用 `.help-popover` 的 `left: 0` 會讓面板從錨點往右長，780px 寬的視窗上實測
+       右緣落在 875px、溢出 95px（`max-width: calc(100vw - 2rem)` 擋不住這種情況——
+       它只在錨點貼齊視窗左緣時才等價）。同檔 `.tag-alias-ai-hint-popover` 的窄螢幕
+       規則用的就是這個解法。 */
+    right: 0;
+    left: auto;
+    margin-top: 0.5rem;
+    width: 22rem;
+    max-width: calc(100vw - 2rem);
+    padding: 0.75rem;
+    background: var(--color-base-200);
+    border-radius: var(--fluent-radius-xl);
+    box-shadow: var(--fluent-shadow-4);
+    z-index: 50;
+    border: 1px solid var(--stroke-default);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.auto-organize-panel__row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.auto-organize-panel__label {
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.auto-organize-panel__path {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    word-break: break-all;
+}
+
+.auto-organize-panel__warning {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.auto-organize-panel__running {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}

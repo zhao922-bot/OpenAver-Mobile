@@ -1,0 +1,194 @@
+{
+  "_comment": "機器可讀的第三方檔案對帳清單。人讀版本見 docs/THIRD_PARTY.md（該處不重複記錄 sha256）。由 scripts/vendor_guard_lint.mjs 對帳；換檔／加檔／改一個位元組都會讓 npm run lint 變紅。",
+  "vendor": [
+    {
+      "path": "web/static/vendor/alpine/alpine.min.js",
+      "package": "alpinejs",
+      "version": "3.15.12",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/alpinejs@3.15.12/dist/cdn.min.js",
+      "upstream_sha256": "57b37d7cae9a27d965fdae4adcc844245dfdc407e655aee85dcfff3a08036a3f",
+      "local_sha256": "6c761e83c3d75c1593dc16a2203eb48bd6ae7a50d2681902699b7d14888ad36c",
+      "license": "MIT",
+      "vendored_date": "2026-06-21",
+      "banner_added": true
+    },
+    {
+      "path": "web/static/vendor/alpine/persist.min.js",
+      "package": "@alpinejs/persist",
+      "version": "3.15.12",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.15.12/dist/cdn.min.js",
+      "upstream_sha256": "e77d932c52ce616c2a5c5dc45530a0221911a31aab48a179e8680932d4d3aa47",
+      "local_sha256": "6aba3c36b22d9bceb3b8d999125c287bbfe5fafd1674402da4d6d5994574a513",
+      "license": "MIT",
+      "vendored_date": "2026-06-21",
+      "banner_added": true
+    },
+    {
+      "path": "web/static/vendor/alpine/collapse.min.js",
+      "package": "@alpinejs/collapse",
+      "version": "3.15.12",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.15.12/dist/cdn.min.js",
+      "upstream_sha256": "c7661d4e2cf0465e3cd693190debb5f592ac72dcc4cfe650581273767558b27b",
+      "local_sha256": "af3859a85032a35f366c0277a20ae1b27e4d89d302a569b22a0ca06b2b9cdcd2",
+      "license": "MIT",
+      "vendored_date": "2026-06-21",
+      "banner_added": true
+    },
+    {
+      "path": "web/static/vendor/alpine/focus.min.js",
+      "package": "@alpinejs/focus",
+      "version": "3.15.12",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/@alpinejs/focus@3.15.12/dist/cdn.min.js",
+      "upstream_sha256": "ea7e215444f5110619549621cd0760cedfe273f708b144d4e658a87b702555f9",
+      "local_sha256": "2124f5984a2e92ed0a4a75af149102bec54800753fbcbf39cdc610afb994ab0e",
+      "license": "MIT",
+      "vendored_date": "2026-06-21",
+      "banner_added": true
+    },
+    {
+      "path": "web/static/vendor/alpine/intersect.min.js",
+      "package": "@alpinejs/intersect",
+      "version": "3.15.12",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/@alpinejs/intersect@3.15.12/dist/cdn.min.js",
+      "upstream_sha256": "b1abfbdea4404f7101de26ef6e2e65f4efae73be7b3302141eecf27def68560e",
+      "local_sha256": "1e40b56407812dfe617b77d4a1dfa71bc3c0bc497b988813d5abf927bcf04e67",
+      "license": "MIT",
+      "vendored_date": "2026-06-21",
+      "banner_added": true
+    },
+    {
+      "path": "web/static/vendor/alpine/anchor.min.js",
+      "package": "@alpinejs/anchor",
+      "version": "3.15.12",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/@alpinejs/anchor@3.15.12/dist/cdn.min.js",
+      "upstream_sha256": "ab491df26e53b7ff6e502e0fa403b1960ce742a1e4498f209d8247ecf3e9e486",
+      "local_sha256": "be2143692affe418a8316282d000ce99db5062db361f1242347e71f76aa0bae4",
+      "license": "MIT",
+      "vendored_date": "2026-06-21",
+      "banner_added": true
+    },
+    {
+      "path": "web/static/vendor/gsap/gsap.min.js",
+      "package": "gsap",
+      "version": "3.14.2",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js",
+      "upstream_sha256": "c174bfce53a729418d57a8ad8625e7247c793a22fef8e2851e3cfa3de9cd8280",
+      "local_sha256": "c174bfce53a729418d57a8ad8625e7247c793a22fef8e2851e3cfa3de9cd8280",
+      "license": "Standard 'no charge' license: https://gsap.com/standard-license",
+      "vendored_date": "2026-06-21",
+      "banner_added": false
+    },
+    {
+      "path": "web/static/vendor/gsap/Flip.min.js",
+      "package": "gsap",
+      "version": "3.14.2",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/Flip.min.js",
+      "upstream_sha256": "df76166f535b37c65b46051a452986f8e374e5447d1f9fcd59db22836f3191ad",
+      "local_sha256": "df76166f535b37c65b46051a452986f8e374e5447d1f9fcd59db22836f3191ad",
+      "license": "Standard 'no charge' license: https://gsap.com/standard-license",
+      "vendored_date": "2026-06-21",
+      "banner_added": false
+    },
+    {
+      "path": "web/static/vendor/gsap/Physics2DPlugin.min.js",
+      "package": "gsap",
+      "version": "3.14.2",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/Physics2DPlugin.min.js",
+      "upstream_sha256": "9b0602bf1a120fc9c5aeb86f52c8ad1c7963f06850e76b821fa0ad24a32c11b9",
+      "local_sha256": "9b0602bf1a120fc9c5aeb86f52c8ad1c7963f06850e76b821fa0ad24a32c11b9",
+      "license": "Standard 'no charge' license: https://gsap.com/standard-license",
+      "vendored_date": "2026-06-21",
+      "banner_added": false
+    },
+    {
+      "path": "web/static/vendor/gsap/CustomEase.min.js",
+      "package": "gsap",
+      "version": "3.14.2",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/CustomEase.min.js",
+      "upstream_sha256": "2dae8ef6daba66ce7b527b1f46a5695ba325b21ad5b4d73e4a843753c65415f6",
+      "local_sha256": "2dae8ef6daba66ce7b527b1f46a5695ba325b21ad5b4d73e4a843753c65415f6",
+      "license": "Standard 'no charge' license: https://gsap.com/standard-license",
+      "vendored_date": "2026-06-21",
+      "banner_added": false
+    },
+    {
+      "path": "web/static/vendor/gsap/CustomBounce.min.js",
+      "package": "gsap",
+      "version": "3.14.2",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/CustomBounce.min.js",
+      "upstream_sha256": "776600661b8d1b93bd71424f0aecbe69c3a38f17f93af8fe6264ced3eed6cf92",
+      "local_sha256": "776600661b8d1b93bd71424f0aecbe69c3a38f17f93af8fe6264ced3eed6cf92",
+      "license": "Standard 'no charge' license: https://gsap.com/standard-license",
+      "vendored_date": "2026-06-21",
+      "banner_added": false
+    },
+    {
+      "path": "web/static/vendor/gsap/DrawSVGPlugin.min.js",
+      "package": "gsap",
+      "version": "3.14.2",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/DrawSVGPlugin.min.js",
+      "upstream_sha256": "2d2b28b7b1ad56cd5ca0d3032ed0f56503d0aaba6b5467169dc596d96e1125e3",
+      "local_sha256": "2d2b28b7b1ad56cd5ca0d3032ed0f56503d0aaba6b5467169dc596d96e1125e3",
+      "license": "Standard 'no charge' license: https://gsap.com/standard-license",
+      "vendored_date": "2026-06-21",
+      "banner_added": false
+    },
+    {
+      "path": "web/static/vendor/bootstrap-icons/bootstrap-icons.css",
+      "package": "bootstrap-icons",
+      "version": "1.11.1",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css",
+      "upstream_sha256": "bb6fd8cd85394cb367e8ac58e47292f2d68eb288fa12fab68e65430a5ddfce48",
+      "local_sha256": "bb6fd8cd85394cb367e8ac58e47292f2d68eb288fa12fab68e65430a5ddfce48",
+      "license": "MIT",
+      "vendored_date": "2026-06-21",
+      "banner_added": false
+    },
+    {
+      "path": "web/static/vendor/bootstrap-icons/fonts/bootstrap-icons.woff",
+      "package": "bootstrap-icons",
+      "version": "1.11.1",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/fonts/bootstrap-icons.woff",
+      "upstream_sha256": "4d4572ef314e1b734cdd6485f913b0396d81bedf4d216a47cfde0cdf32a9316e",
+      "local_sha256": "4d4572ef314e1b734cdd6485f913b0396d81bedf4d216a47cfde0cdf32a9316e",
+      "license": "MIT",
+      "vendored_date": "2026-06-21",
+      "banner_added": false
+    },
+    {
+      "path": "web/static/vendor/bootstrap-icons/fonts/bootstrap-icons.woff2",
+      "package": "bootstrap-icons",
+      "version": "1.11.1",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/fonts/bootstrap-icons.woff2",
+      "upstream_sha256": "bacd70afda7da1deac2bbd49b5717a4dd133bcd59c379525d705b8492f678e95",
+      "local_sha256": "bacd70afda7da1deac2bbd49b5717a4dd133bcd59c379525d705b8492f678e95",
+      "license": "MIT",
+      "vendored_date": "2026-06-21",
+      "banner_added": false
+    },
+    {
+      "path": "web/static/vendor/echarts/echarts.min.js",
+      "package": "echarts",
+      "version": "6.1.0",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js",
+      "upstream_sha256": "b66b25aeb4df84e33199dc21694014d336d222cbd9deb0e5a7c14bd6aa0d0fd0",
+      "local_sha256": "b66b25aeb4df84e33199dc21694014d336d222cbd9deb0e5a7c14bd6aa0d0fd0",
+      "license": "Apache-2.0",
+      "vendored_date": "2026-09-25",
+      "banner_added": false
+    }
+  ],
+  "facefinder": {
+    "path": "core/focal/facefinder",
+    "package": "esimov/pigo (cascade)",
+    "version": "v1.4.6",
+    "upstream_url": "https://raw.githubusercontent.com/esimov/pigo/v1.4.6/cascade/facefinder",
+    "upstream_sha256": "d8014993e7298c7b1865d1f8b855d6dbf4ec5c808bf879e2091ab6837abf90cd",
+    "local_sha256": "d8014993e7298c7b1865d1f8b855d6dbf4ec5c808bf879e2091ab6837abf90cd",
+    "license": "MIT",
+    "copyright": "Copyright (c) 2018 Endre Simo",
+    "vendored_date": "2026-07-13",
+    "banner_added": false,
+    "note": "未修改的上游原檔複本（unmodified upstream asset），與上游逐位元組相同——不是移植、也沒有改寫。此 sha256 只證明「這是 pigo 的 cascade 檔」；該檔跨 pigo v1.4.5／v1.4.6／master 內容一致，故不足以指向某個確切 commit。core/focal 三支 .py 的移植時間點另由 docs/THIRD_PARTY.md 區②記錄的 commit 承載。"
+  }
+}

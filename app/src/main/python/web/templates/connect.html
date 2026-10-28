@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('nav.connect') }} - OpenAver{% endblock %}
+
+{% block extra_css %}
+<link href="/static/css/pages/connect.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="connect-container page-layer" x-data="connectPage"
+     data-mode="{{ shell_mode or 'local' }}"
+     data-shell-kind="{{ 'mac' if is_mac_desktop else 'windows' }}">
+
+    <p id="connect-nobridge" class="connect-nobridge" x-show="bridge === 'unavailable'" x-cloak>{{ t('connect.nobridge') }}</p>
+
+    <div class="connect-stack" x-show="bridge === 'ready'" x-cloak>
+
+        <section id="connect-status-card" class="card connect-card">
+            <div class="connect-card-header">
+                <h2 class="connect-title"><i class="bi bi-hdd-network"></i> <span x-text="statusLine()"></span></h2>
+            </div>
+            <div class="card-body">
+                <p class="connect-line" x-show="statusVersionLine() !== ''" x-text="statusVersionLine()"></p>
+                <p class="connect-line" x-show="lastOkText() !== ''" x-text="lastOkText()"></p>
+            </div>
+        </section>
+
+        <section class="card connect-card">
+            <div class="connect-card-header">
+                <h2 class="connect-title"><i class="bi bi-plug"></i> {{ t('connect.change_title') }}</h2>
+            </div>
+            <div class="card-body">
+
+                <div class="connect-row">
+                    <input id="connect-url" type="text" class="input input-bordered input-sm connect-url"
+                           placeholder="{{ t('connect.url_placeholder') }}"
+                           autocomplete="off" spellcheck="false"
+                           x-model="urlText"
+                           @keydown.enter.prevent="testConnection()">
+                    <button type="button" class="btn btn-sm btn-outline" id="connect-test-btn"
+                            @click="testConnection()"
+                            :disabled="!actions().canProbe">
+                        <span x-show="busy === 'probe'" class="loading loading-spinner loading-sm"></span>
+                        <span x-show="busy !== 'probe'">{{ t('connect.test_btn') }}</span>
+                    </button>
+                </div>
+
+                <div id="connect-probe-result" class="connect-row connect-result" aria-live="polite"
+                     x-show="actions().probeFresh" x-cloak>
+                    <span class="source-pill-probe connect-probe-dot" :data-state="dotName()"><i :class="dotIcon()"></i></span>
+                    <span x-text="resultText()"></span>
+                    <span class="connect-line" x-show="resultVersionText() !== ''" x-text="resultVersionText()"></span>
+                </div>
+
+                <div class="connect-password"
+                     x-show="actions().passwordField === 'input' || actions().passwordField === 'disabled'" x-cloak>
+                    <label class="connect-line" for="connect-pin">{{ t('connect.password_label') }}</label>
+                    <div class="connect-row">
+                        <input id="connect-pin" type="password" inputmode="numeric" autocomplete="off"
+                               class="input input-bordered input-sm connect-pin"
+                               x-model="pin"
+                               @keydown.enter.prevent="login()"
+                               :disabled="actions().passwordField === 'disabled'">
+                        <button type="button" class="btn btn-sm btn-outline" id="connect-login-btn"
+                                @click="login()"
+                                :disabled="!actions().canLogin">
+                            {{ t('connect.login_btn') }}
+                        </button>
+                    </div>
+                    <p id="connect-pin-error" class="connect-error" x-show="pinErrorText() !== ''" x-text="pinErrorText()"></p>
+                    <p id="connect-forgot" class="connect-line"
+                       x-show="actions().passwordField === 'input' && forgotText() !== ''" x-text="forgotText()"></p>
+                </div>
+
+                <p id="connect-nopassword" class="connect-line" x-show="actions().passwordField === 'none'" x-cloak>{{ t('connect.nopassword') }}</p>
+
+                <template x-if="actions().tableVisible">
+                    <div id="connect-rows" class="connect-map">
+                        <h3 class="connect-title">{{ t('connect.rows.title') }}</h3>
+                        <p class="connect-line">{{ t('connect.rows.intro') }}</p>
+
+                        <p id="connect-rows-loading" class="connect-line" x-show="rowsLoading()" x-cloak>{{ t('connect.rows.loading') }}</p>
+
+                        <div x-show="sourcesState === 'error'" x-cloak>
+                            <p id="connect-rows-error" class="connect-error">{{ t('connect.rows.load_failed') }}</p>
+                            <button type="button" class="btn btn-xs btn-outline" id="connect-rows-reload"
+                                    @click="loadSources()"
+                                    :disabled="!actions().canReloadSources">
+                                {{ t('connect.rows.reload_btn') }}
+                            </button>
+                        </div>
+
+                        <p id="connect-rows-empty" class="connect-line" x-show="rowsReady() && rows.length === 0" x-cloak>{{ t('connect.rows.empty') }}</p>
+
+                        <template x-if="rowsReady()">
+                            <div class="connect-map-list">
+                                <template x-for="row in rows" :key="row.server">
+                                    <div class="connect-map-row" data-row
+                                         :data-server="row.server"
+                                         :data-stale="row.stale ? 'true' : null"
+                                         x-show="!row.removed">
+                                        <div class="connect-map-server">
+                                            <code x-text="row.server"></code>
+                                            <span class="connect-map-tag" x-show="rowTag(row) !== ''" x-text="rowTag(row)"></span>
+                                            <span class="connect-map-tag" x-show="row.stale">{{ t('connect.rows.stale') }}</span>
+                                        </div>
+                                        <span class="connect-map-arrow" aria-hidden="true">→</span>
+                                        <input type="text" class="input input-bordered input-sm connect-row-local"
+                                               autocomplete="off" spellcheck="false"
+                                               x-model="row.local"
+                                               @input="onLocalInput(row)"
+                                               :placeholder="placeholderText()">
+                                        <button type="button" class="btn btn-xs btn-outline connect-row-test"
+                                                @click="testRow(row)"
+                                                :disabled="!canTestRow(row)">{{ t('connect.rows.test_btn') }}</button>
+                                        <span class="connect-row-result" aria-live="polite">
+                                            <template x-if="rowResult(row) === 'ok'">
+                                                <span class="source-pill-probe" data-state="ok" role="img"
+                                                      :aria-label="window.t('connect.rows.found')"><i :class="okIcon()"></i></span>
+                                            </template>
+                                            <template x-if="rowResult(row) === 'fail'">
+                                                <span class="connect-row-fail">
+                                                    <span class="source-pill-probe" data-state="unreachable"><i :class="failIcon()"></i></span>
+                                                    <span x-text="rowFailText(row)"></span>
+                                                </span>
+                                            </template>
+                                            <template x-if="rowResult(row) === 'slow'">
+                                                <span class="connect-line">{{ t('connect.rows.slow') }}</span>
+                                            </template>
+                                            <template x-if="rowResult(row) === 'note'">
+                                                <span class="connect-line">{{ t('connect.rows.no_sample') }}</span>
+                                            </template>
+                                        </span>
+                                        <button type="button" class="btn btn-xs btn-outline connect-row-remove"
+                                                x-show="row.stale"
+                                                @click="removeStale(row)"
+                                                :aria-label="window.t('connect.rows.remove')">&times;</button>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <template x-if="mode === 'client'">
+                            <div class="connect-row">
+                                <button type="button" class="btn btn-sm btn-outline" id="connect-rows-save"
+                                        @click="saveRows()"
+                                        :disabled="!actions().canSaveRows">{{ t('connect.rows.save_btn') }}</button>
+                            </div>
+                        </template>
+                        <template x-if="mode === 'local'">
+                            <p id="connect-rows-note" class="connect-line">{{ t('connect.rows.local_note') }}</p>
+                        </template>
+                    </div>
+                </template>
+
+                <p id="connect-cf" class="connect-line" x-text="cfText()"></p>
+                <p id="connect-cf-note" class="connect-line" x-show="cfNoteText() !== ''" x-text="cfNoteText()"></p>
+                <div class="connect-row" x-show="actions().showRetryCf" x-cloak>
+                    <button type="button" class="btn btn-sm btn-outline" id="connect-cf-retry"
+                                @click="retryCf()"
+                                :disabled="!actions().canRetryCf">{{ t('connect.cf_retry_btn') }}</button>
+                </div>
+                <p id="connect-cf-retry-error" class="connect-error" x-show="cfRetryErrorText() !== ''" x-text="cfRetryErrorText()"></p>
+
+                <div class="connect-row connect-actions">
+                    <button type="button" class="btn btn-sm btn-primary" id="connect-apply-btn"
+                            @click="applyRestart()"
+                            :disabled="!actions().canApply"
+                            x-text="applyLabel()"></button>
+                </div>
+                <p class="connect-line" x-text="applyHint()"></p>
+                <p id="connect-action-error" class="connect-error" x-show="actionErrorText() !== ''" x-text="actionErrorText()"></p>
+                <p id="connect-restarting" class="connect-line" x-show="restarting" x-cloak>{{ t('connect.restarting') }}</p>
+            </div>
+        </section>
+
+        <template x-if="mode === 'client'">
+            <section class="card connect-card">
+                <div class="connect-card-header">
+                    <h2 class="connect-title"><i class="bi bi-arrow-counterclockwise"></i> {{ t('connect.switch_local_title') }}</h2>
+                </div>
+                <div class="card-body">
+                    <div class="connect-row">
+                        <button type="button" class="btn btn-sm btn-outline" id="connect-switch-local-btn"
+                                @click="switchLocal()"
+                                :disabled="!actions().canSwitchLocal">
+                            {{ t('connect.switch_local_btn') }}
+                        </button>
+                    </div>
+                    <p class="connect-line">{{ t('connect.switch_local_hint') }}</p>
+                </div>
+            </section>
+        </template>
+
+    </div>
+</div>
+{% endblock %}
+
+{# connect.js 走 pre_alpine_module：須早於 Alpine start 掛上 alpine:init listener，否則 connectPage 註冊太晚（FE-TIMING-01）。 #}
+{% block pre_alpine_module %}
+<script type="module" src="/static/js/pages/connect/main.js"></script>
+{% endblock %}

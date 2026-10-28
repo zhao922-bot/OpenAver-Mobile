@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.jar binary
+*.png binary
+*.jpg binary
+*.woff binary
+*.woff2 binary
+app/src/main/python/core/focal/facefinder binary

@@ -1,0 +1,343 @@
+/* ========================================
+   Showcase 頁面專屬樣式
+   IMPORTANT: 禁止重複定義 theme.css 已有元件
+   ======================================== */
+
+/* ==================== Page Container ==================== */
+.showcase-container {
+    min-height: calc(100vh - var(--mobile-topbar-height)); /* 扣除 header */
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 48px; /* 防止底部 .showcase-footer 遮擋最後一行卡片 (49a-T4 三段式 footer，高度約 40-44px) */
+
+    /* Background Atmosphere — 對齊 Design System (design-system.css L6-11) */
+    background:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(var(--ds-glow-rgb), 0.15), transparent),
+        radial-gradient(ellipse 60% 40% at 80% 100%, oklch(55% 0.15 250 / 0.08), transparent),
+        var(--bg-body);
+}
+
+/* ==================== Toolbar - Sticky + Acrylic ==================== */
+.showcase-toolbar {
+    /* Sticky positioning */
+    position: sticky;
+    top: 0;
+    z-index: 100;
+
+    /* Acrylic 毛玻璃效果（Fluent Design 2 - Heavy Glass）*/
+    background: var(--bg-header); /* color-mix 85% transparency */
+    backdrop-filter: blur(var(--fluent-blur));
+    -webkit-backdrop-filter: blur(var(--fluent-blur));
+
+    /* Border */
+    border-bottom: 1px solid var(--border-light);
+
+    /* Spacing — 水平內距吃 Layer token（CD-146b-17：≥900 = --layer-inset；≤899 見下方覆寫） */
+    padding-block: 0.75rem;
+    padding-inline: var(--layer-inset);
+
+    /* Layout — 3-column grid: [balance] [search] [controls] (44c-T8) */
+    display: grid;
+    grid-template-columns: 1fr var(--spotlight-width) 1fr;
+    gap: 1rem;
+    align-items: center;
+}
+
+/* Toolbar 區段 */
+.toolbar-section {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* Search 區段 — grid 中欄，永遠置中 (44c-T8) */
+.toolbar-search {
+    grid-column: 2;
+    width: 100%;
+}
+
+/* Controls 區段 — grid 右欄，靠右對齊 (44c-T8) */
+.toolbar-controls {
+    grid-column: 3;
+    justify-self: end;
+    flex-wrap: wrap;
+}
+
+/* 117b-T10：搜尋列 + 四態。只疊 .actress-add-btn，不得改 .btn-icon 全域。
+ * 不做 rotate：bi-plus-lg 四重對稱，rotate(90deg) 視覺無差；
+ * rotate(45deg) 變成 ×＝關閉語意，但本鈕是「開面板」不是 toggle → 誤導。
+ * AC-10.5「旋轉／陰影／輝光／微縮」是舉例不是清單。 */
+.actress-add-btn {
+    transition:
+        transform var(--fluent-duration-fast) var(--fluent-ease-standard),
+        color var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.actress-add-btn:hover {
+    transform: scale(1.12);
+    color: var(--accent);
+    /* 背景沿用 .btn-icon:hover —— 不寫 background */
+}
+
+.actress-add-btn:active {
+    transform: scale(0.92);
+}
+
+.actress-add-btn:focus-visible {
+    /* outline 沿用全域 2px；額外 subtle glow（§6 #5 / lb-delete-btn 先例） */
+    box-shadow: 0 0 0 4px var(--glow-subtle);
+}
+
+/* 面板開啟中：沿用 .btn-icon.active（markup :class），不新增規則 */
+
+@media (prefers-reduced-motion: reduce) {
+    /* house style：本專案既有 reduced-motion 區塊只關 transition（見 actress-add-panel.css），
+       不寫 transform: none —— 別自創第二種寫法（Opus 裁決） */
+    .actress-add-btn {
+        transition: none !important;
+    }
+}
+
+/* Control Group - 單個控制元件群組（排序 + 按鈕 / select / mode switcher）*/
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* (M3c mode-switcher 已改為 dropdown) */
+
+/* ==================== Toolbar Dropdown (排序/每頁) ==================== */
+
+.toolbar-dropdown-wrap {
+    position: relative;
+    z-index: 210;
+}
+
+.toolbar-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    min-width: 160px;
+    background: var(--surface-2);
+    border: 1px solid var(--stroke-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: 0.375rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 200;
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.4rem 0.625rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-radius: var(--radius-sm);
+    transition: background var(--duration-fast) var(--ease-out),
+                color var(--duration-fast) var(--ease-out);
+    white-space: nowrap;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.dropdown-item:hover {
+    background: var(--glow-subtle);
+    color: var(--text-primary);
+}
+
+.dropdown-item.active {
+    background: var(--accent);
+    color: var(--color-primary-content);
+    font-weight: 500;
+}
+
+.dropdown-item i {
+    font-size: 0.9375rem;
+    flex-shrink: 0;
+    width: 1.125rem;
+    text-align: center;
+}
+
+/* TASK-123-T6: 選單分隔線——覆查 showcase.css / fluent-materials.css / design-system.css /
+   motion_lab.html 四個候選皆非可直接套用的緊湊型 dropdown divider（各自是 popover 內部邊框、
+   絕對定位疊加 hairline、頁面本地帶文字標籤樣式、或 1rem 大留白的 DaisyUI 通用元件），
+   故新增一條最小規則，色值借用 .toolbar-dropdown 自己的邊框 token（不硬編碼）。 */
+.dropdown-divider {
+    height: 1px;
+    margin: 0.25rem 0.625rem;
+    background: var(--stroke-default);
+}
+
+/* TASK-123-T6: 「只看精選」是勾選態，不是排序項那種單選高亮（spec 明確要求視覺上可辨識）。
+   不沿用 .dropdown-item.active 的實心背景高亮語意——維持一般 hover/idle 底色，改用星形圖示
+   變色＋打勾角標兩個訊號疊加，讓使用者一眼看出這條跟下面八條排序項不是同一種「選中」。 */
+.dropdown-item-pick {
+    position: relative;
+}
+
+.dropdown-item-pick.is-checked {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.dropdown-item-pick.is-checked i.bi-star-fill {
+    color: var(--accent);
+}
+
+.dropdown-item-pick-check {
+    margin-left: auto;
+    font-size: 0.8125rem;
+    color: var(--accent);
+}
+
+/* 119-T2 / CD-119-6 / AC-1.5：Bootstrap Icons 字形左右鏡像工具 class。
+   為什麼套 ::before 不套 <i>：`<i class="bi …">` 是 inline box，CSS transform 對 inline box
+   無視覺效果；vendored bootstrap-icons.css:14-16 已把 .bi::before 設為 display:inline-block，
+   故偽元素才是 transform 生效的那一層（專案記憶 feedback_css_transform_inline_verify，
+   101b-T6 曾因此連兩次假修）。
+   為什麼鏡像：JAV 橫式封面的正面（人）在**右半邊**，左半是背面拼貼；「直式海報」保留的正是右半。
+   鏡像後這顆圖示畫的就是使用者手上那張封面的實際佈局，而不是一張泛用名片。
+   原字形朝向已用渲染像素機械判定（160px canvas、alpha>32 墨水覆蓋率、以墨水 bbox 中線切半）：
+   bi-person-vcard = 左 60.3% / 右 39.7%（人像在左 → 需要鏡像）；
+   bi-person-badge = 49.6% / 50.4%（對稱，人在中間 → 不鏡像，本 task 不動它）；
+   bi-grid-3x3 對照組 = 50.3% / 49.7%（證明量法無系統性偏差）。
+   掛 class 到 <i> 上是 T5 的工作，本 task 只提供規則本體。 */
+.icon-mirror-x::before {
+    transform: scaleX(-1);
+}
+
+/* ==================== Status Bar (M3g) ==================== */
+/* 49a-T4: status bar 已從 showcase 主頁移除（showcase.html 不再使用），
+   保留 CSS 是因為 design-system.html 仍引用 .showcase-status-bar / .status-total /
+   .status-pagination / .page-btn / .page-select 作為元件 reference demo。
+   勿在 showcase 主頁重新使用此元件，相關功能已整合至底部 .showcase-footer 三段式。 */
+
+.showcase-status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.5rem;
+    background: var(--surface-0);
+    border-bottom: 1px solid var(--stroke-subtle);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.status-total {
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+}
+
+.status-total b {
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-weight: 600;
+}
+
+.status-pagination {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.page-select {
+    padding: 0.375rem 2rem 0.375rem 0.75rem;
+    background: var(--surface-1);
+    border: 1px solid var(--stroke-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: border-color var(--duration-fast) var(--ease-out),
+                background var(--duration-fast) var(--ease-out);
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    min-width: 100px;
+}
+
+.page-select:hover {
+    border-color: var(--accent);
+    background: var(--glow-subtle);
+}
+
+.page-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--glow-primary);
+}
+
+.page-btn {
+    padding: 0.375rem 0.875rem;
+    background: transparent;
+    border: 1px solid var(--stroke-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+    white-space: nowrap;
+}
+
+.page-btn:hover:not(:disabled) {
+    background: var(--glow-subtle);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.page-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+    .showcase-status-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+        padding: 1rem;
+    }
+
+    .status-total {
+        text-align: center;
+    }
+
+    .status-pagination {
+        justify-content: center;
+    }
+
+    .page-select {
+        min-width: 80px;
+    }
+
+    .page-btn {
+        padding: 0.375rem 0.625rem;
+        font-size: 0.8125rem;
+    }
+}
+
+.toggle-info-eye-btn {
+    position: relative;   /* 讓兩個 <i> 可以絕對定位疊在同一個位置 */
+}
+
+.toggle-info-eye-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 1;
+    transition: opacity var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.toggle-info-eye-icon.toggle-info-eye-icon-hidden {
+    opacity: 0;
+}

@@ -1,0 +1,107 @@
+plugins {
+    id "com.android.application"
+    id "com.chaquo.python"
+}
+
+def openaverRelease = "v0.17.18"
+def openaverCommit = "af0d99741e63e71980773c9ade04c473407a60b7"
+def requestedAbis = (project.findProperty("abi") ?: "arm64-v8a")
+        .split(",")
+        .collect { it.trim() }
+        .findAll { !it.isEmpty() }
+def openaverBuildPython = System.getenv("OPENAVER_BUILD_PYTHON")
+        ?: project.findProperty("openaverBuildPython")
+
+android {
+    namespace "dev.openaver.mobile"
+    compileSdk 36
+    ndkVersion "28.2.13676358"
+
+    defaultConfig {
+        applicationId "dev.openaver.mobile"
+        minSdk 30
+        targetSdk 36
+        versionCode 17019
+        versionName "0.17.18"
+
+        buildConfigField "String", "OPENAVER_RELEASE", "\"${openaverRelease}\""
+        buildConfigField "String", "OPENAVER_COMMIT", "\"${openaverCommit}\""
+
+        ndk {
+            abiFilters.addAll(requestedAbis)
+        }
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_static"
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file("src/main/cpp/CMakeLists.txt")
+            version "3.22.1"
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+        resources {
+            excludes += [
+                    "META-INF/LICENSE*",
+                    "META-INF/NOTICE*"
+            ]
+        }
+    }
+}
+
+chaquopy {
+    defaultConfig {
+        version = "3.13"
+        if (openaverBuildPython) {
+            buildPython(openaverBuildPython.toString())
+        }
+        extractPackages("core", "web")
+        pip {
+            install("fastapi==0.125.0")
+            install("starlette==0.50.0")
+            install("uvicorn==0.46.0")
+            install("jinja2==3.1.6")
+            install("python-multipart==0.0.32")
+            install("requests==2.33.1")
+            install("httpx==0.28.1")
+            install("beautifulsoup4==4.14.3")
+            install("lxml==5.3.0")
+            install("pydantic==1.10.24")
+            install("pillow==11.0.0")
+            install("PyYAML==6.0.3")
+        }
+        pyc {
+            src = false
+        }
+    }
+}

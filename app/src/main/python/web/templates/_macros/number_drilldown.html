@@ -1,0 +1,40 @@
+{# number_drilldown_panel — 數字清單浮層本體（155b-T2）
+   觸發鈕與 @click.outside wrapper 留給呼叫端；本 macro 只輸出浮層。
+   所有 Alpine 運算式寫死字面，不從 macro 參數插入（FE-ALPINE-07）。
+   attrs 只接 template 內 hardcoded 字串（比照 source_pill）。 #}
+{% macro number_drilldown_panel(attrs='') %}
+<div class="number-drilldown-popover help-popover"
+     x-show="open" x-cloak
+     x-trap="open"
+     @keydown.escape.window="open && close()"
+     role="dialog"
+     :aria-label="_title"
+     {{ attrs|safe }}>
+    <div class="number-drilldown-list">
+        <div class="number-drilldown-list-head">
+            <span class="number-drilldown-list-title" x-text="_title"></span>
+            <span class="number-drilldown-list-count" x-text="countLabel"></span>
+            <button type="button" class="number-drilldown-copy-btn"
+                    :title="t('common.number_drilldown.copy_button')"
+                    :aria-label="t('common.number_drilldown.copy_button')"
+                    @click="copy()">
+                <i class="bi bi-clipboard" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="number-drilldown-copy-btn"
+                    :aria-label="t('common.number_drilldown.close')"
+                    @click="close()">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div class="number-drilldown-list-scroll">
+            <template x-for="it in _items" :key="(it.number || '') + (it.path || '')">
+                <div class="number-drilldown-list-row">
+                    <span class="number-drilldown-row-id" x-text="rowId(it)"></span>
+                    <span class="number-drilldown-row-note" x-show="it.note" x-text="it.note"></span>
+                </div>
+            </template>
+        </div>
+        <p class="number-drilldown-footnote" x-show="hasFootnote" x-text="_footnote"></p>
+    </div>
+</div>
+{% endmacro %}

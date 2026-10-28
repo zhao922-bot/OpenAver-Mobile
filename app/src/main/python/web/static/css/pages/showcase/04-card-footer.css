@@ -1,0 +1,101 @@
+/* ==================== Card Footer Switch (M3e) ==================== */
+
+/* Footer 容器：支援雙層切換 */
+.showcase-grid .av-card-preview-footer {
+    position: relative;
+    overflow: hidden;
+    height: 2.5rem;
+}
+
+/* 預設層：番號（左）+ 女優（右） */
+.footer-default {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+    transition: opacity var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+/* 155a-T3：收合態單人片年齡放在 .av-actress 內（維持 .footer-default 只有兩個 flex 子元素，
+   海報／窄螢幕隱藏 .av-actress 時一併隱藏）；自己宣告淡色，不繼承 .av-actress 的 --text-secondary（FE-CSS-02）。 */
+.footer-default .av-actress .lb-actor-age { color: var(--text-muted); }
+
+/* 123-T5：.footer-default 是 flex + space-between，2 個既有子元素（.av-num/.av-actress）
+   靠 space-between 推到兩端。星标若直接當第 3 個裸 flex 子元素，space-between 會把
+   3 者平均分佈，星标跑最左、.av-num 被推到中間，跟「星在番號正前方」的需求不符。
+   本 wrapper 把星标+.av-num 綁成一個 flex 子元素（與 .av-actress 對稱），內部用
+   inline-flex 排星标在前、.av-num 在後。未精選時 .pick-star-mark 是 x-show="false"
+   （display:none，不佔位），wrapper 內只剩 .av-num，行為與改動前逐像素相同（AC-19）。 */
+.footer-num-group {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0; /* 讓內層 .av-num 的 overflow:hidden;text-overflow:ellipsis 仍能生效 */
+}
+
+/* 123-T5：牆上三處（grid/table/list）唯讀精選星標。獨立於 .lightbox-metadata .lb-details
+   .pick-star（T3，可切換、有 clip-path 兩層疊置動效），不共用——牆上永遠只顯示單一實心
+   金色狀態（x-show gate 掉未精選），不需要 outline/fill 兩層、不需要點擊區 padding、
+   不需要 focus 樣式。硬套 .pick-star 會帶進一堆牆上永遠用不到的規則，還會把本不該耦合
+   的東西耦合在一起（T3 未來改兩層結構時意外波及牆上三處）。
+   固定 rem（非 em）：grid 窄螢幕/poster 斷點會把 .av-num 縮到 0.7rem，但星标是 .av-num
+   的兄弟（見 .footer-num-group），em 會相對未縮小的 wrapper 字級算，跟 .av-num 脫鉤、
+   兩者不同步縮小；固定 rem 讓三處呈現視覺大小一致。
+   ⚠️ 唯讀標記：不得加 transition/animation，也不接 GSAP —— 牆上不做任何動畫/火花，
+   那是燈箱（T3/T4）的行為，牆上這顆星只是靜態狀態指示。 */
+.pick-star-mark {
+    color: var(--star-glow);
+    font-size: 0.75rem;
+    line-height: 1;
+    vertical-align: middle;
+    margin-right: 0.25em;
+    flex-shrink: 0; /* list-item 是 flex 容器，防止被壓縮 */
+}
+
+/* 123-T8b：清單模式抵銷 .list-item 的 flex gap。
+ * .list-item 是 display:flex; gap:0.75rem，而星是它的**直接** flex 子元素，
+ * 所以那 12px 的 gap 會夾在星與番號之間 ⇒ 實測距離 15px，grid（.footer-num-group
+ * 包住、gap 不適用）只有 3px。spec §4.2 要求「一律在番號正前方」，三種呈現必須一致。
+ * 負 margin 是 flex 子元素退出父層 gap 的標準做法；0.25em(3px) − 0.75rem(12px) = −9px
+ * ⇒ 12 + (−9) = 3px，與 grid 對齊。 */
+.list-item .pick-star-mark {
+    margin-right: calc(0.25em - 0.75rem);
+}
+
+/* 懸停層：標題（絕對定位覆蓋） */
+.footer-hover {
+    position: absolute;
+    inset: 0;
+    padding: 0.5rem 0.75rem;
+    background: var(--surface-1);
+    opacity: 0;
+    transform: translateY(100%);
+    transition: opacity var(--fluent-duration-fast) var(--fluent-ease-standard),
+                transform var(--fluent-duration-fast) var(--fluent-ease-standard);
+    display: flex;
+    align-items: center;
+}
+
+/* Card Hover 時切換 */
+.av-card-preview:hover .footer-hover {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.av-card-preview:hover .footer-default {
+    opacity: 0;
+}
+
+/* 懸停標題：2 行截斷 */
+.hover-title {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
