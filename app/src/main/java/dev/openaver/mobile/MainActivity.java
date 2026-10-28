@@ -117,6 +117,7 @@ public final class MainActivity extends Activity {
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
     private boolean webPageLoading;
+    private boolean webBackDispatchPending;
     private boolean runtimeStarting;
     private boolean runtimeReady;
     private boolean runtimeFailed;
@@ -896,20 +897,46 @@ public final class MainActivity extends Activity {
             return;
         }
         if (webContainer.getVisibility() == View.VISIBLE) {
-            if (webView.canGoBack()) {
-                webView.goBack();
-                return;
-            }
-            long now = System.currentTimeMillis();
-            if (now - lastBackPressMs <= EXIT_BACK_WINDOW_MS) {
-                super.onBackPressed();
-            } else {
-                lastBackPressMs = now;
-                toast(R.string.exit_hint);
-            }
+            dispatchWebBack();
             return;
         }
         super.onBackPressed();
+    }
+
+    private void dispatchWebBack() {
+        if (webBackDispatchPending) {
+            return;
+        }
+        webBackDispatchPending = true;
+        try {
+            webView.evaluateJavascript(
+                    "(function(){try{return !!(window.OpenAverMobileBack"
+                            + "&&window.OpenAverMobileBack());}catch(e){return false;}})()",
+                    result -> {
+                        webBackDispatchPending = false;
+                        if (!"true".equals(result)) {
+                            performWebHistoryBackOrExit();
+                        }
+                    }
+            );
+        } catch (Throwable error) {
+            webBackDispatchPending = false;
+            performWebHistoryBackOrExit();
+        }
+    }
+
+    private void performWebHistoryBackOrExit() {
+        if (webView.canGoBack()) {
+            webView.goBack();
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastBackPressMs <= EXIT_BACK_WINDOW_MS) {
+            super.onBackPressed();
+        } else {
+            lastBackPressMs = now;
+            toast(R.string.exit_hint);
+        }
     }
 
     @Override
@@ -1014,6 +1041,7 @@ public final class MainActivity extends Activity {
         @Override
         public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
             super.onPageStarted(view, url, favicon);
+            webBackDispatchPending = false;
             webError.setVisibility(View.GONE);
             pageProgress.setVisibility(View.VISIBLE);
             pageProgress.setProgress(0);

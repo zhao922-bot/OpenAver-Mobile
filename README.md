@@ -11,17 +11,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r7.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r8.apk)
 
 当前发布包：
 
-- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r7.apk`
+- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r8.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r7`（versionCode `17024`）
+- 版本：`0.17.18-r8`（versionCode `17025`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - SHA-256：
-  `06AD242D7E3345CD8E0B10E56FF321E00541DDDF489A039F23A02AA09D93DEDF`
+  `3C7F6180FC8E4B418AF9CE6DD9D1054C4A55C23E255AC94DECFDAFFF23BBA27C`
 
 ## 安装
 
@@ -55,6 +55,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 端口被残留服务占用时自动切换到后续空闲端口，并同步 WebView、健康检查和 Cloudflare 代理
 - 修复 `phase=ready` 后绑定端口失败导致的 `SystemExit: 1`
 - 修复 Pydantic v1 兼容层缺少 `model_copy()` 导致“补抓剧照失败”的问题
+- 修复 Android 返回键跨菜单后退的问题；弹窗、灯箱、抽屉和编辑层会按层级优先关闭
 
 ## 限制
 
