@@ -709,6 +709,8 @@ def build_download_headers(url: str, referer: str = "") -> dict:
             effective_referer = "https://www.dmm.co.jp/"
         elif "jav321.com" in url:
             effective_referer = "https://www.jav321.com/"
+        elif "javdb.com" in url:
+            effective_referer = "https://javdb.com/"
     if effective_referer:
         headers["Referer"] = effective_referer
     return headers
@@ -757,6 +759,16 @@ def _attempt_download_image(
             with open(save_path, "wb") as f:
                 f.write(payload)
             return True
+        if resp.status_code != 200:
+            logger.warning(
+                "[!] 下載圖片失敗: HTTP %s host=%s",
+                resp.status_code, (urlparse(url).hostname or ""),
+            )
+        else:
+            logger.warning(
+                "[!] 下載圖片失敗: payload too small (%d bytes) host=%s",
+                len(resp.content), (urlparse(url).hostname or ""),
+            )
     except requests.exceptions.ConnectionError as e:
         # ConnectTimeout is a ConnectionError subclass; ReadTimeout is not.
         _record_host_failure(_host_key(url))

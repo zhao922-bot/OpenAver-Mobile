@@ -1410,6 +1410,9 @@
       "fetching": "抓取中...",
       "success": "劇照補抓完成",
       "fetch_failed": "補抓劇照失敗，請稍後再試",
+      "no_samples": "沒有找到可下載的劇照",
+      "download_failed": "已找到劇照，但全部下載失敗",
+      "db_write_failed": "劇照已下載，但資料庫更新失敗，請再試一次",
       "multi_video_error": "此資料夾有其他影片，補抓劇照會污染其他片，請先將影片搬到獨立資料夾再試"
     }
   },

@@ -183,7 +183,6 @@ export function stateActress() {
         _heroCardImageError: false,
         _heroCardImageLoaded: false,   // 67-A3: hero actress photo 載入旗標（獨立於 video _imgLoaded，CD-67-4）
         _fetchSamplesLoading: false,
-        _fetchSamplesFailed: {},
 
         // --- helpers in return {} ---
 

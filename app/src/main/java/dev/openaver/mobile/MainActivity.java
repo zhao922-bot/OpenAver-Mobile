@@ -23,8 +23,10 @@ import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewConfiguration;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -75,6 +77,8 @@ public final class MainActivity extends Activity {
     private static final boolean NATIVE_LOADED;
     private static final String PREFS_NAME = "openaver_mobile";
     private static final String PREF_UI_LOCALE = "ui_locale";
+    private static final String PREF_MENU_HANDLE_X = "menu_handle_x";
+    private static final String PREF_MENU_HANDLE_Y = "menu_handle_y";
     private static final String DEFAULT_UI_LOCALE = "zh-CN";
 
     static {
@@ -123,6 +127,14 @@ public final class MainActivity extends Activity {
     private boolean runtimeFailed;
     private volatile int localPort = LOCAL_PORT;
     private long lastBackPressMs;
+    private SharedPreferences preferences;
+    private float menuTouchDownRawX;
+    private float menuTouchDownRawY;
+    private int menuDragStartLeft;
+    private int menuDragStartTop;
+    private int menuTouchSlop;
+    private boolean menuTouchMoved;
+    private boolean menuHandleTouching;
 
     private static native String nativeAbi();
 
@@ -144,6 +156,7 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
 
         pageLoadTimeout = () -> {
             if (webPageLoading) {
@@ -153,6 +166,7 @@ public final class MainActivity extends Activity {
 
         bindViews();
         configureSystemBars();
+        configureMenuHandle();
         configureSetupUi();
         configureErrorUi();
         configureWebView();
@@ -185,6 +199,149 @@ public final class MainActivity extends Activity {
         fullscreenContainer = findViewById(R.id.fullscreenContainer);
     }
 
+    @SuppressLint("ClickableViewAccessibility")
+    private void configureMenuHandle() {
+        menuTouchSlop = Math.max(
+                ViewConfiguration.get(this).getScaledTouchSlop(),
+                Math.round(8f * getResources().getDisplayMetrics().density)
+        );
+        menuHandle.setOnClickListener(view -> showWebMenu());
+        menuHandle.setOnTouchListener((view, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    menuHandleTouching = true;
+                    menuTouchMoved = false;
+                    menuTouchDownRawX = event.getRawX();
+                    menuTouchDownRawY = event.getRawY();
+                    menuDragStartLeft = view.getLeft();
+                    menuDragStartTop = view.getTop();
+                    view.getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (!menuTouchMoved) {
+                        float dx = event.getRawX() - menuTouchDownRawX;
+                        float dy = event.getRawY() - menuTouchDownRawY;
+                        menuTouchMoved = Math.hypot(dx, dy) >= menuTouchSlop;
+                    }
+                    if (menuTouchMoved) {
+                        moveMenuHandle(
+                                menuDragStartLeft + Math.round(event.getRawX() - menuTouchDownRawX),
+                                menuDragStartTop + Math.round(event.getRawY() - menuTouchDownRawY)
+                        );
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    menuHandleTouching = false;
+                    view.getParent().requestDisallowInterceptTouchEvent(false);
+                    if (menuTouchMoved) {
+                        view.post(this::saveMenuHandlePosition);
+                    } else {
+                        view.performClick();
+                    }
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    menuHandleTouching = false;
+                    view.getParent().requestDisallowInterceptTouchEvent(false);
+                    if (menuTouchMoved) {
+                        view.post(this::saveMenuHandlePosition);
+                    }
+                    return true;
+                default:
+                    return false;
+            }
+        });
+        root.addOnLayoutChangeListener((view, left, top, right, bottom,
+                                        oldLeft, oldTop, oldRight, oldBottom) -> {
+            int width = right - left;
+            int height = bottom - top;
+            int oldWidth = oldRight - oldLeft;
+            int oldHeight = oldBottom - oldTop;
+            if (width != oldWidth || height != oldHeight) {
+                view.post(this::applySavedMenuHandlePosition);
+            }
+        });
+        root.post(this::applySavedMenuHandlePosition);
+    }
+
+    private void moveMenuHandle(int requestedLeft, int requestedTop) {
+        if (root == null || menuHandle == null) {
+            return;
+        }
+        int availableWidth = root.getWidth() - root.getPaddingLeft()
+                - root.getPaddingRight() - menuHandle.getWidth();
+        int availableHeight = root.getHeight() - root.getPaddingTop()
+                - root.getPaddingBottom() - menuHandle.getHeight();
+        int left = clamp(requestedLeft, root.getPaddingLeft(),
+                root.getPaddingLeft() + Math.max(0, availableWidth));
+        int top = clamp(requestedTop, root.getPaddingTop(),
+                root.getPaddingTop() + Math.max(0, availableHeight));
+
+        FrameLayout.LayoutParams params =
+                (FrameLayout.LayoutParams) menuHandle.getLayoutParams();
+        params.gravity = Gravity.TOP | Gravity.START;
+        params.leftMargin = left - root.getPaddingLeft();
+        params.topMargin = top - root.getPaddingTop();
+        menuHandle.setLayoutParams(params);
+    }
+
+    private void saveMenuHandlePosition() {
+        if (root == null || menuHandle == null) {
+            return;
+        }
+        int availableWidth = root.getWidth() - root.getPaddingLeft()
+                - root.getPaddingRight() - menuHandle.getWidth();
+        int availableHeight = root.getHeight() - root.getPaddingTop()
+                - root.getPaddingBottom() - menuHandle.getHeight();
+        int rootLeft = webContainer.getLeft() + menuHandle.getLeft();
+        int rootTop = webContainer.getTop() + menuHandle.getTop();
+        float x = availableWidth > 0
+                ? (rootLeft - root.getPaddingLeft()) / (float) availableWidth
+                : 0f;
+        float y = availableHeight > 0
+                ? (rootTop - root.getPaddingTop()) / (float) availableHeight
+                : 0.5f;
+        preferences.edit()
+                .putFloat(PREF_MENU_HANDLE_X, clamp(x, 0f, 1f))
+                .putFloat(PREF_MENU_HANDLE_Y, clamp(y, 0f, 1f))
+                .apply();
+    }
+
+    private void applySavedMenuHandlePosition() {
+        if (root == null || menuHandle == null || root.getWidth() == 0
+                || menuHandle.getWidth() == 0 || menuHandleTouching) {
+            return;
+        }
+        float savedX = preferences.getFloat(PREF_MENU_HANDLE_X, Float.NaN);
+        float savedY = preferences.getFloat(PREF_MENU_HANDLE_Y, Float.NaN);
+        if (Float.isNaN(savedX) || Float.isNaN(savedY)) {
+            FrameLayout.LayoutParams params =
+                    (FrameLayout.LayoutParams) menuHandle.getLayoutParams();
+            params.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
+            params.leftMargin = 0;
+            params.topMargin = 0;
+            menuHandle.setLayoutParams(params);
+            return;
+        }
+
+        int availableWidth = root.getWidth() - root.getPaddingLeft()
+                - root.getPaddingRight() - menuHandle.getWidth();
+        int availableHeight = root.getHeight() - root.getPaddingTop()
+                - root.getPaddingBottom() - menuHandle.getHeight();
+        int left = root.getPaddingLeft()
+                + Math.round(clamp(savedX, 0f, 1f) * Math.max(0, availableWidth));
+        int top = root.getPaddingTop()
+                + Math.round(clamp(savedY, 0f, 1f) * Math.max(0, availableHeight));
+        moveMenuHandle(left, top);
+    }
+
+    private static int clamp(int value, int minimum, int maximum) {
+        return Math.max(minimum, Math.min(value, maximum));
+    }
+
+    private static float clamp(float value, float minimum, float maximum) {
+        return Math.max(minimum, Math.min(value, maximum));
+    }
+
     private void configureSystemBars() {
         Window window = getWindow();
         window.setStatusBarColor(getColor(R.color.bg));
@@ -197,6 +354,7 @@ public final class MainActivity extends Activity {
                         WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
                 );
                 view.setPadding(0, bars.top, 0, bars.bottom);
+                view.post(this::applySavedMenuHandlePosition);
                 return insets;
             });
             root.requestApplyInsets();
@@ -255,7 +413,6 @@ public final class MainActivity extends Activity {
         });
         storageButton.setText(storagePermissionButtonText());
         storageButton.setOnClickListener(view -> openStoragePermission());
-        menuHandle.setOnClickListener(view -> showWebMenu());
     }
 
     private void updatePermissionUi() {
@@ -936,6 +1093,14 @@ public final class MainActivity extends Activity {
         } else {
             lastBackPressMs = now;
             toast(R.string.exit_hint);
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (root != null) {
+            root.post(this::applySavedMenuHandlePosition);
         }
     }
 

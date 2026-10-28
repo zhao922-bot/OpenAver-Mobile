@@ -9,6 +9,7 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from core.atomic_write import atomic_write
 from core.nfo_read import nfo_first_text
 from core.nfo_title_format import build_display_title
 from core.nfo_updater import set_element_text
@@ -83,5 +84,8 @@ def rewrite_nfo_titles(
         ET.SubElement(rec, "body").text = body
 
     out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
-    path.write_bytes(out)
+    # Android／外接儲存上的直接 write_bytes 若中途失敗會把原 NFO 截斷。
+    # 同目錄暫存 + replace 讓失敗時原檔保持不變。
+    with atomic_write(path, mode="wb", suffix=".nfo.tmp") as fh:
+        fh.write(out)
     return out

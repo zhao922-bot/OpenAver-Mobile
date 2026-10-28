@@ -1410,6 +1410,9 @@
       "fetching": "Fetching...",
       "success": "Stills fetched successfully",
       "fetch_failed": "Failed to fetch stills, please try again",
+      "no_samples": "No downloadable stills were found",
+      "download_failed": "Stills were found, but all downloads failed",
+      "db_write_failed": "Stills were downloaded, but the library database could not be updated. Please retry",
       "multi_video_error": "This folder contains other videos. Fetching stills here may affect them. Please move the video to its own folder first."
     }
   },

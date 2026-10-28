@@ -6,7 +6,9 @@ NFO 檔案工具函數。
 及相關正則 pattern。
 """
 
+import os
 import re
+from pathlib import Path
 
 # CDATA 區塊 pattern（用於先拆出 CDATA 再對非 CDATA 部分 sanitize）
 _CDATA_RE = re.compile(rb'<!\[CDATA\[.*?\]\]>', re.DOTALL)
@@ -40,3 +42,37 @@ def sanitize_nfo_bytes(raw: bytes) -> bytes:
     # 最後一段普通區域
     result.append(_BARE_AMP_RE.sub(b'&amp;', raw[last_end:]))
     return b''.join(result)
+
+
+def find_sidecar_nfos(video_path) -> list[Path]:
+    """找出與影片同名的 NFO sidecar，副檔名大小寫不敏感。
+
+    Android／Linux 的檔案系統區分大小寫；由 Windows 拷入的 ``.NFO`` 不能被
+    只查 ``with_suffix('.nfo')`` 的舊路徑漏掉。先回傳精確同名候選，若沒有才
+    做大小寫不敏感比對。結果排序固定，讓呼叫端能區分單檔與多檔歧義。
+    """
+    path = Path(video_path)
+    expected_stem = path.stem
+    try:
+        entries = list(os.scandir(path.parent))
+    except OSError:
+        return []
+
+    exact: list[Path] = []
+    folded: list[Path] = []
+    for entry in entries:
+        try:
+            if not entry.is_file(follow_symlinks=False):
+                continue
+        except OSError:
+            continue
+        stem, ext = os.path.splitext(entry.name)
+        if ext.lower() != ".nfo":
+            continue
+        candidate = Path(entry.path)
+        if stem == expected_stem:
+            exact.append(candidate)
+        elif stem.casefold() == expected_stem.casefold():
+            folded.append(candidate)
+
+    return sorted(exact) if exact else sorted(folded)

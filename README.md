@@ -11,17 +11,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r8.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r9.apk)
 
 当前发布包：
 
-- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r8.apk`
+- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r9.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r8`（versionCode `17025`）
+- 版本：`0.17.18-r9`（versionCode `17026`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - SHA-256：
-  `3C7F6180FC8E4B418AF9CE6DD9D1054C4A55C23E255AC94DECFDAFFF23BBA27C`
+  `C38A550189B3489D0327D4D3AB6E5484460B7C8EB009FA81A009C8BA44318E02`
 
 ## 安装
 
@@ -56,6 +56,11 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 修复 `phase=ready` 后绑定端口失败导致的 `SystemExit: 1`
 - 修复 Pydantic v1 兼容层缺少 `model_copy()` 导致“补抓剧照失败”的问题
 - 修复 Android 返回键跨菜单后退的问题；弹窗、灯箱、抽屉和编辑层会按层级优先关闭
+- 标题翻译写回兼容 Android 文件系统的大小写规则，`.NFO` 不再被误判为不存在，并改为原子写入
+- 修复灯箱多行标题第一、二行间距异常过大的问题
+- 右侧灰色菜单按钮支持拖动，位置会持久化，并在旋转或窗口尺寸变化后保持在屏幕内
+- 补抓剧照增加来源 URL 规范化、JavDB Referer、图片内容校验、下载诊断和可重复重试
+- 补抓剧照区分“来源无剧照”“全部下载失败”“数据库写入失败”，不再显示模糊错误
 
 ## 限制
 

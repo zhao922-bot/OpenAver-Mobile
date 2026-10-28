@@ -31,7 +31,7 @@ from core.nfo_read import (
 )
 from core.nfo_stat import NFO_MTIME_REFRESH, nfo_mtime_or_none
 from core.nfo_title_format import resolve_title_body
-from core.nfo_utils import sanitize_nfo_bytes
+from core.nfo_utils import find_sidecar_nfos, sanitize_nfo_bytes
 from core.path_utils import normalize_path, to_file_uri, uri_to_fs_path, uri_to_local_fs_path
 from core.scrapers.utils import FC2_TOKEN_PATTERN, normalize_number_impl
 from core.video_extensions import DEFAULT_VIDEO_EXTENSIONS, ZERO_SIZE_EXTENSIONS
@@ -576,10 +576,11 @@ class VideoScanner:
         except OSError:
             pass
 
-        # 嘗試讀取 NFO
-        nfo_path = video_path.with_suffix('.nfo')
+        # 嘗試讀取 NFO（副檔名大小寫不敏感，兼容 Windows 拷入的 .NFO）
+        nfo_candidates = find_sidecar_nfos(video_path)
+        nfo_path = nfo_candidates[0] if nfo_candidates else None
         t_nfo_check = time.time()
-        if nfo_path.exists():
+        if nfo_path is not None:
             logger.debug(f"[Scan]   nfo_exists: {t_nfo_check - t_start:.2f}s")
             nfo_info = self.parse_nfo(str(nfo_path))
             t_parse = time.time()

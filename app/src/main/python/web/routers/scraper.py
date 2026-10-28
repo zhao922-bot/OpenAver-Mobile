@@ -12,6 +12,7 @@ import functools
 import json
 import os
 from dataclasses import asdict
+from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
@@ -22,7 +23,11 @@ from typing import Any, Dict, List, Literal, Optional
 from core.database import VideoRepository, organize_failures
 from core.db_inflow import try_inflow_upsert
 from core.focal_trigger import maybe_submit_video_focal
-from core.enricher import enrich_single, fetch_samples_only, resolve_nfo_cover_paths
+from core.enricher import (
+    enrich_single,
+    fetch_samples_only_detailed,
+    resolve_nfo_cover_paths,
+)
 from core.enrich_contract import did_enrich_something, enrich_success, should_preserve_cover
 from core.organizer import organize_file
 from core.path_utils import to_file_uri, uri_to_fs_path, uri_to_local_fs_path, coerce_to_file_uri
@@ -838,6 +843,17 @@ class FetchSamplesRequest(BaseModel):
     number: str
 
 
+def _samples_failure(code: str, message: str, **diagnostics) -> dict:
+    """補劇照失敗的穩定 API 形狀：error_code 供前端分支，message 供人閱讀。"""
+    payload = asdict(_readonly_enrich_failure(message))
+    payload.update({
+        "error_code": code,
+        "message": message,
+        **diagnostics,
+    })
+    return payload
+
+
 @router.post("/scraper/fetch-samples")
 def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
     config = load_config()
@@ -853,33 +869,24 @@ def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
     owning = resolve_owning_output_root(canonical, config)
     if owning is not None:
         source, output_root, output_uri = owning
-        # Codex PR#113 one-pass alignment (2026-07-21): mirror core.enricher.
-        # fetch_samples_only's own EnrichResult field-for-field — nfo_written/
-        # cover_written are always False here (samples-only never touches NFO or
-        # cover), fields_filled is always [] (no metadata merge happens).
         if not output_root:
-            return asdict(_readonly_enrich_failure("未設定媒體庫輸出路徑", "error"))
+            return _samples_failure("output_root_missing", "未設定媒體庫輸出路徑")
         try:
             meta = search_jav(req.number, source="auto")
-            # P2 review round 3 (FIX#2/FIX#3): mirror core.enricher.fetch_samples_only
-            # field-for-field. That function NEVER sets `reason` (EnrichResult's
-            # dataclass default, None, on every path — success, file-not-found,
-            # meta-not-found alike) and distinguishes a TOTAL search failure
-            # (search_jav found nothing at all, enricher.py:715-718 → success=False
-            # + error) from "found metadata but it has no sample_images to
-            # download" (not an error — meta.get("sample_images", []) just
-            # defaults to [], nothing to write, success=True/extrafanart_written=0).
-            # The old `not meta or not meta.get(...)` conflated both into one
-            # success=True branch, silently swallowing total search failures.
             if not meta:
-                return asdict(_readonly_enrich_failure(f"找不到 {req.number} 的資料"))
-            if not meta.get("sample_images"):
-                return asdict(enrich_success(
-                    nfo_written=False, cover_written=False,
-                    extrafanart_written=0, fields_filled=[],
-                    source_used=meta.get('source', ''),
-                    reason=None,
-                ))
+                return _samples_failure(
+                    "samples_search_failed", f"找不到 {req.number} 的資料",
+                    source="", sample_urls_found=0,
+                )
+            sample_images = [
+                url for url in (meta.get("sample_images") or [])
+                if isinstance(url, str) and url.strip()
+            ]
+            if not sample_images:
+                return _samples_failure(
+                    "no_sample_images", "没有找到可下载的剧照",
+                    source=meta.get("source", ""), sample_urls_found=0,
+                )
             fs_path = uri_to_local_fs_path(req.file_path, path_mappings)
             repo = VideoRepository()
             existing = repo.get_by_path(canonical)
@@ -888,52 +895,80 @@ def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
                 "size": existing.size_bytes if existing else os.path.getsize(fs_path),
                 "mtime": existing.mtime if existing else os.path.getmtime(fs_path),
             }
-            # P2 review (2026-07-21): report the ACTUALLY-downloaded count, not the
-            # requested one — `len(meta["sample_images"])` used to be returned
-            # verbatim regardless of how many downloads actually succeeded, so a
-            # partial/total download failure still reported full success.
-            # `assets['sample_fs']` (from _produce_one's new (movie_dir, assets)
-            # return) only contains the files `_write_movie_assets` actually wrote
-            # — the same source `_upsert_db` uses to (conditionally) update
-            # sample_images, so this count and the DB state can never disagree.
-            _, assets = _produce_one(
+            movie_dir, assets = _produce_one(
                 repo, source, config.get("scraper", {}), file_info=file_info,
                 meta=meta, cover_strategy=('none',), assets_mode='samples_only',
                 existing=existing, output_root=output_root, output_uri=output_uri,
                 allocated_this_run=set(), path_mappings=path_mappings,
             )
             written = len(assets.get('sample_fs', []))
-            return asdict(enrich_success(
+            extrafanart_dir = Path(movie_dir) / "extrafanart"
+            try:
+                on_disk = sum(
+                    1 for path in extrafanart_dir.iterdir()
+                    if path.is_file() and path.name.lower().endswith(".jpg")
+                )
+            except OSError:
+                on_disk = written
+            if on_disk == 0:
+                return _samples_failure(
+                    "sample_download_failed", "已找到劇照，但全部下載失敗",
+                    source=meta.get("source", ""),
+                    sample_urls_found=len(sample_images),
+                    downloaded=written,
+                    skipped_existing=0,
+                    extrafanart_on_disk=0,
+                    download_failed=len(sample_images),
+                )
+            payload = asdict(enrich_success(
                 nfo_written=False, cover_written=False,
                 extrafanart_written=written, fields_filled=[],
                 source_used=meta.get('source', ''),
                 reason=None,
             ))
+            payload.update({
+                "error_code": None,
+                "source": meta.get("source", ""),
+                "sample_urls_found": len(sample_images),
+                "downloaded": written,
+                "skipped_existing": max(0, on_disk - written),
+                "extrafanart_on_disk": on_disk,
+                "download_failed": max(0, len(sample_images) - on_disk),
+            })
+            return payload
         except Exception:
             logger.exception("fetch_samples_endpoint readonly 改道失敗")
-            # fetch_samples_only never sets reason='error' either (it has no
-            # top-level exception boundary of its own — stays the dataclass
-            # default None on every path), so this router-level catch-all
-            # matches with reason=None too (FIX#2 field-for-field parity).
-            return asdict(_readonly_enrich_failure("fetch_samples 處理失敗，請查閱日誌"))
+            return _samples_failure(
+                "internal_error", "fetch_samples 處理失敗，請查閱日誌"
+            )
 
     # uri-no-reverse: comparison-only (DB LIKE prefix), inner kept bare per TASK-91-T3 inner/outer analysis
     folder_uri_prefix = to_file_uri(os.path.dirname(uri_to_fs_path(req.file_path)), path_mappings) + "/"
     repo = VideoRepository()
     count = repo.count_videos_in_folder(folder_uri_prefix)
     if count > 1:
-        return {"success": False, "error": "multi_video_folder", "count": count, "extrafanart_written": 0}
+        return _samples_failure(
+            "multi_video_folder",
+            "此資料夾有其他影片，補抓劇照會污染其他片，請先移到獨立資料夾",
+            count=count,
+        )
 
     try:
-        result = fetch_samples_only(
+        result, diagnostics = fetch_samples_only_detailed(
             file_path=req.file_path,
             number=req.number,
             path_mappings=path_mappings,
         )
-        return asdict(result)
+        payload = asdict(result)
+        payload.update(diagnostics)
+        if not result.success and result.error:
+            payload["message"] = result.error
+        return payload
     except Exception:
         logger.exception("fetch_samples_endpoint 失敗")
-        return {"success": False, "error": "fetch_samples 處理失敗，請查閱日誌"}
+        return _samples_failure(
+            "internal_error", "fetch_samples 處理失敗，請查閱日誌"
+        )
 
 
 @router.post("/batch-enrich")

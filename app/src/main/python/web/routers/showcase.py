@@ -33,6 +33,7 @@ from core.config import load_config, get_gallery_source_paths, get_configured_ga
 from core.scrapers.utils import has_japanese
 from core.nfo_stat import nfo_mtime_or_none
 from core.nfo_title_format import build_display_title
+from core.nfo_utils import find_sidecar_nfos
 from core.readonly_paths import resolve_owning_output_root
 from core.title_writeback import (
     NfoNotFoundError, NfoParseError, rewrite_nfo_titles, strip_illegal_xml_chars,
@@ -541,7 +542,13 @@ def _locate_title_nfo(video, config: dict, path_mappings: dict):
     owning = resolve_owning_output_root(video.path, config)
     if owning is not None:
         return _locate_readonly_nfo(video, path_mappings, owning[2])
-    return str(Path(uri_to_local_fs_path(video.path, path_mappings)).with_suffix(".nfo")), None
+    video_fs_path = uri_to_local_fs_path(video.path, path_mappings)
+    candidates = find_sidecar_nfos(video_fs_path)
+    if not candidates:
+        return None, "no_nfo"
+    if len(candidates) > 1:
+        return None, "nfo_ambiguous"
+    return str(candidates[0]), None
 
 
 def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: str) -> Optional[str]:

@@ -77,10 +77,17 @@ export function stateLightboxTranslate() {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ file_path: path, title: translated }),
                     });
-                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                    data = await resp.json();
+                    try {
+                        data = await resp.json();
+                    } catch (parseError) {
+                        throw new Error(`HTTP ${resp.status}: invalid JSON`);
+                    }
+                    if (!resp.ok) {
+                        throw new Error(`HTTP ${resp.status}: ${data?.message || data?.error || 'request failed'}`);
+                    }
                 } catch (e) {
-                    this.showToast(window.t('showcase.lightbox.translate_write_failed'), 'error');
+                    console.error('[title-writeback] request failed', { path, error: e });
+                    this.showToast(e.message || window.t('showcase.lightbox.translate_write_failed'), 'error');
                     return;
                 }
                 if (data.success === true) {
@@ -91,7 +98,11 @@ export function stateLightboxTranslate() {
                     });
                 } else {
                     const key = data.error === 'no_nfo' ? 'translate_no_nfo' : 'translate_write_failed';
-                    this.showToast(window.t(`showcase.lightbox.${key}`), 'error');
+                    console.error('[title-writeback] API rejected', { path, data });
+                    const message = data.error === 'no_nfo'
+                        ? window.t(`showcase.lightbox.${key}`)
+                        : (data.message || window.t(`showcase.lightbox.${key}`));
+                    this.showToast(message, 'error');
                 }
             } finally {
                 delete this._lbTrInFlight[path];

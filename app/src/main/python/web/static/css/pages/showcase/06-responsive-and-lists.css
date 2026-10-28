@@ -350,6 +350,7 @@ body.similar-mobile-active [data-picker-ghost] {
     width: 1.25rem;
     height: 1.25rem;
     margin-left: 4px;             /* micro spacing（§4 micro 子網格）*/
+    margin-top: 0.125rem;         /* flex 標題列：與第一行文字視覺對齊 */
     padding: 0;
     border: 1px solid transparent;
     border-radius: var(--fluent-radius-md);   /* 互動小元件 4px（§1）*/

@@ -1184,7 +1184,7 @@
                                         :aria-label="(currentLightboxVideo?.user_rating||0) > 0 ? t('showcase.pick.remove_aria') : t('showcase.pick.add_aria')"
                                         :aria-busy="!!_pickInFlight[currentLightboxVideo?.path]"
                                         @click.stop="togglePickStar()"><i class="bi bi-star pick-star-outline" aria-hidden="true"></i><i class="bi bi-star-fill pick-star-fill" aria-hidden="true"
-                                       :style="{ '--pick-fill': (currentLightboxVideo?.user_rating || 0) > 0 ? '0%' : '100%' }"></i></button><span x-text="currentLightboxVideo?.title || t('showcase.grid.unknown_title')"></span><button type="button" class="lb-translate-btn"
+                                       :style="{ '--pick-fill': (currentLightboxVideo?.user_rating || 0) > 0 ? '0%' : '100%' }"></i></button><span class="lb-title-text" x-text="currentLightboxVideo?.title || t('showcase.grid.unknown_title')"></span><button type="button" class="lb-translate-btn"
                                         x-show="lbTrShowOnTitle()"
                                         @click.stop="lbTranslate()"
                                         :disabled="lbTrIsBusy()"
@@ -1200,7 +1200,6 @@
                                 <!-- §b3: 劇照補抓入口（無劇照時顯示） -->
                                 <button class="fetch-samples-btn"
                                         x-show="(currentLightboxVideo?.sample_images || []).length === 0 && !_fetchSamplesLoading"
-                                        :disabled="!!_fetchSamplesFailed[currentLightboxVideo?.path]"
                                         @click="fetchSamples(currentLightboxVideo)">
                                     <i class="bi bi-cloud-download" aria-hidden="true"></i>
                                     <span x-text="t('showcase.samples.fetch_btn')"></span>

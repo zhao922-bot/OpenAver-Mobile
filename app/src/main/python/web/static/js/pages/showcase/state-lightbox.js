@@ -369,7 +369,6 @@ export function stateLightbox() {
 
             this.addingLbTag = false;    // 關閉 lightbox 時重置 user tag 輸入框
             this._resetMask();           // 98b-T4：關燈箱丟棄未提交遮罩態（不 commit）
-            this._fetchSamplesFailed = {};
 
             // ★ C11: fly-back — 必須在 generation++ / lightboxOpen = false 之前捕獲
             // 56c-fix-v3: standalone similar-exit（similarExitVideo set，lightboxIndex 仍是進 similar mode 前舊值）
@@ -912,19 +911,40 @@ export function stateLightbox() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ file_path: video.path, number: video.number })
                 });
-                const data = await res.json();
+                let data;
+                try {
+                    data = await res.json();
+                } catch (parseError) {
+                    throw new Error(`HTTP ${res.status}: invalid JSON`);
+                }
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${data?.message || data?.error || 'request failed'}`);
+                }
                 if (data.success) {
                     await this.refreshVideoData(video);
-                    this.showToast(window.t('showcase.samples.success'), 'success');
-                } else if (data.error === 'multi_video_folder') {
-                    this.showToast(window.t('showcase.samples.multi_video_error'), 'warning');
+                    const count = Number(data.extrafanart_on_disk || data.extrafanart_written || 0);
+                    if (count > 0) {
+                        this.showToast(window.t('showcase.samples.success'), 'success');
+                    } else {
+                        this.showToast(window.t('showcase.samples.no_samples'), 'warning');
+                    }
                 } else {
-                    this.showToast(window.t('showcase.samples.fetch_failed'), 'error');
-                    this._fetchSamplesFailed[video.path] = true;
+                    console.error('[fetch-samples] failed', { path: video.path, data });
+                    if ((data.error_code || data.error) === 'multi_video_folder') {
+                        this.showToast(window.t('showcase.samples.multi_video_error'), 'warning');
+                    } else if (data.error_code === 'no_sample_images' || data.error_code === 'samples_search_failed') {
+                        this.showToast(window.t('showcase.samples.no_samples'), 'warning');
+                    } else if (data.error_code === 'sample_download_failed') {
+                        this.showToast(window.t('showcase.samples.download_failed'), 'error');
+                    } else if (data.error_code === 'db_write_failed') {
+                        this.showToast(window.t('showcase.samples.db_write_failed'), 'error');
+                    } else {
+                        this.showToast(data.message || window.t('showcase.samples.fetch_failed'), 'error');
+                    }
                 }
             } catch (e) {
-                this.showToast(window.t('showcase.samples.fetch_failed'), 'error');
-                this._fetchSamplesFailed[video.path] = true;
+                console.error('[fetch-samples] request failed', { path: video.path, error: e });
+                this.showToast(e.message || window.t('showcase.samples.fetch_failed'), 'error');
             } finally {
                 this._fetchSamplesLoading = false;
             }

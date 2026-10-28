@@ -265,13 +265,21 @@
 
 /* Title */
 .lightbox-metadata .lb-title {
+    display: flex;
+    align-items: flex-start;
     font-size: 0.9375rem;
     font-weight: 600;
     color: var(--text-primary);
     line-height: 1.4;
     flex: 1;
     min-width: 0;
+}
+
+.lightbox-metadata .lb-title-text {
+    flex: 1 1 auto;
     word-break: break-word;
+    line-height: 1.4;
+    min-width: 0;
 }
 
 /* Original Title */
@@ -443,6 +451,8 @@
     .lightbox-metadata .lb-title .pick-star {
         width: 44px;
         height: 44px;
+        align-self: flex-start;
+        padding: 5px 0;
         margin-right: calc(1.45em - 44px);   /* 同上：維持 0.45em 的視覺間距，換 44px 盒 */
     }
 }
