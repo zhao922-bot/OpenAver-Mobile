@@ -257,6 +257,18 @@ llvm-readelf -l path/to/libfoo.so
 同时用 Android 15/16 的 16 KB 页大小模拟器或设备安装、启动、扫描、封面显示、
 视频播放和脸部检测。
 
+### 当前 arm64 构建的静态检查结果（2026-10-30）
+
+对包含 loopback 鉴权改动的 arm64 Release APK 执行：
+
+- `zipalign -c -P 16 -v 4` 通过。
+- APK 内 10 个 arm64 native `.so` 的 `LOAD` segment 最小对齐均为 `0x4000`。
+- 检查范围包括 Chaquopy/CPython、OpenSSL、SQLite、Crypto 和
+  `libopenaver_mobile.so`。
+
+这只证明 APK 打包和 ELF 静态对齐满足 16 KB 条件，不等同于已在 16 KB 页大小的
+真机上完成运行验证。
+
 ## 分阶段迁移计划
 
 每个阶段单独提交、单独 tag，不允许把 targetSdk、业务功能和 patch 重排混在一个
