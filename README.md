@@ -138,6 +138,25 @@ python -m pip install -r requirements-test.txt
 python -m pytest tests -q
 ```
 
+### 上游同步
+
+`app/src/main/python/` 不是独立维护的第二份上游源码，而是固定的
+OpenAver `v0.17.18`（提交
+`af0d99741e63e71980773c9ade04c473407a60b7`）加 `patches/` 下七个有编号的
+补丁。`patches/manifest.json` 记录上游提交和每个补丁负责的文件。
+
+CI 在构建前执行：
+
+```bash
+python tools/verify_python_sync.py \
+  --upstream-root upstream \
+  --source-root app/src/main/python
+```
+
+该检查会确认上游提交匹配，然后在临时目录中重放全部补丁，并逐文件比较哈希。
+修改任何 Android Python 文件时，必须同时更新对应 patch；完整维护流程见
+[patches/README.md](patches/README.md)。
+
 ## 许可证
 
 上游 OpenAver 和本项目修改均采用 MIT License，详见 [LICENSE](LICENSE)。

@@ -1,0 +1,261 @@
+--- a/core/custom_source/fetch.py
++++ b/core/custom_source/fetch.py
+@@ -19,6 +19,16 @@
+ _DATA_STATUSES = frozenset({200, 404})
+ _CHUNK_SIZE = 64 * 1024
+ _now = time.monotonic
++
++_BROWSER_HEADERS = {
++    "User-Agent": (
++        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
++        "AppleWebKit/537.36 (KHTML, like Gecko) "
++        "Chrome/120.0.0.0 Safari/537.36"
++    ),
++    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
++    "Accept-Language": "zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.7",
++}
+ 
+ 
+ class FetchError(Exception):
+@@ -65,6 +75,7 @@
+     def __init__(self, source_id, config):
+         self._session = new_session(source_id, settings=config.proxy_settings)
+         self._headers = dict(DEFAULT_HEADERS)
++        self._headers.update(_BROWSER_HEADERS)
+         self._timeout = config.timeout
+ 
+     def request(self, url):
+@@ -134,7 +145,19 @@
+     if fetch == "plain":
+         return PlainTransport(source_id, config)
+     if fetch == "tls":
+-        return TlsTransport(source_id, config)
++        try:
++            return TlsTransport(source_id, config)
++        except FetchError as exc:
++            # Android has no curl_cffi wheel.  Keep the source usable with a
++            # browser-shaped plain request instead of failing at load time.
++            if exc.reason != "transport_unavailable":
++                raise
++            return PlainTransport(source_id, config)
++    if fetch == "cf":
++        # Best-effort fallback.  A real Cloudflare challenge still requires a
++        # WebView; ordinary CF-marked sources often work with the browser
++        # headers used by PlainTransport.
++        return PlainTransport(source_id, config)
+     raise ValueError(f"unknown fetch mode: {fetch}")
+ 
+ 
+--- a/core/custom_source/schema.py
++++ b/core/custom_source/schema.py
+@@ -304,10 +304,8 @@
+ 
+ def _validate_fetch(data):
+     value = _required(data, "fetch", "")
+-    if value == "cf":
+-        raise LoadError("fetch_cf_unsupported", "此版本不支援 CF 模式", "fetch")
+-    if value not in ("plain", "tls") or not isinstance(value, str):
+-        raise LoadError("unknown_fetch", "fetch 只接受 plain 或 tls", "fetch")
++    if value not in ("plain", "tls", "cf") or not isinstance(value, str):
++        raise LoadError("unknown_fetch", "fetch 只接受 plain、tls 或 cf", "fetch")
+     return value
+ 
+ 
+--- a/core/proxy_policy.py
++++ b/core/proxy_policy.py
+@@ -17,7 +17,7 @@
+ from urllib.parse import unquote, urlsplit
+ 
+ import requests
+-from pydantic import BaseModel, ConfigDict, field_validator
++from pydantic import BaseModel, field_validator
+ 
+ from core.desktop_env import desktop_kind
+ from core.loopback import is_loopback_host
+@@ -28,7 +28,8 @@
+ 
+ 
+ class ProxySettings(BaseModel):
+-    model_config = ConfigDict(frozen=True)
++    class Config:
++        frozen = True
+ 
+     url: str = ''
+     scope: Literal['dmm', 'all'] = 'dmm'
+--- a/core/scrapers/actress/avbase.py
++++ b/core/scrapers/actress/avbase.py
+@@ -15,6 +15,7 @@
+ from typing import Dict, List, Optional
+ from urllib.parse import quote
+ 
++import requests
+ from bs4 import BeautifulSoup
+ 
+ from core.logger import get_logger
+@@ -181,8 +182,10 @@
+     try:
+         from curl_cffi import requests as cffi_requests
+     except (ImportError, importlib.metadata.PackageNotFoundError) as exc:
+-        logger.warning("[avbase] curl_cffi unavailable: %s", exc)
+-        return None
++        logger.warning(
++            "[avbase] curl_cffi unavailable, trying requests fallback: %s", exc
++        )
++        return _scrape_avbase_plain(name)
+ 
+     url = _BASE_URL + quote(name, safe="")
+     try:
+@@ -193,3 +196,47 @@
+     except Exception as exc:
+         logger.warning("[avbase] request failed for %s: %s", name, type(exc).__name__)
+         return None
++
++
++def _scrape_avbase_plain(name: str) -> Optional[dict]:
++    """Android fallback for environments without curl_cffi."""
++    url = _BASE_URL + quote(name, safe="")
++    headers = {
++        "User-Agent": (
++            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
++            "AppleWebKit/537.36 (KHTML, like Gecko) "
++            "Chrome/120.0.0.0 Safari/537.36"
++        ),
++        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
++        "Accept-Language": "ja,en;q=0.8,zh-TW;q=0.6",
++    }
++    proxies = proxy_kwargs("actress").get("proxies")
++    session = requests.Session()
++    try:
++        resp = session.get(
++            url,
++            headers=headers,
++            timeout=_TIMEOUT_S,
++            **({"proxies": proxies} if proxies else {}),
++        )
++        # AVBase declares UTF-8 but some requests/urllib3 combinations guess a
++        # legacy encoding when the response is proxied.  Keep the JSON names
++        # comparable to the user-entered Japanese name.
++        if resp.status_code == 200:
++            resp.encoding = "utf-8"
++        logger.debug(
++            "[avbase] fallback response status=%s bytes=%s encoding=%s",
++            resp.status_code,
++            len(resp.content),
++            resp.encoding,
++        )
++        return _handle_response(resp, name)
++    except Exception as exc:
++        logger.warning(
++            "[avbase] requests fallback failed for %s: %s",
++            name,
++            type(exc).__name__,
++        )
++        return None
++    finally:
++        session.close()
+--- a/core/scrapers/javdb.py
++++ b/core/scrapers/javdb.py
+@@ -4,6 +4,7 @@
+ import sys
+ from typing import Optional
+ 
++import requests
+ from core.logger import get_logger
+ 
+ logger = get_logger(__name__)
+@@ -233,10 +234,13 @@
+             if not _warned:
+                 _warned = True
+                 if CURL_CFFI_IMPORT_ERROR is not None:
+-                    logger.warning("javdb 已停用：curl_cffi 不可用: %s", CURL_CFFI_IMPORT_ERROR)
++                    logger.warning(
++                        "javdb: curl_cffi 不可用，改用 requests 浏览器头 fallback: %s",
++                        CURL_CFFI_IMPORT_ERROR,
++                    )
+                 else:
+-                    logger.warning("javdb 已停用：curl_cffi 不可用")
+-            return None
++                    logger.warning("javdb: curl_cffi 不可用，改用 requests 浏览器头 fallback")
++            return self._get_html_plain(url)
+ 
+         _ca = _cainfo_override_bytes()
+         extra = {"curl_options": {CurlOpt.CAINFO: _ca}} if _ca is not None else {}
+@@ -285,6 +289,50 @@
+             raise SourceUnreachable(f"javdb: {e}") from e
+ 
+         return None
++
++    def _get_html_plain(self, url: str) -> Optional[str]:
++        """Android fallback: no curl_cffi, but a browser-shaped requests GET."""
++        session = self._new_session()
++        headers = {
++            "User-Agent": self.config.user_agent,
++            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
++            "Accept-Language": "zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.7",
++            "Referer": "https://javdb.com/",
++            "Cache-Control": "no-cache",
++        }
++        proxies = self._proxy_kwargs().get("proxies") or _resolve_proxies(url)
++        try:
++            resp = session.get(
++                url,
++                headers=headers,
++                timeout=30,
++                allow_redirects=True,
++                **({"proxies": proxies} if proxies else {}),
++            )
++            text = resp.text
++            if resp.status_code == 200:
++                lower = text.lower()
++                if (
++                    "cf-browser-verification" in lower
++                    or "just a moment" in lower
++                    or "challenge-platform" in lower
++                ):
++                    logger.warning("JavDB blocked (Cloudflare challenge) for %s", url)
++                    raise SourceBlocked(f"javdb: Cloudflare challenge detected for {url}")
++                return text
++            if resp.status_code in (403, 429, 503):
++                logger.warning("JavDB blocked (%s) for %s", resp.status_code, url)
++                raise SourceBlocked(f"javdb: HTTP {resp.status_code} for {url}")
++            logger.warning("JavDB non-200 for %s: %s", url, resp.status_code)
++            return None
++        except (SourceUnreachable, SourceBlocked):
++            raise
++        except requests.exceptions.Timeout as exc:
++            raise SourceUnreachable(f"javdb: timeout for {url}") from exc
++        except requests.exceptions.RequestException as exc:
++            raise SourceUnreachable(f"javdb: {exc}") from exc
++        finally:
++            session.close()
+ 
+     def search_via_api(self, number: str) -> Optional[Video]:
+         """走 App 資料介面。呼叫端必須傳入已正規化的番號。
+--- a/core/scrapers/models.py
++++ b/core/scrapers/models.py
+@@ -1,20 +1,22 @@
+ """Scraper 資料模型"""
+ from typing import Optional
+-from pydantic import BaseModel, ConfigDict, Field
++from pydantic import BaseModel, Field
+ 
+ from core.proxy_policy import ProxySettings
+ 
+ 
+ class Actress(BaseModel):
+     """女優資訊"""
+-    model_config = ConfigDict(frozen=True)
++    class Config:
++        frozen = True
+ 
+     name: str = Field(..., min_length=1, description="女優名稱")
+ 
+ 
+ class Video(BaseModel):
+     """影片資訊"""
+-    model_config = ConfigDict(frozen=True)
++    class Config:
++        frozen = True
+ 
+     number: str = Field(..., description="番號（如 SONE-205）")
+     title: str = Field(default="", description="影片標題")

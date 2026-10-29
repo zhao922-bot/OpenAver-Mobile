@@ -35,7 +35,13 @@ outputs/
 **/web/config.local.json
 
 # Local tooling
-tools/
+# Keep the upstream-sync scripts in the repository; ignore only local scratch
+# files that may be placed under this directory by contributors.
+tools/*
+!tools/apply_patches.sh
+!tools/generate_patches.py
+!tools/prepare_python_tree.py
+!tools/verify_python_sync.py
 
 # OS and editor files
 .DS_Store

@@ -1,0 +1,78 @@
+{
+  "upstream": "v0.17.18",
+  "commit": "af0d99741e63e71980773c9ade04c473407a60b7",
+  "patches": [
+    {
+      "patch": "001-pydantic-v1-compat.patch",
+      "files": [
+        "pydantic_v1_compat.py"
+      ]
+    },
+    {
+      "patch": "002-mobile-bootstrap.patch",
+      "files": [
+        "openaver_boot.py",
+        "web/app.py",
+        "web/compression.py"
+      ]
+    },
+    {
+      "patch": "003-android-native-focal.patch",
+      "files": [
+        "core/focal/detector.py",
+        "core/focal/subprocess_runner.py"
+      ]
+    },
+    {
+      "patch": "004-network-and-scraper-fallbacks.patch",
+      "files": [
+        "core/custom_source/fetch.py",
+        "core/custom_source/schema.py",
+        "core/proxy_policy.py",
+        "core/scrapers/actress/avbase.py",
+        "core/scrapers/javdb.py",
+        "core/scrapers/models.py"
+      ]
+    },
+    {
+      "patch": "005-android-file-writeback.patch",
+      "files": [
+        "core/enricher.py",
+        "core/gallery_scanner.py",
+        "core/nfo_utils.py",
+        "core/organizer.py",
+        "core/source_config.py",
+        "core/title_writeback.py"
+      ]
+    },
+    {
+      "patch": "006-mobile-web-routers.patch",
+      "files": [
+        "web/routers/capabilities.py",
+        "web/routers/scanner.py",
+        "web/routers/scraper.py",
+        "web/routers/showcase.py"
+      ]
+    },
+    {
+      "patch": "007-mobile-ui-and-localization.patch",
+      "files": [
+        "core/config.py",
+        "locales/en.json",
+        "locales/ja.json",
+        "locales/zh_CN.json",
+        "locales/zh_TW.json",
+        "web/config.default.json",
+        "web/static/css/pages/showcase/05-lightbox.css",
+        "web/static/css/pages/showcase/06-responsive-and-lists.css",
+        "web/static/js/components/mobile-back.js",
+        "web/static/js/pages/settings/state-config.js",
+        "web/static/js/pages/showcase/state-actress.js",
+        "web/static/js/pages/showcase/state-lightbox-translate.js",
+        "web/static/js/pages/showcase/state-lightbox.js",
+        "web/templates/base.html",
+        "web/templates/showcase.html"
+      ]
+    }
+  ]
+}

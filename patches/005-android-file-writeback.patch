@@ -1,0 +1,445 @@
+--- a/core/enricher.py
++++ b/core/enricher.py
+@@ -2,12 +2,14 @@
+ enricher.py - 舊片原地補完（NFO / 封面 / 劇照），絕對不搬移、不改名、不建目錄
+ """
+ 
++import html
+ import os
+ import shutil
+ import time
+ import xml.etree.ElementTree as ET
+ from pathlib import Path
+ from typing import List, NamedTuple, Optional
++from urllib.parse import urljoin, urlparse
+ 
+ from core.config import STEM_IMAGE_MODES
+ from core.cover_attributes import effective_tags
+@@ -22,6 +24,7 @@
+     should_preserve_cover,
+ )
+ from core.focal_trigger import schedule_focal_after_cover_write
++from core.image_codec import looks_like_image
+ from core.logger import get_logger
+ from core.nfo_read import (
+     nfo_actor_names,
+@@ -423,6 +426,33 @@
+     uris: List[str]
+     downloaded: int
+     skipped_existing: int
++    requested: int
++    failed: int
++
++
++def _normalize_image_url(url, base_url: str = "") -> str:
++    """把 scraper 回傳的圖片網址收斂成可下載的 http(s) URL。"""
++    if not isinstance(url, str):
++        return ""
++    value = html.unescape(url).strip()
++    if not value:
++        return ""
++    if value.startswith("//"):
++        value = "https:" + value
++    elif base_url and not urlparse(value).scheme:
++        value = urljoin(base_url, value)
++    if urlparse(value).scheme.lower() not in ("http", "https"):
++        return ""
++    return value
++
++
++def _is_valid_sample_file(path: str) -> bool:
++    """確認下載後的劇照有可辨識的圖片魔數，避免把 HTML/CDN 錯誤頁計成功。"""
++    try:
++        with open(path, "rb") as fh:
++            return looks_like_image(fh.read(512))
++    except OSError:
++        return False
+ 
+ 
+ def _write_extrafanart(
+@@ -431,9 +461,10 @@
+     write_extrafanart: bool,
+     path_mappings: dict = None,
+     preview_sample_images: List[str] = None,
++    base_url: str = "",
+ ) -> ExtrafanartResult:
+     if not write_extrafanart or not sample_images:
+-        return ExtrafanartResult([], 0, 0)
++        return ExtrafanartResult([], 0, 0, len(sample_images or []), 0)
+ 
+     parent = Path(fs_path).parent
+     extrafanart_dir = parent / "extrafanart"
+@@ -445,6 +476,7 @@
+     uris: List[str] = []
+     downloaded = 0
+     skipped_existing = 0
++    failed = 0
+     for i, url in enumerate(sample_images):
+         dest = str(extrafanart_dir / f"fanart{i+1}.jpg")
+         # CD-127c-1：既有劇照永遠不被程式覆蓋。跳過的那格仍要 append——
+@@ -453,20 +485,38 @@
+             uris.append(to_file_uri(dest, path_mappings))
+             skipped_existing += 1
+             continue
+-        fallback = previews[i] if i < len(previews) else ""
++        primary_url = _normalize_image_url(url, base_url)
++        fallback = _normalize_image_url(
++            previews[i] if i < len(previews) else "", base_url
++        )
++        if not primary_url and not fallback:
++            failed += 1
++            logger.warning("extrafanart %d 下載失敗: 無效圖片網址", i + 1)
++            continue
++        if not primary_url:
++            primary_url, fallback = fallback, ""
+         try:
+             # 同 _write_cover：preview 為空時不傳 kwarg（AC-5 逐字元相同）
+             ok = (
+-                download_image(url, dest, fallback_url=fallback)
++                download_image(primary_url, dest, referer=base_url, fallback_url=fallback)
+                 if fallback
+-                else download_image(url, dest)
++                else download_image(primary_url, dest, referer=base_url)
+             )
+-            if ok:
++            if ok and _is_valid_sample_file(dest):
+                 uris.append(to_file_uri(dest, path_mappings))
+                 downloaded += 1
++            else:
++                failed += 1
++                if ok:
++                    logger.warning("extrafanart %d 下載失敗: 回傳內容不是圖片", i + 1)
++                    try:
++                        os.unlink(dest)
++                    except OSError:
++                        pass
+         except Exception as e:
++            failed += 1
+             logger.warning("extrafanart %d 下載失敗: %s", i + 1, e)
+-    return ExtrafanartResult(uris, downloaded, skipped_existing)
++    return ExtrafanartResult(uris, downloaded, skipped_existing, len(sample_images), failed)
+ 
+ 
+ def _preserve_nfo_only_fields(meta: dict, scraper_data: dict, fs_path: str) -> None:
+@@ -761,6 +811,7 @@
+         write_extrafanart=write_extrafanart,
+         path_mappings=path_mappings,
+         preview_sample_images=meta.get("preview_sample_images", []),
++        base_url=meta.get("url", ""),
+     )
+     extrafanart_written = extrafanart_res.downloaded
+ 
+@@ -940,14 +991,12 @@
+     repo.update_sample_images(path_uri, sample_images)
+ 
+ 
+-def fetch_samples_only(
++def fetch_samples_only_detailed(
+     file_path: str,
+     number: str,
+     path_mappings: dict = None,
+-) -> EnrichResult:
+-    """只補抓劇照：呼叫 scraper → 下載 extrafanart → 更新 DB sample_images。
+-    不寫 NFO / cover / 其他欄位。
+-    """
++) -> tuple[EnrichResult, dict]:
++    """只補抓劇照，並回傳足以區分「查無／無劇照／下載失敗／DB 失敗」的診斷。"""
+     _empty = EnrichResult(
+         success=False,
+         nfo_written=False,
+@@ -957,6 +1006,15 @@
+         source_used="",
+         error=None,
+     )
++    diagnostics = {
++        "error_code": None,
++        "source": "",
++        "sample_urls_found": 0,
++        "downloaded": 0,
++        "skipped_existing": 0,
++        "extrafanart_on_disk": 0,
++        "download_failed": 0,
++    }
+ 
+     try:
+         fs_path = uri_to_local_fs_path(file_path, path_mappings)
+@@ -967,39 +1025,91 @@
+     if not os.path.exists(fs_path):
+         logger.warning("[fetch_samples_only] 檔案不存在: %s", fs_path)
+         _empty.error = "檔案不存在"
+-        return _empty
++        diagnostics["error_code"] = "file_not_found"
++        return _empty, diagnostics
+ 
+     meta = search_jav(number,
+                       source="auto", javbus_lang=None)
+     if not meta:
+         logger.warning("[fetch_samples_only] 找不到資料: %s", number)
+         _empty.error = f"找不到 {number} 的資料"
+-        return _empty
+-
+-    sample_images = meta.get("sample_images", [])
++        diagnostics["error_code"] = "samples_search_failed"
++        return _empty, diagnostics
++
++    source_used = meta.get("source", "")
++    diagnostics["source"] = source_used
++    sample_images = [
++        url for url in (meta.get("sample_images") or [])
++        if isinstance(url, str) and url.strip()
++    ]
++    diagnostics["sample_urls_found"] = len(sample_images)
++    if not sample_images:
++        logger.warning("[fetch_samples_only] %s 的來源 %s 沒有劇照 URL", number, source_used)
++        _empty.error = "沒有找到可下載的劇照"
++        _empty.source_used = source_used
++        diagnostics["error_code"] = "no_sample_images"
++        return _empty, diagnostics
++
+     extrafanart_res = _write_extrafanart(
+         fs_path, sample_images, write_extrafanart=True, path_mappings=path_mappings,
+         preview_sample_images=meta.get("preview_sample_images", []),
++        base_url=meta.get("url", ""),
+     )
++    diagnostics.update({
++        "downloaded": extrafanart_res.downloaded,
++        "skipped_existing": extrafanart_res.skipped_existing,
++        "extrafanart_on_disk": len(extrafanart_res.uris),
++        "download_failed": extrafanart_res.failed,
++    })
+ 
+     if extrafanart_res.uris:                      # ← 既有 gate，語意不變（磁碟真相非空才寫 DB）
+-        repo = VideoRepository()
+-        # db-ns-ok: fs_path_for_db, DB round-trip value passed to wrapper sink
+-        _db_upsert_samples_only(repo, fs_path_for_db, extrafanart_res.uris)
++        try:
++            repo = VideoRepository()
++            # db-ns-ok: fs_path_for_db, DB round-trip value passed to wrapper sink
++            _db_upsert_samples_only(repo, fs_path_for_db, extrafanart_res.uris)
++        except Exception as exc:
++            logger.exception("[fetch_samples_only] DB 更新失敗: %s", exc)
++            _empty.error = "劇照已下載，但資料庫更新失敗，請再試一次"
++            _empty.source_used = source_used
++            diagnostics["error_code"] = "db_write_failed"
++            return _empty, diagnostics
+ 
+     logger.info(
+         "[fetch_samples_only] %s: %d downloaded / %d skipped-existing / %d on disk",
+         number, extrafanart_res.downloaded, extrafanart_res.skipped_existing,
+         len(extrafanart_res.uris),
+     )
+-    return enrich_success(
+-        nfo_written=False,
+-        cover_written=False,
+-        extrafanart_written=extrafanart_res.downloaded,
+-        fields_filled=[],
+-        source_used=meta.get("source", ""),
+-        reason=None,
++    if not extrafanart_res.uris:
++        _empty.error = "已找到劇照，但全部下載失敗"
++        _empty.source_used = source_used
++        diagnostics["error_code"] = "sample_download_failed"
++        return _empty, diagnostics
++
++    return (
++        enrich_success(
++            nfo_written=False,
++            cover_written=False,
++            extrafanart_written=extrafanart_res.downloaded,
++            fields_filled=[],
++            source_used=source_used,
++            reason=None,
++        ),
++        diagnostics,
+     )
++
++
++def fetch_samples_only(
++    file_path: str,
++    number: str,
++    path_mappings: dict = None,
++) -> EnrichResult:
++    """兼容入口：只回既有 EnrichResult；路由改用 detailed 取得診斷。"""
++    result, _diagnostics = fetch_samples_only_detailed(
++        file_path=file_path,
++        number=number,
++        path_mappings=path_mappings,
++    )
++    return result
+ 
+ 
+ def resolve_nfo_cover_paths(file_path: str, path_mappings: dict = None, external_manager: str = "off") -> tuple:
+--- a/core/gallery_scanner.py
++++ b/core/gallery_scanner.py
+@@ -31,7 +31,7 @@
+ )
+ from core.nfo_stat import NFO_MTIME_REFRESH, nfo_mtime_or_none
+ from core.nfo_title_format import resolve_title_body
+-from core.nfo_utils import sanitize_nfo_bytes
++from core.nfo_utils import find_sidecar_nfos, sanitize_nfo_bytes
+ from core.path_utils import normalize_path, to_file_uri, uri_to_fs_path, uri_to_local_fs_path
+ from core.scrapers.utils import FC2_TOKEN_PATTERN, normalize_number_impl
+ from core.video_extensions import DEFAULT_VIDEO_EXTENSIONS, ZERO_SIZE_EXTENSIONS
+@@ -576,10 +576,11 @@
+         except OSError:
+             pass
+ 
+-        # 嘗試讀取 NFO
+-        nfo_path = video_path.with_suffix('.nfo')
++        # 嘗試讀取 NFO（副檔名大小寫不敏感，兼容 Windows 拷入的 .NFO）
++        nfo_candidates = find_sidecar_nfos(video_path)
++        nfo_path = nfo_candidates[0] if nfo_candidates else None
+         t_nfo_check = time.time()
+-        if nfo_path.exists():
++        if nfo_path is not None:
+             logger.debug(f"[Scan]   nfo_exists: {t_nfo_check - t_start:.2f}s")
+             nfo_info = self.parse_nfo(str(nfo_path))
+             t_parse = time.time()
+--- a/core/nfo_utils.py
++++ b/core/nfo_utils.py
+@@ -6,7 +6,9 @@
+ 及相關正則 pattern。
+ """
+ 
++import os
+ import re
++from pathlib import Path
+ 
+ # CDATA 區塊 pattern（用於先拆出 CDATA 再對非 CDATA 部分 sanitize）
+ _CDATA_RE = re.compile(rb'<!\[CDATA\[.*?\]\]>', re.DOTALL)
+@@ -40,3 +42,37 @@
+     # 最後一段普通區域
+     result.append(_BARE_AMP_RE.sub(b'&amp;', raw[last_end:]))
+     return b''.join(result)
++
++
++def find_sidecar_nfos(video_path) -> list[Path]:
++    """找出與影片同名的 NFO sidecar，副檔名大小寫不敏感。
++
++    Android／Linux 的檔案系統區分大小寫；由 Windows 拷入的 ``.NFO`` 不能被
++    只查 ``with_suffix('.nfo')`` 的舊路徑漏掉。先回傳精確同名候選，若沒有才
++    做大小寫不敏感比對。結果排序固定，讓呼叫端能區分單檔與多檔歧義。
++    """
++    path = Path(video_path)
++    expected_stem = path.stem
++    try:
++        entries = list(os.scandir(path.parent))
++    except OSError:
++        return []
++
++    exact: list[Path] = []
++    folded: list[Path] = []
++    for entry in entries:
++        try:
++            if not entry.is_file(follow_symlinks=False):
++                continue
++        except OSError:
++            continue
++        stem, ext = os.path.splitext(entry.name)
++        if ext.lower() != ".nfo":
++            continue
++        candidate = Path(entry.path)
++        if stem == expected_stem:
++            exact.append(candidate)
++        elif stem.casefold() == expected_stem.casefold():
++            folded.append(candidate)
++
++    return sorted(exact) if exact else sorted(folded)
+--- a/core/organizer.py
++++ b/core/organizer.py
+@@ -709,6 +709,8 @@
+             effective_referer = "https://www.dmm.co.jp/"
+         elif "jav321.com" in url:
+             effective_referer = "https://www.jav321.com/"
++        elif "javdb.com" in url:
++            effective_referer = "https://javdb.com/"
+     if effective_referer:
+         headers["Referer"] = effective_referer
+     return headers
+@@ -757,6 +759,16 @@
+             with open(save_path, "wb") as f:
+                 f.write(payload)
+             return True
++        if resp.status_code != 200:
++            logger.warning(
++                "[!] 下載圖片失敗: HTTP %s host=%s",
++                resp.status_code, (urlparse(url).hostname or ""),
++            )
++        else:
++            logger.warning(
++                "[!] 下載圖片失敗: payload too small (%d bytes) host=%s",
++                len(resp.content), (urlparse(url).hostname or ""),
++            )
+     except requests.exceptions.ConnectionError as e:
+         # ConnectTimeout is a ConnectionError subclass; ReadTimeout is not.
+         _record_host_failure(_host_key(url))
+--- a/core/source_config.py
++++ b/core/source_config.py
+@@ -9,7 +9,7 @@
+ - 僅 import core/scrapers/utils.py 的純常數（無 circular import 風險）。
+ - Logger 一律 from core.logger import get_logger（CLAUDE.md Logger 規則）。
+ """
+-from pydantic import BaseModel, Field, computed_field, model_validator
++from pydantic import BaseModel, Field, validator
+ 
+ from core.logger import get_logger
+ from core.scrapers.utils import (
+@@ -47,8 +47,8 @@
+     manual_only: bool = False  # B1 day-one schema（預留 B4 javlibrary）；B1 全 False
+     requires_proxy: bool = False  # 需要日本 IP（DMM=True，metatube 全 False）
+ 
+-    @model_validator(mode='after')
+-    def _derive_requires_proxy(self) -> 'SourceConfig':
++    @validator('requires_proxy', always=True)
++    def _derive_requires_proxy(cls, value, values) -> bool:
+         """Builtin sources always derive requires_proxy from PROXY_SOURCES.
+ 
+         Ensures that even when reconstructed from a stored dict that lacks the
+@@ -56,11 +56,10 @@
+         builtins correctly reflect True.  Non-builtin types (metatube, etc.) are
+         left unchanged — they keep whatever value was passed (default False).
+         """
+-        if self.type == 'builtin':
+-            self.requires_proxy = self.id in PROXY_SOURCES
+-        return self
+-
+-    @computed_field  # type: ignore[prop-decorator]
++        if values.get('type') == 'builtin':
++            return values.get('id') in PROXY_SOURCES
++        return value
++
+     @property
+     def is_censored(self) -> bool:
+         """是否為有碼來源（CD-61-3 round-2 雙路徑）。
+@@ -92,6 +91,11 @@
+             censored_type,
+         )
+         return True
++
++    def dict(self, *args, **kwargs):
++        data = super().dict(*args, **kwargs)
++        data['is_censored'] = self.is_censored
++        return data
+ 
+ 
+ def render_name(s: SourceConfig) -> str:
+--- a/core/title_writeback.py
++++ b/core/title_writeback.py
+@@ -9,6 +9,7 @@
+ import xml.etree.ElementTree as ET
+ from pathlib import Path
+ 
++from core.atomic_write import atomic_write
+ from core.nfo_read import nfo_first_text
+ from core.nfo_title_format import build_display_title
+ from core.nfo_updater import set_element_text
+@@ -83,5 +84,8 @@
+         ET.SubElement(rec, "body").text = body
+ 
+     out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+-    path.write_bytes(out)
++    # Android／外接儲存上的直接 write_bytes 若中途失敗會把原 NFO 截斷。
++    # 同目錄暫存 + replace 讓失敗時原檔保持不變。
++    with atomic_write(path, mode="wb", suffix=".nfo.tmp") as fh:
++        fh.write(out)
+     return out

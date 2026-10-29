@@ -1,0 +1,313 @@
+--- /dev/null
++++ b/openaver_boot.py
+@@ -0,0 +1,165 @@
++"""OpenAver Android embedded server bootstrap."""
++
++from __future__ import annotations
++
++import os
++import socket
++import sys
++import threading
++import traceback
++
++import uvicorn
++
++
++_server = None
++_thread = None
++_server_socket = None
++_server_port = 0
++_server_error = ""
++_startup_status = "python_loaded"
++
++
++def is_server_alive() -> bool:
++    return _thread is not None and _thread.is_alive()
++
++
++def server_error() -> str:
++    return _server_error
++
++
++def server_port() -> int:
++    return _server_port
++
++
++def set_startup_status(status: str) -> None:
++    global _startup_status
++    _startup_status = status
++
++
++def startup_status() -> str:
++    return _startup_status
++
++
++def server_stack() -> str:
++    if _thread is None or _thread.ident is None:
++        return "server thread is not running"
++    frame = sys._current_frames().get(_thread.ident)
++    if frame is None:
++        return "server thread stack is unavailable"
++    return "".join(traceback.format_stack(frame, limit=8))
++
++
++def _bind_server_socket(host: str, preferred_port: int):
++    """Bind before Uvicorn starts so a busy port is a normal retry, not exit(1)."""
++    last_error = None
++    for port in range(preferred_port, preferred_port + 21):
++        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
++        try:
++            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
++            listener.bind((host, port))
++            listener.listen(128)
++            listener.setblocking(False)
++            return listener, listener.getsockname()[1]
++        except OSError as exc:
++            last_error = exc
++            listener.close()
++    if last_error is None:
++        raise OSError("no local port was available")
++    raise OSError(
++        f"no free loopback port in {preferred_port}-{preferred_port + 20}: "
++        f"{last_error}"
++    ) from last_error
++
++
++def _run_server(listener) -> None:
++    global _server_error
++    try:
++        set_startup_status("uvicorn_running")
++        _server.run(sockets=[listener])
++    except BaseException as exc:
++        _server_error = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
++
++
++def start_server(
++    host: str,
++    port: int,
++    data_dir: str,
++    native_lib_path: str = "",
++    cascade_path: str = "",
++) -> int:
++    global _server, _thread, _server_socket, _server_port, _server_error
++    if _server is not None and _thread is not None and _thread.is_alive():
++        return _server_port or port
++
++    os.makedirs(data_dir, exist_ok=True)
++    runtime_home = os.path.join(os.path.dirname(data_dir), "openaver_home")
++    os.makedirs(runtime_home, exist_ok=True)
++    os.environ["OPENAVER_DATA_DIR"] = data_dir
++    os.environ["HOME"] = runtime_home
++    os.environ["OPENAVER_MOBILE"] = "1"
++    if native_lib_path:
++        os.environ["OPENAVER_NATIVE_LIB"] = native_lib_path
++    if cascade_path:
++        os.environ["OPENAVER_CASCADE_PATH"] = cascade_path
++    os.environ["OPENAVER_FOCAL_NATIVE"] = "1"
++    os.environ.pop("OPENAVER_STANDALONE", None)
++
++    from pydantic_v1_compat import install as install_pydantic_v1_compat
++
++    install_pydantic_v1_compat()
++
++    from fastapi.responses import JSONResponse
++    from core.version import VERSION
++    from web.app import app
++
++
++    def _native_focal_status():
++        try:
++            from core.focal.detector import native_focal_status
++
++            return native_focal_status()
++        except Exception:
++            return "unavailable"
++
++    set_startup_status("app_imported")
++
++    @app.get("/api/mobile/health")
++    def mobile_health():
++        return JSONResponse(
++            {
++                "status": "ok",
++                "service": "OpenAver Mobile",
++                "version": VERSION,
++                "data_dir": data_dir,
++                "native_focal": _native_focal_status(),
++            }
++        )
++
++    listener, actual_port = _bind_server_socket(host, port)
++    _server_socket = listener
++    _server_port = actual_port
++    _server_error = ""
++
++    config = uvicorn.Config(
++        app,
++        host=host,
++        port=actual_port,
++        log_level="info",
++        access_log=False,
++        lifespan="on",
++    )
++    _server = uvicorn.Server(config)
++    _server.install_signal_handlers = lambda: None
++    _thread = threading.Thread(
++        target=_run_server,
++        args=(listener,),
++        name="openaver-uvicorn",
++        daemon=True,
++    )
++    _thread.start()
++    return actual_port
++
++
++
++
++
+--- a/web/app.py
++++ b/web/app.py
+@@ -23,8 +23,7 @@
+ from fastapi.exceptions import RequestValidationError
+ from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
+ from web.static_cache import NoCacheStaticFiles
+-from starlette.middleware.gzip import GZipMiddleware
+-from web.compression import GZIP_COMPRESS_LEVEL, GZIP_EXCLUDED_CONTENT_TYPES
++from web.compression import GZIP_COMPRESS_LEVEL, SafeGZipMiddleware
+ from web.auto_organize_scheduler import auto_organize_loop
+ from fastapi.templating import Jinja2Templates
+ 
+@@ -36,6 +35,15 @@
+ setup_logging()
+ 
+ logger = get_logger(__name__)
++
++
++def _mark_mobile_startup(status: str) -> None:
++    try:
++        from openaver_boot import set_startup_status
++    except ImportError:
++        return
++    set_startup_status(status)
++
+ 
+ from core.config import load_config, mutate_config
+ from core.data_layout import bootstrap_data_layout, consume_pending_bootstrap_result, consume_reset_access_auth_marker
+@@ -173,6 +181,7 @@
+ async def lifespan(app: FastAPI):
+     # ── startup ───────────────────────────────────────────────
+     # 資料根定版必須在 init_db()／任何 request 之前（CD-B2）；失敗走固定 stderr + os._exit。
++    _mark_mobile_startup("data_layout")
+     try:
+         bootstrap_data_layout()
+     except Exception as e:
+@@ -184,7 +193,9 @@
+     # init_db() 必須在任何 request 前執行：執行 DROP COLUMN migration（v0.8.7：
+     # 移除 legacy clip_embedding / clip_model_id），確保 Video.from_row cls(**data)
+     # 不會因 legacy schema 欄位收到未知 keyword 而 500。CD-57b-8 contract。
++    _mark_mobile_startup("database")
+     init_db()
++    _mark_mobile_startup("notifications")
+     start_notification_persistence()
+ 
+     _pending = consume_pending_bootstrap_result()
+@@ -198,6 +209,7 @@
+     # TASK-114a-T2: 認證閘門的 schema 就緒動作，與 init_db() 同一段落一起跑
+     # （CD-114a-3：兩者刻意不合併成同一支函式，但啟動時機一致）。idempotent
+     # CREATE TABLE IF NOT EXISTS + 首次 load_snapshot() 暖 cache。
++    _mark_mobile_startup("access_auth")
+     ensure_schema()
+ 
+     try:
+@@ -225,16 +237,32 @@
+     # event loop 只持 weak ref，task 可能執行中途被 GC 回收）。
+     app.state.auto_organize_task = asyncio.create_task(auto_organize_loop())
+ 
+-    try:
+-        await source_reachability.schedule_reprobe_if_stale()
+-    except Exception:
+-        logger.warning("lifespan: source reachability startup probe failed unexpectedly", exc_info=True)
+-
++    _mark_mobile_startup("background_tasks")
++
++    async def _startup_source_reachability() -> None:
++        try:
++            await source_reachability.schedule_reprobe_if_stale()
++        except Exception:
++            logger.warning(
++                "lifespan: source reachability startup probe failed unexpectedly",
++                exc_info=True,
++            )
++
++    # Network reachability is useful but must not gate the local server becoming ready.
++    app.state.source_reachability_task = asyncio.create_task(
++        _startup_source_reachability()
++    )
++
++    _mark_mobile_startup("ready")
+     yield
+     # ── shutdown ──────────────────────────────────────────────
+     # 每一步各自 try/except（同 startup 的既有精神）：通知 drain 失敗不可擋住
+     # 排程 task 的 cancel，反之亦然。
+-    for _task_name in ("nfo_backfill_task", "metatube_reconnect_task"):
++    for _task_name in (
++        "nfo_backfill_task",
++        "metatube_reconnect_task",
++        "source_reachability_task",
++    ):
+         try:
+             _task = getattr(app.state, _task_name)
+             _task.cancel()
+@@ -286,7 +314,8 @@
+ 
+ # 靜態檔案
+ app.mount("/static", NoCacheStaticFiles(directory=STATIC_DIR), name="static")
+-app.add_middleware(GZipMiddleware, compresslevel=GZIP_COMPRESS_LEVEL, exclude_content_types=GZIP_EXCLUDED_CONTENT_TYPES)
++if not os.environ.get("OPENAVER_DISABLE_GZIP"):
++    app.add_middleware(SafeGZipMiddleware, compresslevel=GZIP_COMPRESS_LEVEL)
+ 
+ # 模板引擎
+ templates = Jinja2Templates(directory=TEMPLATES_DIR)
+--- a/web/compression.py
++++ b/web/compression.py
+@@ -1,4 +1,39 @@
+ from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES
++from starlette.middleware.gzip import GZipMiddleware
++
++
++class SafeGZipMiddleware(GZipMiddleware):
++    """GZip only for compressible page/API traffic.
++
++    Starlette 0.50's GZipMiddleware also compresses 206 responses and binary
++    streams.  Video Range responses must stay byte-for-byte untouched, so this
++    wrapper removes Accept-Encoding for media/range requests before the
++    standard middleware chooses its responder.
++    """
++
++    _BINARY_PREFIXES = (
++        "/api/gallery/video",
++        "/api/gallery/image",
++        "/api/proxy-image",
++        "/api/actress/photo",
++        "/api/actress/crop",
++    )
++
++    async def __call__(self, scope, receive, send):
++        if scope.get("type") == "http":
++            headers = scope.get("headers", ())
++            has_range = any(
++                key.lower() == b"range" for key, _ in headers
++            )
++            path = scope.get("path", "")
++            if has_range or any(path.startswith(prefix) for prefix in self._BINARY_PREFIXES):
++                scope = dict(scope)
++                scope["headers"] = [
++                    (key, value)
++                    for key, value in headers
++                    if key.lower() != b"accept-encoding"
++                ]
++        await super().__call__(scope, receive, send)
+ 
+ # findings-152.md §Q1-a：DS218 上 level 6 淨賠（多付 0.998s CPU 只多省 438,431 bytes，
+ # 在所有量到的連線速度下皆虧本）、level 9（Starlette 官方預設）純虧（2.15s）。
