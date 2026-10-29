@@ -1,0 +1,7 @@
+fastapi==0.125.0
+starlette==0.50.0
+uvicorn==0.46.0
+pydantic==1.10.24
+Pillow==11.0.0
+pytest==8.4.2
+PyYAML==6.0.3

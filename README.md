@@ -131,6 +131,13 @@ Python 同步验证、pytest 冒烟测试，并构建未签名的 `arm64-v8a` Re
 `KEY_ALIAS`、`KEY_PASSWORD` 提供签名；未提供时仍会生成未签名 APK，
 方便做验证构建。
 
+本地冒烟测试：
+
+```bash
+python -m pip install -r requirements-test.txt
+python -m pytest tests -q
+```
+
 ## 许可证
 
 上游 OpenAver 和本项目修改均采用 MIT License，详见 [LICENSE](LICENSE)。

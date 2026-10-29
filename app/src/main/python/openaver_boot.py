@@ -59,7 +59,7 @@ def _bind_server_socket(host: str, preferred_port: int):
             listener.bind((host, port))
             listener.listen(128)
             listener.setblocking(False)
-            return listener, port
+            return listener, listener.getsockname()[1]
         except OSError as exc:
             last_error = exc
             listener.close()
