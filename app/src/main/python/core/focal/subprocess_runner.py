@@ -378,9 +378,9 @@ def _run_in_process(
 
     outcome = _abandoned("crashed")
     try:
-        from core.focal.detector import detect_focal
+        from core.focal.detector import WORK_WIDTH, detect_focal
 
-        focal = detect_focal(fs_path, ratio)
+        focal = detect_focal(fs_path, ratio, WORK_WIDTH)
         outcome = _found(*focal) if focal is not None else _no_face()
     except Exception:
         logger.exception("in-process focal detection failed")
@@ -391,3 +391,5 @@ def _run_in_process(
         except Exception:
             logger.exception("focal on_outcome callback raised")
     return outcome
+
+

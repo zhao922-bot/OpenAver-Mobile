@@ -61,6 +61,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Locale;
+import android.system.Os;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -531,6 +532,8 @@ public final class MainActivity extends Activity {
                 updateLoadingText(stage);
                 PyObject boot = py.getModule("openaver_boot");
                 String dataDir = new File(getFilesDir(), "openaver_data").getAbsolutePath();
+                Os.setenv("OPENAVER_NATIVE_LIB", getApplicationInfo().nativeLibraryDir
+                        + "/libopenaver_mobile.so", true);
                 stage = getString(R.string.starting_local_server);
                 updateLoadingText(stage);
                 int serverPort = boot.callAttr(
@@ -1304,3 +1307,4 @@ public final class MainActivity extends Activity {
         }
     }
 }
+

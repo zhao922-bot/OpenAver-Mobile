@@ -14,7 +14,8 @@ from PIL import Image
 
 from core.logger import get_logger
 
-from .pigo import Pigo, rgb_to_grayscale
+import ctypes
+import os as _os
 
 logger = get_logger(__name__)
 
@@ -45,39 +46,37 @@ _CASCADE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'facefi
 _classifier = None
 
 
-def _get_classifier():
-    global _classifier
-    if _classifier is None:
-        with open(_CASCADE_PATH, 'rb') as f:
-            _classifier = Pigo().unpack(f.read())
-    return _classifier
+_lib = None
 
 
-def _make_cascade_params(pixels, rows, cols):
-    return {
-        'pixels': pixels, 'rows': rows, 'cols': cols, 'dim': cols,
-        'min': MIN_FACE_SIZE, 'max': int(MAX_FACE_SIZE),
-        'shift': SHIFT_FACTOR, 'scale': SCALE_FACTOR,
-    }
-
-
-def detect_faces(img, angles=None):
-    """detector.go DetectFaces: single param-set, one or more pigo angles."""
-    if angles is None:
-        angles = [0.0]
-    pg = _get_classifier()
-    pixels, w, h = rgb_to_grayscale(img)
-    cp = _make_cascade_params(pixels, h, w)
-    faces = []
-    for a in angles:
-        faces.extend(pg.run_cascade(cp, a))
-    return faces
-
+def _get_lib():
+    """Load the Android NDK pigo accelerator on demand."""
+    global _lib
+    if _lib is None:
+        lib_path = _os.environ.get('OPENAVER_NATIVE_LIB') or _os.path.join(
+            _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.dirname(
+                _os.path.abspath(__file__)
+            )))),
+            'lib', 'libopenaver_mobile.so',
+        )
+        _lib = ctypes.CDLL(lib_path)
+        _lib.openaver_focal_detect.argtypes = [
+            ctypes.c_char_p, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int, ctypes.POINTER(ctypes.c_float),
+        ]
+        _lib.openaver_focal_detect.restype = ctypes.c_int
+    return _lib
 
 def _rotate_point(x, y, width, height, angle_deg):
     """Port of geomath.RotatePoint (maps a point back after image rotation)."""
     if width <= 0 or height <= 0:
         return 0, 0
+def detect_faces(img, angles=None):
+    """Compatibility shim; Android detect_focal uses the NDK library directly."""
+    del img, angles
+    return []
+
+
     rad = angle_deg * math.pi / 180.0
     cos_v = math.cos(rad)
     sin_v = math.sin(rad)
@@ -366,3 +365,4 @@ def crop_image_position(img, ratio, pos):
     right = min(x + w, width)
     bottom = min(y + h, height)
     return img.crop((x, y, right, bottom))
+

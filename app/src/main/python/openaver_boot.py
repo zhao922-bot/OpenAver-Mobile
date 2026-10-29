@@ -101,6 +101,15 @@ def start_server(host: str, port: int, data_dir: str) -> int:
     from core.version import VERSION
     from web.app import app
 
+
+    def _native_focal_status():
+        try:
+            from core.focal.detector import _get_lib
+
+            return "ready"
+        except Exception:
+            return "unavailable"
+
     set_startup_status("app_imported")
 
     @app.get("/api/mobile/health")
@@ -111,6 +120,7 @@ def start_server(host: str, port: int, data_dir: str) -> int:
                 "service": "OpenAver Mobile",
                 "version": VERSION,
                 "data_dir": data_dir,
+                "native_focal": _native_focal_status(),
             }
         )
 
@@ -137,3 +147,8 @@ def start_server(host: str, port: int, data_dir: str) -> int:
     )
     _thread.start()
     return actual_port
+
+
+
+
+
