@@ -29,12 +29,14 @@ public final class CfShellAgent {
     private static final int RESULT_TIMEOUT_MS = 10_000;
 
     private final String baseUrl;
+    private final String authToken;
     private final AndroidCfTransport transport;
     private volatile boolean stopped;
     private Thread thread;
 
-    public CfShellAgent(String baseUrl, AndroidCfTransport transport) {
+    public CfShellAgent(String baseUrl, String authToken, AndroidCfTransport transport) {
         this.baseUrl = baseUrl;
+        this.authToken = authToken;
         this.transport = transport;
     }
 
@@ -167,6 +169,7 @@ public final class CfShellAgent {
             connection.setUseCaches(false);
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            connection.setRequestProperty("Authorization", "Bearer " + authToken);
             byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
             connection.setFixedLengthStreamingMode(bytes.length);
             try (OutputStream output = connection.getOutputStream()) {

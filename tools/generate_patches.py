@@ -89,6 +89,10 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "web/templates/showcase.html",
         ),
     ),
+    (
+        "008-mobile-loopback-auth.patch",
+        ("mobile_auth.py",),
+    ),
 )
 
 PAYLOAD_ROOTS = ("core", "web", "locales")
@@ -96,6 +100,7 @@ PAYLOAD_ROOT_FILES = (
     "LICENSE",
     "dmm_prefix_table.json",
     "maker_mapping.json",
+    "mobile_auth.py",
     "openaver_boot.py",
     "pydantic_v1_compat.py",
 )

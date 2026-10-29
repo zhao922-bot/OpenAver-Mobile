@@ -42,6 +42,7 @@ Do not edit a current Android file without updating its patch.
 | `005-android-file-writeback.patch` | NFO, cover, title, and sidecar writes |
 | `006-mobile-web-routers.patch` | mobile scanner/showcase/capability routes |
 | `007-mobile-ui-and-localization.patch` | Simplified Chinese defaults, navigation, responsive UI |
+| `008-mobile-loopback-auth.patch` | process-local token gate for the embedded loopback server |
 
 `manifest.json` records the exact file membership for automated checks.
 

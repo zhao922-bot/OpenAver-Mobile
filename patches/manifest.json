@@ -73,6 +73,12 @@
         "web/templates/base.html",
         "web/templates/showcase.html"
       ]
+    },
+    {
+      "patch": "008-mobile-loopback-auth.patch",
+      "files": [
+        "mobile_auth.py"
+      ]
     }
   ]
 }

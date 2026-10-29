@@ -43,6 +43,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 已实现
 
 - 完全本地运行的 Python/FastAPI 服务，仅监听 `127.0.0.1` 的本机端口（优先 8765，占用时自动切换）
+- 内嵌 API 使用进程内随机 token；WebView 使用 HttpOnly/SameSite Cookie，Java 代理使用 Bearer Header
 - 使用真实文件路径扫描手机内部存储和 SD 卡视频
 - SQLite 片库、列表生成、扫描结果持久化
 - 元数据搜索、NFO 与封面读取/写入、文件重命名
@@ -142,7 +143,7 @@ python -m pytest tests -q
 
 `app/src/main/python/` 不是独立维护的第二份上游源码，而是固定的
 OpenAver `v0.17.18`（提交
-`af0d99741e63e71980773c9ade04c473407a60b7`）加 `patches/` 下七个有编号的
+`af0d99741e63e71980773c9ade04c473407a60b7`）加 `patches/` 下八个有编号的
 补丁。`patches/manifest.json` 记录上游提交和每个补丁负责的文件。
 
 CI 在构建前执行：

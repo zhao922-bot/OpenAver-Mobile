@@ -10,6 +10,8 @@ import traceback
 
 import uvicorn
 
+from mobile_auth import AUTH_COOKIE, LoopbackAuth
+
 
 _server = None
 _thread = None
@@ -17,6 +19,7 @@ _server_socket = None
 _server_port = 0
 _server_error = ""
 _startup_status = "python_loaded"
+_auth = LoopbackAuth()
 
 
 def is_server_alive() -> bool:
@@ -29,6 +32,14 @@ def server_error() -> str:
 
 def server_port() -> int:
     return _server_port
+
+
+def server_token() -> str:
+    return _auth.token
+
+
+def auth_cookie_name() -> str:
+    return AUTH_COOKIE
 
 
 def set_startup_status(status: str) -> None:
@@ -91,6 +102,7 @@ def start_server(
     if _server is not None and _thread is not None and _thread.is_alive():
         return _server_port or port
 
+    _auth.rotate()
     os.makedirs(data_dir, exist_ok=True)
     runtime_home = os.path.join(os.path.dirname(data_dir), "openaver_home")
     os.makedirs(runtime_home, exist_ok=True)
@@ -112,6 +124,7 @@ def start_server(
     from core.version import VERSION
     from web.app import app
 
+    _auth.install(app)
 
     def _native_focal_status():
         try:

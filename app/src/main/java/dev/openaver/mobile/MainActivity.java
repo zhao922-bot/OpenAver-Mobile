@@ -127,6 +127,8 @@ public final class MainActivity extends Activity {
     private boolean runtimeReady;
     private boolean runtimeFailed;
     private volatile int localPort = LOCAL_PORT;
+    private volatile String localAuthToken = "";
+    private volatile String localAuthCookieName = "";
     private long lastBackPressMs;
     private SharedPreferences preferences;
     private float menuTouchDownRawX;
@@ -548,6 +550,12 @@ public final class MainActivity extends Activity {
                         cascadePath
                 ).toInt();
                 localPort = serverPort;
+                localAuthToken = boot.callAttr("server_token").toString();
+                localAuthCookieName = boot.callAttr("auth_cookie_name").toString();
+                if (localAuthToken == null || localAuthToken.isEmpty()
+                        || localAuthCookieName == null || localAuthCookieName.isEmpty()) {
+                    throw new IllegalStateException("local authentication token unavailable");
+                }
                 stage = getString(R.string.waiting_local_server);
                 updateLoadingText(stage);
                 if (!waitForHealth(LOCAL_START_TIMEOUT_MS, boot, serverPort)) {
@@ -569,8 +577,10 @@ public final class MainActivity extends Activity {
                     hideLoading();
                     setupScroll.setVisibility(View.GONE);
                     webContainer.setVisibility(View.VISIBLE);
-                    startCfShell();
-                    openLocalPath("/scanner");
+                    applyLocalAuthCookie(() -> {
+                        startCfShell();
+                        openLocalPath("/scanner");
+                    });
                 });
             } catch (Throwable error) {
                 final String failureStage = stage;
@@ -722,6 +732,21 @@ public final class MainActivity extends Activity {
         mainHandler.postDelayed(pageLoadTimeout, PAGE_LOAD_TIMEOUT_MS);
     }
 
+    private void applyLocalAuthCookie(Runnable afterCookieSet) {
+        String cookie = localAuthCookieName + "=" + localAuthToken
+                + "; Path=/; HttpOnly; SameSite=Strict";
+        CookieManager.getInstance().setCookie(
+                localBaseUrl(),
+                cookie,
+                accepted -> {
+                    if (!accepted) {
+                        Log.w(TAG, "WebView rejected loopback authentication cookie");
+                    }
+                    mainHandler.post(afterCookieSet);
+                }
+        );
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private void configureWebView() {
         WebSettings settings = webView.getSettings();
@@ -775,7 +800,7 @@ public final class MainActivity extends Activity {
             return;
         }
         cfTransport = new AndroidCfTransport(this, root);
-        cfShell = new CfShellAgent(localBaseUrl(), cfTransport);
+        cfShell = new CfShellAgent(localBaseUrl(), localAuthToken, cfTransport);
         cfShell.start();
     }
 
@@ -1146,6 +1171,12 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         mainHandler.removeCallbacksAndMessages(null);
         runtimeExecutor.shutdownNow();
+        if (localAuthCookieName != null && !localAuthCookieName.isEmpty()) {
+            CookieManager.getInstance().setCookie(
+                    localBaseUrl(),
+                    localAuthCookieName + "=; Max-Age=0; Path=/"
+            );
+        }
         if (cfShell != null) {
             cfShell.stop();
             cfShell = null;

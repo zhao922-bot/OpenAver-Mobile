@@ -1,0 +1,66 @@
+--- /dev/null
++++ b/mobile_auth.py
+@@ -0,0 +1,63 @@
++"""Loopback authentication for the Android embedded server."""
++
++from __future__ import annotations
++
++import secrets
++
++from fastapi import Request
++from fastapi.responses import JSONResponse
++
++
++AUTH_COOKIE = "openaver_loopback"
++HEALTH_PATH = "/api/mobile/health"
++
++
++def _bearer_token(request: Request) -> str:
++    value = request.headers.get("authorization", "")
++    scheme, separator, token = value.partition(" ")
++    if not separator or scheme.lower() != "bearer":
++        return ""
++    return token.strip()
++
++
++class LoopbackAuth:
++    """Own the process-local token and install its FastAPI middleware."""
++
++    def __init__(self) -> None:
++        self._token = secrets.token_urlsafe(32)
++        self._apps = []
++
++    @property
++    def token(self) -> str:
++        return self._token
++
++    def rotate(self) -> None:
++        self._token = secrets.token_urlsafe(32)
++
++    def install(self, app) -> None:
++        if any(installed is app for installed in self._apps):
++            return
++        self._apps.append(app)
++
++        @app.middleware("http")
++        async def require_loopback_token(request: Request, call_next):
++            if request.url.path == HEALTH_PATH:
++                return await call_next(request)
++
++            supplied = (
++                request.cookies.get(AUTH_COOKIE, ""),
++                _bearer_token(request),
++            )
++            if not any(
++                candidate
++                and secrets.compare_digest(
++                    candidate.encode("utf-8"),
++                    self._token.encode("ascii"),
++                )
++                for candidate in supplied
++            ):
++                return JSONResponse(
++                    {"detail": "missing or invalid loopback token"},
++                    status_code=403,
++                )
++            return await call_next(request)

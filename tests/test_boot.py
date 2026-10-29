@@ -5,9 +5,11 @@ import socket
 import sys
 import time
 import types
+import urllib.error
 import urllib.request
 
 from fastapi import FastAPI
+import pytest
 
 import openaver_boot
 
@@ -105,5 +107,68 @@ def test_start_server_reuses_running_instance(monkeypatch, tmp_path):
             str(tmp_path / "openaver_data"),
         )
         assert second == first
+    finally:
+        _stop_server()
+
+
+def test_loopback_routes_require_in_memory_token(monkeypatch, tmp_path):
+    app = FastAPI()
+
+    @app.get("/protected")
+    def protected():
+        return {"protected": True}
+
+    web_module = types.ModuleType("web")
+    web_module.__path__ = []
+    web_app_module = types.ModuleType("web.app")
+    web_app_module.app = app
+    monkeypatch.setitem(sys.modules, "web", web_module)
+    monkeypatch.setitem(sys.modules, "web.app", web_app_module)
+
+    port = openaver_boot.start_server(
+        "127.0.0.1",
+        0,
+        str(tmp_path / "openaver_data"),
+    )
+    token = openaver_boot.server_token()
+    cookie_name = openaver_boot.auth_cookie_name()
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    endpoint = f"http://127.0.0.1:{port}/protected"
+
+    try:
+        assert len(token) >= 32
+
+        with pytest.raises(urllib.error.HTTPError) as denied:
+            opener.open(endpoint, timeout=2)
+        assert denied.value.code == 403
+
+        invalid = urllib.request.Request(
+            endpoint,
+            headers={"Authorization": "Bearer invalid-token"},
+        )
+        with pytest.raises(urllib.error.HTTPError) as denied:
+            opener.open(invalid, timeout=2)
+        assert denied.value.code == 403
+
+        query_token = f"{endpoint}?openaver_loopback={token}"
+        with pytest.raises(urllib.error.HTTPError) as denied:
+            opener.open(query_token, timeout=2)
+        assert denied.value.code == 403
+
+        bearer = urllib.request.Request(
+            endpoint,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with opener.open(bearer, timeout=2) as response:
+            assert response.status == 200
+            assert json.loads(response.read().decode("utf-8")) == {"protected": True}
+
+        cookie = urllib.request.Request(
+            endpoint,
+            headers={"Cookie": f"{cookie_name}={token}"},
+        )
+        with opener.open(cookie, timeout=2) as response:
+            assert response.status == 200
+            assert json.loads(response.read().decode("utf-8")) == {"protected": True}
     finally:
         _stop_server()
