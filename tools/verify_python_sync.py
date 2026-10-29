@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from prepare_python_tree import (
     copy_tree,
     normalize_text_files,
-    patched_relative_files,
+    normalized_file_bytes,
 )
 
 def iter_payload(root: Path):
@@ -71,7 +71,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="openaver-sync-") as temp_name:
         temp = Path(temp_name)
         copy_tree(upstream, temp)
-        normalize_text_files(temp, patched_relative_files(patch_root))
+        normalize_text_files(temp)
         subprocess.run(["git", "init", "-q"], cwd=temp, check=True)
         for patch in sorted(patch_root.glob("*.patch")):
             subprocess.run(
@@ -94,8 +94,8 @@ def main() -> int:
         different = sorted(
             rel
             for rel in set(expected) & set(actual)
-            if hashlib.sha256(expected[rel].read_bytes()).digest()
-            != hashlib.sha256(actual[rel].read_bytes()).digest()
+            if hashlib.sha256(normalized_file_bytes(expected[rel])).digest()
+            != hashlib.sha256(normalized_file_bytes(actual[rel])).digest()
         )
         if missing or extra or different:
             print("python sync verification FAILED")
@@ -113,8 +113,8 @@ def main() -> int:
                         rel,
                         left.stat().st_size,
                         right.stat().st_size,
-                        hashlib.sha256(left.read_bytes()).hexdigest()[:16],
-                        hashlib.sha256(right.read_bytes()).hexdigest()[:16],
+                        hashlib.sha256(normalized_file_bytes(left)).hexdigest()[:16],
+                        hashlib.sha256(normalized_file_bytes(right)).hexdigest()[:16],
                     )
             return 1
         print(

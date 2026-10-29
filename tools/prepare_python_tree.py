@@ -64,17 +64,29 @@ def patched_relative_files(patch_dir: Path) -> set[str]:
     }
 
 
+def is_text_file(path: Path) -> bool:
+    return path.suffix.lower() in TEXT_SUFFIXES or path.name == "LICENSE"
+
+
+def normalized_file_bytes(path: Path) -> bytes:
+    data = path.read_bytes()
+    if not is_text_file(path):
+        return data
+    normalized = data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    if normalized and not normalized.endswith(b"\n"):
+        normalized += b"\n"
+    return normalized
+
+
 def normalize_text_files(root: Path, only: set[str] | None = None) -> None:
     for path in root.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
+        if not path.is_file() or not is_text_file(path):
             continue
         rel = path.relative_to(root).as_posix()
         if only is not None and rel not in only:
             continue
         data = path.read_bytes()
-        normalized = data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
-        if normalized and not normalized.endswith(b"\n"):
-            normalized += b"\n"
+        normalized = normalized_file_bytes(path)
         if normalized != data:
             path.write_bytes(normalized)
 

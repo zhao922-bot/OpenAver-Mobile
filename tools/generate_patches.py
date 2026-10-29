@@ -158,7 +158,7 @@ def iter_payload(root: Path, include_unknown_root_files: bool = False):
 
 
 def files_equal(left: Path, right: Path) -> bool:
-    if left.suffix.lower() in TEXT_SUFFIXES:
+    if left.suffix.lower() in TEXT_SUFFIXES or left.name == "LICENSE":
         return normalize_lines(left) == normalize_lines(right)
     return left.read_bytes() == right.read_bytes()
 
