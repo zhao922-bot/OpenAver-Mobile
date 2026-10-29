@@ -196,8 +196,9 @@ Java_dev_openaver_mobile_MainActivity_openaverFocalDetect(
         static Cascade cascade;
         static bool loaded = false;
         if (!loaded) {
-            if (!unpack_cascade(cascade, cascade_path(env, context))) {
-                ALOGW("unable to unpack facefinder");
+            const std::string path = cascade_path(env, context);
+            if (!unpack_cascade(cascade, path)) {
+                ALOGW("unable to unpack facefinder: %s", path.c_str());
                 return 0;
             }
             loaded = true;
@@ -222,6 +223,9 @@ Java_dev_openaver_mobile_MainActivity_openaverFocalDetect(
         float out[2] = {clusters.front().x, clusters.front().y};
         env->SetFloatArrayRegion(jout, 0, 2, out);
         return 1;
+    } catch (const std::exception &e) {
+        ALOGW("native focal detection failed: %s", e.what());
+        return 0;
     } catch (...) {
         ALOGW("native focal detection failed");
         return 0;
@@ -242,6 +246,8 @@ Java_dev_openaver_mobile_MainActivity_nativeAbi(JNIEnv *env, jobject /* this */)
     return env->NewStringUTF("unknown");
 #endif
 }
+
+
 
 
 
