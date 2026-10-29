@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -183,44 +184,99 @@ std::string cascade_path(JNIEnv *env, jobject context) {
     const char *chars = env->GetStringUTFChars(jpath, nullptr);
     std::string base(chars);
     env->ReleaseStringUTFChars(jpath, chars);
-    return base + "/openaver_data/lib/core/focal/facefinder";
+    return base + "/chaquopy/AssetFinder/app/core/focal/facefinder";
+}
+
+std::mutex g_cascade_mutex;
+Cascade g_cascade;
+bool g_cascade_loaded = false;
+std::string g_cascade_path;
+
+int detect_rgb(const uint8_t *rgb, int width, int height, int min_face,
+               const char *cascade_path_utf8, float *out) {
+    if (rgb == nullptr || out == nullptr || width <= 0 || height <= 0 ||
+        width > 10000 || height > 10000 || min_face <= 0 ||
+        cascade_path_utf8 == nullptr || cascade_path_utf8[0] == '\0') {
+        return 0;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(g_cascade_mutex);
+        if (!g_cascade_loaded) {
+            if (!unpack_cascade(g_cascade, cascade_path_utf8)) {
+                ALOGW("unable to unpack facefinder: %s", cascade_path_utf8);
+                return 0;
+            }
+            g_cascade_path = cascade_path_utf8;
+            g_cascade_loaded = true;
+        }
+
+        const int count = width * height;
+        std::vector<uint8_t> gray(count);
+        rgb_to_gray(rgb, count, gray);
+
+        const int max_face = static_cast<int>(float(width) * 0.8f);
+        const std::vector<Face> faces = run_cascade(
+            g_cascade, gray, height, width, min_face, max_face
+        );
+        if (faces.empty()) {
+            return 0;
+        }
+
+        const int axis = (int(float(height) * 0.71f) < width) ? 0 : 1;
+        const std::vector<Cluster> clusters =
+            strongest_cluster(faces, width, height, axis);
+        if (clusters.empty() || clusters.front().weight <= 0.0f) {
+            return 0;
+        }
+
+        out[0] = clusters.front().x;
+        out[1] = clusters.front().y;
+        return 1;
+    } catch (const std::exception &e) {
+        ALOGW("native focal detection failed: %s", e.what());
+        return 0;
+    } catch (...) {
+        ALOGW("native focal detection failed");
+        return 0;
+    }
 }
 
 } // namespace
+
+extern "C" __attribute__((visibility("default")))
+int openaver_focal_detect(const uint8_t *rgb, int width, int height,
+                          int min_face, const char *cascade_path_utf8,
+                          float *out) {
+    return detect_rgb(rgb, width, height, min_face, cascade_path_utf8, out);
+}
 
 extern "C" JNIEXPORT jint JNICALL
 Java_dev_openaver_mobile_MainActivity_openaverFocalDetect(
         JNIEnv *env, jobject /* this */, jbyteArray jrgb, jint width, jint height,
         jint min_face, jobject context, jfloatArray jout) {
     try {
-        static Cascade cascade;
-        static bool loaded = false;
-        if (!loaded) {
-            const std::string path = cascade_path(env, context);
-            if (!unpack_cascade(cascade, path)) {
-                ALOGW("unable to unpack facefinder: %s", path.c_str());
-                return 0;
-            }
-            loaded = true;
+        if (jrgb == nullptr || jout == nullptr || width <= 0 || height <= 0) {
+            return 0;
         }
-
         const int count = width * height;
-        std::vector<uint8_t> gray(count);
-        {
-            jbyte *p = env->GetByteArrayElements(jrgb, nullptr);
-            rgb_to_gray(reinterpret_cast<const uint8_t*>(p), count, gray);
-            env->ReleaseByteArrayElements(jrgb, p, JNI_ABORT);
+        if (env->GetArrayLength(jrgb) < count * 3) {
+            return 0;
         }
 
-        int max_face = static_cast<int>(float(width) * 0.8f);
-        std::vector<Face> faces = run_cascade(cascade, gray, height, width,
-                                              min_face, max_face);
-        if (faces.empty()) return 0;
+        std::vector<uint8_t> rgb(count * 3);
+        env->GetByteArrayRegion(
+            jrgb, 0, count * 3, reinterpret_cast<jbyte *>(rgb.data())
+        );
+        if (env->ExceptionCheck()) {
+            return 0;
+        }
 
-        int axis = (int(float(height) * 0.71f) < width) ? 0 : 1;
-        std::vector<Cluster> clusters = strongest_cluster(faces, width, height, axis);
-        if (clusters.empty() || clusters.front().weight <= 0.0f) return 0;
-        float out[2] = {clusters.front().x, clusters.front().y};
+        float out[2] = {0.0f, 0.0f};
+        const std::string path = cascade_path(env, context);
+        if (!detect_rgb(rgb.data(), width, height, min_face, path.c_str(), out)) {
+            return 0;
+        }
         env->SetFloatArrayRegion(jout, 0, 2, out);
         return 1;
     } catch (const std::exception &e) {

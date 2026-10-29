@@ -11,18 +11,18 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r10.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-arm64-r12-focal-fix.apk)
 
 当前发布包：
 
-- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r10.apk`
+- 文件名：`openaver-v0.17.18-arm64-r12-focal-fix.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r10`（versionCode `17027`）
+- 版本：`0.17.18-r12`（versionCode `17028`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；使用传统外部存储权限以兼容外置 SD 卡写入
 - SHA-256：
-  `F617B9F44FAF9B33AC6802206DD671CA40D178301166B7F43AEFC4C69DC25C27`
+  `15CBB5F2410725F51ED9B8F726D81AA262A94F5C8BEA73F0C650A9DA211572D1`
 
 ## 安装
 
@@ -32,7 +32,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 4. 将外置 SD 卡或不可写入的视频目录设为“只读”；OpenAver 会把生成的元数据
    放入应用私有媒体库。
 5. 进入“列表生成”，点击文件夹按钮。
-5. 从 `/storage/emulated/0` 或 SD 卡选择视频目录并生成列表。
+6. 从 `/storage/emulated/0` 或 SD 卡选择视频目录并生成列表。
 
 如果系统没有直接显示权限页，请手动进入：
 
@@ -65,6 +65,8 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 右侧灰色菜单按钮支持拖动，位置会持久化，并在旋转或窗口尺寸变化后保持在屏幕内
 - 补抓剧照增加来源 URL 规范化、JavDB Referer、图片内容校验、下载诊断和可重复重试
 - 补抓剧照区分“来源无剧照”“全部下载失败”“数据库写入失败”，不再显示模糊错误
+- Android 手动脸部对焦改由 arm64 NDK 原生级联检测执行，实测单张封面约 0.16–0.40 秒
+- 原生对焦健康检查会实际加载级联并调用检测入口，不再只检查 `.so` 是否存在
 
 ## 限制
 
@@ -75,6 +77,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 自定义来源 `fetch: cf` 使用普通浏览器请求兼容模式，不保证通过所有
   Cloudflare 站点。
 - 自动检查更新已关闭；升级需安装新 APK。
+- 自动对焦仍遵循上游规则：有码/普通厂牌默认使用标准右裁，手动“自动侦测”不受此限制。
 - 播放能力取决于手机系统 WebView 编解码器。MP4/H.264/AAC 已验证；MKV、AVI、
   RMVB 等格式即使能扫描，也可能无法在 WebView 中解码。
 - Android 11+ 使用 `MANAGE_EXTERNAL_STORAGE`，Android 10 使用传统存储读写权限；

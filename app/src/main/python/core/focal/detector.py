@@ -7,15 +7,16 @@ Selection is NOT "biggest face": each detection is weighted by Scale*Q,
 projected onto the cropped axis, grouped within 0.05 distance, and the
 strongest group's weighted-average position is returned.
 """
+import ctypes
 import math
 import os
+import sys
 
 from PIL import Image
 
 from core.logger import get_logger
 
-import ctypes
-import os as _os
+from .pigo import Pigo, rgb_to_grayscale
 
 logger = get_logger(__name__)
 
@@ -53,30 +54,104 @@ def _get_lib():
     """Load the Android NDK pigo accelerator on demand."""
     global _lib
     if _lib is None:
-        lib_path = _os.environ.get('OPENAVER_NATIVE_LIB') or _os.path.join(
-            _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.dirname(
-                _os.path.abspath(__file__)
+        lib_path = os.environ.get('OPENAVER_NATIVE_LIB') or os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__)
             )))),
             'lib', 'libopenaver_mobile.so',
         )
         _lib = ctypes.CDLL(lib_path)
         _lib.openaver_focal_detect.argtypes = [
-            ctypes.c_char_p, ctypes.c_int, ctypes.c_int,
-            ctypes.c_int, ctypes.POINTER(ctypes.c_float),
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ctypes.c_char_p, ctypes.POINTER(ctypes.c_float),
         ]
         _lib.openaver_focal_detect.restype = ctypes.c_int
     return _lib
+
+
+def _cascade_path():
+    configured = os.environ.get('OPENAVER_CASCADE_PATH')
+    if configured and os.path.isfile(configured):
+        return configured
+    return _CASCADE_PATH
+
+
+def _get_classifier():
+    global _classifier
+    if _classifier is None:
+        with open(_CASCADE_PATH, 'rb') as f:
+            _classifier = Pigo().unpack(f.read())
+    return _classifier
+
+
+def _make_cascade_params(pixels, rows, cols):
+    return {
+        'pixels': pixels, 'rows': rows, 'cols': cols, 'dim': cols,
+        'min': MIN_FACE_SIZE, 'max': int(MAX_FACE_SIZE),
+        'shift': SHIFT_FACTOR, 'scale': SCALE_FACTOR,
+    }
+
+
+def detect_faces(img, angles=None):
+    """detector.go DetectFaces: single param-set, one or more pigo angles."""
+    if angles is None:
+        angles = [0.0]
+    pg = _get_classifier()
+    pixels, w, h = rgb_to_grayscale(img)
+    cp = _make_cascade_params(pixels, h, w)
+    faces = []
+    for a in angles:
+        faces.extend(pg.run_cascade(cp, a))
+    return faces
+
+
+def _native_detect_focal(img):
+    """Return the native focal centroid for an already-resized RGB image."""
+    rgb = img.convert('RGB')
+    width, height = rgb.size
+    data = rgb.tobytes()
+    pixel_buffer = (ctypes.c_ubyte * len(data)).from_buffer_copy(data)
+    out = (ctypes.c_float * 2)()
+    found = _get_lib().openaver_focal_detect(
+        pixel_buffer,
+        width,
+        height,
+        MIN_FACE_SIZE,
+        os.fsencode(_cascade_path()),
+        out,
+    )
+    if not found:
+        return None
+    x, y = float(out[0]), float(out[1])
+    if not (math.isfinite(x) and math.isfinite(y)):
+        return None
+    if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+        return None
+    return x, y
+
+
+def native_focal_status():
+    """Exercise the native entry point so health is not just a load check."""
+    try:
+        lib = _get_lib()
+        path = _cascade_path()
+        if not os.path.isfile(path):
+            return "cascade_missing"
+        out = (ctypes.c_float * 2)()
+        probe = (ctypes.c_ubyte * 3)(0, 0, 0)
+        lib.openaver_focal_detect(
+            probe, 1, 1, MIN_FACE_SIZE, os.fsencode(path), out
+        )
+        return "loaded"
+    except Exception:
+        logger.warning("native focal health check failed", exc_info=True)
+        return "unavailable"
+
 
 def _rotate_point(x, y, width, height, angle_deg):
     """Port of geomath.RotatePoint (maps a point back after image rotation)."""
     if width <= 0 or height <= 0:
         return 0, 0
-def detect_faces(img, angles=None):
-    """Compatibility shim; Android detect_focal uses the NDK library directly."""
-    del img, angles
-    return []
-
-
     rad = angle_deg * math.pi / 180.0
     cos_v = math.cos(rad)
     sin_v = math.sin(rad)
@@ -296,6 +371,9 @@ def detect_focal(fs_path, ratio, work_width=MAX_IMAGE_WIDTH):
         else:
             work = img
         ww, wh = work.size
+
+        if sys.platform == 'android' or os.environ.get('OPENAVER_FOCAL_NATIVE') == '1':
+            return _native_detect_focal(work)
 
         faces = detect_faces(work)  # single-angle only (CD-98a-2)
 

@@ -80,7 +80,13 @@ def _run_server(listener) -> None:
         _server_error = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
 
 
-def start_server(host: str, port: int, data_dir: str) -> int:
+def start_server(
+    host: str,
+    port: int,
+    data_dir: str,
+    native_lib_path: str = "",
+    cascade_path: str = "",
+) -> int:
     global _server, _thread, _server_socket, _server_port, _server_error
     if _server is not None and _thread is not None and _thread.is_alive():
         return _server_port or port
@@ -91,6 +97,11 @@ def start_server(host: str, port: int, data_dir: str) -> int:
     os.environ["OPENAVER_DATA_DIR"] = data_dir
     os.environ["HOME"] = runtime_home
     os.environ["OPENAVER_MOBILE"] = "1"
+    if native_lib_path:
+        os.environ["OPENAVER_NATIVE_LIB"] = native_lib_path
+    if cascade_path:
+        os.environ["OPENAVER_CASCADE_PATH"] = cascade_path
+    os.environ["OPENAVER_FOCAL_NATIVE"] = "1"
     os.environ.pop("OPENAVER_STANDALONE", None)
 
     from pydantic_v1_compat import install as install_pydantic_v1_compat
@@ -104,9 +115,9 @@ def start_server(host: str, port: int, data_dir: str) -> int:
 
     def _native_focal_status():
         try:
-            from core.focal.detector import _get_lib
+            from core.focal.detector import native_focal_status
 
-            return "ready"
+            return native_focal_status()
         except Exception:
             return "unavailable"
 

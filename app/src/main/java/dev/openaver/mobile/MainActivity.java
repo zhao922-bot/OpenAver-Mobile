@@ -532,12 +532,20 @@ public final class MainActivity extends Activity {
                 updateLoadingText(stage);
                 PyObject boot = py.getModule("openaver_boot");
                 String dataDir = new File(getFilesDir(), "openaver_data").getAbsolutePath();
+                String cascadePath = new File(
+                        getFilesDir(),
+                        "chaquopy/AssetFinder/app/core/focal/facefinder"
+                ).getAbsolutePath();
                 Os.setenv("OPENAVER_NATIVE_LIB", getApplicationInfo().nativeLibraryDir
                         + "/libopenaver_mobile.so", true);
+                Os.setenv("OPENAVER_CASCADE_PATH", cascadePath, true);
+                Os.setenv("OPENAVER_FOCAL_NATIVE", "1", true);
                 stage = getString(R.string.starting_local_server);
                 updateLoadingText(stage);
                 int serverPort = boot.callAttr(
-                        "start_server", LOCAL_HOST, LOCAL_PORT, dataDir
+                        "start_server", LOCAL_HOST, LOCAL_PORT, dataDir,
+                        getApplicationInfo().nativeLibraryDir + "/libopenaver_mobile.so",
+                        cascadePath
                 ).toInt();
                 localPort = serverPort;
                 stage = getString(R.string.waiting_local_server);
