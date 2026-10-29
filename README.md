@@ -1,5 +1,7 @@
 # OpenAver Mobile
 
+[![Build APK](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml/badge.svg)](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml)
+
 OpenAver Mobile 是 [OpenAver](https://github.com/slive777/OpenAver) 的非官方
 Android 移植版，基于上游最新正式版 `v0.17.18`
 （提交 `af0d99741e63e71980773c9ade04c473407a60b7`）。
@@ -110,6 +112,24 @@ $env:OPENAVER_BUILD_PYTHON = "C:\path\to\python.exe"
 未指定 `OPENAVER_BUILD_PYTHON` 或 `openaverBuildPython` 时，采用 Chaquopy 的
 Python 构建环境。Gradle 产物默认是未签名 APK，需要自行创建密钥、使用
 `zipalign` 对齐，再通过 `apksigner` 签名。仓库不会包含发布密钥或签名密码。
+
+### GitHub Actions
+
+仓库内的 `Build APK` workflow 会在 `main` 分支 push 和 Pull Request 上运行
+Python 同步验证、pytest 冒烟测试，并构建未签名的 `arm64-v8a` Release APK。
+
+推送 `v*` tag 时，`Publish Android Release` workflow 会构建签名 APK、
+生成 `SHA256SUMS.txt` 并创建 GitHub Release。正式发布前在仓库
+`Settings → Secrets and variables → Actions` 配置：
+
+- `ANDROID_KEYSTORE_BASE64`：release keystore 的 Base64 内容
+- `KEYSTORE_PASSWORD`
+- `KEY_ALIAS`
+- `KEY_PASSWORD`
+
+本地构建可通过 `ANDROID_KEYSTORE_PATH`、`KEYSTORE_PASSWORD`、
+`KEY_ALIAS`、`KEY_PASSWORD` 提供签名；未提供时仍会生成未签名 APK，
+方便做验证构建。
 
 ## 许可证
 

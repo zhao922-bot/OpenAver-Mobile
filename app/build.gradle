@@ -11,6 +11,16 @@ def requestedAbis = (project.findProperty("abi") ?: "arm64-v8a")
         .findAll { !it.isEmpty() }
 def openaverBuildPython = System.getenv("OPENAVER_BUILD_PYTHON")
         ?: project.findProperty("openaverBuildPython")
+def releaseKeystore = System.getenv("ANDROID_KEYSTORE_PATH")
+        ?: project.findProperty("androidKeystorePath")
+def releaseKeystorePassword = System.getenv("KEYSTORE_PASSWORD")
+        ?: project.findProperty("keystorePassword")
+def releaseKeyAlias = System.getenv("KEY_ALIAS")
+        ?: project.findProperty("keyAlias")
+def releaseKeyPassword = System.getenv("KEY_PASSWORD")
+        ?: project.findProperty("keyPassword")
+def hasReleaseSigning = releaseKeystore && releaseKeystorePassword
+        && releaseKeyAlias && releaseKeyPassword
 
 android {
     namespace "dev.openaver.mobile"
@@ -38,6 +48,17 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseKeystore)
+                storePassword releaseKeystorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix ".debug"
@@ -47,6 +68,9 @@ android {
             minifyEnabled false
             shrinkResources false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 
