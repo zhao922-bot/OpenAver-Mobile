@@ -11,24 +11,27 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r9.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/OpenAver-Mobile-v0.17.18-arm64-v8a-r10.apk)
 
 当前发布包：
 
-- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r9.apk`
+- 文件名：`OpenAver-Mobile-v0.17.18-arm64-v8a-r10.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r9`（versionCode `17026`）
+- 版本：`0.17.18-r10`（versionCode `17027`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
+- 目标系统：Android 10（API 29）；使用传统外部存储权限以兼容外置 SD 卡写入
 - SHA-256：
-  `C38A550189B3489D0327D4D3AB6E5484460B7C8EB009FA81A009C8BA44318E02`
+  `F617B9F44FAF9B33AC6802206DD671CA40D178301166B7F43AEFC4C69DC25C27`
 
 ## 安装
 
 1. 在 64 位 ARM Android 10+ 手机上打开 APK，并允许安装未知应用。
 2. Android 11+：授予“所有文件访问权限”。
 3. Android 10：授予读取和写入手机存储权限。
-4. 进入“列表生成”，点击文件夹按钮。
+4. 将外置 SD 卡或不可写入的视频目录设为“只读”；OpenAver 会把生成的元数据
+   放入应用私有媒体库。
+5. 进入“列表生成”，点击文件夹按钮。
 5. 从 `/storage/emulated/0` 或 SD 卡选择视频目录并生成列表。
 
 如果系统没有直接显示权限页，请手动进入：
@@ -49,6 +52,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 自定义来源 `fetch: cf` 的普通浏览器请求兼容模式
 - 简体中文、繁体中文、日文和英文界面；首次启动默认简体中文
 - Android 10 / API 29 上的安装、首次界面、存储授权、本地服务启动和视频扫描
+- Android 10 外置 SD 卡的读取、补抓剧照和标题翻译写回（真机 LG G8X Android 10 验证）
 - Android 16 / API 36 模拟器上的启动、扫描、NFO 写入与播放验证
 - Python 源码预编译、非关键网络探测后台化、5 分钟启动等待和启动失败重试按钮
 - 启动诊断细化到数据目录、数据库、通知、权限表和后台任务阶段，并支持长按复制错误

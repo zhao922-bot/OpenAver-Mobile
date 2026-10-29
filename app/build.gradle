@@ -20,9 +20,9 @@ android {
     defaultConfig {
         applicationId "dev.openaver.mobile"
         minSdk 29
-        targetSdk 36
-        versionCode 17026
-        versionName "0.17.18-r9"
+        targetSdk 29
+        versionCode 17027
+        versionName "0.17.18-r10"
 
         buildConfigField "String", "OPENAVER_RELEASE", "\"${openaverRelease}\""
         buildConfigField "String", "OPENAVER_COMMIT", "\"${openaverCommit}\""
@@ -76,6 +76,12 @@ android {
                     "META-INF/NOTICE*"
             ]
         }
+    }
+
+    lint {
+        // Sideload-only release: target 29 preserves legacy external storage
+        // needed for removable SD cards on Android 10.
+        disable 'ExpiredTargetSdkVersion'
     }
 }
 
