@@ -13,17 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r20-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r21-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r20-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r21-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r20`（versionCode `17036`）
+- 版本：`0.17.18-r21`（versionCode `17037`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：`3FD646F0EE7A1386B6653ABC91716379F31DDE2AE09A8DFC7B9EB9191D81F5A7`
+- SHA-256：签名构建后更新
 
 ## 安装
 
@@ -118,6 +118,12 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   收放，修复图标遮挡占位文字和小屏输入区域过窄
 - r20：片库分析页移除无实际信息的 OpenAver 品牌横幅，将影片数、年份、女优和
   片商压缩为一条四列筛选栏，年份与主要图表在手机首屏即可看到
+- r21：重做片库分析“深入：女优与片商”区；环形图说明明确内圈/外圈、深浅色和
+  灰色含义，并标出“主力片商”的 4 部／80% 判定规则
+- r21：女优片商年表改用两位年份、横向滑动和高对比 16 色片商色盘；普通年份圆点
+  按该女优当年实际片商着色，不再全部显示灰色
+- r21：女优片商分布改为手机单列两行布局，名称、片数、片商家数和分段条不再
+  互相挤压；年表无数据时隐藏无意义的图例和滑动提示
 
 ## 限制
 
