@@ -13,18 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r17-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r18-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r17-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r18-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r17`（versionCode `17033`）
+- 版本：`0.17.18-r18`（versionCode `17034`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：
-  `1E3B55C5F8D1596A888CA0A1C1FA7BABEC6E21A6BB1888DF7E946740FACD4089`
+- SHA-256：`签名构建后更新`
 
 ## 安装
 
@@ -98,6 +97,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   改为响应式操作行，输出路径支持一键复制
 - r17：运行状态卡支持折叠日志、错误自动展开和当前进度比例；移动端顶部导航
   显示当前页面名称，硬件返回键会正确关闭批量标签确认弹窗
+- r18：批量维护区默认折叠；标签来源改为“仅预览”和“预览并更换”两阶段流程，
+  执行前显示新增/移除标签差异、处理数量和失败项
+- r18：批量标签和 NFO 补全可在写入前生成同目录 `.openaver-backup`，备份失败的
+  影片会被跳过；失败项可在任务结束后单独重试
+- r18：扫描、NFO、标签、Jellyfin 图片和补完任务统一显示当前影片、成功/失败/
+  跳过数量、计时与预计剩余时间，并支持取消
+- r18：设置页增加固定保存栏，明确显示“有未保存更改”“正在保存”和“已保存”状态
 
 ## 限制
 
