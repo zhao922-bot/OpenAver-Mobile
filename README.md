@@ -13,18 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r16-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r17-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r16-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r17-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r16`（versionCode `17032`）
+- 版本：`0.17.18-r17`（versionCode `17033`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：
-  `40D26EB204838B01A41020F29A7CF9C6D74B9F813CD65E4DBE4487A8136AB844`
+- SHA-256：`签名构建后更新`
 
 ## 安装
 
@@ -94,6 +93,10 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   “中文字幕”属性
 - r16：批量标签任务离开页面或连接断开后会主动停止；Cloudflare 手动来源和
   自定义来源不会出现在批量来源列表中
+- r17：仅进行移动端 UI 优化。扫描页新增片库概览/批量维护层级，标签来源控件
+  改为响应式操作行，输出路径支持一键复制
+- r17：运行状态卡支持折叠日志、错误自动展开和当前进度比例；移动端顶部导航
+  显示当前页面名称，硬件返回键会正确关闭批量标签确认弹窗
 
 ## 限制
 
