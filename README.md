@@ -13,18 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r18-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r19-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r18-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r19-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r18`（versionCode `17034`）
+- 版本：`0.17.18-r19`（versionCode `17035`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：
-  `8F4D4C3435EFB5C82B54BE6042C53BDEA812BA82C89D808E219596238AD80DD2`
+- SHA-256：签名构建后更新
 
 ## 安装
 
@@ -105,6 +104,18 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r18：扫描、NFO、标签、Jellyfin 图片和补完任务统一显示当前影片、成功/失败/
   跳过数量、计时与预计剩余时间，并支持取消
 - r18：设置页增加固定保存栏，明确显示“有未保存更改”“正在保存”和“已保存”状态
+- r19：统一移动端错误卡为“发生了什么、影响范围、处理建议、详细日志”四段，
+  错误与警告 toast 也支持一键复制诊断信息
+- r19：补齐加载骨架、空状态、离线横幅、来源超时/无权限/不可达状态、部分成功
+  提示，以及扫描任务的当前影片、成功/失败/跳过摘要
+- r19：硬件返回键按“弹窗/灯箱/详情/页面”层级消费，搜索详情返回结果墙，
+  不再直接跳回上一个菜单；灯箱、剧照廊和编辑层保持同一套关闭顺序
+- r19：右侧悬浮按钮改为拖动后吸附屏幕边缘，空闲时半透明收起，并避让状态栏、
+  导航栏和屏幕安全区；主要触控目标统一到至少 48dp
+- r19：统一移动端主操作、次操作和危险操作的颜色/尺寸层级，收紧卡片圆角、
+  阴影和间距，并统一卡片、详情页、播放器标题的行数限制
+- r19：搜索空状态与错误卡恢复完整宽度；搜索栏左右操作区按实际按钮数量动态
+  收放，修复图标遮挡占位文字和小屏输入区域过窄
 
 ## 限制
 
