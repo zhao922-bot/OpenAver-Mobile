@@ -72,6 +72,38 @@ def test_atomic_write_uses_mobile_bridge_after_permission_error(
     }
 
 
+def test_atomic_write_uses_mobile_bridge_for_text_nfo(tmp_path, monkeypatch):
+    target = tmp_path / "ABC-123.nfo"
+    captured = {}
+
+    def fail_mkstemp(**_kwargs):
+        raise PermissionError("simulated Android SD-card denial")
+
+    monkeypatch.setattr(atomic_write_module.tempfile, "mkstemp", fail_mkstemp)
+    from core import android_storage
+
+    monkeypatch.setattr(android_storage, "has_access", lambda _path: True)
+    monkeypatch.setattr(
+        android_storage,
+        "write_bytes",
+        lambda path, data: captured.update(path=path, data=data),
+    )
+
+    with atomic_write(
+        target,
+        mode="w",
+        encoding="utf-8",
+        suffix=".nfo.tmp",
+        mobile_fallback=True,
+    ) as handle:
+        handle.write("<movie><title>标题</title></movie>")
+
+    assert captured == {
+        "path": str(target),
+        "data": "<movie><title>标题</title></movie>".encode("utf-8"),
+    }
+
+
 def test_atomic_write_requires_tree_when_mobile_fallback_is_unauthorized(
     tmp_path, monkeypatch
 ):
@@ -135,3 +167,33 @@ def test_rewrite_nfo_titles_changes_title_and_preserves_other_nodes(tmp_path):
     text = nfo.read_text(encoding="utf-8")
     assert "[ABC-123]新标题 &amp; 特殊字符" in text
     assert "<plot>keep me</plot>" in text
+
+
+def test_generate_nfo_uses_mobile_bridge_for_text_write(
+    tmp_path, monkeypatch
+):
+    from core import android_storage, organizer
+
+    captured = {}
+    output_path = tmp_path / "ABC-123.nfo"
+
+    def fail_mkstemp(**_kwargs):
+        raise PermissionError("simulated Android SD-card denial")
+
+    monkeypatch.setattr(atomic_write_module.tempfile, "mkstemp", fail_mkstemp)
+    monkeypatch.setattr(android_storage, "has_access", lambda _path: True)
+    monkeypatch.setattr(
+        android_storage,
+        "write_bytes",
+        lambda path, data: captured.update(path=path, data=data),
+    )
+
+    assert organizer.generate_nfo(
+        number="ABC-123",
+        title="新标题",
+        original_title="original",
+        output_path=str(output_path),
+    )
+
+    assert captured["path"] == str(output_path)
+    assert "<title>[ABC-123]新标题</title>".encode("utf-8") in captured["data"]

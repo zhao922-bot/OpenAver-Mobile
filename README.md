@@ -13,18 +13,18 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r14-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r15-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r14-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r15-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r14`（versionCode `17030`）
+- 版本：`0.17.18-r15`（versionCode `17031`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
 - SHA-256：
-  `40889A13F0C9CFC98BB72D1EBDB4909A574350D7F1E47EC17AF5F236F78C4802`
+  签名构建后更新
 
 ## 安装
 
@@ -57,7 +57,8 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 自定义来源 `fetch: cf` 的普通浏览器请求兼容模式
 - 简体中文、繁体中文、日文和英文界面；首次启动默认简体中文
 - Android 10 / API 29 上的安装、首次界面、存储授权、本地服务启动和视频扫描
-- Android 10 外置 SD 卡目录授权桥接，支持 NFO、标题翻译、封面和补抓剧照写回
+- Android 10 外置 SD 卡目录授权桥接，支持完整 NFO、封面、poster、fanart、
+  标题翻译和补抓剧照写回
   （真机 LG G8X Android 10 验证）
 - Android 16 / API 36 模拟器上的启动、扫描、NFO 写入与播放验证
 - Python 源码预编译、非关键网络探测后台化、5 分钟启动等待和启动失败重试按钮
@@ -79,6 +80,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r14：Android 进程内脸部检测现在传递硬超时，并区分 `timeout`、`no_face`
   与运行失败，不再无限占用后台线程
 - r14：构建工作流升级到使用当前 Node 运行时的 Actions 主版本
+- r15：`generate_nfo` 的文本原子写入接入 SAF，普通刮削和重新刮削可直接生成
+  SD 卡 NFO
+- r15：`crop_to_poster` 改为内存生成 JPEG 后统一落地，poster 可直接写入 SD 卡
+- r15：`generate_jellyfin_images` 与 readonly 侧车复制接入同一套 SAF 文件桥接，
+  fanart 和 curator 原图可逐字节复制到 SD 卡
+- r15：下载图片、衍生图片和 NFO 统一使用字节校验与原子替换路径，写入失败时
+  保留旧文件
 
 ## 限制
 

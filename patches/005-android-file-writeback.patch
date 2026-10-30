@@ -124,14 +124,16 @@
  ) -> Iterator[IO]:
      """Yield an open file handle whose content lands at `dest` atomically.
  
-@@ -58,12 +60,42 @@
+@@ -58,12 +60,47 @@
      (opt-in for data-root marker durability; default stays off for NAS/HDD
      batch callers — TASK-153b-T6 / O1).
  
 +    ``mobile_fallback=True`` lets Android SD-card writes fail over to the
-+    user-authorized Storage Access Framework bridge. The bridge writes and
-+    verifies the exact bytes (and restores the old document on failure);
-+    desktop callers keep the fully atomic same-directory replace path.
++    user-authorized Storage Access Framework bridge. Binary and UTF-8 text
++    callers are buffered in memory only on that fallback path; the bridge
++    writes and verifies the exact bytes (and restores the old document on
++    failure). Desktop callers keep the fully atomic same-directory replace
++    path.
 +
      Deliberately NOT here (spec-113 §2.5 — each stays with the caller):
      locking, deleting old sibling files after a successful write, turning
@@ -143,7 +145,7 @@
 +    try:
 +        fd, tmp = tempfile.mkstemp(dir=dest.parent, suffix=suffix)
 +    except OSError as error:
-+        if not mobile_fallback or "b" not in mode or encoding is not None:
++        if not mobile_fallback:
 +            raise
 +        from core import android_storage
 +
@@ -153,7 +155,7 @@
 +            raise android_storage.AndroidStoragePermissionError(
 +                "storage_tree_not_authorized"
 +            ) from error
-+        fallback = io.BytesIO()
++        fallback = io.BytesIO() if "b" in mode else io.StringIO()
 +        fd = None
 +        tmp = None
 +
@@ -162,7 +164,10 @@
 +            yield fallback
 +            from core import android_storage
 +
-+            android_storage.write_bytes(str(dest), fallback.getvalue())
++            payload = fallback.getvalue()
++            if isinstance(payload, str):
++                payload = payload.encode(encoding or "utf-8")
++            android_storage.write_bytes(str(dest), payload)
 +        return
 +
      tmp = Path(tmp)
@@ -193,7 +198,51 @@
  from core.logger import get_logger
  from core.nfo_read import (
      nfo_actor_names,
-@@ -423,6 +426,34 @@
+@@ -35,7 +38,14 @@
+ from core.nfo_stat import NFO_MTIME_FILL_MISSING, NFO_MTIME_REFRESH, nfo_mtime_or_none
+ from core.nfo_title_format import resolve_preserved_title_for_write, resolve_title_body
+ from core.nfo_updater import parse_nfo
+-from core.organizer import crop_to_poster, download_image, find_subtitle_files, generate_nfo, _strip_num_prefixes
++from core.organizer import (
++    _copy_file_with_mobile_fallback,
++    _strip_num_prefixes,
++    crop_to_poster,
++    download_image,
++    find_subtitle_files,
++    generate_nfo,
++)
+ from core.path_utils import to_file_uri, uri_to_fs_path, uri_to_local_fs_path
+ from core.scraper import search_jav
+ from core.scrapers.utils import check_subtitle
+@@ -273,7 +283,7 @@
+         existing = repo.get_by_path(path_uri)
+         user_tags = existing.user_tags if existing else []
+ 
+-    generate_nfo(
++    return generate_nfo(
+         number=number,
+         title=meta.get("title", ""),
+         original_title=meta.get("original_title", ""),
+@@ -300,7 +310,6 @@
+         has_fanart=has_fanart,
+         nfo_title_format=nfo_title_format,
+     )
+-    return True
+ 
+ 
+ def _write_cover(
+@@ -390,7 +399,9 @@
+             fanart_ok = certain
+         else:
+             try:
+-                shutil.copy2(str(cover_path), str(fanart_path))
++                _copy_file_with_mobile_fallback(
++                    str(cover_path), str(fanart_path)
++                )
+                 fanart_ok = True
+             except shutil.SameFileError:
+                 fanart_ok = True
+@@ -423,6 +434,34 @@
      uris: List[str]
      downloaded: int
      skipped_existing: int
@@ -228,7 +277,7 @@
  
  
  def _write_extrafanart(
-@@ -431,13 +462,25 @@
+@@ -431,13 +470,25 @@
      write_extrafanart: bool,
      path_mappings: dict = None,
      preview_sample_images: List[str] = None,
@@ -256,7 +305,7 @@
  
      # CD-126-2：逐張配對用 index，**不用裸 zip()**——zip 在長度不等時會靜默截斷，
      # 等於少下載幾張圖。長度不等的正確語意是「那幾格沒有代理」，不是「少下載」。
-@@ -445,28 +488,118 @@
+@@ -445,28 +496,118 @@
      uris: List[str] = []
      downloaded = 0
      skipped_existing = 0
@@ -382,7 +431,7 @@
  
  
  def _preserve_nfo_only_fields(meta: dict, scraper_data: dict, fs_path: str) -> None:
-@@ -761,6 +894,7 @@
+@@ -761,6 +902,7 @@
          write_extrafanart=write_extrafanart,
          path_mappings=path_mappings,
          preview_sample_images=meta.get("preview_sample_images", []),
@@ -390,7 +439,7 @@
      )
      extrafanart_written = extrafanart_res.downloaded
  
-@@ -940,14 +1074,12 @@
+@@ -940,14 +1082,12 @@
      repo.update_sample_images(path_uri, sample_images)
  
  
@@ -408,7 +457,7 @@
      _empty = EnrichResult(
          success=False,
          nfo_written=False,
-@@ -957,6 +1089,16 @@
+@@ -957,6 +1097,16 @@
          source_used="",
          error=None,
      )
@@ -425,7 +474,7 @@
  
      try:
          fs_path = uri_to_local_fs_path(file_path, path_mappings)
-@@ -967,39 +1109,130 @@
+@@ -967,39 +1117,130 @@
      if not os.path.exists(fs_path):
          logger.warning("[fetch_samples_only] 檔案不存在: %s", fs_path)
          _empty.error = "檔案不存在"
@@ -655,7 +704,53 @@
 +    return sorted(exact) if exact else sorted(folded)
 --- a/core/organizer.py
 +++ b/core/organizer.py
-@@ -709,13 +709,20 @@
+@@ -9,6 +9,7 @@
+ import shutil
+ import threading
+ import time
++import io
+ import requests
+ import html
+ from pathlib import Path
+@@ -16,7 +17,7 @@
+ from typing import Optional, Dict, Any, List, Tuple
+ from urllib.parse import urlparse
+ 
+-from core.atomic_write import atomic_move
++from core.atomic_write import atomic_move, atomic_write
+ from core.config import STEM_IMAGE_MODES
+ from core.cover_attributes import effective_tags
+ from core.cover_layout import resolve_cover_target, same_target_verdict
+@@ -523,7 +524,7 @@
+             ratio = h / w
+ 
+             if ratio >= 1.4:
+-                shutil.copy2(src_path, dst_path)
++                _copy_file_with_mobile_fallback(src_path, dst_path)
+                 return True
+ 
+             r_window = _poster_window_ratio(w, h)
+@@ -554,7 +555,9 @@
+ 
+             cropped = rgb.crop((x0, 0, x0 + crop_w, h))
+ 
+-            cropped.save(dst_path, 'JPEG', quality=95, subsampling=0)
++            buffer = io.BytesIO()
++            cropped.save(buffer, 'JPEG', quality=95, subsampling=0)
++            _write_image_payload(dst_path, buffer.getvalue())
+             return True
+     except Exception as e:
+         logger.warning(f"[!] crop_to_poster 失敗: {e}")
+@@ -630,7 +633,7 @@
+             result['fanart_path'] = fanart_path
+     else:
+         try:
+-            shutil.copy2(cover_path, fanart_path)
++            _copy_file_with_mobile_fallback(cover_path, fanart_path)
+             result['fanart'] = True
+             result['fanart_path'] = fanart_path
+         except shutil.SameFileError:
+@@ -709,13 +712,20 @@
              effective_referer = "https://www.dmm.co.jp/"
          elif "jav321.com" in url:
              effective_referer = "https://www.jav321.com/"
@@ -677,7 +772,7 @@
  ) -> bool:
      """Try one URL. Record host only on connect-stage failures.
  
-@@ -726,6 +733,16 @@
+@@ -726,6 +736,16 @@
      使用者會從「30 秒後成功」變成「5 秒失敗」，而且**沒有代理可以救**。
      短逾時的收益只存在於「失敗了還有第二條路」的情境，成本卻落在沒有第二條路的人身上。
      """
@@ -694,7 +789,7 @@
      headers = build_download_headers(url, referer)
      timeout = (CONNECT_TIMEOUT, REQUEST_TIMEOUT) if short_connect else REQUEST_TIMEOUT
      try:
-@@ -753,45 +770,122 @@
+@@ -753,45 +773,128 @@
                  payload = decode_image_payload(url_host, payload)
                  if not looks_like_image(payload):
                      logger.warning("[!] 下載圖片失敗：解碼後不是圖片 host=%s", url_host)
@@ -742,22 +837,28 @@
  
  
 +def _write_image_payload(save_path: str, payload: bytes) -> None:
-+    """Write a downloaded image, using SAF only after a direct write is denied."""
++    """Atomically write image bytes, with the shared Android SAF fallback."""
++    with atomic_write(
++        save_path, mode="wb", suffix=".image.tmp", mobile_fallback=True
++    ) as handle:
++        handle.write(payload)
++
++
++def _copy_file_with_mobile_fallback(
++    source_path: str, destination_path: str
++) -> None:
++    """Copy a sidecar verbatim, falling back to SAF when direct copy is denied."""
 +    try:
-+        with open(save_path, "wb") as handle:
-+            handle.write(payload)
++        shutil.copy2(source_path, destination_path)
 +        return
 +    except OSError as error:
 +        from core import android_storage
 +
 +        if not android_storage.is_access_error(error):
 +            raise
-+        if not android_storage.has_access(save_path):
-+            raise android_storage.AndroidStoragePermissionError(
-+                "storage_tree_not_authorized"
-+            ) from error
-+        android_storage.write_bytes(save_path, payload)
-+        logger.info("image saved through Android SAF: %s", save_path)
++        payload = Path(source_path).read_bytes()
++        _write_image_payload(destination_path, payload)
++        logger.info("file copied through Android SAF: %s", destination_path)
 +
 +
  def download_image(
@@ -833,6 +934,65 @@
  
  
  # NFO-CTRL-01（PR #191 CodeRabbit F1/加固；BE-GUARD-01：閘門寫在 sink，不寫在上游白名單）：
+@@ -1034,7 +1137,13 @@
+ {title_record_block}</movie>'''
+ 
+     try:
+-        with open(output_path, 'w', encoding='utf-8') as f:
++        with atomic_write(
++            output_path,
++            mode='w',
++            encoding='utf-8',
++            suffix='.nfo.tmp',
++            mobile_fallback=True,
++        ) as f:
+             f.write(nfo_content)
+         return True
+     except Exception as e:
+--- a/core/readonly_assets.py
++++ b/core/readonly_assets.py
+@@ -34,7 +34,13 @@
+ from core.gallery_scanner import IMAGE_EXTENSIONS
+ from core.logger import get_logger
+ from core.nfo_stat import NFO_MTIME_REFRESH, nfo_mtime_or_none
+-from core.organizer import crop_to_poster, download_image, generate_jellyfin_images, generate_nfo
++from core.organizer import (
++    _copy_file_with_mobile_fallback,
++    crop_to_poster,
++    download_image,
++    generate_jellyfin_images,
++    generate_nfo,
++)
+ from core.path_utils import is_fs_path_under_dir, to_file_uri, uri_to_local_fs_path
+ 
+ logger = get_logger(__name__)
+@@ -316,7 +322,7 @@
+         # 同一檔＝curator 原檔已經就在輸出位置上，本身就是 verbatim passthrough。
+         return True if os.path.exists(dst) else None
+     try:
+-        shutil.copy2(src, dst)
++        _copy_file_with_mobile_fallback(src, dst)
+         return True
+     except shutil.SameFileError:
+         # preflight 之後、copy 之前才變成同一檔（別名 race）的 backstop；必須排在
+@@ -376,7 +382,7 @@
+             has_fanart = certain
+         else:
+             try:
+-                shutil.copy2(cover_fs, fanart_path)
++                _copy_file_with_mobile_fallback(cover_fs, fanart_path)
+                 has_fanart = True
+             except shutil.SameFileError:
+                 has_fanart = True
+@@ -475,7 +481,7 @@
+         # steps encode; overwriting it would contradict them.
+         return True
+     try:
+-        shutil.copyfile(src, dst)
++        _copy_file_with_mobile_fallback(src, dst)
+         return True
+     except shutil.SameFileError:
+         return True
 --- a/core/source_config.py
 +++ b/core/source_config.py
 @@ -9,7 +9,7 @@

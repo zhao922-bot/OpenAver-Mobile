@@ -9,6 +9,7 @@ import sys
 import shutil
 import threading
 import time
+import io
 import requests
 import html
 from pathlib import Path
@@ -16,7 +17,7 @@ from PIL import Image
 from typing import Optional, Dict, Any, List, Tuple
 from urllib.parse import urlparse
 
-from core.atomic_write import atomic_move
+from core.atomic_write import atomic_move, atomic_write
 from core.config import STEM_IMAGE_MODES
 from core.cover_attributes import effective_tags
 from core.cover_layout import resolve_cover_target, same_target_verdict
@@ -523,7 +524,7 @@ def crop_to_poster(src_path: str, dst_path: str, number: str = '', maker: str = 
             ratio = h / w
 
             if ratio >= 1.4:
-                shutil.copy2(src_path, dst_path)
+                _copy_file_with_mobile_fallback(src_path, dst_path)
                 return True
 
             r_window = _poster_window_ratio(w, h)
@@ -554,7 +555,9 @@ def crop_to_poster(src_path: str, dst_path: str, number: str = '', maker: str = 
 
             cropped = rgb.crop((x0, 0, x0 + crop_w, h))
 
-            cropped.save(dst_path, 'JPEG', quality=95, subsampling=0)
+            buffer = io.BytesIO()
+            cropped.save(buffer, 'JPEG', quality=95, subsampling=0)
+            _write_image_payload(dst_path, buffer.getvalue())
             return True
     except Exception as e:
         logger.warning(f"[!] crop_to_poster 失敗: {e}")
@@ -630,7 +633,7 @@ def generate_jellyfin_images(cover_path: str, base_stem: str, number: str = '', 
             result['fanart_path'] = fanart_path
     else:
         try:
-            shutil.copy2(cover_path, fanart_path)
+            _copy_file_with_mobile_fallback(cover_path, fanart_path)
             result['fanart'] = True
             result['fanart_path'] = fanart_path
         except shutil.SameFileError:
@@ -812,22 +815,28 @@ def _attempt_download_image(
 
 
 def _write_image_payload(save_path: str, payload: bytes) -> None:
-    """Write a downloaded image, using SAF only after a direct write is denied."""
+    """Atomically write image bytes, with the shared Android SAF fallback."""
+    with atomic_write(
+        save_path, mode="wb", suffix=".image.tmp", mobile_fallback=True
+    ) as handle:
+        handle.write(payload)
+
+
+def _copy_file_with_mobile_fallback(
+    source_path: str, destination_path: str
+) -> None:
+    """Copy a sidecar verbatim, falling back to SAF when direct copy is denied."""
     try:
-        with open(save_path, "wb") as handle:
-            handle.write(payload)
+        shutil.copy2(source_path, destination_path)
         return
     except OSError as error:
         from core import android_storage
 
         if not android_storage.is_access_error(error):
             raise
-        if not android_storage.has_access(save_path):
-            raise android_storage.AndroidStoragePermissionError(
-                "storage_tree_not_authorized"
-            ) from error
-        android_storage.write_bytes(save_path, payload)
-        logger.info("image saved through Android SAF: %s", save_path)
+        payload = Path(source_path).read_bytes()
+        _write_image_payload(destination_path, payload)
+        logger.info("file copied through Android SAF: %s", destination_path)
 
 
 def download_image(
@@ -1128,7 +1137,13 @@ def generate_nfo(
 {title_record_block}</movie>'''
 
     try:
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with atomic_write(
+            output_path,
+            mode='w',
+            encoding='utf-8',
+            suffix='.nfo.tmp',
+            mobile_fallback=True,
+        ) as f:
             f.write(nfo_content)
         return True
     except Exception as e:

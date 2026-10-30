@@ -38,7 +38,14 @@ from core.nfo_read import (
 from core.nfo_stat import NFO_MTIME_FILL_MISSING, NFO_MTIME_REFRESH, nfo_mtime_or_none
 from core.nfo_title_format import resolve_preserved_title_for_write, resolve_title_body
 from core.nfo_updater import parse_nfo
-from core.organizer import crop_to_poster, download_image, find_subtitle_files, generate_nfo, _strip_num_prefixes
+from core.organizer import (
+    _copy_file_with_mobile_fallback,
+    _strip_num_prefixes,
+    crop_to_poster,
+    download_image,
+    find_subtitle_files,
+    generate_nfo,
+)
 from core.path_utils import to_file_uri, uri_to_fs_path, uri_to_local_fs_path
 from core.scraper import search_jav
 from core.scrapers.utils import check_subtitle
@@ -276,7 +283,7 @@ def _write_nfo(
         existing = repo.get_by_path(path_uri)
         user_tags = existing.user_tags if existing else []
 
-    generate_nfo(
+    return generate_nfo(
         number=number,
         title=meta.get("title", ""),
         original_title=meta.get("original_title", ""),
@@ -303,7 +310,6 @@ def _write_nfo(
         has_fanart=has_fanart,
         nfo_title_format=nfo_title_format,
     )
-    return True
 
 
 def _write_cover(
@@ -393,7 +399,9 @@ def _write_external_images(
             fanart_ok = certain
         else:
             try:
-                shutil.copy2(str(cover_path), str(fanart_path))
+                _copy_file_with_mobile_fallback(
+                    str(cover_path), str(fanart_path)
+                )
                 fanart_ok = True
             except shutil.SameFileError:
                 fanart_ok = True

@@ -34,7 +34,13 @@ from core.cover_layout import (
 from core.gallery_scanner import IMAGE_EXTENSIONS
 from core.logger import get_logger
 from core.nfo_stat import NFO_MTIME_REFRESH, nfo_mtime_or_none
-from core.organizer import crop_to_poster, download_image, generate_jellyfin_images, generate_nfo
+from core.organizer import (
+    _copy_file_with_mobile_fallback,
+    crop_to_poster,
+    download_image,
+    generate_jellyfin_images,
+    generate_nfo,
+)
 from core.path_utils import is_fs_path_under_dir, to_file_uri, uri_to_local_fs_path
 
 logger = get_logger(__name__)
@@ -316,7 +322,7 @@ def _copy_curator_sidecar(src: str, dst: str, slot: str) -> Optional[bool]:
         # 同一檔＝curator 原檔已經就在輸出位置上，本身就是 verbatim passthrough。
         return True if os.path.exists(dst) else None
     try:
-        shutil.copy2(src, dst)
+        _copy_file_with_mobile_fallback(src, dst)
         return True
     except shutil.SameFileError:
         # preflight 之後、copy 之前才變成同一檔（別名 race）的 backstop；必須排在
@@ -376,7 +382,7 @@ def _write_media_images(
             has_fanart = certain
         else:
             try:
-                shutil.copy2(cover_fs, fanart_path)
+                _copy_file_with_mobile_fallback(cover_fs, fanart_path)
                 has_fanart = True
             except shutil.SameFileError:
                 has_fanart = True
@@ -475,7 +481,7 @@ def _write_cover_copy(src: str, dst: str) -> bool:
         # steps encode; overwriting it would contradict them.
         return True
     try:
-        shutil.copyfile(src, dst)
+        _copy_file_with_mobile_fallback(src, dst)
         return True
     except shutil.SameFileError:
         return True

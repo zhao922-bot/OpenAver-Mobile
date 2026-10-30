@@ -61,9 +61,11 @@ def atomic_write(
     batch callers — TASK-153b-T6 / O1).
 
     ``mobile_fallback=True`` lets Android SD-card writes fail over to the
-    user-authorized Storage Access Framework bridge. The bridge writes and
-    verifies the exact bytes (and restores the old document on failure);
-    desktop callers keep the fully atomic same-directory replace path.
+    user-authorized Storage Access Framework bridge. Binary and UTF-8 text
+    callers are buffered in memory only on that fallback path; the bridge
+    writes and verifies the exact bytes (and restores the old document on
+    failure). Desktop callers keep the fully atomic same-directory replace
+    path.
 
     Deliberately NOT here (spec-113 §2.5 — each stays with the caller):
     locking, deleting old sibling files after a successful write, turning
@@ -74,7 +76,7 @@ def atomic_write(
     try:
         fd, tmp = tempfile.mkstemp(dir=dest.parent, suffix=suffix)
     except OSError as error:
-        if not mobile_fallback or "b" not in mode or encoding is not None:
+        if not mobile_fallback:
             raise
         from core import android_storage
 
@@ -84,7 +86,7 @@ def atomic_write(
             raise android_storage.AndroidStoragePermissionError(
                 "storage_tree_not_authorized"
             ) from error
-        fallback = io.BytesIO()
+        fallback = io.BytesIO() if "b" in mode else io.StringIO()
         fd = None
         tmp = None
 
@@ -93,7 +95,10 @@ def atomic_write(
             yield fallback
             from core import android_storage
 
-            android_storage.write_bytes(str(dest), fallback.getvalue())
+            payload = fallback.getvalue()
+            if isinstance(payload, str):
+                payload = payload.encode(encoding or "utf-8")
+            android_storage.write_bytes(str(dest), payload)
         return
 
     tmp = Path(tmp)

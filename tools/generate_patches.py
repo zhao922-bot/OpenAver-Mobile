@@ -58,6 +58,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "core/gallery_scanner.py",
             "core/nfo_utils.py",
             "core/organizer.py",
+            "core/readonly_assets.py",
             "core/source_config.py",
             "core/title_writeback.py",
         ),
