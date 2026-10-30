@@ -67,9 +67,25 @@ def test_gantt_dots_use_actual_maker_colors():
     assert "function fallbackMakerColor(name)" in charts
     assert "return fallbackMakerColor(name);" in charts
     assert "_makerColorRegistry" in charts
+    assert "export function makerMarkerClass(name)" in charts
     assert "setMakerColorSlots(slots, getRecords());" in read(
         PYTHON_WEB / "static/js/pages/insights/state.js"
     )
     assert "--insights-maker-16:" in css
     assert "--gantt-cell-color:" in template
     assert "background: var(--gantt-cell-color, var(--text-muted));" in css
+
+
+def test_bazooka_and_befree_have_distinct_colors_and_marker_shapes():
+    charts = read(PYTHON_WEB / "static/js/pages/insights/charts.js")
+    css = read(PYTHON_WEB / "static/css/pages/insights.css")
+    template = read(PYTHON_WEB / "templates/insights.html")
+
+    assert "--insights-maker-11: #111827;" in css
+    assert "--insights-maker-12: #7f3c8d;" in css
+    assert "--insights-maker-11: #f8fafc;" in css
+    assert "MAKER_MARKER_CLASSES" in charts
+    assert "maker-marker--square::after" in css
+    assert "maker-marker--diamond::after" in css
+    assert "makerMarkerClass(mk)" in template
+    assert "makerMarkerClass(cell.maker)" in template

@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('help.mobile.page_title') }} - OpenAver{% endblock %}
+
+{% block extra_css %}
+<link href="/static/css/pages/help-mobile.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="mobile-help page-layer">
+    <div class="mobile-help__inner">
+        <section class="mobile-help-hero">
+            <div class="mobile-help-hero__copy">
+                <span class="mobile-help-eyebrow">
+                    <i class="bi bi-phone" aria-hidden="true"></i>
+                    {{ t('help.mobile.eyebrow') }}
+                </span>
+                <h1>
+                    <span>{{ t('help.mobile.title_line1') }}</span>
+                    <span>{{ t('help.mobile.title_line2') }}</span>
+                </h1>
+                <p>{{ t('help.mobile.subtitle') }}</p>
+                <div class="mobile-help-meta">
+                    <span><i class="bi bi-shield-check" aria-hidden="true"></i> {{ t('help.mobile.local_only') }}</span>
+                    <span>{{ t('help.mobile.version') }} v{{ version }}</span>
+                </div>
+                <div class="mobile-help-actions">
+                    <a class="mobile-help-button mobile-help-button--primary" href="/scanner">
+                        <i class="bi bi-list-ul" aria-hidden="true"></i>
+                        {{ t('help.mobile.action_scan') }}
+                    </a>
+                    <a class="mobile-help-button" href="/showcase">
+                        <i class="bi bi-collection-play" aria-hidden="true"></i>
+                        {{ t('help.mobile.action_browse') }}
+                    </a>
+                </div>
+            </div>
+            <div class="mobile-help-hero__signal" aria-hidden="true">
+                <span></span><span></span><span></span>
+                <i class="bi bi-folder-play"></i>
+            </div>
+        </section>
+
+        <nav class="mobile-help-jump" aria-label="{{ t('help.mobile.page_title') }}">
+            <a href="#mobile-help-start">{{ t('help.mobile.jump_start') }}</a>
+            <a href="#mobile-help-storage">{{ t('help.mobile.jump_storage') }}</a>
+            <a href="#mobile-help-tasks">{{ t('help.mobile.jump_tasks') }}</a>
+            <a href="#mobile-help-trouble">{{ t('help.mobile.jump_trouble') }}</a>
+            <a href="#mobile-help-about">{{ t('help.mobile.jump_about') }}</a>
+        </nav>
+
+        <section class="mobile-help-status" aria-label="{{ t('help.mobile.local_title') }}">
+            <article>
+                <i class="bi bi-cpu" aria-hidden="true"></i>
+                <div>
+                    <h2>{{ t('help.mobile.status_local_title') }}</h2>
+                    <p>{{ t('help.mobile.status_local_desc') }}</p>
+                </div>
+            </article>
+            <article>
+                <i class="bi bi-sd-card" aria-hidden="true"></i>
+                <div>
+                    <h2>{{ t('help.mobile.status_files_title') }}</h2>
+                    <p>{{ t('help.mobile.status_files_desc') }}</p>
+                </div>
+            </article>
+            <article>
+                <i class="bi bi-lock" aria-hidden="true"></i>
+                <div>
+                    <h2>{{ t('help.mobile.status_private_title') }}</h2>
+                    <p>{{ t('help.mobile.status_private_desc') }}</p>
+                </div>
+            </article>
+        </section>
+
+        <section class="mobile-help-section" id="mobile-help-start">
+            <div class="mobile-help-section__head">
+                <span>01</span>
+                <div>
+                    <h2>{{ t('help.mobile.start_title') }}</h2>
+                    <p>{{ t('help.mobile.start_desc') }}</p>
+                </div>
+            </div>
+            <ol class="mobile-help-steps">
+                <li>
+                    <span>1</span>
+                    <div>
+                        <h3>{{ t('help.mobile.step1_title') }}</h3>
+                        <p>{{ t('help.mobile.step1_desc') }}</p>
+                    </div>
+                </li>
+                <li>
+                    <span>2</span>
+                    <div>
+                        <h3>{{ t('help.mobile.step2_title') }}</h3>
+                        <p>{{ t('help.mobile.step2_desc') }}</p>
+                    </div>
+                </li>
+                <li>
+                    <span>3</span>
+                    <div>
+                        <h3>{{ t('help.mobile.step3_title') }}</h3>
+                        <p>{{ t('help.mobile.step3_desc') }}</p>
+                    </div>
+                </li>
+                <li>
+                    <span>4</span>
+                    <div>
+                        <h3>{{ t('help.mobile.step4_title') }}</h3>
+                        <p>{{ t('help.mobile.step4_desc') }}</p>
+                    </div>
+                </li>
+            </ol>
+        </section>
+
+        <details class="mobile-help-panel" open>
+            <summary>
+                <span class="mobile-help-panel__icon"><i class="bi bi-phone-vibrate" aria-hidden="true"></i></span>
+                <span>
+                    <strong>{{ t('help.mobile.local_title') }}</strong>
+                    <small>{{ t('help.mobile.local_desc') }}</small>
+                </span>
+                <i class="bi bi-chevron-down mobile-help-panel__chevron" aria-hidden="true"></i>
+            </summary>
+            <div class="mobile-help-panel__body">
+                <ul class="mobile-help-list">
+                    <li>{{ t('help.mobile.local_1') }}</li>
+                    <li>{{ t('help.mobile.local_2') }}</li>
+                    <li>{{ t('help.mobile.local_3') }}</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="mobile-help-panel" id="mobile-help-storage">
+            <summary>
+                <span class="mobile-help-panel__icon"><i class="bi bi-folder-check" aria-hidden="true"></i></span>
+                <span>
+                    <strong>{{ t('help.mobile.storage_title') }}</strong>
+                    <small>{{ t('help.mobile.storage_desc') }}</small>
+                </span>
+                <i class="bi bi-chevron-down mobile-help-panel__chevron" aria-hidden="true"></i>
+            </summary>
+            <div class="mobile-help-panel__body">
+                <ul class="mobile-help-list">
+                    <li>{{ t('help.mobile.storage_android10') }}</li>
+                    <li>{{ t('help.mobile.storage_android11') }}</li>
+                    <li>{{ t('help.mobile.storage_sidecars') }}</li>
+                    <li>{{ t('help.mobile.storage_readonly') }}</li>
+                    <li>{{ t('help.mobile.storage_saf') }}</li>
+                </ul>
+            </div>
+        </details>
+
+        <section class="mobile-help-section" id="mobile-help-tasks">
+            <div class="mobile-help-section__head">
+                <span>02</span>
+                <div>
+                    <h2>{{ t('help.mobile.tasks_title') }}</h2>
+                </div>
+            </div>
+            <div class="mobile-help-task-grid">
+                <article>
+                    <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
+                    <h3>{{ t('help.mobile.task_scan_title') }}</h3>
+                    <p>{{ t('help.mobile.task_scan_desc') }}</p>
+                </article>
+                <article>
+                    <i class="bi bi-cloud-arrow-down" aria-hidden="true"></i>
+                    <h3>{{ t('help.mobile.task_meta_title') }}</h3>
+                    <p>{{ t('help.mobile.task_meta_desc') }}</p>
+                </article>
+                <article>
+                    <i class="bi bi-tags" aria-hidden="true"></i>
+                    <h3>{{ t('help.mobile.task_tag_title') }}</h3>
+                    <p>{{ t('help.mobile.task_tag_desc') }}</p>
+                </article>
+                <article>
+                    <i class="bi bi-images" aria-hidden="true"></i>
+                    <h3>{{ t('help.mobile.task_samples_title') }}</h3>
+                    <p>{{ t('help.mobile.task_samples_desc') }}</p>
+                </article>
+                <article>
+                    <i class="bi bi-translate" aria-hidden="true"></i>
+                    <h3>{{ t('help.mobile.task_translate_title') }}</h3>
+                    <p>{{ t('help.mobile.task_translate_desc') }}</p>
+                </article>
+                <article>
+                    <i class="bi bi-play-btn" aria-hidden="true"></i>
+                    <h3>{{ t('help.mobile.task_play_title') }}</h3>
+                    <p>{{ t('help.mobile.task_play_desc') }}</p>
+                </article>
+            </div>
+        </section>
+
+        <details class="mobile-help-panel mobile-help-panel--warning" id="mobile-help-trouble">
+            <summary>
+                <span class="mobile-help-panel__icon"><i class="bi bi-tools" aria-hidden="true"></i></span>
+                <span>
+                    <strong>{{ t('help.mobile.trouble_title') }}</strong>
+                    <small>{{ t('help.mobile.trouble_log') }}</small>
+                </span>
+                <i class="bi bi-chevron-down mobile-help-panel__chevron" aria-hidden="true"></i>
+            </summary>
+            <div class="mobile-help-panel__body mobile-help-trouble">
+                <article>
+                    <h3>{{ t('help.mobile.trouble_service_title') }}</h3>
+                    <p>{{ t('help.mobile.trouble_service_desc') }}</p>
+                </article>
+                <article>
+                    <h3>{{ t('help.mobile.trouble_scan_title') }}</h3>
+                    <p>{{ t('help.mobile.trouble_scan_desc') }}</p>
+                </article>
+                <article>
+                    <h3>{{ t('help.mobile.trouble_write_title') }}</h3>
+                    <p>{{ t('help.mobile.trouble_write_desc') }}</p>
+                </article>
+                <article>
+                    <h3>{{ t('help.mobile.trouble_source_title') }}</h3>
+                    <p>{{ t('help.mobile.trouble_source_desc') }}</p>
+                </article>
+                <article>
+                    <h3>{{ t('help.mobile.trouble_translate_title') }}</h3>
+                    <p>{{ t('help.mobile.trouble_translate_desc') }}</p>
+                </article>
+            </div>
+        </details>
+
+        <details class="mobile-help-panel">
+            <summary>
+                <span class="mobile-help-panel__icon"><i class="bi bi-shield-lock" aria-hidden="true"></i></span>
+                <span>
+                    <strong>{{ t('help.mobile.privacy_title') }}</strong>
+                    <small>{{ t('help.mobile.local_only') }}</small>
+                </span>
+                <i class="bi bi-chevron-down mobile-help-panel__chevron" aria-hidden="true"></i>
+            </summary>
+            <div class="mobile-help-panel__body">
+                <p>{{ t('help.mobile.privacy_desc') }}</p>
+            </div>
+        </details>
+
+        <section class="mobile-help-about" id="mobile-help-about">
+            <div>
+                <span class="mobile-help-eyebrow">
+                    <i class="bi bi-heart" aria-hidden="true"></i>
+                    {{ t('help.mobile.about_title') }}
+                </span>
+                <h2>{{ t('help.mobile.about_desc') }}</h2>
+                <p>{{ t('help.mobile.license') }}</p>
+            </div>
+            <div class="mobile-help-about__links">
+                <a href="https://github.com/slive777/OpenAver" target="_blank" rel="noopener noreferrer">
+                    <i class="bi bi-github" aria-hidden="true"></i>
+                    {{ t('help.mobile.about_upstream') }}
+                </a>
+                <a href="https://github.com/zhao922-bot/OpenAver-Mobile" target="_blank" rel="noopener noreferrer">
+                    <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                    {{ t('help.mobile.about_mobile') }}
+                </a>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}

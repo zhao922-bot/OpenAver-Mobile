@@ -290,6 +290,16 @@
          "is_windows_desktop": getattr(request.state, "shell_kind", None) == "windows",
          "is_mac_desktop": getattr(request.state, "shell_kind", None) == "mac",
          "is_desktop": getattr(request.state, "shell_kind", None) is not None,
+@@ -953,7 +983,8 @@
+     if show_agent_auth:
+         context["agent_token"] = snap.agent_token
+ 
+-    return templates.TemplateResponse(request, "help.html", context)
++    template_name = "help.html" if context.get("is_desktop") else "help_mobile.html"
++    return templates.TemplateResponse(request, template_name, context)
+ 
+ 
+ @app.get("/design-system")
 --- a/web/compression.py
 +++ b/web/compression.py
 @@ -1,4 +1,39 @@

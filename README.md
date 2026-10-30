@@ -13,17 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r21-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r22-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r21-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r22-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r21`（versionCode `17037`）
+- 版本：`0.17.18-r22`（versionCode `17038`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：`020807C36E239192D11FF30B7BC24CBE0B603C9FF35BB42D018A0400DD9278BF`
+- SHA-256：`签名构建后更新`
 
 ## 安装
 
@@ -124,6 +124,11 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   按该女优当年实际片商着色，不再全部显示灰色
 - r21：女优片商分布改为手机单列两行布局，名称、片数、片商家数和分段条不再
   互相挤压；年表无数据时隐藏无意义的图例和滑动提示
+- r22：BAZOOKA 移出橙黄色系，避免与 Moodyz 混淆；片商圆点、图例和年表增加
+    圆形、方形、菱形、环形、条形编码，不再只依赖颜色区分
+- r22：手机端“说明”页改为专用本地操作指南，移除 Telegram、桌面更新检查、
+    AI 终端、服务器模式、快捷键等桌面内容；保留原作者致谢和 GitHub 链接
+- r22：停用桌面版新手引导，不再自动弹出或在说明页显示入口
 
 ## 限制
 

@@ -417,6 +417,7 @@
                     <template x-for="mk in ganttLegendMakers()" :key="mk">
                         <span class="gantt-legend-item" role="listitem">
                             <span class="gantt-legend-dot"
+                                  :class="makerMarkerClass(mk)"
                                   :style="'background:' + colorForMakerName(mk)"></span>
                             <span x-text="mk"></span>
                         </span>
@@ -484,7 +485,7 @@
                                                      ganttAxis === 'year' && sel.period.type !== 'all'
                                                          ? (isYearInSel(cell.year) ? ' is-selected' : ' is-dimmed')
                                                          : ''
-                                                 )"
+                                                 ) + (cell.maker ? ' ' + makerMarkerClass(cell.maker) : '')"
                                                  :style="cell.maker
                                                      ? ('--gantt-cell-color:' + colorForMakerName(cell.maker) + ';'
                                                          + (cell.state === 'main'
@@ -545,7 +546,7 @@
                                     <span class="solo-segment"
                                           :class="'solo-segment--' + seg.kind"
                                           :style="'width:' + (row.total ? Math.round(seg.count / row.total * 100) : 0) + '%' + (seg.kind === 'named' ? (';background:' + colorForMakerName(seg.maker)) : '')"
-                                          :title="seg.kind === 'other' ? soloOtherTitle(seg) : null"></span>
+                                          :title="seg.kind === 'named' ? seg.maker : (seg.kind === 'other' ? soloOtherTitle(seg) : null)"></span>
                                 </template>
                             </span>
                             <span class="solo-end" x-text="soloRowLabel(row)"></span>

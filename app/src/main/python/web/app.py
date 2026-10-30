@@ -983,7 +983,8 @@ async def help_page(request: Request):
     if show_agent_auth:
         context["agent_token"] = snap.agent_token
 
-    return templates.TemplateResponse(request, "help.html", context)
+    template_name = "help.html" if context.get("is_desktop") else "help_mobile.html"
+    return templates.TemplateResponse(request, template_name, context)
 
 
 @app.get("/design-system")

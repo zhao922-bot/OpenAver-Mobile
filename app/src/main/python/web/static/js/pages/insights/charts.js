@@ -395,6 +395,21 @@ export function colorForMakerName(name) {
     return colorForMaker(name);
 }
 
+const MAKER_MARKER_CLASSES = ['circle', 'square', 'diamond', 'ring', 'bar'];
+
+export function makerMarkerClass(name) {
+    let index = 0;
+    if (name && Object.prototype.hasOwnProperty.call(_makerColorRegistry, name)) {
+        index = _makerColorRegistry[name];
+    } else {
+        const text = String(name || '');
+        for (let i = 0; i < text.length; i++) {
+            index = (Math.imul(index, 31) + text.charCodeAt(i)) >>> 0;
+        }
+    }
+    return 'maker-marker--' + MAKER_MARKER_CLASSES[index % MAKER_MARKER_CLASSES.length];
+}
+
 // ── 生命週期 ─────────────────────────────────────────────────────────
 
 export function areChartsAlive() {

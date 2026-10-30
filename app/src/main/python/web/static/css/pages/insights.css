@@ -7,17 +7,17 @@
   --insights-maker-1: #2b6cb0; --insights-maker-2: #f28e2b; --insights-maker-3: #2e8540;
   --insights-maker-4: #7b3294; --insights-maker-5: #d53e8b; --insights-maker-6: #00a6c8;
   --insights-maker-7: #8c510a; --insights-maker-8: #9e1b32;
-  --insights-maker-9: #6a994e; --insights-maker-10: #3f51b5; --insights-maker-11: #d4a017;
+  --insights-maker-9: #6a994e; --insights-maker-10: #3f51b5; --insights-maker-11: #111827;
   --insights-maker-12: #7f3c8d; --insights-maker-13: #00838f; --insights-maker-14: #c2185b;
-  --insights-maker-15: #4d4d4d; --insights-maker-16: #e76f51;
+  --insights-maker-15: #d4a017; --insights-maker-16: #e76f51;
 }
 [data-theme="dim"] {
   --insights-maker-1: #6aa9ff; --insights-maker-2: #ffb35c; --insights-maker-3: #55c878;
   --insights-maker-4: #b18cff; --insights-maker-5: #ff74b7; --insights-maker-6: #4dd7e8;
   --insights-maker-7: #c98b4a; --insights-maker-8: #ff6b6b;
-  --insights-maker-9: #a8d56f; --insights-maker-10: #8b9cff; --insights-maker-11: #ffd166;
+  --insights-maker-9: #a8d56f; --insights-maker-10: #8b9cff; --insights-maker-11: #f8fafc;
   --insights-maker-12: #d59be8; --insights-maker-13: #58d5dd; --insights-maker-14: #ff8eb5;
-  --insights-maker-15: #b8b8b8; --insights-maker-16: #ff9a7a;
+  --insights-maker-15: #ffd166; --insights-maker-16: #ff9a7a;
 }
 /* stylelint-enable color-no-hex */
 
@@ -1037,6 +1037,25 @@
     opacity: 1;
 }
 
+.insights-container .maker-marker--square::after {
+    border-radius: 1px;
+}
+
+.insights-container .maker-marker--diamond::after {
+    border-radius: 1px;
+    transform: rotate(45deg);
+}
+
+.insights-container .maker-marker--ring::after {
+    box-shadow: inset 0 0 0 2px var(--surface-1);
+}
+
+.insights-container .maker-marker--bar::after {
+    width: 0.5rem;
+    height: 0.1875rem;
+    border-radius: 1px;
+}
+
 .insights-container .gantt-legend {
     display: flex;
     flex-wrap: wrap;
@@ -1070,6 +1089,25 @@
     height: 0.5rem;
     border-radius: var(--radius-pill);
     flex: 0 0 auto;
+}
+
+.insights-container .gantt-legend-dot.maker-marker--square {
+    border-radius: 1px;
+}
+
+.insights-container .gantt-legend-dot.maker-marker--diamond {
+    border-radius: 1px;
+    transform: rotate(45deg);
+}
+
+.insights-container .gantt-legend-dot.maker-marker--ring {
+    box-shadow: inset 0 0 0 2px var(--surface-1);
+}
+
+.insights-container .gantt-legend-dot.maker-marker--bar {
+    width: 0.625rem;
+    height: 0.25rem;
+    border-radius: 1px;
 }
 
 .insights-container .insights-gantt-toggle {

@@ -183,7 +183,7 @@
        "jellyfin_prefix": "Jellyfin cover format missing:",
        "jellyfin_suffix": " videos",
        "jellyfin_update_title": "Generate Jellyfin poster + fanart",
-@@ -1410,6 +1533,9 @@
+@@ -1410,10 +1533,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -193,7 +193,88 @@
        "multi_video_error": "This folder contains other videos. Fetching stills here may affect them. Please move the video to its own folder first."
      }
    },
-@@ -1845,6 +1971,12 @@
+   "help": {
++    "mobile": {
++      "page_title": "Mobile Guide",
++      "eyebrow": "OpenAver Mobile",
++      "title": "Your phone-local library starts here",
++      "title_line1": "Your phone-local",
++      "title_line2": "library starts here",
++      "subtitle": "Scan videos on your phone or SD card, then manage NFO files, covers, samples, and playback locally without a computer or NAS.",
++      "version": "Current version",
++      "local_only": "Fully local",
++      "action_scan": "Open scanner",
++      "action_browse": "Browse library",
++      "jump_start": "Quick start",
++      "jump_storage": "Storage",
++      "jump_tasks": "Common tasks",
++      "jump_trouble": "Troubleshooting",
++      "jump_about": "Credits and source",
++      "status_local_title": "Embedded service",
++      "status_local_desc": "The Python service listens only on this phone and does not depend on a computer.",
++      "status_files_title": "Direct file access",
++      "status_files_desc": "Videos, NFO files, covers, and samples stay in folders you control.",
++      "status_private_title": "Data stays local",
++      "status_private_desc": "Your library is not uploaded. Network access happens only when you start scraping or translation.",
++      "start_title": "Finish setup in four steps",
++      "start_desc": "Complete these once, then simply rescan whenever you add videos.",
++      "step1_title": "Grant storage access",
++      "step1_desc": "On Android 10, grant read/write storage access. On Android 11 and later, grant all-files access.",
++      "step2_title": "Authorize a writable folder",
++      "step2_desc": "For videos on an SD card, open the menu, choose Authorize writable folder, and select the same folder you scan.",
++      "step3_title": "Choose a folder and generate",
++      "step3_desc": "Open Scanner, choose the video folder, and scan. Results are stored in the local database.",
++      "step4_title": "Browse and play",
++      "step4_desc": "Open Browse to view covers and details. Playback is handed to an installed system video player.",
++      "local_title": "Phone-local mode",
++      "local_desc": "OpenAver services, the database, and media processing all run inside this phone.",
++      "local_1": "It does not connect to a computer, NAS, or external OpenAver server.",
++      "local_2": "Scraping, sample fetching, and title translation use the network only when you start them.",
++      "local_3": "The local API uses a random access token so other apps cannot directly call scan or file-write endpoints.",
++      "storage_title": "Storage and writeback",
++      "storage_desc": "Writes into a video folder use Android's folder authorization bridge, so covers and NFO files do not have to stay in the app's private folder.",
++      "storage_android10": "Android 10: grant read/write storage access. Writing to an SD card also requires folder authorization.",
++      "storage_android11": "Android 11 and later: use all-files access. Folder authorization is still recommended for SD cards.",
++      "storage_sidecars": "NFO, cover, poster, fanart, fetched samples, and translated titles are written back beside the video when possible.",
++      "storage_readonly": "Read-only sources are never modified. Generated media is stored in the app's private folder.",
++      "storage_saf": "If writing fails, authorize the writable folder again instead of clearing app data.",
++      "tasks_title": "Common tasks",
++      "task_scan_title": "Add or refresh the library",
++      "task_scan_desc": "Return to Scanner and scan again after adding videos.",
++      "task_meta_title": "Rescrape metadata",
++      "task_meta_desc": "Use advanced rescrape from the video details or menu to choose a source.",
++      "task_tag_title": "Change the tag source in bulk",
++      "task_tag_desc": "Preview the change in Scanner's batch maintenance section before running it.",
++      "task_samples_title": "Fetch samples",
++      "task_samples_desc": "Run it from the details menu. The app clearly reports when a source has no samples.",
++      "task_translate_title": "Translate a title",
++      "task_translate_desc": "Configure a translation service, then run it beside the title. The result is written to the NFO.",
++      "task_play_title": "Play a video",
++      "task_play_desc": "The system lets you choose from installed video player apps.",
++      "trouble_title": "Check these first",
++      "trouble_log": "When a task fails, expand the log card on the page and copy the error details.",
++      "trouble_service_title": "The local service will not start",
++      "trouble_service_desc": "Confirm storage access is still granted and tap Retry local service. If it still fails, force-stop and reopen the app without clearing data.",
++      "trouble_scan_title": "No videos are found",
++      "trouble_scan_desc": "Check the selected folder, confirm permissions are still valid, and make sure the video extension is supported.",
++      "trouble_write_title": "NFO, cover, or sample writeback fails",
++      "trouble_write_desc": "Authorize the writable folder again, confirm it is not read-only, and check that enough storage is available.",
++      "trouble_source_title": "Scraping or sample fetching fails",
++      "trouble_source_desc": "The source may be unavailable, require Cloudflare verification, or have no samples. Try another source.",
++      "trouble_translate_title": "Title translation fails",
++      "trouble_translate_desc": "Check the translation service, API settings, and network. If the video has no NFO, complete metadata writeback first.",
++      "privacy_title": "Privacy",
++      "privacy_desc": "OpenAver Mobile does not collect your library or upload local videos. Network requests are used only for metadata sources, image downloads, and translation services that you start.",
++      "about_title": "Credits and source",
++      "about_desc": "The mobile edition is ported from desktop OpenAver. Thanks to original author slive777 and all upstream contributors.",
++      "about_upstream": "Original desktop project on GitHub",
++      "about_mobile": "Mobile source and releases",
++      "license": "Follow the upstream license and the laws that apply in your location."
++    },
+     "hero": {
+       "copy_curl": "Copy Command",
+       "page_title": "Help Guide",
+@@ -1845,6 +2048,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -206,7 +287,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +1992,11 @@
+@@ -1860,7 +2069,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -219,7 +300,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2014,15 @@
+@@ -1878,11 +2091,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -411,7 +492,7 @@
        "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
        "jellyfin_suffix": "本",
        "jellyfin_update_title": "Jellyfin poster + fanart を補完",
-@@ -1410,6 +1533,9 @@
+@@ -1410,10 +1533,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -421,7 +502,88 @@
        "multi_video_error": "このフォルダに他の動画があります。画像を取得すると他の動画に影響します。動画を専用フォルダに移動してからお試しください。"
      }
    },
-@@ -1845,6 +1971,12 @@
+   "help": {
++    "mobile": {
++      "page_title": "スマートフォン向けガイド",
++      "eyebrow": "OpenAver Mobile",
++      "title": "スマートフォン内のライブラリをここから",
++      "title_line1": "スマートフォン内の",
++      "title_line2": "ライブラリをここから",
++      "subtitle": "スマートフォンや SD カードの動画をスキャンし、NFO、カバー、サンプル、再生を端末内で管理します。PC や NAS は不要です。",
++      "version": "現在のバージョン",
++      "local_only": "完全ローカル動作",
++      "action_scan": "リスト生成へ",
++      "action_browse": "ライブラリを開く",
++      "jump_start": "クイックスタート",
++      "jump_storage": "保存と書き込み",
++      "jump_tasks": "よく使う機能",
++      "jump_trouble": "トラブル解決",
++      "jump_about": "謝辞とソース",
++      "status_local_title": "内蔵サービス",
++      "status_local_desc": "Python サービスは端末内だけで待ち受け、PC に依存しません。",
++      "status_files_title": "ファイルを直接読み書き",
++      "status_files_desc": "動画、NFO、カバー、サンプルは自分で管理するフォルダーに保存されます。",
++      "status_private_title": "データは端末内に保存",
++      "status_private_desc": "ライブラリはアップロードされません。スクレイピングや翻訳を実行したときだけ通信します。",
++      "start_title": "4 ステップで初期設定",
++      "start_desc": "最初に一度だけ設定してください。動画を追加した後は再スキャンするだけです。",
++      "step1_title": "ストレージ権限を許可",
++      "step1_desc": "Android 10 では読み書き権限、Android 11 以降では「すべてのファイルへのアクセス」を許可します。",
++      "step2_title": "書き込み可能なフォルダーを許可",
++      "step2_desc": "動画が SD カードにある場合、メニューの「書き込み可能フォルダーを許可」でスキャン対象と同じフォルダーを選びます。",
++      "step3_title": "フォルダーを選んで生成",
++      "step3_desc": "「リスト生成」で動画フォルダーを選び、スキャンします。結果は端末内のデータベースに保存されます。",
++      "step4_title": "閲覧と再生",
++      "step4_desc": "「閲覧」でカバーと詳細を確認できます。再生はインストール済みのシステム動画プレーヤーに渡されます。",
++      "local_title": "スマートフォン内ローカルモード",
++      "local_desc": "OpenAver のサービス、データベース、メディア処理はすべて端末内で動作します。",
++      "local_1": "PC、NAS、外部 OpenAver サーバーには接続しません。",
++      "local_2": "スクレイピング、サンプル取得、タイトル翻訳などの通信は、自分で実行したときだけ行われます。",
++      "local_3": "ローカル API はランダムなアクセストークンを使用し、他のアプリからスキャンやファイル書き込みを直接呼び出せません。",
++      "storage_title": "保存と書き戻し",
++      "storage_desc": "動画フォルダーへの書き込みには Android のフォルダー許可ブリッジを使うため、カバーや NFO をアプリ専用フォルダーに固定する必要はありません。",
++      "storage_android10": "Android 10：ストレージの読み書き権限が必要です。SD カードへの書き込みにはフォルダー許可も必要です。",
++      "storage_android11": "Android 11 以降：「すべてのファイルへのアクセス」を使用します。SD カードではフォルダー許可も推奨します。",
++      "storage_sidecars": "NFO、カバー、poster、fanart、取得したサンプル、翻訳タイトルは可能な限り動画と同じフォルダーへ書き戻します。",
++      "storage_readonly": "読み取り専用ソースは変更しません。生成したメディアはアプリ専用フォルダーに保存します。",
++      "storage_saf": "書き込みに失敗した場合は、アプリデータを消さず「書き込み可能フォルダーを許可」をやり直してください。",
++      "tasks_title": "よく使う機能",
++      "task_scan_title": "ライブラリを追加・更新",
++      "task_scan_desc": "動画を追加したら「リスト生成」に戻って再スキャンします。",
++      "task_meta_title": "メタデータを再取得",
++      "task_meta_desc": "動画の詳細またはメニューから高度な再取得を選び、ソースを指定できます。",
++      "task_tag_title": "タグソースを一括変更",
++      "task_tag_desc": "「リスト生成」の一括メンテナンスでプレビューしてから実行します。",
++      "task_samples_title": "サンプル画像を取得",
++      "task_samples_desc": "詳細メニューから実行します。ソースにサンプルがない場合も明確に表示されます。",
++      "task_translate_title": "タイトルを翻訳",
++      "task_translate_desc": "翻訳サービスを設定し、タイトル横から実行します。結果は NFO に書き込まれます。",
++      "task_play_title": "動画を再生",
++      "task_play_desc": "再生時に、インストール済みの動画プレーヤーから選択できます。",
++      "trouble_title": "問題が起きたら最初に確認",
++      "trouble_log": "タスクに失敗したら、ページのログカードを開いてエラー情報をコピーしてください。",
++      "trouble_service_title": "ローカルサービスが起動しない",
++      "trouble_service_desc": "ストレージ権限が残っていることを確認し、「ローカルサービスを再試行」を押します。改善しない場合はデータを消さずにアプリを強制停止して開き直してください。",
++      "trouble_scan_title": "動画が見つからない",
++      "trouble_scan_desc": "選択したフォルダー、権限の有効性、対応している動画拡張子を確認してください。",
++      "trouble_write_title": "NFO、カバー、サンプルの書き込みに失敗",
++      "trouble_write_desc": "書き込み可能フォルダーを再許可し、読み取り専用でないことと空き容量を確認してください。",
++      "trouble_source_title": "スクレイピングやサンプル取得に失敗",
++      "trouble_source_desc": "ソースが一時的に利用できない、Cloudflare 認証が必要、またはサンプルがない可能性があります。別のソースを試してください。",
++      "trouble_translate_title": "タイトル翻訳に失敗",
++      "trouble_translate_desc": "翻訳サービス、API 設定、ネットワークを確認してください。NFO がない動画は先にメタデータを書き戻してください。",
++      "privacy_title": "プライバシー",
++      "privacy_desc": "OpenAver Mobile はライブラリを収集せず、端末内の動画をアップロードしません。通信は、自分で実行したメタデータ取得、画像ダウンロード、翻訳サービスにのみ使用されます。",
++      "about_title": "謝辞とソース",
++      "about_desc": "モバイル版はデスクトップ版 OpenAver から移植されています。原作者 slive777 とすべての上流コントリビューターに感謝します。",
++      "about_upstream": "デスクトップ版原作者の GitHub",
++      "about_mobile": "モバイル版ソースとリリース",
++      "license": "上流プロジェクトのライセンスと所在地の法令を遵守してください。"
++    },
+     "hero": {
+       "copy_curl": "コマンドをコピー",
+       "page_title": "使い方",
+@@ -1845,6 +2048,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -434,7 +596,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +1992,11 @@
+@@ -1860,7 +2069,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -447,7 +609,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2014,15 @@
+@@ -1878,11 +2091,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -639,7 +801,7 @@
        "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
-@@ -1410,6 +1533,9 @@
+@@ -1410,10 +1533,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -649,7 +811,88 @@
        "multi_video_error": "此文件夹有其他视频，补抓剧照会污染其他片，请先将视频移至独立文件夹再试"
      }
    },
-@@ -1845,6 +1971,12 @@
+   "help": {
++    "mobile": {
++      "page_title": "手机使用说明",
++      "eyebrow": "OpenAver Mobile",
++      "title": "手机本地片库，从这里开始",
++      "title_line1": "手机本地片库，",
++      "title_line2": "从这里开始",
++      "subtitle": "扫描手机或 SD 卡里的视频，在本机管理 NFO、封面、剧照和播放，不需要电脑或 NAS。",
++      "version": "当前版本",
++      "local_only": "完全本地运行",
++      "action_scan": "去列表生成",
++      "action_browse": "打开浏览",
++      "jump_start": "快速开始",
++      "jump_storage": "存储写入",
++      "jump_tasks": "常用功能",
++      "jump_trouble": "故障排查",
++      "jump_about": "致谢与源码",
++      "status_local_title": "内嵌服务",
++      "status_local_desc": "Python 服务只监听手机本机，不依赖电脑。",
++      "status_files_title": "文件直读直写",
++      "status_files_desc": "视频、NFO、封面和剧照保存在你自己的目录。",
++      "status_private_title": "数据留在本机",
++      "status_private_desc": "片库不会上传；只有你主动刮削或翻译时才会联网。",
++      "start_title": "四步完成首次设置",
++      "start_desc": "建议按顺序完成；以后新增视频只需要重新扫描。",
++      "step1_title": "授予存储权限",
++      "step1_desc": "Android 10 授予读写存储；Android 11 及以上授予“所有文件访问权限”。",
++      "step2_title": "授权可写目录",
++      "step2_desc": "视频在 SD 卡时，打开菜单 →“授权可写目录”，选中与扫描目录相同的文件夹。",
++      "step3_title": "选择目录并生成",
++      "step3_desc": "进入“列表生成”，选择视频目录后扫描；结果会保存在本地数据库。",
++      "step4_title": "浏览与播放",
++      "step4_desc": "进入“浏览”查看封面和详情，播放时交给系统视频播放器。",
++      "local_title": "手机本地模式",
++      "local_desc": "OpenAver 的服务、数据库和媒体处理都在手机内完成。",
++      "local_1": "不会连接电脑、NAS 或外部 OpenAver 服务器。",
++      "local_2": "刮削、补抓剧照、翻译标题等联网功能只在你主动操作时运行。",
++      "local_3": "本机 API 带随机访问令牌，其他 App 不能直接调用扫描或文件写入接口。",
++      "storage_title": "存储与写回",
++      "storage_desc": "写入视频目录时使用 Android 目录授权桥接，不再要求把封面和 NFO 固定放到 App 私有目录。",
++      "storage_android10": "Android 10：需要存储读写权限；SD 卡写入还需要目录授权。",
++      "storage_android11": "Android 11 及以上：使用“所有文件访问权限”，SD 卡仍建议完成目录授权。",
++      "storage_sidecars": "NFO、封面、poster、fanart、补抓剧照和翻译标题会优先写回视频所在目录。",
++      "storage_readonly": "只读来源不会修改原文件；需要生成的媒体会放到 App 私有目录。",
++      "storage_saf": "如果写入失败，重新执行“授权可写目录”，不要直接删除 App 数据。",
++      "tasks_title": "常用功能",
++      "task_scan_title": "新增或更新片库",
++      "task_scan_desc": "新增视频后回到“列表生成”重新扫描。",
++      "task_meta_title": "重新刮削元数据",
++      "task_meta_desc": "在影片详情或菜单里选择高级重新刮削，可指定来源。",
++      "task_tag_title": "批量更换标签来源",
++      "task_tag_desc": "在“列表生成”的批量维护区预览后再执行。",
++      "task_samples_title": "补抓剧照",
++      "task_samples_desc": "从详情菜单执行；来源没有剧照时会明确提示。",
++      "task_translate_title": "翻译标题",
++      "task_translate_desc": "配置翻译服务后，在详情标题旁执行；结果会写回 NFO。",
++      "task_play_title": "播放视频",
++      "task_play_desc": "点击播放后由系统选择已安装的视频播放 App。",
++      "trouble_title": "遇到问题时先检查",
++      "trouble_log": "任务失败时可展开页面上的日志卡并复制错误信息。",
++      "trouble_service_title": "本地服务启动失败",
++      "trouble_service_desc": "确认存储权限仍在，点“重试启动本地服务”；仍失败时强制停止 App 后重新打开，不要清除数据。",
++      "trouble_scan_title": "扫描不到视频",
++      "trouble_scan_desc": "确认目录选择正确、权限没有失效，并检查视频扩展名是否受支持。",
++      "trouble_write_title": "NFO、封面或剧照写入失败",
++      "trouble_write_desc": "重新授权可写目录；确认目录不是只读，并保留足够的存储空间。",
++      "trouble_source_title": "刮削或补抓剧照失败",
++      "trouble_source_desc": "来源可能暂时不可用、被 Cloudflare 验证或没有剧照；可换来源后重试。",
++      "trouble_translate_title": "标题翻译失败",
++      "trouble_translate_desc": "检查翻译服务、API 配置和网络；若影片没有 NFO，先完成元数据写回。",
++      "privacy_title": "隐私说明",
++      "privacy_desc": "OpenAver Mobile 不收集片库内容，也不会上传本地视频。联网请求只用于你主动触发的元数据来源、图片下载和翻译服务。",
++      "about_title": "致谢与源码",
++      "about_desc": "移动版基于桌面版 OpenAver 移植，感谢原作者 slive777 及所有上游贡献者。",
++      "about_upstream": "桌面版原作者 GitHub",
++      "about_mobile": "移动版源码与发布",
++      "license": "请遵守原项目许可证及所在地法律法规。"
++    },
+     "hero": {
+       "copy_curl": "复制命令",
+       "page_title": "使用说明",
+@@ -1845,6 +2048,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -662,7 +905,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +1992,11 @@
+@@ -1860,7 +2069,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -675,7 +918,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2014,15 @@
+@@ -1878,11 +2091,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -867,7 +1110,7 @@
        "jellyfin_prefix": "外部媒體管理器封面缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "補齊 poster + fanart",
-@@ -1410,6 +1533,9 @@
+@@ -1410,10 +1533,90 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -877,7 +1120,88 @@
        "multi_video_error": "此資料夾有其他影片，補抓劇照會污染其他片，請先將影片搬到獨立資料夾再試"
      }
    },
-@@ -1850,6 +1976,12 @@
+   "help": {
++    "mobile": {
++      "page_title": "手機使用說明",
++      "eyebrow": "OpenAver Mobile",
++      "title": "手機本機片庫，從這裡開始",
++      "title_line1": "手機本機片庫，",
++      "title_line2": "從這裡開始",
++      "subtitle": "掃描手機或 SD 卡裡的影片，在本機管理 NFO、封面、劇照和播放，不需要電腦或 NAS。",
++      "version": "目前版本",
++      "local_only": "完全本機執行",
++      "action_scan": "前往列表生成",
++      "action_browse": "開啟瀏覽",
++      "jump_start": "快速開始",
++      "jump_storage": "儲存寫入",
++      "jump_tasks": "常用功能",
++      "jump_trouble": "疑難排解",
++      "jump_about": "致謝與原始碼",
++      "status_local_title": "內嵌服務",
++      "status_local_desc": "Python 服務只監聽手機本機，不依賴電腦。",
++      "status_files_title": "檔案直接讀寫",
++      "status_files_desc": "影片、NFO、封面和劇照保存在你自己的目錄。",
++      "status_private_title": "資料留在本機",
++      "status_private_desc": "片庫不會上傳；只有你主動刮削或翻譯時才會連網。",
++      "start_title": "四步完成首次設定",
++      "start_desc": "建議依序完成；之後新增影片只需要重新掃描。",
++      "step1_title": "授予儲存權限",
++      "step1_desc": "Android 10 授予讀寫儲存；Android 11 以上授予「所有檔案存取權限」。",
++      "step2_title": "授權可寫目錄",
++      "step2_desc": "影片在 SD 卡時，開啟選單 →「授權可寫目錄」，選取與掃描目錄相同的資料夾。",
++      "step3_title": "選擇目錄並產生",
++      "step3_desc": "進入「列表生成」，選擇影片目錄後掃描；結果會保存在本機資料庫。",
++      "step4_title": "瀏覽與播放",
++      "step4_desc": "進入「瀏覽」查看封面和詳細資料，播放時交給系統影片播放器。",
++      "local_title": "手機本機模式",
++      "local_desc": "OpenAver 的服務、資料庫和媒體處理都在手機內完成。",
++      "local_1": "不會連線到電腦、NAS 或外部 OpenAver 伺服器。",
++      "local_2": "刮削、補抓劇照、翻譯標題等連網功能只在你主動操作時執行。",
++      "local_3": "本機 API 帶有隨機存取權杖，其他 App 不能直接呼叫掃描或檔案寫入介面。",
++      "storage_title": "儲存與寫回",
++      "storage_desc": "寫入影片目錄時使用 Android 目錄授權橋接，不再要求把封面和 NFO 固定放到 App 私有目錄。",
++      "storage_android10": "Android 10：需要儲存讀寫權限；SD 卡寫入還需要目錄授權。",
++      "storage_android11": "Android 11 以上：使用「所有檔案存取權限」，SD 卡仍建議完成目錄授權。",
++      "storage_sidecars": "NFO、封面、poster、fanart、補抓劇照和翻譯標題會優先寫回影片所在目錄。",
++      "storage_readonly": "唯讀來源不會修改原始檔案；需要產生的媒體會放到 App 私有目錄。",
++      "storage_saf": "如果寫入失敗，重新執行「授權可寫目錄」，不要直接刪除 App 資料。",
++      "tasks_title": "常用功能",
++      "task_scan_title": "新增或更新片庫",
++      "task_scan_desc": "新增影片後回到「列表生成」重新掃描。",
++      "task_meta_title": "重新刮削中繼資料",
++      "task_meta_desc": "在影片詳細資料或選單裡選擇進階重新刮削，可指定來源。",
++      "task_tag_title": "批次更換標籤來源",
++      "task_tag_desc": "在「列表生成」的批次維護區預覽後再執行。",
++      "task_samples_title": "補抓劇照",
++      "task_samples_desc": "從詳細資料選單執行；來源沒有劇照時會明確提示。",
++      "task_translate_title": "翻譯標題",
++      "task_translate_desc": "設定翻譯服務後，在詳細資料標題旁執行；結果會寫回 NFO。",
++      "task_play_title": "播放影片",
++      "task_play_desc": "點擊播放後由系統選擇已安裝的影片播放 App。",
++      "trouble_title": "遇到問題時先檢查",
++      "trouble_log": "任務失敗時可展開頁面上的日誌卡並複製錯誤資訊。",
++      "trouble_service_title": "本機服務啟動失敗",
++      "trouble_service_desc": "確認儲存權限仍在，點「重試啟動本機服務」；仍失敗時強制停止 App 後重新開啟，不要清除資料。",
++      "trouble_scan_title": "掃描不到影片",
++      "trouble_scan_desc": "確認目錄選擇正確、權限沒有失效，並檢查影片副檔名是否受支援。",
++      "trouble_write_title": "NFO、封面或劇照寫入失敗",
++      "trouble_write_desc": "重新授權可寫目錄；確認目錄不是唯讀，並保留足夠的儲存空間。",
++      "trouble_source_title": "刮削或補抓劇照失敗",
++      "trouble_source_desc": "來源可能暫時不可用、被 Cloudflare 驗證或沒有劇照；可換來源後重試。",
++      "trouble_translate_title": "標題翻譯失敗",
++      "trouble_translate_desc": "檢查翻譯服務、API 設定和網路；若影片沒有 NFO，先完成中繼資料寫回。",
++      "privacy_title": "隱私說明",
++      "privacy_desc": "OpenAver Mobile 不收集片庫內容，也不會上傳本機影片。連網請求只用於你主動觸發的中繼資料來源、圖片下載和翻譯服務。",
++      "about_title": "致謝與原始碼",
++      "about_desc": "行動版基於桌面版 OpenAver 移植，感謝原作者 slive777 及所有上游貢獻者。",
++      "about_upstream": "桌面版原作者 GitHub",
++      "about_mobile": "行動版原始碼與發布",
++      "license": "請遵守原專案授權條款及所在地法律法規。"
++    },
+     "hero": {
+       "this_computer_unavailable": "暫時讀不到這台電腦的更新資訊，請重新開啟說明頁再試",
+       "copy_curl": "複製指令",
+@@ -1850,6 +2053,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -890,7 +1214,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1865,7 +1997,11 @@
+@@ -1865,7 +2074,11 @@
        "costar": "與她同片"
      },
      "donut": {
@@ -903,7 +1227,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2019,15 @@
+@@ -1883,11 +2096,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -1607,6 +1931,570 @@
 +  100% { transform: translateX(100%); }
 +}
 +
+--- /dev/null
++++ b/web/static/css/pages/help-mobile.css
+@@ -0,0 +1,561 @@
++.mobile-help {
++    --mobile-help-ink: #102a2a;
++    --mobile-help-teal: #0f766e;
++    --mobile-help-teal-soft: #d9f3ec;
++    --mobile-help-amber: #d97706;
++    --mobile-help-paper: color-mix(in oklch, var(--surface-1) 92%, #e9f4ef 8%);
++    --mobile-help-border: color-mix(in oklch, var(--stroke-default) 82%, var(--mobile-help-teal) 18%);
++    min-height: 100%;
++    padding: 0 0 2rem;
++    background:
++        radial-gradient(circle at 8% 4%, color-mix(in oklch, var(--mobile-help-teal) 12%, transparent) 0, transparent 28rem),
++        radial-gradient(circle at 92% 14%, color-mix(in oklch, var(--mobile-help-amber) 9%, transparent) 0, transparent 22rem);
++}
++
++[data-theme="dim"] .mobile-help {
++    --mobile-help-ink: #e7f6f2;
++    --mobile-help-teal: #63d6c6;
++    --mobile-help-teal-soft: #173b37;
++    --mobile-help-amber: #f5b85b;
++    --mobile-help-paper: color-mix(in oklch, var(--surface-1) 90%, #0e2725 10%);
++}
++
++.mobile-help__inner {
++    width: min(100%, 52rem);
++    margin: 0 auto;
++    padding: 1rem;
++}
++
++.mobile-help-hero {
++    position: relative;
++    overflow: hidden;
++    display: grid;
++    gap: 1rem;
++    padding: 1.35rem;
++    color: #f4fffc;
++    border-radius: 1.35rem;
++    background:
++        linear-gradient(135deg, #0b3b3a 0%, #102a2a 54%, #172f3a 100%);
++    box-shadow: 0 1rem 2.5rem color-mix(in oklch, #102a2a 24%, transparent);
++}
++
++.mobile-help-hero::after {
++    content: '';
++    position: absolute;
++    inset: auto -4rem -6rem auto;
++    width: 15rem;
++    height: 15rem;
++    border: 1px solid rgb(255 255 255 / 14%);
++    border-radius: 50%;
++    box-shadow:
++        0 0 0 2.2rem rgb(255 255 255 / 5%),
++        0 0 0 4.8rem rgb(255 255 255 / 3%);
++    pointer-events: none;
++}
++
++.mobile-help-hero__copy {
++    position: relative;
++    z-index: 1;
++}
++
++.mobile-help-eyebrow {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.4rem;
++    min-height: 1.75rem;
++    padding: 0.2rem 0.65rem;
++    border: 1px solid rgb(255 255 255 / 18%);
++    border-radius: 999px;
++    color: #9ce9db;
++    background: rgb(255 255 255 / 7%);
++    font-size: 0.75rem;
++    font-weight: 700;
++    letter-spacing: 0.04em;
++}
++
++.mobile-help-hero h1 {
++    margin: 0.8rem 0 0.45rem;
++    color: #fff;
++    font-size: clamp(1.7rem, 7vw, 2.6rem);
++    line-height: 1.08;
++    letter-spacing: -0.04em;
++}
++
++.mobile-help-hero h1 span {
++    display: block;
++}
++
++.mobile-help-hero p {
++    max-width: 36rem;
++    margin: 0;
++    color: rgb(239 255 251 / 76%);
++    font-size: 0.92rem;
++    line-height: 1.65;
++}
++
++.mobile-help-meta {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 0.55rem 1rem;
++    margin-top: 0.9rem;
++    color: rgb(239 255 251 / 64%);
++    font-size: 0.75rem;
++}
++
++.mobile-help-meta span {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.3rem;
++}
++
++.mobile-help-actions {
++    display: grid;
++    grid-template-columns: 1fr 1fr;
++    gap: 0.65rem;
++    margin-top: 1.15rem;
++}
++
++.mobile-help-button {
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    gap: 0.45rem;
++    min-height: 3rem;
++    padding: 0.65rem 0.85rem;
++    border: 1px solid rgb(255 255 255 / 22%);
++    border-radius: 0.85rem;
++    color: #f4fffc;
++    background: rgb(255 255 255 / 8%);
++    font-size: 0.86rem;
++    font-weight: 700;
++    text-decoration: none;
++}
++
++.mobile-help-button--primary {
++    color: #092c29;
++    border-color: #8ce5d4;
++    background: #8ce5d4;
++}
++
++.mobile-help-hero__signal {
++    position: relative;
++    z-index: 1;
++    display: none;
++    min-height: 12rem;
++    place-items: center;
++}
++
++.mobile-help-hero__signal i {
++    display: grid;
++    width: 5.5rem;
++    height: 5.5rem;
++    place-items: center;
++    border: 1px solid rgb(255 255 255 / 18%);
++    border-radius: 1.4rem;
++    color: #baf4e8;
++    background: rgb(255 255 255 / 8%);
++    box-shadow: 0 1rem 3rem rgb(0 0 0 / 18%);
++    font-size: 2.1rem;
++}
++
++.mobile-help-hero__signal span {
++    position: absolute;
++    width: 0.55rem;
++    height: 0.55rem;
++    border-radius: 50%;
++    background: #f5b85b;
++    box-shadow: 0 0 0 0.35rem rgb(245 184 91 / 14%);
++}
++
++.mobile-help-hero__signal span:nth-child(1) { top: 18%; left: 20%; }
++.mobile-help-hero__signal span:nth-child(2) { top: 30%; right: 18%; }
++.mobile-help-hero__signal span:nth-child(3) { bottom: 18%; left: 34%; }
++
++.mobile-help-jump {
++    display: flex;
++    gap: 0.5rem;
++    margin: 0.9rem -0.25rem 0;
++    padding: 0.25rem;
++    overflow-x: auto;
++    scrollbar-width: none;
++}
++
++.mobile-help-jump::-webkit-scrollbar {
++    display: none;
++}
++
++.mobile-help-jump a {
++    flex: 0 0 auto;
++    display: inline-flex;
++    align-items: center;
++    min-height: 2.75rem;
++    padding: 0.55rem 0.85rem;
++    border: 1px solid var(--mobile-help-border);
++    border-radius: 999px;
++    color: var(--text-secondary);
++    background: var(--mobile-help-paper);
++    font-size: 0.78rem;
++    font-weight: 650;
++    text-decoration: none;
++}
++
++.mobile-help-status {
++    display: grid;
++    gap: 0.65rem;
++    margin-top: 0.65rem;
++}
++
++.mobile-help-status article {
++    display: grid;
++    grid-template-columns: 2.4rem 1fr;
++    gap: 0.75rem;
++    align-items: start;
++    padding: 0.9rem;
++    border: 1px solid var(--mobile-help-border);
++    border-radius: 1rem;
++    background: var(--mobile-help-paper);
++}
++
++.mobile-help-status article > i {
++    display: grid;
++    width: 2.4rem;
++    height: 2.4rem;
++    place-items: center;
++    border-radius: 0.75rem;
++    color: var(--mobile-help-teal);
++    background: var(--mobile-help-teal-soft);
++    font-size: 1.1rem;
++}
++
++.mobile-help-status h2,
++.mobile-help-task-grid h3,
++.mobile-help-trouble h3 {
++    margin: 0;
++    color: var(--text-primary);
++    font-size: 0.9rem;
++    font-weight: 750;
++}
++
++.mobile-help-status p,
++.mobile-help-task-grid p,
++.mobile-help-trouble p,
++.mobile-help-panel__body p,
++.mobile-help-list {
++    margin: 0.3rem 0 0;
++    color: var(--text-secondary);
++    font-size: 0.82rem;
++    line-height: 1.62;
++}
++
++.mobile-help-section {
++    margin-top: 1.35rem;
++    scroll-margin-top: 5.5rem;
++}
++
++.mobile-help-section__head {
++    display: grid;
++    grid-template-columns: 2.4rem 1fr;
++    gap: 0.7rem;
++    align-items: start;
++    margin-bottom: 0.75rem;
++}
++
++.mobile-help-section__head > span {
++    display: grid;
++    width: 2.4rem;
++    height: 2.4rem;
++    place-items: center;
++    border-radius: 50%;
++    color: #092c29;
++    background: #9ce9db;
++    font-size: 0.72rem;
++    font-weight: 800;
++}
++
++.mobile-help-section__head h2 {
++    margin: 0;
++    color: var(--text-primary);
++    font-size: 1.2rem;
++    line-height: 1.3;
++    letter-spacing: -0.02em;
++}
++
++.mobile-help-section__head p {
++    margin: 0.25rem 0 0;
++    color: var(--text-muted);
++    font-size: 0.82rem;
++    line-height: 1.55;
++}
++
++.mobile-help-steps {
++    display: grid;
++    gap: 0.55rem;
++    margin: 0;
++    padding: 0;
++    list-style: none;
++    counter-reset: none;
++}
++
++.mobile-help-steps li {
++    display: grid;
++    grid-template-columns: 2.2rem 1fr;
++    gap: 0.7rem;
++    padding: 0.9rem;
++    border: 1px solid var(--mobile-help-border);
++    border-radius: 1rem;
++    background: var(--mobile-help-paper);
++}
++
++.mobile-help-steps li > span {
++    display: grid;
++    width: 2.2rem;
++    height: 2.2rem;
++    place-items: center;
++    border-radius: 0.7rem;
++    color: var(--mobile-help-teal);
++    background: var(--mobile-help-teal-soft);
++    font-size: 0.8rem;
++    font-weight: 800;
++}
++
++.mobile-help-steps h3 {
++    margin: 0;
++    color: var(--text-primary);
++    font-size: 0.9rem;
++}
++
++.mobile-help-steps p {
++    margin: 0.25rem 0 0;
++    color: var(--text-secondary);
++    font-size: 0.8rem;
++    line-height: 1.58;
++}
++
++.mobile-help-panel {
++    margin-top: 0.75rem;
++    border: 1px solid var(--mobile-help-border);
++    border-radius: 1rem;
++    background: var(--mobile-help-paper);
++    scroll-margin-top: 5.5rem;
++}
++
++.mobile-help-panel summary {
++    display: grid;
++    grid-template-columns: 2.5rem 1fr 1.5rem;
++    gap: 0.7rem;
++    align-items: center;
++    min-height: 4.5rem;
++    padding: 0.85rem;
++    cursor: pointer;
++    list-style: none;
++}
++
++.mobile-help-panel summary::-webkit-details-marker {
++    display: none;
++}
++
++.mobile-help-panel__icon {
++    display: grid;
++    width: 2.5rem;
++    height: 2.5rem;
++    place-items: center;
++    border-radius: 0.75rem;
++    color: var(--mobile-help-teal);
++    background: var(--mobile-help-teal-soft);
++    font-size: 1.05rem;
++}
++
++.mobile-help-panel summary strong,
++.mobile-help-panel summary small {
++    display: block;
++}
++
++.mobile-help-panel summary strong {
++    color: var(--text-primary);
++    font-size: 0.92rem;
++}
++
++.mobile-help-panel summary small {
++    margin-top: 0.15rem;
++    color: var(--text-muted);
++    font-size: 0.75rem;
++    line-height: 1.45;
++}
++
++.mobile-help-panel__chevron {
++    color: var(--text-muted);
++    transition: transform 160ms ease;
++}
++
++.mobile-help-panel[open] .mobile-help-panel__chevron {
++    transform: rotate(180deg);
++}
++
++.mobile-help-panel__body {
++    padding: 0 0.9rem 0.95rem;
++}
++
++.mobile-help-list {
++    display: grid;
++    gap: 0.55rem;
++    padding-left: 0;
++    list-style: none;
++}
++
++.mobile-help-list li {
++    position: relative;
++    padding-left: 1rem;
++}
++
++.mobile-help-list li::before {
++    content: '';
++    position: absolute;
++    top: 0.62em;
++    left: 0;
++    width: 0.38rem;
++    height: 0.38rem;
++    border-radius: 50%;
++    background: var(--mobile-help-teal);
++}
++
++.mobile-help-task-grid {
++    display: grid;
++    gap: 0.6rem;
++}
++
++.mobile-help-task-grid article {
++    padding: 0.9rem;
++    border: 1px solid var(--mobile-help-border);
++    border-radius: 1rem;
++    background: var(--mobile-help-paper);
++}
++
++.mobile-help-task-grid article > i {
++    color: var(--mobile-help-amber);
++    font-size: 1.1rem;
++}
++
++.mobile-help-task-grid h3 {
++    margin-top: 0.45rem;
++}
++
++.mobile-help-panel--warning {
++    border-color: color-mix(in oklch, var(--mobile-help-amber) 34%, var(--mobile-help-border));
++}
++
++.mobile-help-panel--warning .mobile-help-panel__icon {
++    color: var(--mobile-help-amber);
++    background: color-mix(in oklch, var(--mobile-help-amber) 13%, transparent);
++}
++
++.mobile-help-trouble {
++    display: grid;
++    gap: 0.85rem;
++}
++
++.mobile-help-trouble article {
++    padding-top: 0.85rem;
++    border-top: 1px solid var(--stroke-subtle);
++}
++
++.mobile-help-trouble article:first-child {
++    padding-top: 0;
++    border-top: 0;
++}
++
++.mobile-help-about {
++    display: grid;
++    gap: 1rem;
++    margin-top: 1.35rem;
++    padding: 1.15rem;
++    border: 1px solid var(--mobile-help-border);
++    border-radius: 1.2rem;
++    background:
++        linear-gradient(135deg, color-mix(in oklch, var(--mobile-help-teal-soft) 78%, transparent), transparent),
++        var(--mobile-help-paper);
++    scroll-margin-top: 5.5rem;
++}
++
++.mobile-help-about .mobile-help-eyebrow {
++    color: var(--mobile-help-teal);
++    border-color: var(--mobile-help-border);
++    background: transparent;
++}
++
++.mobile-help-about h2 {
++    margin: 0.7rem 0 0.35rem;
++    color: var(--text-primary);
++    font-size: 1.05rem;
++    line-height: 1.5;
++}
++
++.mobile-help-about p {
++    margin: 0;
++    color: var(--text-muted);
++    font-size: 0.78rem;
++    line-height: 1.55;
++}
++
++.mobile-help-about__links {
++    display: grid;
++    gap: 0.55rem;
++}
++
++.mobile-help-about__links a {
++    display: inline-flex;
++    align-items: center;
++    justify-content: flex-start;
++    gap: 0.6rem;
++    min-height: 3rem;
++    padding: 0.65rem 0.85rem;
++    border: 1px solid var(--mobile-help-border);
++    border-radius: 0.8rem;
++    color: var(--text-primary);
++    background: color-mix(in oklch, var(--surface-1) 82%, transparent);
++    font-size: 0.82rem;
++    font-weight: 650;
++    text-decoration: none;
++}
++
++@media (min-width: 42rem) {
++    .mobile-help__inner {
++        padding: 1.5rem;
++    }
++
++    .mobile-help-hero {
++        grid-template-columns: minmax(0, 1.6fr) minmax(12rem, 0.7fr);
++        padding: 1.7rem;
++    }
++
++    .mobile-help-hero__signal {
++        display: grid;
++    }
++
++    .mobile-help-status {
++        grid-template-columns: repeat(3, minmax(0, 1fr));
++    }
++
++    .mobile-help-steps,
++    .mobile-help-task-grid {
++        grid-template-columns: repeat(2, minmax(0, 1fr));
++    }
++
++    .mobile-help-trouble {
++        grid-template-columns: repeat(2, minmax(0, 1fr));
++    }
++
++    .mobile-help-about {
++        grid-template-columns: 1fr 16rem;
++        align-items: center;
++    }
++
++    .mobile-help-panel__body {
++        padding-left: 4.05rem;
++    }
++}
++
++@media (prefers-reduced-motion: reduce) {
++    .mobile-help-panel__chevron {
++        transition: none;
++    }
++}
 --- a/web/static/css/pages/insights.css
 +++ b/web/static/css/pages/insights.css
 @@ -4,14 +4,20 @@
@@ -1619,9 +2507,9 @@
 +  --insights-maker-1: #2b6cb0; --insights-maker-2: #f28e2b; --insights-maker-3: #2e8540;
 +  --insights-maker-4: #7b3294; --insights-maker-5: #d53e8b; --insights-maker-6: #00a6c8;
 +  --insights-maker-7: #8c510a; --insights-maker-8: #9e1b32;
-+  --insights-maker-9: #6a994e; --insights-maker-10: #3f51b5; --insights-maker-11: #d4a017;
++  --insights-maker-9: #6a994e; --insights-maker-10: #3f51b5; --insights-maker-11: #111827;
 +  --insights-maker-12: #7f3c8d; --insights-maker-13: #00838f; --insights-maker-14: #c2185b;
-+  --insights-maker-15: #4d4d4d; --insights-maker-16: #e76f51;
++  --insights-maker-15: #d4a017; --insights-maker-16: #e76f51;
  }
  [data-theme="dim"] {
 -  --insights-maker-1: #3987e5; --insights-maker-2: #d95926; --insights-maker-3: #199e70;
@@ -1630,9 +2518,9 @@
 +  --insights-maker-1: #6aa9ff; --insights-maker-2: #ffb35c; --insights-maker-3: #55c878;
 +  --insights-maker-4: #b18cff; --insights-maker-5: #ff74b7; --insights-maker-6: #4dd7e8;
 +  --insights-maker-7: #c98b4a; --insights-maker-8: #ff6b6b;
-+  --insights-maker-9: #a8d56f; --insights-maker-10: #8b9cff; --insights-maker-11: #ffd166;
++  --insights-maker-9: #a8d56f; --insights-maker-10: #8b9cff; --insights-maker-11: #f8fafc;
 +  --insights-maker-12: #d59be8; --insights-maker-13: #58d5dd; --insights-maker-14: #ff8eb5;
-+  --insights-maker-15: #b8b8b8; --insights-maker-16: #ff9a7a;
++  --insights-maker-15: #ffd166; --insights-maker-16: #ff9a7a;
  }
  /* stylelint-enable color-no-hex */
  
@@ -1825,7 +2713,7 @@
      display: flex;
      flex-direction: column;
      width: 100%;
-@@ -978,8 +1033,8 @@
+@@ -978,8 +1033,27 @@
      width: 0.3125rem;
      height: 0.3125rem;
      border-radius: var(--radius-pill);
@@ -1833,10 +2721,29 @@
 -    opacity: 0.55;
 +    background: var(--gantt-cell-color, var(--text-muted));
 +    opacity: 1;
++}
++
++.insights-container .maker-marker--square::after {
++    border-radius: 1px;
++}
++
++.insights-container .maker-marker--diamond::after {
++    border-radius: 1px;
++    transform: rotate(45deg);
++}
++
++.insights-container .maker-marker--ring::after {
++    box-shadow: inset 0 0 0 2px var(--surface-1);
++}
++
++.insights-container .maker-marker--bar::after {
++    width: 0.5rem;
++    height: 0.1875rem;
++    border-radius: 1px;
  }
  
  .insights-container .gantt-legend {
-@@ -987,11 +1042,20 @@
+@@ -987,11 +1061,20 @@
      flex-wrap: wrap;
      align-items: center;
      gap: 0.5rem;
@@ -1860,7 +2767,33 @@
  }
  
  .insights-container .gantt-legend-item {
-@@ -1310,11 +1374,104 @@
+@@ -1006,6 +1089,25 @@
+     height: 0.5rem;
+     border-radius: var(--radius-pill);
+     flex: 0 0 auto;
++}
++
++.insights-container .gantt-legend-dot.maker-marker--square {
++    border-radius: 1px;
++}
++
++.insights-container .gantt-legend-dot.maker-marker--diamond {
++    border-radius: 1px;
++    transform: rotate(45deg);
++}
++
++.insights-container .gantt-legend-dot.maker-marker--ring {
++    box-shadow: inset 0 0 0 2px var(--surface-1);
++}
++
++.insights-container .gantt-legend-dot.maker-marker--bar {
++    width: 0.625rem;
++    height: 0.25rem;
++    border-radius: 1px;
+ }
+ 
+ .insights-container .insights-gantt-toggle {
+@@ -1310,11 +1412,104 @@
  /* ===== 響應式斷點 ===== */
  @media (max-width: 1024px) {
      .insights-container .row1 {
@@ -1970,7 +2903,7 @@
      }
  
      .insights-container .row2,
-@@ -1324,19 +1481,148 @@
+@@ -1324,19 +1519,148 @@
          grid-template-columns: 1fr;
      }
  
@@ -3628,9 +4561,39 @@
  }
  
  export function setMainMakerYearMap(map) {
+@@ -360,6 +393,21 @@
+ 
+ export function colorForMakerName(name) {
+     return colorForMaker(name);
++}
++
++const MAKER_MARKER_CLASSES = ['circle', 'square', 'diamond', 'ring', 'bar'];
++
++export function makerMarkerClass(name) {
++    let index = 0;
++    if (name && Object.prototype.hasOwnProperty.call(_makerColorRegistry, name)) {
++        index = _makerColorRegistry[name];
++    } else {
++        const text = String(name || '');
++        for (let i = 0; i < text.length; i++) {
++            index = (Math.imul(index, 31) + text.charCodeAt(i)) >>> 0;
++        }
++    }
++    return 'maker-marker--' + MAKER_MARKER_CLASSES[index % MAKER_MARKER_CLASSES.length];
+ }
+ 
+ // ── 生命週期 ─────────────────────────────────────────────────────────
 --- a/web/static/js/pages/insights/state.js
 +++ b/web/static/js/pages/insights/state.js
-@@ -257,6 +257,8 @@
+@@ -64,6 +64,7 @@
+     getFieldBarChart,
+     resizeAll,
+     colorForMakerName,
++    makerMarkerClass,
+     emptyKeyForCard,
+ } from './charts.js';
+ import { applyCellFocal } from '../../shared/focal-cell.js';
+@@ -257,12 +258,15 @@
          ganttRows: [],
          // 修正 1（第 2 輪）：圖例名單存進 reactive 欄位，見 ganttLegendMakers() 註解。
          ganttLegend: [],
@@ -3639,7 +4602,14 @@
          soloRows: [],
          costarRows: [],
          previewActress: null,
-@@ -456,6 +458,25 @@
+         previewAnchorRect: null,
+         // 模板色點／格子塗色直接呼叫（charts.js 匯出）
+         colorForMakerName,
++        makerMarkerClass,
+         // P3-3：以女優名為 key，記錄該人頭像照片曾經載入失敗——取代舊版
+         // @error 直接改寫 DOM textContent 的寫法（會把 x-if 錨點一併砍掉，
+         // Alpine 之後永遠無法再插回新內容）。女優格與女優榜共用同一份。
+@@ -456,6 +460,25 @@
                  _mainMakerYearMap,
                  this.sel,
              );
@@ -3665,7 +4635,7 @@
          },
  
          /**
-@@ -689,6 +710,16 @@
+@@ -689,6 +712,16 @@
                      })
                      : label;
              }
@@ -3682,7 +4652,7 @@
              return tFn
                  ? tFn('insights.gantt.tooltip_dot', {
                      label: label,
-@@ -706,7 +737,7 @@
+@@ -706,7 +739,7 @@
           * 觸發依賴），排序改在 `_loadSnapshot` 算好存進去，這裡只回傳。
           */
          ganttLegendMakers() {
@@ -3691,7 +4661,7 @@
          },
  
          /**
-@@ -735,8 +766,18 @@
+@@ -735,8 +768,18 @@
              return (
                  'grid-template-columns: var(--gantt-name-w) repeat(' +
                  n +
@@ -3711,7 +4681,7 @@
          },
  
          /**
-@@ -1815,7 +1856,7 @@
+@@ -1815,7 +1858,7 @@
  
                  setRecords(records);
                  var slots = buildMakerColorSlots(getRecords());
@@ -5478,7 +6448,15 @@
        data-theme="{{ theme|default('light') }}"
        style="font-size: {{ font_size_px|default(16) }}px"
        x-data="{ theme: '{{ theme|default('light') }}', fontSize: '{{ font_size|default('md') }}' }"
-@@ -332,6 +332,38 @@
+@@ -120,7 +120,6 @@
+     <!-- Bootstrap Icons -->
+     <link href="/static/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+     <!-- Tutorial CSS -->
+-    <link href="/static/css/components/tutorial.css" rel="stylesheet">
+     <!-- Rotating Border Effect -->
+     <link href="/static/css/components/rotating-border.css" rel="stylesheet">
+     <!-- Help Popover -->
+@@ -332,6 +331,38 @@
              height: var(--mobile-topbar-height);
          }
  
@@ -5517,7 +6495,7 @@
          /* Offcanvas 選單連結 */
          .offcanvas {
              background-color: var(--surface-1) !important;
-@@ -349,6 +381,8 @@
+@@ -349,6 +380,8 @@
              margin: 0.25rem 0.5rem;
              display: flex;
              align-items: center;
@@ -5526,7 +6504,7 @@
              transition: color var(--fluent-duration-normal) var(--fluent-ease-standard), background-color var(--fluent-duration-normal) var(--fluent-ease-standard);
          }
  
-@@ -360,6 +394,19 @@
+@@ -360,6 +393,19 @@
          .offcanvas-nav .nav-link.active {
              color: var(--color-primary-content);
              background-color: var(--accent);
@@ -5546,7 +6524,7 @@
          }
  
          .offcanvas-nav .nav-link i,
-@@ -460,10 +507,13 @@
+@@ -460,10 +506,13 @@
           Placed after extra_css expansion so source-order beats page-specific CSS (CD-A2).
           Do NOT move into the component link block above — it would be overridden. -->
      <link href="/static/css/components/fluent-materials.css" rel="stylesheet">
@@ -5561,7 +6539,7 @@
        window.__i18n = {{ merged_translations|default({})|tojson }};
        window.t = function(key, params) {
            params = params || {};
-@@ -571,18 +621,54 @@
+@@ -571,18 +620,54 @@
          await this._pollNotifications();
      },
      formatTimestamp(ts) {
@@ -5618,7 +6596,7 @@
      <!-- 頂部導航列（僅小螢幕顯示）-->
      <nav class="navbar bg-base-200 lg:hidden fixed top-0 left-0 right-0 z-50 h-14 top-navbar fluent-acrylic border-b border-base-300" x-show="!mobileMenuOpen">
          <div class="navbar-start">
-@@ -591,8 +677,9 @@
+@@ -591,8 +676,9 @@
              </button>
          </div>
          <div class="navbar-center">
@@ -5630,7 +6608,7 @@
              </span>
          </div>
          <div class="navbar-end">
-@@ -658,7 +745,7 @@
+@@ -658,7 +744,7 @@
              <button type="button"
                      class="btn btn-sm btn-circle btn-ghost"
                      @click="mobileMenuOpen = false"
@@ -5639,7 +6617,7 @@
                  <i class="bi bi-x text-xl"></i>
              </button>
          </div>
-@@ -859,6 +946,8 @@
+@@ -859,6 +945,8 @@
      <script type="module" src="/static/js/components/path-utils.js"></script>
      <!-- Motion Preferences Bridge (T4) -->
      <script type="module" src="/static/js/components/motion-prefs.js"></script>
@@ -5648,7 +6626,7 @@
      <!-- Motion Adapter — shared GSAP wrappers (T5) -->
      <script type="module" src="/static/js/components/motion-adapter.js"></script>
      <!-- Page Lifecycle Manager (T2.1) -->
-@@ -866,10 +955,11 @@
+@@ -866,10 +954,11 @@
      <!-- Ghost Fly — shared lightbox transition helper (T8) -->
      <script type="module" src="/static/js/shared/ghost-fly.js"></script>
      <script type="module" src="/static/js/shared/avatar-fly.js"></script>
@@ -5661,15 +6639,299 @@
      <!-- Bridge notify — window.handleBridgeUncovered hook（168a-T4；所有頁面都要有） -->
      <script type="module" src="/static/js/shared/bridge-notify.js"></script>
      <!-- 168c-T5: 殼 → 頁面的「這台電腦有新版」提醒 hook -->
-@@ -915,6 +1005,8 @@
+@@ -915,9 +1004,8 @@
      <script defer src="/static/vendor/alpine/anchor.min.js"></script>
      <!-- Alpine Core -->
      <script defer src="/static/vendor/alpine/alpine.min.js"></script>
+-    <!-- Tutorial JS -->
+-    <script type="module" src="/static/js/components/tutorial.js"></script>
+-
 +    <!-- Android hardware-back layer handling -->
 +    <script defer src="/static/js/components/mobile-back.js?v=17035-2"></script>
-     <!-- Tutorial JS -->
-     <script type="module" src="/static/js/components/tutorial.js"></script>
+     {% block extra_js %}{% endblock %}
  
+     <!-- 53b-T4: 通知抽屜（單例，fixed 浮動，anchor 由 toggleDrawer 決定） -->
+--- a/web/templates/help.html
++++ b/web/templates/help.html
+@@ -36,11 +36,6 @@
+                     {{ t('help.hero.privacy') }}
+                 </p>
+                 <div class="flex flex-wrap items-center gap-2">
+-                    <!-- 主 CTA -->
+-                    <button class="btn btn-primary btn-sm"
+-                            @click="window.location.href = '/scanner?tutorial=restart'">
+-                        <i class="bi bi-play-circle"></i> {{ t('help.hero.btn_tutorial') }}
+-                    </button>
+                     <!-- 次 CTA -->
+                     <button class="btn btn-outline btn-neutral btn-sm"
+                             @click="checkUpdate()"
+--- /dev/null
++++ b/web/templates/help_mobile.html
+@@ -0,0 +1,264 @@
++{% extends "base.html" %}
++
++{% block title %}{{ t('help.mobile.page_title') }} - OpenAver{% endblock %}
++
++{% block extra_css %}
++<link href="/static/css/pages/help-mobile.css" rel="stylesheet">
++{% endblock %}
++
++{% block content %}
++<div class="mobile-help page-layer">
++    <div class="mobile-help__inner">
++        <section class="mobile-help-hero">
++            <div class="mobile-help-hero__copy">
++                <span class="mobile-help-eyebrow">
++                    <i class="bi bi-phone" aria-hidden="true"></i>
++                    {{ t('help.mobile.eyebrow') }}
++                </span>
++                <h1>
++                    <span>{{ t('help.mobile.title_line1') }}</span>
++                    <span>{{ t('help.mobile.title_line2') }}</span>
++                </h1>
++                <p>{{ t('help.mobile.subtitle') }}</p>
++                <div class="mobile-help-meta">
++                    <span><i class="bi bi-shield-check" aria-hidden="true"></i> {{ t('help.mobile.local_only') }}</span>
++                    <span>{{ t('help.mobile.version') }} v{{ version }}</span>
++                </div>
++                <div class="mobile-help-actions">
++                    <a class="mobile-help-button mobile-help-button--primary" href="/scanner">
++                        <i class="bi bi-list-ul" aria-hidden="true"></i>
++                        {{ t('help.mobile.action_scan') }}
++                    </a>
++                    <a class="mobile-help-button" href="/showcase">
++                        <i class="bi bi-collection-play" aria-hidden="true"></i>
++                        {{ t('help.mobile.action_browse') }}
++                    </a>
++                </div>
++            </div>
++            <div class="mobile-help-hero__signal" aria-hidden="true">
++                <span></span><span></span><span></span>
++                <i class="bi bi-folder-play"></i>
++            </div>
++        </section>
++
++        <nav class="mobile-help-jump" aria-label="{{ t('help.mobile.page_title') }}">
++            <a href="#mobile-help-start">{{ t('help.mobile.jump_start') }}</a>
++            <a href="#mobile-help-storage">{{ t('help.mobile.jump_storage') }}</a>
++            <a href="#mobile-help-tasks">{{ t('help.mobile.jump_tasks') }}</a>
++            <a href="#mobile-help-trouble">{{ t('help.mobile.jump_trouble') }}</a>
++            <a href="#mobile-help-about">{{ t('help.mobile.jump_about') }}</a>
++        </nav>
++
++        <section class="mobile-help-status" aria-label="{{ t('help.mobile.local_title') }}">
++            <article>
++                <i class="bi bi-cpu" aria-hidden="true"></i>
++                <div>
++                    <h2>{{ t('help.mobile.status_local_title') }}</h2>
++                    <p>{{ t('help.mobile.status_local_desc') }}</p>
++                </div>
++            </article>
++            <article>
++                <i class="bi bi-sd-card" aria-hidden="true"></i>
++                <div>
++                    <h2>{{ t('help.mobile.status_files_title') }}</h2>
++                    <p>{{ t('help.mobile.status_files_desc') }}</p>
++                </div>
++            </article>
++            <article>
++                <i class="bi bi-lock" aria-hidden="true"></i>
++                <div>
++                    <h2>{{ t('help.mobile.status_private_title') }}</h2>
++                    <p>{{ t('help.mobile.status_private_desc') }}</p>
++                </div>
++            </article>
++        </section>
++
++        <section class="mobile-help-section" id="mobile-help-start">
++            <div class="mobile-help-section__head">
++                <span>01</span>
++                <div>
++                    <h2>{{ t('help.mobile.start_title') }}</h2>
++                    <p>{{ t('help.mobile.start_desc') }}</p>
++                </div>
++            </div>
++            <ol class="mobile-help-steps">
++                <li>
++                    <span>1</span>
++                    <div>
++                        <h3>{{ t('help.mobile.step1_title') }}</h3>
++                        <p>{{ t('help.mobile.step1_desc') }}</p>
++                    </div>
++                </li>
++                <li>
++                    <span>2</span>
++                    <div>
++                        <h3>{{ t('help.mobile.step2_title') }}</h3>
++                        <p>{{ t('help.mobile.step2_desc') }}</p>
++                    </div>
++                </li>
++                <li>
++                    <span>3</span>
++                    <div>
++                        <h3>{{ t('help.mobile.step3_title') }}</h3>
++                        <p>{{ t('help.mobile.step3_desc') }}</p>
++                    </div>
++                </li>
++                <li>
++                    <span>4</span>
++                    <div>
++                        <h3>{{ t('help.mobile.step4_title') }}</h3>
++                        <p>{{ t('help.mobile.step4_desc') }}</p>
++                    </div>
++                </li>
++            </ol>
++        </section>
++
++        <details class="mobile-help-panel" open>
++            <summary>
++                <span class="mobile-help-panel__icon"><i class="bi bi-phone-vibrate" aria-hidden="true"></i></span>
++                <span>
++                    <strong>{{ t('help.mobile.local_title') }}</strong>
++                    <small>{{ t('help.mobile.local_desc') }}</small>
++                </span>
++                <i class="bi bi-chevron-down mobile-help-panel__chevron" aria-hidden="true"></i>
++            </summary>
++            <div class="mobile-help-panel__body">
++                <ul class="mobile-help-list">
++                    <li>{{ t('help.mobile.local_1') }}</li>
++                    <li>{{ t('help.mobile.local_2') }}</li>
++                    <li>{{ t('help.mobile.local_3') }}</li>
++                </ul>
++            </div>
++        </details>
++
++        <details class="mobile-help-panel" id="mobile-help-storage">
++            <summary>
++                <span class="mobile-help-panel__icon"><i class="bi bi-folder-check" aria-hidden="true"></i></span>
++                <span>
++                    <strong>{{ t('help.mobile.storage_title') }}</strong>
++                    <small>{{ t('help.mobile.storage_desc') }}</small>
++                </span>
++                <i class="bi bi-chevron-down mobile-help-panel__chevron" aria-hidden="true"></i>
++            </summary>
++            <div class="mobile-help-panel__body">
++                <ul class="mobile-help-list">
++                    <li>{{ t('help.mobile.storage_android10') }}</li>
++                    <li>{{ t('help.mobile.storage_android11') }}</li>
++                    <li>{{ t('help.mobile.storage_sidecars') }}</li>
++                    <li>{{ t('help.mobile.storage_readonly') }}</li>
++                    <li>{{ t('help.mobile.storage_saf') }}</li>
++                </ul>
++            </div>
++        </details>
++
++        <section class="mobile-help-section" id="mobile-help-tasks">
++            <div class="mobile-help-section__head">
++                <span>02</span>
++                <div>
++                    <h2>{{ t('help.mobile.tasks_title') }}</h2>
++                </div>
++            </div>
++            <div class="mobile-help-task-grid">
++                <article>
++                    <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
++                    <h3>{{ t('help.mobile.task_scan_title') }}</h3>
++                    <p>{{ t('help.mobile.task_scan_desc') }}</p>
++                </article>
++                <article>
++                    <i class="bi bi-cloud-arrow-down" aria-hidden="true"></i>
++                    <h3>{{ t('help.mobile.task_meta_title') }}</h3>
++                    <p>{{ t('help.mobile.task_meta_desc') }}</p>
++                </article>
++                <article>
++                    <i class="bi bi-tags" aria-hidden="true"></i>
++                    <h3>{{ t('help.mobile.task_tag_title') }}</h3>
++                    <p>{{ t('help.mobile.task_tag_desc') }}</p>
++                </article>
++                <article>
++                    <i class="bi bi-images" aria-hidden="true"></i>
++                    <h3>{{ t('help.mobile.task_samples_title') }}</h3>
++                    <p>{{ t('help.mobile.task_samples_desc') }}</p>
++                </article>
++                <article>
++                    <i class="bi bi-translate" aria-hidden="true"></i>
++                    <h3>{{ t('help.mobile.task_translate_title') }}</h3>
++                    <p>{{ t('help.mobile.task_translate_desc') }}</p>
++                </article>
++                <article>
++                    <i class="bi bi-play-btn" aria-hidden="true"></i>
++                    <h3>{{ t('help.mobile.task_play_title') }}</h3>
++                    <p>{{ t('help.mobile.task_play_desc') }}</p>
++                </article>
++            </div>
++        </section>
++
++        <details class="mobile-help-panel mobile-help-panel--warning" id="mobile-help-trouble">
++            <summary>
++                <span class="mobile-help-panel__icon"><i class="bi bi-tools" aria-hidden="true"></i></span>
++                <span>
++                    <strong>{{ t('help.mobile.trouble_title') }}</strong>
++                    <small>{{ t('help.mobile.trouble_log') }}</small>
++                </span>
++                <i class="bi bi-chevron-down mobile-help-panel__chevron" aria-hidden="true"></i>
++            </summary>
++            <div class="mobile-help-panel__body mobile-help-trouble">
++                <article>
++                    <h3>{{ t('help.mobile.trouble_service_title') }}</h3>
++                    <p>{{ t('help.mobile.trouble_service_desc') }}</p>
++                </article>
++                <article>
++                    <h3>{{ t('help.mobile.trouble_scan_title') }}</h3>
++                    <p>{{ t('help.mobile.trouble_scan_desc') }}</p>
++                </article>
++                <article>
++                    <h3>{{ t('help.mobile.trouble_write_title') }}</h3>
++                    <p>{{ t('help.mobile.trouble_write_desc') }}</p>
++                </article>
++                <article>
++                    <h3>{{ t('help.mobile.trouble_source_title') }}</h3>
++                    <p>{{ t('help.mobile.trouble_source_desc') }}</p>
++                </article>
++                <article>
++                    <h3>{{ t('help.mobile.trouble_translate_title') }}</h3>
++                    <p>{{ t('help.mobile.trouble_translate_desc') }}</p>
++                </article>
++            </div>
++        </details>
++
++        <details class="mobile-help-panel">
++            <summary>
++                <span class="mobile-help-panel__icon"><i class="bi bi-shield-lock" aria-hidden="true"></i></span>
++                <span>
++                    <strong>{{ t('help.mobile.privacy_title') }}</strong>
++                    <small>{{ t('help.mobile.local_only') }}</small>
++                </span>
++                <i class="bi bi-chevron-down mobile-help-panel__chevron" aria-hidden="true"></i>
++            </summary>
++            <div class="mobile-help-panel__body">
++                <p>{{ t('help.mobile.privacy_desc') }}</p>
++            </div>
++        </details>
++
++        <section class="mobile-help-about" id="mobile-help-about">
++            <div>
++                <span class="mobile-help-eyebrow">
++                    <i class="bi bi-heart" aria-hidden="true"></i>
++                    {{ t('help.mobile.about_title') }}
++                </span>
++                <h2>{{ t('help.mobile.about_desc') }}</h2>
++                <p>{{ t('help.mobile.license') }}</p>
++            </div>
++            <div class="mobile-help-about__links">
++                <a href="https://github.com/slive777/OpenAver" target="_blank" rel="noopener noreferrer">
++                    <i class="bi bi-github" aria-hidden="true"></i>
++                    {{ t('help.mobile.about_upstream') }}
++                </a>
++                <a href="https://github.com/zhao922-bot/OpenAver-Mobile" target="_blank" rel="noopener noreferrer">
++                    <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
++                    {{ t('help.mobile.about_mobile') }}
++                </a>
++            </div>
++        </section>
++    </div>
++</div>
++{% endblock %}
 --- a/web/templates/insights.html
 +++ b/web/templates/insights.html
 @@ -3,7 +3,7 @@
@@ -5784,7 +7046,7 @@
                      <button type="button"
                              :class="{ 'is-on': ganttAxis === 'year' }"
                              @click="ganttAxis = 'year'"
-@@ -398,6 +410,24 @@
+@@ -398,6 +410,25 @@
                  </div>
              </div>
              <div class="card-body">
@@ -5795,6 +7057,7 @@
 +                    <template x-for="mk in ganttLegendMakers()" :key="mk">
 +                        <span class="gantt-legend-item" role="listitem">
 +                            <span class="gantt-legend-dot"
++                                  :class="makerMarkerClass(mk)"
 +                                  :style="'background:' + colorForMakerName(mk)"></span>
 +                            <span x-text="mk"></span>
 +                        </span>
@@ -5809,7 +7072,7 @@
                  <div x-show="!ganttRows.length"
                       class="gantt-empty"
                       x-text="t(cardEmptyKey('actress'))"></div>
-@@ -416,7 +446,8 @@
+@@ -416,7 +447,8 @@
                                                       && sel.period.type !== 'all'
                                                       && isYearInSel(col)
                                               }"
@@ -5819,12 +7082,14 @@
                                      </template>
                                  </div>
                                  <template x-for="row in ganttView(ganttAxis).rows"
-@@ -454,8 +485,11 @@
+@@ -453,9 +485,12 @@
+                                                      ganttAxis === 'year' && sel.period.type !== 'all'
                                                           ? (isYearInSel(cell.year) ? ' is-selected' : ' is-dimmed')
                                                           : ''
-                                                  )"
+-                                                 )"
 -                                                 :style="cell.state === 'main'
 -                                                     ? ('background:' + colorForMakerName(cell.maker))
++                                                 ) + (cell.maker ? ' ' + makerMarkerClass(cell.maker) : '')"
 +                                                 :style="cell.maker
 +                                                     ? ('--gantt-cell-color:' + colorForMakerName(cell.maker) + ';'
 +                                                         + (cell.state === 'main'
@@ -5833,7 +7098,7 @@
                                                       : ''"
                                                   @click.stop="ganttCellClick(row.name, cell, ganttAxis, $event)"
                                                   :title="ganttCellTitle(cell, ganttAxis)"></div>
-@@ -477,7 +511,10 @@
+@@ -477,7 +512,10 @@
      <div class="row6" id="row6">
          <section class="card">
              <div class="card-head">
@@ -5845,6 +7110,15 @@
              </div>
              <div class="card-body">
                  <div class="list-rows" id="soloList">
+@@ -508,7 +546,7 @@
+                                     <span class="solo-segment"
+                                           :class="'solo-segment--' + seg.kind"
+                                           :style="'width:' + (row.total ? Math.round(seg.count / row.total * 100) : 0) + '%' + (seg.kind === 'named' ? (';background:' + colorForMakerName(seg.maker)) : '')"
+-                                          :title="seg.kind === 'other' ? soloOtherTitle(seg) : null"></span>
++                                          :title="seg.kind === 'named' ? seg.maker : (seg.kind === 'other' ? soloOtherTitle(seg) : null)"></span>
+                                 </template>
+                             </span>
+                             <span class="solo-end" x-text="soloRowLabel(row)"></span>
 --- a/web/templates/scanner.html
 +++ b/web/templates/scanner.html
 @@ -1,5 +1,6 @@

@@ -64,6 +64,7 @@ import {
     getFieldBarChart,
     resizeAll,
     colorForMakerName,
+    makerMarkerClass,
     emptyKeyForCard,
 } from './charts.js';
 import { applyCellFocal } from '../../shared/focal-cell.js';
@@ -265,6 +266,7 @@ export function libraryInsightsState() {
         previewAnchorRect: null,
         // 模板色點／格子塗色直接呼叫（charts.js 匯出）
         colorForMakerName,
+        makerMarkerClass,
         // P3-3：以女優名為 key，記錄該人頭像照片曾經載入失敗——取代舊版
         // @error 直接改寫 DOM textContent 的寫法（會把 x-if 錨點一併砍掉，
         // Alpine 之後永遠無法再插回新內容）。女優格與女優榜共用同一份。
