@@ -67,6 +67,52 @@
       "count": "共 {count} 部"
     }
   },
+  "ui_state": {
+    "what_happened": "發生了什麼",
+    "scope_label": "影響範圍",
+    "suggestion_label": "處理建議",
+    "details": "詳細資訊與日誌",
+    "copy_log": "複製日誌",
+    "copied": "日誌已複製",
+    "copy_failed": "複製失敗，請手動選取日誌",
+    "error_title": "操作未完成",
+    "partial_title": "操作部分完成",
+    "diagnostics_title": "OpenAver 行動版診斷資訊",
+    "source_status_title": "來源狀態",
+    "source_status_refresh": "重新整理來源狀態",
+    "partial_search_hint": "部分結果已回傳，未成功的項目仍可重試。",
+    "scope": {
+      "current_action": "目前頁面與本次操作",
+      "current_video": "目前影片",
+      "scan_task": "本次掃描或維護工作",
+      "page_data": "目前頁面顯示的資料"
+    },
+    "suggestion": {
+      "retry": "重試目前操作；若問題持續，請複製日誌以協助定位問題。",
+      "offline": "請檢查網路或本機服務後重試；離線時仍可使用已保存在手機上的資料。",
+      "timeout": "請稍後重試或切換其他來源；若多個來源同時逾時，請檢查網路與本機服務日誌。",
+      "permission": "請檢查儲存權限、來源存取權限與目前目錄是否可寫入，然後重試。",
+      "partial": "成功項目已保留；請展開日誌查看失敗或略過原因，並只重試失敗項目。",
+      "success": "工作已完成，無需處理；如需留存紀錄可複製日誌。"
+    },
+    "offline": {
+      "title": "目前處於離線狀態",
+      "body": "已保存在手機上的影片、封面與 NFO 仍可使用；需要網路的刮削、翻譯與來源檢查會暫停。"
+    },
+    "state": {
+      "loading": "正在載入",
+      "empty": "暫無可顯示內容",
+      "partial": "部分操作已完成",
+      "timeout": "來源回應逾時",
+      "timeout_short": "逾時",
+      "permission_required": "需要儲存或來源權限",
+      "unreachable": "無法連線",
+      "available": "可用",
+      "disabled": "未啟用",
+      "no_permission": "無權限",
+      "unknown": "未知狀態"
+    }
+  },
   "desktop": {
     "offline": {
       "message": {
@@ -120,6 +166,7 @@
     },
     "placeholder": {
       "query": "搜尋番號、女優或拖入檔案...",
+      "query_mobile": "搜尋番號或女優...",
       "tag": "標籤名稱",
       "actors": "演員名稱（可用、，,分隔多人）"
     },

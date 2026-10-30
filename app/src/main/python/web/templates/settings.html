@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_macros/ui_state.html' import state_error_card, state_toast with context %}
 
 {% block title %}{{ t('settings.page_title') }} - OpenAver{% endblock %}
 
@@ -191,12 +192,43 @@
         </div>
     </div>
 
+    <div class="ui-loading-card settings-loading-card"
+         x-show="_configLoading"
+         x-cloak
+         aria-busy="true"
+         :aria-label="window.t('ui_state.state.loading')">
+        <div class="ui-skeleton-line is-medium"></div>
+        <div class="ui-skeleton-line"></div>
+        <div class="ui-skeleton-line is-short"></div>
+        <div class="ui-skeleton-grid" aria-hidden="true">
+            <div class="ui-skeleton-block"></div>
+            <div class="ui-skeleton-block"></div>
+            <div class="ui-skeleton-block"></div>
+        </div>
+    </div>
+
+    {{ state_error_card(
+        show_expr="!!_configError",
+        title_expr="_configError || window.t('ui_state.error_title')",
+        scope_expr="window.t('ui_state.scope.page_data')",
+        suggestion_expr="window.OpenAverUIState.errorSuggestion(_configError)",
+        details_expr="window.OpenAverUIState.diagnostics({page: 'settings', error: _configError})",
+        kind_expr="window.OpenAverUIState.classifyError(_configError)",
+        retry_action='loadConfig()',
+        retry_label=t('search.filelist.retry')
+    ) }}
+
     <!-- 64b-1: .settings-tab-bar 整段移除（6 個 .settings-tab button）；nav icon-only 嵌 header 由 64b-2 重建 -->
 
     <!-- 靜態 inert：HTML 渲染即生效，Alpine boot 前保護 -->
     <!-- Alpine boot 後由 :inert binding 接管 -->
     <!-- 64b-1: form wraps all 3 sections (replaces 6-panel layout). -->
-    <form id="settingsForm" @submit.prevent="saveConfig" inert :inert="_configLoading">
+    <form id="settingsForm"
+          @submit.prevent="saveConfig"
+          inert
+          :inert="_configLoading"
+          x-show="!_configLoading && !_configError"
+          x-cloak>
 
         <!-- ── quick-toggle 列（CD-64-B8）：下載劇照 + 進階搜尋，header 下 section 上 ── -->
         <div class="settings-quick-toggle-row">
@@ -1554,11 +1586,11 @@
 
         <!-- 儲存按鈕 -->
         <div class="save-btn-wrapper"
-             :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving }">
+             :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving, 'is-error': !!_configError }">
             <div class="save-state" role="status" aria-live="polite">
                 <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
                 <i x-show="!_configSaving" class="bi"
-                   :class="isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle'"></i>
+                   :class="_configError ? 'bi-x-circle' : (isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle')"></i>
                 <span x-text="saveStatusText"></span>
             </div>
             <button type="submit"
@@ -1733,20 +1765,13 @@
     </dialog>
 
 <!-- Toast 容器（Alpine controlled）-->
-<div class="toast toast-end toast-top z-[9999]" x-show="$store.toast.visible" x-cloak x-transition>
-    <div class="alert" :class="`alert-${$store.toast.type}`">
-        <span x-text="$store.toast.message"></span>
-        <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="$store.toast.hide()">
-            <i class="bi bi-x"></i>
-        </button>
-    </div>
-</div>
+{{ state_toast() }}
     {% include '_browse_dir_modal.html' %}
 </div>
 {% endblock %}
 
 {% block pre_alpine_module %}
-<script type="module" src="/static/js/pages/settings/main.js"></script>
+<script type="module" src="/static/js/pages/settings/main.js?v=17035-2"></script>
 {% endblock %}
 {% block extra_js %}
 <script src="/static/js/pages/settings/theme-transition.js"></script>

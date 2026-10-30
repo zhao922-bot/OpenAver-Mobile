@@ -19,7 +19,68 @@
      "open_local": {
        "folder_opened_copied": "Folder opened (path copied)",
        "folder_opened": "Folder opened",
-@@ -723,6 +724,13 @@
+@@ -64,6 +65,52 @@
+     "shell": {
+       "update_available": "A new version of OpenAver, v{version}, is available on this computer. Update from the Help page",
+       "update_marker_title": "New version v{version} available. Update from the Help page"
++    }
++  },
++  "ui_state": {
++    "what_happened": "What happened",
++    "scope_label": "Impact",
++    "suggestion_label": "Suggested action",
++    "details": "Details and logs",
++    "copy_log": "Copy log",
++    "copied": "Log copied",
++    "copy_failed": "Copy failed. Select the log manually.",
++    "error_title": "Operation did not complete",
++    "partial_title": "Operation partially completed",
++    "diagnostics_title": "OpenAver mobile diagnostics",
++    "source_status_title": "Source status",
++    "source_status_refresh": "Refresh source status",
++    "partial_search_hint": "Some results were returned. Items that failed can still be retried.",
++    "scope": {
++      "current_action": "The current page and this operation",
++      "current_video": "The current video",
++      "scan_task": "This scan or maintenance task",
++      "page_data": "Data displayed on the current page"
++    },
++    "suggestion": {
++      "retry": "Retry the operation. If it keeps failing, copy the log for troubleshooting.",
++      "offline": "Check the network or local service and retry. Data already stored on the phone remains available offline.",
++      "timeout": "Retry later or switch to another source. If several sources time out, check the network and local service logs.",
++      "permission": "Check storage permission, source access permission, and whether the current folder is writable, then retry.",
++      "partial": "Successful items were kept. Open the log to see why items failed or were skipped, then retry only the failures.",
++      "success": "The task completed. No action is needed; copy the log if you want to keep a record."
++    },
++    "offline": {
++      "title": "You are offline",
++      "body": "Videos, covers, and NFO files already stored on the phone remain available. Scraping, translation, and source checks that need the network are paused."
++    },
++    "state": {
++      "loading": "Loading",
++      "empty": "Nothing to display",
++      "partial": "Partially completed",
++      "timeout": "Source timed out",
++      "timeout_short": "Timed out",
++      "permission_required": "Storage or source permission required",
++      "unreachable": "Unreachable",
++      "available": "Available",
++      "disabled": "Disabled",
++      "no_permission": "No permission",
++      "unknown": "Unknown state"
+     }
+   },
+   "desktop": {
+@@ -119,6 +166,7 @@
+     },
+     "placeholder": {
+       "query": "Search ID, actress or drop files...",
++      "query_mobile": "Search ID or actress...",
+       "tag": "Tag name",
+       "actors": "Actor names (separate with 、, or ,)"
+     },
+@@ -723,6 +771,13 @@
        "reset": "Reset to Default",
        "save": "Save Settings"
      },
@@ -33,7 +94,7 @@
      "var": {
        "num": "ID",
        "title": "Title",
-@@ -829,6 +837,8 @@
+@@ -829,6 +884,8 @@
        "nfo_update_done": "Update complete! Regenerate the list to refresh",
        "no_jellyfin_update_needed": "No videos need updating",
        "jellyfin_update_done": "Update complete!",
@@ -42,7 +103,7 @@
        "path_copied": "Copied: {path}",
        "browse_dir_fallback": "Your browser can’t read the path of dropped files, so the folder picker has been opened for you"
      },
-@@ -868,13 +878,79 @@
+@@ -868,13 +925,79 @@
        "clear_display_title": "Clear display (restored on reload)",
        "clear_all_title": "Clear all (including history)"
      },
@@ -122,7 +183,7 @@
        "jellyfin_prefix": "Jellyfin cover format missing:",
        "jellyfin_suffix": " videos",
        "jellyfin_update_title": "Generate Jellyfin poster + fanart",
-@@ -1410,6 +1486,9 @@
+@@ -1410,6 +1533,9 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -142,7 +203,68 @@
      "open_local": {
        "folder_opened_copied": "フォルダを開きました（パスをコピーしました）",
        "folder_opened": "フォルダを開きました",
-@@ -723,6 +724,13 @@
+@@ -64,6 +65,52 @@
+     "shell": {
+       "update_available": "このPCの OpenAver に新バージョン v{version} があります。ヘルプページで更新してください",
+       "update_marker_title": "新バージョン v{version} があります。ヘルプページで更新してください"
++    }
++  },
++  "ui_state": {
++    "what_happened": "発生した内容",
++    "scope_label": "影響範囲",
++    "suggestion_label": "対処方法",
++    "details": "詳細とログ",
++    "copy_log": "ログをコピー",
++    "copied": "ログをコピーしました",
++    "copy_failed": "コピーに失敗しました。ログを手動で選択してください。",
++    "error_title": "操作を完了できませんでした",
++    "partial_title": "一部の操作が完了しました",
++    "diagnostics_title": "OpenAver モバイル診断情報",
++    "source_status_title": "ソース状態",
++    "source_status_refresh": "ソース状態を更新",
++    "partial_search_hint": "一部の結果を取得しました。失敗した項目は再試行できます。",
++    "scope": {
++      "current_action": "現在のページとこの操作",
++      "current_video": "現在の動画",
++      "scan_task": "今回のスキャンまたはメンテナンス",
++      "page_data": "現在のページに表示されているデータ"
++    },
++    "suggestion": {
++      "retry": "操作を再試行してください。解決しない場合はログをコピーして原因を確認してください。",
++      "offline": "ネットワークまたはローカルサービスを確認して再試行してください。端末内に保存済みのデータはオフラインでも利用できます。",
++      "timeout": "時間を置いて再試行するか、別のソースへ切り替えてください。複数のソースがタイムアウトする場合はネットワークとローカルサービスのログを確認してください。",
++      "permission": "ストレージ権限、ソースへのアクセス権限、現在のフォルダーが書き込み可能かを確認して再試行してください。",
++      "partial": "成功した項目は保持されています。ログで失敗またはスキップの理由を確認し、失敗した項目だけを再試行してください。",
++      "success": "タスクは完了しました。追加の操作は不要です。記録が必要な場合はログをコピーしてください。"
++    },
++    "offline": {
++      "title": "オフラインです",
++      "body": "端末内に保存済みの動画、カバー、NFO は引き続き利用できます。ネットワークが必要な取得、翻訳、ソース確認は一時停止します。"
++    },
++    "state": {
++      "loading": "読み込み中",
++      "empty": "表示できる内容がありません",
++      "partial": "一部完了",
++      "timeout": "ソースがタイムアウトしました",
++      "timeout_short": "タイムアウト",
++      "permission_required": "ストレージまたはソースの権限が必要です",
++      "unreachable": "接続不可",
++      "available": "利用可能",
++      "disabled": "無効",
++      "no_permission": "権限なし",
++      "unknown": "不明な状態"
+     }
+   },
+   "desktop": {
+@@ -119,6 +166,7 @@
+     },
+     "placeholder": {
+       "query": "番号、女優名またはファイルをドロップ...",
++      "query_mobile": "番号・女優名を検索...",
+       "tag": "タグ名",
+       "actors": "女優名（、，, で複数区切り可）"
+     },
+@@ -723,6 +771,13 @@
        "reset": "デフォルトにリセット",
        "save": "設定を保存"
      },
@@ -156,7 +278,7 @@
      "var": {
        "num": "番号",
        "title": "タイトル",
-@@ -829,6 +837,8 @@
+@@ -829,6 +884,8 @@
        "nfo_update_done": "補完が完了しました。リストを再生成して更新してください",
        "no_jellyfin_update_needed": "補完が必要な動画はありません",
        "jellyfin_update_done": "補完が完了しました！",
@@ -165,7 +287,7 @@
        "path_copied": "コピーしました: {path}",
        "browse_dir_fallback": "ブラウザではドロップしたファイルのパスを直接読み取れないため、フォルダ選択画面を開きました"
      },
-@@ -868,13 +878,79 @@
+@@ -868,13 +925,79 @@
        "clear_display_title": "画面をクリア（リロード後に復元）",
        "clear_all_title": "すべてクリア（履歴含む）"
      },
@@ -245,7 +367,7 @@
        "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
        "jellyfin_suffix": "本",
        "jellyfin_update_title": "Jellyfin poster + fanart を補完",
-@@ -1410,6 +1486,9 @@
+@@ -1410,6 +1533,9 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -265,7 +387,68 @@
      "open_local": {
        "folder_opened_copied": "已打开文件夹（路径已复制）",
        "folder_opened": "已打开文件夹",
-@@ -723,6 +724,13 @@
+@@ -64,6 +65,52 @@
+     "shell": {
+       "update_available": "这台电脑的 OpenAver 有新版 v{version}，到帮助页更新",
+       "update_marker_title": "有新版 v{version}，到帮助页更新"
++    }
++  },
++  "ui_state": {
++    "what_happened": "发生了什么",
++    "scope_label": "影响范围",
++    "suggestion_label": "处理建议",
++    "details": "详细信息与日志",
++    "copy_log": "复制日志",
++    "copied": "日志已复制",
++    "copy_failed": "复制失败，请手动选择日志",
++    "error_title": "操作未完成",
++    "partial_title": "操作部分完成",
++    "diagnostics_title": "OpenAver 移动端诊断信息",
++    "source_status_title": "来源状态",
++    "source_status_refresh": "刷新来源状态",
++    "partial_search_hint": "部分结果已返回，未成功的项目仍可重试。",
++    "scope": {
++      "current_action": "当前页面与本次操作",
++      "current_video": "当前影片",
++      "scan_task": "本次扫描或维护任务",
++      "page_data": "当前页面显示的数据"
++    },
++    "suggestion": {
++      "retry": "重试当前操作；若问题持续，复制日志用于定位问题。",
++      "offline": "检查网络或本地服务状态后重试；离线时仍可使用已经保存在手机上的数据。",
++      "timeout": "稍后重试，或切换到其他来源；若多个来源同时超时，请检查网络与本地服务日志。",
++      "permission": "检查存储权限、来源访问权限和当前目录是否可写，然后重试。",
++      "partial": "成功项目已经保留；展开日志查看失败或跳过原因，并只重试失败项目。",
++      "success": "任务已完成，无需处理；如需留档可复制日志。"
++    },
++    "offline": {
++      "title": "当前处于离线状态",
++      "body": "已经保存在手机上的影片、封面和 NFO 仍可使用；需要联网的刮削、翻译与来源检查会暂停。"
++    },
++    "state": {
++      "loading": "正在加载",
++      "empty": "暂无可显示内容",
++      "partial": "部分操作已完成",
++      "timeout": "来源响应超时",
++      "timeout_short": "超时",
++      "permission_required": "需要存储或来源权限",
++      "unreachable": "不可达",
++      "available": "可用",
++      "disabled": "未启用",
++      "no_permission": "无权限",
++      "unknown": "未知状态"
+     }
+   },
+   "desktop": {
+@@ -119,6 +166,7 @@
+     },
+     "placeholder": {
+       "query": "搜索番号、女优或拖入文件...",
++      "query_mobile": "搜索番号或女优...",
+       "tag": "标签名称",
+       "actors": "演员名称（可用、，,分隔多人）"
+     },
+@@ -723,6 +771,13 @@
        "reset": "重置为默认值",
        "save": "保存设置"
      },
@@ -279,7 +462,7 @@
      "var": {
        "num": "番号",
        "title": "标题",
-@@ -829,6 +837,8 @@
+@@ -829,6 +884,8 @@
        "nfo_update_done": "补全完成！请重新生成列表以更新",
        "no_jellyfin_update_needed": "没有需要补齐的视频",
        "jellyfin_update_done": "补齐完成！",
@@ -288,7 +471,7 @@
        "path_copied": "已复制: {path}",
        "browse_dir_fallback": "浏览器无法直接读取拖放文件的路径，已为您打开文件夹选择器"
      },
-@@ -868,13 +878,79 @@
+@@ -868,13 +925,79 @@
        "clear_display_title": "清除画面（刷新后恢复）",
        "clear_all_title": "清除全部（包含历史）"
      },
@@ -368,7 +551,7 @@
        "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
-@@ -1410,6 +1486,9 @@
+@@ -1410,6 +1533,9 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -388,7 +571,68 @@
      "open_local": {
        "folder_opened_copied": "已開啟資料夾（路徑已複製）",
        "folder_opened": "已開啟資料夾",
-@@ -723,6 +724,13 @@
+@@ -64,6 +65,52 @@
+       "copy_failed": "複製失敗，請手動選取清單文字複製",
+       "close": "關閉",
+       "count": "共 {count} 部"
++    }
++  },
++  "ui_state": {
++    "what_happened": "發生了什麼",
++    "scope_label": "影響範圍",
++    "suggestion_label": "處理建議",
++    "details": "詳細資訊與日誌",
++    "copy_log": "複製日誌",
++    "copied": "日誌已複製",
++    "copy_failed": "複製失敗，請手動選取日誌",
++    "error_title": "操作未完成",
++    "partial_title": "操作部分完成",
++    "diagnostics_title": "OpenAver 行動版診斷資訊",
++    "source_status_title": "來源狀態",
++    "source_status_refresh": "重新整理來源狀態",
++    "partial_search_hint": "部分結果已回傳，未成功的項目仍可重試。",
++    "scope": {
++      "current_action": "目前頁面與本次操作",
++      "current_video": "目前影片",
++      "scan_task": "本次掃描或維護工作",
++      "page_data": "目前頁面顯示的資料"
++    },
++    "suggestion": {
++      "retry": "重試目前操作；若問題持續，請複製日誌以協助定位問題。",
++      "offline": "請檢查網路或本機服務後重試；離線時仍可使用已保存在手機上的資料。",
++      "timeout": "請稍後重試或切換其他來源；若多個來源同時逾時，請檢查網路與本機服務日誌。",
++      "permission": "請檢查儲存權限、來源存取權限與目前目錄是否可寫入，然後重試。",
++      "partial": "成功項目已保留；請展開日誌查看失敗或略過原因，並只重試失敗項目。",
++      "success": "工作已完成，無需處理；如需留存紀錄可複製日誌。"
++    },
++    "offline": {
++      "title": "目前處於離線狀態",
++      "body": "已保存在手機上的影片、封面與 NFO 仍可使用；需要網路的刮削、翻譯與來源檢查會暫停。"
++    },
++    "state": {
++      "loading": "正在載入",
++      "empty": "暫無可顯示內容",
++      "partial": "部分操作已完成",
++      "timeout": "來源回應逾時",
++      "timeout_short": "逾時",
++      "permission_required": "需要儲存或來源權限",
++      "unreachable": "無法連線",
++      "available": "可用",
++      "disabled": "未啟用",
++      "no_permission": "無權限",
++      "unknown": "未知狀態"
+     }
+   },
+   "desktop": {
+@@ -119,6 +166,7 @@
+     },
+     "placeholder": {
+       "query": "搜尋番號、女優或拖入檔案...",
++      "query_mobile": "搜尋番號或女優...",
+       "tag": "標籤名稱",
+       "actors": "演員名稱（可用、，,分隔多人）"
+     },
+@@ -723,6 +771,13 @@
        "reset": "重置為預設值",
        "save": "儲存設定"
      },
@@ -402,7 +646,7 @@
      "var": {
        "num": "番號",
        "title": "標題",
-@@ -829,6 +837,8 @@
+@@ -829,6 +884,8 @@
        "nfo_update_done": "補全完成！請重新產生列表以更新",
        "no_jellyfin_update_needed": "沒有需要補齊的影片",
        "jellyfin_update_done": "補齊完成！",
@@ -411,7 +655,7 @@
        "path_copied": "已複製: {path}",
        "browse_dir_fallback": "瀏覽器無法直接讀取拖放檔案的路徑，已為您開啟資料夾選擇器"
      },
-@@ -868,13 +878,79 @@
+@@ -868,13 +925,79 @@
        "clear_display_title": "清除畫面（重整後恢復）",
        "clear_all_title": "清除全部（包含歷史）"
      },
@@ -491,7 +735,7 @@
        "jellyfin_prefix": "外部媒體管理器封面缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "補齊 poster + fanart",
-@@ -1410,6 +1486,9 @@
+@@ -1410,6 +1533,9 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -515,6 +759,678 @@
    },
    "sources": [
      {
+--- /dev/null
++++ b/web/static/css/components/mobile-ui.css
+@@ -0,0 +1,669 @@
++/* r19: shared mobile state, touch, hierarchy, and density rules. */
++
++:root {
++  --ui-touch-target: 48px;
++  --ui-state-radius: 14px;
++  --ui-control-radius: 12px;
++  --ui-space-1: 4px;
++  --ui-space-2: 8px;
++  --ui-space-3: 12px;
++  --ui-space-4: 16px;
++  --ui-space-5: 24px;
++  --ui-primary-bg: var(--color-primary);
++  --ui-primary-fg: var(--color-primary-content);
++  --ui-danger-bg: var(--color-error);
++  --ui-danger-fg: white;
++  --ui-secondary-bg: color-mix(in oklch, var(--surface-1) 86%, var(--surface-2));
++  --ui-secondary-fg: var(--text-primary);
++}
++
++/* Unified state card: what happened, scope, suggestion, details/copy. */
++.ui-state-card {
++  box-sizing: border-box;
++  max-width: 100%;
++  width: min(100%, 760px);
++  margin: var(--ui-space-5) auto;
++  padding: var(--ui-space-5);
++  border: 1px solid var(--stroke-default);
++  border-radius: var(--ui-state-radius);
++  background:
++    linear-gradient(145deg,
++      color-mix(in oklch, var(--surface-1) 94%, transparent),
++      color-mix(in oklch, var(--surface-0) 98%, transparent));
++  box-shadow: var(--fluent-shadow-4);
++  color: var(--text-primary);
++}
++
++.ui-state-card--error,
++.ui-state-card--offline,
++.ui-state-card--timeout,
++.ui-state-card--permission_required {
++  border-color: color-mix(in oklch, var(--color-error) 45%, var(--stroke-default));
++}
++
++.ui-state-card--partial_success,
++.ui-state-card--unreachable {
++  border-color: color-mix(in oklch, var(--color-warning) 52%, var(--stroke-default));
++}
++
++.ui-state-card__head {
++  display: flex;
++  align-items: flex-start;
++  gap: var(--ui-space-3);
++}
++
++.ui-state-card__icon {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  flex: 0 0 42px;
++  width: 42px;
++  height: 42px;
++  border-radius: 12px;
++  color: var(--color-error);
++  background: color-mix(in oklch, var(--color-error) 13%, transparent);
++  font-size: 1.25rem;
++}
++
++.ui-state-card--partial_success .ui-state-card__icon,
++.ui-state-card--unreachable .ui-state-card__icon {
++  color: var(--color-warning-darker);
++  background: color-mix(in oklch, var(--color-warning) 16%, transparent);
++}
++
++.ui-state-card__title {
++  margin: 2px 0 0;
++  font-size: 1.08rem;
++  font-weight: 700;
++  line-height: 1.35;
++}
++
++.ui-state-card__grid {
++  display: grid;
++  gap: var(--ui-space-3);
++  margin-top: var(--ui-space-4);
++}
++
++.ui-state-card__field {
++  padding: var(--ui-space-3);
++  border-radius: var(--ui-control-radius);
++  background: color-mix(in oklch, var(--surface-2) 72%, transparent);
++}
++
++.ui-state-card__label {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  margin-bottom: 5px;
++  color: var(--text-muted);
++  font-size: 0.76rem;
++  font-weight: 700;
++  letter-spacing: 0.04em;
++}
++
++.ui-state-card__value {
++  margin: 0;
++  color: var(--text-primary);
++  font-size: 0.9rem;
++  line-height: 1.55;
++  overflow-wrap: anywhere;
++}
++
++.ui-state-card__details {
++  margin-top: var(--ui-space-3);
++  border-top: 1px solid var(--stroke-subtle);
++  padding-top: var(--ui-space-3);
++}
++
++.ui-state-card__details summary {
++  min-height: var(--ui-touch-target);
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  cursor: pointer;
++  color: var(--text-secondary);
++  font-size: 0.86rem;
++  font-weight: 600;
++}
++
++.ui-state-card__details pre {
++  max-height: 14rem;
++  overflow: auto;
++  margin: var(--ui-space-2) 0 0;
++  padding: var(--ui-space-3);
++  border-radius: var(--ui-control-radius);
++  background: color-mix(in oklch, var(--surface-0) 92%, black);
++  color: var(--text-secondary);
++  font-size: 0.76rem;
++  line-height: 1.45;
++  white-space: pre-wrap;
++  overflow-wrap: anywhere;
++}
++
++.ui-state-card__followup {
++  margin-top: var(--ui-space-3);
++  padding-top: var(--ui-space-3);
++  border-top: 1px solid var(--stroke-subtle);
++}
++
++.ui-state-card__followup .empty-explainer-line {
++  margin: 0 0 var(--ui-space-3);
++  color: var(--text-secondary);
++  font-size: 0.84rem;
++  line-height: 1.5;
++}
++
++.ui-state-card__followup .error-nav {
++  margin-top: var(--ui-space-2);
++}
++
++.ui-state-card__actions,
++.ui-task-summary__actions {
++  display: flex;
++  flex-wrap: wrap;
++  justify-content: flex-end;
++  gap: var(--ui-space-2);
++  margin-top: var(--ui-space-4);
++}
++
++/* Loading skeletons and empty states. */
++.ui-loading-card {
++  width: min(100%, 980px);
++  margin: var(--ui-space-5) auto;
++  padding: var(--ui-space-4);
++  border: 1px solid var(--stroke-subtle);
++  border-radius: var(--ui-state-radius);
++  background: var(--surface-1);
++}
++
++.ui-skeleton-line,
++.ui-skeleton-block {
++  position: relative;
++  overflow: hidden;
++  border-radius: 8px;
++  background: color-mix(in oklch, var(--surface-2) 86%, var(--surface-1));
++}
++
++.ui-skeleton-line::after,
++.ui-skeleton-block::after {
++  content: "";
++  position: absolute;
++  inset: 0;
++  transform: translateX(-100%);
++  background: linear-gradient(
++    90deg,
++    transparent,
++    color-mix(in oklch, white 22%, transparent),
++    transparent
++  );
++  animation: ui-skeleton-sweep 1.35s infinite;
++}
++
++.ui-skeleton-line {
++  height: 14px;
++  margin-bottom: 10px;
++}
++
++.ui-skeleton-line.is-short { width: 42%; }
++.ui-skeleton-line.is-medium { width: 68%; }
++
++.ui-skeleton-grid {
++  display: grid;
++  grid-template-columns: repeat(3, minmax(0, 1fr));
++  gap: var(--ui-space-3);
++}
++
++.ui-skeleton-block {
++  min-height: 148px;
++  border-radius: 12px;
++}
++
++.ui-state-card--empty {
++  text-align: center;
++  border-style: dashed;
++  box-shadow: none;
++}
++
++.ui-state-card--empty .ui-state-card__head {
++  justify-content: center;
++}
++
++/* Offline and source-status strips. */
++.ui-offline-banner {
++  position: fixed;
++  left: 50%;
++  top: max(8px, env(safe-area-inset-top));
++  z-index: 2400;
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  width: min(calc(100vw - 24px), 560px);
++  min-height: var(--ui-touch-target);
++  padding: 10px 12px;
++  transform: translateX(-50%);
++  border: 1px solid color-mix(in oklch, var(--color-warning) 55%, var(--stroke-default));
++  border-radius: 12px;
++  background: color-mix(in oklch, var(--surface-2) 96%, transparent);
++  box-shadow: var(--fluent-shadow-16);
++  color: var(--text-primary);
++  font-size: 0.84rem;
++}
++
++.ui-offline-banner[hidden] { display: none !important; }
++
++.ui-source-status {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: center;
++  gap: var(--ui-space-2);
++  margin: 0 var(--layer-inset) var(--ui-space-3);
++  padding: 10px;
++  border: 1px solid color-mix(in oklch, var(--color-warning) 45%, var(--stroke-subtle));
++  border-radius: 12px;
++  background: color-mix(in oklch, var(--color-warning) 7%, var(--surface-1));
++}
++
++.ui-source-status__title {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  font-size: 0.82rem;
++  font-weight: 700;
++}
++
++.ui-source-chip {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  min-height: 32px;
++  padding: 4px 9px;
++  border: 1px solid var(--stroke-default);
++  border-radius: 999px;
++  background: var(--surface-1);
++  font-size: 0.78rem;
++}
++
++.ui-source-chip.is-no_permission {
++  border-color: color-mix(in oklch, var(--color-error) 45%, var(--stroke-default));
++}
++
++.ui-source-chip.is-timeout,
++.ui-source-chip.is-unreachable {
++  border-color: color-mix(in oklch, var(--color-warning) 55%, var(--stroke-default));
++}
++
++.ui-source-chip__state {
++  color: var(--text-secondary);
++  font-weight: 600;
++}
++
++.ui-partial-banner {
++  display: flex;
++  align-items: flex-start;
++  gap: 10px;
++  margin: 0 var(--layer-inset) var(--ui-space-3);
++  padding: 12px;
++  border: 1px solid color-mix(in oklch, var(--color-warning) 48%, var(--stroke-default));
++  border-radius: 12px;
++  background: color-mix(in oklch, var(--color-warning) 8%, var(--surface-1));
++  font-size: 0.84rem;
++  line-height: 1.45;
++}
++
++.ui-partial-banner i {
++  color: var(--color-warning-darker);
++  font-size: 1.05rem;
++}
++
++.ui-task-summary {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  min-height: var(--ui-touch-target);
++  padding: 10px 12px;
++  border: 1px solid color-mix(in oklch, var(--color-success) 36%, var(--stroke-subtle));
++  border-radius: 12px;
++  background: color-mix(in oklch, var(--color-success) 7%, var(--surface-1));
++  color: var(--text-primary);
++  font-size: 0.86rem;
++}
++
++.ui-task-summary > span {
++  flex: 1 1 auto;
++  min-width: 0;
++}
++
++.ui-task-summary.is-partial {
++  border-color: color-mix(in oklch, var(--color-warning) 48%, var(--stroke-default));
++  background: color-mix(in oklch, var(--color-warning) 8%, var(--surface-1));
++}
++
++.ui-task-summary.is-partial > i {
++  color: var(--color-warning-darker);
++}
++
++.scanner-state-error {
++  width: auto;
++  margin: var(--ui-space-3);
++}
++
++@media (max-width: 1023.98px) {
++  [data-is-android="true"] .search-container .result-area {
++    flex-wrap: wrap;
++    width: 100%;
++    min-width: 0;
++  }
++
++  [data-is-android="true"] .search-container .result-area > .ui-state-card,
++  [data-is-android="true"] .search-container .result-area > .ui-partial-banner {
++    flex: 0 0 100%;
++    width: 100%;
++    max-width: 100%;
++    min-width: 0;
++    margin-inline: 0;
++  }
++}
++
++/* Action hierarchy: primary, secondary, danger. */
++.ui-action,
++.ui-state-card .btn,
++.ui-task-summary .btn,
++.ui-toast .btn {
++  min-height: var(--ui-touch-target);
++  padding-inline: 16px;
++  border-radius: var(--ui-control-radius);
++  font-weight: 650;
++}
++
++.ui-action--primary,
++.ui-state-card .btn-primary {
++  background: var(--ui-primary-bg);
++  color: var(--ui-primary-fg);
++  border-color: transparent;
++}
++
++.ui-action--secondary,
++.ui-state-card .btn-outline,
++.ui-state-card .btn-ghost {
++  background: var(--ui-secondary-bg);
++  color: var(--ui-secondary-fg);
++  border-color: var(--stroke-default);
++}
++
++.ui-action--danger,
++.ui-state-card .btn-error {
++  background: var(--ui-danger-bg);
++  color: var(--ui-danger-fg);
++  border-color: transparent;
++}
++
++.ui-action:focus-visible,
++.ui-state-card button:focus-visible,
++.ui-source-chip:focus-visible {
++  outline: 2px solid var(--accent);
++  outline-offset: 3px;
++}
++
++/* Toast keeps a textual severity label, not color alone. */
++.ui-toast {
++  width: min(calc(100vw - 24px), 520px);
++  padding: 12px;
++  border: 1px solid var(--stroke-default);
++  border-radius: 14px;
++  background: color-mix(in oklch, var(--surface-2) 96%, transparent);
++  box-shadow: var(--fluent-shadow-16);
++  color: var(--text-primary);
++}
++
++.ui-toast__head {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  font-weight: 700;
++}
++
++.ui-toast__body {
++  margin: 7px 0 0;
++  color: var(--text-secondary);
++  font-size: 0.84rem;
++  line-height: 1.45;
++  overflow-wrap: anywhere;
++}
++
++.ui-toast__meta {
++  display: grid;
++  gap: 4px;
++  margin-top: 8px;
++  color: var(--text-muted);
++  font-size: 0.78rem;
++}
++
++.ui-toast__actions {
++  display: flex;
++  justify-content: flex-end;
++  gap: 8px;
++  margin-top: 8px;
++}
++
++/* Mobile title and density rules. */
++[data-is-android="true"] .hover-title,
++[data-is-android="true"] .info-title,
++[data-is-android="true"] .list-title {
++  display: -webkit-box;
++  -webkit-box-orient: vertical;
++  -webkit-line-clamp: 2;
++  overflow: hidden;
++  white-space: normal;
++}
++
++[data-is-android="true"] .table-cell-title {
++  display: block;
++  max-width: 100%;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++[data-is-android="true"] .lb-title-text {
++  display: -webkit-box;
++  -webkit-box-orient: vertical;
++  -webkit-line-clamp: 3;
++  overflow: hidden;
++  white-space: normal;
++}
++
++[data-is-android="true"] .player-title,
++[data-is-android="true"] .video-title {
++  display: -webkit-box;
++  -webkit-box-orient: vertical;
++  -webkit-line-clamp: 2;
++  overflow: hidden;
++  white-space: normal;
++}
++
++[data-is-android="true"] .lb-otitle {
++  display: -webkit-box;
++  -webkit-box-orient: vertical;
++  -webkit-line-clamp: 2;
++  overflow: hidden;
++  white-space: normal;
++}
++
++[data-is-android="true"] .mobile-page-heading span {
++  display: block;
++  max-width: min(54vw, 320px);
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++@media (max-width: 1023.98px) {
++  [data-is-android="true"] .main-content {
++    padding-bottom: calc(var(--ui-space-5) + env(safe-area-inset-bottom));
++  }
++
++  [data-is-android="true"] .card,
++  [data-is-android="true"] .avlist-card,
++  [data-is-android="true"] .stats-card,
++  [data-is-android="true"] .mini-terminal {
++    border-radius: var(--ui-state-radius);
++    box-shadow: var(--fluent-shadow-2);
++  }
++
++  [data-is-android="true"] .settings-loading-card {
++    margin: 0 var(--layer-inset-mobile) var(--ui-space-4);
++    width: auto;
++  }
++
++  [data-is-android="true"] .save-btn-wrapper.is-error {
++    border-color: color-mix(in oklch, var(--color-error) 48%, var(--stroke-default));
++    background: color-mix(in oklch, var(--color-error) 7%, var(--surface-1));
++  }
++
++  [data-is-android="true"] .btn-icon,
++  [data-is-android="true"] .mode-toggle-btn,
++  [data-is-android="true"] .log-filter-btn,
++  [data-is-android="true"] .log-action-btn,
++  [data-is-android="true"] .pager-btn,
++  [data-is-android="true"] .lightbox-close,
++  [data-is-android="true"] .sg-close,
++  [data-is-android="true"] .lb-nav-btn,
++  [data-is-android="true"] .font-size-btn,
++  [data-is-android="true"] .locale-toggle-btn,
++  [data-is-android="true"] .theme-toggle-btn {
++    min-width: var(--ui-touch-target);
++    min-height: var(--ui-touch-target);
++  }
++
++  [data-is-android="true"] .btn {
++    min-height: var(--ui-touch-target);
++    border-radius: var(--ui-control-radius);
++  }
++
++  [data-is-android="true"] .btn-hero {
++    min-height: var(--ui-touch-target);
++    padding: 0.6rem 1.35rem;
++    font-size: 0.94rem;
++    border-radius: var(--radius-pill);
++  }
++
++  [data-is-android="true"] .action-section {
++    padding: 0.75rem;
++  }
++
++  [data-is-android="true"] .output-info-path {
++    flex-wrap: wrap;
++  }
++
++  [data-is-android="true"] .output-info-path .path {
++    flex: 1 1 100%;
++  }
++
++  [data-is-android="true"] .output-info-actions {
++    width: 100%;
++    justify-content: flex-end;
++    flex-wrap: wrap;
++  }
++
++  [data-is-android="true"] .scanner-generate-inline {
++    min-height: var(--ui-touch-target);
++    padding: 0.5rem 0.9rem;
++    font-size: 0.86rem;
++    white-space: nowrap;
++  }
++
++  [data-is-android="true"] .output-info-actions .path-copy-btn,
++  [data-is-android="true"] .output-info-actions .settings-link {
++    min-height: var(--ui-touch-target);
++  }
++
++  [data-is-android="true"] .output-info-actions .settings-link {
++    display: inline-flex;
++    align-items: center;
++    padding-inline: 4px;
++  }
++
++  [data-is-android="true"] .search-bar .spotlight-search--wishlist-toggle {
++    --spotlight-left-slot: 7rem;
++    --spotlight-right-slot: 3.5rem;
++  }
++
++  [data-is-android="true"] .spotlight-search input {
++    font-size: 0.9rem;
++  }
++
++  /*
++   * Right-slot width follows the controls that are actually visible.
++   * One unit is a 40px icon button; the source pill counts as two units.
++   * This keeps the placeholder readable in the normal one-button state.
++   */
++  [data-is-android="true"] .search-bar .spotlight-search--wishlist-toggle[data-action-units="2"] {
++    --spotlight-right-slot: 5.75rem;
++  }
++
++  [data-is-android="true"] .search-bar .spotlight-search--wishlist-toggle[data-action-units="3"] {
++    --spotlight-right-slot: 8.5rem;
++  }
++
++  [data-is-android="true"] .search-bar .spotlight-search--wishlist-toggle[data-action-units="4"] {
++    --spotlight-right-slot: 11.25rem;
++  }
++
++  [data-is-android="true"] .search-bar .spotlight-search--wishlist-toggle[data-action-units="5"] {
++    --spotlight-right-slot: 14rem;
++  }
++
++  [data-is-android="true"] .btn-primary:not(.btn-outline) {
++    background: var(--ui-primary-bg);
++    color: var(--ui-primary-fg);
++    border-color: transparent;
++  }
++
++  [data-is-android="true"] .btn-error:not(.btn-outline) {
++    background: var(--ui-danger-bg);
++    color: var(--ui-danger-fg);
++    border-color: transparent;
++  }
++
++  [data-is-android="true"] .ui-state-card {
++    margin-inline: var(--layer-inset-mobile);
++    width: auto;
++    padding: var(--ui-space-4);
++  }
++
++  [data-is-android="true"] .ui-source-status,
++  [data-is-android="true"] .ui-partial-banner {
++    margin-inline: var(--layer-inset-mobile);
++  }
++
++  [data-is-android="true"] .ui-skeleton-grid {
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++  }
++}
++
++@media (max-width: 520px) {
++  [data-is-android="true"] .ui-state-card__grid {
++    gap: var(--ui-space-2);
++  }
++
++  [data-is-android="true"] .ui-state-card__actions > *,
++  [data-is-android="true"] .ui-task-summary__actions > * {
++    flex: 1 1 140px;
++  }
++
++  [data-is-android="true"] .ui-source-status {
++    align-items: flex-start;
++  }
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .ui-skeleton-line::after,
++  .ui-skeleton-block::after {
++    animation: none;
++  }
++}
++
++@keyframes ui-skeleton-sweep {
++  100% { transform: translateX(100%); }
++}
++
 --- a/web/static/css/pages/showcase/05-lightbox.css
 +++ b/web/static/css/pages/showcase/05-lightbox.css
 @@ -265,13 +265,21 @@
@@ -1544,7 +2460,7 @@
 +}
 --- /dev/null
 +++ b/web/static/js/components/mobile-back.js
-@@ -0,0 +1,213 @@
+@@ -0,0 +1,248 @@
 +/**
 + * Android hardware-back bridge for the embedded WebView.
 + *
@@ -1680,6 +2596,8 @@
 +            ? window.Alpine.store('ui')
 +            : null;
 +
++        // Layer order mirrors what is visually on top: toolbar/dialog, editor,
++        // media overlay, then the page's own expanded information state.
 +        return closeFlag(ui, 'toolbarOpen', null)
 +            || closeFlag(page, '_maskVisible', 'cancelMask')
 +            || closeFlag(page, '_pillEditor', '_cancelPillEditor')
@@ -1693,23 +2611,52 @@
 +            || closeFlag(page, 'deleteVideoModalOpen', 'cancelDeleteVideo')
 +            || closeFlag(page, 'sampleGalleryOpen', 'closeSampleGallery')
 +            || closeFlag(page, 'lightboxOpen', 'closeLightbox')
++            || closeFlag(page, 'infoVisible', null)
 +            || closeFlag(page, 'sortOpen', null)
 +            || closeFlag(page, 'modeOpen', null);
 +    }
 +
 +    function closeSearch(page) {
 +        if (!page) return false;
-+        return closeFlag(page, 'rescrapeOpen', 'closeRescrape')
++        var overlayHandled = closeFlag(page, 'rescrapeOpen', 'closeRescrape')
 +            || closeFlag(page, 'browseDirOpen', 'closeBrowseDir')
 +            || closeFlag(page, 'duplicateModalOpen', 'closeDuplicateModal')
 +            || closeFlag(page, 'sampleGalleryOpen', 'closeSampleGallery')
 +            || closeFlag(page, 'wishlistLightboxOpen', 'closeWishlistLightbox')
 +            || closeFlag(page, 'lightboxOpen', 'closeLightbox');
++        if (overlayHandled) return true;
++
++        // A wishlist wall is one level below the search/file result surface.
++        if (page.listMode === 'wishlist' && typeof page.switchToSearchList === 'function') {
++            page.switchToSearchList();
++            return true;
++        }
++
++        // Grid -> detail is the normal navigation path. Going back from a
++        // detail view must return to the grid, not to the browser's previous
++        // menu entry.
++        if (page.displayMode === 'detail'
++                && page.listMode === 'search'
++                && Array.isArray(page.searchResults)
++                && page.searchResults.length > 1) {
++            page.displayMode = 'grid';
++            if (typeof page.saveState === 'function') page.saveState();
++            return true;
++        }
++
++        // The final result/error surface is one level above the empty search
++        // surface. Clear it before allowing WebView history navigation.
++        if ((page.pageState === 'result' || page.pageState === 'error')
++                && typeof page.clearAll === 'function') {
++            page.clearAll();
++            return true;
++        }
++        return false;
 +    }
 +
 +    function closeScanner(page) {
 +        if (!page) return false;
-+        return closeFlag(page, 'dirtyCheckModalOpen', 'dirtyCheckCancel')
++        var overlayHandled = closeFlag(page, 'dirtyCheckModalOpen', 'dirtyCheckCancel')
 +            || closeFlag(page, 'missingConfirmModalOpen', 'cancelLargeMissingEnrich')
 +            || closeFlag(page, 'nfoUpdateConfirmModalOpen', 'cancelNfoUpdate')
 +            || closeFlag(page, 'tagSourceConfirmModalOpen', 'cancelTagSourceUpdate')
@@ -1719,6 +2666,8 @@
 +            || closeFlag(page, 'readonlyConfirmModalOpen', 'readonlyConfirmCancel')
 +            || closeFlag(page, 'clearCacheModalOpen', null)
 +            || closeFlag(page, 'browseDirOpen', 'closeBrowseDir');
++        if (overlayHandled) return true;
++        return closeFlag(page, 'logPanelExpanded', null);
 +    }
 +
 +    function closeSettings(page) {
@@ -1739,6 +2688,8 @@
 +    }
 +
 +    window.OpenAverMobileBack = function () {
++        // Contract: return true only when this call consumed one visible layer.
++        // Native code falls back to WebView history only after this returns false.
 +        var shell = dataFor(document.body);
 +        if (closeShellLayer(shell)) return true;
 +        if (closeTutorial()) return true;
@@ -1758,6 +2709,94 @@
 +        return handled || closeGenericPopover();
 +    };
 +})();
+--- a/web/static/js/components/toast-store.js
++++ b/web/static/js/components/toast-store.js
+@@ -3,22 +3,80 @@
+         message: '',
+         type: 'success',
+         visible: false,
++        kind: 'success',
++        title: '',
++        scope: '',
++        suggestion: '',
++        details: '',
++        occurredAt: '',
+         action: null, // UI 暫態 {label, onClick}；每次 show() 覆寫，hide()／到期清 null
+         _timer: null,
+         // 逐字保留今日五份實作的共同語意：後到的覆蓋先到的（先取消舊計時器再排新的）
+-        show(msg, type = 'success', duration = 2500, action = null) {
+-            this.message = msg;
+-            this.type = type;
++        show(msgOrOptions, type = 'success', duration = 2500, action = null) {
++            const options = msgOrOptions && typeof msgOrOptions === 'object'
++                ? msgOrOptions
++                : { message: msgOrOptions, type, duration, action };
++            const message = String(options.message ?? '');
++            const severity = options.type || 'success';
++            this.message = message;
++            this.type = severity;
++            this.kind = options.kind || (
++                severity === 'error' ? 'error'
++                    : (severity === 'warning' || severity === 'warn') ? 'partial_success'
++                        : severity === 'info' ? 'info'
++                            : 'success'
++            );
++            this.title = options.title || (
++                severity === 'error' ? window.t('ui_state.error_title')
++                    : (severity === 'warning' || severity === 'warn') ? window.t('ui_state.partial_title')
++                        : message
++            );
++            this.scope = options.scope || (
++                severity === 'error' || severity === 'warning' || severity === 'warn'
++                    ? window.t('ui_state.scope.current_action')
++                    : ''
++            );
++            this.suggestion = options.suggestion || (
++                severity === 'error' || severity === 'warning' || severity === 'warn'
++                    ? window.OpenAverUIState?.errorSuggestion(severity === 'error' ? 'error' : 'partial')
++                    : ''
++            );
++            this.details = options.details || (
++                severity === 'error' || severity === 'warning' || severity === 'warn'
++                    ? window.OpenAverUIState?.diagnostics({
++                        title: this.title,
++                        scope: this.scope,
++                        suggestion: this.suggestion,
++                        details: message,
++                    }) || message
++                    : ''
++            );
++            this.occurredAt = options.occurredAt || new Date().toISOString();
+             this.visible = true;
+-            this.action = action;
++            this.action = options.action || null;
+             if (this._timer) clearTimeout(this._timer);
+-            this._timer = setTimeout(() => { this.visible = false; this.action = null; this._timer = null; }, duration);
++            const timeout = Number.isFinite(options.duration) ? options.duration : duration;
++            this._timer = setTimeout(() => { this.hide(); }, timeout);
++        },
++        copy() {
++            return window.OpenAverUIState?.copyError({
++                title: this.title,
++                scope: this.scope,
++                suggestion: this.suggestion,
++                details: this.details,
++            });
+         },
+         hide() {
+             if (this._timer) clearTimeout(this._timer);
+             this._timer = null;
+             this.visible = false;
+             this.action = null;
++            this.kind = 'success';
++            this.title = '';
++            this.scope = '';
++            this.suggestion = '';
++            this.details = '';
++            this.occurredAt = '';
+         },
+     };
+ }
 --- a/web/static/js/pages/scanner/state-scan.js
 +++ b/web/static/js/pages/scanner/state-scan.js
 @@ -33,6 +33,7 @@
@@ -2794,20 +3833,22 @@
          serverMode: false,
          lanIp: '',
          // 168c-T4：「這台電腦」兩格（viewerPlayer／closeAction）的讀寫路由。
-@@ -133,6 +134,7 @@
+@@ -133,6 +134,8 @@
          savedOpenaiUseCustomModel: false,
          pendingNavigationUrl: '',
          _configLoading: true,  // 初始 true，loadConfig 完成後 false
++        _configError: '',
 +        _configSaving: false,
          // 95a-T8: filename 膠囊編輯器收斂式 hydrate 就緒旗標（響應式鏡像，供 x-effect 追蹤；
          // naming.ready 是 closure 布林、非響應式，x-effect 追不到）。loadConfig 開頭重設 false、
          // form 設妥後翻 true；由 hydrateFilenameEditor() 讀取觸發 reactive 補載。
-@@ -211,6 +213,17 @@
+@@ -211,6 +214,18 @@
                  || this.openaiUseCustomModel !== this.savedOpenaiUseCustomModel;
          },
  
 +        get saveStatusText() {
 +            if (this._configLoading) return window.t('settings.save_bar.loading');
++            if (this._configError) return window.t('ui_state.error_title');
 +            if (this._configSaving) return window.t('settings.save_bar.saving');
 +            if (this.isDirty) return window.t('settings.save_bar.unsaved');
 +            return window.t('settings.save_bar.saved');
@@ -2820,7 +3861,7 @@
          // 命名預覽（依 data 套範例值）。誠實反映後端空值行為（U-A2）：空變數 → 空字串，
          // 殘留分隔符照實呈現、不美化（folderPreviewTextEmpty 用空 actor/suffix 展示）。
          _previewWith(data) {
-@@ -353,6 +366,7 @@
+@@ -353,6 +368,7 @@
              // 80a-T3: 讀 data-lan-ip attribute（T2 注入 template context）
              this.lanIp = this.$el?.dataset?.lanIp || '';
              this.shellMode = this.$el?.dataset?.shellMode || '';
@@ -2828,7 +3869,15 @@
  
              this.loadConfig().then(() => {
                  // B1: init scanner link state after config loaded
-@@ -795,38 +809,40 @@
+@@ -665,6 +681,7 @@
+         async loadConfig() {
+             // 鎖定表單（載入期間不可操作）
+             this._configLoading = true;
++            this._configError = '';
+             // 清空快照（載入期間不判定 dirty）
+             this.savedState = null;
+             // 95a-T8: 對稱重設 hydrate 旗標（reset 設定 / 重跑 loadConfig 時需重新 hydrate，
+@@ -795,38 +812,40 @@
                      this.form.closeAction = config.general?.close_action || 'ask';
                      // sidebar_collapsed 已移除（由 Alpine $persist + localStorage 驅動）
  
@@ -2897,7 +3946,20 @@
                      }
  
                      // Sources（61c-2）：讀 config.sources 段填入 unified scope。
-@@ -944,33 +960,40 @@
+@@ -886,9 +905,12 @@
+                     if (ollamaUrl && config.translate.provider === 'ollama') {
+                         this.loadOllamaModels(ollamaUrl, ollamaModel);  // 不 await
+                     }
++                } else {
++                    this._configError = result.error || window.t('ui_state.error_title');
+                 }
+             } catch (e) {
+                 console.error('載入設定失敗:', e);
++                this._configError = e?.message || window.t('ui_state.error_title');
+             } finally {
+                 this._configLoading = false;
+             }
+@@ -944,33 +966,40 @@
  
          // 168c-T4：伺服器 + 這台電腦各存各的；互不阻擋。
          async saveConfig() {
@@ -2965,6 +4027,14 @@
          },
  
          async _saveServerConfig() {
+--- a/web/static/js/pages/settings/main.js
++++ b/web/static/js/pages/settings/main.js
+@@ -1,4 +1,4 @@
+-import { stateConfig }       from '@/settings/state-config.js';
++import { stateConfig }       from '@/settings/state-config.js?v=17035-2';
+ import { stateProviders }    from '@/settings/state-providers.js';
+ import { stateUI }           from '@/settings/state-ui.js';
+ import { stateSourceProbe }  from '@/settings/state-source-probe.js';
 --- a/web/static/js/pages/showcase/state-actress.js
 +++ b/web/static/js/pages/showcase/state-actress.js
 @@ -183,7 +183,6 @@
@@ -3083,6 +4153,266 @@
              } else {
                  window.open('/api/gallery/player?path=' + encodeURIComponent(path), '_blank');
              }
+--- a/web/static/js/pages/showcase/state-base.js
++++ b/web/static/js/pages/showcase/state-base.js
+@@ -328,13 +328,20 @@
+         _animGeneration: 0,  // B13: 防止 stale deferred callback
+         _heroCardReconcilePending: false,  // TASK-138-T1（CD-C5）：init first-frame 窗口；非 $persist
+ 
++        async refreshSourceStatus() {
++            try {
++                const response = await fetch('/api/showcase/source-status');
++                const list = response.ok ? await response.json() : [];
++                this.unreachableSources = Array.isArray(list) ? list : [];
++            } catch (_) {
++                // Source reachability is advisory; keep the current list on failure.
++            }
++        },
++
+         // --- 生命週期 ---
+         async init() {
+             // TASK-142-T4: fire-and-forget 來源可達性；失敗靜默，不進 await 鏈。
+-            fetch('/api/showcase/source-status')
+-                .then(r => r.ok ? r.json() : [])
+-                .then(list => { this.unreachableSources = Array.isArray(list) ? list : []; })
+-                .catch(() => {});
++            this.refreshSourceStatus();
+ 
+             // 接入 page lifecycle：清理 lightbox timer 和 body class
+             if (window.__registerPage) {
+--- a/web/static/js/pages/showcase/main.js
++++ b/web/static/js/pages/showcase/main.js
+@@ -10,7 +10,7 @@
+  * plain spread 會丟失 getter descriptor，必須用 Object.defineProperties。
+  */
+ 
+-import { stateBase }     from '@/showcase/state-base.js';
++import { stateBase }     from '@/showcase/state-base.js?v=17035-2';
+ import { stateVideos }   from '@/showcase/state-videos.js';
+ import { stateActress }  from '@/showcase/state-actress.js';
+ import { stateLightbox } from '@/showcase/state-lightbox.js';
+--- /dev/null
++++ b/web/static/js/shared/ui-state.js
+@@ -0,0 +1,219 @@
++/**
++ * Shared mobile UI state and diagnostics helpers.
++ *
++ * This module is intentionally presentation-only: it classifies errors,
++ * formats diagnostics for copying, and exposes stable state names for the
++ * templates. It never performs scraping, database, or file-system work.
++ */
++
++export const UI_STATES = Object.freeze({
++    loading: 'loading',
++    empty: 'empty',
++    offline: 'offline',
++    timeout: 'timeout',
++    permissionRequired: 'permission_required',
++    partialSuccess: 'partial_success',
++    unreachable: 'unreachable',
++    error: 'error',
++});
++
++function tr(key, fallback, params) {
++    if (typeof window.t !== 'function') return fallback;
++    const value = window.t(key, params || {});
++    return value === '[' + key + ']' ? fallback : value;
++}
++
++function stringifyDetail(value) {
++    if (value === null || typeof value === 'undefined') return '';
++    if (typeof value === 'string') return value;
++    if (Array.isArray(value)) {
++        return value.map((item) => {
++            if (item && typeof item === 'object') {
++                const level = item.level ? '[' + String(item.level).toUpperCase() + '] ' : '';
++                const message = item.message || item.text || JSON.stringify(item);
++                return level + message;
++            }
++            return String(item);
++        }).filter(Boolean).join('\n');
++    }
++    if (typeof value === 'object') {
++        try {
++            return JSON.stringify(value, null, 2);
++        } catch (_) {
++            return String(value);
++        }
++    }
++    return String(value);
++}
++
++export function classifyError(errorOrMessage) {
++    const message = String(
++        typeof errorOrMessage === 'object' && errorOrMessage !== null
++            ? (errorOrMessage.message || errorOrMessage.error || errorOrMessage.reason || '')
++            : (errorOrMessage || '')
++    ).toLowerCase();
++
++    if (!navigator.onLine || /offline|network|failed to fetch|connection|连不上|連不上|网络|網路/.test(message)) {
++        return UI_STATES.offline;
++    }
++    if (/timeout|timed out|超时|逾時/.test(message)) return UI_STATES.timeout;
++    if (/permission|forbidden|unauthorized|403|权限|權限/.test(message)) {
++        return UI_STATES.permissionRequired;
++    }
++    if (/partial|部分/.test(message)) return UI_STATES.partialSuccess;
++    if (/empty|no data|not found|没有|沒有|暂无|暫無/.test(message)) return UI_STATES.empty;
++    return UI_STATES.error;
++}
++
++export function errorSuggestion(kindOrError) {
++    if (kindOrError === 'success') {
++        return tr('ui_state.suggestion.success', '任务已完成，无需处理；如需留档可复制日志。');
++    }
++    const kind = Object.values(UI_STATES).includes(kindOrError)
++        ? kindOrError
++        : classifyError(kindOrError);
++
++    if (kind === UI_STATES.offline) {
++        return tr(
++            'ui_state.suggestion.offline',
++            '检查网络或本地服务状态后重试；离线时仍可使用已经保存在手机上的数据。'
++        );
++    }
++    if (kind === UI_STATES.timeout) {
++        return tr(
++            'ui_state.suggestion.timeout',
++            '稍后重试，或切换到其他来源；若多个来源同时超时，请检查网络与本地服务日志。'
++        );
++    }
++    if (kind === UI_STATES.permissionRequired) {
++        return tr(
++            'ui_state.suggestion.permission',
++            '检查存储权限、来源访问权限和当前目录是否可写，然后重试。'
++        );
++    }
++    if (kind === UI_STATES.partialSuccess) {
++        return tr(
++            'ui_state.suggestion.partial',
++            '成功项目已经保留；展开日志查看失败或跳过原因，并只重试失败项目。'
++        );
++    }
++    return tr(
++        'ui_state.suggestion.retry',
++        '重试当前操作；若问题持续，复制日志用于定位问题。'
++    );
++}
++
++export function sourceReasonLabel(reason) {
++    const labels = {
++        no_permission: ['ui_state.state.no_permission', '无权限'],
++        timeout: ['ui_state.state.timeout_short', '超时'],
++        unreachable: ['ui_state.state.unreachable', '不可达'],
++        disabled: ['ui_state.state.disabled', '未启用'],
++        available: ['ui_state.state.available', '可用'],
++    };
++    const item = labels[reason] || ['ui_state.state.unknown', '未知状态'];
++    return tr(item[0], item[1]);
++}
++
++export function sourceReasonIcon(reason) {
++    if (reason === 'no_permission') return 'bi-shield-lock';
++    if (reason === 'timeout') return 'bi-stopwatch';
++    if (reason === 'unreachable') return 'bi-plug';
++    if (reason === 'disabled') return 'bi-toggle-off';
++    if (reason === 'available') return 'bi-check2-circle';
++    return 'bi-question-circle';
++}
++
++export function diagnostics(context) {
++    const data = context && typeof context === 'object' ? context : { message: context };
++    const lines = [
++        tr('ui_state.diagnostics_title', 'OpenAver 移动端诊断信息'),
++        'time: ' + new Date().toISOString(),
++        'page: ' + (data.page || window.location.pathname),
++        'online: ' + (navigator.onLine ? 'true' : 'false'),
++        'locale: ' + (window.__locale || document.documentElement.lang || 'unknown'),
++    ];
++
++    if (data.title) lines.push('title: ' + stringifyDetail(data.title));
++    if (data.scope) lines.push('scope: ' + stringifyDetail(data.scope));
++    if (data.suggestion) lines.push('suggestion: ' + stringifyDetail(data.suggestion));
++    if (data.error) lines.push('error: ' + stringifyDetail(data.error));
++    if (data.task) lines.push('task: ' + stringifyDetail(data.task));
++    if (data.video) lines.push('video: ' + stringifyDetail(data.video));
++
++    const details = stringifyDetail(data.details);
++    if (details) lines.push('details:\n' + details);
++    return lines.join('\n');
++}
++
++async function copyText(text) {
++    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
++        try {
++            await navigator.clipboard.writeText(text);
++            return true;
++        } catch (_) {
++            // Fall through to the textarea fallback for older WebViews.
++        }
++    }
++
++    try {
++        const area = document.createElement('textarea');
++        area.value = text;
++        area.setAttribute('readonly', 'readonly');
++        area.style.position = 'fixed';
++        area.style.opacity = '0';
++        document.body.appendChild(area);
++        area.select();
++        const copied = document.execCommand('copy');
++        document.body.removeChild(area);
++        return copied;
++    } catch (_) {
++        return false;
++    }
++}
++
++export async function copyError(payload) {
++    const data = payload && typeof payload === 'object' ? payload : { error: payload };
++    const text = data.text || diagnostics(data);
++    const copied = await copyText(text);
++    const toast = window.Alpine && typeof window.Alpine.store === 'function'
++        ? window.Alpine.store('toast')
++        : null;
++    if (toast && typeof toast.show === 'function') {
++        toast.show(
++            copied
++                ? tr('ui_state.copied', '日志已复制')
++                : tr('ui_state.copy_failed', '复制失败，请手动选择日志'),
++            copied ? 'success' : 'warning',
++            2200
++        );
++    }
++    return copied;
++}
++
++function updateNetworkState() {
++    const online = navigator.onLine !== false;
++    document.body.dataset.networkState = online ? 'online' : 'offline';
++    const banner = document.getElementById('uiOfflineBanner');
++    if (banner) banner.hidden = online;
++}
++
++window.OpenAverUIState = Object.freeze({
++    states: UI_STATES,
++    classifyError,
++    errorSuggestion,
++    sourceReasonLabel,
++    sourceReasonIcon,
++    diagnostics,
++    copyError,
++    copyText,
++});
++
++if (document.readyState === 'loading') {
++    document.addEventListener('DOMContentLoaded', updateNetworkState, { once: true });
++} else {
++    updateNetworkState();
++}
++window.addEventListener('online', updateNetworkState);
++window.addEventListener('offline', updateNetworkState);
++
 --- /dev/null
 +++ b/web/static/js/shared/video-player.js
 @@ -0,0 +1,20 @@
@@ -3106,6 +4436,116 @@
 +}
 +
 +window.openVideoPlayer = openVideoPlayer;
+--- /dev/null
++++ b/web/templates/_macros/ui_state.html
+@@ -0,0 +1,107 @@
++{% macro state_error_card(show_expr, title_expr, scope_expr, suggestion_expr, details_expr, kind_expr="'error'", retry_action='', retry_label='', secondary_action='', secondary_label='', extra_class='') -%}
++<section class="ui-state-card {{ extra_class }}"
++         x-show="{{ show_expr }}"
++         x-cloak
++         :class="'ui-state-card--' + ({{ kind_expr }})"
++         role="alert">
++  <div class="ui-state-card__head">
++    <span class="ui-state-card__icon" aria-hidden="true">
++      <i class="bi" :class="({{ kind_expr }}) === 'permission_required' ? 'bi-shield-lock' : (({{ kind_expr }}) === 'timeout' ? 'bi-stopwatch' : (({{ kind_expr }}) === 'offline' ? 'bi-wifi-off' : 'bi-exclamation-triangle'))"></i>
++    </span>
++    <div>
++      <p class="ui-state-card__title" x-text="{{ title_expr }}"></p>
++    </div>
++  </div>
++  <div class="ui-state-card__grid">
++    <div class="ui-state-card__field">
++      <div class="ui-state-card__label"><i class="bi bi-bounding-box" aria-hidden="true"></i>{{ t('ui_state.what_happened') }}</div>
++      <p class="ui-state-card__value" x-text="{{ title_expr }}"></p>
++    </div>
++    <div class="ui-state-card__field">
++      <div class="ui-state-card__label"><i class="bi bi-diagram-3" aria-hidden="true"></i>{{ t('ui_state.scope_label') }}</div>
++      <p class="ui-state-card__value" x-text="{{ scope_expr }}"></p>
++    </div>
++    <div class="ui-state-card__field">
++      <div class="ui-state-card__label"><i class="bi bi-lightbulb" aria-hidden="true"></i>{{ t('ui_state.suggestion_label') }}</div>
++      <p class="ui-state-card__value" x-text="{{ suggestion_expr }}"></p>
++    </div>
++  </div>
++  <details class="ui-state-card__details" x-show="!!({{ details_expr }})">
++    <summary><i class="bi bi-terminal" aria-hidden="true"></i>{{ t('ui_state.details') }}</summary>
++    <pre x-text="{{ details_expr }}"></pre>
++  </details>
++  {% if caller is defined %}
++  <div class="ui-state-card__followup">{{ caller() }}</div>
++  {% endif %}
++  <div class="ui-state-card__actions">
++    <button type="button"
++            class="btn btn-sm btn-outline ui-action ui-action--secondary"
++            @click="window.OpenAverUIState.copyError({
++                title: ({{ title_expr }}),
++                scope: ({{ scope_expr }}),
++                suggestion: ({{ suggestion_expr }}),
++                details: ({{ details_expr }})
++            })">
++      <i class="bi bi-clipboard" aria-hidden="true"></i>{{ t('ui_state.copy_log') }}
++    </button>
++    {% if retry_action %}
++    <button type="button"
++            class="btn btn-sm btn-primary ui-action ui-action--primary"
++            @click="{{ retry_action }}">
++      <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{ retry_label }}
++    </button>
++    {% endif %}
++    {% if secondary_action %}
++    <button type="button"
++            class="btn btn-sm btn-outline ui-action ui-action--secondary"
++            @click="{{ secondary_action }}">
++      <i class="bi bi-sliders" aria-hidden="true"></i>{{ secondary_label }}
++    </button>
++    {% endif %}
++  </div>
++</section>
++{%- endmacro %}
++
++{% macro state_toast() -%}
++<div class="toast toast-bottom toast-center fluent-toast-container"
++     x-show="$store.toast.visible"
++     x-cloak
++     role="status"
++     aria-live="polite">
++  <div class="ui-toast" :data-kind="$store.toast.kind">
++    <div class="ui-toast__head">
++      <i class="bi" :class="{
++        'bi-check-circle-fill': $store.toast.type === 'success',
++        'bi-exclamation-circle-fill': $store.toast.type === 'error',
++        'bi-exclamation-triangle-fill': $store.toast.type === 'warning' || $store.toast.type === 'warn',
++        'bi-info-circle-fill': $store.toast.type === 'info'
++      }" aria-hidden="true"></i>
++      <span x-text="$store.toast.title || $store.toast.message"></span>
++    </div>
++    <p class="ui-toast__body"
++       x-show="$store.toast.title && $store.toast.title !== $store.toast.message"
++       x-text="$store.toast.message"></p>
++    <div class="ui-toast__meta"
++         x-show="$store.toast.type === 'error' || $store.toast.type === 'warning' || $store.toast.type === 'warn'">
++      <span><strong>{{ t('ui_state.scope_label') }}:</strong> <span x-text="$store.toast.scope"></span></span>
++      <span><strong>{{ t('ui_state.suggestion_label') }}:</strong> <span x-text="$store.toast.suggestion"></span></span>
++    </div>
++    <div class="ui-toast__actions">
++      <button type="button"
++              class="btn btn-ghost btn-sm"
++              x-show="$store.toast.type === 'error' || $store.toast.type === 'warning' || $store.toast.type === 'warn'"
++              @click="$store.toast.copy()">
++        <i class="bi bi-clipboard" aria-hidden="true"></i>{{ t('ui_state.copy_log') }}
++      </button>
++      <button type="button"
++              class="btn btn-ghost btn-sm"
++              x-show="$store.toast.action"
++              @click.stop="$store.toast.action.onClick(); $store.toast.hide()"
++              x-text="$store.toast.action?.label"></button>
++      <button type="button" class="btn btn-ghost btn-sm" @click="$store.toast.hide()">
++        <i class="bi bi-x-lg" aria-hidden="true"></i>{{ t('common.close') }}
++      </button>
++    </div>
++  </div>
++</div>
++{%- endmacro %}
 --- a/web/templates/base.html
 +++ b/web/templates/base.html
 @@ -1,5 +1,5 @@
@@ -3183,7 +4623,13 @@
          }
  
          .offcanvas-nav .nav-link i,
-@@ -463,7 +510,7 @@
+@@ -460,10 +507,13 @@
+          Placed after extra_css expansion so source-order beats page-specific CSS (CD-A2).
+          Do NOT move into the component link block above — it would be overridden. -->
+     <link href="/static/css/components/fluent-materials.css" rel="stylesheet">
++    <!-- r19 mobile interaction/state layer. Keep last so it can close out spacing,
++         touch targets, and responsive hierarchy across page-specific styles. -->
++    <link href="/static/css/components/mobile-ui.css?v=17035-4" rel="stylesheet">
  
      <!-- i18n: 注入合併後的完整字典 + window.t() -->
      <script>
@@ -3192,7 +4638,32 @@
        window.__i18n = {{ merged_translations|default({})|tojson }};
        window.t = function(key, params) {
            params = params || {};
-@@ -583,6 +630,31 @@
+@@ -571,18 +621,54 @@
+         await this._pollNotifications();
+     },
+     formatTimestamp(ts) {
+-        return new Date(ts * 1000).toLocaleString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
++        const locale = window.__locale || document.documentElement.lang || 'zh-CN';
++        return new Date(ts * 1000).toLocaleString(locale, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+     }
+ }"
+      x-init="$watch('sidebarCollapsed', configSync('sidebar_collapsed'))"
+      :class="{ 'sidebar-collapsed': sidebarCollapsed }"
+-     class="{% if page in ['design-system', 'showcase'] %}ds-page{% endif %} fluent-canvas page-{{ page }}">
++     class="{% if page in ['design-system', 'showcase'] %}ds-page{% endif %} fluent-canvas page-{{ page }}"
++     data-is-android="{{ 'true' if is_android else 'false' }}"
++     data-network-state="online">
++    <div id="uiOfflineBanner"
++         class="ui-offline-banner"
++         role="status"
++         aria-live="polite"
++         hidden>
++        <i class="bi bi-wifi-off" aria-hidden="true"></i>
++        <span>{{ t('ui_state.offline.title') }}：{{ t('ui_state.offline.body') }}</span>
++    </div>
+     <!-- Sidebar: Jinja 直接渲染 class 防止閃爍（不依賴 localStorage） -->
+     <script>
+       if ({{ sidebar_collapsed|default(false)|tojson }}) {
          document.body.classList.add('sidebar-collapsed');
        }
      </script>
@@ -3224,7 +4695,7 @@
      <!-- 頂部導航列（僅小螢幕顯示）-->
      <nav class="navbar bg-base-200 lg:hidden fixed top-0 left-0 right-0 z-50 h-14 top-navbar fluent-acrylic border-b border-base-300" x-show="!mobileMenuOpen">
          <div class="navbar-start">
-@@ -591,8 +663,9 @@
+@@ -591,8 +677,9 @@
              </button>
          </div>
          <div class="navbar-center">
@@ -3236,7 +4707,7 @@
              </span>
          </div>
          <div class="navbar-end">
-@@ -658,7 +731,7 @@
+@@ -658,7 +745,7 @@
              <button type="button"
                      class="btn btn-sm btn-circle btn-ghost"
                      @click="mobileMenuOpen = false"
@@ -3245,7 +4716,16 @@
                  <i class="bi bi-x text-xl"></i>
              </button>
          </div>
-@@ -866,6 +939,7 @@
+@@ -859,6 +946,8 @@
+     <script type="module" src="/static/js/components/path-utils.js"></script>
+     <!-- Motion Preferences Bridge (T4) -->
+     <script type="module" src="/static/js/components/motion-prefs.js"></script>
++    <!-- Shared mobile state classification and diagnostics (r19) -->
++    <script type="module" src="/static/js/shared/ui-state.js?v=17035-2"></script>
+     <!-- Motion Adapter — shared GSAP wrappers (T5) -->
+     <script type="module" src="/static/js/components/motion-adapter.js"></script>
+     <!-- Page Lifecycle Manager (T2.1) -->
+@@ -866,10 +955,11 @@
      <!-- Ghost Fly — shared lightbox transition helper (T8) -->
      <script type="module" src="/static/js/shared/ghost-fly.js"></script>
      <script type="module" src="/static/js/shared/avatar-fly.js"></script>
@@ -3253,18 +4733,30 @@
      <!-- Burst Picker — shared photo-picker animation module (49b-T4a) -->
      <script type="module" src="/static/js/shared/burst-picker.js"></script>
      <!-- Toast store — Alpine.store('toast')（131b-T3） -->
-@@ -915,6 +989,8 @@
+-    <script type="module" src="/static/js/components/toast-store.js"></script>
++    <script type="module" src="/static/js/components/toast-store.js?v=17035-2"></script>
+     <!-- Bridge notify — window.handleBridgeUncovered hook（168a-T4；所有頁面都要有） -->
+     <script type="module" src="/static/js/shared/bridge-notify.js"></script>
+     <!-- 168c-T5: 殼 → 頁面的「這台電腦有新版」提醒 hook -->
+@@ -915,6 +1005,8 @@
      <script defer src="/static/vendor/alpine/anchor.min.js"></script>
      <!-- Alpine Core -->
      <script defer src="/static/vendor/alpine/alpine.min.js"></script>
 +    <!-- Android hardware-back layer handling -->
-+    <script defer src="/static/js/components/mobile-back.js"></script>
++    <script defer src="/static/js/components/mobile-back.js?v=17035-2"></script>
      <!-- Tutorial JS -->
      <script type="module" src="/static/js/components/tutorial.js"></script>
  
 --- a/web/templates/scanner.html
 +++ b/web/templates/scanner.html
-@@ -15,9 +15,10 @@
+@@ -1,5 +1,6 @@
+ {% extends "base.html" %}
+ {% from '_macros/number_drilldown.html' import number_drilldown_panel %}
++{% from '_macros/ui_state.html' import state_error_card, state_toast with context %}
+ 
+ {% block title %}{{ t('scanner.page_title') }} - OpenAver{% endblock %}
+ 
+@@ -15,9 +16,10 @@
  <div class="page-layer">
  <div class="avlist-container ds-gallery-composition" x-data="scanner"
       data-shell-mode="{{ shell_mode or '' }}"
@@ -3276,7 +4768,7 @@
      <!-- Drag Overlay (must be inside x-data scope) -->
      <div class="drag-overlay" id="dragOverlay" :class="{ active: showDragOverlay }">
          <div class="drag-overlay-content">
-@@ -97,14 +98,24 @@
+@@ -97,14 +99,31 @@
          </div>
  
          <!-- Output Info -->
@@ -3304,11 +4796,34 @@
 +                <a href="/settings" class="settings-link">
 +                    <i class="bi bi-gear"></i> {{ t('scanner.folder.settings_link') }}
 +                </a>
++                {% if is_android %}
++                <button class="btn btn-primary scanner-generate-inline" id="btnGenerate"
++                        @click="generate()"
++                        x-bind:disabled="isBusy"
++                        x-html="generateButtonText">
++                </button>
++                {% endif %}
 +            </div>
          </div>
  
          <!-- 跨機器路徑提醒（media-server 風味）：strm 內寫本機路徑，播放端在別機須認得，可到設定設路徑替換規則 -->
-@@ -137,37 +148,57 @@
+@@ -120,12 +139,14 @@
+         </div>
+ 
+         <!-- Action Buttons -->
+-        <div class="action-section">
++        <div class="action-section"{% if is_android %} x-show="doneActionsVisible"{% endif %}>
++            {% if not is_android %}
+             <button class="btn-hero btn-hero-primary" id="btnGenerate"
+                     @click="generate()"
+                     x-bind:disabled="isBusy"
+                     x-html="generateButtonText">
+             </button>
++            {% endif %}
+             <!-- Done Actions (hidden until complete) -->
+             <div id="doneActions" class="done-actions" :style="{ display: doneActionsVisible ? 'flex' : 'none' }">
+                 <button class="btn-hero btn-hero-secondary" id="btnCopyPath"
+@@ -137,37 +158,57 @@
      </div>
  
      <!-- Mini Terminal (hidden by default) -->
@@ -3396,7 +4911,7 @@
              </div>
          </div>
  
-@@ -207,27 +238,115 @@
+@@ -207,27 +248,143 @@
              <span class="enrich-card-badge" x-show="enrichBadgeCount > 0" x-text="enrichBadgeCount"></span>
          </div>
  
@@ -3417,9 +4932,28 @@
 +                </span>
 +                <span class="task-clock" x-show="taskEtaText" x-text="taskEtaText"></span>
 +            </div>
-+            <p class="task-result-summary"
-+               x-show="!isGenerating && taskSummaryText"
-+               x-text="taskSummaryText"></p>
++            <div class="ui-task-summary"
++                 :class="{ 'is-partial': taskFailedDisplay > 0 || taskSkippedCount > 0 }"
++                 x-show="!isGenerating && taskSummaryText"
++                 role="status"
++                 aria-live="polite">
++                <i class="bi"
++                   :class="taskFailedDisplay > 0 || taskSkippedCount > 0 ? 'bi-exclamation-triangle' : 'bi-check2-circle'"
++                   aria-hidden="true"></i>
++                <span x-text="taskSummaryText"></span>
++                <button type="button"
++                        class="btn btn-ghost btn-sm"
++                        @click="window.OpenAverUIState.copyError({
++                            title: taskSummaryText,
++                            scope: window.t('ui_state.scope.scan_task'),
++                            suggestion: window.OpenAverUIState.errorSuggestion(taskFailedDisplay > 0 ? 'partial' : 'success'),
++                            details: window.OpenAverUIState.diagnostics({page: 'scanner', task: taskKind, details: logEntries})
++                        })"
++                        :aria-label="window.t('ui_state.copy_log')"
++                        :title="window.t('ui_state.copy_log')">
++                    <i class="bi bi-clipboard" aria-hidden="true"></i>
++                </button>
++            </div>
 +            <div class="task-control-actions">
 +                <div class="task-metrics"
 +                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich'].includes(taskKind)">
@@ -3458,6 +4992,15 @@
 +                </div>
 +            </div>
 +        </div>
++        {{ state_error_card(
++            show_expr="state === 'error'",
++            title_expr="progressStatus || window.t('ui_state.error_title')",
++            scope_expr="window.t('ui_state.scope.scan_task')",
++            suggestion_expr="window.OpenAverUIState.errorSuggestion(progressStatus)",
++            details_expr="window.OpenAverUIState.diagnostics({page: 'scanner', task: taskKind, error: progressStatus, details: logEntries})",
++            kind_expr="window.OpenAverUIState.classifyError(progressStatus)",
++            extra_class='scanner-state-error'
++        ) }}
 +        <div class="terminal-log-wrap" x-show="logPanelExpanded" x-collapse>
 +            <div class="terminal-log-empty" x-show="logEntries.length === 0">
 +                <i class="bi bi-terminal"></i>
@@ -3527,7 +5070,7 @@
              <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
                  <i class="bi bi-exclamation-circle"></i>
                  {{ t('scanner.stats.nfo_prefix') }}
-@@ -238,14 +357,47 @@
+@@ -238,14 +395,47 @@
                  {{ t('scanner.stats.nfo_suffix') }}
                  {{ number_drilldown_panel() }}
              </span>
@@ -3577,7 +5120,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -295,7 +447,7 @@
+@@ -295,7 +485,7 @@
          </div>
  
          <!-- T10: Resume Pill (未完成提示) -->
@@ -3586,7 +5129,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-arrow-repeat"></i>
                  <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-@@ -313,7 +465,7 @@
+@@ -313,7 +503,7 @@
  
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
          <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
@@ -3595,7 +5138,7 @@
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +491,7 @@
+@@ -339,7 +529,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -3604,7 +5147,7 @@
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +526,8 @@
+@@ -374,6 +564,8 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
@@ -3613,7 +5156,7 @@
          </div>
      </div>
  
-@@ -782,6 +936,140 @@
+@@ -782,6 +974,140 @@
          </div>
      </dialog>
  
@@ -3754,9 +5297,49 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
+@@ -806,25 +1132,7 @@
+     </dialog>
+ 
+     <!-- Toast (Alpine controlled) -->
+-    <div class="toast toast-bottom toast-center fluent-toast-container"
+-         x-show="$store.toast.visible"
+-         x-transition:enter="transition ease-out duration-300"
+-         x-transition:enter-start="opacity-0 translate-y-4"
+-         x-transition:enter-end="opacity-100 translate-y-0"
+-         x-transition:leave="transition ease-in duration-200"
+-         x-transition:leave-start="opacity-100 translate-y-0"
+-         x-transition:leave-end="opacity-0 translate-y-4"
+-         x-cloak>
+-        <div class="alert fluent-toast" :class="`alert-${$store.toast.type}`">
+-            <i class="bi" :class="{
+-                'bi-check-circle': $store.toast.type === 'success',
+-                'bi-exclamation-circle': $store.toast.type === 'error',
+-                'bi-exclamation-triangle': $store.toast.type === 'warning',
+-                'bi-info-circle': $store.toast.type === 'info'
+-            }"></i>
+-            <span x-text="$store.toast.message"></span>
+-        </div>
+-    </div>
++    {{ state_toast() }}
+     {% include '_browse_dir_modal.html' %}
+ </div>
+ </div>
 --- a/web/templates/search.html
 +++ b/web/templates/search.html
-@@ -67,7 +67,7 @@
+@@ -1,10 +1,11 @@
+ {% extends "base.html" %}
+ {% from '_macros/source_pill.html' import source_pill %}
++{% from '_macros/ui_state.html' import state_error_card, state_toast with context %}
+ 
+ {% block title %}{{ t('search.page_title') }} - OpenAver{% endblock %}
+ 
+ {% block extra_css %}
+-<link href="/static/css/pages/search.css" rel="stylesheet">
++<link href="/static/css/pages/search.css?v=17035-3" rel="stylesheet">
+ {% include '_showcase_css.html' %}
+ {% endblock %}
+ 
+@@ -67,7 +68,7 @@
                      </button>
                      <!-- TASK-140-T6: 播放 -->
                      <button class="lb-action-btn"
@@ -3765,7 +5348,99 @@
                              x-show="!actressLightboxMode() && (cardActionState(currentLightboxVideo()) === 'play' || cardActionState(currentLightboxVideo()) === 'play+folder')"
                              data-tooltip="{{ t('search.action.play') }}" aria-label="{{ t('search.action.play') }}">
                          <i class="bi bi-play-fill"></i>
-@@ -1062,7 +1062,7 @@
+@@ -413,7 +414,12 @@
+     <!-- 搜尋框（Spotlight 中央輸入；US-1 navbar 收合不作用於 search 頁，維持永遠可見） -->
+     <div class="search-bar">
+         <form id="searchForm" @submit.prevent="doSearch()">
+-            <div class="spotlight-search spotlight-search--wishlist-toggle">
++            <div class="spotlight-search spotlight-search--wishlist-toggle"
++                 :data-action-units="1
++                     + (pageState === 'loading' ? 1 : 0)
++                     + (listMode === 'search' && pageState === 'result' && (searchResults.length > 1 || actressProfile) && !isComposing() ? 1 : 0)
++                     + (hasContent ? 1 : 0)
++                     + ((isComposing() || canReopenSourcePick()) ? 2 : 0)">
+                 <!-- TASK-140-T7 / spec F2：segmented 檢視切換，取代原本的 search-icon-left -->
+                 <div class="mode-toggle">
+                     <button type="button" class="mode-toggle-btn"
+@@ -430,7 +436,7 @@
+                         <span class="mode-toggle-badge" x-show="wishlistCount > 0" x-text="wishlistCount"></span>
+                     </button>
+                 </div>
+-                <input type="text" id="searchQuery" name="q" placeholder="{{ t('search.placeholder.query') }}" autocomplete="off" x-model="searchQuery" x-ref="searchQuery" @keydown.enter="if ($event.isComposing) { $event.preventDefault(); return; }">
++                <input type="text" id="searchQuery" name="q" placeholder="{{ t('search.placeholder.query_mobile') if is_android else t('search.placeholder.query') }}" autocomplete="off" x-model="searchQuery" x-ref="searchQuery" @keydown.enter="if ($event.isComposing) { $event.preventDefault(); return; }">
+                 <div class="search-actions-right">
+                     <!-- 取消搜尋按鈕（loading 狀態顯示） -->
+                     <button type="button"
+@@ -479,8 +485,20 @@
+ 
+     <!-- 結果區域 -->
+     <div class="result-area">
++        <div class="ui-partial-banner"
++             x-show="pageState === 'result' && searchResults.some(r => r._failed) && searchResults.some(r => !r._failed && !r._skeleton)"
++             x-cloak
++             role="status"
++             aria-live="polite">
++            <i class="bi bi-check2-circle" aria-hidden="true"></i>
++            <div>
++                <strong>{{ t('ui_state.state.partial') }}</strong>
++                <div>{{ t('ui_state.partial_search_hint') }}</div>
++            </div>
++        </div>
++
+         <!-- 初始狀態 -->
+-        <div id="emptyState" class="state-page w-full" x-show="pageState === 'empty' && listMode !== 'wishlist'" x-cloak>
++        <div id="emptyState" class="state-page ui-state-card ui-state-card--empty w-full" x-show="pageState === 'empty' && listMode !== 'wishlist'" x-cloak>
+             <i class="bi bi-film state-page-icon"></i>
+             <p class="state-page-text">{{ t('search.empty.hint') }}</p>
+             <div class="empty-actions">
+@@ -606,22 +624,26 @@
+                     <div class="detail-bar" :style="'width:' + detailProgressPercent() + '%'"></div>
+                     <span class="detail-text" x-text="detailDone + ' / ' + detailTotal">0 / 0</span>
+                 </div>
++                <div class="ui-skeleton-line is-medium" aria-hidden="true"></div>
++                <div class="ui-skeleton-line is-short" aria-hidden="true"></div>
+             </div>
+         </div>
+ 
+         <!-- 錯誤狀態 -->
+-        <div id="errorState" class="state-page error w-full" x-show="pageState === 'error' && listMode !== 'wishlist'" x-cloak>
+-            <i class="bi bi-exclamation-triangle state-page-icon"></i>
+-            <p class="state-page-text error-text" id="errorMessage" x-text="errorText || window.t('search.filelist.search_failed')">{{ t('search.filelist.search_failed') }}</p>
+-            <small class="state-page-hint">{{ t('search.error.hint_retry') }}</small>
+-            {{ source_pill(
+-                name="t('search.error.advanced_search_cta')",
+-                censored=true,
+-                variant='action',
+-                icon='bi-sliders',
+-                extra_classes='state-page-action',
+-                attrs='x-show="!activeMaker()" @click="openRescrape(null, \'search\'); rescrapeNumber = (currentQuery || \'\').trim()"'
+-            ) }}
++        {% call state_error_card(
++            show_expr="pageState === 'error' && listMode !== 'wishlist'",
++            title_expr="errorText || window.t('search.filelist.search_failed')",
++            scope_expr="window.t('ui_state.scope.current_action')",
++            suggestion_expr="window.OpenAverUIState.errorSuggestion(errorKind || errorText)",
++            details_expr="window.OpenAverUIState.diagnostics({page: 'search', error: errorText, details: {errorKind: errorKind, query: currentQuery, mode: currentMode}})",
++            kind_expr="window.OpenAverUIState.classifyError(errorKind || errorText)",
++            retry_action="doSearch(currentQuery || searchQuery)",
++            retry_label=t('search.filelist.retry'),
++            secondary_action="!activeMaker() && (openRescrape(null, 'search'), rescrapeNumber = (currentQuery || '').trim())",
++            secondary_label=t('search.error.advanced_search_cta'),
++            extra_class='w-full'
++        ) %}
++        <div class="search-error-followup">
+             <p class="empty-explainer-line"
+                x-show="pageState === 'error' && errorKind === 'no_data' && (currentMode === 'exact' || currentMode === 'prefix')"
+                x-cloak>{{ t('search.empty.explainer_partial') }}</p>
+@@ -644,6 +666,7 @@
+                 </button>
+             </div>
+         </div>
++        {% endcall %}
+ 
+         <!-- 結果卡片（wrapper：卡片 + 檔案列表垂直排列） -->
+         <div id="resultCard" x-show="pageState === 'result' && listMode !== 'wishlist'" x-cloak>
+@@ -1062,7 +1085,7 @@
                                  </button>
                                  <!-- TASK-140-T6: 播放（count===1 或 count>1 皆顯示）-->
                                  <button class="btn-glass-circle"
@@ -3774,9 +5449,48 @@
                                          x-show="cardActionState(result) === 'play' || cardActionState(result) === 'play+folder'"
                                          title="{{ t('search.action.play') }}">
                                      <i class="bi bi-play-fill"></i>
+@@ -1348,31 +1371,7 @@
+     </div>
+ 
+     <!-- T6b: 統一 Toast 組件（固定位置，Alpine 管理） -->
+-    <div class="search-toast-container"
+-         x-show="$store.toast.visible"
+-         x-transition:enter="transition ease-out duration-300"
+-         x-transition:enter-start="opacity-0 translate-y-4"
+-         x-transition:enter-end="opacity-100 translate-y-0"
+-         x-transition:leave="transition ease-in duration-200"
+-         x-transition:leave-start="opacity-100 translate-y-0"
+-         x-transition:leave-end="opacity-0 translate-y-4">
+-        <div class="alert"
+-             :class="{
+-                 'alert-success': $store.toast.type === 'success',
+-                 'alert-error': $store.toast.type === 'error',
+-                 'alert-warning': $store.toast.type === 'warning',
+-                 'alert-info': $store.toast.type === 'info'
+-             }">
+-            <i class="bi"
+-               :class="{
+-                   'bi-check-circle-fill': $store.toast.type === 'success',
+-                   'bi-exclamation-circle-fill': $store.toast.type === 'error',
+-                   'bi-exclamation-triangle-fill': $store.toast.type === 'warning',
+-                   'bi-info-circle-fill': $store.toast.type === 'info'
+-               }"></i>
+-            <span x-text="$store.toast.message"></span>
+-        </div>
+-    </div>
++    {{ state_toast() }}
+ 
+     <!-- Fix-1: 覆蓋警告 Modal (Alpine state-driven) -->
+     <dialog class="modal fluent-modal"
 --- a/web/templates/settings.html
 +++ b/web/templates/settings.html
-@@ -7,13 +7,14 @@
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% from '_macros/ui_state.html' import state_error_card, state_toast with context %}
+ 
+ {% block title %}{{ t('settings.page_title') }} - OpenAver{% endblock %}
+ 
+@@ -7,13 +8,14 @@
  {% endblock %}
  
  {% block content %}
@@ -3792,7 +5506,7 @@
              <!-- Server Mode Toggle (80a-T3) — 81b-T1: 從 actions 末尾搬到標題側 -->
              {% if not is_synology %}
              <div class="settings-server-mode">
-@@ -153,6 +154,7 @@
+@@ -153,6 +155,7 @@
                      <span>{{ t('settings.server_info.public_exposure') }}</span>
                  </div>
              </div>
@@ -3800,7 +5514,52 @@
          </div>
          <div class="settings-header-actions">
              <!-- Font Size Control -->
-@@ -1248,6 +1250,7 @@
+@@ -189,12 +192,43 @@
+         </div>
+     </div>
+ 
++    <div class="ui-loading-card settings-loading-card"
++         x-show="_configLoading"
++         x-cloak
++         aria-busy="true"
++         :aria-label="window.t('ui_state.state.loading')">
++        <div class="ui-skeleton-line is-medium"></div>
++        <div class="ui-skeleton-line"></div>
++        <div class="ui-skeleton-line is-short"></div>
++        <div class="ui-skeleton-grid" aria-hidden="true">
++            <div class="ui-skeleton-block"></div>
++            <div class="ui-skeleton-block"></div>
++            <div class="ui-skeleton-block"></div>
++        </div>
++    </div>
++
++    {{ state_error_card(
++        show_expr="!!_configError",
++        title_expr="_configError || window.t('ui_state.error_title')",
++        scope_expr="window.t('ui_state.scope.page_data')",
++        suggestion_expr="window.OpenAverUIState.errorSuggestion(_configError)",
++        details_expr="window.OpenAverUIState.diagnostics({page: 'settings', error: _configError})",
++        kind_expr="window.OpenAverUIState.classifyError(_configError)",
++        retry_action='loadConfig()',
++        retry_label=t('search.filelist.retry')
++    ) }}
++
+     <!-- 64b-1: .settings-tab-bar 整段移除（6 個 .settings-tab button）；nav icon-only 嵌 header 由 64b-2 重建 -->
+ 
+     <!-- 靜態 inert：HTML 渲染即生效，Alpine boot 前保護 -->
+     <!-- Alpine boot 後由 :inert binding 接管 -->
+     <!-- 64b-1: form wraps all 3 sections (replaces 6-panel layout). -->
+-    <form id="settingsForm" @submit.prevent="saveConfig" inert :inert="_configLoading">
++    <form id="settingsForm"
++          @submit.prevent="saveConfig"
++          inert
++          :inert="_configLoading"
++          x-show="!_configLoading && !_configError"
++          x-cloak>
+ 
+         <!-- ── quick-toggle 列（CD-64-B8）：下載劇照 + 進階搜尋，header 下 section 上 ── -->
+         <div class="settings-quick-toggle-row">
+@@ -1248,6 +1282,7 @@
                                  <input type="number" class="input input-bordered input-sm" id="maxFilenameLength"
                                      x-model.number="form.maxFilenameLength" min="50" max="255">
                                  <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
@@ -3808,7 +5567,7 @@
                                  <button type="button" class="help-popover-btn"
                                          @click="toggle()"
                                          :aria-expanded="open"
-@@ -1268,6 +1271,7 @@
+@@ -1268,6 +1303,7 @@
                                          {{ t('settings.scraper.path_length_help_line4') }}
                                      </small>
                                  </div>
@@ -3816,7 +5575,7 @@
                              </div>
                          </div>
  
-@@ -1438,6 +1442,7 @@
+@@ -1438,6 +1474,7 @@
                          </div>
                      </div>
  
@@ -3824,7 +5583,7 @@
                      <!-- ── 進階摺疊：離線 HTML 匯出（galleryExport，預設收合 G-B1）── -->
                      <button class="collapsible-trigger" type="button" @click="galleryExport = !galleryExport"
                              :aria-expanded="galleryExport.toString()">
-@@ -1487,6 +1492,7 @@
+@@ -1487,6 +1524,7 @@
                          </div>
  
                      </div><!-- /collapsible-content galleryExport -->
@@ -3832,7 +5591,7 @@
  
              </div>
            </div>
-@@ -1518,6 +1524,7 @@
+@@ -1518,6 +1556,7 @@
                          {% if shell_mode == 'client' %}<small class="settings-hint local-machine-unavailable" x-show="localMachineState === 'unavailable'" x-cloak x-text="window.t('settings.system.this_computer_unavailable')"></small>{% endif %}
                      </div>
                      {% endif %}
@@ -3840,7 +5599,7 @@
                      <div class="settings-form-row">
                          <label class="row-label">{{ t('settings.system.player_label') }}{{ local_machine_tag() }}</label>
                          <div class="flex-1 flex flex-col gap-1">
-@@ -1527,6 +1534,7 @@
+@@ -1527,6 +1566,7 @@
                              <small class="settings-hint">{{ t('settings.system.player_hint_prefix') }} C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe</small>
                          </div>
                      </div>
@@ -3848,7 +5607,7 @@
                      <hr class="my-3">
  
                      <!-- 重置按鈕 -->
-@@ -1545,9 +1553,23 @@
+@@ -1545,9 +1585,23 @@
          </section><!-- /sec-system -->
  
          <!-- 儲存按鈕 -->
@@ -3856,11 +5615,11 @@
 -            <button type="submit" class="btn btn-primary save-btn" id="saveBtn">
 -                <i class="bi bi-save"></i> {{ t('settings.action.save') }}
 +        <div class="save-btn-wrapper"
-+             :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving }">
++             :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving, 'is-error': !!_configError }">
 +            <div class="save-state" role="status" aria-live="polite">
 +                <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
 +                <i x-show="!_configSaving" class="bi"
-+                   :class="isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle'"></i>
++                   :class="_configError ? 'bi-x-circle' : (isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle')"></i>
 +                <span x-text="saveStatusText"></span>
 +            </div>
 +            <button type="submit"
@@ -3875,7 +5634,7 @@
              </button>
          </div>
      </form>
-@@ -1629,6 +1651,7 @@
+@@ -1629,6 +1683,7 @@
          </div>
      </dialog>
  
@@ -3883,7 +5642,7 @@
      <!-- T4: 伺服器模式切換 Confirm Modal -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': serverModeConfirmOpen }"
-@@ -1660,6 +1683,7 @@
+@@ -1660,6 +1715,7 @@
              </div>
          </div>
      </dialog>
@@ -3891,9 +5650,138 @@
  
      <!-- 90c-T5: 全域模式切換（破壞性重設）Confirm Modal -->
      <dialog class="modal fluent-modal"
+@@ -1709,20 +1765,13 @@
+     </dialog>
+ 
+ <!-- Toast 容器（Alpine controlled）-->
+-<div class="toast toast-end toast-top z-[9999]" x-show="$store.toast.visible" x-cloak x-transition>
+-    <div class="alert" :class="`alert-${$store.toast.type}`">
+-        <span x-text="$store.toast.message"></span>
+-        <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="$store.toast.hide()">
+-            <i class="bi bi-x"></i>
+-        </button>
+-    </div>
+-</div>
++{{ state_toast() }}
+     {% include '_browse_dir_modal.html' %}
+ </div>
+ {% endblock %}
+ 
+ {% block pre_alpine_module %}
+-<script type="module" src="/static/js/pages/settings/main.js"></script>
++<script type="module" src="/static/js/pages/settings/main.js?v=17035-2"></script>
+ {% endblock %}
+ {% block extra_js %}
+ <script src="/static/js/pages/settings/theme-transition.js"></script>
 --- a/web/templates/showcase.html
 +++ b/web/templates/showcase.html
-@@ -1184,7 +1184,7 @@
+@@ -1,4 +1,5 @@
+ {% extends "base.html" %}
++{% from '_macros/ui_state.html' import state_error_card, state_toast with context %}
+ 
+ {% block title %}{{ t('showcase.page_title') }} - OpenAver{% endblock %}
+ 
+@@ -9,7 +10,7 @@
+ {% block pre_alpine_module %}
+ {# 進階搜尋 SSR 注入（TASK-62a-0）。放 main.js 之前確保 __ADVANCED_SEARCH__ 就緒。 #}
+ {% include '_advanced_search_bootstrap.html' %}
+-<script type="module" src="/static/js/pages/showcase/main.js"></script>
++<script type="module" src="/static/js/pages/showcase/main.js?v=17035-2"></script>
+ {% endblock %}
+ 
+ {% block content %}
+@@ -20,13 +21,22 @@
+      x-on:showcase:clear-search.window="clearAllFilters()">
+ 
+     <!-- Loading State (初始顯示) -->
+-    <div class="state-page" x-cloak x-show="!showFavoriteActresses && loading && videoCount === 0">
+-        <i class="bi bi-hourglass-split state-page-icon"></i>
+-        <p class="state-page-text">{{ t('showcase.state.loading') }}</p>
++    <div class="ui-loading-card"
++         x-cloak
++         x-show="!showFavoriteActresses && loading && videoCount === 0"
++         aria-busy="true"
++         :aria-label="window.t('ui_state.state.loading')">
++        <div class="ui-skeleton-line is-medium"></div>
++        <div class="ui-skeleton-line is-short"></div>
++        <div class="ui-skeleton-grid" aria-hidden="true">
++            <div class="ui-skeleton-block"></div>
++            <div class="ui-skeleton-block"></div>
++            <div class="ui-skeleton-block"></div>
++        </div>
+     </div>
+ 
+     <!-- Empty State (API 回傳空資料時) -->
+-    <div class="state-page" x-cloak x-show="!showFavoriteActresses && !loading && !error && videoCount === 0">
++    <div class="state-page ui-state-card ui-state-card--empty" x-cloak x-show="!showFavoriteActresses && !loading && !error && videoCount === 0">
+         <i class="bi bi-collection-play state-page-icon"></i>
+         <p class="state-page-text">{{ t('showcase.state.empty') }}</p>
+         <div class="empty-actions">
+@@ -37,15 +47,16 @@
+     </div>
+ 
+     <!-- Error State (API 錯誤時) -->
+-    <div class="state-page error" x-cloak x-show="!loading && error">
+-        <i class="bi bi-exclamation-triangle state-page-icon"></i>
+-        <p class="state-page-text" x-text="error"></p>
+-        <div class="empty-actions">
+-            <button class="btn btn-outline btn-primary btn-sm" @click="retry()">
+-                <i class="bi bi-arrow-clockwise"></i> {{ t('showcase.state.retry') }}
+-            </button>
+-        </div>
+-    </div>
++    {{ state_error_card(
++        show_expr='!loading && !!error',
++        title_expr="error || window.t('ui_state.error_title')",
++        scope_expr="window.t('ui_state.scope.page_data')",
++        suggestion_expr="window.OpenAverUIState.errorSuggestion(error)",
++        details_expr="window.OpenAverUIState.diagnostics({page: 'showcase', error: error})",
++        kind_expr="window.OpenAverUIState.classifyError(error)",
++        retry_action='retry()',
++        retry_label=t('showcase.state.retry')
++    ) }}
+ 
+     <!-- Main Content (API 載入後顯示) -->
+     <div x-show="!error && (videoCount > 0 || showFavoriteActresses)" x-cloak>
+@@ -449,6 +460,37 @@
+ 
+         <!-- 81-T3: 行動工具列透明 backdrop（≤480，點擊收合）。用 @click（非 @click.outside，避子元素 .stop 吃掉觸發）-->
+         <div class="mobile-toolbar-backdrop" x-show="$store.ui.toolbarOpen" @click="$store.ui.toolbarOpen = false" x-cloak></div>
++
++        <!-- Source availability: text + icon, never color alone. -->
++        <div class="ui-source-status"
++             x-show="unreachableSources.length > 0"
++             x-cloak
++             role="status"
++             aria-live="polite">
++            <span class="ui-source-status__title">
++                <i class="bi bi-hdd-network" aria-hidden="true"></i>
++                {{ t('ui_state.source_status_title') }}
++            </span>
++            <template x-for="source in unreachableSources.slice(0, 4)" :key="source.display || source.id">
++                <span class="ui-source-chip"
++                      :class="'is-' + (source.reason || 'unknown')">
++                    <i class="bi" :class="window.OpenAverUIState.sourceReasonIcon(source.reason)" aria-hidden="true"></i>
++                    <b x-text="source.display || source.id"></b>
++                    <span class="ui-source-chip__state"
++                          x-text="window.OpenAverUIState.sourceReasonLabel(source.reason)"></span>
++                </span>
++            </template>
++            <span class="ui-source-chip"
++                  x-show="unreachableSources.length > 4"
++                  x-text="'+' + (unreachableSources.length - 4)"></span>
++            <button type="button"
++                    class="btn btn-ghost btn-sm"
++                    @click="refreshSourceStatus()"
++                    :aria-label="window.t('ui_state.source_status_refresh')"
++                    :title="window.t('ui_state.source_status_refresh')">
++                <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
++            </button>
++        </div>
+ 
+         <!-- 影片模式：status bar + grid / table / list (CD-2: x-if 避免 Alpine 追蹤隱藏陣列 DOM) -->
+         <template x-if="!showFavoriteActresses">
+@@ -1184,7 +1226,7 @@
                                          :aria-label="(currentLightboxVideo?.user_rating||0) > 0 ? t('showcase.pick.remove_aria') : t('showcase.pick.add_aria')"
                                          :aria-busy="!!_pickInFlight[currentLightboxVideo?.path]"
                                          @click.stop="togglePickStar()"><i class="bi bi-star pick-star-outline" aria-hidden="true"></i><i class="bi bi-star-fill pick-star-fill" aria-hidden="true"
@@ -3902,7 +5790,7 @@
                                          x-show="lbTrShowOnTitle()"
                                          @click.stop="lbTranslate()"
                                          :disabled="lbTrIsBusy()"
-@@ -1200,7 +1200,6 @@
+@@ -1200,7 +1242,6 @@
                                  <!-- §b3: 劇照補抓入口（無劇照時顯示） -->
                                  <button class="fetch-samples-btn"
                                          x-show="(currentLightboxVideo?.sample_images || []).length === 0 && !_fetchSamplesLoading"
@@ -3910,3 +5798,39 @@
                                          @click="fetchSamples(currentLightboxVideo)">
                                      <i class="bi bi-cloud-download" aria-hidden="true"></i>
                                      <span x-text="t('showcase.samples.fetch_btn')"></span>
+@@ -1900,34 +1941,7 @@
+     </dialog>
+ 
+     <!-- Toast (M3h) -->
+-    <div class="toast toast-bottom toast-center fluent-toast-container"
+-         x-show="$store.toast.visible"
+-         x-transition:enter="fluent-toast-enter"
+-         x-transition:enter-start="fluent-toast-enter-start"
+-         x-transition:enter-end="fluent-toast-enter-end"
+-         x-transition:leave="fluent-toast-leave"
+-         x-transition:leave-start="fluent-toast-leave-start"
+-         x-transition:leave-end="fluent-toast-leave-end">
+-        <div class="alert fluent-toast"
+-             :class="{
+-                 'alert-success': $store.toast.type === 'success',
+-                 'alert-error':   $store.toast.type === 'error',
+-                 'alert-warning': $store.toast.type === 'warning',
+-                 'alert-info':    $store.toast.type === 'info'
+-             }">
+-            <i class="bi" :class="{
+-                'bi-check-circle':         $store.toast.type === 'success',
+-                'bi-exclamation-circle':   $store.toast.type === 'error',
+-                'bi-exclamation-triangle': $store.toast.type === 'warning',
+-                'bi-info-circle':          $store.toast.type === 'info'
+-            }"></i>
+-            <span x-text="$store.toast.message"></span>
+-            <button type="button" class="btn btn-ghost btn-xs"
+-                    x-show="$store.toast.action"
+-                    @click.stop="$store.toast.action.onClick(); $store.toast.hide()"
+-                    x-text="$store.toast.action?.label"></button>
+-        </div>
+-    </div>
++    {{ state_toast() }}
+ 
+     <!-- Footer 三段式 (49a-T4)：左 count + 中 shortcut + 右 pager -->
+     <!-- ⚠️ 不可加 x-data（會建立 nested Alpine scope，讓 showFavoriteActresses / totalPages / filteredCount 等 state 全變 undefined）。

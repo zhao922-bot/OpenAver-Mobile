@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% from '_macros/source_pill.html' import source_pill %}
+{% from '_macros/ui_state.html' import state_error_card, state_toast with context %}
 
 {% block title %}{{ t('search.page_title') }} - OpenAver{% endblock %}
 
 {% block extra_css %}
-<link href="/static/css/pages/search.css" rel="stylesheet">
+<link href="/static/css/pages/search.css?v=17035-3" rel="stylesheet">
 {% include '_showcase_css.html' %}
 {% endblock %}
 
@@ -413,7 +414,12 @@
     <!-- 搜尋框（Spotlight 中央輸入；US-1 navbar 收合不作用於 search 頁，維持永遠可見） -->
     <div class="search-bar">
         <form id="searchForm" @submit.prevent="doSearch()">
-            <div class="spotlight-search spotlight-search--wishlist-toggle">
+            <div class="spotlight-search spotlight-search--wishlist-toggle"
+                 :data-action-units="1
+                     + (pageState === 'loading' ? 1 : 0)
+                     + (listMode === 'search' && pageState === 'result' && (searchResults.length > 1 || actressProfile) && !isComposing() ? 1 : 0)
+                     + (hasContent ? 1 : 0)
+                     + ((isComposing() || canReopenSourcePick()) ? 2 : 0)">
                 <!-- TASK-140-T7 / spec F2：segmented 檢視切換，取代原本的 search-icon-left -->
                 <div class="mode-toggle">
                     <button type="button" class="mode-toggle-btn"
@@ -430,7 +436,7 @@
                         <span class="mode-toggle-badge" x-show="wishlistCount > 0" x-text="wishlistCount"></span>
                     </button>
                 </div>
-                <input type="text" id="searchQuery" name="q" placeholder="{{ t('search.placeholder.query') }}" autocomplete="off" x-model="searchQuery" x-ref="searchQuery" @keydown.enter="if ($event.isComposing) { $event.preventDefault(); return; }">
+                <input type="text" id="searchQuery" name="q" placeholder="{{ t('search.placeholder.query_mobile') if is_android else t('search.placeholder.query') }}" autocomplete="off" x-model="searchQuery" x-ref="searchQuery" @keydown.enter="if ($event.isComposing) { $event.preventDefault(); return; }">
                 <div class="search-actions-right">
                     <!-- 取消搜尋按鈕（loading 狀態顯示） -->
                     <button type="button"
@@ -479,8 +485,20 @@
 
     <!-- 結果區域 -->
     <div class="result-area">
+        <div class="ui-partial-banner"
+             x-show="pageState === 'result' && searchResults.some(r => r._failed) && searchResults.some(r => !r._failed && !r._skeleton)"
+             x-cloak
+             role="status"
+             aria-live="polite">
+            <i class="bi bi-check2-circle" aria-hidden="true"></i>
+            <div>
+                <strong>{{ t('ui_state.state.partial') }}</strong>
+                <div>{{ t('ui_state.partial_search_hint') }}</div>
+            </div>
+        </div>
+
         <!-- 初始狀態 -->
-        <div id="emptyState" class="state-page w-full" x-show="pageState === 'empty' && listMode !== 'wishlist'" x-cloak>
+        <div id="emptyState" class="state-page ui-state-card ui-state-card--empty w-full" x-show="pageState === 'empty' && listMode !== 'wishlist'" x-cloak>
             <i class="bi bi-film state-page-icon"></i>
             <p class="state-page-text">{{ t('search.empty.hint') }}</p>
             <div class="empty-actions">
@@ -606,22 +624,26 @@
                     <div class="detail-bar" :style="'width:' + detailProgressPercent() + '%'"></div>
                     <span class="detail-text" x-text="detailDone + ' / ' + detailTotal">0 / 0</span>
                 </div>
+                <div class="ui-skeleton-line is-medium" aria-hidden="true"></div>
+                <div class="ui-skeleton-line is-short" aria-hidden="true"></div>
             </div>
         </div>
 
         <!-- 錯誤狀態 -->
-        <div id="errorState" class="state-page error w-full" x-show="pageState === 'error' && listMode !== 'wishlist'" x-cloak>
-            <i class="bi bi-exclamation-triangle state-page-icon"></i>
-            <p class="state-page-text error-text" id="errorMessage" x-text="errorText || window.t('search.filelist.search_failed')">{{ t('search.filelist.search_failed') }}</p>
-            <small class="state-page-hint">{{ t('search.error.hint_retry') }}</small>
-            {{ source_pill(
-                name="t('search.error.advanced_search_cta')",
-                censored=true,
-                variant='action',
-                icon='bi-sliders',
-                extra_classes='state-page-action',
-                attrs='x-show="!activeMaker()" @click="openRescrape(null, \'search\'); rescrapeNumber = (currentQuery || \'\').trim()"'
-            ) }}
+        {% call state_error_card(
+            show_expr="pageState === 'error' && listMode !== 'wishlist'",
+            title_expr="errorText || window.t('search.filelist.search_failed')",
+            scope_expr="window.t('ui_state.scope.current_action')",
+            suggestion_expr="window.OpenAverUIState.errorSuggestion(errorKind || errorText)",
+            details_expr="window.OpenAverUIState.diagnostics({page: 'search', error: errorText, details: {errorKind: errorKind, query: currentQuery, mode: currentMode}})",
+            kind_expr="window.OpenAverUIState.classifyError(errorKind || errorText)",
+            retry_action="doSearch(currentQuery || searchQuery)",
+            retry_label=t('search.filelist.retry'),
+            secondary_action="!activeMaker() && (openRescrape(null, 'search'), rescrapeNumber = (currentQuery || '').trim())",
+            secondary_label=t('search.error.advanced_search_cta'),
+            extra_class='w-full'
+        ) %}
+        <div class="search-error-followup">
             <p class="empty-explainer-line"
                x-show="pageState === 'error' && errorKind === 'no_data' && (currentMode === 'exact' || currentMode === 'prefix')"
                x-cloak>{{ t('search.empty.explainer_partial') }}</p>
@@ -644,6 +666,7 @@
                 </button>
             </div>
         </div>
+        {% endcall %}
 
         <!-- 結果卡片（wrapper：卡片 + 檔案列表垂直排列） -->
         <div id="resultCard" x-show="pageState === 'result' && listMode !== 'wishlist'" x-cloak>
@@ -1348,31 +1371,7 @@
     </div>
 
     <!-- T6b: 統一 Toast 組件（固定位置，Alpine 管理） -->
-    <div class="search-toast-container"
-         x-show="$store.toast.visible"
-         x-transition:enter="transition ease-out duration-300"
-         x-transition:enter-start="opacity-0 translate-y-4"
-         x-transition:enter-end="opacity-100 translate-y-0"
-         x-transition:leave="transition ease-in duration-200"
-         x-transition:leave-start="opacity-100 translate-y-0"
-         x-transition:leave-end="opacity-0 translate-y-4">
-        <div class="alert"
-             :class="{
-                 'alert-success': $store.toast.type === 'success',
-                 'alert-error': $store.toast.type === 'error',
-                 'alert-warning': $store.toast.type === 'warning',
-                 'alert-info': $store.toast.type === 'info'
-             }">
-            <i class="bi"
-               :class="{
-                   'bi-check-circle-fill': $store.toast.type === 'success',
-                   'bi-exclamation-circle-fill': $store.toast.type === 'error',
-                   'bi-exclamation-triangle-fill': $store.toast.type === 'warning',
-                   'bi-info-circle-fill': $store.toast.type === 'info'
-               }"></i>
-            <span x-text="$store.toast.message"></span>
-        </div>
-    </div>
+    {{ state_toast() }}
 
     <!-- Fix-1: 覆蓋警告 Modal (Alpine state-driven) -->
     <dialog class="modal fluent-modal"

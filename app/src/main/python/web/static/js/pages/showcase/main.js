@@ -10,7 +10,7 @@
  * plain spread 會丟失 getter descriptor，必須用 Object.defineProperties。
  */
 
-import { stateBase }     from '@/showcase/state-base.js';
+import { stateBase }     from '@/showcase/state-base.js?v=17035-2';
 import { stateVideos }   from '@/showcase/state-videos.js';
 import { stateActress }  from '@/showcase/state-actress.js';
 import { stateLightbox } from '@/showcase/state-lightbox.js';

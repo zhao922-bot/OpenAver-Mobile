@@ -328,13 +328,20 @@ export function stateBase() {
         _animGeneration: 0,  // B13: 防止 stale deferred callback
         _heroCardReconcilePending: false,  // TASK-138-T1（CD-C5）：init first-frame 窗口；非 $persist
 
+        async refreshSourceStatus() {
+            try {
+                const response = await fetch('/api/showcase/source-status');
+                const list = response.ok ? await response.json() : [];
+                this.unreachableSources = Array.isArray(list) ? list : [];
+            } catch (_) {
+                // Source reachability is advisory; keep the current list on failure.
+            }
+        },
+
         // --- 生命週期 ---
         async init() {
             // TASK-142-T4: fire-and-forget 來源可達性；失敗靜默，不進 await 鏈。
-            fetch('/api/showcase/source-status')
-                .then(r => r.ok ? r.json() : [])
-                .then(list => { this.unreachableSources = Array.isArray(list) ? list : []; })
-                .catch(() => {});
+            this.refreshSourceStatus();
 
             // 接入 page lifecycle：清理 lightbox timer 和 body class
             if (window.__registerPage) {

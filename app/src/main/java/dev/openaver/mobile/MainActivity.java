@@ -12,6 +12,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -24,6 +25,7 @@ import android.provider.Settings;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewConfiguration;
@@ -76,6 +78,8 @@ public final class MainActivity extends Activity {
     private static final long EXIT_BACK_WINDOW_MS = 2000L;
     private static final long PAGE_LOAD_TIMEOUT_MS = 30000L;
     private static final long LOCAL_START_TIMEOUT_MS = 300_000L;
+    private static final long MENU_HANDLE_IDLE_MS = 2600L;
+    private static final int MENU_HANDLE_VERTICAL_SAFE_INSET_DP = 8;
     private static final boolean NATIVE_LOADED;
     private static final String PREFS_NAME = "openaver_mobile";
     private static final String PREF_UI_LOCALE = "ui_locale";
@@ -139,6 +143,14 @@ public final class MainActivity extends Activity {
     private int menuTouchSlop;
     private boolean menuTouchMoved;
     private boolean menuHandleTouching;
+    private final Runnable menuHandleIdleCollapse = () -> {
+        if (menuHandle == null || menuHandleTouching) return;
+        menuHandle.animate()
+                .alpha(0.38f)
+                .scaleX(0.76f)
+                .setDuration(180L)
+                .start();
+    };
 
     private static native String nativeAbi();
 
@@ -216,6 +228,8 @@ public final class MainActivity extends Activity {
                 case MotionEvent.ACTION_DOWN:
                     menuHandleTouching = true;
                     menuTouchMoved = false;
+                    mainHandler.removeCallbacks(menuHandleIdleCollapse);
+                    view.animate().alpha(0.96f).scaleX(1f).setDuration(120L).start();
                     menuTouchDownRawX = event.getRawX();
                     menuTouchDownRawY = event.getRawY();
                     menuDragStartLeft = view.getLeft();
@@ -239,16 +253,19 @@ public final class MainActivity extends Activity {
                     menuHandleTouching = false;
                     view.getParent().requestDisallowInterceptTouchEvent(false);
                     if (menuTouchMoved) {
-                        view.post(this::saveMenuHandlePosition);
+                        snapMenuHandleToEdge(true);
                     } else {
                         view.performClick();
+                        scheduleMenuHandleCollapse();
                     }
                     return true;
                 case MotionEvent.ACTION_CANCEL:
                     menuHandleTouching = false;
                     view.getParent().requestDisallowInterceptTouchEvent(false);
                     if (menuTouchMoved) {
-                        view.post(this::saveMenuHandlePosition);
+                        snapMenuHandleToEdge(true);
+                    } else {
+                        scheduleMenuHandleCollapse();
                     }
                     return true;
                 default:
@@ -268,18 +285,96 @@ public final class MainActivity extends Activity {
         root.post(this::applySavedMenuHandlePosition);
     }
 
+    private void updateMenuHandleTouchDelegate() {
+        if (menuHandle == null || !(menuHandle.getParent() instanceof View)) return;
+        View parent = (View) menuHandle.getParent();
+        if (menuHandle.getWidth() <= 0 || menuHandle.getHeight() <= 0) return;
+
+        int targetSize = dpToPx(48);
+        int extraX = Math.max(0, (targetSize - menuHandle.getWidth()) / 2);
+        int extraY = Math.max(0, (targetSize - menuHandle.getHeight()) / 2);
+        Rect area = new Rect(
+                menuHandle.getLeft() - extraX,
+                menuHandle.getTop() - extraY,
+                menuHandle.getRight() + extraX,
+                menuHandle.getBottom() + extraY
+        );
+        area.intersect(0, 0, parent.getWidth(), parent.getHeight());
+        parent.setTouchDelegate(area.isEmpty() ? null : new TouchDelegate(area, menuHandle));
+    }
+
+    private void updateMenuHandleEdgeStyle(int left) {
+        if (root == null || menuHandle == null) return;
+        boolean onLeftEdge = left + menuHandle.getWidth() / 2 < root.getWidth() / 2;
+        menuHandle.setBackgroundResource(onLeftEdge
+                ? R.drawable.bg_edge_handle_left
+                : R.drawable.bg_edge_handle);
+        // Keep the collapsed handle visually attached to the selected edge.
+        menuHandle.setPivotX(onLeftEdge ? 0f : menuHandle.getWidth());
+        menuHandle.setPivotY(menuHandle.getHeight() / 2f);
+    }
+
+    private void scheduleMenuHandleCollapse() {
+        if (menuHandle == null) return;
+        mainHandler.removeCallbacks(menuHandleIdleCollapse);
+        mainHandler.postDelayed(menuHandleIdleCollapse, MENU_HANDLE_IDLE_MS);
+    }
+
+    private void snapMenuHandleToEdge(boolean animate) {
+        if (root == null || menuHandle == null || webContainer == null
+                || menuHandle.getWidth() == 0) {
+            return;
+        }
+        int minLeft = root.getPaddingLeft();
+        int maxLeft = root.getWidth() - root.getPaddingRight() - menuHandle.getWidth();
+        if (maxLeft < minLeft) maxLeft = minLeft;
+
+        int currentRootLeft = webContainer.getLeft() + menuHandle.getLeft();
+        int targetLeft = currentRootLeft + menuHandle.getWidth() / 2
+                < root.getWidth() / 2 ? minLeft : maxLeft;
+        targetLeft = clamp(targetLeft, minLeft, maxLeft);
+        int top = webContainer.getTop() + menuHandle.getTop();
+
+        if (!animate) {
+            moveMenuHandle(targetLeft, top);
+            saveMenuHandlePosition();
+            scheduleMenuHandleCollapse();
+            return;
+        }
+
+        float deltaX = targetLeft - currentRootLeft;
+        final int snappedLeft = targetLeft;
+        final int snappedTop = top;
+        menuHandle.animate()
+                .translationX(deltaX)
+                .alpha(0.78f)
+                .setDuration(180L)
+                .withEndAction(() -> {
+                    menuHandle.setTranslationX(0f);
+                    moveMenuHandle(snappedLeft, snappedTop);
+                    saveMenuHandlePosition();
+                    scheduleMenuHandleCollapse();
+                })
+                .start();
+    }
+
     private void moveMenuHandle(int requestedLeft, int requestedTop) {
         if (root == null || menuHandle == null) {
             return;
         }
+        int verticalSafeInset = dpToPx(MENU_HANDLE_VERTICAL_SAFE_INSET_DP);
         int availableWidth = root.getWidth() - root.getPaddingLeft()
                 - root.getPaddingRight() - menuHandle.getWidth();
         int availableHeight = root.getHeight() - root.getPaddingTop()
                 - root.getPaddingBottom() - menuHandle.getHeight();
-        int left = clamp(requestedLeft, root.getPaddingLeft(),
-                root.getPaddingLeft() + Math.max(0, availableWidth));
-        int top = clamp(requestedTop, root.getPaddingTop(),
-                root.getPaddingTop() + Math.max(0, availableHeight));
+        int minLeft = root.getPaddingLeft();
+        int maxLeft = root.getPaddingLeft() + Math.max(0, availableWidth);
+        int minTop = root.getPaddingTop() + verticalSafeInset;
+        int maxTop = root.getPaddingTop() + Math.max(0, availableHeight) - verticalSafeInset;
+        if (maxLeft < minLeft) maxLeft = minLeft;
+        if (maxTop < minTop) maxTop = minTop;
+        int left = clamp(requestedLeft, minLeft, maxLeft);
+        int top = clamp(requestedTop, minTop, maxTop);
 
         FrameLayout.LayoutParams params =
                 (FrameLayout.LayoutParams) menuHandle.getLayoutParams();
@@ -287,6 +382,8 @@ public final class MainActivity extends Activity {
         params.leftMargin = left - root.getPaddingLeft();
         params.topMargin = top - root.getPaddingTop();
         menuHandle.setLayoutParams(params);
+        updateMenuHandleEdgeStyle(left);
+        menuHandle.post(this::updateMenuHandleTouchDelegate);
     }
 
     private void saveMenuHandlePosition() {
@@ -325,6 +422,12 @@ public final class MainActivity extends Activity {
             params.leftMargin = 0;
             params.topMargin = 0;
             menuHandle.setLayoutParams(params);
+            menuHandle.setTranslationX(0f);
+            menuHandle.setBackgroundResource(R.drawable.bg_edge_handle);
+            menuHandle.setPivotX(menuHandle.getWidth());
+            menuHandle.setPivotY(menuHandle.getHeight() / 2f);
+            menuHandle.post(this::updateMenuHandleTouchDelegate);
+            scheduleMenuHandleCollapse();
             return;
         }
 
@@ -337,10 +440,15 @@ public final class MainActivity extends Activity {
         int top = root.getPaddingTop()
                 + Math.round(clamp(savedY, 0f, 1f) * Math.max(0, availableHeight));
         moveMenuHandle(left, top);
+        snapMenuHandleToEdge(false);
     }
 
     private static int clamp(int value, int minimum, int maximum) {
         return Math.max(minimum, Math.min(value, maximum));
+    }
+
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
     private static float clamp(float value, float minimum, float maximum) {

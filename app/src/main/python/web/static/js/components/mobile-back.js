@@ -133,6 +133,8 @@
             ? window.Alpine.store('ui')
             : null;
 
+        // Layer order mirrors what is visually on top: toolbar/dialog, editor,
+        // media overlay, then the page's own expanded information state.
         return closeFlag(ui, 'toolbarOpen', null)
             || closeFlag(page, '_maskVisible', 'cancelMask')
             || closeFlag(page, '_pillEditor', '_cancelPillEditor')
@@ -146,23 +148,52 @@
             || closeFlag(page, 'deleteVideoModalOpen', 'cancelDeleteVideo')
             || closeFlag(page, 'sampleGalleryOpen', 'closeSampleGallery')
             || closeFlag(page, 'lightboxOpen', 'closeLightbox')
+            || closeFlag(page, 'infoVisible', null)
             || closeFlag(page, 'sortOpen', null)
             || closeFlag(page, 'modeOpen', null);
     }
 
     function closeSearch(page) {
         if (!page) return false;
-        return closeFlag(page, 'rescrapeOpen', 'closeRescrape')
+        var overlayHandled = closeFlag(page, 'rescrapeOpen', 'closeRescrape')
             || closeFlag(page, 'browseDirOpen', 'closeBrowseDir')
             || closeFlag(page, 'duplicateModalOpen', 'closeDuplicateModal')
             || closeFlag(page, 'sampleGalleryOpen', 'closeSampleGallery')
             || closeFlag(page, 'wishlistLightboxOpen', 'closeWishlistLightbox')
             || closeFlag(page, 'lightboxOpen', 'closeLightbox');
+        if (overlayHandled) return true;
+
+        // A wishlist wall is one level below the search/file result surface.
+        if (page.listMode === 'wishlist' && typeof page.switchToSearchList === 'function') {
+            page.switchToSearchList();
+            return true;
+        }
+
+        // Grid -> detail is the normal navigation path. Going back from a
+        // detail view must return to the grid, not to the browser's previous
+        // menu entry.
+        if (page.displayMode === 'detail'
+                && page.listMode === 'search'
+                && Array.isArray(page.searchResults)
+                && page.searchResults.length > 1) {
+            page.displayMode = 'grid';
+            if (typeof page.saveState === 'function') page.saveState();
+            return true;
+        }
+
+        // The final result/error surface is one level above the empty search
+        // surface. Clear it before allowing WebView history navigation.
+        if ((page.pageState === 'result' || page.pageState === 'error')
+                && typeof page.clearAll === 'function') {
+            page.clearAll();
+            return true;
+        }
+        return false;
     }
 
     function closeScanner(page) {
         if (!page) return false;
-        return closeFlag(page, 'dirtyCheckModalOpen', 'dirtyCheckCancel')
+        var overlayHandled = closeFlag(page, 'dirtyCheckModalOpen', 'dirtyCheckCancel')
             || closeFlag(page, 'missingConfirmModalOpen', 'cancelLargeMissingEnrich')
             || closeFlag(page, 'nfoUpdateConfirmModalOpen', 'cancelNfoUpdate')
             || closeFlag(page, 'tagSourceConfirmModalOpen', 'cancelTagSourceUpdate')
@@ -172,6 +203,8 @@
             || closeFlag(page, 'readonlyConfirmModalOpen', 'readonlyConfirmCancel')
             || closeFlag(page, 'clearCacheModalOpen', null)
             || closeFlag(page, 'browseDirOpen', 'closeBrowseDir');
+        if (overlayHandled) return true;
+        return closeFlag(page, 'logPanelExpanded', null);
     }
 
     function closeSettings(page) {
@@ -192,6 +225,8 @@
     }
 
     window.OpenAverMobileBack = function () {
+        // Contract: return true only when this call consumed one visible layer.
+        // Native code falls back to WebView history only after this returns false.
         var shell = dataFor(document.body);
         if (closeShellLayer(shell)) return true;
         if (closeTutorial()) return true;

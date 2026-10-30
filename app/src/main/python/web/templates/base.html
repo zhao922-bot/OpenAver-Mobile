@@ -507,6 +507,9 @@
          Placed after extra_css expansion so source-order beats page-specific CSS (CD-A2).
          Do NOT move into the component link block above — it would be overridden. -->
     <link href="/static/css/components/fluent-materials.css" rel="stylesheet">
+    <!-- r19 mobile interaction/state layer. Keep last so it can close out spacing,
+         touch targets, and responsive hierarchy across page-specific styles. -->
+    <link href="/static/css/components/mobile-ui.css?v=17035-4" rel="stylesheet">
 
     <!-- i18n: 注入合併後的完整字典 + window.t() -->
     <script>
@@ -618,12 +621,23 @@
         await this._pollNotifications();
     },
     formatTimestamp(ts) {
-        return new Date(ts * 1000).toLocaleString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const locale = window.__locale || document.documentElement.lang || 'zh-CN';
+        return new Date(ts * 1000).toLocaleString(locale, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
     }
 }"
      x-init="$watch('sidebarCollapsed', configSync('sidebar_collapsed'))"
      :class="{ 'sidebar-collapsed': sidebarCollapsed }"
-     class="{% if page in ['design-system', 'showcase'] %}ds-page{% endif %} fluent-canvas page-{{ page }}">
+     class="{% if page in ['design-system', 'showcase'] %}ds-page{% endif %} fluent-canvas page-{{ page }}"
+     data-is-android="{{ 'true' if is_android else 'false' }}"
+     data-network-state="online">
+    <div id="uiOfflineBanner"
+         class="ui-offline-banner"
+         role="status"
+         aria-live="polite"
+         hidden>
+        <i class="bi bi-wifi-off" aria-hidden="true"></i>
+        <span>{{ t('ui_state.offline.title') }}：{{ t('ui_state.offline.body') }}</span>
+    </div>
     <!-- Sidebar: Jinja 直接渲染 class 防止閃爍（不依賴 localStorage） -->
     <script>
       if ({{ sidebar_collapsed|default(false)|tojson }}) {
@@ -932,6 +946,8 @@
     <script type="module" src="/static/js/components/path-utils.js"></script>
     <!-- Motion Preferences Bridge (T4) -->
     <script type="module" src="/static/js/components/motion-prefs.js"></script>
+    <!-- Shared mobile state classification and diagnostics (r19) -->
+    <script type="module" src="/static/js/shared/ui-state.js?v=17035-2"></script>
     <!-- Motion Adapter — shared GSAP wrappers (T5) -->
     <script type="module" src="/static/js/components/motion-adapter.js"></script>
     <!-- Page Lifecycle Manager (T2.1) -->
@@ -943,7 +959,7 @@
     <!-- Burst Picker — shared photo-picker animation module (49b-T4a) -->
     <script type="module" src="/static/js/shared/burst-picker.js"></script>
     <!-- Toast store — Alpine.store('toast')（131b-T3） -->
-    <script type="module" src="/static/js/components/toast-store.js"></script>
+    <script type="module" src="/static/js/components/toast-store.js?v=17035-2"></script>
     <!-- Bridge notify — window.handleBridgeUncovered hook（168a-T4；所有頁面都要有） -->
     <script type="module" src="/static/js/shared/bridge-notify.js"></script>
     <!-- 168c-T5: 殼 → 頁面的「這台電腦有新版」提醒 hook -->
@@ -990,7 +1006,7 @@
     <!-- Alpine Core -->
     <script defer src="/static/vendor/alpine/alpine.min.js"></script>
     <!-- Android hardware-back layer handling -->
-    <script defer src="/static/js/components/mobile-back.js"></script>
+    <script defer src="/static/js/components/mobile-back.js?v=17035-2"></script>
     <!-- Tutorial JS -->
     <script type="module" src="/static/js/components/tutorial.js"></script>
 

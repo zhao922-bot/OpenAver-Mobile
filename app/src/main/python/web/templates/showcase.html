@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_macros/ui_state.html' import state_error_card, state_toast with context %}
 
 {% block title %}{{ t('showcase.page_title') }} - OpenAver{% endblock %}
 
@@ -9,7 +10,7 @@
 {% block pre_alpine_module %}
 {# 進階搜尋 SSR 注入（TASK-62a-0）。放 main.js 之前確保 __ADVANCED_SEARCH__ 就緒。 #}
 {% include '_advanced_search_bootstrap.html' %}
-<script type="module" src="/static/js/pages/showcase/main.js"></script>
+<script type="module" src="/static/js/pages/showcase/main.js?v=17035-2"></script>
 {% endblock %}
 
 {% block content %}
@@ -20,13 +21,22 @@
      x-on:showcase:clear-search.window="clearAllFilters()">
 
     <!-- Loading State (初始顯示) -->
-    <div class="state-page" x-cloak x-show="!showFavoriteActresses && loading && videoCount === 0">
-        <i class="bi bi-hourglass-split state-page-icon"></i>
-        <p class="state-page-text">{{ t('showcase.state.loading') }}</p>
+    <div class="ui-loading-card"
+         x-cloak
+         x-show="!showFavoriteActresses && loading && videoCount === 0"
+         aria-busy="true"
+         :aria-label="window.t('ui_state.state.loading')">
+        <div class="ui-skeleton-line is-medium"></div>
+        <div class="ui-skeleton-line is-short"></div>
+        <div class="ui-skeleton-grid" aria-hidden="true">
+            <div class="ui-skeleton-block"></div>
+            <div class="ui-skeleton-block"></div>
+            <div class="ui-skeleton-block"></div>
+        </div>
     </div>
 
     <!-- Empty State (API 回傳空資料時) -->
-    <div class="state-page" x-cloak x-show="!showFavoriteActresses && !loading && !error && videoCount === 0">
+    <div class="state-page ui-state-card ui-state-card--empty" x-cloak x-show="!showFavoriteActresses && !loading && !error && videoCount === 0">
         <i class="bi bi-collection-play state-page-icon"></i>
         <p class="state-page-text">{{ t('showcase.state.empty') }}</p>
         <div class="empty-actions">
@@ -37,15 +47,16 @@
     </div>
 
     <!-- Error State (API 錯誤時) -->
-    <div class="state-page error" x-cloak x-show="!loading && error">
-        <i class="bi bi-exclamation-triangle state-page-icon"></i>
-        <p class="state-page-text" x-text="error"></p>
-        <div class="empty-actions">
-            <button class="btn btn-outline btn-primary btn-sm" @click="retry()">
-                <i class="bi bi-arrow-clockwise"></i> {{ t('showcase.state.retry') }}
-            </button>
-        </div>
-    </div>
+    {{ state_error_card(
+        show_expr='!loading && !!error',
+        title_expr="error || window.t('ui_state.error_title')",
+        scope_expr="window.t('ui_state.scope.page_data')",
+        suggestion_expr="window.OpenAverUIState.errorSuggestion(error)",
+        details_expr="window.OpenAverUIState.diagnostics({page: 'showcase', error: error})",
+        kind_expr="window.OpenAverUIState.classifyError(error)",
+        retry_action='retry()',
+        retry_label=t('showcase.state.retry')
+    ) }}
 
     <!-- Main Content (API 載入後顯示) -->
     <div x-show="!error && (videoCount > 0 || showFavoriteActresses)" x-cloak>
@@ -449,6 +460,37 @@
 
         <!-- 81-T3: 行動工具列透明 backdrop（≤480，點擊收合）。用 @click（非 @click.outside，避子元素 .stop 吃掉觸發）-->
         <div class="mobile-toolbar-backdrop" x-show="$store.ui.toolbarOpen" @click="$store.ui.toolbarOpen = false" x-cloak></div>
+
+        <!-- Source availability: text + icon, never color alone. -->
+        <div class="ui-source-status"
+             x-show="unreachableSources.length > 0"
+             x-cloak
+             role="status"
+             aria-live="polite">
+            <span class="ui-source-status__title">
+                <i class="bi bi-hdd-network" aria-hidden="true"></i>
+                {{ t('ui_state.source_status_title') }}
+            </span>
+            <template x-for="source in unreachableSources.slice(0, 4)" :key="source.display || source.id">
+                <span class="ui-source-chip"
+                      :class="'is-' + (source.reason || 'unknown')">
+                    <i class="bi" :class="window.OpenAverUIState.sourceReasonIcon(source.reason)" aria-hidden="true"></i>
+                    <b x-text="source.display || source.id"></b>
+                    <span class="ui-source-chip__state"
+                          x-text="window.OpenAverUIState.sourceReasonLabel(source.reason)"></span>
+                </span>
+            </template>
+            <span class="ui-source-chip"
+                  x-show="unreachableSources.length > 4"
+                  x-text="'+' + (unreachableSources.length - 4)"></span>
+            <button type="button"
+                    class="btn btn-ghost btn-sm"
+                    @click="refreshSourceStatus()"
+                    :aria-label="window.t('ui_state.source_status_refresh')"
+                    :title="window.t('ui_state.source_status_refresh')">
+                <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+            </button>
+        </div>
 
         <!-- 影片模式：status bar + grid / table / list (CD-2: x-if 避免 Alpine 追蹤隱藏陣列 DOM) -->
         <template x-if="!showFavoriteActresses">
@@ -1899,34 +1941,7 @@
     </dialog>
 
     <!-- Toast (M3h) -->
-    <div class="toast toast-bottom toast-center fluent-toast-container"
-         x-show="$store.toast.visible"
-         x-transition:enter="fluent-toast-enter"
-         x-transition:enter-start="fluent-toast-enter-start"
-         x-transition:enter-end="fluent-toast-enter-end"
-         x-transition:leave="fluent-toast-leave"
-         x-transition:leave-start="fluent-toast-leave-start"
-         x-transition:leave-end="fluent-toast-leave-end">
-        <div class="alert fluent-toast"
-             :class="{
-                 'alert-success': $store.toast.type === 'success',
-                 'alert-error':   $store.toast.type === 'error',
-                 'alert-warning': $store.toast.type === 'warning',
-                 'alert-info':    $store.toast.type === 'info'
-             }">
-            <i class="bi" :class="{
-                'bi-check-circle':         $store.toast.type === 'success',
-                'bi-exclamation-circle':   $store.toast.type === 'error',
-                'bi-exclamation-triangle': $store.toast.type === 'warning',
-                'bi-info-circle':          $store.toast.type === 'info'
-            }"></i>
-            <span x-text="$store.toast.message"></span>
-            <button type="button" class="btn btn-ghost btn-xs"
-                    x-show="$store.toast.action"
-                    @click.stop="$store.toast.action.onClick(); $store.toast.hide()"
-                    x-text="$store.toast.action?.label"></button>
-        </div>
-    </div>
+    {{ state_toast() }}
 
     <!-- Footer 三段式 (49a-T4)：左 count + 中 shortcut + 右 pager -->
     <!-- ⚠️ 不可加 x-data（會建立 nested Alpine scope，讓 showFavoriteActresses / totalPages / filteredCount 等 state 全變 undefined）。

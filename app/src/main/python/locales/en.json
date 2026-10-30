@@ -67,6 +67,52 @@
       "update_marker_title": "New version v{version} available. Update from the Help page"
     }
   },
+  "ui_state": {
+    "what_happened": "What happened",
+    "scope_label": "Impact",
+    "suggestion_label": "Suggested action",
+    "details": "Details and logs",
+    "copy_log": "Copy log",
+    "copied": "Log copied",
+    "copy_failed": "Copy failed. Select the log manually.",
+    "error_title": "Operation did not complete",
+    "partial_title": "Operation partially completed",
+    "diagnostics_title": "OpenAver mobile diagnostics",
+    "source_status_title": "Source status",
+    "source_status_refresh": "Refresh source status",
+    "partial_search_hint": "Some results were returned. Items that failed can still be retried.",
+    "scope": {
+      "current_action": "The current page and this operation",
+      "current_video": "The current video",
+      "scan_task": "This scan or maintenance task",
+      "page_data": "Data displayed on the current page"
+    },
+    "suggestion": {
+      "retry": "Retry the operation. If it keeps failing, copy the log for troubleshooting.",
+      "offline": "Check the network or local service and retry. Data already stored on the phone remains available offline.",
+      "timeout": "Retry later or switch to another source. If several sources time out, check the network and local service logs.",
+      "permission": "Check storage permission, source access permission, and whether the current folder is writable, then retry.",
+      "partial": "Successful items were kept. Open the log to see why items failed or were skipped, then retry only the failures.",
+      "success": "The task completed. No action is needed; copy the log if you want to keep a record."
+    },
+    "offline": {
+      "title": "You are offline",
+      "body": "Videos, covers, and NFO files already stored on the phone remain available. Scraping, translation, and source checks that need the network are paused."
+    },
+    "state": {
+      "loading": "Loading",
+      "empty": "Nothing to display",
+      "partial": "Partially completed",
+      "timeout": "Source timed out",
+      "timeout_short": "Timed out",
+      "permission_required": "Storage or source permission required",
+      "unreachable": "Unreachable",
+      "available": "Available",
+      "disabled": "Disabled",
+      "no_permission": "No permission",
+      "unknown": "Unknown state"
+    }
+  },
   "desktop": {
     "tray": {
       "open_app": "Open OpenAver",
@@ -120,6 +166,7 @@
     },
     "placeholder": {
       "query": "Search ID, actress or drop files...",
+      "query_mobile": "Search ID or actress...",
       "tag": "Tag name",
       "actors": "Actor names (separate with 、, or ,)"
     },

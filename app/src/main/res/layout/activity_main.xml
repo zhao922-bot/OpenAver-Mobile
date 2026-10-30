@@ -418,14 +418,14 @@
 
         <ImageButton
             android:id="@+id/menuHandle"
-            android:layout_width="30dp"
-            android:layout_height="66dp"
+            android:layout_width="34dp"
+            android:layout_height="64dp"
             android:layout_gravity="end|center_vertical"
-            android:alpha="0.82"
+            android:alpha="0.78"
             android:background="@drawable/bg_edge_handle"
             android:contentDescription="@string/menu_open"
             android:elevation="8dp"
-            android:padding="5dp"
+            android:padding="8dp"
             android:src="@drawable/ic_more_vertical" />
     </FrameLayout>
 

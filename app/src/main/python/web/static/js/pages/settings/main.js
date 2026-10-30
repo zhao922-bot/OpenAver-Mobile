@@ -1,4 +1,4 @@
-import { stateConfig }       from '@/settings/state-config.js';
+import { stateConfig }       from '@/settings/state-config.js?v=17035-2';
 import { stateProviders }    from '@/settings/state-providers.js';
 import { stateUI }           from '@/settings/state-ui.js';
 import { stateSourceProbe }  from '@/settings/state-source-probe.js';

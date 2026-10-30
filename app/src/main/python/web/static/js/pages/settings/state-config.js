@@ -134,6 +134,7 @@ export function stateConfig() {
         savedOpenaiUseCustomModel: false,
         pendingNavigationUrl: '',
         _configLoading: true,  // 初始 true，loadConfig 完成後 false
+        _configError: '',
         _configSaving: false,
         // 95a-T8: filename 膠囊編輯器收斂式 hydrate 就緒旗標（響應式鏡像，供 x-effect 追蹤；
         // naming.ready 是 closure 布林、非響應式，x-effect 追不到）。loadConfig 開頭重設 false、
@@ -215,6 +216,7 @@ export function stateConfig() {
 
         get saveStatusText() {
             if (this._configLoading) return window.t('settings.save_bar.loading');
+            if (this._configError) return window.t('ui_state.error_title');
             if (this._configSaving) return window.t('settings.save_bar.saving');
             if (this.isDirty) return window.t('settings.save_bar.unsaved');
             return window.t('settings.save_bar.saved');
@@ -679,6 +681,7 @@ export function stateConfig() {
         async loadConfig() {
             // 鎖定表單（載入期間不可操作）
             this._configLoading = true;
+            this._configError = '';
             // 清空快照（載入期間不判定 dirty）
             this.savedState = null;
             // 95a-T8: 對稱重設 hydrate 旗標（reset 設定 / 重跑 loadConfig 時需重新 hydrate，
@@ -902,9 +905,12 @@ export function stateConfig() {
                     if (ollamaUrl && config.translate.provider === 'ollama') {
                         this.loadOllamaModels(ollamaUrl, ollamaModel);  // 不 await
                     }
+                } else {
+                    this._configError = result.error || window.t('ui_state.error_title');
                 }
             } catch (e) {
                 console.error('載入設定失敗:', e);
+                this._configError = e?.message || window.t('ui_state.error_title');
             } finally {
                 this._configLoading = false;
             }

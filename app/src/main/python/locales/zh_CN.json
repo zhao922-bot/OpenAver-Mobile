@@ -67,6 +67,52 @@
       "update_marker_title": "有新版 v{version}，到帮助页更新"
     }
   },
+  "ui_state": {
+    "what_happened": "发生了什么",
+    "scope_label": "影响范围",
+    "suggestion_label": "处理建议",
+    "details": "详细信息与日志",
+    "copy_log": "复制日志",
+    "copied": "日志已复制",
+    "copy_failed": "复制失败，请手动选择日志",
+    "error_title": "操作未完成",
+    "partial_title": "操作部分完成",
+    "diagnostics_title": "OpenAver 移动端诊断信息",
+    "source_status_title": "来源状态",
+    "source_status_refresh": "刷新来源状态",
+    "partial_search_hint": "部分结果已返回，未成功的项目仍可重试。",
+    "scope": {
+      "current_action": "当前页面与本次操作",
+      "current_video": "当前影片",
+      "scan_task": "本次扫描或维护任务",
+      "page_data": "当前页面显示的数据"
+    },
+    "suggestion": {
+      "retry": "重试当前操作；若问题持续，复制日志用于定位问题。",
+      "offline": "检查网络或本地服务状态后重试；离线时仍可使用已经保存在手机上的数据。",
+      "timeout": "稍后重试，或切换到其他来源；若多个来源同时超时，请检查网络与本地服务日志。",
+      "permission": "检查存储权限、来源访问权限和当前目录是否可写，然后重试。",
+      "partial": "成功项目已经保留；展开日志查看失败或跳过原因，并只重试失败项目。",
+      "success": "任务已完成，无需处理；如需留档可复制日志。"
+    },
+    "offline": {
+      "title": "当前处于离线状态",
+      "body": "已经保存在手机上的影片、封面和 NFO 仍可使用；需要联网的刮削、翻译与来源检查会暂停。"
+    },
+    "state": {
+      "loading": "正在加载",
+      "empty": "暂无可显示内容",
+      "partial": "部分操作已完成",
+      "timeout": "来源响应超时",
+      "timeout_short": "超时",
+      "permission_required": "需要存储或来源权限",
+      "unreachable": "不可达",
+      "available": "可用",
+      "disabled": "未启用",
+      "no_permission": "无权限",
+      "unknown": "未知状态"
+    }
+  },
   "desktop": {
     "tray": {
       "open_app": "打开 OpenAver",
@@ -120,6 +166,7 @@
     },
     "placeholder": {
       "query": "搜索番号、女优或拖入文件...",
+      "query_mobile": "搜索番号或女优...",
       "tag": "标签名称",
       "actors": "演员名称（可用、，,分隔多人）"
     },
