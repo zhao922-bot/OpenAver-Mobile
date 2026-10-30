@@ -15,6 +15,7 @@ from core.rename_normalizer import (
     execute_combined_rename_plan,
     execute_folder_rename_plan,
     execute_rename_plan,
+    validate_combined_rename_plan,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -495,6 +496,7 @@ def test_combined_plan_renames_files_and_folder_from_source_title(tmp_path):
     assert item["videos"][0]["sample_images_new"] == [
         to_file_uri(str(new_folder / "extrafanart" / "fanart1.jpg"))
     ]
+    assert validate_combined_rename_plan(plan) is True
 
     repo = FakeRepo()
     repo.paths.add(old_uri)
@@ -522,6 +524,27 @@ def test_combined_plan_renames_files_and_folder_from_source_title(tmp_path):
         to_file_uri(str(new_folder / "ABC-123 來源新標題.mp4")),
         [to_file_uri(str(new_folder / "extrafanart" / "fanart1.jpg"))],
     )]
+
+
+def test_combined_plan_validation_detects_changed_source_size(tmp_path):
+    source = tmp_path / "library"
+    folder = source / "ABC123 舊名稱"
+    folder.mkdir(parents=True)
+    video = folder / "ABC123 舊名稱.mp4"
+    video.write_bytes(b"video")
+    old_uri = to_file_uri(str(video))
+    plan = build_combined_rename_plan(
+        [Video(path=old_uri, number="ABC-123")],
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 來源新標題"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+
+    video.write_bytes(b"changed after preview")
+
+    assert validate_combined_rename_plan(plan) is False
 
 
 def test_combined_execute_rolls_back_files_when_folder_rename_fails(tmp_path):

@@ -65,6 +65,7 @@ from core.rename_normalizer import (
     execute_combined_rename_plan,
     execute_folder_rename_plan,
     execute_rename_plan,
+    validate_combined_rename_plan,
 )
 from web.routers.gallery_media import safe_realpath
 from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
@@ -1837,6 +1838,11 @@ def rename_execute(request: RenameExecuteRequest):
                 return {
                     "success": False,
                     "error": "plan_has_conflicts",
+                }
+            if not validate_combined_rename_plan(plan):
+                return {
+                    "success": False,
+                    "error": "plan_changed",
                 }
             result = execute_combined_rename_plan(
                 plan,

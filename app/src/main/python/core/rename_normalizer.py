@@ -1376,3 +1376,53 @@ def execute_combined_rename_plan(
         "updated_videos": len(completed_db),
         "manifest_path": str(manifest),
     }
+
+
+def validate_combined_rename_plan(plan: dict[str, Any]) -> bool:
+    """Recheck cached source-plan file state immediately before execution."""
+    if plan.get("summary", {}).get("conflicts", 0):
+        return False
+    items = [
+        item for item in plan.get("items", [])
+        if item.get("status") == "ready"
+    ]
+    file_sources = {
+        _path_key(operation["old_path"])
+        for item in items
+        for video in item.get("videos", [])
+        for operation in video.get("operations", [])
+    }
+    folder_sources = {
+        _path_key(item["old_folder_path"])
+        for item in items
+        if item["old_folder_path"] != item["new_folder_path"]
+    }
+    try:
+        for item in items:
+            for video in item.get("videos", []):
+                for operation in video.get("operations", []):
+                    source = Path(operation["old_path"])
+                    target = Path(operation["new_path"])
+                    if not source.is_file():
+                        return False
+                    expected_size = operation.get("signature", {}).get("size")
+                    if expected_size is not None and source.stat().st_size != expected_size:
+                        return False
+                    if (
+                        target.exists()
+                        and _path_key(str(target)) not in file_sources
+                    ):
+                        return False
+            if item["old_folder_path"] != item["new_folder_path"]:
+                source = Path(item["old_folder_path"])
+                target = Path(item["new_folder_path"])
+                if not source.is_dir():
+                    return False
+                if (
+                    target.exists()
+                    and _path_key(str(target)) not in folder_sources
+                ):
+                    return False
+    except OSError:
+        return False
+    return True

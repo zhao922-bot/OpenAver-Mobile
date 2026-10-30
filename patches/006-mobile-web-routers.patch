@@ -18,7 +18,7 @@
          "side_effect": True,
 --- a/web/routers/scanner.py
 +++ b/web/routers/scanner.py
-@@ -34,23 +34,46 @@
+@@ -34,23 +34,47 @@
  
  from core.gallery_scanner import VideoScanner, fast_scan_directory, VideoInfo, _run_sample_images_cleanup_pass, is_nas_system_dir_name  # noqa: PLC2701 — scanner 的 rescan 端點需要在特定時機主動觸發 gallery_scanner 內部的樣本圖清理 pass（該 pass 平常只在 scanner 自身流程內被呼叫），避免把整段清理邏輯複製一份到 router 層
  from core.cover_layout import cover_base_stem
@@ -55,6 +55,7 @@
 +    execute_combined_rename_plan,
 +    execute_folder_rename_plan,
 +    execute_rename_plan,
++    validate_combined_rename_plan,
 +)
  from web.routers.gallery_media import safe_realpath
  from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
@@ -68,7 +69,7 @@
  from pydantic import BaseModel
  from core.logger import get_logger
  from core.platform_info import DSM_PERMISSION_HINT, is_synology
-@@ -65,6 +88,14 @@
+@@ -65,6 +89,14 @@
  # T3(40c): Jellyfin check TTL 快取（60 秒）
  _jellyfin_cache_result: dict | None = None
  _jellyfin_cache_time: float = 0
@@ -83,7 +84,7 @@
  
  
  def _sse_event(data: dict) -> str:
-@@ -788,6 +819,55 @@
+@@ -788,6 +820,55 @@
  _DISCONNECT_POLL_INTERVAL_SEC = 0.5
  
  
@@ -139,7 +140,7 @@
  @router.get("/generate")
  async def generate(request: Request):
      """產生影片列表（SSE 串流回傳進度）
-@@ -959,6 +1039,396 @@
+@@ -959,6 +1040,396 @@
      return cache, skipped_readonly, path_mappings
  
  
@@ -536,7 +537,7 @@
  @router.get("/update-check")
  def check_update():
      """檢查需要更新的影片數量（從 SQLite 讀取）"""
-@@ -1021,9 +1491,13 @@
+@@ -1021,9 +1492,13 @@
                  continue
              if has_nfo and has_cover:
                  continue
@@ -552,7 +553,7 @@
              if not has_nfo and not has_cover:
                  missing_both += 1
                  item["category"] = "both"
-@@ -1053,7 +1527,408 @@
+@@ -1053,7 +1528,413 @@
          return {"success": False, "error": "檢查缺失 NFO/封面失敗"}
  
  
@@ -868,6 +869,11 @@
 +                    "success": False,
 +                    "error": "plan_has_conflicts",
 +                }
++            if not validate_combined_rename_plan(plan):
++                return {
++                    "success": False,
++                    "error": "plan_changed",
++                }
 +            result = execute_combined_rename_plan(
 +                plan,
 +                VideoRepository(db_path),
@@ -962,7 +968,7 @@
      """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
  
      try:
-@@ -1085,6 +1960,27 @@
+@@ -1085,6 +1966,27 @@
              return
  
          paths_to_update = stats['paths']
@@ -990,7 +996,7 @@
          yield _sse_event({
              "type": "log",
              "level": "info",
-@@ -1092,12 +1988,46 @@
+@@ -1092,12 +1994,46 @@
          })
  
          # 執行更新（path_mappings 沿用 _build_nfo_update_cache 算好的那份，不重讀 config）
@@ -1039,7 +1045,7 @@
          })
  
      except Exception as e:
-@@ -1106,15 +2036,62 @@
+@@ -1106,15 +2042,62 @@
  
  
  @router.get("/update")
@@ -1110,7 +1116,7 @@
      )
  
  
-@@ -1211,7 +2188,9 @@
+@@ -1211,7 +2194,9 @@
      return {'need_update': len(need_update), 'items': need_update}
  
  
@@ -1121,7 +1127,7 @@
      """SSE 串流：批次為影片產生 poster + fanart"""
      global _jellyfin_cache_result, _jellyfin_cache_time
  
-@@ -1252,7 +2231,13 @@
+@@ -1252,7 +2237,13 @@
          yield _sse_event({"type": "log", "level": "info", "message": f"需補齊 {total} 部影片的圖片..."})
  
          completed = 0
@@ -1135,7 +1141,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,6 +2246,7 @@
+@@ -1261,6 +2252,7 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -1143,7 +1149,7 @@
                  break
  
              cover = item['cover_path']
-@@ -1271,7 +2257,11 @@
+@@ -1271,7 +2263,11 @@
                  "type": "progress",
                  "current": i,
                  "total": total,
@@ -1156,7 +1162,7 @@
              })
  
              img_result = generate_jellyfin_images(
-@@ -1283,18 +2273,35 @@
+@@ -1283,18 +2279,35 @@
  
              if img_result['poster']:
                  yield _sse_event({"type": "log", "level": "info", "message": f"✓ {num} poster + fanart"})
@@ -1195,7 +1201,7 @@
          })
  
      except Exception as e:
-@@ -1359,15 +2366,11 @@
+@@ -1359,15 +2372,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -1215,7 +1221,7 @@
      )
  
  
-@@ -1621,6 +2624,11 @@
+@@ -1621,6 +2630,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:

@@ -274,6 +274,9 @@ export function stateBatch() {
                     this.showToast(message, 'success', 5000);
                     await this.loadStats();
                     await this.checkMissing();
+                } else if (result.error === 'plan_changed') {
+                    this.showToast(window.t('scanner.rename.plan_changed'), 'warn');
+                    this.renamePreviewOpen = false;
                 } else if (result.error === 'plan_expired') {
                     this.showToast(window.t('scanner.rename.plan_expired'), 'warn');
                     this.renamePreviewOpen = false;
