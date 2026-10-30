@@ -23,7 +23,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：签名构建后更新
+- SHA-256：`020807C36E239192D11FF30B7BC24CBE0B603C9FF35BB42D018A0400DD9278BF`
 
 ## 安装
 
