@@ -834,6 +834,7 @@ def get_common_context(request: Request) -> dict:
         "locale": locale,
         "merged_translations": merged_translations,
         "t": _t_bound,
+        "is_android": sys.platform == "android" or os.environ.get("OPENAVER_MOBILE") == "1",
         "is_windows_desktop": getattr(request.state, "shell_kind", None) == "windows",
         "is_mac_desktop": getattr(request.state, "shell_kind", None) == "mac",
         "is_desktop": getattr(request.state, "shell_kind", None) is not None,

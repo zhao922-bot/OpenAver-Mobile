@@ -64,6 +64,9 @@
     <string name="about_message">內嵌 Android 建置 %1$s\n上游正式版 %2$s\n提交 %3$s\n\n本機資料：%4$s\n\nOpenAver 使用 MIT 授權。原桌面端專屬整合無法在 Android 上執行。</string>
     <string name="ok">確定</string>
     <string name="external_browser_missing">沒有可用的瀏覽器。</string>
+    <string name="choose_video_player">選擇影片播放器</string>
+    <string name="video_player_missing">沒有可用的影片播放器。</string>
+    <string name="video_file_unavailable">無法從 App 開啟這個影片檔案。</string>
     <string name="download_started">已開始下載。</string>
     <string name="download_failed">無法開始下載。</string>
     <string name="file_chooser_title">選擇檔案</string>

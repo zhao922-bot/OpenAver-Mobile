@@ -560,7 +560,7 @@
      border-radius: var(--fluent-radius-md);   /* 互動小元件 4px（§1）*/
 --- a/web/static/css/pages/scanner.css
 +++ b/web/static/css/pages/scanner.css
-@@ -365,3 +365,821 @@
+@@ -365,3 +365,825 @@
      border-radius: var(--fluent-radius-md);
      color: var(--text-default, currentColor);
  }
@@ -1283,6 +1283,10 @@
 +}
 +
 +@media (max-width: 520px) {
++    [data-is-android="true"] .avlist-header {
++        display: none;
++    }
++
 +    #progressSection {
 +        margin-inline: 0;
 +    }
@@ -1384,7 +1388,63 @@
 +}
 --- a/web/static/css/pages/settings.css
 +++ b/web/static/css/pages/settings.css
-@@ -1729,3 +1729,97 @@
+@@ -392,33 +392,32 @@
+ 
+     /* P2(Codex): settings-header 換行防溢出（需在 .settings-header base rule 之後，避免被 cascade 覆蓋）*/
+ 
+-    /* scroll-margin-top 加大：sticky header 換兩列後高度增加，避免遮蓋段頭 */
++    /* Mobile controls scroll with the page; only the global top bar stays fixed. */
+     #settings-components .settings-section {
+-        scroll-margin-top: 9rem;
+-    }
+-
+-    /* header 整體允許換行，h4 佔第一列全寬，actions 落第二列 */
+-    .settings-header {
+-        flex-wrap: wrap;
+-        justify-content: flex-start;
+-    }
+-
+-    /* 81b-T2: h4 已包進 .settings-header-left，不再是 .settings-header 直接 flex item。
+-       換行接力改由 .settings-header-left 佔第一列全寬；h4 在 cluster 內仍可佔行（標題獨佔，膠囊/inline 落次行）。 */
+-    .settings-header-left {
+-        flex: 1 1 100%;
+-        min-width: 0;
+-    }
+-
+-    .settings-header-left h4 {
+-        flex: 1 1 100%;
+-        min-width: 0;
+-    }
+-
+-    .settings-header-actions {
++        scroll-margin-top: 4.5rem;
++    }
++
++    /* The page title is already shown in the global mobile top bar. */
++    #settings-components[data-is-android="true"] .settings-header {
++        position: static;
++        justify-content: center;
++        padding-bottom: 0.25rem;
++        margin-bottom: 0.25rem;
++        background: transparent;
++        border-bottom: 0;
++        backdrop-filter: none;
++        -webkit-backdrop-filter: none;
++    }
++
++    #settings-components .settings-header-left {
++        display: none;
++    }
++
++    #settings-components[data-is-android="true"] .settings-header-actions {
+         flex: 1 1 100%;
+         min-width: 0;
+         flex-wrap: wrap;
++        justify-content: center;
+         gap: 0.5rem;
+     }
+ 
+@@ -1729,3 +1728,97 @@
      background: color-mix(in oklch, var(--surface-2) 55%, transparent);
      border-radius: var(--radius-sm);
  }
@@ -2722,7 +2782,7 @@
                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
 --- a/web/static/js/pages/settings/state-config.js
 +++ b/web/static/js/pages/settings/state-config.js
-@@ -88,7 +88,7 @@
+@@ -88,9 +88,10 @@
          cfWindowProxyRestartNeeded: false,
  
          // ===== i18n State =====
@@ -2730,8 +2790,11 @@
 +        locale: (window.__locale || 'zh-CN'),
  
          // ===== Server Mode State (80a-T3) =====
++        isAndroid: false,
          serverMode: false,
-@@ -133,6 +133,7 @@
+         lanIp: '',
+         // 168c-T4：「這台電腦」兩格（viewerPlayer／closeAction）的讀寫路由。
+@@ -133,6 +134,7 @@
          savedOpenaiUseCustomModel: false,
          pendingNavigationUrl: '',
          _configLoading: true,  // 初始 true，loadConfig 完成後 false
@@ -2739,12 +2802,10 @@
          // 95a-T8: filename 膠囊編輯器收斂式 hydrate 就緒旗標（響應式鏡像，供 x-effect 追蹤；
          // naming.ready 是 closure 布林、非響應式，x-effect 追不到）。loadConfig 開頭重設 false、
          // form 設妥後翻 true；由 hydrateFilenameEditor() 讀取觸發 reactive 補載。
-@@ -209,6 +210,17 @@
-             if (!this.savedState) return false;
-             return JSON.stringify(this.form) !== JSON.stringify(this.savedState)
+@@ -211,6 +213,17 @@
                  || this.openaiUseCustomModel !== this.savedOpenaiUseCustomModel;
-+        },
-+
+         },
+ 
 +        get saveStatusText() {
 +            if (this._configLoading) return window.t('settings.save_bar.loading');
 +            if (this._configSaving) return window.t('settings.save_bar.saving');
@@ -2754,10 +2815,89 @@
 +
 +        get saveButtonDisabled() {
 +            return this._configLoading || this._configSaving || !this.isDirty;
-         },
- 
++        },
++
          // 命名預覽（依 data 套範例值）。誠實反映後端空值行為（U-A2）：空變數 → 空字串，
-@@ -944,33 +956,40 @@
+         // 殘留分隔符照實呈現、不美化（folderPreviewTextEmpty 用空 actor/suffix 展示）。
+         _previewWith(data) {
+@@ -353,6 +366,7 @@
+             // 80a-T3: 讀 data-lan-ip attribute（T2 注入 template context）
+             this.lanIp = this.$el?.dataset?.lanIp || '';
+             this.shellMode = this.$el?.dataset?.shellMode || '';
++            this.isAndroid = this.$el?.dataset?.isAndroid === 'true';
+ 
+             this.loadConfig().then(() => {
+                 // B1: init scanner link state after config loaded
+@@ -795,38 +809,40 @@
+                     this.form.closeAction = config.general?.close_action || 'ask';
+                     // sidebar_collapsed 已移除（由 Alpine $persist + localStorage 驅動）
+ 
+-                    // 80a-T3: Server Mode（?? false：缺 key→false；不用 ||，守 CD#3 慣例）
+-                    this.serverMode = config.general?.server_mode ?? false;
+-                    if (this.serverMode) {
+-                        try {
+-                            const r = await fetch('/api/config/general/lan-port');
+-                            const j = await r.json();
+-                            this.lanPort = j.lan_port ?? null;
+-                            this.lanIp = j.lan_ip ?? null;
+-                            this.publicExposure = j.public_exposure ?? false;
+-                        } catch (_e) {
++                    if (!this.isAndroid) {
++                        // 80a-T3: Server Mode（?? false：缺 key→false；不用 ||，守 CD#3 慣例）
++                        this.serverMode = config.general?.server_mode ?? false;
++                        if (this.serverMode) {
++                            try {
++                                const r = await fetch('/api/config/general/lan-port');
++                                const j = await r.json();
++                                this.lanPort = j.lan_port ?? null;
++                                this.lanIp = j.lan_ip ?? null;
++                                this.publicExposure = j.public_exposure ?? false;
++                            } catch (_e) {
++                                this.lanPort = null;
++                                this.publicExposure = false;
++                            }
++                        } else {
+                             this.lanPort = null;
+                             this.publicExposure = false;
+                         }
+-                    } else {
+-                        this.lanPort = null;
+-                        this.publicExposure = false;
+-                    }
+-
+-                    // 114a-T5: 存取密碼保護 —— GET 無 loopback 限制，無論 serverMode 開關都嘗試讀取
+-                    // （spec §2.6：PIN 設定與已通行裝置在 server_mode 關閉時仍要保留、仍要顯示）
+-                    try {
+-                        const authResp = await fetch('/api/access/settings');
+-                        const authResult = await authResp.json();
+-                        if (authResult.success) {
+-                            this.accessAuthEnabled = authResult.enabled;
+-                            this.accessAuthEnabledSaved = authResult.enabled;
+-                            this.accessAuthPin = authResult.pin;
+-                            this.accessAuthPinRevealed = authResult.pin_revealed;
+-                            this.accessAuthCanEdit = authResult.can_edit;
++
++                        // 114a-T5: 存取密碼保護 —— GET 無 loopback 限制，無論 serverMode 開關都嘗試讀取
++                        // （spec §2.6：PIN 設定與已通行裝置在 server_mode 關閉時仍要保留、仍要顯示）
++                        try {
++                            const authResp = await fetch('/api/access/settings');
++                            const authResult = await authResp.json();
++                            if (authResult.success) {
++                                this.accessAuthEnabled = authResult.enabled;
++                                this.accessAuthEnabledSaved = authResult.enabled;
++                                this.accessAuthPin = authResult.pin;
++                                this.accessAuthPinRevealed = authResult.pin_revealed;
++                                this.accessAuthCanEdit = authResult.can_edit;
++                            }
++                        } catch (e) {
++                            console.warn('[accessAuth] loadConfig: GET /api/access/settings failed:', e);
+                         }
+-                    } catch (e) {
+-                        console.warn('[accessAuth] loadConfig: GET /api/access/settings failed:', e);
+                     }
+ 
+                     // Sources（61c-2）：讀 config.sources 段填入 unified scope。
+@@ -944,33 +960,40 @@
  
          // 168c-T4：伺服器 + 這台電腦各存各的；互不阻擋。
          async saveConfig() {
@@ -2932,6 +3072,40 @@
              } finally {
                  this._fetchSamplesLoading = false;
              }
+--- a/web/static/js/pages/showcase/state-videos.js
++++ b/web/static/js/pages/showcase/state-videos.js
+@@ -877,6 +877,8 @@
+                         console.error('Failed to open file:', err);
+                         this.showToast(window.t('showcase.video.play_failed'), 'error');
+                     });
++            } else if (window.openVideoPlayer) {
++                window.openVideoPlayer(path);
+             } else {
+                 window.open('/api/gallery/player?path=' + encodeURIComponent(path), '_blank');
+             }
+--- /dev/null
++++ b/web/static/js/shared/video-player.js
+@@ -0,0 +1,20 @@
++const ANDROID_SHELL_UA = /(?:^|\s)OpenAverMobile\/\S+/;
++
++export function openVideoPlayer(path) {
++    const value = String(path || '').trim();
++    if (!value) return false;
++
++    if (ANDROID_SHELL_UA.test(navigator.userAgent)) {
++        window.location.href =
++            'openaver-player://play?path=' + encodeURIComponent(value);
++        return true;
++    }
++
++    window.open(
++        '/api/gallery/player?path=' + encodeURIComponent(value),
++        '_blank'
++    );
++    return true;
++}
++
++window.openVideoPlayer = openVideoPlayer;
 --- a/web/templates/base.html
 +++ b/web/templates/base.html
 @@ -1,5 +1,5 @@
@@ -3071,7 +3245,15 @@
                  <i class="bi bi-x text-xl"></i>
              </button>
          </div>
-@@ -915,6 +988,8 @@
+@@ -866,6 +939,7 @@
+     <!-- Ghost Fly — shared lightbox transition helper (T8) -->
+     <script type="module" src="/static/js/shared/ghost-fly.js"></script>
+     <script type="module" src="/static/js/shared/avatar-fly.js"></script>
++    <script type="module" src="/static/js/shared/video-player.js"></script>
+     <!-- Burst Picker — shared photo-picker animation module (49b-T4a) -->
+     <script type="module" src="/static/js/shared/burst-picker.js"></script>
+     <!-- Toast store — Alpine.store('toast')（131b-T3） -->
+@@ -915,6 +989,8 @@
      <script defer src="/static/vendor/alpine/anchor.min.js"></script>
      <!-- Alpine Core -->
      <script defer src="/static/vendor/alpine/alpine.min.js"></script>
@@ -3082,8 +3264,11 @@
  
 --- a/web/templates/scanner.html
 +++ b/web/templates/scanner.html
-@@ -17,7 +17,7 @@
+@@ -15,9 +15,10 @@
+ <div class="page-layer">
+ <div class="avlist-container ds-gallery-composition" x-data="scanner"
       data-shell-mode="{{ shell_mode or '' }}"
++     data-is-android="{{ 'true' if is_android else 'false' }}"
       @dragover.document.prevent="handleDragOver($event)"
       @drop.document.prevent="handleDrop($event)"
 -     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel();">
@@ -3091,7 +3276,7 @@
      <!-- Drag Overlay (must be inside x-data scope) -->
      <div class="drag-overlay" id="dragOverlay" :class="{ active: showDragOverlay }">
          <div class="drag-overlay-content">
-@@ -97,14 +97,24 @@
+@@ -97,14 +98,24 @@
          </div>
  
          <!-- Output Info -->
@@ -3123,7 +3308,7 @@
          </div>
  
          <!-- 跨機器路徑提醒（media-server 風味）：strm 內寫本機路徑，播放端在別機須認得，可到設定設路徑替換規則 -->
-@@ -137,37 +147,57 @@
+@@ -137,37 +148,57 @@
      </div>
  
      <!-- Mini Terminal (hidden by default) -->
@@ -3211,7 +3396,7 @@
              </div>
          </div>
  
-@@ -207,27 +237,115 @@
+@@ -207,27 +238,115 @@
              <span class="enrich-card-badge" x-show="enrichBadgeCount > 0" x-text="enrichBadgeCount"></span>
          </div>
  
@@ -3342,7 +3527,7 @@
              <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
                  <i class="bi bi-exclamation-circle"></i>
                  {{ t('scanner.stats.nfo_prefix') }}
-@@ -238,14 +356,47 @@
+@@ -238,14 +357,47 @@
                  {{ t('scanner.stats.nfo_suffix') }}
                  {{ number_drilldown_panel() }}
              </span>
@@ -3392,7 +3577,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -295,7 +446,7 @@
+@@ -295,7 +447,7 @@
          </div>
  
          <!-- T10: Resume Pill (未完成提示) -->
@@ -3401,7 +3586,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-arrow-repeat"></i>
                  <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-@@ -313,7 +464,7 @@
+@@ -313,7 +465,7 @@
  
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
          <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
@@ -3410,7 +3595,7 @@
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +490,7 @@
+@@ -339,7 +491,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -3419,7 +3604,7 @@
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +525,8 @@
+@@ -374,6 +526,8 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
@@ -3428,7 +3613,7 @@
          </div>
      </div>
  
-@@ -782,6 +935,140 @@
+@@ -782,6 +936,140 @@
          </div>
      </dialog>
  
@@ -3569,9 +3754,101 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
+--- a/web/templates/search.html
++++ b/web/templates/search.html
+@@ -67,7 +67,7 @@
+                     </button>
+                     <!-- TASK-140-T6: 播放 -->
+                     <button class="lb-action-btn"
+-                            @click="window.open('/api/gallery/player?path=' + encodeURIComponent(currentLightboxVideo()?._localStatus?.paths?.[0] || ''), '_blank')"
++                            @click="window.openVideoPlayer ? window.openVideoPlayer(currentLightboxVideo()?._localStatus?.paths?.[0] || '') : window.open('/api/gallery/player?path=' + encodeURIComponent(currentLightboxVideo()?._localStatus?.paths?.[0] || ''), '_blank')"
+                             x-show="!actressLightboxMode() && (cardActionState(currentLightboxVideo()) === 'play' || cardActionState(currentLightboxVideo()) === 'play+folder')"
+                             data-tooltip="{{ t('search.action.play') }}" aria-label="{{ t('search.action.play') }}">
+                         <i class="bi bi-play-fill"></i>
+@@ -1062,7 +1062,7 @@
+                                 </button>
+                                 <!-- TASK-140-T6: 播放（count===1 或 count>1 皆顯示）-->
+                                 <button class="btn-glass-circle"
+-                                        @click.stop="window.open('/api/gallery/player?path=' + encodeURIComponent(result._localStatus?.paths?.[0] || ''), '_blank')"
++                                        @click.stop="window.openVideoPlayer ? window.openVideoPlayer(result._localStatus?.paths?.[0] || '') : window.open('/api/gallery/player?path=' + encodeURIComponent(result._localStatus?.paths?.[0] || ''), '_blank')"
+                                         x-show="cardActionState(result) === 'play' || cardActionState(result) === 'play+folder'"
+                                         title="{{ t('search.action.play') }}">
+                                     <i class="bi bi-play-fill"></i>
 --- a/web/templates/settings.html
 +++ b/web/templates/settings.html
-@@ -1545,9 +1545,23 @@
+@@ -7,13 +7,14 @@
+ {% endblock %}
+ 
+ {% block content %}
+-<div id="settings-components" class="page-layer" x-data="settings" data-lan-ip="{{ lan_ip or '' }}" data-shell-mode="{{ shell_mode or '' }}">
++<div id="settings-components" class="page-layer" x-data="settings" data-lan-ip="{{ lan_ip or '' }}" data-shell-mode="{{ shell_mode or '' }}" data-is-android="{{ 'true' if is_android else 'false' }}">
+     <div class="settings-header">
+         <!-- 81b-T1: 左 cluster 包標題 + 膠囊 + 連線 inline 區塊；flex 樣式由 T2 補 -->
+         <div class="settings-header-left">
+             <h4 class="mb-0">
+                 <i class="bi bi-gear"></i> {{ t('settings.header.title') }}
+             </h4>
++            {% if not is_android %}
+             <!-- Server Mode Toggle (80a-T3) — 81b-T1: 從 actions 末尾搬到標題側 -->
+             {% if not is_synology %}
+             <div class="settings-server-mode">
+@@ -153,6 +154,7 @@
+                     <span>{{ t('settings.server_info.public_exposure') }}</span>
+                 </div>
+             </div>
++            {% endif %}
+         </div>
+         <div class="settings-header-actions">
+             <!-- Font Size Control -->
+@@ -1248,6 +1250,7 @@
+                                 <input type="number" class="input input-bordered input-sm" id="maxFilenameLength"
+                                     x-model.number="form.maxFilenameLength" min="50" max="255">
+                                 <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
++                                {% if not is_android %}
+                                 <button type="button" class="help-popover-btn"
+                                         @click="toggle()"
+                                         :aria-expanded="open"
+@@ -1268,6 +1271,7 @@
+                                         {{ t('settings.scraper.path_length_help_line4') }}
+                                     </small>
+                                 </div>
++                                {% endif %}
+                             </div>
+                         </div>
+ 
+@@ -1438,6 +1442,7 @@
+                         </div>
+                     </div>
+ 
++                    {% if not is_android %}
+                     <!-- ── 進階摺疊：離線 HTML 匯出（galleryExport，預設收合 G-B1）── -->
+                     <button class="collapsible-trigger" type="button" @click="galleryExport = !galleryExport"
+                             :aria-expanded="galleryExport.toString()">
+@@ -1487,6 +1492,7 @@
+                         </div>
+ 
+                     </div><!-- /collapsible-content galleryExport -->
++                    {% endif %}
+ 
+             </div>
+           </div>
+@@ -1518,6 +1524,7 @@
+                         {% if shell_mode == 'client' %}<small class="settings-hint local-machine-unavailable" x-show="localMachineState === 'unavailable'" x-cloak x-text="window.t('settings.system.this_computer_unavailable')"></small>{% endif %}
+                     </div>
+                     {% endif %}
++                    {% if not is_android %}
+                     <div class="settings-form-row">
+                         <label class="row-label">{{ t('settings.system.player_label') }}{{ local_machine_tag() }}</label>
+                         <div class="flex-1 flex flex-col gap-1">
+@@ -1527,6 +1534,7 @@
+                             <small class="settings-hint">{{ t('settings.system.player_hint_prefix') }} C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe</small>
+                         </div>
+                     </div>
++                    {% endif %}
+                     <hr class="my-3">
+ 
+                     <!-- 重置按鈕 -->
+@@ -1545,9 +1553,23 @@
          </section><!-- /sec-system -->
  
          <!-- 儲存按鈕 -->
@@ -3598,6 +3875,22 @@
              </button>
          </div>
      </form>
+@@ -1629,6 +1651,7 @@
+         </div>
+     </dialog>
+ 
++    {% if not is_android %}
+     <!-- T4: 伺服器模式切換 Confirm Modal -->
+     <dialog class="modal fluent-modal"
+             :class="{ 'modal-open': serverModeConfirmOpen }"
+@@ -1660,6 +1683,7 @@
+             </div>
+         </div>
+     </dialog>
++    {% endif %}
+ 
+     <!-- 90c-T5: 全域模式切換（破壞性重設）Confirm Modal -->
+     <dialog class="modal fluent-modal"
 --- a/web/templates/showcase.html
 +++ b/web/templates/showcase.html
 @@ -1184,7 +1184,7 @@

@@ -1084,6 +1084,10 @@
 }
 
 @media (max-width: 520px) {
+    [data-is-android="true"] .avlist-header {
+        display: none;
+    }
+
     #progressSection {
         margin-inline: 0;
     }

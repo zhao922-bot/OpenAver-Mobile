@@ -41,7 +41,7 @@ Do not edit a current Android file without updating its patch.
 | `004-network-and-scraper-fallbacks.patch` | requests fallbacks and TLS/proxy compatibility |
 | `005-android-file-writeback.patch` | NFO batch updates, cover, poster, fanart, title, and SAF bridge writes |
 | `006-mobile-web-routers.patch` | mobile scanner/showcase/capability routes and batch tag-source updates |
-| `007-mobile-ui-and-localization.patch` | Simplified Chinese defaults, navigation, responsive UI, task controls, safe batch maintenance, and persistent settings save state |
+| `007-mobile-ui-and-localization.patch` | Simplified Chinese defaults, navigation, responsive UI, desktop-only settings cleanup, system video-player handoff, task controls, safe batch maintenance, and persistent settings save state |
 | `008-mobile-loopback-auth.patch` | process-local token gate for the embedded loopback server |
 
 `manifest.json` records the exact file membership for automated checks.

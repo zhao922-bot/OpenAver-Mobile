@@ -91,6 +91,7 @@ export function stateConfig() {
         locale: (window.__locale || 'zh-CN'),
 
         // ===== Server Mode State (80a-T3) =====
+        isAndroid: false,
         serverMode: false,
         lanIp: '',
         // 168c-T4：「這台電腦」兩格（viewerPlayer／closeAction）的讀寫路由。
@@ -365,6 +366,7 @@ export function stateConfig() {
             // 80a-T3: 讀 data-lan-ip attribute（T2 注入 template context）
             this.lanIp = this.$el?.dataset?.lanIp || '';
             this.shellMode = this.$el?.dataset?.shellMode || '';
+            this.isAndroid = this.$el?.dataset?.isAndroid === 'true';
 
             this.loadConfig().then(() => {
                 // B1: init scanner link state after config loaded
@@ -807,38 +809,40 @@ export function stateConfig() {
                     this.form.closeAction = config.general?.close_action || 'ask';
                     // sidebar_collapsed 已移除（由 Alpine $persist + localStorage 驅動）
 
-                    // 80a-T3: Server Mode（?? false：缺 key→false；不用 ||，守 CD#3 慣例）
-                    this.serverMode = config.general?.server_mode ?? false;
-                    if (this.serverMode) {
-                        try {
-                            const r = await fetch('/api/config/general/lan-port');
-                            const j = await r.json();
-                            this.lanPort = j.lan_port ?? null;
-                            this.lanIp = j.lan_ip ?? null;
-                            this.publicExposure = j.public_exposure ?? false;
-                        } catch (_e) {
+                    if (!this.isAndroid) {
+                        // 80a-T3: Server Mode（?? false：缺 key→false；不用 ||，守 CD#3 慣例）
+                        this.serverMode = config.general?.server_mode ?? false;
+                        if (this.serverMode) {
+                            try {
+                                const r = await fetch('/api/config/general/lan-port');
+                                const j = await r.json();
+                                this.lanPort = j.lan_port ?? null;
+                                this.lanIp = j.lan_ip ?? null;
+                                this.publicExposure = j.public_exposure ?? false;
+                            } catch (_e) {
+                                this.lanPort = null;
+                                this.publicExposure = false;
+                            }
+                        } else {
                             this.lanPort = null;
                             this.publicExposure = false;
                         }
-                    } else {
-                        this.lanPort = null;
-                        this.publicExposure = false;
-                    }
 
-                    // 114a-T5: 存取密碼保護 —— GET 無 loopback 限制，無論 serverMode 開關都嘗試讀取
-                    // （spec §2.6：PIN 設定與已通行裝置在 server_mode 關閉時仍要保留、仍要顯示）
-                    try {
-                        const authResp = await fetch('/api/access/settings');
-                        const authResult = await authResp.json();
-                        if (authResult.success) {
-                            this.accessAuthEnabled = authResult.enabled;
-                            this.accessAuthEnabledSaved = authResult.enabled;
-                            this.accessAuthPin = authResult.pin;
-                            this.accessAuthPinRevealed = authResult.pin_revealed;
-                            this.accessAuthCanEdit = authResult.can_edit;
+                        // 114a-T5: 存取密碼保護 —— GET 無 loopback 限制，無論 serverMode 開關都嘗試讀取
+                        // （spec §2.6：PIN 設定與已通行裝置在 server_mode 關閉時仍要保留、仍要顯示）
+                        try {
+                            const authResp = await fetch('/api/access/settings');
+                            const authResult = await authResp.json();
+                            if (authResult.success) {
+                                this.accessAuthEnabled = authResult.enabled;
+                                this.accessAuthEnabledSaved = authResult.enabled;
+                                this.accessAuthPin = authResult.pin;
+                                this.accessAuthPinRevealed = authResult.pin_revealed;
+                                this.accessAuthCanEdit = authResult.can_edit;
+                            }
+                        } catch (e) {
+                            console.warn('[accessAuth] loadConfig: GET /api/access/settings failed:', e);
                         }
-                    } catch (e) {
-                        console.warn('[accessAuth] loadConfig: GET /api/access/settings failed:', e);
                     }
 
                     // Sources（61c-2）：讀 config.sources 段填入 unified scope。

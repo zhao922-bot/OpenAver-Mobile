@@ -392,33 +392,32 @@
 
     /* P2(Codex): settings-header 換行防溢出（需在 .settings-header base rule 之後，避免被 cascade 覆蓋）*/
 
-    /* scroll-margin-top 加大：sticky header 換兩列後高度增加，避免遮蓋段頭 */
+    /* Mobile controls scroll with the page; only the global top bar stays fixed. */
     #settings-components .settings-section {
-        scroll-margin-top: 9rem;
+        scroll-margin-top: 4.5rem;
     }
 
-    /* header 整體允許換行，h4 佔第一列全寬，actions 落第二列 */
-    .settings-header {
-        flex-wrap: wrap;
-        justify-content: flex-start;
+    /* The page title is already shown in the global mobile top bar. */
+    #settings-components[data-is-android="true"] .settings-header {
+        position: static;
+        justify-content: center;
+        padding-bottom: 0.25rem;
+        margin-bottom: 0.25rem;
+        background: transparent;
+        border-bottom: 0;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
     }
 
-    /* 81b-T2: h4 已包進 .settings-header-left，不再是 .settings-header 直接 flex item。
-       換行接力改由 .settings-header-left 佔第一列全寬；h4 在 cluster 內仍可佔行（標題獨佔，膠囊/inline 落次行）。 */
-    .settings-header-left {
-        flex: 1 1 100%;
-        min-width: 0;
+    #settings-components .settings-header-left {
+        display: none;
     }
 
-    .settings-header-left h4 {
-        flex: 1 1 100%;
-        min-width: 0;
-    }
-
-    .settings-header-actions {
+    #settings-components[data-is-android="true"] .settings-header-actions {
         flex: 1 1 100%;
         min-width: 0;
         flex-wrap: wrap;
+        justify-content: center;
         gap: 0.5rem;
     }
 

@@ -7,13 +7,14 @@
 {% endblock %}
 
 {% block content %}
-<div id="settings-components" class="page-layer" x-data="settings" data-lan-ip="{{ lan_ip or '' }}" data-shell-mode="{{ shell_mode or '' }}">
+<div id="settings-components" class="page-layer" x-data="settings" data-lan-ip="{{ lan_ip or '' }}" data-shell-mode="{{ shell_mode or '' }}" data-is-android="{{ 'true' if is_android else 'false' }}">
     <div class="settings-header">
         <!-- 81b-T1: 左 cluster 包標題 + 膠囊 + 連線 inline 區塊；flex 樣式由 T2 補 -->
         <div class="settings-header-left">
             <h4 class="mb-0">
                 <i class="bi bi-gear"></i> {{ t('settings.header.title') }}
             </h4>
+            {% if not is_android %}
             <!-- Server Mode Toggle (80a-T3) — 81b-T1: 從 actions 末尾搬到標題側 -->
             {% if not is_synology %}
             <div class="settings-server-mode">
@@ -153,6 +154,7 @@
                     <span>{{ t('settings.server_info.public_exposure') }}</span>
                 </div>
             </div>
+            {% endif %}
         </div>
         <div class="settings-header-actions">
             <!-- Font Size Control -->
@@ -1248,6 +1250,7 @@
                                 <input type="number" class="input input-bordered input-sm" id="maxFilenameLength"
                                     x-model.number="form.maxFilenameLength" min="50" max="255">
                                 <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
+                                {% if not is_android %}
                                 <button type="button" class="help-popover-btn"
                                         @click="toggle()"
                                         :aria-expanded="open"
@@ -1268,6 +1271,7 @@
                                         {{ t('settings.scraper.path_length_help_line4') }}
                                     </small>
                                 </div>
+                                {% endif %}
                             </div>
                         </div>
 
@@ -1438,6 +1442,7 @@
                         </div>
                     </div>
 
+                    {% if not is_android %}
                     <!-- ── 進階摺疊：離線 HTML 匯出（galleryExport，預設收合 G-B1）── -->
                     <button class="collapsible-trigger" type="button" @click="galleryExport = !galleryExport"
                             :aria-expanded="galleryExport.toString()">
@@ -1487,6 +1492,7 @@
                         </div>
 
                     </div><!-- /collapsible-content galleryExport -->
+                    {% endif %}
 
             </div>
           </div>
@@ -1518,6 +1524,7 @@
                         {% if shell_mode == 'client' %}<small class="settings-hint local-machine-unavailable" x-show="localMachineState === 'unavailable'" x-cloak x-text="window.t('settings.system.this_computer_unavailable')"></small>{% endif %}
                     </div>
                     {% endif %}
+                    {% if not is_android %}
                     <div class="settings-form-row">
                         <label class="row-label">{{ t('settings.system.player_label') }}{{ local_machine_tag() }}</label>
                         <div class="flex-1 flex flex-col gap-1">
@@ -1527,6 +1534,7 @@
                             <small class="settings-hint">{{ t('settings.system.player_hint_prefix') }} C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe</small>
                         </div>
                     </div>
+                    {% endif %}
                     <hr class="my-3">
 
                     <!-- 重置按鈕 -->
@@ -1643,6 +1651,7 @@
         </div>
     </dialog>
 
+    {% if not is_android %}
     <!-- T4: 伺服器模式切換 Confirm Modal -->
     <dialog class="modal fluent-modal"
             :class="{ 'modal-open': serverModeConfirmOpen }"
@@ -1674,6 +1683,7 @@
             </div>
         </div>
     </dialog>
+    {% endif %}
 
     <!-- 90c-T5: 全域模式切換（破壞性重設）Confirm Modal -->
     <dialog class="modal fluent-modal"

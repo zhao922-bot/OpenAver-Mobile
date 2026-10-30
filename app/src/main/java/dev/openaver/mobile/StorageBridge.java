@@ -102,6 +102,19 @@ public final class StorageBridge {
         }
     }
 
+    public static Uri documentUriForPath(String path) {
+        synchronized (LOCK) {
+            try {
+                if (!hasTreeAccess()) {
+                    return null;
+                }
+                return findDocument(path);
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+    }
+
     public static String mkdirs(String path) {
         synchronized (LOCK) {
             try {

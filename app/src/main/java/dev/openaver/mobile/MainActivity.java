@@ -929,6 +929,10 @@ public final class MainActivity extends Activity {
         }
         scheme = scheme.toLowerCase(Locale.ROOT);
 
+        if ("openaver-player".equals(scheme)) {
+            ExternalPlayer.open(this, uri.getQueryParameter("path"));
+            return true;
+        }
         if ("http".equals(scheme) || "https".equals(scheme)
                 || "mailto".equals(scheme) || "tel".equals(scheme)) {
             openExternal(uri);

@@ -282,6 +282,14 @@
  
  # 模板引擎
  templates = Jinja2Templates(directory=TEMPLATES_DIR)
+@@ -805,6 +834,7 @@
+         "locale": locale,
+         "merged_translations": merged_translations,
+         "t": _t_bound,
++        "is_android": sys.platform == "android" or os.environ.get("OPENAVER_MOBILE") == "1",
+         "is_windows_desktop": getattr(request.state, "shell_kind", None) == "windows",
+         "is_mac_desktop": getattr(request.state, "shell_kind", None) == "mac",
+         "is_desktop": getattr(request.state, "shell_kind", None) is not None,
 --- a/web/compression.py
 +++ b/web/compression.py
 @@ -1,4 +1,39 @@

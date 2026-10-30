@@ -64,6 +64,9 @@
     <string name="about_message">Embedded Android build %1$s\nUpstream release %2$s\nCommit %3$s\n\nLocal data: %4$s\n\nOpenAver is MIT licensed. The original desktop-only integrations are unavailable on Android.</string>
     <string name="ok">OK</string>
     <string name="external_browser_missing">No browser is available.</string>
+    <string name="choose_video_player">Choose a video player</string>
+    <string name="video_player_missing">No video player is available.</string>
+    <string name="video_file_unavailable">This video cannot be opened from the app.</string>
     <string name="download_started">Download started.</string>
     <string name="download_failed">Download could not start.</string>
     <string name="file_chooser_title">Choose a file</string>

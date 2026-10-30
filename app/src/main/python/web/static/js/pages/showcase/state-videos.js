@@ -877,6 +877,8 @@ export function stateVideos() {
                         console.error('Failed to open file:', err);
                         this.showToast(window.t('showcase.video.play_failed'), 'error');
                     });
+            } else if (window.openVideoPlayer) {
+                window.openVideoPlayer(path);
             } else {
                 window.open('/api/gallery/player?path=' + encodeURIComponent(path), '_blank');
             }
