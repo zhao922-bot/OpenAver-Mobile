@@ -13,18 +13,18 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-arm64-r12-focal-fix.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r13-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-arm64-r12-focal-fix.apk`
+- 文件名：`openaver-v0.17.18-android-r13-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r12`（versionCode `17028`）
+- 版本：`0.17.18-r13`（versionCode `17029`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；使用传统外部存储权限以兼容外置 SD 卡写入
 - SHA-256：
-  `15CBB5F2410725F51ED9B8F726D81AA262A94F5C8BEA73F0C650A9DA211572D1`
+  `F380980526D10CA8EA064F283EA069067EA062AC9E2638D20A6A2C513E861315`
 
 ## 安装
 
