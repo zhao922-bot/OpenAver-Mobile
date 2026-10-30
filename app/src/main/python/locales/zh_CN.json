@@ -1971,6 +1971,12 @@
     "unit": "部",
     "all_years": "全部年份",
     "clear_year": "清除年份",
+    "summary": {
+      "videos": "影片",
+      "year": "年份",
+      "actress": "女优",
+      "maker": "片商"
+    },
     "row": {
       "years": "年份",
       "makers": "片商",

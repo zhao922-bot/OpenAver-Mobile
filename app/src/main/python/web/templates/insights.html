@@ -3,7 +3,7 @@
 {% block title %}{{ t('insights.page_title') }} - OpenAver{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/pages/insights.css">
+<link rel="stylesheet" href="/static/css/pages/insights.css?v=17036-1">
 {% endblock %}
 
 {% block pre_alpine_module %}
@@ -118,15 +118,8 @@
 
 {% block content %}
 <div class="insights-container page-layer" x-data="libraryInsights" :class="{ 'is-actress-focused': isActressFocused, 'is-podium-3': podiumSize === 3 }">
-    <!-- Row 1: 常駐五格 -->
-    <div class="row1">
-        <section class="card insights-brand-card">
-            <div class="card-body">
-                <div class="insights-brand-row">
-                    <span class="title">OpenAver</span>
-                </div>
-            </div>
-        </section>
+    <!-- Row 1: 片库摘要与当前筛选 -->
+    <div class="row1 insights-summary-bar">
         <section class="card"
                  id="tileCount"
                  role="button"
@@ -138,6 +131,7 @@
                  @keydown.enter.prevent="goBrowse()"
                  @keydown.space.prevent="goBrowse()">
             <div class="card-body">
+                <span class="insights-summary-label">{{ t('insights.summary.videos') }}</span>
                 <div x-show="snapshotError" class="insights-tile-error">
                     <div class="insights-tile-value">—</div>
                     <div class="insights-tile-error-msg" x-text="t('insights.snapshot_error')"></div>
@@ -152,6 +146,7 @@
         </section>
         <section class="card" id="tileYear">
             <div class="card-body">
+                <span class="insights-summary-label">{{ t('insights.summary.year') }}</span>
                 <div x-show="sel.period.type !== 'all'" class="insights-year-value">
                     <span class="insights-tile-value" x-text="periodTileLabel()"></span>
                     <button type="button"
@@ -166,6 +161,7 @@
         </section>
         <section class="card" id="tileActress">
             <div class="card-body">
+                <span class="insights-summary-label">{{ t('insights.summary.actress') }}</span>
                 <div x-show="sel.actress" class="insights-focus-row">
                     <template x-if="sel.actress">
                         <span class="insights-focus-avatar"
@@ -214,6 +210,7 @@
         </section>
         <section class="card" id="tileMaker">
             <div class="card-body">
+                <span class="insights-summary-label">{{ t('insights.summary.maker') }}</span>
                 <div x-show="sel.maker" class="insights-focus-row">
                     <template x-if="sel.maker">
                         <span class="insights-focus-avatar mk"

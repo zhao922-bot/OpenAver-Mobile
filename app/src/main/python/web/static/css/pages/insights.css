@@ -79,51 +79,38 @@
     color: var(--text-primary);
 }
 
-/* ===== Row 1: 常駐五格 ===== */
+/* ===== Row 1: 片库摘要与当前筛选 ===== */
 .insights-container .row1 {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.5rem;
     min-width: 0;
 }
 
 .insights-container .row1 .card {
-    min-height: 100px;
+    min-height: 84px;
 }
 
 .insights-container .row1 .card-body {
     justify-content: center;
+    align-items: stretch;
+    gap: 0.2rem;
     padding: 0.5rem 0.75rem;
 }
 
-/* OpenAver 品牌格：滿版字樣，視覺份量對齊旁邊片數數字（156d-T1 / CD-156d-8）
-   .card-body 沿用 base（column + stretch）＋ .row1 .card-body 的 justify-content:center
-   垂直置中；不再需要 row-direction/space-between（原本服務「文字 vs 空按鈕位」兩個子元素，
-   移除空按鈕位後只剩一個子元素，交給 stretch 預設值即可滿版寬度）。*/
-.insights-brand-row {
-    display: flex;
-    align-items: center;
-    min-width: 0;
-}
-
-.insights-brand-row .title {
-    /* vw-based 線性擬合（非任意值）：對這格 .card-body 內容寬（扣 padding）在 1025–1440
-       三個實測寬度做最小平方回歸，目標是文字 scrollWidth 落在內容寬 80%–100%（spec-156d
-       §3.1，主 session 2026-09-27 裁決）。斷點切換時內容寬跳變（4欄→2欄→1欄，格子變寬），
-       字級隨之跳變是該跳變的必然結果，不是校準誤差。
-       161a-T7：頂排由四格改五格，格寬縮小，係數依 1025／1280／1440 實測（文字寬約 4.95×字級）重擬合，
-       目標 scrollWidth ≈ 內容寬 91%。 */
-    font-size: clamp(1.5rem, calc(3.7vw - 12.5px), 3.3rem);
-    font-weight: 700;
-    color: var(--text-primary);
+.insights-container .insights-summary-label {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.66rem;
+    font-weight: 650;
+    line-height: 1.1;
+    letter-spacing: 0.06em;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
-/* 常駐五格共用字級（片數數字／年份選中值／焦點名字）——單一 class，spec §3.1 */
+/* 摘要格共用字級（片數數字／年份選中值／焦點名字）。 */
 .insights-container .insights-tile-value {
-    font-size: 2.75rem;
+    font-size: 2.2rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     line-height: 1.05;
@@ -206,10 +193,10 @@
 }
 
 .insights-container .insights-muted-big {
-    font-size: 2.25rem;
+    font-size: 1.45rem;
     font-weight: 700;
     color: var(--text-muted);
-    line-height: 1.05;
+    line-height: 1.15;
     letter-spacing: -0.01em;
 }
 
@@ -230,6 +217,7 @@
 }
 
 .insights-container .insights-focus-name {
+    font-size: 1.45rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -237,8 +225,8 @@
 }
 
 .insights-container .insights-focus-avatar {
-    width: 52px;
-    height: 52px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     flex: 0 0 auto;
     overflow: hidden;
@@ -1310,11 +1298,104 @@
 /* ===== 響應式斷點 ===== */
 @media (max-width: 1024px) {
     .insights-container .row1 {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0;
+        overflow: hidden;
+        border: 1px solid var(--stroke-default);
+        border-radius: var(--radius-lg);
+        background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
+        box-shadow:
+            inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+            var(--fluent-shadow-4);
     }
 
-    .insights-container .row1 > :last-child {
-        grid-column: 1 / -1;
+    .insights-container .row1 .card {
+        min-height: 64px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    .insights-container .row1 .card + .card {
+        border-left: 1px solid var(--stroke-subtle);
+    }
+
+    .insights-container .row1 .card-body {
+        justify-content: center;
+        align-items: stretch;
+        gap: 0.15rem;
+        padding: 0.35rem 0.25rem;
+        min-width: 0;
+    }
+
+    .insights-container .insights-summary-label {
+        font-size: 0.58rem;
+        line-height: 1.1;
+        text-align: center;
+        letter-spacing: 0.03em;
+    }
+
+    .insights-container .insights-tile-value {
+        font-size: 1.18rem;
+        line-height: 1.1;
+    }
+
+    .insights-container #tileCount .insights-tile-value {
+        font-size: 1.32rem;
+    }
+
+    .insights-container .insights-tile-unit {
+        font-size: 0.66rem;
+    }
+
+    .insights-container .insights-tile-sub {
+        display: none;
+    }
+
+    .insights-container .insights-big-number,
+    .insights-container .insights-year-value {
+        justify-content: center;
+        align-items: center;
+        gap: 0.15rem;
+        min-width: 0;
+    }
+
+    .insights-container .insights-muted-big {
+        font-size: 0.72rem;
+        line-height: 1.15;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .insights-container .insights-focus-row {
+        justify-content: center;
+        gap: 0.15rem;
+        min-width: 0;
+    }
+
+    .insights-container .insights-focus-avatar {
+        display: none;
+    }
+
+    .insights-container .insights-focus-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 0.72rem;
+        line-height: 1.15;
+        text-align: center;
+    }
+
+    .insights-container .insights-x-btn {
+        width: 22px;
+        height: 22px;
+        font-size: 0.7rem;
+    }
+
+    .insights-container #tileCount .insights-open-arrow {
+        font-size: 0.66rem;
     }
 
     .insights-container .row2,
@@ -1324,19 +1405,10 @@
         grid-template-columns: 1fr;
     }
 
-    /* ≤1024（2 欄／1 欄皆含，640 斷點的同一條規則合併於此——max-width:640 恆蘊含
-       max-width:1024，不需重複宣告）：不再用內容寬回歸撐滿比例（640 單欄時內容寬暴衝到
-       551px，回歸值會把字級推到 99px，跟旁邊固定 44px 的「2,103」不成比例、還把整列拉爆）。
-       改成「份量與片數數字相當」：上限落在 .insights-tile-value 實際 computed 44px 的
-       1.0–1.25 倍（44–55px）之間，用純 rem/vw clamp 表達，不用回歸 calc（主 session
-       2026-09-27 二次裁決）。 */
-    .insights-brand-row .title {
-        font-size: clamp(2.25rem, 5vw, 3rem);
-    }
 }
 
 @media (max-width: 640px) {
     .insights-container .row1 {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 }

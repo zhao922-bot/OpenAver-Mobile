@@ -1971,6 +1971,12 @@
     "unit": "本",
     "all_years": "すべての年",
     "clear_year": "年をクリア",
+    "summary": {
+      "videos": "作品",
+      "year": "年",
+      "actress": "女優",
+      "maker": "メーカー"
+    },
     "row": {
       "years": "年別",
       "makers": "メーカー",

@@ -1976,6 +1976,12 @@
     "clear_actress": "清除女優",
     "clear_maker": "清除片商",
     "count_open_browse": "在瀏覽頁查看",
+    "summary": {
+      "videos": "影片",
+      "year": "年份",
+      "actress": "女優",
+      "maker": "片商"
+    },
     "row": {
       "years": "年份",
       "makers": "片商",

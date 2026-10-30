@@ -1971,6 +1971,12 @@
     "unit": "videos",
     "all_years": "All Years",
     "clear_year": "Clear Year",
+    "summary": {
+      "videos": "Videos",
+      "year": "Year",
+      "actress": "Actress",
+      "maker": "Studio"
+    },
     "row": {
       "years": "Year",
       "makers": "Makers",

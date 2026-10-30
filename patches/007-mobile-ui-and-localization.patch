@@ -193,6 +193,19 @@
        "multi_video_error": "This folder contains other videos. Fetching stills here may affect them. Please move the video to its own folder first."
      }
    },
+@@ -1845,6 +1971,12 @@
+     "unit": "videos",
+     "all_years": "All Years",
+     "clear_year": "Clear Year",
++    "summary": {
++      "videos": "Videos",
++      "year": "Year",
++      "actress": "Actress",
++      "maker": "Studio"
++    },
+     "row": {
+       "years": "Year",
+       "makers": "Makers",
 --- a/locales/ja.json
 +++ b/locales/ja.json
 @@ -26,6 +26,7 @@
@@ -377,6 +390,19 @@
        "multi_video_error": "このフォルダに他の動画があります。画像を取得すると他の動画に影響します。動画を専用フォルダに移動してからお試しください。"
      }
    },
+@@ -1845,6 +1971,12 @@
+     "unit": "本",
+     "all_years": "すべての年",
+     "clear_year": "年をクリア",
++    "summary": {
++      "videos": "作品",
++      "year": "年",
++      "actress": "女優",
++      "maker": "メーカー"
++    },
+     "row": {
+       "years": "年別",
+       "makers": "メーカー",
 --- a/locales/zh_CN.json
 +++ b/locales/zh_CN.json
 @@ -26,6 +26,7 @@
@@ -561,6 +587,19 @@
        "multi_video_error": "此文件夹有其他视频，补抓剧照会污染其他片，请先将视频移至独立文件夹再试"
      }
    },
+@@ -1845,6 +1971,12 @@
+     "unit": "部",
+     "all_years": "全部年份",
+     "clear_year": "清除年份",
++    "summary": {
++      "videos": "影片",
++      "year": "年份",
++      "actress": "女优",
++      "maker": "片商"
++    },
+     "row": {
+       "years": "年份",
+       "makers": "片商",
 --- a/locales/zh_TW.json
 +++ b/locales/zh_TW.json
 @@ -26,6 +26,7 @@
@@ -745,6 +784,19 @@
        "multi_video_error": "此資料夾有其他影片，補抓劇照會污染其他片，請先將影片搬到獨立資料夾再試"
      }
    },
+@@ -1850,6 +1976,12 @@
+     "clear_actress": "清除女優",
+     "clear_maker": "清除片商",
+     "count_open_browse": "在瀏覽頁查看",
++    "summary": {
++      "videos": "影片",
++      "year": "年份",
++      "actress": "女優",
++      "maker": "片商"
++    },
+     "row": {
+       "years": "年份",
+       "makers": "片商",
 --- a/web/config.default.json
 +++ b/web/config.default.json
 @@ -84,9 +84,9 @@
@@ -1431,6 +1483,241 @@
 +  100% { transform: translateX(100%); }
 +}
 +
+--- a/web/static/css/pages/insights.css
++++ b/web/static/css/pages/insights.css
+@@ -79,51 +79,38 @@
+     color: var(--text-primary);
+ }
+ 
+-/* ===== Row 1: 常駐五格 ===== */
++/* ===== Row 1: 片库摘要与当前筛选 ===== */
+ .insights-container .row1 {
+     display: grid;
+-    grid-template-columns: repeat(5, minmax(0, 1fr));
++    grid-template-columns: repeat(4, minmax(0, 1fr));
+     gap: 0.5rem;
+     min-width: 0;
+ }
+ 
+ .insights-container .row1 .card {
+-    min-height: 100px;
++    min-height: 84px;
+ }
+ 
+ .insights-container .row1 .card-body {
+     justify-content: center;
++    align-items: stretch;
++    gap: 0.2rem;
+     padding: 0.5rem 0.75rem;
+ }
+ 
+-/* OpenAver 品牌格：滿版字樣，視覺份量對齊旁邊片數數字（156d-T1 / CD-156d-8）
+-   .card-body 沿用 base（column + stretch）＋ .row1 .card-body 的 justify-content:center
+-   垂直置中；不再需要 row-direction/space-between（原本服務「文字 vs 空按鈕位」兩個子元素，
+-   移除空按鈕位後只剩一個子元素，交給 stretch 預設值即可滿版寬度）。*/
+-.insights-brand-row {
+-    display: flex;
+-    align-items: center;
+-    min-width: 0;
+-}
+-
+-.insights-brand-row .title {
+-    /* vw-based 線性擬合（非任意值）：對這格 .card-body 內容寬（扣 padding）在 1025–1440
+-       三個實測寬度做最小平方回歸，目標是文字 scrollWidth 落在內容寬 80%–100%（spec-156d
+-       §3.1，主 session 2026-09-27 裁決）。斷點切換時內容寬跳變（4欄→2欄→1欄，格子變寬），
+-       字級隨之跳變是該跳變的必然結果，不是校準誤差。
+-       161a-T7：頂排由四格改五格，格寬縮小，係數依 1025／1280／1440 實測（文字寬約 4.95×字級）重擬合，
+-       目標 scrollWidth ≈ 內容寬 91%。 */
+-    font-size: clamp(1.5rem, calc(3.7vw - 12.5px), 3.3rem);
+-    font-weight: 700;
+-    color: var(--text-primary);
++.insights-container .insights-summary-label {
++    display: block;
++    color: var(--text-muted);
++    font-size: 0.66rem;
++    font-weight: 650;
++    line-height: 1.1;
++    letter-spacing: 0.06em;
+     white-space: nowrap;
+-    overflow: hidden;
+-    text-overflow: ellipsis;
+-}
+-
+-/* 常駐五格共用字級（片數數字／年份選中值／焦點名字）——單一 class，spec §3.1 */
++}
++
++/* 摘要格共用字級（片數數字／年份選中值／焦點名字）。 */
+ .insights-container .insights-tile-value {
+-    font-size: 2.75rem;
++    font-size: 2.2rem;
+     font-weight: 700;
+     font-variant-numeric: tabular-nums;
+     line-height: 1.05;
+@@ -206,10 +193,10 @@
+ }
+ 
+ .insights-container .insights-muted-big {
+-    font-size: 2.25rem;
++    font-size: 1.45rem;
+     font-weight: 700;
+     color: var(--text-muted);
+-    line-height: 1.05;
++    line-height: 1.15;
+     letter-spacing: -0.01em;
+ }
+ 
+@@ -230,6 +217,7 @@
+ }
+ 
+ .insights-container .insights-focus-name {
++    font-size: 1.45rem;
+     overflow: hidden;
+     text-overflow: ellipsis;
+     white-space: nowrap;
+@@ -237,8 +225,8 @@
+ }
+ 
+ .insights-container .insights-focus-avatar {
+-    width: 52px;
+-    height: 52px;
++    width: 40px;
++    height: 40px;
+     border-radius: 50%;
+     flex: 0 0 auto;
+     overflow: hidden;
+@@ -1310,11 +1298,104 @@
+ /* ===== 響應式斷點 ===== */
+ @media (max-width: 1024px) {
+     .insights-container .row1 {
+-        grid-template-columns: repeat(2, 1fr);
+-    }
+-
+-    .insights-container .row1 > :last-child {
+-        grid-column: 1 / -1;
++        grid-template-columns: repeat(4, minmax(0, 1fr));
++        gap: 0;
++        overflow: hidden;
++        border: 1px solid var(--stroke-default);
++        border-radius: var(--radius-lg);
++        background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
++        box-shadow:
++            inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
++            var(--fluent-shadow-4);
++    }
++
++    .insights-container .row1 .card {
++        min-height: 64px;
++        border: 0;
++        border-radius: 0;
++        background: transparent;
++        box-shadow: none;
++    }
++
++    .insights-container .row1 .card + .card {
++        border-left: 1px solid var(--stroke-subtle);
++    }
++
++    .insights-container .row1 .card-body {
++        justify-content: center;
++        align-items: stretch;
++        gap: 0.15rem;
++        padding: 0.35rem 0.25rem;
++        min-width: 0;
++    }
++
++    .insights-container .insights-summary-label {
++        font-size: 0.58rem;
++        line-height: 1.1;
++        text-align: center;
++        letter-spacing: 0.03em;
++    }
++
++    .insights-container .insights-tile-value {
++        font-size: 1.18rem;
++        line-height: 1.1;
++    }
++
++    .insights-container #tileCount .insights-tile-value {
++        font-size: 1.32rem;
++    }
++
++    .insights-container .insights-tile-unit {
++        font-size: 0.66rem;
++    }
++
++    .insights-container .insights-tile-sub {
++        display: none;
++    }
++
++    .insights-container .insights-big-number,
++    .insights-container .insights-year-value {
++        justify-content: center;
++        align-items: center;
++        gap: 0.15rem;
++        min-width: 0;
++    }
++
++    .insights-container .insights-muted-big {
++        font-size: 0.72rem;
++        line-height: 1.15;
++        text-align: center;
++        overflow: hidden;
++        text-overflow: ellipsis;
++        white-space: nowrap;
++    }
++
++    .insights-container .insights-focus-row {
++        justify-content: center;
++        gap: 0.15rem;
++        min-width: 0;
++    }
++
++    .insights-container .insights-focus-avatar {
++        display: none;
++    }
++
++    .insights-container .insights-focus-name {
++        flex: 1 1 auto;
++        min-width: 0;
++        font-size: 0.72rem;
++        line-height: 1.15;
++        text-align: center;
++    }
++
++    .insights-container .insights-x-btn {
++        width: 22px;
++        height: 22px;
++        font-size: 0.7rem;
++    }
++
++    .insights-container #tileCount .insights-open-arrow {
++        font-size: 0.66rem;
+     }
+ 
+     .insights-container .row2,
+@@ -1324,19 +1405,10 @@
+         grid-template-columns: 1fr;
+     }
+ 
+-    /* ≤1024（2 欄／1 欄皆含，640 斷點的同一條規則合併於此——max-width:640 恆蘊含
+-       max-width:1024，不需重複宣告）：不再用內容寬回歸撐滿比例（640 單欄時內容寬暴衝到
+-       551px，回歸值會把字級推到 99px，跟旁邊固定 44px 的「2,103」不成比例、還把整列拉爆）。
+-       改成「份量與片數數字相當」：上限落在 .insights-tile-value 實際 computed 44px 的
+-       1.0–1.25 倍（44–55px）之間，用純 rem/vw clamp 表達，不用回歸 calc（主 session
+-       2026-09-27 二次裁決）。 */
+-    .insights-brand-row .title {
+-        font-size: clamp(2.25rem, 5vw, 3rem);
+-    }
+ }
+ 
+ @media (max-width: 640px) {
+     .insights-container .row1 {
+-        grid-template-columns: 1fr;
+-    }
+-}
++        grid-template-columns: repeat(4, minmax(0, 1fr));
++    }
++}
 --- a/web/static/css/pages/showcase/05-lightbox.css
 +++ b/web/static/css/pages/showcase/05-lightbox.css
 @@ -265,13 +265,21 @@
@@ -4747,6 +5034,67 @@
      <!-- Tutorial JS -->
      <script type="module" src="/static/js/components/tutorial.js"></script>
  
+--- a/web/templates/insights.html
++++ b/web/templates/insights.html
+@@ -3,7 +3,7 @@
+ {% block title %}{{ t('insights.page_title') }} - OpenAver{% endblock %}
+ 
+ {% block extra_css %}
+-<link rel="stylesheet" href="/static/css/pages/insights.css">
++<link rel="stylesheet" href="/static/css/pages/insights.css?v=17036-1">
+ {% endblock %}
+ 
+ {% block pre_alpine_module %}
+@@ -118,15 +118,8 @@
+ 
+ {% block content %}
+ <div class="insights-container page-layer" x-data="libraryInsights" :class="{ 'is-actress-focused': isActressFocused, 'is-podium-3': podiumSize === 3 }">
+-    <!-- Row 1: 常駐五格 -->
+-    <div class="row1">
+-        <section class="card insights-brand-card">
+-            <div class="card-body">
+-                <div class="insights-brand-row">
+-                    <span class="title">OpenAver</span>
+-                </div>
+-            </div>
+-        </section>
++    <!-- Row 1: 片库摘要与当前筛选 -->
++    <div class="row1 insights-summary-bar">
+         <section class="card"
+                  id="tileCount"
+                  role="button"
+@@ -138,6 +131,7 @@
+                  @keydown.enter.prevent="goBrowse()"
+                  @keydown.space.prevent="goBrowse()">
+             <div class="card-body">
++                <span class="insights-summary-label">{{ t('insights.summary.videos') }}</span>
+                 <div x-show="snapshotError" class="insights-tile-error">
+                     <div class="insights-tile-value">—</div>
+                     <div class="insights-tile-error-msg" x-text="t('insights.snapshot_error')"></div>
+@@ -152,6 +146,7 @@
+         </section>
+         <section class="card" id="tileYear">
+             <div class="card-body">
++                <span class="insights-summary-label">{{ t('insights.summary.year') }}</span>
+                 <div x-show="sel.period.type !== 'all'" class="insights-year-value">
+                     <span class="insights-tile-value" x-text="periodTileLabel()"></span>
+                     <button type="button"
+@@ -166,6 +161,7 @@
+         </section>
+         <section class="card" id="tileActress">
+             <div class="card-body">
++                <span class="insights-summary-label">{{ t('insights.summary.actress') }}</span>
+                 <div x-show="sel.actress" class="insights-focus-row">
+                     <template x-if="sel.actress">
+                         <span class="insights-focus-avatar"
+@@ -214,6 +210,7 @@
+         </section>
+         <section class="card" id="tileMaker">
+             <div class="card-body">
++                <span class="insights-summary-label">{{ t('insights.summary.maker') }}</span>
+                 <div x-show="sel.maker" class="insights-focus-row">
+                     <template x-if="sel.maker">
+                         <span class="insights-focus-avatar mk"
 --- a/web/templates/scanner.html
 +++ b/web/templates/scanner.html
 @@ -1,5 +1,6 @@
