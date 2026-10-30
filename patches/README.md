@@ -39,9 +39,9 @@ Do not edit a current Android file without updating its patch.
 | `002-mobile-bootstrap.patch` | Embedded server, mobile data root, compression |
 | `003-android-native-focal.patch` | Native focal detector and in-process runner |
 | `004-network-and-scraper-fallbacks.patch` | requests fallbacks and TLS/proxy compatibility |
-| `005-android-file-writeback.patch` | NFO batch updates, cover, poster, fanart, title, and SAF bridge writes |
-| `006-mobile-web-routers.patch` | mobile scanner/showcase/capability routes and batch tag-source updates |
-| `007-mobile-ui-and-localization.patch` | Simplified Chinese defaults, navigation, unified mobile state/error cards, compact and high-contrast library-insight summary/deep-dive views, responsive search and scanner layouts, touch-safe floating handle, desktop-only settings cleanup, system video-player handoff, task controls, safe batch maintenance, persistent settings save state, and the phone-specific Help guide with tutorial removal |
+| `005-android-file-writeback.patch` | NFO batch updates, cover, poster, fanart, title, SAF bridge writes, preview-first filename and direct-child folder normalization with rollback, stable external-storage plan fingerprints, CJK-adjacent number detection, and 255-byte shared-stem repair for files truncated by Android external-storage clients |
+| `006-mobile-web-routers.patch` | mobile scanner/showcase/capability routes, batch tag-source updates, missing-sidecar number recovery, and filename/folder rename preview/execute endpoints |
+| `007-mobile-ui-and-localization.patch` | Simplified Chinese defaults, navigation, unified mobile state/error cards, compact and high-contrast library-insight summary/deep-dive views, responsive search and scanner layouts, touch-safe floating handle, desktop-only settings cleanup, system video-player handoff, task controls, safe batch maintenance, persistent settings save state, the phone-specific Help guide with tutorial removal, coordinated scanner action controls, and filename/folder normalization preview/conflict UI |
 | `008-mobile-loopback-auth.patch` | process-local token gate for the embedded loopback server |
 
 `manifest.json` records the exact file membership for automated checks.

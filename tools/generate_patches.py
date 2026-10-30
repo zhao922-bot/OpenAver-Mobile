@@ -47,6 +47,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "core/scrapers/actress/avbase.py",
             "core/scrapers/javdb.py",
             "core/scrapers/models.py",
+            "core/scrapers/utils.py",
         ),
     ),
     (
@@ -60,6 +61,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "core/nfo_updater.py",
             "core/organizer.py",
             "core/readonly_assets.py",
+            "core/rename_normalizer.py",
             "core/source_config.py",
             "core/title_writeback.py",
         ),

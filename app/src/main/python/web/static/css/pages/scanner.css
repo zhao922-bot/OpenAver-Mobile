@@ -898,6 +898,71 @@
     flex: 0 0 auto;
 }
 
+.scanner-action-cluster {
+    gap: 0.5rem;
+}
+
+.scanner-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.42rem;
+    min-height: 2.7rem;
+    padding: 0.48rem 0.85rem;
+    border: 1px solid var(--border-light);
+    border-radius: 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 650;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+        transform var(--fluent-duration-fast) var(--fluent-ease-standard),
+        border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+        background-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+        box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.scanner-action-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.scanner-action-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.scanner-action-secondary {
+    color: var(--text-primary);
+    background: var(--bg-card);
+}
+
+.scanner-action-secondary:hover:not(:disabled) {
+    border-color: color-mix(in oklch, var(--accent) 45%, var(--border-light));
+    background: color-mix(in oklch, var(--accent) 7%, var(--bg-card));
+}
+
+.scanner-action-primary {
+    color: var(--bg-card);
+    border-color: var(--text-primary);
+    background: var(--text-primary);
+    box-shadow: 0 0.3rem 0.8rem color-mix(in oklch, var(--text-primary) 16%, transparent);
+}
+
+.scanner-action-primary:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--text-primary) 88%, var(--accent));
+    box-shadow: 0 0.4rem 1rem color-mix(in oklch, var(--text-primary) 20%, transparent);
+}
+
+.scanner-action-cluster .path-copy-btn {
+    width: auto;
+    height: auto;
+}
+
+.scanner-action-cluster .settings-link {
+    color: inherit;
+    font-size: inherit;
+}
+
 .path-copy-btn {
     display: inline-flex;
     align-items: center;
@@ -1040,6 +1105,106 @@
     color: var(--color-success);
     background: color-mix(in oklch, var(--color-success) 9%, transparent);
     font-size: 0.8rem;
+}
+
+.rename-preview-modal .modal-box {
+    width: min(46rem, calc(100vw - 1.5rem));
+}
+
+.rename-preview-list,
+.rename-conflict-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 22rem;
+    margin: 0.85rem 0;
+    padding: 0.55rem;
+    overflow-y: auto;
+    border: 1px solid var(--border-light);
+    border-radius: var(--fluent-radius-md);
+    background: color-mix(in oklch, var(--bg-body) 58%, transparent);
+}
+
+.rename-preview-item {
+    display: grid;
+    gap: 0.28rem;
+    padding: 0.65rem;
+    border: 1px solid color-mix(in oklch, var(--border-light) 72%, transparent);
+    border-radius: var(--fluent-radius-sm);
+    background: var(--bg-card);
+}
+
+.rename-preview-item > strong {
+    color: var(--accent);
+    font-size: 0.72rem;
+    letter-spacing: 0.03em;
+}
+
+.rename-preview-names {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+    font-size: 0.74rem;
+}
+
+.rename-preview-old,
+.rename-preview-new {
+    overflow-wrap: anywhere;
+}
+
+.rename-preview-old {
+    color: var(--text-secondary);
+    text-decoration: line-through;
+}
+
+.rename-preview-new {
+    color: var(--text-primary);
+    font-weight: 650;
+}
+
+.rename-preview-names i {
+    color: var(--text-muted);
+}
+
+.rename-preview-item > small {
+    color: var(--text-muted);
+    font-size: 0.68rem;
+}
+
+.rename-conflict-list {
+    border-color: color-mix(in oklch, var(--color-error) 34%, var(--border-light));
+    background: color-mix(in oklch, var(--color-error) 7%, transparent);
+}
+
+.rename-conflict-list h4 {
+    margin: 0;
+    color: var(--color-error);
+    font-size: 0.8rem;
+}
+
+.rename-conflict-item {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.55rem;
+    border-radius: var(--fluent-radius-sm);
+    background: var(--bg-card);
+}
+
+.rename-conflict-item strong {
+    overflow-wrap: anywhere;
+    font-size: 0.75rem;
+}
+
+.rename-conflict-item small {
+    color: var(--color-error);
+    font-size: 0.68rem;
+    overflow-wrap: anywhere;
+}
+
+.rename-preview-actions {
+    flex-wrap: wrap;
 }
 
 .tag-backup-option {

@@ -140,6 +140,41 @@ public final class StorageBridge {
         }
     }
 
+    public static String rename(String sourcePath, String targetPath) {
+        synchronized (LOCK) {
+            try {
+                File source = new File(sourcePath);
+                File target = new File(targetPath);
+                String sourceParent = source.getParentFile() == null
+                        ? null : source.getParentFile().getAbsolutePath();
+                String targetParent = target.getParentFile() == null
+                        ? null : target.getParentFile().getAbsolutePath();
+                if (sourceParent == null || !sourceParent.equals(targetParent)) {
+                    return "cross_directory_not_supported";
+                }
+                if (findDocument(sourcePath) == null) {
+                    return "source_not_found";
+                }
+                if (findDocument(targetPath) != null) {
+                    return "target_exists";
+                }
+                Uri renamed = DocumentsContract.renameDocument(
+                        resolver(), findDocument(sourcePath), target.getName()
+                );
+                if (renamed == null) {
+                    return "rename_failed";
+                }
+                // MediaProvider can keep stale child listings and display names
+                // briefly after a successful rename. A non-null URI is the
+                // DocumentsContract success contract; the caller rescans after
+                // the transaction instead of retrying an already-completed move.
+                return null;
+            } catch (Exception error) {
+                return errorText(error);
+            }
+        }
+    }
+
     public static String writeBytes(String path, byte[] data, boolean createParents) {
         synchronized (LOCK) {
             Uri existing = null;

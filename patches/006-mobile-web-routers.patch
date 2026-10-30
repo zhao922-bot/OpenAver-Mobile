@@ -18,7 +18,7 @@
          "side_effect": True,
 --- a/web/routers/scanner.py
 +++ b/web/routers/scanner.py
-@@ -34,14 +34,26 @@
+@@ -34,23 +34,43 @@
  
  from core.gallery_scanner import VideoScanner, fast_scan_directory, VideoInfo, _run_sample_images_cleanup_pass, is_nas_system_dir_name  # noqa: PLC2701 — scanner 的 rescan 端點需要在特定時機主動觸發 gallery_scanner 內部的樣本圖清理 pass（該 pass 平常只在 scanner 自身流程內被呼叫），避免把整段清理邏輯複製一份到 router 層
  from core.cover_layout import cover_base_stem
@@ -47,19 +47,38 @@
  from core.config import load_config, iter_gallery_sources, get_gallery_source_paths, STEM_IMAGE_MODES
  from core.data_root import resolve_gallery_output_path
  from core.readonly_producer import produce_source
-@@ -49,8 +61,10 @@
++from core.rename_normalizer import (
++    build_folder_rename_plan,
++    build_rename_plan,
++    execute_folder_rename_plan,
++    execute_rename_plan,
++)
+ from web.routers.gallery_media import safe_realpath
  from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
  from core.generate_state import try_mark_generate_active, mark_generate_done
  from core import thumbnail_cache
 -from core.scraper import smart_search
 +from core.scraper import get_javbus_lang, search_jav, smart_search
  from core.source_settings import is_uncensored_mode_effective
-+from core.scrapers.utils import check_subtitle
++from core.scrapers.utils import check_subtitle, extract_number
 +from core.source_config import get_manual_only_sources, validate_source_id
  from pydantic import BaseModel
  from core.logger import get_logger
  from core.platform_info import DSM_PERMISSION_HINT, is_synology
-@@ -788,6 +802,55 @@
+@@ -65,6 +85,12 @@
+ # T3(40c): Jellyfin check TTL 快取（60 秒）
+ _jellyfin_cache_result: dict | None = None
+ _jellyfin_cache_time: float = 0
++_rename_execute_lock = threading.Lock()
++
++
++class RenameExecuteRequest(BaseModel):
++    plan_id: str
++    scope: str = "files"
+ 
+ 
+ def _sse_event(data: dict) -> str:
+@@ -788,6 +814,55 @@
  _DISCONNECT_POLL_INTERVAL_SEC = 0.5
  
  
@@ -115,7 +134,7 @@
  @router.get("/generate")
  async def generate(request: Request):
      """產生影片列表（SSE 串流回傳進度）
-@@ -959,6 +1022,383 @@
+@@ -959,6 +1034,383 @@
      return cache, skipped_readonly, path_mappings
  
  
@@ -499,11 +518,153 @@
  @router.get("/update-check")
  def check_update():
      """檢查需要更新的影片數量（從 SQLite 讀取）"""
-@@ -1053,7 +1493,11 @@
+@@ -1021,9 +1473,13 @@
+                 continue
+             if has_nfo and has_cover:
+                 continue
+-            if not v.number:  # skip videos without number (cannot enrich)
++            # Older scans could store number=NULL when the filename put CJK text
++            # directly after the code. Recover the number from the current path so
++            # already-scanned rows become actionable without clearing the library.
++            number = v.number or extract_number(v.path.rstrip("/").rsplit("/", 1)[-1])
++            if not number:  # skip videos without number (cannot enrich)
+                 continue
+-            item = {"file_path": v.path, "number": v.number}
++            item = {"file_path": v.path, "number": number}
+             if not has_nfo and not has_cover:
+                 missing_both += 1
+                 item["category"] = "both"
+@@ -1053,7 +1509,137 @@
          return {"success": False, "error": "檢查缺失 NFO/封面失敗"}
  
  
 -def generate_nfo_update() -> Generator[str, None, None]:
++def _build_current_rename_plan(scope: str = "files") -> dict:
++    db_path = get_db_path()
++    if scope not in {"files", "folders"}:
++        raise ValueError("invalid_rename_scope")
++    if not db_path.exists():
++        return {
++            "plan_id": "",
++            "generated_at": "",
++            "summary": {
++                "total": 0,
++                "rename_videos": 0,
++                "rename_files": 0,
++                "conflicts": 0,
++                "unchanged": 0,
++                "skipped": 0,
++                "missing": 0,
++            },
++            "items": [],
++        }
++    config = load_config()
++    gallery = config.get("gallery", {})
++    mappings = gallery.get("path_mappings", {}) or {}
++    ro_prefixes = readonly_source_prefixes(gallery, mappings)
++    writable = writable_source_prefixes(gallery, mappings)
++    videos = []
++    for video in VideoRepository(db_path).get_all():
++        canonical = coerce_to_file_uri(video.path, mappings)
++        if is_path_readonly(canonical, ro_prefixes, writable):
++            continue
++        videos.append(video)
++    if scope == "folders":
++        source_roots = []
++        for source in get_gallery_source_paths(gallery):
++            try:
++                source_roots.append(
++                    uri_to_fs_path(coerce_to_file_uri(source, mappings))
++                )
++            except Exception:
++                logger.warning(
++                    "rename folder source root is invalid: %s",
++                    source,
++                    exc_info=True,
++                )
++        return build_folder_rename_plan(
++            videos,
++            source_roots=source_roots,
++            path_mappings=mappings,
++        )
++    return build_rename_plan(
++        videos,
++        path_mappings=mappings,
++        config=config,
++    )
++
++
++@router.get("/rename-preview")
++def rename_preview(scope: str = Query("files")):
++    """Preview filename or direct-child folder normalization without writes."""
++    try:
++        return {"success": True, "data": _build_current_rename_plan(scope)}
++    except Exception as exc:
++        logger.exception("建立檔名正規化預覽失敗")
++        return {"success": False, "error": str(exc)}
++
++
++@router.post("/rename-execute")
++def rename_execute(request: RenameExecuteRequest):
++    """Execute a previously previewed plan and roll back on any failure."""
++    if not _rename_execute_lock.acquire(blocking=False):
++        return {
++            "success": False,
++            "error": "rename_already_running",
++        }
++    try:
++        db_path = get_db_path()
++        plan = _build_current_rename_plan(request.scope)
++        if not plan.get("plan_id") or plan["plan_id"] != request.plan_id:
++            return {
++                "success": False,
++                "error": "plan_changed",
++            }
++        if plan["summary"]["conflicts"]:
++            return {
++                "success": False,
++                "error": "plan_has_conflicts",
++            }
++        if request.scope == "folders":
++            result = execute_folder_rename_plan(
++                plan,
++                VideoRepository(db_path),
++                manifest_dir=db_path.parent / "rename-manifests",
++            )
++        else:
++            result = execute_rename_plan(
++                plan,
++                VideoRepository(db_path),
++                manifest_dir=db_path.parent / "rename-manifests",
++            )
++        if result.get("success"):
++            for item in plan["items"]:
++                if item["status"] == "ready":
++                    old_uris = (
++                        [
++                            video["db_old_uri"]
++                            for video in item.get("videos", [])
++                        ]
++                        if request.scope == "folders"
++                        else [item["db_old_uri"]]
++                    )
++                    for old_uri in old_uris:
++                        try:
++                            thumbnail_cache.invalidate(old_uri)
++                        except Exception:
++                            logger.warning(
++                                "rename thumbnail invalidate failed: %s",
++                                old_uri,
++                                exc_info=True,
++                            )
++        return result
++    except Exception as exc:
++        logger.exception("執行檔名正規化失敗")
++        return {"success": False, "error": str(exc)}
++    finally:
++        _rename_execute_lock.release()
++
++
 +def generate_nfo_update(
 +    cancel_event: Optional[threading.Event] = None,
 +    selected_paths: Optional[list[str]] = None,
@@ -512,7 +673,7 @@
      """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
  
      try:
-@@ -1085,6 +1529,27 @@
+@@ -1085,6 +1671,27 @@
              return
  
          paths_to_update = stats['paths']
@@ -540,7 +701,7 @@
          yield _sse_event({
              "type": "log",
              "level": "info",
-@@ -1092,12 +1557,46 @@
+@@ -1092,12 +1699,46 @@
          })
  
          # 執行更新（path_mappings 沿用 _build_nfo_update_cache 算好的那份，不重讀 config）
@@ -589,7 +750,7 @@
          })
  
      except Exception as e:
-@@ -1106,15 +1605,62 @@
+@@ -1106,15 +1747,62 @@
  
  
  @router.get("/update")
@@ -660,7 +821,7 @@
      )
  
  
-@@ -1211,7 +1757,9 @@
+@@ -1211,7 +1899,9 @@
      return {'need_update': len(need_update), 'items': need_update}
  
  
@@ -671,7 +832,7 @@
      """SSE 串流：批次為影片產生 poster + fanart"""
      global _jellyfin_cache_result, _jellyfin_cache_time
  
-@@ -1252,7 +1800,13 @@
+@@ -1252,7 +1942,13 @@
          yield _sse_event({"type": "log", "level": "info", "message": f"需補齊 {total} 部影片的圖片..."})
  
          completed = 0
@@ -685,7 +846,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,6 +1815,7 @@
+@@ -1261,6 +1957,7 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -693,7 +854,7 @@
                  break
  
              cover = item['cover_path']
-@@ -1271,7 +1826,11 @@
+@@ -1271,7 +1968,11 @@
                  "type": "progress",
                  "current": i,
                  "total": total,
@@ -706,7 +867,7 @@
              })
  
              img_result = generate_jellyfin_images(
-@@ -1283,18 +1842,35 @@
+@@ -1283,18 +1984,35 @@
  
              if img_result['poster']:
                  yield _sse_event({"type": "log", "level": "info", "message": f"✓ {num} poster + fanart"})
@@ -745,7 +906,7 @@
          })
  
      except Exception as e:
-@@ -1359,15 +1935,11 @@
+@@ -1359,15 +2077,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -765,7 +926,7 @@
      )
  
  
-@@ -1621,6 +2193,11 @@
+@@ -1621,6 +2335,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:

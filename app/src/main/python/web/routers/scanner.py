@@ -57,13 +57,19 @@ from core.organizer import (
 from core.config import load_config, iter_gallery_sources, get_gallery_source_paths, STEM_IMAGE_MODES
 from core.data_root import resolve_gallery_output_path
 from core.readonly_producer import produce_source
+from core.rename_normalizer import (
+    build_folder_rename_plan,
+    build_rename_plan,
+    execute_folder_rename_plan,
+    execute_rename_plan,
+)
 from web.routers.gallery_media import safe_realpath
 from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
 from core.generate_state import try_mark_generate_active, mark_generate_done
 from core import thumbnail_cache
 from core.scraper import get_javbus_lang, search_jav, smart_search
 from core.source_settings import is_uncensored_mode_effective
-from core.scrapers.utils import check_subtitle
+from core.scrapers.utils import check_subtitle, extract_number
 from core.source_config import get_manual_only_sources, validate_source_id
 from pydantic import BaseModel
 from core.logger import get_logger
@@ -79,6 +85,12 @@ router = APIRouter(prefix="/api/gallery", tags=["gallery"])
 # T3(40c): Jellyfin check TTL 快取（60 秒）
 _jellyfin_cache_result: dict | None = None
 _jellyfin_cache_time: float = 0
+_rename_execute_lock = threading.Lock()
+
+
+class RenameExecuteRequest(BaseModel):
+    plan_id: str
+    scope: str = "files"
 
 
 def _sse_event(data: dict) -> str:
@@ -1461,9 +1473,13 @@ def check_missing():
                 continue
             if has_nfo and has_cover:
                 continue
-            if not v.number:  # skip videos without number (cannot enrich)
+            # Older scans could store number=NULL when the filename put CJK text
+            # directly after the code. Recover the number from the current path so
+            # already-scanned rows become actionable without clearing the library.
+            number = v.number or extract_number(v.path.rstrip("/").rsplit("/", 1)[-1])
+            if not number:  # skip videos without number (cannot enrich)
                 continue
-            item = {"file_path": v.path, "number": v.number}
+            item = {"file_path": v.path, "number": number}
             if not has_nfo and not has_cover:
                 missing_both += 1
                 item["category"] = "both"
@@ -1491,6 +1507,132 @@ def check_missing():
     except Exception as e:
         logger.error("檢查缺失 NFO/封面失敗: %s", e)
         return {"success": False, "error": "檢查缺失 NFO/封面失敗"}
+
+
+def _build_current_rename_plan(scope: str = "files") -> dict:
+    db_path = get_db_path()
+    if scope not in {"files", "folders"}:
+        raise ValueError("invalid_rename_scope")
+    if not db_path.exists():
+        return {
+            "plan_id": "",
+            "generated_at": "",
+            "summary": {
+                "total": 0,
+                "rename_videos": 0,
+                "rename_files": 0,
+                "conflicts": 0,
+                "unchanged": 0,
+                "skipped": 0,
+                "missing": 0,
+            },
+            "items": [],
+        }
+    config = load_config()
+    gallery = config.get("gallery", {})
+    mappings = gallery.get("path_mappings", {}) or {}
+    ro_prefixes = readonly_source_prefixes(gallery, mappings)
+    writable = writable_source_prefixes(gallery, mappings)
+    videos = []
+    for video in VideoRepository(db_path).get_all():
+        canonical = coerce_to_file_uri(video.path, mappings)
+        if is_path_readonly(canonical, ro_prefixes, writable):
+            continue
+        videos.append(video)
+    if scope == "folders":
+        source_roots = []
+        for source in get_gallery_source_paths(gallery):
+            try:
+                source_roots.append(
+                    uri_to_fs_path(coerce_to_file_uri(source, mappings))
+                )
+            except Exception:
+                logger.warning(
+                    "rename folder source root is invalid: %s",
+                    source,
+                    exc_info=True,
+                )
+        return build_folder_rename_plan(
+            videos,
+            source_roots=source_roots,
+            path_mappings=mappings,
+        )
+    return build_rename_plan(
+        videos,
+        path_mappings=mappings,
+        config=config,
+    )
+
+
+@router.get("/rename-preview")
+def rename_preview(scope: str = Query("files")):
+    """Preview filename or direct-child folder normalization without writes."""
+    try:
+        return {"success": True, "data": _build_current_rename_plan(scope)}
+    except Exception as exc:
+        logger.exception("建立檔名正規化預覽失敗")
+        return {"success": False, "error": str(exc)}
+
+
+@router.post("/rename-execute")
+def rename_execute(request: RenameExecuteRequest):
+    """Execute a previously previewed plan and roll back on any failure."""
+    if not _rename_execute_lock.acquire(blocking=False):
+        return {
+            "success": False,
+            "error": "rename_already_running",
+        }
+    try:
+        db_path = get_db_path()
+        plan = _build_current_rename_plan(request.scope)
+        if not plan.get("plan_id") or plan["plan_id"] != request.plan_id:
+            return {
+                "success": False,
+                "error": "plan_changed",
+            }
+        if plan["summary"]["conflicts"]:
+            return {
+                "success": False,
+                "error": "plan_has_conflicts",
+            }
+        if request.scope == "folders":
+            result = execute_folder_rename_plan(
+                plan,
+                VideoRepository(db_path),
+                manifest_dir=db_path.parent / "rename-manifests",
+            )
+        else:
+            result = execute_rename_plan(
+                plan,
+                VideoRepository(db_path),
+                manifest_dir=db_path.parent / "rename-manifests",
+            )
+        if result.get("success"):
+            for item in plan["items"]:
+                if item["status"] == "ready":
+                    old_uris = (
+                        [
+                            video["db_old_uri"]
+                            for video in item.get("videos", [])
+                        ]
+                        if request.scope == "folders"
+                        else [item["db_old_uri"]]
+                    )
+                    for old_uri in old_uris:
+                        try:
+                            thumbnail_cache.invalidate(old_uri)
+                        except Exception:
+                            logger.warning(
+                                "rename thumbnail invalidate failed: %s",
+                                old_uri,
+                                exc_info=True,
+                            )
+        return result
+    except Exception as exc:
+        logger.exception("執行檔名正規化失敗")
+        return {"success": False, "error": str(exc)}
+    finally:
+        _rename_execute_lock.release()
 
 
 def generate_nfo_update(

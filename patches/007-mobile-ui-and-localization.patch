@@ -94,7 +94,55 @@
      "var": {
        "num": "ID",
        "title": "Title",
-@@ -829,6 +884,8 @@
+@@ -801,6 +856,47 @@
+     }
+   },
+   "scanner": {
++    "rename": {
++      "row_title": "Normalize video filenames",
++      "row_hint": "Normalize number/title spacing; overlong names are safely truncated with ...",
++      "folder_row_title": "Normalize video folders",
++      "folder_row_hint": "Preview the direct-child movie folders under each scan root",
++      "preview_btn": "Preview rename",
++      "preview_loading": "Scanning filenames...",
++      "folder_preview_btn": "Preview folder rename",
++      "folder_preview_loading": "Scanning folders...",
++      "preview_failed": "Could not build the rename preview",
++      "preview_network_error": "Could not load the preview: {message}",
++      "modal_title": "Filename normalization preview",
++      "folder_modal_title": "Folder normalization preview",
++      "summary_videos": "Videos to rename",
++      "summary_folders": "Folders to rename",
++      "summary_files": "Files including sidecars",
++      "summary_conflicts": "Conflicts",
++      "modal_intro": "Only video filenames and sidecars in the same folder are changed: NFO, cover, poster, fanart, and subtitles. Overlong names share a safe limit and end with ..., while folders, extrafanart, and other videos stay unchanged.",
++      "folder_modal_intro": "Only direct-child movie folder names under each scan root are changed, together with database paths. Videos, NFO, cover, and still-image files inside keep their filenames.",
++      "modal_note": "The preview is checked again before execution and stops if files changed. Any failure rolls files and database paths back automatically and saves a rename manifest.",
++      "related_files": "Also handles {count} sidecar files",
++      "folder_related_videos": "Updates {count} video paths",
++      "conflict_title": "These items conflict and will not run",
++      "no_changes": "All recognizable filenames already use the normalized format",
++      "folder_no_changes": "All recognizable folder names already use the normalized format",
++      "close_btn": "Cancel",
++      "copy_btn": "Copy manifest",
++      "execute_btn": "Execute rename",
++      "folder_execute_btn": "Execute folder rename",
++      "executing_btn": "Renaming...",
++      "folder_executing_btn": "Renaming folders...",
++      "execute_success": "Rename complete: {videos} videos, {files} files",
++      "folder_execute_success": "Folder rename complete: {folders} folders, {videos} video paths",
++      "plan_changed": "Files or database rows changed. The preview was refreshed; confirm again.",
++      "execute_rolled_back": "Execution failed and files/database paths were rolled back",
++      "execute_rolled_back_detail": "Execution failed and files/database paths were rolled back: {error}",
++      "execute_failed": "Rename failed",
++      "execute_network_error": "Rename request failed: {message}",
++      "copy_success": "Rename manifest copied",
++      "copy_failed": "Could not copy the rename manifest"
++    },
+     "page_title": "Scanner",
+     "toast": {
+       "folder_already_added": "This folder is already in the list",
+@@ -829,6 +925,8 @@
        "nfo_update_done": "Update complete! Regenerate the list to refresh",
        "no_jellyfin_update_needed": "No videos need updating",
        "jellyfin_update_done": "Update complete!",
@@ -103,7 +151,7 @@
        "path_copied": "Copied: {path}",
        "browse_dir_fallback": "Your browser can’t read the path of dropped files, so the folder picker has been opened for you"
      },
-@@ -868,13 +925,79 @@
+@@ -868,13 +966,79 @@
        "clear_display_title": "Clear display (restored on reload)",
        "clear_all_title": "Clear all (including history)"
      },
@@ -183,7 +231,7 @@
        "jellyfin_prefix": "Jellyfin cover format missing:",
        "jellyfin_suffix": " videos",
        "jellyfin_update_title": "Generate Jellyfin poster + fanart",
-@@ -1410,10 +1533,90 @@
+@@ -1410,10 +1574,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -274,7 +322,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1845,6 +2048,12 @@
+@@ -1845,6 +2089,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -287,7 +335,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2069,11 @@
+@@ -1860,7 +2110,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -300,7 +348,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2091,15 @@
+@@ -1878,11 +2132,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -403,7 +451,55 @@
      "var": {
        "num": "番号",
        "title": "タイトル",
-@@ -829,6 +884,8 @@
+@@ -801,6 +856,47 @@
+     }
+   },
+   "scanner": {
++    "rename": {
++      "row_title": "動画ファイル名を統一",
++      "row_hint": "品番とタイトルの間隔を統一し、長すぎる名前は ... 付きで安全に短縮",
++      "folder_row_title": "動画フォルダー名を統一",
++      "folder_row_hint": "各スキャンルート直下の動画フォルダー名をプレビュー",
++      "preview_btn": "名前変更をプレビュー",
++      "preview_loading": "ファイル名を確認中...",
++      "folder_preview_btn": "フォルダー名変更をプレビュー",
++      "folder_preview_loading": "フォルダーを確認中...",
++      "preview_failed": "名前変更プレビューを作成できません",
++      "preview_network_error": "プレビューを読み込めません：{message}",
++      "modal_title": "ファイル名正規化プレビュー",
++      "folder_modal_title": "フォルダー名正規化プレビュー",
++      "summary_videos": "名前を変更する動画",
++      "summary_folders": "名前を変更するフォルダー",
++      "summary_files": "サイドカーファイルを含む",
++      "summary_conflicts": "競合",
++      "modal_intro": "同じフォルダー内の動画名と、NFO、カバー、poster、fanart、字幕だけを変更します。長すぎる名前は共通の安全な長さに揃えて ... を付け、フォルダー、extrafanart、他の動画は変更しません。",
++      "folder_modal_intro": "各スキャンルート直下の動画フォルダー名とデータベースパスだけを変更します。フォルダー内の動画、NFO、カバー、サンプル画像のファイル名は変更しません。",
++      "modal_note": "実行前にプレビューを再確認し、ファイルが変わっていれば停止します。途中で失敗した場合はファイルとデータベースのパスを自動で元に戻し、名前変更マニフェストを保存します。",
++      "related_files": "サイドカーファイル {count} 件も処理",
++      "folder_related_videos": "動画パス {count} 件を更新",
++      "conflict_title": "次の項目は競合するため実行できません",
++      "no_changes": "認識できるファイル名はすべて統一形式です",
++      "folder_no_changes": "認識できるフォルダー名はすべて統一形式です",
++      "close_btn": "キャンセル",
++      "copy_btn": "一覧をコピー",
++      "execute_btn": "名前変更を実行",
++      "folder_execute_btn": "フォルダー名変更を実行",
++      "executing_btn": "名前を変更中...",
++      "folder_executing_btn": "フォルダー名を変更中...",
++      "execute_success": "名前変更完了：動画 {videos} 件、ファイル {files} 件",
++      "folder_execute_success": "フォルダー名変更完了：フォルダー {folders} 件、動画パス {videos} 件",
++      "plan_changed": "ファイルまたはデータベースが変化したため、プレビューを更新しました。もう一度確認してください。",
++      "execute_rolled_back": "実行に失敗したため、ファイルとデータベースのパスを元に戻しました",
++      "execute_rolled_back_detail": "実行に失敗したため、ファイルとデータベースのパスを元に戻しました：{error}",
++      "execute_failed": "名前変更に失敗しました",
++      "execute_network_error": "名前変更リクエストに失敗：{message}",
++      "copy_success": "名前変更一覧をコピーしました",
++      "copy_failed": "名前変更一覧をコピーできません"
++    },
+     "page_title": "リスト生成",
+     "toast": {
+       "folder_already_added": "このフォルダはすでにリストにあります",
+@@ -829,6 +925,8 @@
        "nfo_update_done": "補完が完了しました。リストを再生成して更新してください",
        "no_jellyfin_update_needed": "補完が必要な動画はありません",
        "jellyfin_update_done": "補完が完了しました！",
@@ -412,7 +508,7 @@
        "path_copied": "コピーしました: {path}",
        "browse_dir_fallback": "ブラウザではドロップしたファイルのパスを直接読み取れないため、フォルダ選択画面を開きました"
      },
-@@ -868,13 +925,79 @@
+@@ -868,13 +966,79 @@
        "clear_display_title": "画面をクリア（リロード後に復元）",
        "clear_all_title": "すべてクリア（履歴含む）"
      },
@@ -492,7 +588,7 @@
        "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
        "jellyfin_suffix": "本",
        "jellyfin_update_title": "Jellyfin poster + fanart を補完",
-@@ -1410,10 +1533,90 @@
+@@ -1410,10 +1574,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -583,7 +679,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1845,6 +2048,12 @@
+@@ -1845,6 +2089,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -596,7 +692,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2069,11 @@
+@@ -1860,7 +2110,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -609,7 +705,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2091,15 @@
+@@ -1878,11 +2132,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -712,7 +808,55 @@
      "var": {
        "num": "番号",
        "title": "标题",
-@@ -829,6 +884,8 @@
+@@ -801,6 +856,47 @@
+     }
+   },
+   "scanner": {
++    "rename": {
++      "row_title": "统一文件名格式",
++      "row_hint": "统一番号与标题间距；超过系统限制的名称会安全截断并加 ...",
++      "folder_row_title": "统一文件夹格式",
++      "folder_row_hint": "预览扫描目录下一层的影片文件夹名称",
++      "preview_btn": "预览重命名",
++      "preview_loading": "正在扫描文件名...",
++      "folder_preview_btn": "预览文件夹重命名",
++      "folder_preview_loading": "正在扫描文件夹...",
++      "preview_failed": "无法生成重命名预览",
++      "preview_network_error": "读取预览失败：{message}",
++      "modal_title": "文件名规范化预览",
++      "folder_modal_title": "文件夹规范化预览",
++      "summary_videos": "需要改名的视频",
++      "summary_folders": "需要改名的文件夹",
++      "summary_files": "包含侧车文件",
++      "summary_conflicts": "冲突项",
++      "modal_intro": "只会修改视频文件名和同目录下的 NFO、封面、poster、fanart、字幕；超长名称会共用安全长度并以 ... 结尾，文件夹、extrafanart 和其他视频保持不动。",
++      "folder_modal_intro": "只修改扫描目录下一层的影片文件夹名称，并同步数据库路径；文件夹内的视频、NFO、封面和剧照文件保持原名。",
++      "modal_note": "执行前会再次核对预览结果；若文件发生变化会停止。任何一步失败都会自动回滚文件和数据库路径，并保存重命名清单。",
++      "related_files": "同时处理 {count} 个侧车文件",
++      "folder_related_videos": "同步更新 {count} 个视频路径",
++      "conflict_title": "以下项目存在冲突，不会执行",
++      "no_changes": "所有可识别文件名已经符合统一格式",
++      "folder_no_changes": "所有可识别文件夹名已经符合统一格式",
++      "close_btn": "取消",
++      "copy_btn": "复制清单",
++      "execute_btn": "确认执行重命名",
++      "folder_execute_btn": "确认执行文件夹重命名",
++      "executing_btn": "正在重命名...",
++      "folder_executing_btn": "正在重命名文件夹...",
++      "execute_success": "重命名完成：{videos} 部视频，{files} 个文件",
++      "folder_execute_success": "文件夹重命名完成：{folders} 个文件夹，{videos} 个视频路径",
++      "plan_changed": "预览后文件或数据库已变化，预览已刷新，请再次确认",
++      "execute_rolled_back": "执行失败，已自动回滚文件和数据库路径",
++      "execute_rolled_back_detail": "执行失败，已自动回滚文件和数据库路径。原因：{error}",
++      "execute_failed": "执行重命名失败",
++      "execute_network_error": "执行请求失败：{message}",
++      "copy_success": "重命名清单已复制",
++      "copy_failed": "复制重命名清单失败"
++    },
+     "page_title": "列表生成",
+     "toast": {
+       "folder_already_added": "此文件夹已在列表中",
+@@ -829,6 +925,8 @@
        "nfo_update_done": "补全完成！请重新生成列表以更新",
        "no_jellyfin_update_needed": "没有需要补齐的视频",
        "jellyfin_update_done": "补齐完成！",
@@ -721,7 +865,7 @@
        "path_copied": "已复制: {path}",
        "browse_dir_fallback": "浏览器无法直接读取拖放文件的路径，已为您打开文件夹选择器"
      },
-@@ -868,13 +925,79 @@
+@@ -868,13 +966,79 @@
        "clear_display_title": "清除画面（刷新后恢复）",
        "clear_all_title": "清除全部（包含历史）"
      },
@@ -801,7 +945,7 @@
        "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
-@@ -1410,10 +1533,90 @@
+@@ -1410,10 +1574,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -892,7 +1036,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1845,6 +2048,12 @@
+@@ -1845,6 +2089,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -905,7 +1049,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2069,11 @@
+@@ -1860,7 +2110,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -918,7 +1062,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2091,15 @@
+@@ -1878,11 +2132,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -1021,7 +1165,55 @@
      "var": {
        "num": "番號",
        "title": "標題",
-@@ -829,6 +884,8 @@
+@@ -801,6 +856,47 @@
+     }
+   },
+   "scanner": {
++    "rename": {
++      "row_title": "統一檔名格式",
++      "row_hint": "統一編號與標題間距；超過系統限制的名稱會安全截斷並加上 ...",
++      "folder_row_title": "統一資料夾格式",
++      "folder_row_hint": "預覽掃描目錄下一層的影片資料夾名稱",
++      "preview_btn": "預覽重新命名",
++      "preview_loading": "正在掃描檔名...",
++      "folder_preview_btn": "預覽資料夾重新命名",
++      "folder_preview_loading": "正在掃描資料夾...",
++      "preview_failed": "無法產生重新命名預覽",
++      "preview_network_error": "讀取預覽失敗：{message}",
++      "modal_title": "檔名正規化預覽",
++      "folder_modal_title": "資料夾正規化預覽",
++      "summary_videos": "需要改名的影片",
++      "summary_folders": "需要改名的資料夾",
++      "summary_files": "包含側車檔案",
++      "summary_conflicts": "衝突項目",
++      "modal_intro": "只會修改影片檔名和同目錄下的 NFO、封面、poster、fanart、字幕；超長名稱會共用安全長度並以 ... 結尾，資料夾、extrafanart 和其他影片保持不動。",
++      "folder_modal_intro": "只修改掃描目錄下一層的影片資料夾名稱，並同步資料庫路徑；資料夾內的影片、NFO、封面和劇照檔案保持原名。",
++      "modal_note": "執行前會再次核對預覽結果；若檔案發生變化會停止。任何一步失敗都會自動回滾檔案和資料庫路徑，並保存重新命名清單。",
++      "related_files": "同時處理 {count} 個側車檔案",
++      "folder_related_videos": "同步更新 {count} 個影片路徑",
++      "conflict_title": "以下項目存在衝突，不會執行",
++      "no_changes": "所有可辨識檔名已經符合統一格式",
++      "folder_no_changes": "所有可辨識資料夾名稱已經符合統一格式",
++      "close_btn": "取消",
++      "copy_btn": "複製清單",
++      "execute_btn": "確認執行重新命名",
++      "folder_execute_btn": "確認執行資料夾重新命名",
++      "executing_btn": "正在重新命名...",
++      "folder_executing_btn": "正在重新命名資料夾...",
++      "execute_success": "重新命名完成：{videos} 部影片，{files} 個檔案",
++      "folder_execute_success": "資料夾重新命名完成：{folders} 個資料夾，{videos} 個影片路徑",
++      "plan_changed": "預覽後檔案或資料庫已變化，預覽已重新整理，請再次確認",
++      "execute_rolled_back": "執行失敗，已自動回滾檔案和資料庫路徑",
++      "execute_rolled_back_detail": "執行失敗，已自動回滾檔案和資料庫路徑。原因：{error}",
++      "execute_failed": "執行重新命名失敗",
++      "execute_network_error": "執行請求失敗：{message}",
++      "copy_success": "重新命名清單已複製",
++      "copy_failed": "複製重新命名清單失敗"
++    },
+     "page_title": "列表生成",
+     "toast": {
+       "folder_already_added": "此資料夾已在列表中",
+@@ -829,6 +925,8 @@
        "nfo_update_done": "補全完成！請重新產生列表以更新",
        "no_jellyfin_update_needed": "沒有需要補齊的影片",
        "jellyfin_update_done": "補齊完成！",
@@ -1030,7 +1222,7 @@
        "path_copied": "已複製: {path}",
        "browse_dir_fallback": "瀏覽器無法直接讀取拖放檔案的路徑，已為您開啟資料夾選擇器"
      },
-@@ -868,13 +925,79 @@
+@@ -868,13 +966,79 @@
        "clear_display_title": "清除畫面（重整後恢復）",
        "clear_all_title": "清除全部（包含歷史）"
      },
@@ -1110,7 +1302,7 @@
        "jellyfin_prefix": "外部媒體管理器封面缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "補齊 poster + fanart",
-@@ -1410,10 +1533,90 @@
+@@ -1410,10 +1574,90 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -1201,7 +1393,7 @@
      "hero": {
        "this_computer_unavailable": "暫時讀不到這台電腦的更新資訊，請重新開啟說明頁再試",
        "copy_curl": "複製指令",
-@@ -1850,6 +2053,12 @@
+@@ -1850,6 +2094,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -1214,7 +1406,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1865,7 +2074,11 @@
+@@ -1865,7 +2115,11 @@
        "costar": "與她同片"
      },
      "donut": {
@@ -1227,7 +1419,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2096,15 @@
+@@ -1883,11 +2137,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -1261,7 +1453,7 @@
      {
 --- /dev/null
 +++ b/web/static/css/components/mobile-ui.css
-@@ -0,0 +1,669 @@
+@@ -0,0 +1,690 @@
 +/* r19: shared mobile state, touch, hierarchy, and density rules. */
 +
 +:root {
@@ -1829,6 +2021,27 @@
 +    flex-wrap: wrap;
 +  }
 +
++  [data-is-android="true"] .output-info-actions.scanner-action-cluster {
++    display: grid;
++    grid-template-columns: max-content max-content minmax(0, 1fr);
++    align-items: stretch;
++    gap: 0.5rem;
++  }
++
++  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn {
++    width: 100%;
++    min-width: 0;
++    min-height: var(--ui-touch-target);
++    padding: 0.5rem 0.72rem;
++    border-radius: var(--ui-control-radius);
++    font-size: 0.8rem;
++  }
++
++  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > span,
++  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > i {
++    flex: 0 0 auto;
++  }
++
 +  [data-is-android="true"] .scanner-generate-inline {
 +    min-height: var(--ui-touch-target);
 +    padding: 0.5rem 0.9rem;
@@ -1844,7 +2057,7 @@
 +  [data-is-android="true"] .output-info-actions .settings-link {
 +    display: inline-flex;
 +    align-items: center;
-+    padding-inline: 4px;
++    padding-inline: 0.72rem;
 +  }
 +
 +  [data-is-android="true"] .search-bar .spotlight-search--wishlist-toggle {
@@ -3109,7 +3322,7 @@
      border-radius: var(--fluent-radius-md);   /* 互動小元件 4px（§1）*/
 --- a/web/static/css/pages/scanner.css
 +++ b/web/static/css/pages/scanner.css
-@@ -365,3 +365,825 @@
+@@ -365,3 +365,990 @@
      border-radius: var(--fluent-radius-md);
      color: var(--text-default, currentColor);
  }
@@ -3646,6 +3859,71 @@
 +    flex: 0 0 auto;
 +}
 +
++.scanner-action-cluster {
++    gap: 0.5rem;
++}
++
++.scanner-action-btn {
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    gap: 0.42rem;
++    min-height: 2.7rem;
++    padding: 0.48rem 0.85rem;
++    border: 1px solid var(--border-light);
++    border-radius: 0.85rem;
++    font-size: 0.8rem;
++    font-weight: 650;
++    line-height: 1;
++    text-decoration: none;
++    white-space: nowrap;
++    transition:
++        transform var(--fluent-duration-fast) var(--fluent-ease-standard),
++        border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
++        background-color var(--fluent-duration-fast) var(--fluent-ease-standard),
++        box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
++}
++
++.scanner-action-btn:hover:not(:disabled) {
++    transform: translateY(-1px);
++}
++
++.scanner-action-btn:active:not(:disabled) {
++    transform: translateY(0);
++}
++
++.scanner-action-secondary {
++    color: var(--text-primary);
++    background: var(--bg-card);
++}
++
++.scanner-action-secondary:hover:not(:disabled) {
++    border-color: color-mix(in oklch, var(--accent) 45%, var(--border-light));
++    background: color-mix(in oklch, var(--accent) 7%, var(--bg-card));
++}
++
++.scanner-action-primary {
++    color: var(--bg-card);
++    border-color: var(--text-primary);
++    background: var(--text-primary);
++    box-shadow: 0 0.3rem 0.8rem color-mix(in oklch, var(--text-primary) 16%, transparent);
++}
++
++.scanner-action-primary:hover:not(:disabled) {
++    background: color-mix(in oklch, var(--text-primary) 88%, var(--accent));
++    box-shadow: 0 0.4rem 1rem color-mix(in oklch, var(--text-primary) 20%, transparent);
++}
++
++.scanner-action-cluster .path-copy-btn {
++    width: auto;
++    height: auto;
++}
++
++.scanner-action-cluster .settings-link {
++    color: inherit;
++    font-size: inherit;
++}
++
 +.path-copy-btn {
 +    display: inline-flex;
 +    align-items: center;
@@ -3788,6 +4066,106 @@
 +    color: var(--color-success);
 +    background: color-mix(in oklch, var(--color-success) 9%, transparent);
 +    font-size: 0.8rem;
++}
++
++.rename-preview-modal .modal-box {
++    width: min(46rem, calc(100vw - 1.5rem));
++}
++
++.rename-preview-list,
++.rename-conflict-list {
++    display: flex;
++    flex-direction: column;
++    gap: 0.5rem;
++    max-height: 22rem;
++    margin: 0.85rem 0;
++    padding: 0.55rem;
++    overflow-y: auto;
++    border: 1px solid var(--border-light);
++    border-radius: var(--fluent-radius-md);
++    background: color-mix(in oklch, var(--bg-body) 58%, transparent);
++}
++
++.rename-preview-item {
++    display: grid;
++    gap: 0.28rem;
++    padding: 0.65rem;
++    border: 1px solid color-mix(in oklch, var(--border-light) 72%, transparent);
++    border-radius: var(--fluent-radius-sm);
++    background: var(--bg-card);
++}
++
++.rename-preview-item > strong {
++    color: var(--accent);
++    font-size: 0.72rem;
++    letter-spacing: 0.03em;
++}
++
++.rename-preview-names {
++    display: grid;
++    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
++    align-items: center;
++    gap: 0.4rem;
++    min-width: 0;
++    font-size: 0.74rem;
++}
++
++.rename-preview-old,
++.rename-preview-new {
++    overflow-wrap: anywhere;
++}
++
++.rename-preview-old {
++    color: var(--text-secondary);
++    text-decoration: line-through;
++}
++
++.rename-preview-new {
++    color: var(--text-primary);
++    font-weight: 650;
++}
++
++.rename-preview-names i {
++    color: var(--text-muted);
++}
++
++.rename-preview-item > small {
++    color: var(--text-muted);
++    font-size: 0.68rem;
++}
++
++.rename-conflict-list {
++    border-color: color-mix(in oklch, var(--color-error) 34%, var(--border-light));
++    background: color-mix(in oklch, var(--color-error) 7%, transparent);
++}
++
++.rename-conflict-list h4 {
++    margin: 0;
++    color: var(--color-error);
++    font-size: 0.8rem;
++}
++
++.rename-conflict-item {
++    display: grid;
++    gap: 0.15rem;
++    padding: 0.55rem;
++    border-radius: var(--fluent-radius-sm);
++    background: var(--bg-card);
++}
++
++.rename-conflict-item strong {
++    overflow-wrap: anywhere;
++    font-size: 0.75rem;
++}
++
++.rename-conflict-item small {
++    color: var(--color-error);
++    font-size: 0.68rem;
++    overflow-wrap: anywhere;
++}
++
++.rename-preview-actions {
++    flex-wrap: wrap;
 +}
 +
 +.tag-backup-option {
@@ -5584,7 +5962,13 @@
  
 --- a/web/static/js/pages/scanner/state-batch.js
 +++ b/web/static/js/pages/scanner/state-batch.js
-@@ -22,6 +22,7 @@
+@@ -1,3 +1,5 @@
++import { copyText } from '@/shared/clipboard.js';
++
+ /** TASK-147b-T3 / CD-147b-5：四項判準——真的補到 NFO／封面／欄位／劇照才算成功。
+  * 與 core/enrich_contract.py 的 did_enrich_something() 同一判準；改一邊必須改另一邊。
+  *
+@@ -22,9 +24,17 @@
          missingEnrichOffset: 0,     // batch offset
          missingEnrichSuccess: 0,
          missingEnrichFailed: 0,
@@ -5592,7 +5976,219 @@
          resumePillVisible: false,
          missingConfirmModalOpen: false,   // TASK-13: 大批量補完 confirm dialog 開關
          _enrichAbortController: null,
-@@ -109,14 +110,17 @@
++
++        // ===== r23: Preview-first filename normalization =====
++        renamePreviewOpen: false,
++        renamePreviewLoading: false,
++        renameExecuting: false,
++        renamePlan: null,
++        renamePreviewMode: 'files', // files | folders
+ 
+         // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
+         currentCard: null,          // {number, status, source, reason, coverSrc} | null
+@@ -72,6 +82,185 @@
+                 return '<span class="loading loading-spinner loading-sm"></span> ' + window.t('scanner.stats.missing_enrich_loading');
+             }
+             return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
++        },
++
++        get renameReadyItems() {
++            return (this.renamePlan?.items || []).filter(item => item.status === 'ready');
++        },
++
++        get renameConflictItems() {
++            return (this.renamePlan?.items || []).filter(item => item.status === 'conflict');
++        },
++
++        get renameIsFolders() {
++            return this.renamePreviewMode === 'folders';
++        },
++
++        get renamePrimaryLabel() {
++            return window.t(this.renameIsFolders
++                ? 'scanner.rename.summary_folders'
++                : 'scanner.rename.summary_videos');
++        },
++
++        get renamePrimaryValue() {
++            return this.renameIsFolders
++                ? (this.renamePlan?.summary?.rename_folders || 0)
++                : (this.renamePlan?.summary?.rename_videos || 0);
++        },
++
++        get renameSecondaryLabel() {
++            return window.t(this.renameIsFolders
++                ? 'scanner.rename.summary_videos'
++                : 'scanner.rename.summary_files');
++        },
++
++        get renameSecondaryValue() {
++            return this.renameIsFolders
++                ? (this.renamePlan?.summary?.rename_videos || 0)
++                : (this.renamePlan?.summary?.rename_files || 0);
++        },
++
++        get renameModalTitle() {
++            return window.t(this.renameIsFolders
++                ? 'scanner.rename.folder_modal_title'
++                : 'scanner.rename.modal_title');
++        },
++
++        get renameModalIntro() {
++            return window.t(this.renameIsFolders
++                ? 'scanner.rename.folder_modal_intro'
++                : 'scanner.rename.modal_intro');
++        },
++
++        get renameNoChangesText() {
++            return window.t(this.renameIsFolders
++                ? 'scanner.rename.folder_no_changes'
++                : 'scanner.rename.no_changes');
++        },
++
++        get renameExecuteText() {
++            if (this.renameExecuting) {
++                return window.t(this.renameIsFolders
++                    ? 'scanner.rename.folder_executing_btn'
++                    : 'scanner.rename.executing_btn');
++            }
++            return window.t(this.renameIsFolders
++                ? 'scanner.rename.folder_execute_btn'
++                : 'scanner.rename.execute_btn');
++        },
++
++        get renameExecuteDisabled() {
++            return this.renameExecuting
++                || this.renamePreviewLoading
++                || !this.renamePlan
++                || this.renamePrimaryValue === 0
++                || (this.renamePlan.summary?.conflicts || 0) > 0;
++        },
++
++        renameRelatedText(item) {
++            if (this.renameIsFolders) {
++                return window.t('scanner.rename.folder_related_videos', {
++                    count: item.videos?.length || 0,
++                });
++            }
++            return window.t('scanner.rename.related_files', {
++                count: Math.max(0, item.operations.length - 1),
++            });
++        },
++
++        async previewRenamePlan(scope = 'files') {
++            if (this.renamePreviewLoading || this.isBusy) return;
++            this.renamePreviewMode = scope === 'folders' ? 'folders' : 'files';
++            this.renamePreviewLoading = true;
++            try {
++                const resp = await fetch(
++                    `/api/gallery/rename-preview?scope=${encodeURIComponent(this.renamePreviewMode)}`
++                );
++                const result = await resp.json();
++                if (!result.success) {
++                    this.showToast(result.error || window.t('scanner.rename.preview_failed'), 'error');
++                    return;
++                }
++                this.renamePlan = result.data;
++                this.renamePreviewOpen = true;
++            } catch (e) {
++                this.showToast(window.t('scanner.rename.preview_network_error', { message: e.message }), 'error');
++            } finally {
++                this.renamePreviewLoading = false;
++            }
++        },
++
++        closeRenamePreview() {
++            if (this.renameExecuting) return;
++            this.renamePreviewOpen = false;
++        },
++
++        async executeRenamePlan() {
++            if (this.renameExecuteDisabled || !this.renamePlan) return;
++            this.renameExecuting = true;
++            try {
++                const resp = await fetch('/api/gallery/rename-execute', {
++                    method: 'POST',
++                    headers: { 'Content-Type': 'application/json' },
++                    body: JSON.stringify({
++                        plan_id: this.renamePlan.plan_id,
++                        scope: this.renamePreviewMode,
++                    }),
++                });
++                const result = await resp.json();
++                if (result.success) {
++                    this.renamePreviewOpen = false;
++                    const message = this.renameIsFolders
++                        ? window.t('scanner.rename.folder_execute_success', {
++                            folders: result.renamed_folders || 0,
++                            videos: result.updated_videos || 0,
++                        })
++                        : window.t('scanner.rename.execute_success', {
++                            videos: result.renamed_videos || 0,
++                            files: result.renamed_files || 0,
++                        });
++                    this.showToast(message, 'success', 5000);
++                    await this.loadStats();
++                    await this.checkMissing();
++                } else if (result.error === 'plan_changed') {
++                    this.showToast(window.t('scanner.rename.plan_changed'), 'warn');
++                    await this.previewRenamePlan(this.renamePreviewMode);
++                } else if (result.rollback_ok) {
++                    this.showToast(window.t('scanner.rename.execute_rolled_back_detail', {
++                        error: result.error || 'unknown_error',
++                    }), 'error', 8000);
++                } else {
++                    this.showToast(result.error || window.t('scanner.rename.execute_failed'), 'error');
++                }
++            } catch (e) {
++                this.showToast(window.t('scanner.rename.execute_network_error', { message: e.message }), 'error');
++            } finally {
++                this.renameExecuting = false;
++            }
++        },
++
++        async copyRenameManifest() {
++            if (!this.renamePlan) return;
++            const lines = [];
++            for (const item of this.renameReadyItems) {
++                lines.push(`${item.old_name} -> ${item.new_name}`);
++                if (this.renameIsFolders) {
++                    lines.push(`  ${window.t('scanner.rename.folder_related_videos', {
++                        count: item.videos?.length || 0,
++                    })}`);
++                    continue;
++                }
++                for (const op of (item.operations || [])) {
++                    if (op.kind !== 'video') {
++                        lines.push(`  ${op.old_name} -> ${op.new_name}`);
++                    }
++                }
++            }
++            const ok = await copyText(lines.join('\n'));
++            this.showToast(
++                window.t(ok ? 'scanner.rename.copy_success' : 'scanner.rename.copy_failed'),
++                ok ? 'success' : 'error'
++            );
+         },
+ 
+         // ===== T10: Missing NFO/Cover Enrich Methods =====
+@@ -88,8 +277,15 @@
+                     this.missingCoverCount = d.missing_cover || 0;
+                     this.missingItems = Array.isArray(d.items) ? d.items : [];
+                     this.missingPillVisible = true;
++                    // Make a completed scan actionable immediately instead of
++                    // hiding the "fill missing" row inside a collapsed section.
++                    this.maintenanceExpanded = true;
+                 } else {
+                     this.missingPillVisible = false;
++                    this.missingBothCount = 0;
++                    this.missingNfoCount = 0;
++                    this.missingCoverCount = 0;
++                    this.missingItems = [];
+                 }
+             } catch (e) {
+                 console.error('checkMissing failed:', e);
+@@ -109,14 +305,17 @@
              this.missingEnrichOffset = 0;
              this.missingEnrichSuccess = 0;
              this.missingEnrichFailed = 0;
@@ -5613,7 +6209,7 @@
              this.clearLogs();
  
              const controller = new AbortController();
-@@ -146,7 +150,7 @@
+@@ -146,7 +345,7 @@
                          }
                          this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
                          this.flushLogs();
@@ -5622,7 +6218,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          // Save remaining
-@@ -159,7 +163,7 @@
+@@ -159,7 +358,7 @@
                          const errText = await resp.text().catch(() => '');
                          this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
                          this.flushLogs();
@@ -5631,7 +6227,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -200,6 +204,12 @@
+@@ -200,6 +399,12 @@
                                  this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
                                  this.progressTotal = items.length;
                                  this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
@@ -5644,7 +6240,7 @@
                              } else if (event.type === 'result-item') {
                                  // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
                                  // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
-@@ -234,7 +244,18 @@
+@@ -234,7 +439,18 @@
                                      this.missingEnrichSuccess++;
                                  } else {
                                      this.missingEnrichFailed++;
@@ -5663,7 +6259,7 @@
                                  // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
                                  if (event.reason === 'error') {
                                      this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
-@@ -246,7 +267,7 @@
+@@ -246,7 +462,7 @@
                              } else if (event.type === 'error') {
                                  this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
                                  this.flushLogs();
@@ -5672,7 +6268,7 @@
                                  this.currentCard = null;
                                  this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -258,7 +279,7 @@
+@@ -258,7 +474,7 @@
  
                      // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
                      if (!batchDone) {
@@ -5681,7 +6277,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -284,11 +305,19 @@
+@@ -284,11 +500,19 @@
                      if (lastCover) {
                          this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
                      }
@@ -5703,7 +6299,7 @@
                      const summary = this.missingEnrichFailed > 0
                          ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
                          : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
-@@ -312,7 +341,7 @@
+@@ -312,7 +536,7 @@
                  if (e.name === 'AbortError') return;
                  console.error('runMissingEnrich error:', e);
                  this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
@@ -7136,11 +7732,11 @@
       @dragover.document.prevent="handleDragOver($event)"
       @drop.document.prevent="handleDrop($event)"
 -     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel();">
-+     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); nfoUpdateConfirmModalOpen && cancelNfoUpdate(); tagSourceConfirmModalOpen && cancelTagSourceUpdate(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel();">
++     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); nfoUpdateConfirmModalOpen && cancelNfoUpdate(); tagSourceConfirmModalOpen && cancelTagSourceUpdate(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel(); renamePreviewOpen && closeRenamePreview();">
      <!-- Drag Overlay (must be inside x-data scope) -->
      <div class="drag-overlay" id="dragOverlay" :class="{ active: showDragOverlay }">
          <div class="drag-overlay-content">
-@@ -97,14 +99,31 @@
+@@ -97,14 +99,32 @@
          </div>
  
          <!-- Output Info -->
@@ -7157,19 +7753,20 @@
 +                <span class="path-label">{{ t('scanner.folder.output_prefix') }}</span>
 +                <code x-text="outputPathDisplay"></code>
 +            </div>
-+            <div class="output-info-actions">
-+                <button type="button" class="path-copy-btn"
++            <div class="output-info-actions scanner-action-cluster">
++                <button type="button" class="path-copy-btn scanner-action-btn scanner-action-secondary"
 +                        @click="copyDisplayedPath()"
 +                        :disabled="!outputPathDisplay"
 +                        :title="window.t('scanner.folder.copy_path')"
 +                        :aria-label="window.t('scanner.folder.copy_path')">
 +                    <i class="bi bi-clipboard"></i>
++                    <span>{{ t('scanner.folder.copy_path') }}</span>
 +                </button>
-+                <a href="/settings" class="settings-link">
++                <a href="/settings" class="settings-link scanner-action-btn scanner-action-secondary">
 +                    <i class="bi bi-gear"></i> {{ t('scanner.folder.settings_link') }}
 +                </a>
 +                {% if is_android %}
-+                <button class="btn btn-primary scanner-generate-inline" id="btnGenerate"
++                <button class="btn btn-primary scanner-generate-inline scanner-action-btn scanner-action-primary" id="btnGenerate"
 +                        @click="generate()"
 +                        x-bind:disabled="isBusy"
 +                        x-html="generateButtonText">
@@ -7179,7 +7776,7 @@
          </div>
  
          <!-- 跨機器路徑提醒（media-server 風味）：strm 內寫本機路徑，播放端在別機須認得，可到設定設路徑替換規則 -->
-@@ -120,12 +139,14 @@
+@@ -120,12 +140,14 @@
          </div>
  
          <!-- Action Buttons -->
@@ -7195,7 +7792,7 @@
              <!-- Done Actions (hidden until complete) -->
              <div id="doneActions" class="done-actions" :style="{ display: doneActionsVisible ? 'flex' : 'none' }">
                  <button class="btn-hero btn-hero-secondary" id="btnCopyPath"
-@@ -137,37 +158,57 @@
+@@ -137,37 +159,57 @@
      </div>
  
      <!-- Mini Terminal (hidden by default) -->
@@ -7283,7 +7880,7 @@
              </div>
          </div>
  
-@@ -207,27 +248,143 @@
+@@ -207,27 +249,143 @@
              <span class="enrich-card-badge" x-show="enrichBadgeCount > 0" x-text="enrichBadgeCount"></span>
          </div>
  
@@ -7442,7 +8039,7 @@
              <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
                  <i class="bi bi-exclamation-circle"></i>
                  {{ t('scanner.stats.nfo_prefix') }}
-@@ -238,14 +395,47 @@
+@@ -238,14 +396,91 @@
                  {{ t('scanner.stats.nfo_suffix') }}
                  {{ number_drilldown_panel() }}
              </span>
@@ -7454,6 +8051,50 @@
              </button>
          </div>
 +        <!-- r16: Replace ordinary tags from one selected source -->
++        <div class="nfo-update-row maintenance-row maintenance-row-rename">
++            <div class="maintenance-copy">
++                <span class="maintenance-icon"><i class="bi bi-input-cursor-text"></i></span>
++                <span class="maintenance-text">
++                    <strong>{{ t('scanner.rename.row_title') }}</strong>
++                    <small>{{ t('scanner.rename.row_hint') }}</small>
++                </span>
++            </div>
++            <div class="maintenance-controls">
++                <button class="btn-tag-preview"
++                        @click="previewRenamePlan()"
++                        :disabled="renamePreviewLoading || isBusy">
++                    <span x-show="renamePreviewLoading" class="loading loading-spinner loading-sm"></span>
++                    <i class="bi bi-eye" x-show="!renamePreviewLoading"></i>
++                    <span x-text="window.t(renamePreviewLoading
++                        ? 'scanner.rename.preview_loading'
++                        : 'scanner.rename.preview_btn')"></span>
++                </button>
++            </div>
++        </div>
++
++        <div class="nfo-update-row maintenance-row maintenance-row-rename-folder">
++            <div class="maintenance-copy">
++                <span class="maintenance-icon"><i class="bi bi-folder-symlink"></i></span>
++                <span class="maintenance-text">
++                    <strong>{{ t('scanner.rename.folder_row_title') }}</strong>
++                    <small>{{ t('scanner.rename.folder_row_hint') }}</small>
++                </span>
++            </div>
++            <div class="maintenance-controls">
++                <button class="btn-tag-preview"
++                        @click="previewRenamePlan('folders')"
++                        :disabled="renamePreviewLoading || isBusy">
++                    <span x-show="renamePreviewLoading && renamePreviewMode === 'folders'"
++                          class="loading loading-spinner loading-sm"></span>
++                    <i class="bi bi-eye"
++                       x-show="!renamePreviewLoading || renamePreviewMode !== 'folders'"></i>
++                    <span x-text="window.t(renamePreviewLoading && renamePreviewMode === 'folders'
++                        ? 'scanner.rename.folder_preview_loading'
++                        : 'scanner.rename.folder_preview_btn')"></span>
++                </button>
++            </div>
++        </div>
++
 +        <div class="nfo-update-row maintenance-row maintenance-row-tag"
 +             x-show="tagSourceOptions.length > 0">
 +            <div class="maintenance-copy" :title="window.t('scanner.stats.tag_source_hint')">
@@ -7492,7 +8133,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -295,7 +485,7 @@
+@@ -295,7 +530,7 @@
          </div>
  
          <!-- T10: Resume Pill (未完成提示) -->
@@ -7501,7 +8142,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-arrow-repeat"></i>
                  <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-@@ -313,7 +503,7 @@
+@@ -313,7 +548,7 @@
  
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
          <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
@@ -7510,7 +8151,7 @@
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +529,7 @@
+@@ -339,7 +574,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -7519,7 +8160,7 @@
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +564,8 @@
+@@ -374,6 +609,8 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
@@ -7528,7 +8169,7 @@
          </div>
      </div>
  
-@@ -782,6 +974,140 @@
+@@ -782,6 +1019,140 @@
          </div>
      </dialog>
  
@@ -7669,9 +8310,93 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -806,25 +1132,7 @@
+@@ -805,26 +1176,91 @@
+         </div>
      </dialog>
  
++    <!-- r23: Preview-first filename normalization -->
++    <dialog class="modal fluent-modal rename-preview-modal"
++            :class="{ 'modal-open': renamePreviewOpen }"
++            @click.self="closeRenamePreview()">
++        <div class="modal-box fluent-modal-box">
++            <h3 class="fluent-modal-title">
++                <i class="bi" :class="renameIsFolders ? 'bi-folder-symlink' : 'bi-input-cursor-text'"></i>
++                <span x-text="renameModalTitle"></span>
++            </h3>
++            <div class="batch-confirm-summary">
++                <div class="batch-confirm-summary-item">
++                    <span x-text="renamePrimaryLabel"></span>
++                    <strong x-text="renamePrimaryValue"></strong>
++                </div>
++                <div class="batch-confirm-summary-item">
++                    <span x-text="renameSecondaryLabel"></span>
++                    <strong x-text="renameSecondaryValue"></strong>
++                </div>
++                <div class="batch-confirm-summary-item">
++                    <span>{{ t('scanner.rename.summary_conflicts') }}</span>
++                    <strong x-text="renamePlan?.summary?.conflicts || 0"></strong>
++                </div>
++            </div>
++            <p class="fluent-modal-body" x-text="renameModalIntro"></p>
++            <p class="fluent-modal-body batch-confirm-note">
++                <i class="bi bi-info-circle"></i>
++                <span>{{ t('scanner.rename.modal_note') }}</span>
++            </p>
++
++            <div class="rename-preview-list" x-show="renameReadyItems.length > 0">
++                <template x-for="item in renameReadyItems" :key="item.db_old_uri">
++                    <div class="rename-preview-item">
++                        <strong x-text="item.number || ''"></strong>
++                        <div class="rename-preview-names">
++                            <span class="rename-preview-old" x-text="item.old_name"></span>
++                            <i class="bi bi-arrow-right"></i>
++                            <span class="rename-preview-new" x-text="item.new_name"></span>
++                        </div>
++                        <small x-text="renameRelatedText(item)"></small>
++                    </div>
++                </template>
++            </div>
++
++            <div class="rename-conflict-list" x-show="renameConflictItems.length > 0">
++                <h4>{{ t('scanner.rename.conflict_title') }}</h4>
++                <template x-for="item in renameConflictItems" :key="item.db_old_uri">
++                    <div class="rename-conflict-item">
++                        <strong x-text="item.old_name"></strong>
++                        <small x-text="item.conflicts.join(' · ')"></small>
++                    </div>
++                </template>
++            </div>
++
++            <div class="tag-preview-empty"
++                 x-show="renameReadyItems.length === 0 && renameConflictItems.length === 0">
++                <i class="bi bi-check2-circle"></i>
++                <span x-text="renameNoChangesText"></span>
++            </div>
++
++            <div class="modal-action fluent-modal-actions rename-preview-actions">
++                <button type="button" class="btn btn-ghost"
++                        @click="closeRenamePreview()"
++                        :disabled="renameExecuting">
++                    {{ t('scanner.rename.close_btn') }}
++                </button>
++                <button type="button" class="btn btn-outline"
++                        @click="copyRenameManifest()"
++                        :disabled="renameReadyItems.length === 0">
++                    <i class="bi bi-clipboard"></i>
++                    {{ t('scanner.rename.copy_btn') }}
++                </button>
++                <button type="button" class="btn btn-primary"
++                        @click="executeRenamePlan()"
++                        x-show="renamePrimaryValue > 0"
++                        :disabled="renameExecuteDisabled">
++                    <span x-show="renameExecuting" class="loading loading-spinner loading-xs"></span>
++                    <i class="bi bi-shield-check" x-show="!renameExecuting"></i>
++                    <span x-text="renameExecuteText"></span>
++                </button>
++            </div>
++        </div>
++    </dialog>
++
      <!-- Toast (Alpine controlled) -->
 -    <div class="toast toast-bottom toast-center fluent-toast-container"
 -         x-show="$store.toast.visible"

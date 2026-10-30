@@ -565,6 +565,27 @@
     flex-wrap: wrap;
   }
 
+  [data-is-android="true"] .output-info-actions.scanner-action-cluster {
+    display: grid;
+    grid-template-columns: max-content max-content minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--ui-touch-target);
+    padding: 0.5rem 0.72rem;
+    border-radius: var(--ui-control-radius);
+    font-size: 0.8rem;
+  }
+
+  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > span,
+  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > i {
+    flex: 0 0 auto;
+  }
+
   [data-is-android="true"] .scanner-generate-inline {
     min-height: var(--ui-touch-target);
     padding: 0.5rem 0.9rem;
@@ -580,7 +601,7 @@
   [data-is-android="true"] .output-info-actions .settings-link {
     display: inline-flex;
     align-items: center;
-    padding-inline: 4px;
+    padding-inline: 0.72rem;
   }
 
   [data-is-android="true"] .search-bar .spotlight-search--wishlist-toggle {

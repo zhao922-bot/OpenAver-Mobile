@@ -19,7 +19,7 @@
      data-is-android="{{ 'true' if is_android else 'false' }}"
      @dragover.document.prevent="handleDragOver($event)"
      @drop.document.prevent="handleDrop($event)"
-     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); nfoUpdateConfirmModalOpen && cancelNfoUpdate(); tagSourceConfirmModalOpen && cancelTagSourceUpdate(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel();">
+     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); nfoUpdateConfirmModalOpen && cancelNfoUpdate(); tagSourceConfirmModalOpen && cancelTagSourceUpdate(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel(); renamePreviewOpen && closeRenamePreview();">
     <!-- Drag Overlay (must be inside x-data scope) -->
     <div class="drag-overlay" id="dragOverlay" :class="{ active: showDragOverlay }">
         <div class="drag-overlay-content">
@@ -105,19 +105,20 @@
                 <span class="path-label">{{ t('scanner.folder.output_prefix') }}</span>
                 <code x-text="outputPathDisplay"></code>
             </div>
-            <div class="output-info-actions">
-                <button type="button" class="path-copy-btn"
+            <div class="output-info-actions scanner-action-cluster">
+                <button type="button" class="path-copy-btn scanner-action-btn scanner-action-secondary"
                         @click="copyDisplayedPath()"
                         :disabled="!outputPathDisplay"
                         :title="window.t('scanner.folder.copy_path')"
                         :aria-label="window.t('scanner.folder.copy_path')">
                     <i class="bi bi-clipboard"></i>
+                    <span>{{ t('scanner.folder.copy_path') }}</span>
                 </button>
-                <a href="/settings" class="settings-link">
+                <a href="/settings" class="settings-link scanner-action-btn scanner-action-secondary">
                     <i class="bi bi-gear"></i> {{ t('scanner.folder.settings_link') }}
                 </a>
                 {% if is_android %}
-                <button class="btn btn-primary scanner-generate-inline" id="btnGenerate"
+                <button class="btn btn-primary scanner-generate-inline scanner-action-btn scanner-action-primary" id="btnGenerate"
                         @click="generate()"
                         x-bind:disabled="isBusy"
                         x-html="generateButtonText">
@@ -402,6 +403,50 @@
             </button>
         </div>
         <!-- r16: Replace ordinary tags from one selected source -->
+        <div class="nfo-update-row maintenance-row maintenance-row-rename">
+            <div class="maintenance-copy">
+                <span class="maintenance-icon"><i class="bi bi-input-cursor-text"></i></span>
+                <span class="maintenance-text">
+                    <strong>{{ t('scanner.rename.row_title') }}</strong>
+                    <small>{{ t('scanner.rename.row_hint') }}</small>
+                </span>
+            </div>
+            <div class="maintenance-controls">
+                <button class="btn-tag-preview"
+                        @click="previewRenamePlan()"
+                        :disabled="renamePreviewLoading || isBusy">
+                    <span x-show="renamePreviewLoading" class="loading loading-spinner loading-sm"></span>
+                    <i class="bi bi-eye" x-show="!renamePreviewLoading"></i>
+                    <span x-text="window.t(renamePreviewLoading
+                        ? 'scanner.rename.preview_loading'
+                        : 'scanner.rename.preview_btn')"></span>
+                </button>
+            </div>
+        </div>
+
+        <div class="nfo-update-row maintenance-row maintenance-row-rename-folder">
+            <div class="maintenance-copy">
+                <span class="maintenance-icon"><i class="bi bi-folder-symlink"></i></span>
+                <span class="maintenance-text">
+                    <strong>{{ t('scanner.rename.folder_row_title') }}</strong>
+                    <small>{{ t('scanner.rename.folder_row_hint') }}</small>
+                </span>
+            </div>
+            <div class="maintenance-controls">
+                <button class="btn-tag-preview"
+                        @click="previewRenamePlan('folders')"
+                        :disabled="renamePreviewLoading || isBusy">
+                    <span x-show="renamePreviewLoading && renamePreviewMode === 'folders'"
+                          class="loading loading-spinner loading-sm"></span>
+                    <i class="bi bi-eye"
+                       x-show="!renamePreviewLoading || renamePreviewMode !== 'folders'"></i>
+                    <span x-text="window.t(renamePreviewLoading && renamePreviewMode === 'folders'
+                        ? 'scanner.rename.folder_preview_loading'
+                        : 'scanner.rename.folder_preview_btn')"></span>
+                </button>
+            </div>
+        </div>
+
         <div class="nfo-update-row maintenance-row maintenance-row-tag"
              x-show="tagSourceOptions.length > 0">
             <div class="maintenance-copy" :title="window.t('scanner.stats.tag_source_hint')">
@@ -1126,6 +1171,89 @@
                 </button>
                 <button type="button" class="btn btn-primary" @click="confirmLargeMissingEnrich()">
                     <span x-text="window.t('scanner.stats.missing_enrich_confirm_confirm')"></span>
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- r23: Preview-first filename normalization -->
+    <dialog class="modal fluent-modal rename-preview-modal"
+            :class="{ 'modal-open': renamePreviewOpen }"
+            @click.self="closeRenamePreview()">
+        <div class="modal-box fluent-modal-box">
+            <h3 class="fluent-modal-title">
+                <i class="bi" :class="renameIsFolders ? 'bi-folder-symlink' : 'bi-input-cursor-text'"></i>
+                <span x-text="renameModalTitle"></span>
+            </h3>
+            <div class="batch-confirm-summary">
+                <div class="batch-confirm-summary-item">
+                    <span x-text="renamePrimaryLabel"></span>
+                    <strong x-text="renamePrimaryValue"></strong>
+                </div>
+                <div class="batch-confirm-summary-item">
+                    <span x-text="renameSecondaryLabel"></span>
+                    <strong x-text="renameSecondaryValue"></strong>
+                </div>
+                <div class="batch-confirm-summary-item">
+                    <span>{{ t('scanner.rename.summary_conflicts') }}</span>
+                    <strong x-text="renamePlan?.summary?.conflicts || 0"></strong>
+                </div>
+            </div>
+            <p class="fluent-modal-body" x-text="renameModalIntro"></p>
+            <p class="fluent-modal-body batch-confirm-note">
+                <i class="bi bi-info-circle"></i>
+                <span>{{ t('scanner.rename.modal_note') }}</span>
+            </p>
+
+            <div class="rename-preview-list" x-show="renameReadyItems.length > 0">
+                <template x-for="item in renameReadyItems" :key="item.db_old_uri">
+                    <div class="rename-preview-item">
+                        <strong x-text="item.number || ''"></strong>
+                        <div class="rename-preview-names">
+                            <span class="rename-preview-old" x-text="item.old_name"></span>
+                            <i class="bi bi-arrow-right"></i>
+                            <span class="rename-preview-new" x-text="item.new_name"></span>
+                        </div>
+                        <small x-text="renameRelatedText(item)"></small>
+                    </div>
+                </template>
+            </div>
+
+            <div class="rename-conflict-list" x-show="renameConflictItems.length > 0">
+                <h4>{{ t('scanner.rename.conflict_title') }}</h4>
+                <template x-for="item in renameConflictItems" :key="item.db_old_uri">
+                    <div class="rename-conflict-item">
+                        <strong x-text="item.old_name"></strong>
+                        <small x-text="item.conflicts.join(' · ')"></small>
+                    </div>
+                </template>
+            </div>
+
+            <div class="tag-preview-empty"
+                 x-show="renameReadyItems.length === 0 && renameConflictItems.length === 0">
+                <i class="bi bi-check2-circle"></i>
+                <span x-text="renameNoChangesText"></span>
+            </div>
+
+            <div class="modal-action fluent-modal-actions rename-preview-actions">
+                <button type="button" class="btn btn-ghost"
+                        @click="closeRenamePreview()"
+                        :disabled="renameExecuting">
+                    {{ t('scanner.rename.close_btn') }}
+                </button>
+                <button type="button" class="btn btn-outline"
+                        @click="copyRenameManifest()"
+                        :disabled="renameReadyItems.length === 0">
+                    <i class="bi bi-clipboard"></i>
+                    {{ t('scanner.rename.copy_btn') }}
+                </button>
+                <button type="button" class="btn btn-primary"
+                        @click="executeRenamePlan()"
+                        x-show="renamePrimaryValue > 0"
+                        :disabled="renameExecuteDisabled">
+                    <span x-show="renameExecuting" class="loading loading-spinner loading-xs"></span>
+                    <i class="bi bi-shield-check" x-show="!renameExecuting"></i>
+                    <span x-text="renameExecuteText"></span>
                 </button>
             </div>
         </div>

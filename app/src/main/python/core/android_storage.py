@@ -103,3 +103,26 @@ def delete(path: str) -> None:
         raise AndroidStorageWriteError(str(exc)) from exc
     if error:
         raise AndroidStorageWriteError(str(error))
+
+
+def rename(source: str, target: str) -> None:
+    """Rename within one directory, using SAF only after a direct rename fails."""
+    try:
+        os.rename(source, target)
+        return
+    except OSError as exc:
+        direct_error = exc
+
+    if not is_access_error(direct_error):
+        raise direct_error
+    if not has_access(source):
+        raise AndroidStoragePermissionError(
+            "storage_tree_not_authorized"
+        ) from direct_error
+    bridge = _bridge()
+    try:
+        error = bridge.rename(str(source), str(target))
+    except Exception as exc:
+        raise AndroidStorageWriteError(str(exc)) from exc
+    if error:
+        raise AndroidStorageWriteError(str(error))

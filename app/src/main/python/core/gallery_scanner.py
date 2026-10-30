@@ -246,31 +246,32 @@ class VideoScanner:
     # 番號識別正則表達式 (從 galleryHtml.cs 移植)
     NUM_PATTERNS = [
         # FC2-PPV
-        (rf'^(.*[\W_])?(?P<fc2>{FC2_TOKEN_PATTERN})([\W_].*|[a-z]+|F?HD.*)?$',
+        (rf'^(.*[\W_])?(?P<fc2>{FC2_TOKEN_PATTERN})([^\dA-Za-z].*|[a-z]+|F?HD.*)?$',
          lambda m: normalize_number_impl(m.group('fc2'))),
 
         # 一本道/加勒比 (n1234, k1234)
-        (r'^(.*[\W_])?([nk]\d{4})([\W_].*|[a-z]+|F?HD.*)?$',
+        (r'^(.*[\W_])?([nk]\d{4})([^\dA-Za-z].*|[a-z]+|F?HD.*)?$',
          lambda m: m.group(2).upper()),
 
         # 加勒比/一本道 日期格式 (123456-01, 123456_789)
-        (r'^(.*[\W_])?(\d{6}[_-]\d{2,3})([\W_].*|[a-z]+|F?HD.*)?$',
+        (r'^(.*[\W_])?(\d{6}[_-]\d{2,3})([^\dA-Za-z].*|[a-z]+|F?HD.*)?$',
          lambda m: m.group(2)),
 
         # 素人系列 (200GANA-1234, 259LUXU-1234)
-        (r'^(.*[\W_])?(\d{3}[a-zA-Z]{3,5})-?(\d+)([\W_].*|[a-z]+|F?HD.*)?$',
+        (r'^(.*[\W_])?(\d{3}[a-zA-Z]{3,5})-?(\d+)([^\dA-Za-z].*|[a-z]+|F?HD.*)?$',
          lambda m: f"{m.group(2).upper()}-{m.group(3)}"),
 
-        # 一般番號 (ABC-123, ABCD-12345)
-        (r'^(.*[\W_]|\d+)?([a-zA-Z]{2,7})-?(\d{2,5})([\W_].*|[a-z]+|F?HD.*)?$',
+        # 一般番號 (ABC-123, ABCD-12345)。番號後可直接接中文／日文，
+        # 例如 SSIS-465超對我性癖好...；不可把緊接的數字或英文字母吃進番號。
+        (r'^(.*[\W_]|\d+)?([a-zA-Z]{2,7})[ _-]?(\d{2,5})([^\dA-Za-z].*|[a-z]+|F?HD.*)?$',
          lambda m: f"{m.group(2).upper()}-{m.group(3)}"),
 
         # 含數字前綴的番號 (1PONDO, 7SNIS)
-        (r'^(.*[\W_]|\d+)?([a-zA-Z][a-zA-Z0-9]{1,6})-(\d{2,5})([\W_].*|[a-z]+|F?HD.*)?$',
+        (r'^(.*[\W_]|\d+)?([a-zA-Z][a-zA-Z0-9]{1,6})[ _-](\d{2,5})([^\dA-Za-z].*|[a-z]+|F?HD.*)?$',
          lambda m: f"{m.group(2).upper()}-{m.group(3)}"),
 
         # HEYZO
-        (r'^(.*[\W_])?HEYZO([\W_].*[\W_])?(\d{4})([\W_].*|[a-z]+|F?HD.*)?$',
+        (r'^(.*[\W_])?HEYZO([\W_].*[\W_])?(\d{4})([^\dA-Za-z].*|[a-z]+|F?HD.*)?$',
          lambda m: f"HEYZO-{m.group(3)}"),
     ]
 

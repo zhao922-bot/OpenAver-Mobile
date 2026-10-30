@@ -13,17 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r22-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r27-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r22-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r27-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r22`（versionCode `17038`）
+- 版本：`0.17.18-r27`（versionCode `17043`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：`719782526D2366C2669CDFB2922D9677307B2FE64A8B9612D9879FA6498D87E2`
+- SHA-256：`签名构建后更新`
 
 ## 安装
 
@@ -129,6 +129,27 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r22：手机端“说明”页改为专用本地操作指南，移除 Telegram、桌面更新检查、
     AI 终端、服务器模式、快捷键等桌面内容；保留原作者致谢和 GitHub 链接
 - r22：停用桌面版新手引导，不再自动弹出或在说明页显示入口
+- r23：修复番号后直接接中文标题时无法识别番号、导致“缺件 0”的问题
+- r23：新增“统一文件名格式”预览与执行：支持 `ABC123`、`ABC_123`、
+    `ABC-123标题` → `ABC-123 标题`，同步处理 NFO、封面、poster、fanart 和字幕，
+    不动文件夹、`extrafanart` 和其他辅助文件；冲突不执行，失败自动回滚并保存清单
+- r24：修复外置存储亚微秒 mtime 波动导致预览被误判为过期、执行时只显示
+    `plan_changed` 的问题；计划变化时会自动刷新预览并再次要求确认
+- r24：新增“统一文件夹格式”，只规范扫描目录下一层的影片文件夹，并同步数据库中的
+    视频、封面和剧照路径；文件夹内文件保持原名，支持冲突阻断和失败回滚
+- r24：扫描页的“复制路径 / 设置 / 生成网页”改为统一高度、圆角和视觉层级的操作组；
+    文件名规范化说明不再展示无关的密钥文件示例
+- r25：修复部分 SD 卡目录提供器在重命名后短暂返回旧目录列表、导致已经成功的
+    重命名被判为 `rename_verify_failed` 并触发整批回滚的问题；改为校验系统返回的
+    新文档 URI 和实际显示名称
+- r25：回滚失败提示现在会附带具体错误原因，便于在不读取应用私有目录时定位问题
+- r26：SD 卡重命名改为以 Android `renameDocument()` 返回非空新 URI 作为成功依据，
+    不再依赖可能短暂滞后的目录列表或显示名；整批完成后再统一扫描验证
+- r26：若重命名仍失败，错误信息会附带具体旧文件名和新文件名
+- r27：识别 MTP/FUSE 复制到 SD 卡时因超过 255 字节而被截断的超长文件名；
+    可在数据库记录仍完整时按番号找回唯一视频，并修复到安全长度
+- r27：视频、封面、NFO、poster 和 fanart 共用同一条截断后的文件名主干，
+    超长标题以 `...` 结尾，避免侧车名称不一致或再次超过 Android 文件系统限制
 
 ## 限制
 

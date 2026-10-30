@@ -1,3 +1,5 @@
+import { copyText } from '@/shared/clipboard.js';
+
 /** TASK-147b-T3 / CD-147b-5：四項判準——真的補到 NFO／封面／欄位／劇照才算成功。
  * 與 core/enrich_contract.py 的 did_enrich_something() 同一判準；改一邊必須改另一邊。
  *
@@ -26,6 +28,13 @@ export function stateBatch() {
         resumePillVisible: false,
         missingConfirmModalOpen: false,   // TASK-13: 大批量補完 confirm dialog 開關
         _enrichAbortController: null,
+
+        // ===== r23: Preview-first filename normalization =====
+        renamePreviewOpen: false,
+        renamePreviewLoading: false,
+        renameExecuting: false,
+        renamePlan: null,
+        renamePreviewMode: 'files', // files | folders
 
         // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
         currentCard: null,          // {number, status, source, reason, coverSrc} | null
@@ -75,6 +84,185 @@ export function stateBatch() {
             return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
         },
 
+        get renameReadyItems() {
+            return (this.renamePlan?.items || []).filter(item => item.status === 'ready');
+        },
+
+        get renameConflictItems() {
+            return (this.renamePlan?.items || []).filter(item => item.status === 'conflict');
+        },
+
+        get renameIsFolders() {
+            return this.renamePreviewMode === 'folders';
+        },
+
+        get renamePrimaryLabel() {
+            return window.t(this.renameIsFolders
+                ? 'scanner.rename.summary_folders'
+                : 'scanner.rename.summary_videos');
+        },
+
+        get renamePrimaryValue() {
+            return this.renameIsFolders
+                ? (this.renamePlan?.summary?.rename_folders || 0)
+                : (this.renamePlan?.summary?.rename_videos || 0);
+        },
+
+        get renameSecondaryLabel() {
+            return window.t(this.renameIsFolders
+                ? 'scanner.rename.summary_videos'
+                : 'scanner.rename.summary_files');
+        },
+
+        get renameSecondaryValue() {
+            return this.renameIsFolders
+                ? (this.renamePlan?.summary?.rename_videos || 0)
+                : (this.renamePlan?.summary?.rename_files || 0);
+        },
+
+        get renameModalTitle() {
+            return window.t(this.renameIsFolders
+                ? 'scanner.rename.folder_modal_title'
+                : 'scanner.rename.modal_title');
+        },
+
+        get renameModalIntro() {
+            return window.t(this.renameIsFolders
+                ? 'scanner.rename.folder_modal_intro'
+                : 'scanner.rename.modal_intro');
+        },
+
+        get renameNoChangesText() {
+            return window.t(this.renameIsFolders
+                ? 'scanner.rename.folder_no_changes'
+                : 'scanner.rename.no_changes');
+        },
+
+        get renameExecuteText() {
+            if (this.renameExecuting) {
+                return window.t(this.renameIsFolders
+                    ? 'scanner.rename.folder_executing_btn'
+                    : 'scanner.rename.executing_btn');
+            }
+            return window.t(this.renameIsFolders
+                ? 'scanner.rename.folder_execute_btn'
+                : 'scanner.rename.execute_btn');
+        },
+
+        get renameExecuteDisabled() {
+            return this.renameExecuting
+                || this.renamePreviewLoading
+                || !this.renamePlan
+                || this.renamePrimaryValue === 0
+                || (this.renamePlan.summary?.conflicts || 0) > 0;
+        },
+
+        renameRelatedText(item) {
+            if (this.renameIsFolders) {
+                return window.t('scanner.rename.folder_related_videos', {
+                    count: item.videos?.length || 0,
+                });
+            }
+            return window.t('scanner.rename.related_files', {
+                count: Math.max(0, item.operations.length - 1),
+            });
+        },
+
+        async previewRenamePlan(scope = 'files') {
+            if (this.renamePreviewLoading || this.isBusy) return;
+            this.renamePreviewMode = scope === 'folders' ? 'folders' : 'files';
+            this.renamePreviewLoading = true;
+            try {
+                const resp = await fetch(
+                    `/api/gallery/rename-preview?scope=${encodeURIComponent(this.renamePreviewMode)}`
+                );
+                const result = await resp.json();
+                if (!result.success) {
+                    this.showToast(result.error || window.t('scanner.rename.preview_failed'), 'error');
+                    return;
+                }
+                this.renamePlan = result.data;
+                this.renamePreviewOpen = true;
+            } catch (e) {
+                this.showToast(window.t('scanner.rename.preview_network_error', { message: e.message }), 'error');
+            } finally {
+                this.renamePreviewLoading = false;
+            }
+        },
+
+        closeRenamePreview() {
+            if (this.renameExecuting) return;
+            this.renamePreviewOpen = false;
+        },
+
+        async executeRenamePlan() {
+            if (this.renameExecuteDisabled || !this.renamePlan) return;
+            this.renameExecuting = true;
+            try {
+                const resp = await fetch('/api/gallery/rename-execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        plan_id: this.renamePlan.plan_id,
+                        scope: this.renamePreviewMode,
+                    }),
+                });
+                const result = await resp.json();
+                if (result.success) {
+                    this.renamePreviewOpen = false;
+                    const message = this.renameIsFolders
+                        ? window.t('scanner.rename.folder_execute_success', {
+                            folders: result.renamed_folders || 0,
+                            videos: result.updated_videos || 0,
+                        })
+                        : window.t('scanner.rename.execute_success', {
+                            videos: result.renamed_videos || 0,
+                            files: result.renamed_files || 0,
+                        });
+                    this.showToast(message, 'success', 5000);
+                    await this.loadStats();
+                    await this.checkMissing();
+                } else if (result.error === 'plan_changed') {
+                    this.showToast(window.t('scanner.rename.plan_changed'), 'warn');
+                    await this.previewRenamePlan(this.renamePreviewMode);
+                } else if (result.rollback_ok) {
+                    this.showToast(window.t('scanner.rename.execute_rolled_back_detail', {
+                        error: result.error || 'unknown_error',
+                    }), 'error', 8000);
+                } else {
+                    this.showToast(result.error || window.t('scanner.rename.execute_failed'), 'error');
+                }
+            } catch (e) {
+                this.showToast(window.t('scanner.rename.execute_network_error', { message: e.message }), 'error');
+            } finally {
+                this.renameExecuting = false;
+            }
+        },
+
+        async copyRenameManifest() {
+            if (!this.renamePlan) return;
+            const lines = [];
+            for (const item of this.renameReadyItems) {
+                lines.push(`${item.old_name} -> ${item.new_name}`);
+                if (this.renameIsFolders) {
+                    lines.push(`  ${window.t('scanner.rename.folder_related_videos', {
+                        count: item.videos?.length || 0,
+                    })}`);
+                    continue;
+                }
+                for (const op of (item.operations || [])) {
+                    if (op.kind !== 'video') {
+                        lines.push(`  ${op.old_name} -> ${op.new_name}`);
+                    }
+                }
+            }
+            const ok = await copyText(lines.join('\n'));
+            this.showToast(
+                window.t(ok ? 'scanner.rename.copy_success' : 'scanner.rename.copy_failed'),
+                ok ? 'success' : 'error'
+            );
+        },
+
         // ===== T10: Missing NFO/Cover Enrich Methods =====
         async checkMissing() {
             try {
@@ -89,8 +277,15 @@ export function stateBatch() {
                     this.missingCoverCount = d.missing_cover || 0;
                     this.missingItems = Array.isArray(d.items) ? d.items : [];
                     this.missingPillVisible = true;
+                    // Make a completed scan actionable immediately instead of
+                    // hiding the "fill missing" row inside a collapsed section.
+                    this.maintenanceExpanded = true;
                 } else {
                     this.missingPillVisible = false;
+                    this.missingBothCount = 0;
+                    this.missingNfoCount = 0;
+                    this.missingCoverCount = 0;
+                    this.missingItems = [];
                 }
             } catch (e) {
                 console.error('checkMissing failed:', e);

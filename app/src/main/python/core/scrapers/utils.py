@@ -121,6 +121,7 @@ def extract_number(filename: str) -> Optional[str]:
         r'(\d{6}_\d{2,})',             # 120415_201 / 082912_01 底線格式（無碼）
         r'([A-Za-z]+\d+-\d+)',          # T28-103 混合格式
         r'\[([A-Za-z]{1,7}-\d{3,5})\]', # [ABC-123] 方括號
+        r'([A-Za-z]{1,7}[ _-]\d{3,5})', # ABC-123 / ABC_123 / ABC 123
         r'([A-Za-z]{1,7}-\d{3,5})',     # ABC-123 帶橫線
         r'([A-Za-z]{2,7})(\d{3,5})',    # ABC12345 不帶橫線（index 6，兩 group → 插 hyphen）
         r'([nkcmsNKCMS]\d{4})(?!\d)',      # n0762 單字母 + 恰 4 位（Tokyo Hot 無碼，前綴限 n/k/c/m/s（spec-73 US2 權威模型），右側無更多數字）
@@ -132,11 +133,11 @@ def extract_number(filename: str) -> Optional[str]:
         if match:
             if i == 0:
                 return normalize_number_impl(match.group('fc2'))
-            elif i == 6:  # 不帶橫線需重組（ABC12345）
+            elif match.lastindex == 2:  # 不帶橫線需重組（ABC12345）
                 number = f"{match.group(1).upper()}-{match.group(2)}"
             else:
                 number = match.group(1).upper()
-            return number
+            return normalize_number_impl(number)
     return None
 
 
@@ -382,6 +383,10 @@ def normalize_number_impl(number: str) -> str:
     # 單字母 + 恰 4 位（如 N0762, K0150）→ Tokyo Hot 無碼番號，不插 hyphen
     if re.match(r'^[A-Z]\d{4}$', number):
         return number
+    # ABC_123 / ABC 123 → ABC-123
+    spaced = re.match(r'^([A-Z]+)[ _-]+(\d+)$', number)
+    if spaced:
+        return f"{spaced.group(1)}-{spaced.group(2)}"
     # ABC123 → ABC-123
     match = re.match(r'^([A-Z]+)(\d+)$', number)
     if match:
