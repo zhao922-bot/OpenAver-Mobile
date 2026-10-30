@@ -72,6 +72,7 @@ public final class MainActivity extends Activity {
     private static final int REQUEST_FILE_CHOOSER = 4101;
     private static final int REQUEST_ALL_FILES_ACCESS = 4102;
     private static final int REQUEST_LEGACY_STORAGE = 4103;
+    private static final int REQUEST_STORAGE_TREE = 4104;
     private static final long EXIT_BACK_WINDOW_MS = 2000L;
     private static final long PAGE_LOAD_TIMEOUT_MS = 30000L;
     private static final long LOCAL_START_TIMEOUT_MS = 300_000L;
@@ -159,6 +160,7 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        StorageBridge.initialize(this);
         preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
 
         pageLoadTimeout = () -> {
@@ -494,6 +496,24 @@ public final class MainActivity extends Activity {
                 permissionStatus.setTextColor(getColor(R.color.danger));
                 permissionStatus.setVisibility(View.VISIBLE);
             }
+        }
+    }
+
+    private void openStorageTreePicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        );
+        try {
+            startActivityForResult(intent, REQUEST_STORAGE_TREE);
+        } catch (Exception error) {
+            Toast.makeText(
+                    this,
+                    R.string.storage_tree_open_failed,
+                    Toast.LENGTH_LONG
+            ).show();
         }
     }
 
@@ -835,6 +855,10 @@ public final class MainActivity extends Activity {
         dialog.findViewById(R.id.menuStorageSettings).setOnClickListener(view -> {
             dialog.dismiss();
             openStoragePermission();
+        });
+        dialog.findViewById(R.id.menuStorageTree).setOnClickListener(view -> {
+            dialog.dismiss();
+            openStorageTreePicker();
         });
         dialog.findViewById(R.id.menuAbout).setOnClickListener(view -> {
             dialog.dismiss();
@@ -1215,6 +1239,19 @@ public final class MainActivity extends Activity {
                 startEmbeddedRuntime();
             } else {
                 showPermissionUi();
+            }
+            return;
+        }
+        if (requestCode == REQUEST_STORAGE_TREE) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                String error = StorageBridge.setTreeUri(this, data.getData());
+                Toast.makeText(
+                        this,
+                        error == null
+                                ? R.string.storage_tree_authorized
+                                : R.string.storage_tree_authorize_failed,
+                        Toast.LENGTH_LONG
+                ).show();
             }
         }
     }

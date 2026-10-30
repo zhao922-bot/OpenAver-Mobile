@@ -66,6 +66,11 @@ def _get_lib():
             ctypes.c_char_p, ctypes.POINTER(ctypes.c_float),
         ]
         _lib.openaver_focal_detect.restype = ctypes.c_int
+        _lib.openaver_focal_detect_timed.argtypes = [
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ctypes.c_char_p, ctypes.c_int, ctypes.POINTER(ctypes.c_float),
+        ]
+        _lib.openaver_focal_detect_timed.restype = ctypes.c_int
     return _lib
 
 
@@ -105,29 +110,49 @@ def detect_faces(img, angles=None):
     return faces
 
 
-def _native_detect_focal(img):
-    """Return the native focal centroid for an already-resized RGB image."""
+def _native_detect_focal_status(img, timeout_ms=0):
+    """Return (focal, status) for an already-resized RGB image."""
     rgb = img.convert('RGB')
     width, height = rgb.size
     data = rgb.tobytes()
     pixel_buffer = (ctypes.c_ubyte * len(data)).from_buffer_copy(data)
     out = (ctypes.c_float * 2)()
-    found = _get_lib().openaver_focal_detect(
-        pixel_buffer,
-        width,
-        height,
-        MIN_FACE_SIZE,
-        os.fsencode(_cascade_path()),
-        out,
-    )
-    if not found:
-        return None
+    lib = _get_lib()
+    try:
+        found = lib.openaver_focal_detect_timed(
+            pixel_buffer,
+            width,
+            height,
+            MIN_FACE_SIZE,
+            os.fsencode(_cascade_path()),
+            max(0, int(timeout_ms)),
+            out,
+        )
+    except AttributeError:
+        found = lib.openaver_focal_detect(
+            pixel_buffer,
+            width,
+            height,
+            MIN_FACE_SIZE,
+            os.fsencode(_cascade_path()),
+            out,
+        )
+    if found == -2:
+        return None, "timeout"
+    if found <= 0:
+        return None, "no_face" if found == 0 else "failed"
     x, y = float(out[0]), float(out[1])
     if not (math.isfinite(x) and math.isfinite(y)):
-        return None
+        return None, "failed"
     if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
-        return None
-    return x, y
+        return None, "failed"
+    return (x, y), "found"
+
+
+def _native_detect_focal(img, timeout_ms=0):
+    """Return the native focal centroid for an already-resized RGB image."""
+    focal, _status = _native_detect_focal_status(img, timeout_ms)
+    return focal
 
 
 def native_focal_status():
@@ -351,17 +376,9 @@ def find_primary_face_axis_ratio(img, ratio, advanced, work_width=MAX_IMAGE_WIDT
     return pos, found, faces, (ww, wh), axis
 
 
-def detect_focal(fs_path, ratio, work_width=MAX_IMAGE_WIDTH):
-    """Product entry point (CD-98a-1/-2/-4): single-angle face detection ->
-    2D focal centroid.
-
-    fs_path is a caller-resolved filesystem path (callers own the
-    URI -> fs path resolution via core.path_utils; this function never
-    touches file:// URIs). Returns (x_ratio, y_ratio) in [0,1]x[0,1], or
-    None when no face is found. Never raises — on image-open failure or a
-    missing/corrupt cascade it logs a warning and returns None so callers
-    fall back to the existing right-crop behavior (load-bearing wall).
-    """
+def detect_focal_with_status(fs_path, ratio, work_width=MAX_IMAGE_WIDTH,
+                             timeout_s=0):
+    """Return (focal, status) where status is found/no_face/timeout/failed."""
     try:
         img = Image.open(fs_path)
         w, h = img.size
@@ -373,15 +390,36 @@ def detect_focal(fs_path, ratio, work_width=MAX_IMAGE_WIDTH):
         ww, wh = work.size
 
         if sys.platform == 'android' or os.environ.get('OPENAVER_FOCAL_NATIVE') == '1':
-            return _native_detect_focal(work)
+            timeout_ms = max(0, int(float(timeout_s or 0) * 1000))
+            return _native_detect_focal_status(work, timeout_ms)
 
         faces = detect_faces(work)  # single-angle only (CD-98a-2)
 
         axis = _dominant_axis_by_ratio(ww, wh, ratio)
-        return _cluster_and_select_2d(ww, wh, faces, axis)
+        focal = _cluster_and_select_2d(ww, wh, faces, axis)
+        return focal, "found" if focal is not None else "no_face"
     except Exception as e:
         logger.warning(f"detect_focal failed for {fs_path}: {e}")
-        return None
+        return None, "failed"
+
+
+def detect_focal(fs_path, ratio, work_width=MAX_IMAGE_WIDTH, timeout_s=0):
+    """Product entry point (CD-98a-1/-2/-4): single-angle face detection ->
+    2D focal centroid.
+
+    fs_path is a caller-resolved filesystem path (callers own the
+    URI -> fs path resolution via core.path_utils; this function never
+    touches file:// URIs). Returns (x_ratio, y_ratio) in [0,1]x[0,1], or
+    None when no face is found. Never raises — on image-open failure or a
+    missing/corrupt cascade it logs a warning and returns None so callers
+    fall back to the existing right-crop behavior (load-bearing wall).
+    """
+    focal, _status = detect_focal_with_status(
+        fs_path, ratio, work_width, timeout_s
+    )
+    if focal is not None:
+        return focal
+    return None
 
 
 # --- serde (CD-98a-3: canonical "x,y" 4-decimal string) --------------------

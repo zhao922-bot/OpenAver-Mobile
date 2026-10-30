@@ -38,6 +38,10 @@ from core.readonly_paths import resolve_owning_output_root
 from core.title_writeback import (
     NfoNotFoundError, NfoParseError, rewrite_nfo_titles, strip_illegal_xml_chars,
 )
+from core.android_storage import (
+    AndroidStoragePermissionError,
+    AndroidStorageWriteError,
+)
 from core.focal import device_state, format_focal, parse_focal
 from core.focal.subprocess_runner import run_detection
 from core import thumbnail_cache
@@ -495,6 +499,7 @@ _TITLE_ERROR_MESSAGES = {
     "no_nfo": "找不到 NFO",
     "nfo_ambiguous": "輸出夾有多份 NFO，無法判斷要改哪一份",
     "nfo_unreadable": "NFO 無法讀取或解析",
+    "storage_permission_required": "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
     "nfo_write_failed": "NFO 寫入失敗",
     "db_write_failed": "資料庫寫入失敗（NFO 已更新，請再試一次）",
     "invalid_path": "檔案路徑格式無效",
@@ -563,6 +568,11 @@ def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: st
         return "no_nfo"
     except NfoParseError:
         return "nfo_unreadable"
+    except AndroidStoragePermissionError:
+        return "storage_permission_required"
+    except AndroidStorageWriteError as e:
+        logger.error("[title-writeback] SAF NFO 寫入失敗: %s", e)
+        return "nfo_write_failed"
     except Exception as e:
         logger.error("[title-writeback] NFO 寫入失敗: %s", e)
         return "nfo_write_failed"

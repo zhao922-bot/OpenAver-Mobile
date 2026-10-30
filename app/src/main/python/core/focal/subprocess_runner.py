@@ -284,10 +284,11 @@ def run_detection(
     zero-user-impact tidy (pre-merge step 0.1). If a future on_outcome consumer
     cares about circuit_open, make the two sites agree *before* relying on it.
     """
-    if sys.platform == "android":
+    if sys.platform == "android" or os.environ.get("OPENAVER_MOBILE") == "1":
         return _run_in_process(
             fs_path,
             ratio,
+            timeout_s=timeout_s,
             pre_spawn_check=pre_spawn_check,
             on_outcome=on_outcome,
         )
@@ -365,6 +366,7 @@ def _run_in_process(
     fs_path: str,
     ratio: float,
     *,
+    timeout_s: float,
     pre_spawn_check: Callable[[], bool] | None,
     on_outcome: Callable[[RunnerOutcome], None] | None,
 ) -> RunnerOutcome:
@@ -378,10 +380,17 @@ def _run_in_process(
 
     outcome = _abandoned("crashed")
     try:
-        from core.focal.detector import WORK_WIDTH, detect_focal
+        from core.focal.detector import WORK_WIDTH, detect_focal_with_status
 
-        focal = detect_focal(fs_path, ratio, WORK_WIDTH)
-        outcome = _found(*focal) if focal is not None else _no_face()
+        focal, status = detect_focal_with_status(
+            fs_path, ratio, WORK_WIDTH, timeout_s
+        )
+        if status == "timeout":
+            outcome = _abandoned("detect_timeout")
+        elif status == "failed":
+            outcome = _abandoned("crashed")
+        else:
+            outcome = _found(*focal) if focal is not None else _no_face()
     except Exception:
         logger.exception("in-process focal detection failed")
 

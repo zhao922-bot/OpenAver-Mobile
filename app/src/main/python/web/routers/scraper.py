@@ -31,6 +31,7 @@ from core.enricher import (
 from core.enrich_contract import did_enrich_something, enrich_success, should_preserve_cover
 from core.organizer import organize_file
 from core.path_utils import to_file_uri, uri_to_fs_path, uri_to_local_fs_path, coerce_to_file_uri
+from core.android_storage import AndroidStoragePermissionError, AndroidStorageWriteError
 from core.scraper import (
     search_jav, search_jav_single_source, access_error_info,
     search_javlib_versions, fetch_javlib_by_detail_url, internal_nfo_carriers,
@@ -936,6 +937,22 @@ def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
                 "download_failed": max(0, len(sample_images) - on_disk),
             })
             return payload
+        except AndroidStoragePermissionError:
+            return _samples_failure(
+                "storage_permission_required",
+                "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
+                source="",
+                sample_urls_found=0,
+            )
+        except AndroidStorageWriteError as exc:
+            logger.exception("fetch_samples_endpoint readonly SAF 寫入失敗")
+            return _samples_failure(
+                "sample_write_failed",
+                "劇照寫入外置存儲失敗",
+                source="",
+                sample_urls_found=0,
+                detail=str(exc),
+            )
         except Exception:
             logger.exception("fetch_samples_endpoint readonly 改道失敗")
             return _samples_failure(

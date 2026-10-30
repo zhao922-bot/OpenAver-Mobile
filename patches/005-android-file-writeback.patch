@@ -1,3 +1,173 @@
+--- /dev/null
++++ b/core/android_storage.py
+@@ -0,0 +1,105 @@
++"""Fallback writes through the Android Storage Access Framework.
++
++Android 10 can read a removable SD card with legacy storage permissions but
++does not grant arbitrary writes to files below it. The Java StorageBridge
++writes through a persisted user-selected document tree in that case.
++"""
++
++from __future__ import annotations
++
++import errno
++import os
++
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++BRIDGE_CLASS = "dev.openaver.mobile.StorageBridge"
++
++
++class AndroidStorageError(OSError):
++    """Base error for SAF fallback failures."""
++
++
++class AndroidStoragePermissionError(AndroidStorageError):
++    """No persisted SAF tree can write the requested path."""
++
++
++class AndroidStorageWriteError(AndroidStorageError):
++    """The SAF bridge rejected a write or failed verification."""
++
++
++def is_access_error(error: OSError) -> bool:
++    """Return whether a filesystem error can reasonably be solved by SAF."""
++    return isinstance(error, PermissionError) or error.errno in {
++        errno.EACCES,
++        errno.EPERM,
++        errno.EROFS,
++    }
++
++
++def _bridge():
++    if os.environ.get("OPENAVER_MOBILE") != "1":
++        return None
++    try:
++        from java import jclass
++
++        return jclass(BRIDGE_CLASS)
++    except Exception:
++        logger.debug("Android StorageBridge is unavailable", exc_info=True)
++        return None
++
++
++def has_access(path: str) -> bool:
++    bridge = _bridge()
++    if bridge is None:
++        return False
++    try:
++        return bool(bridge.hasAccessForPath(str(path)))
++    except Exception:
++        logger.warning("SAF access probe failed for %s", path, exc_info=True)
++        return False
++
++
++def write_bytes(path: str, data: bytes, *, create_parents: bool = True) -> None:
++    if not has_access(path):
++        raise AndroidStoragePermissionError(
++            "storage_tree_not_authorized"
++        )
++    bridge = _bridge()
++    try:
++        error = bridge.writeBytes(
++            str(path), bytes(data), bool(create_parents)
++        )
++    except Exception as exc:
++        raise AndroidStorageWriteError(str(exc)) from exc
++    if error:
++        raise AndroidStorageWriteError(str(error))
++
++
++def mkdirs(path: str) -> None:
++    if not has_access(path):
++        raise AndroidStoragePermissionError(
++            "storage_tree_not_authorized"
++        )
++    bridge = _bridge()
++    try:
++        error = bridge.mkdirs(str(path))
++    except Exception as exc:
++        raise AndroidStorageWriteError(str(exc)) from exc
++    if error:
++        raise AndroidStorageWriteError(str(error))
++
++
++def delete(path: str) -> None:
++    if not has_access(path):
++        raise AndroidStoragePermissionError(
++            "storage_tree_not_authorized"
++        )
++    bridge = _bridge()
++    try:
++        error = bridge.delete(str(path))
++    except Exception as exc:
++        raise AndroidStorageWriteError(str(exc)) from exc
++    if error:
++        raise AndroidStorageWriteError(str(error))
+--- a/core/atomic_write.py
++++ b/core/atomic_write.py
+@@ -20,6 +20,7 @@
+ from pathlib import Path
+ from typing import IO, Iterator, Optional, Union
+ import errno
++import io
+ import os          # 🔴 必須是屬性存取形式：禁 `from os import replace`
+ import shutil
+ import tempfile    # 🔴 同上：禁 `from tempfile import mkstemp`
+@@ -33,6 +34,7 @@
+     encoding: Optional[str] = None,
+     suffix: str = ".tmp",
+     fsync: bool = False,
++    mobile_fallback: bool = False,
+ ) -> Iterator[IO]:
+     """Yield an open file handle whose content lands at `dest` atomically.
+ 
+@@ -58,12 +60,42 @@
+     (opt-in for data-root marker durability; default stays off for NAS/HDD
+     batch callers — TASK-153b-T6 / O1).
+ 
++    ``mobile_fallback=True`` lets Android SD-card writes fail over to the
++    user-authorized Storage Access Framework bridge. The bridge writes and
++    verifies the exact bytes (and restores the old document on failure);
++    desktop callers keep the fully atomic same-directory replace path.
++
+     Deliberately NOT here (spec-113 §2.5 — each stays with the caller):
+     locking, deleting old sibling files after a successful write, turning
+     failures into a `False` return, and deciding where `dest` is.
+     """
+     dest = Path(dest)
+-    fd, tmp = tempfile.mkstemp(dir=dest.parent, suffix=suffix)
++    fallback = None
++    try:
++        fd, tmp = tempfile.mkstemp(dir=dest.parent, suffix=suffix)
++    except OSError as error:
++        if not mobile_fallback or "b" not in mode or encoding is not None:
++            raise
++        from core import android_storage
++
++        if not android_storage.is_access_error(error):
++            raise
++        if not android_storage.has_access(str(dest)):
++            raise android_storage.AndroidStoragePermissionError(
++                "storage_tree_not_authorized"
++            ) from error
++        fallback = io.BytesIO()
++        fd = None
++        tmp = None
++
++    if fallback is not None:
++        with fallback:
++            yield fallback
++            from core import android_storage
++
++            android_storage.write_bytes(str(dest), fallback.getvalue())
++        return
++
+     tmp = Path(tmp)
+     try:
+         # 🔴 os.fdopen 自己包一層 try（Codex PR review P2）：mkstemp 回傳的 fd
 --- a/core/enricher.py
 +++ b/core/enricher.py
 @@ -2,12 +2,14 @@
@@ -23,12 +193,13 @@
  from core.logger import get_logger
  from core.nfo_read import (
      nfo_actor_names,
-@@ -423,6 +426,33 @@
+@@ -423,6 +426,34 @@
      uris: List[str]
      downloaded: int
      skipped_existing: int
 +    requested: int
 +    failed: int
++    errors: tuple = ()
 +
 +
 +def _normalize_image_url(url, base_url: str = "") -> str:
@@ -57,7 +228,7 @@
  
  
  def _write_extrafanart(
-@@ -431,9 +461,10 @@
+@@ -431,13 +462,25 @@
      write_extrafanart: bool,
      path_mappings: dict = None,
      preview_sample_images: List[str] = None,
@@ -69,37 +240,92 @@
  
      parent = Path(fs_path).parent
      extrafanart_dir = parent / "extrafanart"
-@@ -445,6 +476,7 @@
+-    os.makedirs(str(extrafanart_dir), exist_ok=True)
++    try:
++        os.makedirs(str(extrafanart_dir), exist_ok=True)
++    except OSError as error:
++        from core import android_storage
++
++        if not android_storage.is_access_error(error):
++            raise
++        if not android_storage.has_access(str(extrafanart_dir)):
++            raise android_storage.AndroidStoragePermissionError(
++                "storage_tree_not_authorized"
++            ) from error
++        android_storage.mkdirs(str(extrafanart_dir))
+ 
+     # CD-126-2：逐張配對用 index，**不用裸 zip()**——zip 在長度不等時會靜默截斷，
+     # 等於少下載幾張圖。長度不等的正確語意是「那幾格沒有代理」，不是「少下載」。
+@@ -445,28 +488,118 @@
      uris: List[str] = []
      downloaded = 0
      skipped_existing = 0
 +    failed = 0
++    errors = []
++    seen = set()
      for i, url in enumerate(sample_images):
          dest = str(extrafanart_dir / f"fanart{i+1}.jpg")
-         # CD-127c-1：既有劇照永遠不被程式覆蓋。跳過的那格仍要 append——
-@@ -453,20 +485,38 @@
-             uris.append(to_file_uri(dest, path_mappings))
-             skipped_existing += 1
-             continue
--        fallback = previews[i] if i < len(previews) else ""
 +        primary_url = _normalize_image_url(url, base_url)
 +        fallback = _normalize_image_url(
 +            previews[i] if i < len(previews) else "", base_url
 +        )
++        candidate_key = primary_url or fallback
++        if candidate_key and candidate_key in seen:
++            continue
++        if candidate_key:
++            seen.add(candidate_key)
+         # CD-127c-1：既有劇照永遠不被程式覆蓋。跳過的那格仍要 append——
+         # uris 是「磁碟真相」，少一格會讓 _db_upsert 把那張劇照從 DB 洗掉。
+         if os.path.exists(dest):
+-            uris.append(to_file_uri(dest, path_mappings))
+-            skipped_existing += 1
++            if _is_valid_sample_file(dest):
++                uris.append(to_file_uri(dest, path_mappings))
++                skipped_existing += 1
++                continue
++            try:
++                os.unlink(dest)
++            except OSError as error:
++                from core import android_storage
++
++                if not android_storage.is_access_error(error):
++                    raise
++                if not android_storage.has_access(dest):
++                    raise android_storage.AndroidStoragePermissionError(
++                        "storage_tree_not_authorized"
++                    ) from error
++                android_storage.delete(dest)
++            logger.warning(
++                "extrafanart %d 既有檔案不是圖片，已刪除重抓", i + 1
++            )
 +        if not primary_url and not fallback:
 +            failed += 1
 +            logger.warning("extrafanart %d 下載失敗: 無效圖片網址", i + 1)
-+            continue
++            errors.append({
++                "index": i + 1,
++                "reason": "invalid_url",
++                "host": "",
++                "http_status": None,
++            })
+             continue
+-        fallback = previews[i] if i < len(previews) else ""
 +        if not primary_url:
 +            primary_url, fallback = fallback, ""
++        diagnostics = {}
          try:
              # 同 _write_cover：preview 為空時不傳 kwarg（AC-5 逐字元相同）
              ok = (
 -                download_image(url, dest, fallback_url=fallback)
-+                download_image(primary_url, dest, referer=base_url, fallback_url=fallback)
++                download_image(
++                    primary_url, dest, referer=base_url,
++                    fallback_url=fallback, diagnostics=diagnostics,
++                )
                  if fallback
 -                else download_image(url, dest)
-+                else download_image(primary_url, dest, referer=base_url)
++                else download_image(
++                    primary_url, dest, referer=base_url,
++                    diagnostics=diagnostics,
++                )
              )
 -            if ok:
 +            if ok and _is_valid_sample_file(dest):
@@ -109,19 +335,54 @@
 +                failed += 1
 +                if ok:
 +                    logger.warning("extrafanart %d 下載失敗: 回傳內容不是圖片", i + 1)
++                    errors.append({
++                        "index": i + 1,
++                        "reason": "not_image",
++                        "host": urlparse(primary_url).hostname or "",
++                        "http_status": None,
++                    })
 +                    try:
 +                        os.unlink(dest)
 +                    except OSError:
 +                        pass
++                else:
++                    attempts = diagnostics.get("attempts") or []
++                    last = attempts[-1] if attempts else {}
++                    errors.append({
++                        "index": i + 1,
++                        "reason": last.get("reason", "download_failed"),
++                        "host": last.get(
++                            "host", urlparse(primary_url).hostname or ""
++                        ),
++                        "http_status": last.get("http_status"),
++                    })
          except Exception as e:
++            from core.android_storage import AndroidStorageError
++
++            if isinstance(e, AndroidStorageError):
++                raise
 +            failed += 1
              logger.warning("extrafanart %d 下載失敗: %s", i + 1, e)
 -    return ExtrafanartResult(uris, downloaded, skipped_existing)
-+    return ExtrafanartResult(uris, downloaded, skipped_existing, len(sample_images), failed)
++            errors.append({
++                "index": i + 1,
++                "reason": "exception",
++                "host": urlparse(primary_url).hostname or "",
++                "http_status": None,
++                "detail": f"{type(e).__name__}: {e}",
++            })
++    return ExtrafanartResult(
++        uris,
++        downloaded,
++        skipped_existing,
++        len(sample_images),
++        failed,
++        tuple(errors),
++    )
  
  
  def _preserve_nfo_only_fields(meta: dict, scraper_data: dict, fs_path: str) -> None:
-@@ -761,6 +811,7 @@
+@@ -761,6 +894,7 @@
          write_extrafanart=write_extrafanart,
          path_mappings=path_mappings,
          preview_sample_images=meta.get("preview_sample_images", []),
@@ -129,7 +390,7 @@
      )
      extrafanart_written = extrafanart_res.downloaded
  
-@@ -940,14 +991,12 @@
+@@ -940,14 +1074,12 @@
      repo.update_sample_images(path_uri, sample_images)
  
  
@@ -147,7 +408,7 @@
      _empty = EnrichResult(
          success=False,
          nfo_written=False,
-@@ -957,6 +1006,15 @@
+@@ -957,6 +1089,16 @@
          source_used="",
          error=None,
      )
@@ -159,26 +420,40 @@
 +        "skipped_existing": 0,
 +        "extrafanart_on_disk": 0,
 +        "download_failed": 0,
++        "download_errors": [],
 +    }
  
      try:
          fs_path = uri_to_local_fs_path(file_path, path_mappings)
-@@ -967,39 +1025,91 @@
+@@ -967,39 +1109,130 @@
      if not os.path.exists(fs_path):
          logger.warning("[fetch_samples_only] 檔案不存在: %s", fs_path)
          _empty.error = "檔案不存在"
 -        return _empty
+-
+-    meta = search_jav(number,
+-                      source="auto", javbus_lang=None)
 +        diagnostics["error_code"] = "file_not_found"
 +        return _empty, diagnostics
- 
-     meta = search_jav(number,
-                       source="auto", javbus_lang=None)
++
++    try:
++        meta = search_jav(number, source="auto", javbus_lang=None)
++    except Exception as exc:
++        logger.exception("[fetch_samples_only] 來源查詢失敗: %s", exc)
++        _empty.error = f"劇照來源查詢失敗：{type(exc).__name__}"
++        diagnostics["error_code"] = "samples_search_failed"
++        diagnostics["detail"] = f"{type(exc).__name__}: {exc}"
++        return _empty, diagnostics
      if not meta:
          logger.warning("[fetch_samples_only] 找不到資料: %s", number)
          _empty.error = f"找不到 {number} 的資料"
 -        return _empty
 -
 -    sample_images = meta.get("sample_images", [])
+-    extrafanart_res = _write_extrafanart(
+-        fs_path, sample_images, write_extrafanart=True, path_mappings=path_mappings,
+-        preview_sample_images=meta.get("preview_sample_images", []),
+-    )
 +        diagnostics["error_code"] = "samples_search_failed"
 +        return _empty, diagnostics
 +
@@ -196,16 +471,39 @@
 +        diagnostics["error_code"] = "no_sample_images"
 +        return _empty, diagnostics
 +
-     extrafanart_res = _write_extrafanart(
-         fs_path, sample_images, write_extrafanart=True, path_mappings=path_mappings,
-         preview_sample_images=meta.get("preview_sample_images", []),
-+        base_url=meta.get("url", ""),
-     )
++    try:
++        extrafanart_res = _write_extrafanart(
++            fs_path, sample_images, write_extrafanart=True,
++            path_mappings=path_mappings,
++            preview_sample_images=meta.get("preview_sample_images", []),
++            base_url=meta.get("url", ""),
++        )
++    except Exception as exc:
++        from core.android_storage import (
++            AndroidStoragePermissionError,
++            AndroidStorageWriteError,
++        )
++
++        logger.exception("[fetch_samples_only] 劇照寫入失敗: %s", exc)
++        if isinstance(exc, AndroidStoragePermissionError):
++            _empty.error = "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”"
++            error_code = "storage_permission_required"
++        elif isinstance(exc, AndroidStorageWriteError):
++            _empty.error = "劇照寫入外置存儲失敗"
++            error_code = "sample_write_failed"
++        else:
++            _empty.error = "劇照寫入失敗"
++            error_code = "sample_write_failed"
++        _empty.source_used = source_used
++        diagnostics["error_code"] = error_code
++        diagnostics["detail"] = f"{type(exc).__name__}: {exc}"
++        return _empty, diagnostics
 +    diagnostics.update({
 +        "downloaded": extrafanart_res.downloaded,
 +        "skipped_existing": extrafanart_res.skipped_existing,
 +        "extrafanart_on_disk": len(extrafanart_res.uris),
 +        "download_failed": extrafanart_res.failed,
++        "download_errors": list(extrafanart_res.errors),
 +    })
  
      if extrafanart_res.uris:                      # ← 既有 gate，語意不變（磁碟真相非空才寫 DB）
@@ -236,7 +534,17 @@
 -        source_used=meta.get("source", ""),
 -        reason=None,
 +    if not extrafanart_res.uris:
-+        _empty.error = "已找到劇照，但全部下載失敗"
++        reasons = {}
++        for item in extrafanart_res.errors:
++            reason = item.get("reason", "download_failed")
++            reasons[reason] = reasons.get(reason, 0) + 1
++        summary = "、".join(
++            f"{reason} × {count}" for reason, count in reasons.items()
++        )
++        _empty.error = (
++            f"已找到 {len(sample_images)} 張劇照，但全部下載失敗"
++            + (f"（{summary}）" if summary else "")
++        )
 +        _empty.source_used = source_used
 +        diagnostics["error_code"] = "sample_download_failed"
 +        return _empty, diagnostics
@@ -347,7 +655,7 @@
 +    return sorted(exact) if exact else sorted(folded)
 --- a/core/organizer.py
 +++ b/core/organizer.py
-@@ -709,6 +709,8 @@
+@@ -709,13 +709,20 @@
              effective_referer = "https://www.dmm.co.jp/"
          elif "jav321.com" in url:
              effective_referer = "https://www.jav321.com/"
@@ -356,23 +664,175 @@
      if effective_referer:
          headers["Referer"] = effective_referer
      return headers
-@@ -757,6 +759,16 @@
-             with open(save_path, "wb") as f:
-                 f.write(payload)
+ 
+ 
+ def _attempt_download_image(
+-    url: str, save_path: str, referer: str = "", *, short_connect: bool = False
++    url: str,
++    save_path: str,
++    referer: str = "",
++    *,
++    short_connect: bool = False,
++    diagnostics: Optional[dict] = None,
+ ) -> bool:
+     """Try one URL. Record host only on connect-stage failures.
+ 
+@@ -726,6 +733,16 @@
+     使用者會從「30 秒後成功」變成「5 秒失敗」，而且**沒有代理可以救**。
+     短逾時的收益只存在於「失敗了還有第二條路」的情境，成本卻落在沒有第二條路的人身上。
+     """
++    def mark(reason: str, **fields) -> None:
++        if diagnostics is not None:
++            diagnostics.update({"reason": reason, **fields})
++
++    if diagnostics is not None:
++        diagnostics.update({
++            "url": url,
++            "host": (urlparse(url).hostname or "") if url else "",
++            "success": False,
++        })
+     headers = build_download_headers(url, referer)
+     timeout = (CONNECT_TIMEOUT, REQUEST_TIMEOUT) if short_connect else REQUEST_TIMEOUT
+     try:
+@@ -753,45 +770,122 @@
+                 payload = decode_image_payload(url_host, payload)
+                 if not looks_like_image(payload):
+                     logger.warning("[!] 下載圖片失敗：解碼後不是圖片 host=%s", url_host)
++                    mark("decoded_payload_not_image")
+                     return False
+-            with open(save_path, "wb") as f:
+-                f.write(payload)
++            _write_image_payload(save_path, payload)
++            if diagnostics is not None:
++                diagnostics.update({
++                    "reason": "success",
++                    "success": True,
++                    "http_status": resp.status_code,
++                    "bytes": len(payload),
++                })
              return True
 +        if resp.status_code != 200:
 +            logger.warning(
 +                "[!] 下載圖片失敗: HTTP %s host=%s",
 +                resp.status_code, (urlparse(url).hostname or ""),
 +            )
++            mark("http_error", http_status=resp.status_code, bytes=len(resp.content))
 +        else:
 +            logger.warning(
 +                "[!] 下載圖片失敗: payload too small (%d bytes) host=%s",
 +                len(resp.content), (urlparse(url).hostname or ""),
 +            )
++            mark("payload_too_small", http_status=resp.status_code, bytes=len(resp.content))
      except requests.exceptions.ConnectionError as e:
          # ConnectTimeout is a ConnectionError subclass; ReadTimeout is not.
          _record_host_failure(_host_key(url))
+         logger.warning(f"[!] 下載圖片失敗: {e}")
++        mark("connection_error", detail=str(e))
++    except requests.exceptions.Timeout as e:
++        logger.warning(f"[!] 下載圖片失敗: {e}")
++        mark("timeout", detail=str(e))
+     except Exception as e:
++        from core.android_storage import AndroidStorageError
++
++        if isinstance(e, AndroidStorageError):
++            raise
+         logger.warning(f"[!] 下載圖片失敗: {e}")
++        mark("write_or_request_error", detail=f"{type(e).__name__}: {e}")
+     return False
+ 
+ 
++def _write_image_payload(save_path: str, payload: bytes) -> None:
++    """Write a downloaded image, using SAF only after a direct write is denied."""
++    try:
++        with open(save_path, "wb") as handle:
++            handle.write(payload)
++        return
++    except OSError as error:
++        from core import android_storage
++
++        if not android_storage.is_access_error(error):
++            raise
++        if not android_storage.has_access(save_path):
++            raise android_storage.AndroidStoragePermissionError(
++                "storage_tree_not_authorized"
++            ) from error
++        android_storage.write_bytes(save_path, payload)
++        logger.info("image saved through Android SAF: %s", save_path)
++
++
+ def download_image(
+-    url: str, save_path: str, referer: str = "", fallback_url: str = ""
++    url: str,
++    save_path: str,
++    referer: str = "",
++    fallback_url: str = "",
++    diagnostics: Optional[dict] = None,
+ ) -> bool:
+     """下載圖片。
+ 
+     metatube 的 `/v1/images/` 會重新編碼 JPEG（實測 +3% 體積、尺寸不變），所以先試原址，取不到才用代理副本。
+     """
++    attempts = []
++
++    def attempt(candidate: str, *, short_connect: bool = False) -> bool:
++        detail = {}
++        ok = _attempt_download_image(
++            candidate,
++            save_path,
++            referer,
++            short_connect=short_connect,
++            diagnostics=detail,
++        )
++        attempts.append(detail)
++        return ok
++
+     if not url:
++        if diagnostics is not None:
++            diagnostics.update({
++                "reason": "invalid_url",
++                "attempts": attempts,
++                "success": False,
++            })
+         return False
+ 
+     # CD-126-8: original-first; proxy is a re-encoded JPEG rescue copy.
+     skip_primary = bool(fallback_url) and _host_recently_failed(_host_key(url))
+ 
+-    if not skip_primary:
+-        # 只有「有代理可退」的那一次原址嘗試才用短 connect（見 _attempt_download_image
+-        # 的 docstring）。沒有 fallback 時逐字元維持改動前的 timeout=REQUEST_TIMEOUT。
+-        if _attempt_download_image(
+-            url, save_path, referer, short_connect=bool(fallback_url)
+-        ):
+-            return True
+-        if not fallback_url:
+-            return False
+-        # 代理那一次用正常 timeout（plan §2.3）——它通常在區網內，且已經是最後一條路。
+-        return _attempt_download_image(fallback_url, save_path, referer)
+-
+-    return _attempt_download_image(fallback_url, save_path, referer)
++    try:
++        if not skip_primary:
++            # 只有「有代理可退」的那一次原址嘗試才用短 connect（見 _attempt_download_image
++            # 的 docstring）。沒有 fallback 時逐字元維持改動前的 timeout=REQUEST_TIMEOUT。
++            if attempt(url, short_connect=bool(fallback_url)):
++                return True
++            if not fallback_url:
++                return False
++            # 代理那一次用正常 timeout（plan §2.3）——它通常在區網內，且已經是最後一條路。
++            return attempt(fallback_url)
++        return attempt(fallback_url)
++    finally:
++        if diagnostics is not None:
++            diagnostics["attempts"] = attempts
++            diagnostics["success"] = any(
++                bool(item.get("success")) for item in attempts
++            )
++            if attempts:
++                diagnostics["reason"] = attempts[-1].get("reason", "download_failed")
+ 
+ 
+ # NFO-CTRL-01（PR #191 CodeRabbit F1/加固；BE-GUARD-01：閘門寫在 sink，不寫在上游白名單）：
 --- a/core/source_config.py
 +++ b/core/source_config.py
 @@ -9,7 +9,7 @@
@@ -433,13 +893,15 @@
  from core.nfo_read import nfo_first_text
  from core.nfo_title_format import build_display_title
  from core.nfo_updater import set_element_text
-@@ -83,5 +84,8 @@
+@@ -83,5 +84,10 @@
          ET.SubElement(rec, "body").text = body
  
      out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
 -    path.write_bytes(out)
 +    # Android／外接儲存上的直接 write_bytes 若中途失敗會把原 NFO 截斷。
 +    # 同目錄暫存 + replace 讓失敗時原檔保持不變。
-+    with atomic_write(path, mode="wb", suffix=".nfo.tmp") as fh:
++    with atomic_write(
++        path, mode="wb", suffix=".nfo.tmp", mobile_fallback=True
++    ) as fh:
 +        fh.write(out)
      return out

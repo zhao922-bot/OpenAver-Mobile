@@ -86,6 +86,8 @@ def rewrite_nfo_titles(
     out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     # Android／外接儲存上的直接 write_bytes 若中途失敗會把原 NFO 截斷。
     # 同目錄暫存 + replace 讓失敗時原檔保持不變。
-    with atomic_write(path, mode="wb", suffix=".nfo.tmp") as fh:
+    with atomic_write(
+        path, mode="wb", suffix=".nfo.tmp", mobile_fallback=True
+    ) as fh:
         fh.write(out)
     return out

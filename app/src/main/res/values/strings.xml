@@ -26,7 +26,7 @@
     <string name="local_step1_title_legacy">Grant Android 10 storage access</string>
     <string name="local_step1_body_legacy">Android 10 uses legacy storage permissions so OpenAver can access normal file paths instead of opaque document URIs.</string>
     <string name="local_step2_title">Add a phone folder</string>
-    <string name="local_step2_body">On Scanner, tap the folder button and browse to /storage/emulated/0 or your SD card, then choose the folder containing videos.</string>
+    <string name="local_step2_body">On Scanner, tap the folder button and browse to /storage/emulated/0 or your SD card, then choose the folder containing videos. When writing to an SD card, also use the right-side menu once to authorize that same folder as writable.</string>
     <string name="local_step3_title">Scan and play locally</string>
     <string name="local_step3_body">Generation, metadata search, NFO/cover writes, and playback all run on the phone. Network access is only used for metadata sources you enable.</string>
     <string name="privacy_note">The Python server, SQLite database, logs, and generated data stay inside this app’s private storage. Video files remain in their original phone folders.</string>
@@ -51,6 +51,10 @@
     <string name="menu_refresh">Refresh page</string>
     <string name="menu_scanner">Open scanner</string>
     <string name="menu_storage_settings">Storage permission</string>
+    <string name="menu_storage_tree">Authorize writable folder</string>
+    <string name="storage_tree_authorized">Writable folder authorized</string>
+    <string name="storage_tree_authorize_failed">Could not authorize that folder</string>
+    <string name="storage_tree_open_failed">Could not open the folder picker</string>
     <string name="menu_about">About this build</string>
     <string name="menu_exit">Exit</string>
     <string name="menu_open">Open menu</string>

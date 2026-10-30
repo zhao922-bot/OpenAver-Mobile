@@ -39,7 +39,7 @@ Do not edit a current Android file without updating its patch.
 | `002-mobile-bootstrap.patch` | Embedded server, mobile data root, compression |
 | `003-android-native-focal.patch` | Native focal detector and in-process runner |
 | `004-network-and-scraper-fallbacks.patch` | requests fallbacks and TLS/proxy compatibility |
-| `005-android-file-writeback.patch` | NFO, cover, title, and sidecar writes |
+| `005-android-file-writeback.patch` | NFO, cover, title, sidecar, and SAF bridge writes |
 | `006-mobile-web-routers.patch` | mobile scanner/showcase/capability routes |
 | `007-mobile-ui-and-localization.patch` | Simplified Chinese defaults, navigation, responsive UI |
 | `008-mobile-loopback-auth.patch` | process-local token gate for the embedded loopback server |

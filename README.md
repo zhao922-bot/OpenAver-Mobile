@@ -13,28 +13,30 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r13-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r14-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r13-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r14-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r13`（versionCode `17029`）
+- 版本：`0.17.18-r14`（versionCode `17030`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
-- 目标系统：Android 10（API 29）；使用传统外部存储权限以兼容外置 SD 卡写入
+- 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
 - SHA-256：
-  `48F16EDCE8D9A9DC5CC7CA2388F90FD8916841159B475AAC371FE3C936994B5A`
+  `D30121C2A3BD813824BC9A49D79A0639C5BAA250F0B270F270467EFA02EFE7F9`
 
 ## 安装
 
 1. 在 64 位 ARM Android 10+ 手机上打开 APK，并允许安装未知应用。
 2. Android 11+：授予“所有文件访问权限”。
 3. Android 10：授予读取和写入手机存储权限。
-4. 将外置 SD 卡或不可写入的视频目录设为“只读”；OpenAver 会把生成的元数据
-   放入应用私有媒体库。
+4. 如果视频在 SD 卡，打开右侧菜单 → “授权可写目录”，在系统目录选择器中选中
+   与扫描目录相同的 SD 卡文件夹。Android 10 的传统存储权限可读取外置 SD 卡，
+   但任意文件写入仍需要这一步目录授权。
 5. 进入“列表生成”，点击文件夹按钮。
 6. 从 `/storage/emulated/0` 或 SD 卡选择视频目录并生成列表。
+7. 如果来源确实不应修改，可开启“只读”；OpenAver 会把生成内容写入应用私有媒体库。
 
 如果系统没有直接显示权限页，请手动进入：
 
@@ -55,7 +57,8 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 自定义来源 `fetch: cf` 的普通浏览器请求兼容模式
 - 简体中文、繁体中文、日文和英文界面；首次启动默认简体中文
 - Android 10 / API 29 上的安装、首次界面、存储授权、本地服务启动和视频扫描
-- Android 10 外置 SD 卡的读取、补抓剧照和标题翻译写回（真机 LG G8X Android 10 验证）
+- Android 10 外置 SD 卡目录授权桥接，支持 NFO、标题翻译、封面和补抓剧照写回
+  （真机 LG G8X Android 10 验证）
 - Android 16 / API 36 模拟器上的启动、扫描、NFO 写入与播放验证
 - Python 源码预编译、非关键网络探测后台化、5 分钟启动等待和启动失败重试按钮
 - 启动诊断细化到数据目录、数据库、通知、权限表和后台任务阶段，并支持长按复制错误
@@ -70,6 +73,12 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 补抓剧照区分“来源无剧照”“全部下载失败”“数据库写入失败”，不再显示模糊错误
 - Android 手动脸部对焦改由 arm64 NDK 原生级联检测执行，实测单张封面约 0.16–0.40 秒
 - 原生对焦健康检查会实际加载级联并调用检测入口，不再只检查 `.so` 是否存在
+- r14：补抓剧照逐图返回下载诊断，重复 URL 去重，损坏的既有剧照会删除重抓
+- r14：标题写回与剧照下载在 SD 卡直写被拒后自动转交 SAF；写入后校验字节，
+  失败时恢复旧 NFO
+- r14：Android 进程内脸部检测现在传递硬超时，并区分 `timeout`、`no_face`
+  与运行失败，不再无限占用后台线程
+- r14：构建工作流升级到使用当前 Node 运行时的 Actions 主版本
 
 ## 限制
 
@@ -83,8 +92,9 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 自动对焦仍遵循上游规则：有码/普通厂牌默认使用标准右裁，手动“自动侦测”不受此限制。
 - 播放能力取决于手机系统 WebView 编解码器。MP4/H.264/AAC 已验证；MKV、AVI、
   RMVB 等格式即使能扫描，也可能无法在 WebView 中解码。
-- Android 11+ 使用 `MANAGE_EXTERNAL_STORAGE`，Android 10 使用传统存储读写权限；
-  APK 面向手动侧载，不适合直接上架 Google Play。
+- Android 11+ 使用 `MANAGE_EXTERNAL_STORAGE`；Android 10 的普通存储权限不足以
+  任意写入外置 SD 卡，必须额外完成一次“授权可写目录”。APK 面向手动侧载，
+  不适合直接上架 Google Play。
 - 这是非官方构建，与 OpenAver 上游作者没有隶属或背书关系。
 
 ## 构建

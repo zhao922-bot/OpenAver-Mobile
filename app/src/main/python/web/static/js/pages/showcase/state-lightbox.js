@@ -933,9 +933,11 @@ export function stateLightbox() {
                     if ((data.error_code || data.error) === 'multi_video_folder') {
                         this.showToast(window.t('showcase.samples.multi_video_error'), 'warning');
                     } else if (data.error_code === 'no_sample_images' || data.error_code === 'samples_search_failed') {
-                        this.showToast(window.t('showcase.samples.no_samples'), 'warning');
+                        this.showToast(data.message || window.t('showcase.samples.no_samples'), 'warning');
                     } else if (data.error_code === 'sample_download_failed') {
-                        this.showToast(window.t('showcase.samples.download_failed'), 'error');
+                        this.showToast(data.message || window.t('showcase.samples.download_failed'), 'error');
+                    } else if (data.error_code === 'storage_permission_required' || data.error_code === 'sample_write_failed') {
+                        this.showToast(data.message || window.t('showcase.samples.fetch_failed'), 'error');
                     } else if (data.error_code === 'db_write_failed') {
                         this.showToast(window.t('showcase.samples.db_write_failed'), 'error');
                     } else {

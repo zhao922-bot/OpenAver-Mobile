@@ -717,7 +717,12 @@ def build_download_headers(url: str, referer: str = "") -> dict:
 
 
 def _attempt_download_image(
-    url: str, save_path: str, referer: str = "", *, short_connect: bool = False
+    url: str,
+    save_path: str,
+    referer: str = "",
+    *,
+    short_connect: bool = False,
+    diagnostics: Optional[dict] = None,
 ) -> bool:
     """Try one URL. Record host only on connect-stage failures.
 
@@ -728,6 +733,16 @@ def _attempt_download_image(
     使用者會從「30 秒後成功」變成「5 秒失敗」，而且**沒有代理可以救**。
     短逾時的收益只存在於「失敗了還有第二條路」的情境，成本卻落在沒有第二條路的人身上。
     """
+    def mark(reason: str, **fields) -> None:
+        if diagnostics is not None:
+            diagnostics.update({"reason": reason, **fields})
+
+    if diagnostics is not None:
+        diagnostics.update({
+            "url": url,
+            "host": (urlparse(url).hostname or "") if url else "",
+            "success": False,
+        })
     headers = build_download_headers(url, referer)
     timeout = (CONNECT_TIMEOUT, REQUEST_TIMEOUT) if short_connect else REQUEST_TIMEOUT
     try:
@@ -755,55 +770,122 @@ def _attempt_download_image(
                 payload = decode_image_payload(url_host, payload)
                 if not looks_like_image(payload):
                     logger.warning("[!] 下載圖片失敗：解碼後不是圖片 host=%s", url_host)
+                    mark("decoded_payload_not_image")
                     return False
-            with open(save_path, "wb") as f:
-                f.write(payload)
+            _write_image_payload(save_path, payload)
+            if diagnostics is not None:
+                diagnostics.update({
+                    "reason": "success",
+                    "success": True,
+                    "http_status": resp.status_code,
+                    "bytes": len(payload),
+                })
             return True
         if resp.status_code != 200:
             logger.warning(
                 "[!] 下載圖片失敗: HTTP %s host=%s",
                 resp.status_code, (urlparse(url).hostname or ""),
             )
+            mark("http_error", http_status=resp.status_code, bytes=len(resp.content))
         else:
             logger.warning(
                 "[!] 下載圖片失敗: payload too small (%d bytes) host=%s",
                 len(resp.content), (urlparse(url).hostname or ""),
             )
+            mark("payload_too_small", http_status=resp.status_code, bytes=len(resp.content))
     except requests.exceptions.ConnectionError as e:
         # ConnectTimeout is a ConnectionError subclass; ReadTimeout is not.
         _record_host_failure(_host_key(url))
         logger.warning(f"[!] 下載圖片失敗: {e}")
-    except Exception as e:
+        mark("connection_error", detail=str(e))
+    except requests.exceptions.Timeout as e:
         logger.warning(f"[!] 下載圖片失敗: {e}")
+        mark("timeout", detail=str(e))
+    except Exception as e:
+        from core.android_storage import AndroidStorageError
+
+        if isinstance(e, AndroidStorageError):
+            raise
+        logger.warning(f"[!] 下載圖片失敗: {e}")
+        mark("write_or_request_error", detail=f"{type(e).__name__}: {e}")
     return False
 
 
+def _write_image_payload(save_path: str, payload: bytes) -> None:
+    """Write a downloaded image, using SAF only after a direct write is denied."""
+    try:
+        with open(save_path, "wb") as handle:
+            handle.write(payload)
+        return
+    except OSError as error:
+        from core import android_storage
+
+        if not android_storage.is_access_error(error):
+            raise
+        if not android_storage.has_access(save_path):
+            raise android_storage.AndroidStoragePermissionError(
+                "storage_tree_not_authorized"
+            ) from error
+        android_storage.write_bytes(save_path, payload)
+        logger.info("image saved through Android SAF: %s", save_path)
+
+
 def download_image(
-    url: str, save_path: str, referer: str = "", fallback_url: str = ""
+    url: str,
+    save_path: str,
+    referer: str = "",
+    fallback_url: str = "",
+    diagnostics: Optional[dict] = None,
 ) -> bool:
     """下載圖片。
 
     metatube 的 `/v1/images/` 會重新編碼 JPEG（實測 +3% 體積、尺寸不變），所以先試原址，取不到才用代理副本。
     """
+    attempts = []
+
+    def attempt(candidate: str, *, short_connect: bool = False) -> bool:
+        detail = {}
+        ok = _attempt_download_image(
+            candidate,
+            save_path,
+            referer,
+            short_connect=short_connect,
+            diagnostics=detail,
+        )
+        attempts.append(detail)
+        return ok
+
     if not url:
+        if diagnostics is not None:
+            diagnostics.update({
+                "reason": "invalid_url",
+                "attempts": attempts,
+                "success": False,
+            })
         return False
 
     # CD-126-8: original-first; proxy is a re-encoded JPEG rescue copy.
     skip_primary = bool(fallback_url) and _host_recently_failed(_host_key(url))
 
-    if not skip_primary:
-        # 只有「有代理可退」的那一次原址嘗試才用短 connect（見 _attempt_download_image
-        # 的 docstring）。沒有 fallback 時逐字元維持改動前的 timeout=REQUEST_TIMEOUT。
-        if _attempt_download_image(
-            url, save_path, referer, short_connect=bool(fallback_url)
-        ):
-            return True
-        if not fallback_url:
-            return False
-        # 代理那一次用正常 timeout（plan §2.3）——它通常在區網內，且已經是最後一條路。
-        return _attempt_download_image(fallback_url, save_path, referer)
-
-    return _attempt_download_image(fallback_url, save_path, referer)
+    try:
+        if not skip_primary:
+            # 只有「有代理可退」的那一次原址嘗試才用短 connect（見 _attempt_download_image
+            # 的 docstring）。沒有 fallback 時逐字元維持改動前的 timeout=REQUEST_TIMEOUT。
+            if attempt(url, short_connect=bool(fallback_url)):
+                return True
+            if not fallback_url:
+                return False
+            # 代理那一次用正常 timeout（plan §2.3）——它通常在區網內，且已經是最後一條路。
+            return attempt(fallback_url)
+        return attempt(fallback_url)
+    finally:
+        if diagnostics is not None:
+            diagnostics["attempts"] = attempts
+            diagnostics["success"] = any(
+                bool(item.get("success")) for item in attempts
+            )
+            if attempts:
+                diagnostics["reason"] = attempts[-1].get("reason", "download_failed")
 
 
 # NFO-CTRL-01（PR #191 CodeRabbit F1/加固；BE-GUARD-01：閘門寫在 sink，不寫在上游白名單）：

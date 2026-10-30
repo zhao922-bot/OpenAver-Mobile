@@ -1,4 +1,5 @@
 #include <android/log.h>
+#include <chrono>
 #include <jni.h>
 #include <algorithm>
 #include <cmath>
@@ -63,16 +64,27 @@ float classify_region(const Cascade &c, int r0, int col0, int scale,
 }
 
 std::vector<Face> run_cascade(const Cascade &c, const std::vector<uint8_t> &pixels,
-                              int rows, int cols, int min_size, int max_size) {
+                              int rows, int cols, int min_size, int max_size,
+                              const std::chrono::steady_clock::time_point &deadline,
+                              bool &timed_out) {
     std::vector<Face> dets;
     const float shift = 0.10f;
     const float scale_factor = 1.08f;
     int scale = min_size;
     while (scale <= max_size) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            timed_out = true;
+            return {};
+        }
         int step = static_cast<int>(shift * scale);
         if (step < 1) step = 1;
         int offset = scale / 2 + 1;
         for (int row = offset; row <= rows - offset; row += step) {
+            if ((row & 7) == 0 &&
+                std::chrono::steady_clock::now() >= deadline) {
+                timed_out = true;
+                return {};
+            }
             for (int col = offset; col <= cols - offset; col += step) {
                 float q = classify_region(c, row, col, scale, pixels, cols);
                 if (q > 0.0f) dets.push_back({row, col, scale, q});
@@ -193,7 +205,7 @@ bool g_cascade_loaded = false;
 std::string g_cascade_path;
 
 int detect_rgb(const uint8_t *rgb, int width, int height, int min_face,
-               const char *cascade_path_utf8, float *out) {
+               const char *cascade_path_utf8, float *out, int timeout_ms) {
     if (rgb == nullptr || out == nullptr || width <= 0 || height <= 0 ||
         width > 10000 || height > 10000 || min_face <= 0 ||
         cascade_path_utf8 == nullptr || cascade_path_utf8[0] == '\0') {
@@ -215,10 +227,19 @@ int detect_rgb(const uint8_t *rgb, int width, int height, int min_face,
         std::vector<uint8_t> gray(count);
         rgb_to_gray(rgb, count, gray);
 
+        const auto deadline = timeout_ms > 0
+            ? std::chrono::steady_clock::now() +
+                  std::chrono::milliseconds(timeout_ms)
+            : std::chrono::steady_clock::time_point::max();
+        bool timed_out = false;
         const int max_face = static_cast<int>(float(width) * 0.8f);
         const std::vector<Face> faces = run_cascade(
-            g_cascade, gray, height, width, min_face, max_face
+            g_cascade, gray, height, width, min_face, max_face,
+            deadline, timed_out
         );
+        if (timed_out) {
+            return -2;
+        }
         if (faces.empty()) {
             return 0;
         }
@@ -248,7 +269,18 @@ extern "C" __attribute__((visibility("default")))
 int openaver_focal_detect(const uint8_t *rgb, int width, int height,
                           int min_face, const char *cascade_path_utf8,
                           float *out) {
-    return detect_rgb(rgb, width, height, min_face, cascade_path_utf8, out);
+    return detect_rgb(
+        rgb, width, height, min_face, cascade_path_utf8, out, 0
+    );
+}
+
+extern "C" __attribute__((visibility("default")))
+int openaver_focal_detect_timed(const uint8_t *rgb, int width, int height,
+                                int min_face, const char *cascade_path_utf8,
+                                int timeout_ms, float *out) {
+    return detect_rgb(
+        rgb, width, height, min_face, cascade_path_utf8, out, timeout_ms
+    );
 }
 
 extern "C" JNIEXPORT jint JNICALL
@@ -274,8 +306,11 @@ Java_dev_openaver_mobile_MainActivity_openaverFocalDetect(
 
         float out[2] = {0.0f, 0.0f};
         const std::string path = cascade_path(env, context);
-        if (!detect_rgb(rgb.data(), width, height, min_face, path.c_str(), out)) {
-            return 0;
+        const int status = detect_rgb(
+            rgb.data(), width, height, min_face, path.c_str(), out, 0
+        );
+        if (status <= 0) {
+            return status;
         }
         env->SetFloatArrayRegion(jout, 0, 2, out);
         return 1;

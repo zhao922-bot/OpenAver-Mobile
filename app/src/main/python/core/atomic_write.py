@@ -20,6 +20,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import IO, Iterator, Optional, Union
 import errno
+import io
 import os          # 🔴 必須是屬性存取形式：禁 `from os import replace`
 import shutil
 import tempfile    # 🔴 同上：禁 `from tempfile import mkstemp`
@@ -33,6 +34,7 @@ def atomic_write(
     encoding: Optional[str] = None,
     suffix: str = ".tmp",
     fsync: bool = False,
+    mobile_fallback: bool = False,
 ) -> Iterator[IO]:
     """Yield an open file handle whose content lands at `dest` atomically.
 
@@ -58,12 +60,42 @@ def atomic_write(
     (opt-in for data-root marker durability; default stays off for NAS/HDD
     batch callers — TASK-153b-T6 / O1).
 
+    ``mobile_fallback=True`` lets Android SD-card writes fail over to the
+    user-authorized Storage Access Framework bridge. The bridge writes and
+    verifies the exact bytes (and restores the old document on failure);
+    desktop callers keep the fully atomic same-directory replace path.
+
     Deliberately NOT here (spec-113 §2.5 — each stays with the caller):
     locking, deleting old sibling files after a successful write, turning
     failures into a `False` return, and deciding where `dest` is.
     """
     dest = Path(dest)
-    fd, tmp = tempfile.mkstemp(dir=dest.parent, suffix=suffix)
+    fallback = None
+    try:
+        fd, tmp = tempfile.mkstemp(dir=dest.parent, suffix=suffix)
+    except OSError as error:
+        if not mobile_fallback or "b" not in mode or encoding is not None:
+            raise
+        from core import android_storage
+
+        if not android_storage.is_access_error(error):
+            raise
+        if not android_storage.has_access(str(dest)):
+            raise android_storage.AndroidStoragePermissionError(
+                "storage_tree_not_authorized"
+            ) from error
+        fallback = io.BytesIO()
+        fd = None
+        tmp = None
+
+    if fallback is not None:
+        with fallback:
+            yield fallback
+            from core import android_storage
+
+            android_storage.write_bytes(str(dest), fallback.getvalue())
+        return
+
     tmp = Path(tmp)
     try:
         # 🔴 os.fdopen 自己包一層 try（Codex PR review P2）：mkstemp 回傳的 fd

@@ -5,3 +5,6 @@ pydantic==1.10.24
 Pillow==11.0.0
 pytest==8.4.2
 PyYAML==6.0.3
+requests==2.33.1
+beautifulsoup4==4.14.3
+lxml==5.3.0

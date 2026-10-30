@@ -40,7 +40,7 @@
  from urllib.parse import urlparse
  
  from fastapi import APIRouter, HTTPException
-@@ -22,7 +23,11 @@
+@@ -22,10 +23,15 @@
  from core.database import VideoRepository, organize_failures
  from core.db_inflow import try_inflow_upsert
  from core.focal_trigger import maybe_submit_video_focal
@@ -53,7 +53,11 @@
  from core.enrich_contract import did_enrich_something, enrich_success, should_preserve_cover
  from core.organizer import organize_file
  from core.path_utils import to_file_uri, uri_to_fs_path, uri_to_local_fs_path, coerce_to_file_uri
-@@ -838,6 +843,17 @@
++from core.android_storage import AndroidStoragePermissionError, AndroidStorageWriteError
+ from core.scraper import (
+     search_jav, search_jav_single_source, access_error_info,
+     search_javlib_versions, fetch_javlib_by_detail_url, internal_nfo_carriers,
+@@ -838,6 +844,17 @@
      number: str
  
  
@@ -71,7 +75,7 @@
  @router.post("/scraper/fetch-samples")
  def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
      config = load_config()
-@@ -853,33 +869,24 @@
+@@ -853,33 +870,24 @@
      owning = resolve_owning_output_root(canonical, config)
      if owning is not None:
          source, output_root, output_uri = owning
@@ -119,7 +123,7 @@
              fs_path = uri_to_local_fs_path(req.file_path, path_mappings)
              repo = VideoRepository()
              existing = repo.get_by_path(canonical)
-@@ -888,52 +895,80 @@
+@@ -888,52 +896,96 @@
                  "size": existing.size_bytes if existing else os.path.getsize(fs_path),
                  "mtime": existing.mtime if existing else os.path.getmtime(fs_path),
              }
@@ -174,6 +178,22 @@
 +                "download_failed": max(0, len(sample_images) - on_disk),
 +            })
 +            return payload
++        except AndroidStoragePermissionError:
++            return _samples_failure(
++                "storage_permission_required",
++                "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
++                source="",
++                sample_urls_found=0,
++            )
++        except AndroidStorageWriteError as exc:
++            logger.exception("fetch_samples_endpoint readonly SAF 寫入失敗")
++            return _samples_failure(
++                "sample_write_failed",
++                "劇照寫入外置存儲失敗",
++                source="",
++                sample_urls_found=0,
++                detail=str(exc),
++            )
          except Exception:
              logger.exception("fetch_samples_endpoint readonly 改道失敗")
 -            # fetch_samples_only never sets reason='error' either (it has no
@@ -221,7 +241,7 @@
  @router.post("/batch-enrich")
 --- a/web/routers/showcase.py
 +++ b/web/routers/showcase.py
-@@ -33,6 +33,7 @@
+@@ -33,9 +33,14 @@
  from core.scrapers.utils import has_japanese
  from core.nfo_stat import nfo_mtime_or_none
  from core.nfo_title_format import build_display_title
@@ -229,7 +249,22 @@
  from core.readonly_paths import resolve_owning_output_root
  from core.title_writeback import (
      NfoNotFoundError, NfoParseError, rewrite_nfo_titles, strip_illegal_xml_chars,
-@@ -541,7 +542,13 @@
++)
++from core.android_storage import (
++    AndroidStoragePermissionError,
++    AndroidStorageWriteError,
+ )
+ from core.focal import device_state, format_focal, parse_focal
+ from core.focal.subprocess_runner import run_detection
+@@ -494,6 +499,7 @@
+     "no_nfo": "找不到 NFO",
+     "nfo_ambiguous": "輸出夾有多份 NFO，無法判斷要改哪一份",
+     "nfo_unreadable": "NFO 無法讀取或解析",
++    "storage_permission_required": "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
+     "nfo_write_failed": "NFO 寫入失敗",
+     "db_write_failed": "資料庫寫入失敗（NFO 已更新，請再試一次）",
+     "invalid_path": "檔案路徑格式無效",
+@@ -541,7 +547,13 @@
      owning = resolve_owning_output_root(video.path, config)
      if owning is not None:
          return _locate_readonly_nfo(video, path_mappings, owning[2])
@@ -244,3 +279,15 @@
  
  
  def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: str) -> Optional[str]:
+@@ -556,6 +568,11 @@
+         return "no_nfo"
+     except NfoParseError:
+         return "nfo_unreadable"
++    except AndroidStoragePermissionError:
++        return "storage_permission_required"
++    except AndroidStorageWriteError as e:
++        logger.error("[title-writeback] SAF NFO 寫入失敗: %s", e)
++        return "nfo_write_failed"
+     except Exception as e:
+         logger.error("[title-writeback] NFO 寫入失敗: %s", e)
+         return "nfo_write_failed"

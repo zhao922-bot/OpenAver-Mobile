@@ -52,6 +52,8 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "005-android-file-writeback.patch",
         (
+            "core/android_storage.py",
+            "core/atomic_write.py",
             "core/enricher.py",
             "core/gallery_scanner.py",
             "core/nfo_utils.py",

@@ -428,6 +428,7 @@ class ExtrafanartResult(NamedTuple):
     skipped_existing: int
     requested: int
     failed: int
+    errors: tuple = ()
 
 
 def _normalize_image_url(url, base_url: str = "") -> str:
@@ -468,7 +469,18 @@ def _write_extrafanart(
 
     parent = Path(fs_path).parent
     extrafanart_dir = parent / "extrafanart"
-    os.makedirs(str(extrafanart_dir), exist_ok=True)
+    try:
+        os.makedirs(str(extrafanart_dir), exist_ok=True)
+    except OSError as error:
+        from core import android_storage
+
+        if not android_storage.is_access_error(error):
+            raise
+        if not android_storage.has_access(str(extrafanart_dir)):
+            raise android_storage.AndroidStoragePermissionError(
+                "storage_tree_not_authorized"
+            ) from error
+        android_storage.mkdirs(str(extrafanart_dir))
 
     # CD-126-2：逐張配對用 index，**不用裸 zip()**——zip 在長度不等時會靜默截斷，
     # 等於少下載幾張圖。長度不等的正確語意是「那幾格沒有代理」，不是「少下載」。
@@ -477,30 +489,66 @@ def _write_extrafanart(
     downloaded = 0
     skipped_existing = 0
     failed = 0
+    errors = []
+    seen = set()
     for i, url in enumerate(sample_images):
         dest = str(extrafanart_dir / f"fanart{i+1}.jpg")
-        # CD-127c-1：既有劇照永遠不被程式覆蓋。跳過的那格仍要 append——
-        # uris 是「磁碟真相」，少一格會讓 _db_upsert 把那張劇照從 DB 洗掉。
-        if os.path.exists(dest):
-            uris.append(to_file_uri(dest, path_mappings))
-            skipped_existing += 1
-            continue
         primary_url = _normalize_image_url(url, base_url)
         fallback = _normalize_image_url(
             previews[i] if i < len(previews) else "", base_url
         )
+        candidate_key = primary_url or fallback
+        if candidate_key and candidate_key in seen:
+            continue
+        if candidate_key:
+            seen.add(candidate_key)
+        # CD-127c-1：既有劇照永遠不被程式覆蓋。跳過的那格仍要 append——
+        # uris 是「磁碟真相」，少一格會讓 _db_upsert 把那張劇照從 DB 洗掉。
+        if os.path.exists(dest):
+            if _is_valid_sample_file(dest):
+                uris.append(to_file_uri(dest, path_mappings))
+                skipped_existing += 1
+                continue
+            try:
+                os.unlink(dest)
+            except OSError as error:
+                from core import android_storage
+
+                if not android_storage.is_access_error(error):
+                    raise
+                if not android_storage.has_access(dest):
+                    raise android_storage.AndroidStoragePermissionError(
+                        "storage_tree_not_authorized"
+                    ) from error
+                android_storage.delete(dest)
+            logger.warning(
+                "extrafanart %d 既有檔案不是圖片，已刪除重抓", i + 1
+            )
         if not primary_url and not fallback:
             failed += 1
             logger.warning("extrafanart %d 下載失敗: 無效圖片網址", i + 1)
+            errors.append({
+                "index": i + 1,
+                "reason": "invalid_url",
+                "host": "",
+                "http_status": None,
+            })
             continue
         if not primary_url:
             primary_url, fallback = fallback, ""
+        diagnostics = {}
         try:
             # 同 _write_cover：preview 為空時不傳 kwarg（AC-5 逐字元相同）
             ok = (
-                download_image(primary_url, dest, referer=base_url, fallback_url=fallback)
+                download_image(
+                    primary_url, dest, referer=base_url,
+                    fallback_url=fallback, diagnostics=diagnostics,
+                )
                 if fallback
-                else download_image(primary_url, dest, referer=base_url)
+                else download_image(
+                    primary_url, dest, referer=base_url,
+                    diagnostics=diagnostics,
+                )
             )
             if ok and _is_valid_sample_file(dest):
                 uris.append(to_file_uri(dest, path_mappings))
@@ -509,14 +557,49 @@ def _write_extrafanart(
                 failed += 1
                 if ok:
                     logger.warning("extrafanart %d 下載失敗: 回傳內容不是圖片", i + 1)
+                    errors.append({
+                        "index": i + 1,
+                        "reason": "not_image",
+                        "host": urlparse(primary_url).hostname or "",
+                        "http_status": None,
+                    })
                     try:
                         os.unlink(dest)
                     except OSError:
                         pass
+                else:
+                    attempts = diagnostics.get("attempts") or []
+                    last = attempts[-1] if attempts else {}
+                    errors.append({
+                        "index": i + 1,
+                        "reason": last.get("reason", "download_failed"),
+                        "host": last.get(
+                            "host", urlparse(primary_url).hostname or ""
+                        ),
+                        "http_status": last.get("http_status"),
+                    })
         except Exception as e:
+            from core.android_storage import AndroidStorageError
+
+            if isinstance(e, AndroidStorageError):
+                raise
             failed += 1
             logger.warning("extrafanart %d 下載失敗: %s", i + 1, e)
-    return ExtrafanartResult(uris, downloaded, skipped_existing, len(sample_images), failed)
+            errors.append({
+                "index": i + 1,
+                "reason": "exception",
+                "host": urlparse(primary_url).hostname or "",
+                "http_status": None,
+                "detail": f"{type(e).__name__}: {e}",
+            })
+    return ExtrafanartResult(
+        uris,
+        downloaded,
+        skipped_existing,
+        len(sample_images),
+        failed,
+        tuple(errors),
+    )
 
 
 def _preserve_nfo_only_fields(meta: dict, scraper_data: dict, fs_path: str) -> None:
@@ -1014,6 +1097,7 @@ def fetch_samples_only_detailed(
         "skipped_existing": 0,
         "extrafanart_on_disk": 0,
         "download_failed": 0,
+        "download_errors": [],
     }
 
     try:
@@ -1028,8 +1112,14 @@ def fetch_samples_only_detailed(
         diagnostics["error_code"] = "file_not_found"
         return _empty, diagnostics
 
-    meta = search_jav(number,
-                      source="auto", javbus_lang=None)
+    try:
+        meta = search_jav(number, source="auto", javbus_lang=None)
+    except Exception as exc:
+        logger.exception("[fetch_samples_only] 來源查詢失敗: %s", exc)
+        _empty.error = f"劇照來源查詢失敗：{type(exc).__name__}"
+        diagnostics["error_code"] = "samples_search_failed"
+        diagnostics["detail"] = f"{type(exc).__name__}: {exc}"
+        return _empty, diagnostics
     if not meta:
         logger.warning("[fetch_samples_only] 找不到資料: %s", number)
         _empty.error = f"找不到 {number} 的資料"
@@ -1050,16 +1140,39 @@ def fetch_samples_only_detailed(
         diagnostics["error_code"] = "no_sample_images"
         return _empty, diagnostics
 
-    extrafanart_res = _write_extrafanart(
-        fs_path, sample_images, write_extrafanart=True, path_mappings=path_mappings,
-        preview_sample_images=meta.get("preview_sample_images", []),
-        base_url=meta.get("url", ""),
-    )
+    try:
+        extrafanart_res = _write_extrafanart(
+            fs_path, sample_images, write_extrafanart=True,
+            path_mappings=path_mappings,
+            preview_sample_images=meta.get("preview_sample_images", []),
+            base_url=meta.get("url", ""),
+        )
+    except Exception as exc:
+        from core.android_storage import (
+            AndroidStoragePermissionError,
+            AndroidStorageWriteError,
+        )
+
+        logger.exception("[fetch_samples_only] 劇照寫入失敗: %s", exc)
+        if isinstance(exc, AndroidStoragePermissionError):
+            _empty.error = "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”"
+            error_code = "storage_permission_required"
+        elif isinstance(exc, AndroidStorageWriteError):
+            _empty.error = "劇照寫入外置存儲失敗"
+            error_code = "sample_write_failed"
+        else:
+            _empty.error = "劇照寫入失敗"
+            error_code = "sample_write_failed"
+        _empty.source_used = source_used
+        diagnostics["error_code"] = error_code
+        diagnostics["detail"] = f"{type(exc).__name__}: {exc}"
+        return _empty, diagnostics
     diagnostics.update({
         "downloaded": extrafanart_res.downloaded,
         "skipped_existing": extrafanart_res.skipped_existing,
         "extrafanart_on_disk": len(extrafanart_res.uris),
         "download_failed": extrafanart_res.failed,
+        "download_errors": list(extrafanart_res.errors),
     })
 
     if extrafanart_res.uris:                      # ← 既有 gate，語意不變（磁碟真相非空才寫 DB）
@@ -1080,7 +1193,17 @@ def fetch_samples_only_detailed(
         len(extrafanart_res.uris),
     )
     if not extrafanart_res.uris:
-        _empty.error = "已找到劇照，但全部下載失敗"
+        reasons = {}
+        for item in extrafanart_res.errors:
+            reason = item.get("reason", "download_failed")
+            reasons[reason] = reasons.get(reason, 0) + 1
+        summary = "、".join(
+            f"{reason} × {count}" for reason, count in reasons.items()
+        )
+        _empty.error = (
+            f"已找到 {len(sample_images)} 張劇照，但全部下載失敗"
+            + (f"（{summary}）" if summary else "")
+        )
         _empty.source_used = source_used
         diagnostics["error_code"] = "sample_download_failed"
         return _empty, diagnostics
