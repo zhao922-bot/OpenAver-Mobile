@@ -257,6 +257,8 @@ export function libraryInsightsState() {
         ganttRows: [],
         // 修正 1（第 2 輪）：圖例名單存進 reactive 欄位，見 ganttLegendMakers() 註解。
         ganttLegend: [],
+        // 年表實際會用到的片商色票（含非全庫 Top8 的片商）。
+        ganttMakerLegend: [],
         soloRows: [],
         costarRows: [],
         previewActress: null,
@@ -456,6 +458,25 @@ export function libraryInsightsState() {
                 _mainMakerYearMap,
                 this.sel,
             );
+            this._recomputeGanttMakerLegend();
+        },
+
+        _recomputeGanttMakerLegend() {
+            const counts = new Map();
+            const view = this.ganttView('year');
+            (view.rows || []).forEach(function (row) {
+                (row.cells || []).forEach(function (cell) {
+                    if (!cell || !cell.maker) return;
+                    counts.set(cell.maker, (counts.get(cell.maker) || 0) + 1);
+                });
+            });
+            this.ganttMakerLegend = Array.from(counts.entries())
+                .sort(function (a, b) {
+                    return b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+                })
+                .map(function (entry) {
+                    return entry[0];
+                });
         },
 
         /**
@@ -689,6 +710,16 @@ export function libraryInsightsState() {
                     })
                     : label;
             }
+            if (cell.maker) {
+                return tFn
+                    ? tFn('insights.gantt.tooltip_dot_maker', {
+                        label: label,
+                        total: cell.filmCount,
+                        maker: cell.maker,
+                        count: cell.makerCount,
+                    })
+                    : label + ' · ' + cell.maker;
+            }
             return tFn
                 ? tFn('insights.gantt.tooltip_dot', {
                     label: label,
@@ -706,7 +737,7 @@ export function libraryInsightsState() {
          * 觸發依賴），排序改在 `_loadSnapshot` 算好存進去，這裡只回傳。
          */
         ganttLegendMakers() {
-            return this.ganttLegend;
+            return this.ganttMakerLegend;
         },
 
         /**
@@ -735,8 +766,18 @@ export function libraryInsightsState() {
             return (
                 'grid-template-columns: var(--gantt-name-w) repeat(' +
                 n +
-                ', minmax(var(--gantt-cell-min-w), 1fr))'
+                ', var(--gantt-cell-track))'
             );
+        },
+
+        /**
+         * 手機上的年份欄位很窄；顯示兩位年份可避免 2019／2020… 黏成一串。
+         * 完整年份仍保留在格子的 title 中。
+         */
+        ganttAxisLabel(value, axis) {
+            if (axis === 'age') return String(value);
+            const year = String(value);
+            return "'" + year.slice(-2);
         },
 
         /**
@@ -1815,7 +1856,7 @@ export function libraryInsightsState() {
 
                 setRecords(records);
                 var slots = buildMakerColorSlots(getRecords());
-                setMakerColorSlots(slots);
+                setMakerColorSlots(slots, getRecords());
                 this.ganttLegend = Object.keys(slots)
                     .map(function (name) {
                         return { name: name, slot: slots[name] };

@@ -1992,7 +1992,11 @@
       "actress_top_rest": "{from}–{to} 位"
     },
     "donut": {
-      "legend": "内側：メーカー比率　外側：主要メーカー作品／その他作品",
+      "legend": "内側：メーカー別の作品比率　外側：主要メーカー作品とその他作品",
+      "legend_inner": "内側：メーカー別の作品比率",
+      "legend_outer": "外側：濃色＝その年の主力メーカー作品、淡色＝その他作品",
+      "legend_unknown": "灰色＝判定不可",
+      "legend_rule": "主力メーカー：同じ女優の同年作品が 4 本以上、かつ同一メーカーが 80% 以上",
       "other": "その他",
       "unknown": "不明",
       "library_wide": "ライブラリ全体"
@@ -2010,11 +2014,15 @@
       "age_label": "{age}歳",
       "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
       "tooltip_dot": "{label} ・ コレクション {total} 本",
-      "skipped_note": "生年月日が不明な {n} 名はスキップされました"
+      "tooltip_dot_maker": "{label} ・ コレクション {total} 本 ・ 最も多いメーカー：{maker}（{count} 本）",
+      "skipped_note": "生年月日が不明な {n} 名はスキップされました",
+      "subtitle": "同じ女優の同年作品が 4 本以上、かつ同一メーカーが 80% 以上の女優だけを表示します。",
+      "scroll_hint": "横にスワイプして全年を表示"
     },
     "solo": {
       "count_label": "{n} 本 ・ {m} 社",
-      "other_title": "その他 {n} 社：{list}"
+      "other_title": "その他 {n} 社：{list}",
+      "subtitle": "色付きの区間はメーカー別、灰色はその他または不明メーカーです。"
     },
     "costar": {
       "count_label": "{n} 本"

@@ -32,6 +32,8 @@ let _lastYearCats = [];
 let _yearsDrag = null;
 /** @type {Record<string, number>} */
 let _makerSlots = {};
+/** @type {Record<string, number>} 全庫片商色票索引（最多 16 色，避免不同片商撞色） */
+let _makerColorRegistry = {};
 /** @type {Record<string, string>} 全庫主要片商年 map（init 算一次，重繪複用） */
 let _mainMakerYearMap = {};
 /** @type {{w:number,h:number}} */
@@ -315,12 +317,30 @@ function neutralOther() {
     );
 }
 
+function fallbackMakerColor(name) {
+    const text = String(name || '');
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    const hue = Math.abs(hash) % 360;
+    const lightness = _isDimTheme() ? 62 : 48;
+    return 'hsl(' + hue + ', 62%, ' + lightness + '%)';
+}
+
 function colorForMaker(name) {
+    if (name && Object.prototype.hasOwnProperty.call(_makerColorRegistry, name)) {
+        const index = _makerColorRegistry[name];
+        if (index < 16) {
+            return cssVar('--insights-maker-' + (index + 1));
+        }
+    }
     if (name && Object.prototype.hasOwnProperty.call(_makerSlots, name)) {
         const slot = _makerSlots[name]; // 0..7
         return cssVar('--insights-maker-' + (slot + 1));
     }
-    return neutralOther();
+    return fallbackMakerColor(name);
 }
 
 function neutralUnknown() {
@@ -346,12 +366,25 @@ function labelForDonutKey(key) {
     return key;
 }
 
-export function setMakerColorSlots(slots) {
+export function setMakerColorSlots(slots, records) {
     _makerSlots = slots || {};
+    const counts = new Map();
+    (records || []).forEach(function (r) {
+        const mk = r && r.maker;
+        if (mk == null || mk === '') return;
+        counts.set(mk, (counts.get(mk) || 0) + 1);
+    });
+    const ordered = Array.from(counts.entries()).sort(function (a, b) {
+        return b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    });
+    _makerColorRegistry = {};
+    ordered.forEach(function (entry, index) {
+        _makerColorRegistry[entry[0]] = index;
+    });
 }
 
 export function refreshMakerColorSlots() {
-    _makerSlots = buildMakerColorSlots(getRecords());
+    setMakerColorSlots(buildMakerColorSlots(getRecords()), getRecords());
 }
 
 export function setMainMakerYearMap(map) {

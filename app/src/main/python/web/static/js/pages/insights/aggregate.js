@@ -666,6 +666,25 @@ export function ganttYearAxis(records) {
 }
 
 /**
+ * 某組作品中最常出現的具名片商。用於非「主要片商年」的年份圓點著色，
+ * 讓同一女優不同年份能依實際片商顯示不同顏色。
+ */
+function dominantNamedMaker(films) {
+    var counts = new Map();
+    (films || []).forEach(function (r) {
+        var mk = r && r.maker;
+        if (mk == null || mk === '') return;
+        counts.set(mk, (counts.get(mk) || 0) + 1);
+    });
+    var ranked = Array.from(counts.entries()).sort(function (a, b) {
+        return b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    });
+    return ranked.length
+        ? { maker: ranked[0][0], count: ranked[0][1] }
+        : { maker: null, count: 0 };
+}
+
+/**
  * 年表年份格子。empty＝無片；main＝該年是她的主要片商年；否則 dot。
  * 不呼叫 getRecords()。
  */
@@ -697,7 +716,14 @@ export function buildGanttYearCells(name, records, mainMakerYearMap, yearAxis) {
                 makerCount: makerCount,
             };
         }
-        return { year: year, state: 'dot', maker: null, filmCount: films.length, makerCount: 0 };
+        var dominant = dominantNamedMaker(films);
+        return {
+            year: year,
+            state: 'dot',
+            maker: dominant.maker,
+            filmCount: films.length,
+            makerCount: dominant.count,
+        };
     });
 }
 
@@ -796,7 +822,14 @@ export function buildGanttAgeCells(name, records, favorites, mainMakerYearMap, a
                 makerCount: makerCount,
             };
         }
-        return { age: age, state: 'dot', maker: null, filmCount: films.length, makerCount: 0 };
+        var dominant = dominantNamedMaker(films);
+        return {
+            age: age,
+            state: 'dot',
+            maker: dominant.maker,
+            filmCount: films.length,
+            makerCount: dominant.count,
+        };
     });
 }
 

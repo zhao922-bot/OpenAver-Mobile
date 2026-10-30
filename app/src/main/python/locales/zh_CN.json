@@ -1992,7 +1992,11 @@
       "actress_top_rest": "第 {from}–{to} 名"
     },
     "donut": {
-      "legend": "内圈 片商占比 · 外圈 主要片商作品／其他作品",
+      "legend": "内圈：片商占比 · 外圈：主力片商与其他作品",
+      "legend_inner": "内圈：各片商影片占比",
+      "legend_outer": "外圈：深色=女优当年主力片商作品，浅色=其他作品",
+      "legend_unknown": "灰色=无法判定",
+      "legend_rule": "主力片商：同一女优同一年至少 4 部，且同一片商占比不低于 80%",
       "other": "其他",
       "unknown": "未知",
       "library_wide": "全库"
@@ -2010,11 +2014,15 @@
       "age_label": "{age}岁",
       "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
       "tooltip_dot": "{label} · 收藏 {total} 部",
-      "skipped_note": "{n} 位无生日资料已略过"
+      "tooltip_dot_maker": "{label} · 收藏 {total} 部 · 出现最多的片商：{maker}（{count} 部）",
+      "skipped_note": "{n} 位无生日资料已略过",
+      "subtitle": "仅显示同一女优某年至少 4 部、且同一片商占比不低于 80% 的情况。",
+      "scroll_hint": "左右滑动查看完整年份"
     },
     "solo": {
       "count_label": "{n} 部 · {m} 家",
-      "other_title": "其他 {n} 家：{list}"
+      "other_title": "其他 {n} 家：{list}",
+      "subtitle": "每段颜色代表一个片商；灰色代表其他或未知片商。"
     },
     "costar": {
       "count_label": "{n} 部"

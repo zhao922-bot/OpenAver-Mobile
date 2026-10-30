@@ -206,6 +206,37 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
+@@ -1860,7 +1992,11 @@
+       "actress_top_rest": "Ranks {from}–{to}"
+     },
+     "donut": {
+-      "legend": "Inner ring: maker share · Outer ring: major-maker videos / other videos",
++      "legend": "Inner ring: studio share · Outer ring: main-studio and other work",
++      "legend_inner": "Inner ring: share of videos by studio",
++      "legend_outer": "Outer ring: solid = the actress's main studio that year; pale = other work",
++      "legend_unknown": "Gray = undetermined",
++      "legend_rule": "Main studio: the same actress has at least 4 videos in one year, with one studio at 80% or more",
+       "other": "Other",
+       "unknown": "Unknown",
+       "library_wide": "Library-wide"
+@@ -1878,11 +2014,15 @@
+       "age_label": "{age}y",
+       "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
+       "tooltip_dot": "{label} · {total} videos in your collection",
+-      "skipped_note": "{n} with no birth date skipped"
++      "tooltip_dot_maker": "{label} · {total} videos · most frequent studio: {maker} ({count})",
++      "skipped_note": "{n} with no birth date skipped",
++      "subtitle": "Only actresses with at least 4 videos in one year and one studio at 80% or more are listed.",
++      "scroll_hint": "Swipe horizontally to see every year"
+     },
+     "solo": {
+       "count_label": "{n} videos · {m} makers",
+-      "other_title": "Other {n} makers: {list}"
++      "other_title": "Other {n} makers: {list}",
++      "subtitle": "Each colored segment is one studio; gray means other or unknown studios."
+     },
+     "costar": {
+       "count_label": "{n} videos"
 --- a/locales/ja.json
 +++ b/locales/ja.json
 @@ -26,6 +26,7 @@
@@ -403,6 +434,37 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
+@@ -1860,7 +1992,11 @@
+       "actress_top_rest": "{from}–{to} 位"
+     },
+     "donut": {
+-      "legend": "内側：メーカー比率　外側：主要メーカー作品／その他作品",
++      "legend": "内側：メーカー別の作品比率　外側：主要メーカー作品とその他作品",
++      "legend_inner": "内側：メーカー別の作品比率",
++      "legend_outer": "外側：濃色＝その年の主力メーカー作品、淡色＝その他作品",
++      "legend_unknown": "灰色＝判定不可",
++      "legend_rule": "主力メーカー：同じ女優の同年作品が 4 本以上、かつ同一メーカーが 80% 以上",
+       "other": "その他",
+       "unknown": "不明",
+       "library_wide": "ライブラリ全体"
+@@ -1878,11 +2014,15 @@
+       "age_label": "{age}歳",
+       "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
+       "tooltip_dot": "{label} ・ コレクション {total} 本",
+-      "skipped_note": "生年月日が不明な {n} 名はスキップされました"
++      "tooltip_dot_maker": "{label} ・ コレクション {total} 本 ・ 最も多いメーカー：{maker}（{count} 本）",
++      "skipped_note": "生年月日が不明な {n} 名はスキップされました",
++      "subtitle": "同じ女優の同年作品が 4 本以上、かつ同一メーカーが 80% 以上の女優だけを表示します。",
++      "scroll_hint": "横にスワイプして全年を表示"
+     },
+     "solo": {
+       "count_label": "{n} 本 ・ {m} 社",
+-      "other_title": "その他 {n} 社：{list}"
++      "other_title": "その他 {n} 社：{list}",
++      "subtitle": "色付きの区間はメーカー別、灰色はその他または不明メーカーです。"
+     },
+     "costar": {
+       "count_label": "{n} 本"
 --- a/locales/zh_CN.json
 +++ b/locales/zh_CN.json
 @@ -26,6 +26,7 @@
@@ -600,6 +662,37 @@
      "row": {
        "years": "年份",
        "makers": "片商",
+@@ -1860,7 +1992,11 @@
+       "actress_top_rest": "第 {from}–{to} 名"
+     },
+     "donut": {
+-      "legend": "内圈 片商占比 · 外圈 主要片商作品／其他作品",
++      "legend": "内圈：片商占比 · 外圈：主力片商与其他作品",
++      "legend_inner": "内圈：各片商影片占比",
++      "legend_outer": "外圈：深色=女优当年主力片商作品，浅色=其他作品",
++      "legend_unknown": "灰色=无法判定",
++      "legend_rule": "主力片商：同一女优同一年至少 4 部，且同一片商占比不低于 80%",
+       "other": "其他",
+       "unknown": "未知",
+       "library_wide": "全库"
+@@ -1878,11 +2014,15 @@
+       "age_label": "{age}岁",
+       "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
+       "tooltip_dot": "{label} · 收藏 {total} 部",
+-      "skipped_note": "{n} 位无生日资料已略过"
++      "tooltip_dot_maker": "{label} · 收藏 {total} 部 · 出现最多的片商：{maker}（{count} 部）",
++      "skipped_note": "{n} 位无生日资料已略过",
++      "subtitle": "仅显示同一女优某年至少 4 部、且同一片商占比不低于 80% 的情况。",
++      "scroll_hint": "左右滑动查看完整年份"
+     },
+     "solo": {
+       "count_label": "{n} 部 · {m} 家",
+-      "other_title": "其他 {n} 家：{list}"
++      "other_title": "其他 {n} 家：{list}",
++      "subtitle": "每段颜色代表一个片商；灰色代表其他或未知片商。"
+     },
+     "costar": {
+       "count_label": "{n} 部"
 --- a/locales/zh_TW.json
 +++ b/locales/zh_TW.json
 @@ -26,6 +26,7 @@
@@ -797,6 +890,37 @@
      "row": {
        "years": "年份",
        "makers": "片商",
+@@ -1865,7 +1997,11 @@
+       "costar": "與她同片"
+     },
+     "donut": {
+-      "legend": "內圈 片商占比 · 外圈 主要片商作品／其他作品",
++      "legend": "內圈：片商占比 · 外圈：主力片商與其他作品",
++      "legend_inner": "內圈：各片商影片占比",
++      "legend_outer": "外圈：深色＝女優當年主力片商作品，淺色＝其他作品",
++      "legend_unknown": "灰色＝無法判定",
++      "legend_rule": "主力片商：同一女優同年至少 4 部，且同一片商占比不低於 80%",
+       "other": "其他",
+       "unknown": "未知",
+       "library_wide": "全庫"
+@@ -1883,11 +2019,15 @@
+       "age_label": "{age} 歲",
+       "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
+       "tooltip_dot": "{label} · 收藏 {total} 部",
+-      "skipped_note": "{n} 位無生日資料已略過"
++      "tooltip_dot_maker": "{label} · 收藏 {total} 部 · 出現最多的片商：{maker}（{count} 部）",
++      "skipped_note": "{n} 位無生日資料已略過",
++      "subtitle": "僅顯示同一女優某年至少 4 部、且同一片商占比不低於 80% 的情況。",
++      "scroll_hint": "左右滑動查看完整年份"
+     },
+     "solo": {
+       "count_label": "{n} 部 · {m} 家",
+-      "other_title": "其他 {n} 家：{list}"
++      "other_title": "其他 {n} 家：{list}",
++      "subtitle": "每段顏色代表一個片商；灰色代表其他或未知片商。"
+     },
+     "costar": {
+       "count_label": "{n} 部"
 --- a/web/config.default.json
 +++ b/web/config.default.json
 @@ -84,9 +84,9 @@
@@ -1485,7 +1609,34 @@
 +
 --- a/web/static/css/pages/insights.css
 +++ b/web/static/css/pages/insights.css
-@@ -79,51 +79,38 @@
+@@ -4,14 +4,20 @@
+    poc/index.sonnet4.html 設計稿、非由既有 --color-* token 衍生；echarts.min.js 不支援
+    oklch()（見上方說明），刻意維持 hex 字面而非轉換，2026-09-25 */
+ :root {
+-  --insights-maker-1: #2a78d6; --insights-maker-2: #eb6834; --insights-maker-3: #1baf7a;
+-  --insights-maker-4: #eda100; --insights-maker-5: #e87ba4; --insights-maker-6: #008300;
+-  --insights-maker-7: #4a3aa7; --insights-maker-8: #e34948;
++  --insights-maker-1: #2b6cb0; --insights-maker-2: #f28e2b; --insights-maker-3: #2e8540;
++  --insights-maker-4: #7b3294; --insights-maker-5: #d53e8b; --insights-maker-6: #00a6c8;
++  --insights-maker-7: #8c510a; --insights-maker-8: #9e1b32;
++  --insights-maker-9: #6a994e; --insights-maker-10: #3f51b5; --insights-maker-11: #d4a017;
++  --insights-maker-12: #7f3c8d; --insights-maker-13: #00838f; --insights-maker-14: #c2185b;
++  --insights-maker-15: #4d4d4d; --insights-maker-16: #e76f51;
+ }
+ [data-theme="dim"] {
+-  --insights-maker-1: #3987e5; --insights-maker-2: #d95926; --insights-maker-3: #199e70;
+-  --insights-maker-4: #c98500; --insights-maker-5: #d55181; --insights-maker-6: #008300;
+-  --insights-maker-7: #9085e9; --insights-maker-8: #e66767;
++  --insights-maker-1: #6aa9ff; --insights-maker-2: #ffb35c; --insights-maker-3: #55c878;
++  --insights-maker-4: #b18cff; --insights-maker-5: #ff74b7; --insights-maker-6: #4dd7e8;
++  --insights-maker-7: #c98b4a; --insights-maker-8: #ff6b6b;
++  --insights-maker-9: #a8d56f; --insights-maker-10: #8b9cff; --insights-maker-11: #ffd166;
++  --insights-maker-12: #d59be8; --insights-maker-13: #58d5dd; --insights-maker-14: #ff8eb5;
++  --insights-maker-15: #b8b8b8; --insights-maker-16: #ff9a7a;
+ }
+ /* stylelint-enable color-no-hex */
+ 
+@@ -79,51 +85,38 @@
      color: var(--text-primary);
  }
  
@@ -1553,7 +1704,7 @@
      font-weight: 700;
      font-variant-numeric: tabular-nums;
      line-height: 1.05;
-@@ -206,10 +193,10 @@
+@@ -206,10 +199,10 @@
  }
  
  .insights-container .insights-muted-big {
@@ -1566,7 +1717,7 @@
      letter-spacing: -0.01em;
  }
  
-@@ -230,6 +217,7 @@
+@@ -230,6 +223,7 @@
  }
  
  .insights-container .insights-focus-name {
@@ -1574,7 +1725,7 @@
      overflow: hidden;
      text-overflow: ellipsis;
      white-space: nowrap;
-@@ -237,8 +225,8 @@
+@@ -237,8 +231,8 @@
  }
  
  .insights-container .insights-focus-avatar {
@@ -1585,7 +1736,131 @@
      border-radius: 50%;
      flex: 0 0 auto;
      overflow: hidden;
-@@ -1310,11 +1298,104 @@
+@@ -327,9 +321,57 @@
+ }
+ 
+ .insights-container .donut-legend {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 0.25rem 0.65rem;
+     font-size: 0.6875rem;
+     color: var(--text-muted);
+     line-height: 1.3;
++}
++
++.insights-container .donut-legend-item {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.3rem;
++    min-width: 0;
++}
++
++.insights-container .donut-legend-swatch {
++    width: 0.55rem;
++    height: 0.55rem;
++    flex: 0 0 auto;
++    border-radius: 0.18rem;
++    box-sizing: border-box;
++}
++
++.insights-container .donut-legend-swatch--inner {
++    border-radius: var(--radius-pill);
++    background: conic-gradient(
++        var(--color-primary) 0 50%,
++        var(--color-warning) 50% 100%
++    );
++}
++
++.insights-container .donut-legend-swatch--main {
++    background: var(--color-primary);
++}
++
++.insights-container .donut-legend-swatch--other {
++    margin-left: -0.18rem;
++    background: color-mix(in oklch, var(--color-primary) 34%, var(--surface-1));
++}
++
++.insights-container .donut-legend-swatch--unknown {
++    background: color-mix(in oklch, var(--text-muted) 35%, var(--surface-1));
++}
++
++.insights-container .donut-legend-rule {
++    flex-basis: 100%;
++    display: flex;
++    align-items: flex-start;
++    gap: 0.3rem;
++    font-size: 0.625rem;
++    color: var(--text-muted);
+ }
+ 
+ .insights-container .donut-chart-wrap {
+@@ -862,8 +904,20 @@
+ }
+ 
+ .insights-container .gantt-card .card-head {
+-    align-items: center;
+-    flex-wrap: wrap;
++    align-items: flex-start;
++    flex-wrap: nowrap;
++}
++
++.insights-container .gantt-heading {
++    min-width: 0;
++    flex: 1 1 auto;
++}
++
++.insights-container .deep-card-subtitle {
++    margin: 0.2rem 0 0;
++    color: var(--text-muted);
++    font-size: 0.6875rem;
++    line-height: 1.35;
+ }
+ 
+ .insights-container .gantt-wrap {
+@@ -875,6 +929,7 @@
+ .insights-container .gantt-table {
+     --gantt-name-w: 7.5rem;
+     --gantt-cell-min-w: 1.5rem;
++    --gantt-cell-track: minmax(var(--gantt-cell-min-w), 1fr);
+     display: flex;
+     flex-direction: column;
+     width: 100%;
+@@ -978,8 +1033,8 @@
+     width: 0.3125rem;
+     height: 0.3125rem;
+     border-radius: var(--radius-pill);
+-    background: var(--text-muted);
+-    opacity: 0.55;
++    background: var(--gantt-cell-color, var(--text-muted));
++    opacity: 1;
+ }
+ 
+ .insights-container .gantt-legend {
+@@ -987,11 +1042,20 @@
+     flex-wrap: wrap;
+     align-items: center;
+     gap: 0.5rem;
+-    flex: 1 1 auto;
+-    min-width: 0;
+-    justify-content: flex-end;
++    flex: 0 0 auto;
++    min-width: 0;
++    justify-content: flex-start;
+     font-size: 0.6875rem;
+     color: var(--text-secondary);
++}
++
++.insights-container .gantt-scroll-hint {
++    display: none;
++    align-items: center;
++    gap: 0.3rem;
++    margin: 0.35rem 0 0.2rem;
++    color: var(--text-muted);
++    font-size: 0.625rem;
+ }
+ 
+ .insights-container .gantt-legend-item {
+@@ -1310,11 +1374,104 @@
  /* ===== 響應式斷點 ===== */
  @media (max-width: 1024px) {
      .insights-container .row1 {
@@ -1695,7 +1970,7 @@
      }
  
      .insights-container .row2,
-@@ -1324,19 +1405,10 @@
+@@ -1324,19 +1481,148 @@
          grid-template-columns: 1fr;
      }
  
@@ -1708,6 +1983,144 @@
 -    .insights-brand-row .title {
 -        font-size: clamp(2.25rem, 5vw, 3rem);
 -    }
++    .insights-container .donut-legend {
++        gap: 0.3rem;
++    }
++
++    .insights-container .donut-legend-item {
++        flex: 1 1 100%;
++        align-items: flex-start;
++    }
++
++    .insights-container .gantt-card .card-head {
++        flex-direction: column;
++        align-items: stretch;
++        gap: 0.45rem;
++    }
++
++    .insights-container .insights-gantt-toggle {
++        align-self: flex-start;
++    }
++
++    .insights-container .gantt-legend {
++        flex-wrap: nowrap;
++        justify-content: flex-start;
++        overflow-x: auto;
++        padding-bottom: 0.2rem;
++        scrollbar-width: none;
++    }
++
++    .insights-container .gantt-legend::-webkit-scrollbar {
++        display: none;
++    }
++
++    .insights-container .gantt-scroll-hint {
++        display: flex;
++    }
++
++    .insights-container .gantt-wrap {
++        min-height: 0;
++        max-height: 45vh;
++    }
++
++    .insights-container .gantt-table {
++        --gantt-name-w: 7rem;
++        --gantt-cell-min-w: 2rem;
++        --gantt-cell-track: 2rem;
++        width: max-content;
++        min-width: 100%;
++    }
++
++    .insights-container .gantt-row {
++        width: max-content;
++        min-width: 100%;
++    }
++
++    .insights-container .gantt-head-cell,
++    .insights-container .gantt-cell {
++        min-width: 2rem;
++    }
++
++    .insights-container .gantt-head-cell {
++        font-size: 0.6rem;
++    }
++
++    .insights-container .gantt-cell {
++        height: 1.75rem;
++    }
++
++    .insights-container .gantt-cell--main {
++        margin-block: 0.15rem;
++        border-radius: 0.35rem;
++    }
++
++    .insights-container .row6 .list-rows {
++        grid-template-columns: 1fr;
++        gap: 0;
++        min-height: 0;
++        max-height: 55vh;
++    }
++
++    .insights-container .solo-row {
++        display: grid;
++        grid-template-columns: 22px minmax(0, 1fr) auto;
++        grid-template-areas:
++            "avatar name end"
++            ". bar bar";
++        align-items: center;
++        gap: 0.25rem 0.45rem;
++        padding: 0.5rem 0.125rem;
++    }
++
++    .insights-container .solo-avatar {
++        grid-area: avatar;
++    }
++
++    .insights-container .solo-name {
++        grid-area: name;
++        width: auto;
++    }
++
++    .insights-container .solo-end {
++        grid-area: end;
++        width: auto;
++    }
++
++    .insights-container .solo-bar-wrap {
++        grid-area: bar;
++        width: 100%;
++    }
++
++    .insights-container .costar-row {
++        display: grid;
++        grid-template-columns: auto minmax(0, 1fr) auto;
++        grid-template-areas:
++            "avatars names end"
++            ". bar bar";
++        align-items: center;
++        gap: 0.25rem 0.45rem;
++        padding: 0.5rem 0.125rem;
++    }
++
++    .insights-container .costar-avatars {
++        grid-area: avatars;
++    }
++
++    .insights-container .costar-names {
++        grid-area: names;
++        width: auto;
++    }
++
++    .insights-container .costar-end {
++        grid-area: end;
++        width: auto;
++    }
++
++    .insights-container .costar-bar-wrap {
++        grid-area: bar;
++        width: 100%;
++    }
++
  }
  
  @media (max-width: 640px) {
@@ -3084,6 +3497,229 @@
          },
      };
  }
+--- a/web/static/js/pages/insights/aggregate.js
++++ b/web/static/js/pages/insights/aggregate.js
+@@ -666,6 +666,25 @@
+ }
+ 
+ /**
++ * 某組作品中最常出現的具名片商。用於非「主要片商年」的年份圓點著色，
++ * 讓同一女優不同年份能依實際片商顯示不同顏色。
++ */
++function dominantNamedMaker(films) {
++    var counts = new Map();
++    (films || []).forEach(function (r) {
++        var mk = r && r.maker;
++        if (mk == null || mk === '') return;
++        counts.set(mk, (counts.get(mk) || 0) + 1);
++    });
++    var ranked = Array.from(counts.entries()).sort(function (a, b) {
++        return b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
++    });
++    return ranked.length
++        ? { maker: ranked[0][0], count: ranked[0][1] }
++        : { maker: null, count: 0 };
++}
++
++/**
+  * 年表年份格子。empty＝無片；main＝該年是她的主要片商年；否則 dot。
+  * 不呼叫 getRecords()。
+  */
+@@ -697,7 +716,14 @@
+                 makerCount: makerCount,
+             };
+         }
+-        return { year: year, state: 'dot', maker: null, filmCount: films.length, makerCount: 0 };
++        var dominant = dominantNamedMaker(films);
++        return {
++            year: year,
++            state: 'dot',
++            maker: dominant.maker,
++            filmCount: films.length,
++            makerCount: dominant.count,
++        };
+     });
+ }
+ 
+@@ -796,7 +822,14 @@
+                 makerCount: makerCount,
+             };
+         }
+-        return { age: age, state: 'dot', maker: null, filmCount: films.length, makerCount: 0 };
++        var dominant = dominantNamedMaker(films);
++        return {
++            age: age,
++            state: 'dot',
++            maker: dominant.maker,
++            filmCount: films.length,
++            makerCount: dominant.count,
++        };
+     });
+ }
+ 
+--- a/web/static/js/pages/insights/charts.js
++++ b/web/static/js/pages/insights/charts.js
+@@ -32,6 +32,8 @@
+ let _yearsDrag = null;
+ /** @type {Record<string, number>} */
+ let _makerSlots = {};
++/** @type {Record<string, number>} 全庫片商色票索引（最多 16 色，避免不同片商撞色） */
++let _makerColorRegistry = {};
+ /** @type {Record<string, string>} 全庫主要片商年 map（init 算一次，重繪複用） */
+ let _mainMakerYearMap = {};
+ /** @type {{w:number,h:number}} */
+@@ -315,12 +317,30 @@
+     );
+ }
+ 
++function fallbackMakerColor(name) {
++    const text = String(name || '');
++    let hash = 2166136261;
++    for (let i = 0; i < text.length; i++) {
++        hash ^= text.charCodeAt(i);
++        hash = Math.imul(hash, 16777619);
++    }
++    const hue = Math.abs(hash) % 360;
++    const lightness = _isDimTheme() ? 62 : 48;
++    return 'hsl(' + hue + ', 62%, ' + lightness + '%)';
++}
++
+ function colorForMaker(name) {
++    if (name && Object.prototype.hasOwnProperty.call(_makerColorRegistry, name)) {
++        const index = _makerColorRegistry[name];
++        if (index < 16) {
++            return cssVar('--insights-maker-' + (index + 1));
++        }
++    }
+     if (name && Object.prototype.hasOwnProperty.call(_makerSlots, name)) {
+         const slot = _makerSlots[name]; // 0..7
+         return cssVar('--insights-maker-' + (slot + 1));
+     }
+-    return neutralOther();
++    return fallbackMakerColor(name);
+ }
+ 
+ function neutralUnknown() {
+@@ -346,12 +366,25 @@
+     return key;
+ }
+ 
+-export function setMakerColorSlots(slots) {
++export function setMakerColorSlots(slots, records) {
+     _makerSlots = slots || {};
++    const counts = new Map();
++    (records || []).forEach(function (r) {
++        const mk = r && r.maker;
++        if (mk == null || mk === '') return;
++        counts.set(mk, (counts.get(mk) || 0) + 1);
++    });
++    const ordered = Array.from(counts.entries()).sort(function (a, b) {
++        return b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
++    });
++    _makerColorRegistry = {};
++    ordered.forEach(function (entry, index) {
++        _makerColorRegistry[entry[0]] = index;
++    });
+ }
+ 
+ export function refreshMakerColorSlots() {
+-    _makerSlots = buildMakerColorSlots(getRecords());
++    setMakerColorSlots(buildMakerColorSlots(getRecords()), getRecords());
+ }
+ 
+ export function setMainMakerYearMap(map) {
+--- a/web/static/js/pages/insights/state.js
++++ b/web/static/js/pages/insights/state.js
+@@ -257,6 +257,8 @@
+         ganttRows: [],
+         // 修正 1（第 2 輪）：圖例名單存進 reactive 欄位，見 ganttLegendMakers() 註解。
+         ganttLegend: [],
++        // 年表實際會用到的片商色票（含非全庫 Top8 的片商）。
++        ganttMakerLegend: [],
+         soloRows: [],
+         costarRows: [],
+         previewActress: null,
+@@ -456,6 +458,25 @@
+                 _mainMakerYearMap,
+                 this.sel,
+             );
++            this._recomputeGanttMakerLegend();
++        },
++
++        _recomputeGanttMakerLegend() {
++            const counts = new Map();
++            const view = this.ganttView('year');
++            (view.rows || []).forEach(function (row) {
++                (row.cells || []).forEach(function (cell) {
++                    if (!cell || !cell.maker) return;
++                    counts.set(cell.maker, (counts.get(cell.maker) || 0) + 1);
++                });
++            });
++            this.ganttMakerLegend = Array.from(counts.entries())
++                .sort(function (a, b) {
++                    return b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
++                })
++                .map(function (entry) {
++                    return entry[0];
++                });
+         },
+ 
+         /**
+@@ -689,6 +710,16 @@
+                     })
+                     : label;
+             }
++            if (cell.maker) {
++                return tFn
++                    ? tFn('insights.gantt.tooltip_dot_maker', {
++                        label: label,
++                        total: cell.filmCount,
++                        maker: cell.maker,
++                        count: cell.makerCount,
++                    })
++                    : label + ' · ' + cell.maker;
++            }
+             return tFn
+                 ? tFn('insights.gantt.tooltip_dot', {
+                     label: label,
+@@ -706,7 +737,7 @@
+          * 觸發依賴），排序改在 `_loadSnapshot` 算好存進去，這裡只回傳。
+          */
+         ganttLegendMakers() {
+-            return this.ganttLegend;
++            return this.ganttMakerLegend;
+         },
+ 
+         /**
+@@ -735,8 +766,18 @@
+             return (
+                 'grid-template-columns: var(--gantt-name-w) repeat(' +
+                 n +
+-                ', minmax(var(--gantt-cell-min-w), 1fr))'
++                ', var(--gantt-cell-track))'
+             );
++        },
++
++        /**
++         * 手機上的年份欄位很窄；顯示兩位年份可避免 2019／2020… 黏成一串。
++         * 完整年份仍保留在格子的 title 中。
++         */
++        ganttAxisLabel(value, axis) {
++            if (axis === 'age') return String(value);
++            const year = String(value);
++            return "'" + year.slice(-2);
+         },
+ 
+         /**
+@@ -1815,7 +1856,7 @@
+ 
+                 setRecords(records);
+                 var slots = buildMakerColorSlots(getRecords());
+-                setMakerColorSlots(slots);
++                setMakerColorSlots(slots, getRecords());
+                 this.ganttLegend = Object.keys(slots)
+                     .map(function (name) {
+                         return { name: name, slot: slots[name] };
 --- a/web/static/js/pages/scanner/state-scan.js
 +++ b/web/static/js/pages/scanner/state-scan.js
 @@ -33,6 +33,7 @@
@@ -5041,7 +5677,7 @@
  
  {% block extra_css %}
 -<link rel="stylesheet" href="/static/css/pages/insights.css">
-+<link rel="stylesheet" href="/static/css/pages/insights.css?v=17036-1">
++<link rel="stylesheet" href="/static/css/pages/insights.css?v=17037-1">
  {% endblock %}
  
  {% block pre_alpine_module %}
@@ -5095,6 +5731,120 @@
                  <div x-show="sel.maker" class="insights-focus-row">
                      <template x-if="sel.maker">
                          <span class="insights-focus-avatar mk"
+@@ -250,7 +247,25 @@
+             <div class="card-head">
+                 <div class="donut-head-text">
+                     <h2 x-text="donutTitle()"></h2>
+-                    <div class="donut-legend">{{ t('insights.donut.legend') }}</div>
++                    <div class="donut-legend">
++                        <span class="donut-legend-item">
++                            <span class="donut-legend-swatch donut-legend-swatch--inner" aria-hidden="true"></span>
++                            <span>{{ t('insights.donut.legend_inner') }}</span>
++                        </span>
++                        <span class="donut-legend-item">
++                            <span class="donut-legend-swatch donut-legend-swatch--main" aria-hidden="true"></span>
++                            <span class="donut-legend-swatch donut-legend-swatch--other" aria-hidden="true"></span>
++                            <span>{{ t('insights.donut.legend_outer') }}</span>
++                        </span>
++                        <span class="donut-legend-item">
++                            <span class="donut-legend-swatch donut-legend-swatch--unknown" aria-hidden="true"></span>
++                            <span>{{ t('insights.donut.legend_unknown') }}</span>
++                        </span>
++                        <span class="donut-legend-rule">
++                            <i class="bi bi-info-circle" aria-hidden="true"></i>
++                            {{ t('insights.donut.legend_rule') }}
++                        </span>
++                    </div>
+                 </div>
+             </div>
+             <div class="card-body">
+@@ -376,17 +391,14 @@
+     <div class="row5">
+         <section class="card gantt-card" x-data="{ ganttAxis: 'year' }">
+             <div class="card-head">
+-                <h2 x-text="ganttTitle"></h2>
+-                <div class="gantt-legend">
+-                    <template x-for="mk in ganttLegendMakers()" :key="mk">
+-                        <span class="gantt-legend-item">
+-                            <span class="gantt-legend-dot"
+-                                  :style="'background:' + colorForMakerName(mk)"></span>
+-                            <span x-text="mk"></span>
+-                        </span>
+-                    </template>
+-                </div>
+-                <div class="insights-gantt-toggle" role="group">
++                <div class="gantt-heading">
++                    <h2 x-text="ganttTitle"></h2>
++                    <p class="deep-card-subtitle">{{ t('insights.gantt.subtitle') }}</p>
++                </div>
++                <div class="insights-gantt-toggle"
++                     role="group"
++                     x-show="ganttRows.length"
++                     x-cloak>
+                     <button type="button"
+                             :class="{ 'is-on': ganttAxis === 'year' }"
+                             @click="ganttAxis = 'year'"
+@@ -398,6 +410,24 @@
+                 </div>
+             </div>
+             <div class="card-body">
++                <div class="gantt-legend"
++                     role="list"
++                     x-show="ganttRows.length"
++                     x-cloak>
++                    <template x-for="mk in ganttLegendMakers()" :key="mk">
++                        <span class="gantt-legend-item" role="listitem">
++                            <span class="gantt-legend-dot"
++                                  :style="'background:' + colorForMakerName(mk)"></span>
++                            <span x-text="mk"></span>
++                        </span>
++                    </template>
++                </div>
++                <div class="gantt-scroll-hint"
++                     x-show="ganttRows.length && ganttAxis === 'year'"
++                     x-cloak>
++                    <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
++                    {{ t('insights.gantt.scroll_hint') }}
++                </div>
+                 <div x-show="!ganttRows.length"
+                      class="gantt-empty"
+                      x-text="t(cardEmptyKey('actress'))"></div>
+@@ -416,7 +446,8 @@
+                                                      && sel.period.type !== 'all'
+                                                      && isYearInSel(col)
+                                              }"
+-                                             x-text="col"></div>
++                                             :title="String(col)"
++                                             x-text="ganttAxisLabel(col, ganttAxis)"></div>
+                                     </template>
+                                 </div>
+                                 <template x-for="row in ganttView(ganttAxis).rows"
+@@ -454,8 +485,11 @@
+                                                          ? (isYearInSel(cell.year) ? ' is-selected' : ' is-dimmed')
+                                                          : ''
+                                                  )"
+-                                                 :style="cell.state === 'main'
+-                                                     ? ('background:' + colorForMakerName(cell.maker))
++                                                 :style="cell.maker
++                                                     ? ('--gantt-cell-color:' + colorForMakerName(cell.maker) + ';'
++                                                         + (cell.state === 'main'
++                                                             ? 'background:var(--gantt-cell-color)'
++                                                             : ''))
+                                                      : ''"
+                                                  @click.stop="ganttCellClick(row.name, cell, ganttAxis, $event)"
+                                                  :title="ganttCellTitle(cell, ganttAxis)"></div>
+@@ -477,7 +511,10 @@
+     <div class="row6" id="row6">
+         <section class="card">
+             <div class="card-head">
+-                <h2 id="soloTitle" x-text="soloTitle"></h2>
++                <div class="gantt-heading">
++                    <h2 id="soloTitle" x-text="soloTitle"></h2>
++                    <p class="deep-card-subtitle">{{ t('insights.solo.subtitle') }}</p>
++                </div>
+             </div>
+             <div class="card-body">
+                 <div class="list-rows" id="soloList">
 --- a/web/templates/scanner.html
 +++ b/web/templates/scanner.html
 @@ -1,5 +1,6 @@

@@ -1992,7 +1992,11 @@
       "actress_top_rest": "Ranks {from}–{to}"
     },
     "donut": {
-      "legend": "Inner ring: maker share · Outer ring: major-maker videos / other videos",
+      "legend": "Inner ring: studio share · Outer ring: main-studio and other work",
+      "legend_inner": "Inner ring: share of videos by studio",
+      "legend_outer": "Outer ring: solid = the actress's main studio that year; pale = other work",
+      "legend_unknown": "Gray = undetermined",
+      "legend_rule": "Main studio: the same actress has at least 4 videos in one year, with one studio at 80% or more",
       "other": "Other",
       "unknown": "Unknown",
       "library_wide": "Library-wide"
@@ -2010,11 +2014,15 @@
       "age_label": "{age}y",
       "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
       "tooltip_dot": "{label} · {total} videos in your collection",
-      "skipped_note": "{n} with no birth date skipped"
+      "tooltip_dot_maker": "{label} · {total} videos · most frequent studio: {maker} ({count})",
+      "skipped_note": "{n} with no birth date skipped",
+      "subtitle": "Only actresses with at least 4 videos in one year and one studio at 80% or more are listed.",
+      "scroll_hint": "Swipe horizontally to see every year"
     },
     "solo": {
       "count_label": "{n} videos · {m} makers",
-      "other_title": "Other {n} makers: {list}"
+      "other_title": "Other {n} makers: {list}",
+      "subtitle": "Each colored segment is one studio; gray means other or unknown studios."
     },
     "costar": {
       "count_label": "{n} videos"

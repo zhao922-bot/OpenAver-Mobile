@@ -3,7 +3,7 @@
 {% block title %}{{ t('insights.page_title') }} - OpenAver{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/pages/insights.css?v=17036-1">
+<link rel="stylesheet" href="/static/css/pages/insights.css?v=17037-1">
 {% endblock %}
 
 {% block pre_alpine_module %}
@@ -247,7 +247,25 @@
             <div class="card-head">
                 <div class="donut-head-text">
                     <h2 x-text="donutTitle()"></h2>
-                    <div class="donut-legend">{{ t('insights.donut.legend') }}</div>
+                    <div class="donut-legend">
+                        <span class="donut-legend-item">
+                            <span class="donut-legend-swatch donut-legend-swatch--inner" aria-hidden="true"></span>
+                            <span>{{ t('insights.donut.legend_inner') }}</span>
+                        </span>
+                        <span class="donut-legend-item">
+                            <span class="donut-legend-swatch donut-legend-swatch--main" aria-hidden="true"></span>
+                            <span class="donut-legend-swatch donut-legend-swatch--other" aria-hidden="true"></span>
+                            <span>{{ t('insights.donut.legend_outer') }}</span>
+                        </span>
+                        <span class="donut-legend-item">
+                            <span class="donut-legend-swatch donut-legend-swatch--unknown" aria-hidden="true"></span>
+                            <span>{{ t('insights.donut.legend_unknown') }}</span>
+                        </span>
+                        <span class="donut-legend-rule">
+                            <i class="bi bi-info-circle" aria-hidden="true"></i>
+                            {{ t('insights.donut.legend_rule') }}
+                        </span>
+                    </div>
                 </div>
             </div>
             <div class="card-body">
@@ -373,17 +391,14 @@
     <div class="row5">
         <section class="card gantt-card" x-data="{ ganttAxis: 'year' }">
             <div class="card-head">
-                <h2 x-text="ganttTitle"></h2>
-                <div class="gantt-legend">
-                    <template x-for="mk in ganttLegendMakers()" :key="mk">
-                        <span class="gantt-legend-item">
-                            <span class="gantt-legend-dot"
-                                  :style="'background:' + colorForMakerName(mk)"></span>
-                            <span x-text="mk"></span>
-                        </span>
-                    </template>
+                <div class="gantt-heading">
+                    <h2 x-text="ganttTitle"></h2>
+                    <p class="deep-card-subtitle">{{ t('insights.gantt.subtitle') }}</p>
                 </div>
-                <div class="insights-gantt-toggle" role="group">
+                <div class="insights-gantt-toggle"
+                     role="group"
+                     x-show="ganttRows.length"
+                     x-cloak>
                     <button type="button"
                             :class="{ 'is-on': ganttAxis === 'year' }"
                             @click="ganttAxis = 'year'"
@@ -395,6 +410,24 @@
                 </div>
             </div>
             <div class="card-body">
+                <div class="gantt-legend"
+                     role="list"
+                     x-show="ganttRows.length"
+                     x-cloak>
+                    <template x-for="mk in ganttLegendMakers()" :key="mk">
+                        <span class="gantt-legend-item" role="listitem">
+                            <span class="gantt-legend-dot"
+                                  :style="'background:' + colorForMakerName(mk)"></span>
+                            <span x-text="mk"></span>
+                        </span>
+                    </template>
+                </div>
+                <div class="gantt-scroll-hint"
+                     x-show="ganttRows.length && ganttAxis === 'year'"
+                     x-cloak>
+                    <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
+                    {{ t('insights.gantt.scroll_hint') }}
+                </div>
                 <div x-show="!ganttRows.length"
                      class="gantt-empty"
                      x-text="t(cardEmptyKey('actress'))"></div>
@@ -413,7 +446,8 @@
                                                      && sel.period.type !== 'all'
                                                      && isYearInSel(col)
                                              }"
-                                             x-text="col"></div>
+                                             :title="String(col)"
+                                             x-text="ganttAxisLabel(col, ganttAxis)"></div>
                                     </template>
                                 </div>
                                 <template x-for="row in ganttView(ganttAxis).rows"
@@ -451,8 +485,11 @@
                                                          ? (isYearInSel(cell.year) ? ' is-selected' : ' is-dimmed')
                                                          : ''
                                                  )"
-                                                 :style="cell.state === 'main'
-                                                     ? ('background:' + colorForMakerName(cell.maker))
+                                                 :style="cell.maker
+                                                     ? ('--gantt-cell-color:' + colorForMakerName(cell.maker) + ';'
+                                                         + (cell.state === 'main'
+                                                             ? 'background:var(--gantt-cell-color)'
+                                                             : ''))
                                                      : ''"
                                                  @click.stop="ganttCellClick(row.name, cell, ganttAxis, $event)"
                                                  :title="ganttCellTitle(cell, ganttAxis)"></div>
@@ -474,7 +511,10 @@
     <div class="row6" id="row6">
         <section class="card">
             <div class="card-head">
-                <h2 id="soloTitle" x-text="soloTitle"></h2>
+                <div class="gantt-heading">
+                    <h2 id="soloTitle" x-text="soloTitle"></h2>
+                    <p class="deep-card-subtitle">{{ t('insights.solo.subtitle') }}</p>
+                </div>
             </div>
             <div class="card-body">
                 <div class="list-rows" id="soloList">
