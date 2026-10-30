@@ -13,17 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r19-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r20-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r19-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r20-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r19`（versionCode `17035`）
+- 版本：`0.17.18-r20`（versionCode `17036`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：`2568476632A28C97395D9F3A73C2680E1D8F5B959B96C7B183710E852FF07872`
+- SHA-256：签名构建后更新
 
 ## 安装
 
@@ -116,6 +116,8 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   阴影和间距，并统一卡片、详情页、播放器标题的行数限制
 - r19：搜索空状态与错误卡恢复完整宽度；搜索栏左右操作区按实际按钮数量动态
   收放，修复图标遮挡占位文字和小屏输入区域过窄
+- r20：片库分析页移除无实际信息的 OpenAver 品牌横幅，将影片数、年份、女优和
+  片商压缩为一条四列筛选栏，年份与主要图表在手机首屏即可看到
 
 ## 限制
 
