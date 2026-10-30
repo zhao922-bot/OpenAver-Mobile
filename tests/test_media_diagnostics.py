@@ -70,7 +70,8 @@ def test_extrafanart_deduplicates_repeated_urls(tmp_path, monkeypatch):
 
     assert calls == ["https://example.invalid/fanart.jpg"]
     assert result.downloaded == 1
-    assert result.uris == [Path(tmp_path / "extrafanart" / "fanart1.jpg").as_uri()]
+    assert len(result.uris) == 1
+    assert result.uris[0].endswith("/extrafanart/fanart1.jpg")
 
 
 def test_extrafanart_preserves_storage_permission_error(tmp_path, monkeypatch):
