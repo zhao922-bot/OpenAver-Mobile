@@ -36,6 +36,7 @@ export function stateBatch() {
         renamePlan: null,
         renamePreviewMode: 'combined',
         renameSource: 'auto',
+        renamePreviewPage: 1,
 
         // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
         currentCard: null,          // {number, status, source, reason, coverSrc} | null
@@ -127,6 +128,19 @@ export function stateBatch() {
                 || this.renameFolderValue > 0;
         },
 
+        get renamePageSize() {
+            return 5;
+        },
+
+        get renamePageCount() {
+            return Math.max(1, Math.ceil(this.renameReadyItems.length / this.renamePageSize));
+        },
+
+        get renamePageItems() {
+            const start = (this.renamePreviewPage - 1) * this.renamePageSize;
+            return this.renameReadyItems.slice(start, start + this.renamePageSize);
+        },
+
         get renameSourceLabel() {
             const selected = (this.tagSourceOptions || []).find(
                 (source) => source.id === this.renamePlan?.source
@@ -202,6 +216,7 @@ export function stateBatch() {
                             this.eventSource.close();
                             this.eventSource = null;
                             this.renamePlan = data.plan || null;
+                            this.renamePreviewPage = 1;
                             this.progressCurrent = this.progressTotal;
                             const cancelled = data.plan?.cancelled;
                             this._finishTask(
@@ -249,6 +264,13 @@ export function stateBatch() {
         closeRenamePreview() {
             if (this.renameExecuting) return;
             this.renamePreviewOpen = false;
+        },
+
+        setRenamePreviewPage(delta) {
+            this.renamePreviewPage = Math.min(
+                this.renamePageCount,
+                Math.max(1, this.renamePreviewPage + delta)
+            );
         },
 
         async executeRenamePlan() {

@@ -1264,13 +1264,6 @@
                             <div class="lb-otitle"
                                  x-show="currentLightboxVideo?.original_title"
                                  x-text="currentLightboxVideo?.original_title"></div>
-                            <button type="button" class="lb-translate-btn"
-                                        x-show="lbTrShowOnOtitle()"
-                                        @click.stop="lbTranslate()"
-                                        :disabled="lbTrIsBusy()"
-                                        :aria-busy="lbTrIsBusy()"
-                                        data-tooltip="{{ t('showcase.lightbox.translate_tooltip') }}"
-                                        aria-label="{{ t('showcase.lightbox.translate_tooltip') }}"><i class="bi bi-translate" x-show="!lbTrIsBusy()" aria-hidden="true"></i><i class="bi bi-arrow-repeat spin" x-show="lbTrIsBusy()" aria-hidden="true"></i></button>
                             </div>
                             <!-- Row 3: Actresses -->
                             <div class="lb-actor" x-show="currentLightboxVideo?.actresses">

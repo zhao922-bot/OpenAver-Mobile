@@ -55,6 +55,7 @@ def test_nfo_update_backs_up_before_fill(tmp_path, monkeypatch):
     backup = tmp_path / "ABC-126.nfo.openaver-backup"
     assert stats["success"] == 1
     assert stats["backed_up"] == 1
+    assert stats["updated_paths"] == [str(video)]
     assert backup.read_text(encoding="utf-8") == original
     assert "<title>Filled title</title>" in nfo.read_text(encoding="utf-8")
 

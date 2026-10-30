@@ -3,7 +3,7 @@ import sqlite3
 import json
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import NamedTuple, Optional, List, Tuple
 from datetime import datetime
 
 from core.logger import get_logger
@@ -17,6 +17,21 @@ logger = get_logger(__name__)
 # 算出來的張數恆為 >= 0，兩者永遠不相等，比對式會自然觸發重掃（見
 # get_mtime_index() docstring，TASK-118b-T9 Opus 裁決④）。
 _SAMPLE_COUNT_UNKNOWN = -1
+
+
+class MtimeIndexEntry(NamedTuple):
+    """Incremental-scan snapshot for one DB row.
+
+    The first three fields preserve the historical tuple contract.  The two
+    additive fields let scanners refresh records whose cached metadata or
+    cover reference became incomplete without rescanning the whole library.
+    """
+
+    mtime: float
+    nfo_mtime: float
+    sample_count: int
+    cover_path: str
+    metadata_complete: bool
 
 
 @dataclass
@@ -105,6 +120,71 @@ class Video:
         if self.updated_at:
             data['updated_at'] = self.updated_at.isoformat()
         return data
+
+    def preserve_missing_metadata(self, existing: 'Video') -> None:
+        """Keep richer DB metadata when a scanner result omitted fields.
+
+        Generating the gallery reparses sidecar NFOs.  If an NFO is incomplete
+        (or a recent write only reached the DB), an unconditional upsert used
+        to blank titles, tags, actresses, and cover references.  Scanners call
+        this after building the fresh row so non-empty values are never erased
+        by a missing value from the same video's sidecars.
+        """
+        text_fields = (
+            'number',
+            'title',
+            'original_title',
+            'maker',
+            'director',
+            'series',
+            'label',
+            'cover_path',
+            'release_date',
+        )
+        for field_name in text_fields:
+            if not getattr(self, field_name) and getattr(existing, field_name):
+                setattr(self, field_name, getattr(existing, field_name))
+
+        for field_name in ('actresses', 'tags'):
+            if not getattr(self, field_name) and getattr(existing, field_name):
+                setattr(self, field_name, list(getattr(existing, field_name)))
+
+        if self.duration is None and existing.duration is not None:
+            self.duration = existing.duration
+
+    def preserve_existing_metadata(self, existing: 'Video') -> None:
+        """Trust the DB over an unchanged NFO after a cover-only rescan.
+
+        A DB edit can succeed while the NFO write is unavailable (permission,
+        malformed XML, or an older build).  When the NFO mtime is unchanged,
+        reparsing that stale file must not replace richer/newer DB metadata
+        with an old non-empty value.
+        """
+        for field_name in (
+            'number',
+            'title',
+            'original_title',
+            'maker',
+            'director',
+            'series',
+            'label',
+            'release_date',
+        ):
+            existing_value = getattr(existing, field_name)
+            if existing_value:
+                setattr(self, field_name, existing_value)
+
+        for field_name in ('actresses', 'tags'):
+            existing_value = list(getattr(existing, field_name))
+            if existing_value:
+                setattr(self, field_name, existing_value)
+
+        if existing.duration is not None:
+            self.duration = existing.duration
+
+        # A fresh sidecar discovery must win over a stale DB reference.
+        if not self.cover_path and existing.cover_path:
+            self.cover_path = existing.cover_path
 
     @classmethod
     def from_row(cls, row: tuple, columns: List[str]) -> 'Video':
@@ -731,6 +811,28 @@ class VideoRepository:
         finally:
             conn.close()
 
+    def get_by_paths(self, paths: List[str]) -> dict[str, Video]:
+        """Batch-load complete rows for scanner preservation checks."""
+        if not paths:
+            return {}
+        conn = self._get_connection()
+        try:
+            columns = self._get_columns()
+            result: dict[str, Video] = {}
+            for start in range(0, len(paths), 900):
+                chunk = paths[start:start + 900]
+                placeholders = ', '.join(['?'] * len(chunk))
+                cursor = conn.execute(
+                    f"SELECT * FROM videos WHERE path IN ({placeholders})",
+                    chunk,
+                )
+                for row in cursor.fetchall():
+                    video = Video.from_row(row, columns)
+                    result[video.path] = video
+            return result
+        finally:
+            conn.close()
+
     def get_focal_crop_map(self, paths: List[str]) -> dict:
         """批次讀 {path: (auto_focal, crop_mode)}（Codex PR#105 P2 修復用，避免 N+1）。
 
@@ -850,8 +952,8 @@ class VideoRepository:
         finally:
             conn.close()
 
-    def get_mtime_index(self) -> dict:
-        """取得 {path: (mtime, nfo_mtime, sample_count)} 索引，用於增量比對。
+    def get_mtime_index(self) -> dict[str, MtimeIndexEntry]:
+        """取得增量掃描索引 `{path: MtimeIndexEntry}`。
 
         sample_count（TASK-118b-T9）：合法 JSON list → 實際張數。空字串／NULL／
         損毀 JSON／非 list 的合法 JSON 這四種壞值一律回傳哨兵值
@@ -859,15 +961,45 @@ class VideoRepository:
         裁決④：壞資料要 fail-safe 成「需要重掃」，不得讓單筆壞資料中止整個
         SELECT／整次掃描）。真實檔案系統算出來的張數恆為 >= 0，-1 必定與任何
         真實張數不相等，呼叫端的比對式因此自然觸發重掃，不需要額外的例外分支。
+
+        `cover_path` / `metadata_complete` 是 mobile r29 的加法欄位：即使影片與
+        NFO 的 mtime 都沒變，只要 DB 仍缺封面、標題、演員、標籤、片商或日期，
+        呼叫端也應重新讀取該片的 sidecar，避免「已經補完卻一直顯示舊資料」。
+        NamedTuple 保留前三個位置索引，既有呼叫端不需同步改寫。
         """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
-            cursor.execute("SELECT path, mtime, nfo_mtime, sample_images FROM videos")
+            cursor.execute(
+                "SELECT path, mtime, nfo_mtime, sample_images, cover_path, "
+                "title, number, actresses, tags, maker, release_date FROM videos"
+            )
             rows = cursor.fetchall()
             result = {}
-            for path, mtime, nfo_mtime, sample_images_raw in rows:
+
+            def _has_json_list(raw) -> bool:
+                if not raw:
+                    return False
+                try:
+                    parsed = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    return False
+                return isinstance(parsed, list) and bool(parsed)
+
+            for (
+                path,
+                mtime,
+                nfo_mtime,
+                sample_images_raw,
+                cover_path,
+                title,
+                number,
+                actresses_raw,
+                tags_raw,
+                maker,
+                release_date,
+            ) in rows:
                 sample_count = _SAMPLE_COUNT_UNKNOWN
                 if sample_images_raw:
                     try:
@@ -876,7 +1008,22 @@ class VideoRepository:
                             sample_count = len(parsed)
                     except (json.JSONDecodeError, TypeError):
                         pass
-                result[path] = (mtime, nfo_mtime, sample_count)
+
+                metadata_complete = bool(
+                    title
+                    and number
+                    and _has_json_list(actresses_raw)
+                    and _has_json_list(tags_raw)
+                    and maker
+                    and release_date
+                )
+                result[path] = MtimeIndexEntry(
+                    mtime=mtime,
+                    nfo_mtime=nfo_mtime,
+                    sample_count=sample_count,
+                    cover_path=cover_path or '',
+                    metadata_complete=metadata_complete,
+                )
             return result
         finally:
             conn.close()
@@ -885,7 +1032,7 @@ class VideoRepository:
         """取得 {path: scrape_attempted_at} 索引，供 T3 `_should_skip` 冷啟動判斷用（TASK-89b-T1）。
 
         Additive read-only method。回傳的是 {path: int}——**不是** get_mtime_index() 的
-        形狀（那支自 TASK-118b-T9 起回 3-tuple，含劇照張數）。SELECT 不加 WHERE，
+        形狀（那支回 MtimeIndexEntry，含劇照張數、封面與 metadata 完整度）。SELECT 不加 WHERE，
         含 scrape_attempted_at == 0 的 row（不過濾）——呼叫端用 `.get(path, 0) > 0`
         統一判斷「從未試過」（key 不存在或值為 0 皆視為未試過）。
         """

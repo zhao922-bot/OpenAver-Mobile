@@ -121,7 +121,22 @@ def atomic_write(
                 f.flush()
                 os.fsync(f.fileno())
         # fd 已由上面的 with 關閉 → 安全 replace（Windows file-lock 前提）
-        os.replace(tmp, dest)
+        try:
+            os.replace(tmp, dest)
+        except OSError as replace_error:
+            # Some Android SD-card mounts allow creating the temporary file
+            # but reject the final rename. Fall back to the user-authorized
+            # SAF bridge instead of reporting a false NFO write failure.
+            if not mobile_fallback:
+                raise
+            from core import android_storage
+
+            if not android_storage.is_access_error(replace_error):
+                raise
+            if not android_storage.has_access(str(dest)):
+                raise
+            android_storage.write_bytes(str(dest), tmp.read_bytes())
+            tmp.unlink(missing_ok=True)
     except BaseException:
         # 路徑 1：區塊內使用者程式碼拋例外；路徑 2：os.replace 自己拋例外
         # （BE-ENV-01：Windows 防毒/縮圖快取會擋，不是必成功）。

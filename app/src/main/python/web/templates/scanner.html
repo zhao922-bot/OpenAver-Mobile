@@ -1017,7 +1017,7 @@
                 <div class="batch-confirm-summary-item">
                     <span>{{ t('scanner.stats.nfo_confirm_scope_label') }}</span>
                     <strong x-text="window.t('scanner.stats.tag_source_confirm_count_value', {
-                        count: nfoUpdateRetryPaths.length || nfoNeedUpdateCount
+                        count: nfoSelectedCount
                     })"></strong>
                 </div>
                 <div class="batch-confirm-summary-item">
@@ -1030,6 +1030,44 @@
                 <i class="bi bi-info-circle"></i>
                 <span>{{ t('scanner.stats.nfo_confirm_note') }}</span>
             </p>
+            <div class="batch-preview-selection">
+                <button type="button" class="btn btn-ghost btn-xs" @click="toggleNfoSelection()">
+                    <i class="bi" :class="nfoSelectedCount === nfoUpdatePaths.length ? 'bi-x-square' : 'bi-check2-square'"></i>
+                    <span x-text="window.t(nfoSelectedCount === nfoUpdatePaths.length
+                        ? 'scanner.stats.selection_clear'
+                        : 'scanner.stats.selection_all')"></span>
+                </button>
+                <span x-text="window.t('scanner.stats.selection_count', {
+                    selected: nfoSelectedCount,
+                    total: nfoUpdatePaths.length
+                })"></span>
+            </div>
+            <div class="tag-preview-list" x-show="nfoUpdateItems.length > 0">
+                <template x-for="item in nfoUpdatePageItems" :key="item.path">
+                    <label class="tag-preview-item batch-preview-option">
+                        <input type="checkbox" class="checkbox checkbox-sm checkbox-primary"
+                               :value="item.path" x-model="nfoSelectedPaths">
+                        <span>
+                            <strong x-text="item.number || item.path"></strong>
+                            <small x-text="window.t('scanner.stats.nfo_field_note_prefix') + (item.missing || []).map(field => window.t('scanner.stats.nfo_field_' + field)).join('、')"></small>
+                        </span>
+                    </label>
+                </template>
+            </div>
+            <div class="batch-preview-pager" x-show="nfoUpdatePageCount > 1">
+                <button type="button" class="btn btn-ghost btn-xs"
+                        :disabled="nfoPreviewPage <= 1" @click="setNfoPreviewPage(-1)">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <span x-text="window.t('scanner.stats.preview_page', {
+                    current: nfoPreviewPage,
+                    total: nfoUpdatePageCount
+                })"></span>
+                <button type="button" class="btn btn-ghost btn-xs"
+                        :disabled="nfoPreviewPage >= nfoUpdatePageCount" @click="setNfoPreviewPage(1)">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
             <label class="tag-backup-option">
                 <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="nfoUpdateBackupEnabled">
                 <span>
@@ -1041,7 +1079,9 @@
                 <button type="button" class="btn btn-ghost" @click="cancelNfoUpdate()">
                     {{ t('scanner.stats.tag_source_confirm_cancel') }}
                 </button>
-                <button type="button" class="btn btn-primary" @click="confirmNfoUpdate()">
+                <button type="button" class="btn btn-primary"
+                        :disabled="nfoUpdateConfirmDisabled"
+                        @click="confirmNfoUpdate()">
                     <i class="bi bi-shield-check"></i>
                     <span x-text="window.t(nfoUpdateBackupEnabled
                         ? 'scanner.stats.nfo_confirm_backup_ok'
@@ -1075,6 +1115,10 @@
                     <span>{{ t('scanner.stats.tag_source_preview_changed_label') }}</span>
                     <strong x-text="window.t('scanner.stats.tag_source_preview_changed_value', { count: tagSourcePreviewChangedCount })"></strong>
                 </div>
+                <div class="batch-confirm-summary-item">
+                    <span>{{ t('scanner.stats.tag_source_selected_label') }}</span>
+                    <strong x-text="window.t('scanner.stats.tag_source_confirm_count_value', { count: tagSourceSelectedChangedCount })"></strong>
+                </div>
             </div>
             <p class="fluent-modal-body"
                x-text="window.t(tagSourcePreviewOnly
@@ -1083,21 +1127,49 @@
                        source: tagSourceModalSourceLabel,
                        count: tagSourcePreviewData?.total || 0
                    })"></p>
+            <div class="batch-preview-selection" x-show="tagSourcePreviewChangedItems.length > 0">
+                <button type="button" class="btn btn-ghost btn-xs" @click="toggleTagSourceSelection()">
+                    <i class="bi" :class="tagSourceSelectedChangedCount === tagSourcePreviewChangedItems.length
+                        ? 'bi-x-square' : 'bi-check2-square'"></i>
+                    <span x-text="window.t(tagSourceSelectedChangedCount === tagSourcePreviewChangedItems.length
+                        ? 'scanner.stats.selection_clear'
+                        : 'scanner.stats.selection_all')"></span>
+                </button>
+                <span x-text="window.t('scanner.stats.selection_count', {
+                    selected: tagSourceSelectedChangedCount,
+                    total: tagSourcePreviewChangedItems.length
+                })"></span>
+            </div>
             <div class="tag-preview-list" x-show="tagSourcePreviewChangedItems.length > 0">
-                <template x-for="item in tagSourcePreviewChangedItems.slice(0, 20)" :key="item.path">
-                    <div class="tag-preview-item">
-                        <strong x-text="item.number"></strong>
-                        <div class="tag-preview-diff">
-                            <span class="tag-preview-add" x-show="item.added.length > 0"
-                                  x-text="window.t('scanner.stats.tag_source_preview_added', { tags: item.added.join('、') })"></span>
-                            <span class="tag-preview-remove" x-show="item.removed.length > 0"
-                                  x-text="window.t('scanner.stats.tag_source_preview_removed', { tags: item.removed.join('、') })"></span>
-                        </div>
-                    </div>
+                <template x-for="item in tagSourcePreviewPageItems" :key="item.path">
+                    <label class="tag-preview-item batch-preview-option">
+                        <input type="checkbox" class="checkbox checkbox-sm checkbox-primary"
+                               :value="item.number" x-model="tagSourcePreviewNumbers">
+                        <span>
+                            <strong x-text="item.number"></strong>
+                            <span class="tag-preview-diff">
+                                <span class="tag-preview-add" x-show="item.added.length > 0"
+                                      x-text="window.t('scanner.stats.tag_source_preview_added', { tags: item.added.join('、') })"></span>
+                                <span class="tag-preview-remove" x-show="item.removed.length > 0"
+                                      x-text="window.t('scanner.stats.tag_source_preview_removed', { tags: item.removed.join('、') })"></span>
+                            </span>
+                        </span>
+                    </label>
                 </template>
-                <p class="tag-preview-more"
-                   x-show="tagSourcePreviewChangedItems.length > 20"
-                   x-text="window.t('scanner.stats.tag_source_preview_more', { count: tagSourcePreviewChangedItems.length - 20 })"></p>
+            </div>
+            <div class="batch-preview-pager" x-show="tagSourcePreviewPageCount > 1">
+                <button type="button" class="btn btn-ghost btn-xs"
+                        :disabled="tagSourcePreviewPage <= 1" @click="setTagSourcePreviewPage(-1)">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <span x-text="window.t('scanner.stats.preview_page', {
+                    current: tagSourcePreviewPage,
+                    total: tagSourcePreviewPageCount
+                })"></span>
+                <button type="button" class="btn btn-ghost btn-xs"
+                        :disabled="tagSourcePreviewPage >= tagSourcePreviewPageCount" @click="setTagSourcePreviewPage(1)">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
             </div>
             <div class="tag-preview-empty"
                  x-show="tagSourcePreviewChangedItems.length === 0 && tagSourcePreviewFailureItems.length === 0">
@@ -1206,7 +1278,7 @@
             </p>
 
             <div class="rename-preview-list" x-show="renameReadyItems.length > 0">
-                <template x-for="item in renameReadyItems" :key="item.db_old_uri">
+                <template x-for="item in renamePageItems" :key="item.db_old_uri">
                     <div class="rename-preview-item">
                         <strong x-text="item.number || ''"></strong>
                         <div class="rename-preview-names">
@@ -1228,6 +1300,20 @@
                         <small x-text="renameRelatedText(item)"></small>
                     </div>
                 </template>
+            </div>
+            <div class="batch-preview-pager" x-show="renamePageCount > 1">
+                <button type="button" class="btn btn-ghost btn-xs"
+                        :disabled="renamePreviewPage <= 1" @click="setRenamePreviewPage(-1)">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <span x-text="window.t('scanner.stats.preview_page', {
+                    current: renamePreviewPage,
+                    total: renamePageCount
+                })"></span>
+                <button type="button" class="btn btn-ghost btn-xs"
+                        :disabled="renamePreviewPage >= renamePageCount" @click="setRenamePreviewPage(1)">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
             </div>
 
             <div class="rename-conflict-list" x-show="renameConflictItems.length > 0">

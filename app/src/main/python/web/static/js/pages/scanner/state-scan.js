@@ -84,6 +84,8 @@ export function stateScan() {
         nfoUpdatePaths: [],
         nfoUpdateItems: [],
         nfoUpdateVisible: false,
+        nfoSelectedPaths: [],
+        nfoPreviewPage: 1,
 
         // ===== r16: Batch tag source update =====
         tagSourceUpdateSource: 'auto',
@@ -92,12 +94,12 @@ export function stateScan() {
         tagSourcePreviewSourceLabel: '',
         tagSourcePreviewData: null,
         tagSourcePreviewNumbers: [],
+        tagSourcePreviewPage: 1,
         tagSourcePreviewOnly: false,
         tagSourceBackupEnabled: true,
 
         // ===== r18: NFO confirmation =====
         nfoUpdateConfirmModalOpen: false,
-        nfoUpdateRetryPaths: [],
         nfoUpdateBackupEnabled: true,
 
         // ===== T6d: Jellyfin Image Update =====
@@ -199,8 +201,52 @@ export function stateScan() {
             return this.tagSourcePreviewData?.changed || 0;
         },
 
+        get tagSourcePreviewPageSize() {
+            return 6;
+        },
+
+        get tagSourcePreviewPageCount() {
+            return Math.max(
+                1,
+                Math.ceil(this.tagSourcePreviewChangedItems.length / this.tagSourcePreviewPageSize)
+            );
+        },
+
+        get tagSourcePreviewPageItems() {
+            const start = (this.tagSourcePreviewPage - 1) * this.tagSourcePreviewPageSize;
+            return this.tagSourcePreviewChangedItems.slice(start, start + this.tagSourcePreviewPageSize);
+        },
+
+        get tagSourceSelectedChangedCount() {
+            const changed = new Set(this.tagSourcePreviewChangedItems.map((item) => item.number));
+            return [...new Set(this.tagSourcePreviewNumbers)].filter((number) => changed.has(number)).length;
+        },
+
         get tagSourceConfirmButtonDisabled() {
-            return this.isGenerating || this.tagSourcePreviewOnly || this.tagSourcePreviewChangedCount === 0;
+            return this.isGenerating
+                || this.tagSourcePreviewOnly
+                || this.tagSourceSelectedChangedCount === 0;
+        },
+
+        get nfoUpdatePageSize() {
+            return 6;
+        },
+
+        get nfoUpdatePageCount() {
+            return Math.max(1, Math.ceil(this.nfoUpdateItems.length / this.nfoUpdatePageSize));
+        },
+
+        get nfoUpdatePageItems() {
+            const start = (this.nfoPreviewPage - 1) * this.nfoUpdatePageSize;
+            return this.nfoUpdateItems.slice(start, start + this.nfoUpdatePageSize);
+        },
+
+        get nfoSelectedCount() {
+            return new Set(this.nfoSelectedPaths).size;
+        },
+
+        get nfoUpdateConfirmDisabled() {
+            return this.isGenerating || this.nfoSelectedCount === 0;
         },
 
         get isGenerating() {
@@ -413,6 +459,7 @@ export function stateScan() {
             // 初始載入
             await this.loadConfig();
             this.loadStats();
+            this.checkNfoUpdates();
 
             // T7b: 恢復日誌（logOutput 為 scanner.html 靜態 x-ref 元素，
             // init 時早已 mount，直接同步還原、無需等 $nextTick）
@@ -551,6 +598,25 @@ export function stateScan() {
             }
         },
 
+        async checkNfoUpdates() {
+            try {
+                const resp = await fetch('/api/gallery/update-check');
+                const result = await resp.json();
+                if (!result.success || !result.data) return;
+                const count = result.data.need_update || 0;
+                this.nfoNeedUpdateCount = count;
+                this.nfoUpdatePaths = Array.isArray(result.data.paths) ? result.data.paths : [];
+                this.nfoUpdateItems = Array.isArray(result.data.items) ? result.data.items : [];
+                this.nfoUpdateVisible = count > 0;
+                this.nfoPreviewPage = 1;
+                if (count === 0) {
+                    this.nfoSelectedPaths = [];
+                }
+            } catch (e) {
+                console.error('檢查 NFO 待補欄位失敗:', e);
+            }
+        },
+
         async clearCache() {
             this.clearCacheLoading = true;
             try {
@@ -561,6 +627,10 @@ export function stateScan() {
                     this.statTotal = 0;
                     this.statsVisible = false;
                     this.nfoUpdateVisible = false;
+                    this.nfoNeedUpdateCount = 0;
+                    this.nfoUpdatePaths = [];
+                    this.nfoUpdateItems = [];
+                    this.nfoSelectedPaths = [];
                     this.jellyfinImageVisible = false;
                     this.jellyfinCheckState = 'idle';
                     this.clearCacheModalOpen = false;
@@ -1190,6 +1260,15 @@ export function stateScan() {
                             this.showToast(window.t('scanner.toast.generate_success', { count: data.video_count }), 'success');
                         }
 
+                        const missingNfo = Number(data.missing_nfo) || 0;
+                        if (missingNfo > 0) {
+                            this.showToast(
+                                window.t('scanner.toast.missing_nfo_warning', { count: missingNfo }),
+                                'warn',
+                                8000
+                            );
+                        }
+
                         // a5: Windows 長路徑警告
                         if (data.long_paths && data.long_paths.length > 0) {
                             this.showToast(
@@ -1239,22 +1318,33 @@ export function stateScan() {
         // ===== T7b: NFO Update Flow =====
         openNfoUpdateConfirm(paths = []) {
             if (this.isGenerating) return;
-            const count = paths.length > 0 ? paths.length : this.nfoNeedUpdateCount;
-            if (count === 0) {
+            const candidates = paths.length > 0
+                ? paths.slice()
+                : (this.nfoUpdatePaths.length > 0 ? this.nfoUpdatePaths.slice() : []);
+            if (candidates.length === 0 && this.nfoNeedUpdateCount > 0) {
+                this.checkNfoUpdates().then(() => {
+                    if (this.nfoUpdatePaths.length > 0) this.openNfoUpdateConfirm(paths);
+                    else this.showToast(window.t('scanner.toast.no_nfo_update_needed'), 'info');
+                });
+                return;
+            }
+            if (candidates.length === 0) {
                 this.showToast(window.t('scanner.toast.no_nfo_update_needed'), 'info');
                 return;
             }
-            this.nfoUpdateRetryPaths = paths.slice();
+            this.nfoSelectedPaths = candidates.slice();
+            this.nfoPreviewPage = 1;
             this.nfoUpdateConfirmModalOpen = true;
         },
 
         cancelNfoUpdate() {
             this.nfoUpdateConfirmModalOpen = false;
-            this.nfoUpdateRetryPaths = [];
+            this.nfoSelectedPaths = [];
         },
 
         confirmNfoUpdate() {
-            const paths = this.nfoUpdateRetryPaths.slice();
+            if (this.nfoUpdateConfirmDisabled) return;
+            const paths = this.nfoSelectedPaths.slice();
             this.nfoUpdateConfirmModalOpen = false;
             this.runNfoUpdate(paths);
         },
@@ -1263,7 +1353,8 @@ export function stateScan() {
             // 互斥鎖定
             if (this.isGenerating) return;
 
-            const expectedCount = paths.length > 0 ? paths.length : this.nfoNeedUpdateCount;
+            const selectedPaths = paths.length > 0 ? paths.slice() : this.nfoSelectedPaths.slice();
+            const expectedCount = selectedPaths.length;
             if (expectedCount === 0) {
                 this.showToast(window.t('scanner.toast.no_nfo_update_needed'), 'info');
                 return;
@@ -1280,7 +1371,7 @@ export function stateScan() {
                 const params = new URLSearchParams({
                     backup: this.nfoUpdateBackupEnabled ? 'true' : 'false',
                 });
-                for (const path of paths) params.append('path', path);
+                for (const path of selectedPaths) params.append('path', path);
                 this.eventSource = new EventSource(`/api/gallery/update?${params.toString()}`);
 
                 this.eventSource.onmessage = (event) => {
@@ -1318,15 +1409,16 @@ export function stateScan() {
                         this.flushLogs();
 
                         // 隱藏 NFO 更新按鈕（已完成）
-                        if (paths.length === 0) {
-                            this.nfoNeedUpdateCount = 0;
-                            this.nfoUpdateVisible = false;
-                        } else {
-                            this.nfoNeedUpdateCount = Math.max(
-                                0,
-                                this.nfoNeedUpdateCount - (data.summary?.success || 0)
-                            );
-                        }
+                        this.nfoNeedUpdateCount = Math.max(
+                            0,
+                            this.nfoNeedUpdateCount - (data.summary?.success || 0)
+                        );
+                        const completed = new Set(selectedPaths);
+                        this.nfoUpdatePaths = this.nfoUpdatePaths.filter((path) => !completed.has(path));
+                        this.nfoUpdateItems = this.nfoUpdateItems.filter((item) => !completed.has(item.path));
+                        this.nfoSelectedPaths = [];
+                        this.nfoUpdateVisible = this.nfoNeedUpdateCount > 0;
+                        this.checkNfoUpdates();
                     } else if (data.type === 'error') {
                         this.eventSource.close();
                         this.eventSource = null;
@@ -1354,6 +1446,21 @@ export function stateScan() {
             }
         },
 
+        setNfoPreviewPage(delta) {
+            this.nfoPreviewPage = Math.min(
+                this.nfoUpdatePageCount,
+                Math.max(1, this.nfoPreviewPage + delta)
+            );
+        },
+
+        toggleNfoSelection() {
+            if (this.nfoSelectedCount === this.nfoUpdatePaths.length) {
+                this.nfoSelectedPaths = [];
+            } else {
+                this.nfoSelectedPaths = this.nfoUpdatePaths.slice();
+            }
+        },
+
         // ===== r16: Batch tag source update =====
         openTagSourceUpdateConfirm() {
             if (this.tagSourceUpdateButtonDisabled) return;
@@ -1368,6 +1475,22 @@ export function stateScan() {
         cancelTagSourceUpdate() {
             this.tagSourceConfirmModalOpen = false;
             this.tagSourcePreviewOnly = false;
+        },
+
+        setTagSourcePreviewPage(delta) {
+            this.tagSourcePreviewPage = Math.min(
+                this.tagSourcePreviewPageCount,
+                Math.max(1, this.tagSourcePreviewPage + delta)
+            );
+        },
+
+        toggleTagSourceSelection() {
+            const changed = [...new Set(this.tagSourcePreviewChangedItems.map((item) => item.number))];
+            if (this.tagSourceSelectedChangedCount === changed.length) {
+                this.tagSourcePreviewNumbers = [];
+            } else {
+                this.tagSourcePreviewNumbers = changed;
+            }
         },
 
         confirmTagSourceUpdate() {
@@ -1419,6 +1542,13 @@ export function stateScan() {
                     this.eventSource = null;
                     this.progressCurrent = this.progressTotal;
                     this.tagSourcePreviewData = data.summary || null;
+                    const changedNumbers = Array.isArray(data.summary?.changed_numbers)
+                        ? data.summary.changed_numbers
+                        : (data.summary?.items || [])
+                            .filter((item) => item.status === 'changed')
+                            .map((item) => item.number);
+                    this.tagSourcePreviewNumbers = [...new Set(changedNumbers.filter(Boolean))];
+                    this.tagSourcePreviewPage = 1;
                     this._finishTask(
                         data.summary?.cancelled ? 'cancelled' : 'done',
                         data.message || window.t('scanner.stats.tag_source_preview_done'),
@@ -1661,5 +1791,6 @@ export function stateScan() {
                 }
             });
         },
+
     };
 }

@@ -55,7 +55,9 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "core/android_storage.py",
             "core/atomic_write.py",
+            "core/database/video.py",
             "core/enricher.py",
+            "core/gallery_generator.py",
             "core/gallery_scanner.py",
             "core/nfo_utils.py",
             "core/nfo_updater.py",
@@ -73,6 +75,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "web/routers/scanner.py",
             "web/routers/scraper.py",
             "web/routers/showcase.py",
+            "web/routers/translate.py",
         ),
     ),
     (

@@ -35,6 +35,7 @@ from core.nfo_stat import nfo_mtime_or_none
 from core.nfo_title_format import build_display_title
 from core.nfo_utils import find_sidecar_nfos
 from core.readonly_paths import resolve_owning_output_root
+from core.organizer import generate_nfo
 from core.title_writeback import (
     NfoNotFoundError, NfoParseError, rewrite_nfo_titles, strip_illegal_xml_chars,
 )
@@ -78,6 +79,11 @@ class TitleWritebackRequest(BaseModel):
 def _needs_translate(title, original_title, nfo_mtime) -> bool:
     """標題是假名、沒有原文、且有 NFO（nfo_mtime > 0）才算待翻譯（列表與寫回回應共用）。"""
     return bool((not original_title) and has_japanese(title or '') and (nfo_mtime or 0) > 0)
+
+
+def _can_manual_translate(title, original_title, _nfo_mtime) -> bool:
+    """Lightbox 手動翻譯入口：只要目前有標題且尚未保存原文即可。"""
+    return bool(not original_title and (title or '').strip())
 
 
 def _serialize_video(v, path_mappings: dict, enabled: bool = False) -> dict:
@@ -126,6 +132,7 @@ def _serialize_video(v, path_mappings: dict, enabled: bool = False) -> dict:
         "has_cover": bool(v.cover_path),             # DB 初判（不做 IO）
         "has_nfo": (v.nfo_mtime or 0) > 0,          # 對齊 41a nfo_mtime 寫入契約，防禦 NULL
         "needs_translate": _needs_translate(v.title, v.original_title, v.nfo_mtime),  # 無條件輸出（FE-ALPINE-06）
+        "can_translate": _can_manual_translate(v.title, v.original_title, v.nfo_mtime),
         "auto_focal": v.auto_focal,                  # canonical "x,y" 4dp 字串或 ''（98b：前端 focalObjectPosition 消費）
         "crop_mode": v.crop_mode,                    # 'auto' | 'default'（98b：default 退 baseline 右裁）
     }
@@ -579,6 +586,48 @@ def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: st
     return None
 
 
+def _create_title_nfo(video, body: str, new_original: str, config: dict, path_mappings: dict):
+    """Create the missing sidecar NFO and return ``(path, error)``."""
+    owning = resolve_owning_output_root(video.path, config)
+    if owning is not None:
+        if not video.output_dir:
+            return None, "no_nfo"
+        output_dir = Path(uri_to_local_fs_path(video.output_dir, path_mappings))
+        video_fs = Path(uri_to_local_fs_path(video.path, path_mappings))
+        nfo_path = output_dir / f"{video_fs.stem}.nfo"
+    else:
+        nfo_path = Path(
+            uri_to_local_fs_path(video.path, path_mappings)
+        ).with_suffix(".nfo")
+
+    scraper_config = config.get("scraper", {})
+    external_manager = scraper_config.get("external_manager", "off")
+    created = generate_nfo(
+        number=video.number or "",
+        title=body,
+        original_title=new_original,
+        actors=video.actresses,
+        tags=video.tags,
+        date=video.release_date,
+        maker=video.maker,
+        output_path=str(nfo_path),
+        has_poster=bool(video.cover_path) and external_manager != "off",
+        has_fanart=bool(video.cover_path) and external_manager != "off",
+        director=video.director,
+        duration=video.duration,
+        series=video.series or "",
+        label=video.label,
+        user_tags=video.user_tags,
+        external_manager=external_manager,
+        nfo_title_format=scraper_config.get(
+            "nfo_title_format", "[{num}]{title}"
+        ),
+    )
+    if not created:
+        return None, "nfo_write_failed"
+    return str(nfo_path), None
+
+
 def _apply_title_writeback(repo, video, req, config: dict, path_mappings: dict) -> dict:
     fmt = config.get("scraper", {}).get("nfo_title_format", '[{num}]{title}')
     _display, body = build_display_title(
@@ -591,6 +640,31 @@ def _apply_title_writeback(repo, video, req, config: dict, path_mappings: dict) 
 
     nfo_path, loc_err = _locate_title_nfo(video, config, path_mappings)
     if nfo_path is None:
+        if loc_err == "no_nfo":
+            nfo_path, create_err = _create_title_nfo(
+                video, body, new_original, config, path_mappings
+            )
+            if create_err is not None:
+                return _title_fail(create_err)
+            new_mtime = nfo_mtime_or_none(Path(nfo_path))
+            if new_mtime is None:
+                new_mtime = video.nfo_mtime
+            written = repo.update_titles(video.path, body, new_original, new_mtime)
+            if not written:
+                return _title_fail("not_found")
+            return {
+                "success": True,
+                "title": body,
+                "original_title": new_original,
+                "needs_translate": _needs_translate(
+                    body, new_original, new_mtime
+                ),
+                "can_translate": _can_manual_translate(
+                    body, new_original, new_mtime
+                ),
+                "nfo_updated": True,
+                "nfo_created": True,
+            }
         return _title_fail(loc_err)
     nfo_err = _write_title_nfo(nfo_path, video, body, new_original, fmt)
     if nfo_err is not None:
@@ -609,6 +683,7 @@ def _apply_title_writeback(repo, video, req, config: dict, path_mappings: dict) 
         return _title_fail("not_found")
     return {"success": True, "title": body, "original_title": new_original,
             "needs_translate": _needs_translate(body, new_original, new_mtime),
+            "can_translate": _can_manual_translate(body, new_original, new_mtime),
             "nfo_updated": True}
 
 

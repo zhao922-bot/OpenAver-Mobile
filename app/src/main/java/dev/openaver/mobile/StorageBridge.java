@@ -181,8 +181,20 @@ public final class StorageBridge {
             byte[] previous = null;
             boolean created = false;
             try {
-                existing = findDocument(path);
+                existing = findExistingDocument(path);
                 if (existing != null) {
+                    // Some Android document providers append ".xml" when an
+                    // NFO is created as application/xml. Reuse and rename that
+                    // legacy document instead of creating a numbered duplicate.
+                    if (isNfoPath(path) && !expectedName(path).equals(displayName(existing))) {
+                        Uri renamed = DocumentsContract.renameDocument(
+                                resolver(), existing, expectedName(path)
+                        );
+                        if (renamed == null) {
+                            return "document_rename_failed";
+                        }
+                        existing = renamed;
+                    }
                     previous = readAll(resolver().openInputStream(existing));
                 } else {
                     if (!createParents) {
@@ -323,6 +335,52 @@ public final class StorageBridge {
                 tree, treeId + "/" + relative
         );
         return documentExists(candidate) ? candidate : null;
+    }
+
+    private static Uri findExistingDocument(String path) {
+        Uri exact = findDocument(path);
+        if (exact != null || !isNfoPath(path)) {
+            return exact;
+        }
+
+        // Older builds passed application/xml to DocumentsContract, causing
+        // providers to save "movie.nfo.xml" (and later "movie.nfo (1).xml").
+        // Find the first legacy variant so the next write can rename it.
+        Uri legacy = findDocument(path + ".xml");
+        if (legacy != null) {
+            return legacy;
+        }
+        for (int i = 1; i <= 32; i++) {
+            legacy = findDocument(path + " (" + i + ").xml");
+            if (legacy != null) {
+                return legacy;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isNfoPath(String path) {
+        return path != null && path.toLowerCase().endsWith(".nfo");
+    }
+
+    private static String expectedName(String path) {
+        File file = new File(path);
+        return file.getName();
+    }
+
+    private static String displayName(Uri document) {
+        try (Cursor cursor = resolver().query(
+                document,
+                new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME},
+                null, null, null
+        )) {
+            if (cursor != null && cursor.moveToFirst()) {
+                return cursor.getString(0);
+            }
+        } catch (Exception ignored) {
+            // Fall through to the path-derived name.
+        }
+        return "";
     }
 
     private static Uri resolveDirectory(String path, boolean create) throws IOException {
@@ -480,7 +538,12 @@ public final class StorageBridge {
         if (lower.endsWith(".webp")) {
             return "image/webp";
         }
-        if (lower.endsWith(".nfo") || lower.endsWith(".xml")) {
+        if (lower.endsWith(".nfo")) {
+            // Do not use application/xml here: several Android document
+            // providers append ".xml" to the requested display name.
+            return "application/octet-stream";
+        }
+        if (lower.endsWith(".xml")) {
             return "application/xml";
         }
         return "application/octet-stream";

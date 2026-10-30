@@ -29,6 +29,7 @@ class TranslateRequest(BaseModel):
     mode: str = "translate"  # "translate" (日文→中文) 或 "optimize" (清理中文)
     actors: Optional[List[str]] = None
     number: Optional[str] = None
+    force: bool = False  # 使用者在 Lightbox 明確按下翻譯時，允許漢字-only 標題
 
 
 class BatchTranslateRequest(BaseModel):
@@ -92,7 +93,7 @@ async def translate_title(request: TranslateRequest) -> dict:
         return {"success": False, "error": "翻譯功能未啟用"}
 
     # === 新增：日文檢測，只對 translate 模式生效 ===
-    if request.mode == "translate" and not has_japanese(request.text):
+    if request.mode == "translate" and not request.force and not has_japanese(request.text):
         return {
             "skipped": True,
             "success": True,  # 新增：API 成功執行跳過邏輯

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from core.database import Video
 from core.gallery_scanner import VideoScanner
+from core.path_utils import to_file_uri
 from web.routers import scanner as scanner_router
 
 
@@ -52,6 +53,11 @@ def test_missing_check_recovers_number_from_existing_cjk_filename(
 
     monkeypatch.setattr(scanner_router, "get_db_path", lambda: db_path)
     monkeypatch.setattr(scanner_router, "VideoRepository", FakeRepo)
+    monkeypatch.setattr(
+        scanner_router,
+        "load_config",
+        lambda: {"gallery": {"path_mappings": {}}},
+    )
 
     result = scanner_router.check_missing()
 
@@ -73,3 +79,45 @@ def test_missing_results_expand_maintenance_for_visibility():
     ).read_text(encoding="utf-8")
 
     assert "this.maintenanceExpanded = true;" in batch
+
+
+def test_missing_check_reports_nfo_after_a_failed_enrich_attempt(
+    tmp_path,
+    monkeypatch,
+):
+    video_file = tmp_path / "ABC-125.mp4"
+    video_file.write_bytes(b"video")
+    cover_file = tmp_path / "ABC-125.jpg"
+    cover_file.write_bytes(b"cover")
+    row = Video(
+        path=to_file_uri(str(video_file)),
+        number="ABC-125",
+        title="Title",
+        nfo_mtime=0,
+        cover_path=to_file_uri(str(cover_file)),
+        scrape_attempted_at=123,
+    )
+
+    class FakeRepo:
+        def __init__(self, _path):
+            pass
+
+        def get_all(self):
+            return [row]
+
+    db_path = tmp_path / "openaver.db"
+    db_path.touch()
+    monkeypatch.setattr(scanner_router, "get_db_path", lambda: db_path)
+    monkeypatch.setattr(scanner_router, "VideoRepository", FakeRepo)
+    monkeypatch.setattr(
+        scanner_router,
+        "load_config",
+        lambda: {"gallery": {"path_mappings": {}}},
+    )
+
+    result = scanner_router.check_missing()
+
+    assert result["success"] is True
+    assert result["data"]["missing_nfo"] == 1
+    assert result["data"]["missing_both"] == 0
+    assert result["data"]["items"][0]["category"] == "nfo"

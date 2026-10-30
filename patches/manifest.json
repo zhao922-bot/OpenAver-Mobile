@@ -40,7 +40,9 @@
       "files": [
         "core/android_storage.py",
         "core/atomic_write.py",
+        "core/database/video.py",
         "core/enricher.py",
+        "core/gallery_generator.py",
         "core/gallery_scanner.py",
         "core/nfo_utils.py",
         "core/nfo_updater.py",
@@ -57,7 +59,8 @@
         "web/routers/capabilities.py",
         "web/routers/scanner.py",
         "web/routers/scraper.py",
-        "web/routers/showcase.py"
+        "web/routers/showcase.py",
+        "web/routers/translate.py"
       ]
     },
     {

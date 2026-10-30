@@ -490,6 +490,7 @@ def update_videos_generator(
         'cancelled': False,
         'backed_up': 0,
         'failed_items': [],
+        'updated_paths': [],
     }
 
     for i, path in enumerate(paths, 1):
@@ -583,6 +584,7 @@ def update_videos_generator(
         try:
             updated, msg = update_nfo_file(nfo_path, metadata, info)
             if updated:
+                stats['updated_paths'].append(path)
                 yield {
                     'type': 'log',
                     'level': 'info',

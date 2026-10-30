@@ -87,6 +87,7 @@ def test_batch_tag_source_update_replaces_tags_and_nfo(
 
     assert events[-1]["type"] == "done"
     assert events[-1]["summary"]["success"] == 1
+    assert events[-1]["summary"]["changed_numbers"] == ["ABC-123"]
     assert calls["tags_path"] == video.path
     assert calls["tags"] == ["痴女", "巨乳", "中文字幕"]
     assert calls["nfo_mtime"] > 0

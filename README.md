@@ -13,17 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r28-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r29-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r28-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r29-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r28`（versionCode `17044`）
+- 版本：`0.17.18-r29`（versionCode `17045`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：`B1CFA592777C33C79A64274E401BE5DB8A248E5BC186CE1DC2689A690A4325D6`
+- SHA-256：`签名构建后更新`
 
 ## 安装
 
@@ -153,6 +153,16 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r28：合并“统一文件名格式”和“统一文件夹格式”为一个统一命名流程
 - r28：可选择元数据来源，以该来源的标题决定番号后面的视频名和影片文件夹名；
     预览会同时展示视频、侧车和文件夹变更，并支持整批失败回滚
+- r29：标签差异预览默认只勾选确实有变化的影片，可逐部取消或分页查看；
+    NFO 批量补齐同样改为显式选择，不再从预览误扩大到全部影片
+- r29：生成网页时只重扫 DB 缺封面、封面路径失效或基础资料不完整的影片；
+    若 NFO 未变，重新扫描不会用旧 NFO 覆盖数据库中的新标签和影片信息
+- r29：静态网页在 Android WebView 中统一通过图片 API 读取本地封面，
+    并把用户标签一并纳入详情和灯箱显示
+- r29：所有非空标题都可使用手动 AI 翻译；没有 NFO 时会自动创建 NFO，并把译文与原文写入 NFO 和片库
+- r29：生成网页后会提示仍缺少 NFO 的影片；SAF 写入使用不会追加 `.xml` 的文件类型，
+    并会自动复用旧版生成的 `.nfo.xml` 文件，避免重复创建
+- r29：修复女优浏览模式搜索框左侧模式按钮遮挡提示文字的问题
 
 ## 限制
 

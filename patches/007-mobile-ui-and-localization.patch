@@ -155,7 +155,13 @@
      "page_title": "Scanner",
      "toast": {
        "folder_already_added": "This folder is already in the list",
-@@ -829,6 +938,8 @@
+@@ -824,11 +933,14 @@
+       "no_output_count": "{count} without output folder set",
+       "done_with_warnings": "Completed {count}, but {parts}; see log for details",
+       "generate_success": "Generated list of {count} videos",
++      "missing_nfo_warning": "{count} videos have no NFO. Title translation will create one automatically; you can also complete them from Batch maintenance first.",
+       "long_paths_warning": "This scan found {count} paths over 260 characters that may be unreadable; see debug.log for the full list",
+       "no_nfo_update_needed": "No videos need updating",
        "nfo_update_done": "Update complete! Regenerate the list to refresh",
        "no_jellyfin_update_needed": "No videos need updating",
        "jellyfin_update_done": "Update complete!",
@@ -164,7 +170,7 @@
        "path_copied": "Copied: {path}",
        "browse_dir_fallback": "Your browser can’t read the path of dropped files, so the folder picker has been opened for you"
      },
-@@ -868,13 +979,79 @@
+@@ -868,13 +980,84 @@
        "clear_display_title": "Clear display (restored on reload)",
        "clear_all_title": "Clear all (including history)"
      },
@@ -223,6 +229,7 @@
 +      "tag_source_preview_body": "Compared tags from \"{source}\" for {count} videos. No database or NFO files were written.",
 +      "tag_source_preview_changed_label": "Tag changes",
 +      "tag_source_preview_changed_value": "{count} videos",
++      "tag_source_selected_label": "Selected to update",
 +      "tag_source_preview_added": "Added: {tags}",
 +      "tag_source_preview_removed": "Removed: {tags}",
 +      "tag_source_preview_more": "{count} more changed videos not shown",
@@ -231,6 +238,10 @@
 +      "tag_source_preview_close": "Close",
 +      "tag_source_backup_label": "Back up NFO before applying",
 +      "tag_source_backup_hint": "Each NFO gets an .openaver-backup beside it. A video is skipped if its backup fails.",
++      "selection_all": "Select all",
++      "selection_clear": "Clear selection",
++      "selection_count": "Selected {selected}/{total}",
++      "preview_page": "Page {current}/{total}",
 +      "nfo_confirm_title": "Confirm batch NFO completion",
 +      "nfo_confirm_scope_label": "Scope",
 +      "nfo_confirm_write_label": "Write target",
@@ -244,7 +255,15 @@
        "jellyfin_prefix": "Jellyfin cover format missing:",
        "jellyfin_suffix": " videos",
        "jellyfin_update_title": "Generate Jellyfin poster + fanart",
-@@ -1410,10 +1587,90 @@
+@@ -1291,6 +1474,7 @@
+       "tag_nfo_write_blocked": "Tag saved, but there's no permission to write the NFO",
+       "translate_tooltip": "Translate title",
+       "translate_done": "Title translated",
++      "translate_done_nfo_created": "Title translated and a new NFO was created",
+       "translate_undo": "Undo",
+       "translate_skipped": "Nothing in the title needs translating",
+       "translate_undone": "Title restored",
+@@ -1410,10 +1594,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -335,7 +354,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1845,6 +2102,12 @@
+@@ -1845,6 +2109,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -348,7 +367,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2123,11 @@
+@@ -1860,7 +2130,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -361,7 +380,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2145,15 @@
+@@ -1878,11 +2152,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -525,7 +544,13 @@
      "page_title": "リスト生成",
      "toast": {
        "folder_already_added": "このフォルダはすでにリストにあります",
-@@ -829,6 +938,8 @@
+@@ -824,11 +933,14 @@
+       "no_output_count": "{count} 件が出力フォルダ未設定",
+       "done_with_warnings": "{count} 本完了、ただし {parts}。詳細はログを参照",
+       "generate_success": "{count} 本の動画リストを生成しました",
++      "missing_nfo_warning": "{count} 本に NFO がありません。タイトル翻訳時に自動作成されますが、先に一括メンテナンスで補完することもできます。",
+       "long_paths_warning": "今回のスキャンで 260 文字を超えるパスが {count} 件見つかりました。読み取れない可能性があります。詳細は debug.log を参照",
+       "no_nfo_update_needed": "更新が必要な動画はありません",
        "nfo_update_done": "補完が完了しました。リストを再生成して更新してください",
        "no_jellyfin_update_needed": "補完が必要な動画はありません",
        "jellyfin_update_done": "補完が完了しました！",
@@ -534,7 +559,7 @@
        "path_copied": "コピーしました: {path}",
        "browse_dir_fallback": "ブラウザではドロップしたファイルのパスを直接読み取れないため、フォルダ選択画面を開きました"
      },
-@@ -868,13 +979,79 @@
+@@ -868,13 +980,84 @@
        "clear_display_title": "画面をクリア（リロード後に復元）",
        "clear_all_title": "すべてクリア（履歴含む）"
      },
@@ -593,6 +618,7 @@
 +      "tag_source_preview_body": "「{source}」と {count} 本の動画タグを比較しました。プレビュー中はデータベースや NFO に書き込んでいません。",
 +      "tag_source_preview_changed_label": "タグ変更",
 +      "tag_source_preview_changed_value": "{count} 本",
++      "tag_source_selected_label": "今回の更新対象",
 +      "tag_source_preview_added": "追加：{tags}",
 +      "tag_source_preview_removed": "削除：{tags}",
 +      "tag_source_preview_more": "ほかに {count} 本の変更があります",
@@ -601,6 +627,10 @@
 +      "tag_source_preview_close": "閉じる",
 +      "tag_source_backup_label": "実行前に NFO をバックアップ",
 +      "tag_source_backup_hint": "各 NFO と同じ場所に .openaver-backup を作成します。バックアップに失敗した動画は書き込みません。",
++      "selection_all": "すべて選択",
++      "selection_clear": "選択を解除",
++      "selection_count": "{selected}/{total} 件選択",
++      "preview_page": "{current}/{total} ページ",
 +      "nfo_confirm_title": "NFO 一括補完を確認",
 +      "nfo_confirm_scope_label": "対象範囲",
 +      "nfo_confirm_write_label": "書き込み先",
@@ -614,7 +644,15 @@
        "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
        "jellyfin_suffix": "本",
        "jellyfin_update_title": "Jellyfin poster + fanart を補完",
-@@ -1410,10 +1587,90 @@
+@@ -1291,6 +1474,7 @@
+       "tag_nfo_write_blocked": "タグは保存されましたが、NFO への書き込み権限がありません",
+       "translate_tooltip": "タイトルを翻訳",
+       "translate_done": "タイトルを翻訳しました",
++      "translate_done_nfo_created": "タイトルを翻訳し、NFO を新規作成しました",
+       "translate_undo": "元に戻す",
+       "translate_skipped": "翻訳が必要な内容はありません",
+       "translate_undone": "タイトルを元に戻しました",
+@@ -1410,10 +1594,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -705,7 +743,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1845,6 +2102,12 @@
+@@ -1845,6 +2109,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -718,7 +756,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2123,11 @@
+@@ -1860,7 +2130,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -731,7 +769,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2145,15 @@
+@@ -1878,11 +2152,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -895,7 +933,13 @@
      "page_title": "列表生成",
      "toast": {
        "folder_already_added": "此文件夹已在列表中",
-@@ -829,6 +938,8 @@
+@@ -824,11 +933,14 @@
+       "no_output_count": "{count} 个未设输出文件夹",
+       "done_with_warnings": "完成 {count} 部，但 {parts}，详细见日志",
+       "generate_success": "成功生成 {count} 部视频列表",
++      "missing_nfo_warning": "有 {count} 部影片没有 NFO。翻译标题时会自动创建；也可以先在批量维护中补全。",
+       "long_paths_warning": "本次扫描发现 {count} 个路径超过 260 字符，可能无法读取，详细清单见 debug.log",
+       "no_nfo_update_needed": "没有需要更新的视频",
        "nfo_update_done": "补全完成！请重新生成列表以更新",
        "no_jellyfin_update_needed": "没有需要补齐的视频",
        "jellyfin_update_done": "补齐完成！",
@@ -904,7 +948,7 @@
        "path_copied": "已复制: {path}",
        "browse_dir_fallback": "浏览器无法直接读取拖放文件的路径，已为您打开文件夹选择器"
      },
-@@ -868,13 +979,79 @@
+@@ -868,13 +980,84 @@
        "clear_display_title": "清除画面（刷新后恢复）",
        "clear_all_title": "清除全部（包含历史）"
      },
@@ -963,6 +1007,7 @@
 +      "tag_source_preview_body": "已比较「{source}」与 {count} 部影片的标签；预览过程没有写入数据库或 NFO。",
 +      "tag_source_preview_changed_label": "标签有变化",
 +      "tag_source_preview_changed_value": "{count} 部",
++      "tag_source_selected_label": "本次将更新",
 +      "tag_source_preview_added": "新增：{tags}",
 +      "tag_source_preview_removed": "移除：{tags}",
 +      "tag_source_preview_more": "另有 {count} 部有变化未展开",
@@ -971,6 +1016,10 @@
 +      "tag_source_preview_close": "关闭",
 +      "tag_source_backup_label": "执行前备份 NFO",
 +      "tag_source_backup_hint": "每份 NFO 会在同目录生成 .openaver-backup；备份失败时不会写入该影片。",
++      "selection_all": "全选",
++      "selection_clear": "清空选择",
++      "selection_count": "已选 {selected}/{total}",
++      "preview_page": "第 {current}/{total} 页",
 +      "nfo_confirm_title": "确认批量补齐 NFO",
 +      "nfo_confirm_scope_label": "处理范围",
 +      "nfo_confirm_write_label": "写入位置",
@@ -984,7 +1033,15 @@
        "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
-@@ -1410,10 +1587,90 @@
+@@ -1291,6 +1474,7 @@
+       "tag_nfo_write_blocked": "标签已保存，但没有权限写入 NFO",
+       "translate_tooltip": "翻译标题",
+       "translate_done": "已翻译标题",
++      "translate_done_nfo_created": "已翻译标题并自动创建 NFO",
+       "translate_undo": "复原",
+       "translate_skipped": "标题没有需要翻译的内容",
+       "translate_undone": "已复原标题",
+@@ -1410,10 +1594,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -1075,7 +1132,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1845,6 +2102,12 @@
+@@ -1845,6 +2109,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -1088,7 +1145,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2123,11 @@
+@@ -1860,7 +2130,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -1101,7 +1158,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2145,15 @@
+@@ -1878,11 +2152,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -1265,7 +1322,13 @@
      "page_title": "列表生成",
      "toast": {
        "folder_already_added": "此資料夾已在列表中",
-@@ -829,6 +938,8 @@
+@@ -824,11 +933,14 @@
+       "no_output_count": "{count} 個未設輸出夾",
+       "done_with_warnings": "完成 {count} 部，但 {parts}，詳細見日誌",
+       "generate_success": "成功產生 {count} 部影片列表",
++      "missing_nfo_warning": "有 {count} 部影片沒有 NFO。翻譯標題時會自動建立；也可以先在批次維護中補齊。",
+       "long_paths_warning": "本次掃描發現 {count} 個路徑超過 260 字元，可能無法讀取，詳細清單見 debug.log",
+       "no_nfo_update_needed": "沒有需要更新的影片",
        "nfo_update_done": "補全完成！請重新產生列表以更新",
        "no_jellyfin_update_needed": "沒有需要補齊的影片",
        "jellyfin_update_done": "補齊完成！",
@@ -1274,7 +1337,7 @@
        "path_copied": "已複製: {path}",
        "browse_dir_fallback": "瀏覽器無法直接讀取拖放檔案的路徑，已為您開啟資料夾選擇器"
      },
-@@ -868,13 +979,79 @@
+@@ -868,13 +980,84 @@
        "clear_display_title": "清除畫面（重整後恢復）",
        "clear_all_title": "清除全部（包含歷史）"
      },
@@ -1333,6 +1396,7 @@
 +      "tag_source_preview_body": "已比較「{source}」與 {count} 部影片的標籤；預覽過程沒有寫入資料庫或 NFO。",
 +      "tag_source_preview_changed_label": "標籤有變化",
 +      "tag_source_preview_changed_value": "{count} 部",
++      "tag_source_selected_label": "本次將更新",
 +      "tag_source_preview_added": "新增：{tags}",
 +      "tag_source_preview_removed": "移除：{tags}",
 +      "tag_source_preview_more": "另有 {count} 部有變化未展開",
@@ -1341,6 +1405,10 @@
 +      "tag_source_preview_close": "關閉",
 +      "tag_source_backup_label": "執行前備份 NFO",
 +      "tag_source_backup_hint": "每份 NFO 會在同目錄產生 .openaver-backup；備份失敗時不會寫入該影片。",
++      "selection_all": "全選",
++      "selection_clear": "清除選取",
++      "selection_count": "已選 {selected}/{total}",
++      "preview_page": "第 {current}/{total} 頁",
 +      "nfo_confirm_title": "確認批次補齊 NFO",
 +      "nfo_confirm_scope_label": "處理範圍",
 +      "nfo_confirm_write_label": "寫入位置",
@@ -1354,7 +1422,15 @@
        "jellyfin_prefix": "外部媒體管理器封面缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "補齊 poster + fanart",
-@@ -1410,10 +1587,90 @@
+@@ -1291,6 +1474,7 @@
+       "tag_nfo_write_blocked": "標籤已存，但沒有權限寫入 NFO",
+       "translate_tooltip": "翻譯標題",
+       "translate_done": "已翻譯標題",
++      "translate_done_nfo_created": "已翻譯標題並自動建立 NFO",
+       "translate_undo": "復原",
+       "translate_skipped": "標題沒有需要翻譯的內容",
+       "translate_undone": "已復原標題",
+@@ -1410,10 +1594,90 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -1445,7 +1521,7 @@
      "hero": {
        "this_computer_unavailable": "暫時讀不到這台電腦的更新資訊，請重新開啟說明頁再試",
        "copy_curl": "複製指令",
-@@ -1850,6 +2107,12 @@
+@@ -1850,6 +2114,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -1458,7 +1534,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1865,7 +2128,11 @@
+@@ -1865,7 +2135,11 @@
        "costar": "與她同片"
      },
      "donut": {
@@ -1471,7 +1547,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2150,15 @@
+@@ -1883,11 +2157,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -1505,7 +1581,7 @@
      {
 --- /dev/null
 +++ b/web/static/css/components/mobile-ui.css
-@@ -0,0 +1,696 @@
+@@ -0,0 +1,699 @@
 +/* r19: shared mobile state, touch, hierarchy, and density rules. */
 +
 +:root {
@@ -2120,7 +2196,10 @@
 +  /* Showcase has two mode icons inside the left slot. Reserve a real gap
 +     between the second icon and the placeholder on Android WebView. */
 +  [data-is-android="true"] .showcase-toolbar .spotlight-search--mode-toggle {
-+    --spotlight-left-slot: 6rem;
++    /* Both mode buttons use the 48px Android touch target. With the capsule
++       inset and gap the controls occupy about 110 CSS px, so 6rem still let
++       the second button cover the actress placeholder. */
++    --spotlight-left-slot: 7.5rem;
 +  }
 +
 +  [data-is-android="true"] .spotlight-search input {
@@ -3380,7 +3459,7 @@
      border-radius: var(--fluent-radius-md);   /* 互動小元件 4px（§1）*/
 --- a/web/static/css/pages/scanner.css
 +++ b/web/static/css/pages/scanner.css
-@@ -365,3 +365,1027 @@
+@@ -365,3 +365,1081 @@
      border-radius: var(--fluent-radius-md);
      color: var(--text-default, currentColor);
  }
@@ -4098,6 +4177,58 @@
 +    font-size: 0.78rem;
 +}
 +
++.batch-preview-selection,
++.batch-preview-pager {
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    gap: 0.65rem;
++    margin: 0.75rem 0 0.45rem;
++    color: var(--text-secondary);
++    font-size: 0.74rem;
++}
++
++.batch-preview-pager {
++    justify-content: center;
++    margin-top: 0.35rem;
++}
++
++.batch-preview-pager span {
++    min-width: 5.5rem;
++    text-align: center;
++}
++
++.batch-preview-option {
++    flex-direction: row;
++    align-items: flex-start;
++    gap: 0.55rem;
++    cursor: pointer;
++}
++
++.batch-preview-option > input {
++    flex: 0 0 auto;
++    margin-top: 0.1rem;
++}
++
++.batch-preview-option > span {
++    display: flex;
++    flex: 1 1 auto;
++    min-width: 0;
++    flex-direction: column;
++    gap: 0.2rem;
++}
++
++.batch-preview-option strong {
++    color: var(--text-primary);
++    font-size: 0.78rem;
++}
++
++.batch-preview-option small {
++    color: var(--text-secondary);
++    font-size: 0.7rem;
++    line-height: 1.45;
++}
++
 +.tag-preview-diff {
 +    display: flex;
 +    flex-direction: column;
@@ -4199,6 +4330,8 @@
 +    display: flex;
 +    flex-direction: column;
 +    gap: 0.25rem;
++    max-height: 5.5rem;
++    overflow-y: auto;
 +    padding-left: 0.7rem;
 +}
 +
@@ -5208,10 +5341,12 @@
  
          // ===== T7b: Done Actions =====
          outputPath: '',        // 輸出路徑（供複製）
-@@ -69,6 +84,21 @@
+@@ -69,6 +84,23 @@
          nfoUpdatePaths: [],
          nfoUpdateItems: [],
          nfoUpdateVisible: false,
++        nfoSelectedPaths: [],
++        nfoPreviewPage: 1,
 +
 +        // ===== r16: Batch tag source update =====
 +        tagSourceUpdateSource: 'auto',
@@ -5220,17 +5355,17 @@
 +        tagSourcePreviewSourceLabel: '',
 +        tagSourcePreviewData: null,
 +        tagSourcePreviewNumbers: [],
++        tagSourcePreviewPage: 1,
 +        tagSourcePreviewOnly: false,
 +        tagSourceBackupEnabled: true,
 +
 +        // ===== r18: NFO confirmation =====
 +        nfoUpdateConfirmModalOpen: false,
-+        nfoUpdateRetryPaths: [],
 +        nfoUpdateBackupEnabled: true,
  
          // ===== T6d: Jellyfin Image Update =====
          jellyfinImageCount: 0,
-@@ -102,8 +132,82 @@
+@@ -102,8 +134,126 @@
              return (this.progressCurrent / this.progressTotal) * 100;
          },
  
@@ -5301,8 +5436,52 @@
 +            return this.tagSourcePreviewData?.changed || 0;
 +        },
 +
++        get tagSourcePreviewPageSize() {
++            return 6;
++        },
++
++        get tagSourcePreviewPageCount() {
++            return Math.max(
++                1,
++                Math.ceil(this.tagSourcePreviewChangedItems.length / this.tagSourcePreviewPageSize)
++            );
++        },
++
++        get tagSourcePreviewPageItems() {
++            const start = (this.tagSourcePreviewPage - 1) * this.tagSourcePreviewPageSize;
++            return this.tagSourcePreviewChangedItems.slice(start, start + this.tagSourcePreviewPageSize);
++        },
++
++        get tagSourceSelectedChangedCount() {
++            const changed = new Set(this.tagSourcePreviewChangedItems.map((item) => item.number));
++            return [...new Set(this.tagSourcePreviewNumbers)].filter((number) => changed.has(number)).length;
++        },
++
 +        get tagSourceConfirmButtonDisabled() {
-+            return this.isGenerating || this.tagSourcePreviewOnly || this.tagSourcePreviewChangedCount === 0;
++            return this.isGenerating
++                || this.tagSourcePreviewOnly
++                || this.tagSourceSelectedChangedCount === 0;
++        },
++
++        get nfoUpdatePageSize() {
++            return 6;
++        },
++
++        get nfoUpdatePageCount() {
++            return Math.max(1, Math.ceil(this.nfoUpdateItems.length / this.nfoUpdatePageSize));
++        },
++
++        get nfoUpdatePageItems() {
++            const start = (this.nfoPreviewPage - 1) * this.nfoUpdatePageSize;
++            return this.nfoUpdateItems.slice(start, start + this.nfoUpdatePageSize);
++        },
++
++        get nfoSelectedCount() {
++            return new Set(this.nfoSelectedPaths).size;
++        },
++
++        get nfoUpdateConfirmDisabled() {
++            return this.isGenerating || this.nfoSelectedCount === 0;
 +        },
 +
          get isGenerating() {
@@ -5313,7 +5492,7 @@
                  || this.state === 'jellyfinUpdating' || this.state === 'enriching';
          },
  
-@@ -119,6 +223,68 @@
+@@ -119,6 +269,68 @@
  
          get doneActionsVisible() {
              return this.state === 'done' && this.outputPath !== '';
@@ -5382,7 +5561,7 @@
          },
  
          get generateButtonText() {
-@@ -219,6 +385,7 @@
+@@ -219,6 +431,7 @@
                          if (this.eventSource) { this.eventSource.close(); this.eventSource = null; }
                          window.Alpine?.store?.('toast')?.hide?.();   // 131b-T3：cleanup 不得拋錯（拋了會跳過後面所有 teardown）
                          clearTimeout(this.logTimer);
@@ -5390,7 +5569,15 @@
                          // T2(40c): abort jellyfin check fetch
                          if (this._jellyfinCheckController) {
                              this._jellyfinCheckController.abort();
-@@ -305,6 +472,13 @@
+@@ -246,6 +459,7 @@
+             // 初始載入
+             await this.loadConfig();
+             this.loadStats();
++            this.checkNfoUpdates();
+ 
+             // T7b: 恢復日誌（logOutput 為 scanner.html 靜態 x-ref 元素，
+             // init 時早已 mount，直接同步還原、無需等 $nextTick）
+@@ -305,6 +519,13 @@
                  if (result.success) {
                      this.config = result.data;
                      this.directories = this.config.gallery?.directories || [];
@@ -5404,7 +5591,44 @@
                      // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                      this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
  
-@@ -636,6 +810,9 @@
+@@ -377,6 +598,25 @@
+             }
+         },
+ 
++        async checkNfoUpdates() {
++            try {
++                const resp = await fetch('/api/gallery/update-check');
++                const result = await resp.json();
++                if (!result.success || !result.data) return;
++                const count = result.data.need_update || 0;
++                this.nfoNeedUpdateCount = count;
++                this.nfoUpdatePaths = Array.isArray(result.data.paths) ? result.data.paths : [];
++                this.nfoUpdateItems = Array.isArray(result.data.items) ? result.data.items : [];
++                this.nfoUpdateVisible = count > 0;
++                this.nfoPreviewPage = 1;
++                if (count === 0) {
++                    this.nfoSelectedPaths = [];
++                }
++            } catch (e) {
++                console.error('檢查 NFO 待補欄位失敗:', e);
++            }
++        },
++
+         async clearCache() {
+             this.clearCacheLoading = true;
+             try {
+@@ -387,6 +627,10 @@
+                     this.statTotal = 0;
+                     this.statsVisible = false;
+                     this.nfoUpdateVisible = false;
++                    this.nfoNeedUpdateCount = 0;
++                    this.nfoUpdatePaths = [];
++                    this.nfoUpdateItems = [];
++                    this.nfoSelectedPaths = [];
+                     this.jellyfinImageVisible = false;
+                     this.jellyfinCheckState = 'idle';
+                     this.clearCacheModalOpen = false;
+@@ -636,6 +880,9 @@
          addLog(level, message) {
              // T7d: 加入結構化陣列
              this.logEntries.push({ level, message, timestamp: Date.now() });
@@ -5414,7 +5638,7 @@
  
              const cls = level === 'error' ? 'log-error' :
                          level === 'warn' ? 'log-warn' : 'log-info';
-@@ -713,10 +890,22 @@
+@@ -713,10 +960,22 @@
              localStorage.removeItem('avlist_last_status');
              this.logHtml = '';
              this.logEntries = [];
@@ -5437,7 +5661,7 @@
          clearLogsDisplay() {
              this.logHtml = '';
              this.logEntries = [];
-@@ -768,6 +957,136 @@
+@@ -768,6 +1027,136 @@
              if (confirm(window.t('scanner.toast.confirm_clear_logs'))) {
                  this.clearLogs();
                  this.showToast(window.t('scanner.toast.logs_cleared'), 'success');
@@ -5574,7 +5798,7 @@
              }
          },
  
-@@ -792,9 +1111,7 @@
+@@ -792,9 +1181,7 @@
  
              // 重置狀態
              this.state = 'generating';
@@ -5585,7 +5809,7 @@
              this.outputPath = '';
              this.nfoUpdateVisible = false;
              this.clearLogs();
-@@ -812,16 +1129,21 @@
+@@ -812,16 +1199,21 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -5608,7 +5832,23 @@
  
                          localStorage.setItem('avlist_generating', 'false');
                          localStorage.setItem('avlist_last_status', window.t('scanner.stats.status_done'));
-@@ -890,24 +1212,24 @@
+@@ -868,6 +1260,15 @@
+                             this.showToast(window.t('scanner.toast.generate_success', { count: data.video_count }), 'success');
+                         }
+ 
++                        const missingNfo = Number(data.missing_nfo) || 0;
++                        if (missingNfo > 0) {
++                            this.showToast(
++                                window.t('scanner.toast.missing_nfo_warning', { count: missingNfo }),
++                                'warn',
++                                8000
++                            );
++                        }
++
+                         // a5: Windows 長路徑警告
+                         if (data.long_paths && data.long_paths.length > 0) {
+                             this.showToast(
+@@ -890,24 +1291,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -5637,29 +5877,40 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] generate error:', e);
                  this.showToast(window.t('scanner.toast.generate_error'), 'error', 4000);
-@@ -915,26 +1237,51 @@
+@@ -915,26 +1316,63 @@
          },
  
          // ===== T7b: NFO Update Flow =====
 -        async runNfoUpdate() {
 +        openNfoUpdateConfirm(paths = []) {
 +            if (this.isGenerating) return;
-+            const count = paths.length > 0 ? paths.length : this.nfoNeedUpdateCount;
-+            if (count === 0) {
++            const candidates = paths.length > 0
++                ? paths.slice()
++                : (this.nfoUpdatePaths.length > 0 ? this.nfoUpdatePaths.slice() : []);
++            if (candidates.length === 0 && this.nfoNeedUpdateCount > 0) {
++                this.checkNfoUpdates().then(() => {
++                    if (this.nfoUpdatePaths.length > 0) this.openNfoUpdateConfirm(paths);
++                    else this.showToast(window.t('scanner.toast.no_nfo_update_needed'), 'info');
++                });
++                return;
++            }
++            if (candidates.length === 0) {
 +                this.showToast(window.t('scanner.toast.no_nfo_update_needed'), 'info');
 +                return;
 +            }
-+            this.nfoUpdateRetryPaths = paths.slice();
++            this.nfoSelectedPaths = candidates.slice();
++            this.nfoPreviewPage = 1;
 +            this.nfoUpdateConfirmModalOpen = true;
 +        },
 +
 +        cancelNfoUpdate() {
 +            this.nfoUpdateConfirmModalOpen = false;
-+            this.nfoUpdateRetryPaths = [];
++            this.nfoSelectedPaths = [];
 +        },
 +
 +        confirmNfoUpdate() {
-+            const paths = this.nfoUpdateRetryPaths.slice();
++            if (this.nfoUpdateConfirmDisabled) return;
++            const paths = this.nfoSelectedPaths.slice();
 +            this.nfoUpdateConfirmModalOpen = false;
 +            this.runNfoUpdate(paths);
 +        },
@@ -5669,7 +5920,8 @@
              if (this.isGenerating) return;
  
 -            if (this.nfoNeedUpdateCount === 0) {
-+            const expectedCount = paths.length > 0 ? paths.length : this.nfoNeedUpdateCount;
++            const selectedPaths = paths.length > 0 ? paths.slice() : this.nfoSelectedPaths.slice();
++            const expectedCount = selectedPaths.length;
 +            if (expectedCount === 0) {
                  this.showToast(window.t('scanner.toast.no_nfo_update_needed'), 'info');
                  return;
@@ -5690,12 +5942,12 @@
 +                const params = new URLSearchParams({
 +                    backup: this.nfoUpdateBackupEnabled ? 'true' : 'false',
 +                });
-+                for (const path of paths) params.append('path', path);
++                for (const path of selectedPaths) params.append('path', path);
 +                this.eventSource = new EventSource(`/api/gallery/update?${params.toString()}`);
  
                  this.eventSource.onmessage = (event) => {
                      const data = JSON.parse(event.data);
-@@ -943,55 +1290,249 @@
+@@ -943,55 +1381,288 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -5732,15 +5984,16 @@
                          // 隱藏 NFO 更新按鈕（已完成）
 -                        this.nfoNeedUpdateCount = 0;
 -                        this.nfoUpdateVisible = false;
-+                        if (paths.length === 0) {
-+                            this.nfoNeedUpdateCount = 0;
-+                            this.nfoUpdateVisible = false;
-+                        } else {
-+                            this.nfoNeedUpdateCount = Math.max(
-+                                0,
-+                                this.nfoNeedUpdateCount - (data.summary?.success || 0)
-+                            );
-+                        }
++                        this.nfoNeedUpdateCount = Math.max(
++                            0,
++                            this.nfoNeedUpdateCount - (data.summary?.success || 0)
++                        );
++                        const completed = new Set(selectedPaths);
++                        this.nfoUpdatePaths = this.nfoUpdatePaths.filter((path) => !completed.has(path));
++                        this.nfoUpdateItems = this.nfoUpdateItems.filter((item) => !completed.has(item.path));
++                        this.nfoSelectedPaths = [];
++                        this.nfoUpdateVisible = this.nfoNeedUpdateCount > 0;
++                        this.checkNfoUpdates();
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -5772,6 +6025,21 @@
              }
          },
  
++        setNfoPreviewPage(delta) {
++            this.nfoPreviewPage = Math.min(
++                this.nfoUpdatePageCount,
++                Math.max(1, this.nfoPreviewPage + delta)
++            );
++        },
++
++        toggleNfoSelection() {
++            if (this.nfoSelectedCount === this.nfoUpdatePaths.length) {
++                this.nfoSelectedPaths = [];
++            } else {
++                this.nfoSelectedPaths = this.nfoUpdatePaths.slice();
++            }
++        },
++
 +        // ===== r16: Batch tag source update =====
 +        openTagSourceUpdateConfirm() {
 +            if (this.tagSourceUpdateButtonDisabled) return;
@@ -5786,6 +6054,22 @@
 +        cancelTagSourceUpdate() {
 +            this.tagSourceConfirmModalOpen = false;
 +            this.tagSourcePreviewOnly = false;
++        },
++
++        setTagSourcePreviewPage(delta) {
++            this.tagSourcePreviewPage = Math.min(
++                this.tagSourcePreviewPageCount,
++                Math.max(1, this.tagSourcePreviewPage + delta)
++            );
++        },
++
++        toggleTagSourceSelection() {
++            const changed = [...new Set(this.tagSourcePreviewChangedItems.map((item) => item.number))];
++            if (this.tagSourceSelectedChangedCount === changed.length) {
++                this.tagSourcePreviewNumbers = [];
++            } else {
++                this.tagSourcePreviewNumbers = changed;
++            }
 +        },
 +
 +        confirmTagSourceUpdate() {
@@ -5837,6 +6121,13 @@
 +                    this.eventSource = null;
 +                    this.progressCurrent = this.progressTotal;
 +                    this.tagSourcePreviewData = data.summary || null;
++                    const changedNumbers = Array.isArray(data.summary?.changed_numbers)
++                        ? data.summary.changed_numbers
++                        : (data.summary?.items || [])
++                            .filter((item) => item.status === 'changed')
++                            .map((item) => item.number);
++                    this.tagSourcePreviewNumbers = [...new Set(changedNumbers.filter(Boolean))];
++                    this.tagSourcePreviewPage = 1;
 +                    this._finishTask(
 +                        data.summary?.cancelled ? 'cancelled' : 'done',
 +                        data.message || window.t('scanner.stats.tag_source_preview_done'),
@@ -5954,7 +6245,7 @@
          // ===== T6d: Jellyfin Image Update Flow =====
          async runJellyfinImageUpdate() {
              if (this.isGenerating) return;
-@@ -1002,9 +1543,7 @@
+@@ -1002,9 +1673,7 @@
              }
  
              this.state = 'jellyfinUpdating';
@@ -5965,7 +6256,7 @@
              this.clearLogs();
  
              localStorage.setItem('avlist_generating', 'true');
-@@ -1019,14 +1558,13 @@
+@@ -1019,14 +1688,13 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -5981,7 +6272,7 @@
                          // TASK-111 P2-b 後續（codex delta review）：done 不再必然代表「全數完成」——
                          // 批次跑到一半若把 external_manager 切成 off，後端會在下一部片 break 並送
                          // done(updated=已完成筆數)。這裡若無條件補滿 progressTotal，UI 會顯示 3/3
-@@ -1035,6 +1573,11 @@
+@@ -1035,6 +1703,11 @@
                          this.progressCurrent = (typeof data.updated === 'number')
                              ? data.updated
                              : this.progressTotal;
@@ -5993,7 +6284,7 @@
  
                          localStorage.setItem('avlist_generating', 'false');
                          localStorage.setItem('avlist_last_status', data.message || window.t('scanner.stats.status_done'));
-@@ -1045,7 +1588,13 @@
+@@ -1045,7 +1718,13 @@
                          this.jellyfinItems = [];
                          this.jellyfinCheckState = 'idle';
  
@@ -6008,7 +6299,7 @@
                          if (data.message) {
                              this.addLog('info', data.message);
                          }
-@@ -1053,24 +1602,24 @@
+@@ -1053,24 +1732,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -6037,7 +6328,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] runJellyfinImageUpdate error:', e);
                  this.showToast(window.t('scanner.toast.jellyfin_update_error'), 'error', 4000);
-@@ -1078,6 +1627,21 @@
+@@ -1078,6 +1757,21 @@
          },
  
          // ===== T7b: Utility =====
@@ -6059,6 +6350,13 @@
          copyOutputPath() {
              if (!this.outputPath) return;
  
+@@ -1097,5 +1791,6 @@
+                 }
+             });
+         },
++
+     };
+ }
 --- a/web/static/js/pages/scanner/state-batch.js
 +++ b/web/static/js/pages/scanner/state-batch.js
 @@ -1,3 +1,5 @@
@@ -6067,7 +6365,7 @@
  /** TASK-147b-T3 / CD-147b-5：四項判準——真的補到 NFO／封面／欄位／劇照才算成功。
   * 與 core/enrich_contract.py 的 did_enrich_something() 同一判準；改一邊必須改另一邊。
   *
-@@ -22,9 +24,18 @@
+@@ -22,9 +24,19 @@
          missingEnrichOffset: 0,     // batch offset
          missingEnrichSuccess: 0,
          missingEnrichFailed: 0,
@@ -6083,10 +6381,11 @@
 +        renamePlan: null,
 +        renamePreviewMode: 'combined',
 +        renameSource: 'auto',
++        renamePreviewPage: 1,
  
          // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
          currentCard: null,          // {number, status, source, reason, coverSrc} | null
-@@ -72,6 +83,238 @@
+@@ -72,6 +84,259 @@
                  return '<span class="loading loading-spinner loading-sm"></span> ' + window.t('scanner.stats.missing_enrich_loading');
              }
              return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
@@ -6132,6 +6431,19 @@
 +            return this.renamePrimaryValue > 0
 +                || this.renameSecondaryValue > 0
 +                || this.renameFolderValue > 0;
++        },
++
++        get renamePageSize() {
++            return 5;
++        },
++
++        get renamePageCount() {
++            return Math.max(1, Math.ceil(this.renameReadyItems.length / this.renamePageSize));
++        },
++
++        get renamePageItems() {
++            const start = (this.renamePreviewPage - 1) * this.renamePageSize;
++            return this.renameReadyItems.slice(start, start + this.renamePageSize);
 +        },
 +
 +        get renameSourceLabel() {
@@ -6209,6 +6521,7 @@
 +                            this.eventSource.close();
 +                            this.eventSource = null;
 +                            this.renamePlan = data.plan || null;
++                            this.renamePreviewPage = 1;
 +                            this.progressCurrent = this.progressTotal;
 +                            const cancelled = data.plan?.cancelled;
 +                            this._finishTask(
@@ -6256,6 +6569,13 @@
 +        closeRenamePreview() {
 +            if (this.renameExecuting) return;
 +            this.renamePreviewOpen = false;
++        },
++
++        setRenamePreviewPage(delta) {
++            this.renamePreviewPage = Math.min(
++                this.renamePageCount,
++                Math.max(1, this.renamePreviewPage + delta)
++            );
 +        },
 +
 +        async executeRenamePlan() {
@@ -6325,7 +6645,7 @@
          },
  
          // ===== T10: Missing NFO/Cover Enrich Methods =====
-@@ -88,8 +331,15 @@
+@@ -88,8 +353,15 @@
                      this.missingCoverCount = d.missing_cover || 0;
                      this.missingItems = Array.isArray(d.items) ? d.items : [];
                      this.missingPillVisible = true;
@@ -6341,7 +6661,7 @@
                  }
              } catch (e) {
                  console.error('checkMissing failed:', e);
-@@ -109,14 +359,17 @@
+@@ -109,14 +381,17 @@
              this.missingEnrichOffset = 0;
              this.missingEnrichSuccess = 0;
              this.missingEnrichFailed = 0;
@@ -6362,7 +6682,7 @@
              this.clearLogs();
  
              const controller = new AbortController();
-@@ -146,7 +399,7 @@
+@@ -146,7 +421,7 @@
                          }
                          this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
                          this.flushLogs();
@@ -6371,7 +6691,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          // Save remaining
-@@ -159,7 +412,7 @@
+@@ -159,7 +434,7 @@
                          const errText = await resp.text().catch(() => '');
                          this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
                          this.flushLogs();
@@ -6380,7 +6700,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -200,6 +453,12 @@
+@@ -200,6 +475,12 @@
                                  this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
                                  this.progressTotal = items.length;
                                  this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
@@ -6393,7 +6713,7 @@
                              } else if (event.type === 'result-item') {
                                  // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
                                  // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
-@@ -234,7 +493,18 @@
+@@ -234,7 +515,18 @@
                                      this.missingEnrichSuccess++;
                                  } else {
                                      this.missingEnrichFailed++;
@@ -6412,7 +6732,7 @@
                                  // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
                                  if (event.reason === 'error') {
                                      this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
-@@ -246,7 +516,7 @@
+@@ -246,7 +538,7 @@
                              } else if (event.type === 'error') {
                                  this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
                                  this.flushLogs();
@@ -6421,7 +6741,7 @@
                                  this.currentCard = null;
                                  this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -258,7 +528,7 @@
+@@ -258,7 +550,7 @@
  
                      // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
                      if (!batchDone) {
@@ -6430,7 +6750,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -284,11 +554,19 @@
+@@ -284,11 +576,19 @@
                      if (lastCover) {
                          this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
                      }
@@ -6452,7 +6772,7 @@
                      const summary = this.missingEnrichFailed > 0
                          ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
                          : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
-@@ -312,7 +590,7 @@
+@@ -312,7 +612,7 @@
                  if (e.name === 'AbortError') return;
                  console.error('runMissingEnrich error:', e);
                  this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
@@ -6689,7 +7009,32 @@
  
 --- a/web/static/js/pages/showcase/state-lightbox-translate.js
 +++ b/web/static/js/pages/showcase/state-lightbox-translate.js
-@@ -77,10 +77,17 @@
+@@ -21,14 +21,9 @@
+             return typeof window !== 'undefined' && window.__SHOWCASE_TRANSLATE__?.enabled === true;
+         },
+ 
+-        // 標題行尾圖示：標題含假名且尚無原文（needs_translate 由後端算，前端不寫假名 regex）
++        // 主標題固定提供翻譯入口；有原文時翻譯原文，沒有時翻譯目前標題。
+         lbTrShowOnTitle() {
+-            return this.lbTranslateEnabled && this.currentLightboxVideo?.needs_translate === true;
+-        },
+-
+-        // 原文行尾圖示：已有原文且有 NFO（再翻入口；無 NFO 寫回必回 no_nfo，不給入口）
+-        lbTrShowOnOtitle() {
+-            return this.lbTranslateEnabled && this.currentLightboxVideo?.has_nfo === true && !!this.currentLightboxVideo?.original_title;
++            return this.lbTranslateEnabled && !!this.currentLightboxVideo?.title;
+         },
+ 
+         lbTrIsBusy() {
+@@ -51,6 +46,7 @@
+                         body: JSON.stringify({
+                             text: video.original_title || video.title || '',
+                             mode: 'translate',
++                            force: true,
+                             actors: (video.actresses || '').split(',').map((a) => a.trim()).filter(Boolean),
+                             number: video.number || '',
+                         }),
+@@ -77,21 +73,35 @@
                          headers: { 'Content-Type': 'application/json' },
                          body: JSON.stringify({ file_path: path, title: translated }),
                      });
@@ -6710,7 +7055,14 @@
                      return;
                  }
                  if (data.success === true) {
-@@ -91,7 +98,11 @@
+                     this._lbTrApply(video, data);
+-                    this.showToast(window.t('showcase.lightbox.translate_done'), 'success', LB_TR_UNDO_TOAST_MS, {
++                    const toastKey = data.nfo_created
++                        ? 'showcase.lightbox.translate_done_nfo_created'
++                        : 'showcase.lightbox.translate_done';
++                    this.showToast(window.t(toastKey), 'success', LB_TR_UNDO_TOAST_MS, {
+                         label: window.t('showcase.lightbox.translate_undo'),
+                         onClick: () => this._lbTrUndo(video, snapshot),
                      });
                  } else {
                      const key = data.error === 'no_nfo' ? 'translate_no_nfo' : 'translate_write_failed';
@@ -6723,6 +7075,14 @@
                  }
              } finally {
                  delete this._lbTrInFlight[path];
+@@ -103,6 +113,7 @@
+             video.title = data.title;
+             video.original_title = data.original_title;
+             video.needs_translate = data.needs_translate;
++            video.can_translate = data.can_translate;
+         },
+ 
+         // 復原：只用按下當下的 snapshot 與當時捕獲的那一片；不佔 _lbTrInFlight（plan 已接受的併發 residual）
 --- a/web/static/js/pages/showcase/state-lightbox.js
 +++ b/web/static/js/pages/showcase/state-lightbox.js
 @@ -369,7 +369,6 @@
@@ -8307,7 +8667,7 @@
          </div>
      </div>
  
-@@ -782,6 +1004,140 @@
+@@ -782,6 +1004,212 @@
          </div>
      </dialog>
  
@@ -8324,7 +8684,7 @@
 +                <div class="batch-confirm-summary-item">
 +                    <span>{{ t('scanner.stats.nfo_confirm_scope_label') }}</span>
 +                    <strong x-text="window.t('scanner.stats.tag_source_confirm_count_value', {
-+                        count: nfoUpdateRetryPaths.length || nfoNeedUpdateCount
++                        count: nfoSelectedCount
 +                    })"></strong>
 +                </div>
 +                <div class="batch-confirm-summary-item">
@@ -8337,6 +8697,44 @@
 +                <i class="bi bi-info-circle"></i>
 +                <span>{{ t('scanner.stats.nfo_confirm_note') }}</span>
 +            </p>
++            <div class="batch-preview-selection">
++                <button type="button" class="btn btn-ghost btn-xs" @click="toggleNfoSelection()">
++                    <i class="bi" :class="nfoSelectedCount === nfoUpdatePaths.length ? 'bi-x-square' : 'bi-check2-square'"></i>
++                    <span x-text="window.t(nfoSelectedCount === nfoUpdatePaths.length
++                        ? 'scanner.stats.selection_clear'
++                        : 'scanner.stats.selection_all')"></span>
++                </button>
++                <span x-text="window.t('scanner.stats.selection_count', {
++                    selected: nfoSelectedCount,
++                    total: nfoUpdatePaths.length
++                })"></span>
++            </div>
++            <div class="tag-preview-list" x-show="nfoUpdateItems.length > 0">
++                <template x-for="item in nfoUpdatePageItems" :key="item.path">
++                    <label class="tag-preview-item batch-preview-option">
++                        <input type="checkbox" class="checkbox checkbox-sm checkbox-primary"
++                               :value="item.path" x-model="nfoSelectedPaths">
++                        <span>
++                            <strong x-text="item.number || item.path"></strong>
++                            <small x-text="window.t('scanner.stats.nfo_field_note_prefix') + (item.missing || []).map(field => window.t('scanner.stats.nfo_field_' + field)).join('、')"></small>
++                        </span>
++                    </label>
++                </template>
++            </div>
++            <div class="batch-preview-pager" x-show="nfoUpdatePageCount > 1">
++                <button type="button" class="btn btn-ghost btn-xs"
++                        :disabled="nfoPreviewPage <= 1" @click="setNfoPreviewPage(-1)">
++                    <i class="bi bi-chevron-left"></i>
++                </button>
++                <span x-text="window.t('scanner.stats.preview_page', {
++                    current: nfoPreviewPage,
++                    total: nfoUpdatePageCount
++                })"></span>
++                <button type="button" class="btn btn-ghost btn-xs"
++                        :disabled="nfoPreviewPage >= nfoUpdatePageCount" @click="setNfoPreviewPage(1)">
++                    <i class="bi bi-chevron-right"></i>
++                </button>
++            </div>
 +            <label class="tag-backup-option">
 +                <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="nfoUpdateBackupEnabled">
 +                <span>
@@ -8348,7 +8746,9 @@
 +                <button type="button" class="btn btn-ghost" @click="cancelNfoUpdate()">
 +                    {{ t('scanner.stats.tag_source_confirm_cancel') }}
 +                </button>
-+                <button type="button" class="btn btn-primary" @click="confirmNfoUpdate()">
++                <button type="button" class="btn btn-primary"
++                        :disabled="nfoUpdateConfirmDisabled"
++                        @click="confirmNfoUpdate()">
 +                    <i class="bi bi-shield-check"></i>
 +                    <span x-text="window.t(nfoUpdateBackupEnabled
 +                        ? 'scanner.stats.nfo_confirm_backup_ok'
@@ -8382,6 +8782,10 @@
 +                    <span>{{ t('scanner.stats.tag_source_preview_changed_label') }}</span>
 +                    <strong x-text="window.t('scanner.stats.tag_source_preview_changed_value', { count: tagSourcePreviewChangedCount })"></strong>
 +                </div>
++                <div class="batch-confirm-summary-item">
++                    <span>{{ t('scanner.stats.tag_source_selected_label') }}</span>
++                    <strong x-text="window.t('scanner.stats.tag_source_confirm_count_value', { count: tagSourceSelectedChangedCount })"></strong>
++                </div>
 +            </div>
 +            <p class="fluent-modal-body"
 +               x-text="window.t(tagSourcePreviewOnly
@@ -8390,21 +8794,49 @@
 +                       source: tagSourceModalSourceLabel,
 +                       count: tagSourcePreviewData?.total || 0
 +                   })"></p>
++            <div class="batch-preview-selection" x-show="tagSourcePreviewChangedItems.length > 0">
++                <button type="button" class="btn btn-ghost btn-xs" @click="toggleTagSourceSelection()">
++                    <i class="bi" :class="tagSourceSelectedChangedCount === tagSourcePreviewChangedItems.length
++                        ? 'bi-x-square' : 'bi-check2-square'"></i>
++                    <span x-text="window.t(tagSourceSelectedChangedCount === tagSourcePreviewChangedItems.length
++                        ? 'scanner.stats.selection_clear'
++                        : 'scanner.stats.selection_all')"></span>
++                </button>
++                <span x-text="window.t('scanner.stats.selection_count', {
++                    selected: tagSourceSelectedChangedCount,
++                    total: tagSourcePreviewChangedItems.length
++                })"></span>
++            </div>
 +            <div class="tag-preview-list" x-show="tagSourcePreviewChangedItems.length > 0">
-+                <template x-for="item in tagSourcePreviewChangedItems.slice(0, 20)" :key="item.path">
-+                    <div class="tag-preview-item">
-+                        <strong x-text="item.number"></strong>
-+                        <div class="tag-preview-diff">
-+                            <span class="tag-preview-add" x-show="item.added.length > 0"
-+                                  x-text="window.t('scanner.stats.tag_source_preview_added', { tags: item.added.join('、') })"></span>
-+                            <span class="tag-preview-remove" x-show="item.removed.length > 0"
-+                                  x-text="window.t('scanner.stats.tag_source_preview_removed', { tags: item.removed.join('、') })"></span>
-+                        </div>
-+                    </div>
++                <template x-for="item in tagSourcePreviewPageItems" :key="item.path">
++                    <label class="tag-preview-item batch-preview-option">
++                        <input type="checkbox" class="checkbox checkbox-sm checkbox-primary"
++                               :value="item.number" x-model="tagSourcePreviewNumbers">
++                        <span>
++                            <strong x-text="item.number"></strong>
++                            <span class="tag-preview-diff">
++                                <span class="tag-preview-add" x-show="item.added.length > 0"
++                                      x-text="window.t('scanner.stats.tag_source_preview_added', { tags: item.added.join('、') })"></span>
++                                <span class="tag-preview-remove" x-show="item.removed.length > 0"
++                                      x-text="window.t('scanner.stats.tag_source_preview_removed', { tags: item.removed.join('、') })"></span>
++                            </span>
++                        </span>
++                    </label>
 +                </template>
-+                <p class="tag-preview-more"
-+                   x-show="tagSourcePreviewChangedItems.length > 20"
-+                   x-text="window.t('scanner.stats.tag_source_preview_more', { count: tagSourcePreviewChangedItems.length - 20 })"></p>
++            </div>
++            <div class="batch-preview-pager" x-show="tagSourcePreviewPageCount > 1">
++                <button type="button" class="btn btn-ghost btn-xs"
++                        :disabled="tagSourcePreviewPage <= 1" @click="setTagSourcePreviewPage(-1)">
++                    <i class="bi bi-chevron-left"></i>
++                </button>
++                <span x-text="window.t('scanner.stats.preview_page', {
++                    current: tagSourcePreviewPage,
++                    total: tagSourcePreviewPageCount
++                })"></span>
++                <button type="button" class="btn btn-ghost btn-xs"
++                        :disabled="tagSourcePreviewPage >= tagSourcePreviewPageCount" @click="setTagSourcePreviewPage(1)">
++                    <i class="bi bi-chevron-right"></i>
++                </button>
 +            </div>
 +            <div class="tag-preview-empty"
 +                 x-show="tagSourcePreviewChangedItems.length === 0 && tagSourcePreviewFailureItems.length === 0">
@@ -8448,7 +8880,7 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -805,26 +1161,117 @@
+@@ -805,26 +1233,131 @@
          </div>
      </dialog>
  
@@ -8497,7 +8929,7 @@
 +            </p>
 +
 +            <div class="rename-preview-list" x-show="renameReadyItems.length > 0">
-+                <template x-for="item in renameReadyItems" :key="item.db_old_uri">
++                <template x-for="item in renamePageItems" :key="item.db_old_uri">
 +                    <div class="rename-preview-item">
 +                        <strong x-text="item.number || ''"></strong>
 +                        <div class="rename-preview-names">
@@ -8519,6 +8951,20 @@
 +                        <small x-text="renameRelatedText(item)"></small>
 +                    </div>
 +                </template>
++            </div>
++            <div class="batch-preview-pager" x-show="renamePageCount > 1">
++                <button type="button" class="btn btn-ghost btn-xs"
++                        :disabled="renamePreviewPage <= 1" @click="setRenamePreviewPage(-1)">
++                    <i class="bi bi-chevron-left"></i>
++                </button>
++                <span x-text="window.t('scanner.stats.preview_page', {
++                    current: renamePreviewPage,
++                    total: renamePageCount
++                })"></span>
++                <button type="button" class="btn btn-ghost btn-xs"
++                        :disabled="renamePreviewPage >= renamePageCount" @click="setRenamePreviewPage(1)">
++                    <i class="bi bi-chevron-right"></i>
++                </button>
 +            </div>
 +
 +            <div class="rename-conflict-list" x-show="renameConflictItems.length > 0">
@@ -9059,7 +9505,21 @@
                                          @click="fetchSamples(currentLightboxVideo)">
                                      <i class="bi bi-cloud-download" aria-hidden="true"></i>
                                      <span x-text="t('showcase.samples.fetch_btn')"></span>
-@@ -1900,34 +1941,7 @@
+@@ -1223,13 +1264,6 @@
+                             <div class="lb-otitle"
+                                  x-show="currentLightboxVideo?.original_title"
+                                  x-text="currentLightboxVideo?.original_title"></div>
+-                            <button type="button" class="lb-translate-btn"
+-                                        x-show="lbTrShowOnOtitle()"
+-                                        @click.stop="lbTranslate()"
+-                                        :disabled="lbTrIsBusy()"
+-                                        :aria-busy="lbTrIsBusy()"
+-                                        data-tooltip="{{ t('showcase.lightbox.translate_tooltip') }}"
+-                                        aria-label="{{ t('showcase.lightbox.translate_tooltip') }}"><i class="bi bi-translate" x-show="!lbTrIsBusy()" aria-hidden="true"></i><i class="bi bi-arrow-repeat spin" x-show="lbTrIsBusy()" aria-hidden="true"></i></button>
+                             </div>
+                             <!-- Row 3: Actresses -->
+                             <div class="lb-actor" x-show="currentLightboxVideo?.actresses">
+@@ -1900,34 +1934,7 @@
      </dialog>
  
      <!-- Toast (M3h) -->

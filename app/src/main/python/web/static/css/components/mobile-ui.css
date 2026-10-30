@@ -612,7 +612,10 @@
   /* Showcase has two mode icons inside the left slot. Reserve a real gap
      between the second icon and the placeholder on Android WebView. */
   [data-is-android="true"] .showcase-toolbar .spotlight-search--mode-toggle {
-    --spotlight-left-slot: 6rem;
+    /* Both mode buttons use the 48px Android touch target. With the capsule
+       inset and gap the controls occupy about 110 CSS px, so 6rem still let
+       the second button cover the actress placeholder. */
+    --spotlight-left-slot: 7.5rem;
   }
 
   [data-is-android="true"] .spotlight-search input {

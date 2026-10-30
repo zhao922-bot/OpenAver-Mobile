@@ -18,9 +18,12 @@
          "side_effect": True,
 --- a/web/routers/scanner.py
 +++ b/web/routers/scanner.py
-@@ -34,23 +34,47 @@
+@@ -32,25 +32,49 @@
+ from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
+ from starlette.background import BackgroundTask
  
- from core.gallery_scanner import VideoScanner, fast_scan_directory, VideoInfo, _run_sample_images_cleanup_pass, is_nas_system_dir_name  # noqa: PLC2701 — scanner 的 rescan 端點需要在特定時機主動觸發 gallery_scanner 內部的樣本圖清理 pass（該 pass 平常只在 scanner 自身流程內被呼叫），避免把整段清理邏輯複製一份到 router 層
+-from core.gallery_scanner import VideoScanner, fast_scan_directory, VideoInfo, _run_sample_images_cleanup_pass, is_nas_system_dir_name  # noqa: PLC2701 — scanner 的 rescan 端點需要在特定時機主動觸發 gallery_scanner 內部的樣本圖清理 pass（該 pass 平常只在 scanner 自身流程內被呼叫），避免把整段清理邏輯複製一份到 router 層
++from core.gallery_scanner import VideoScanner, fast_scan_directory, scan_entry_needs_refresh, VideoInfo, _run_sample_images_cleanup_pass, is_nas_system_dir_name  # noqa: PLC2701 — scanner 的 rescan 端點需要在特定時機主動觸發 gallery_scanner 內部的樣本圖清理 pass（該 pass 平常只在 scanner 自身流程內被呼叫），避免把整段清理邏輯複製一份到 router 層
  from core.cover_layout import cover_base_stem
 +from core.cover_attributes import effective_tags
  from core.video_extensions import get_video_extensions
@@ -84,10 +87,112 @@
  
  
  def _sse_event(data: dict) -> str:
-@@ -788,6 +820,55 @@
+@@ -323,6 +355,7 @@
+         total_inserted = 0
+         total_updated = 0
+         total_deleted = 0
++        missing_nfo_count = 0
+         scan_error_count = 0
+         session_added_paths = []  # 追蹤本次新增/變更的影片路徑
+         long_paths: list[str] = []  # a5: Windows 長路徑收集（只在 win32 填充）
+@@ -415,6 +448,7 @@
+                 # 比對決定需要處理的檔案
+                 needs_scan = []
+                 current_paths = set()
++                nfo_unchanged_paths = set()
+ 
+                 for file_info in all_files:
+                     path = file_info['path']
+@@ -422,12 +456,14 @@
+                     current_paths.add(file_uri)
+ 
+                     db_entry = db_index.get(file_uri)
+-                    if db_entry is None:
+-                        # 新檔案
++                    if scan_entry_needs_refresh(db_entry, file_info, path_mappings):
++                        # 新檔案、mtime/NFO/劇照變更，或 DB 仍缺基本資料／可服務封面。
+                         needs_scan.append(file_info)
+-                    elif db_entry[0] != file_info['mtime'] or db_entry[1] != file_info.get('nfo_mtime', 0) or db_entry[2] != file_info.get('sample_image_count', 0):
+-                        # mtime、nfo_mtime 或劇照張數變更（TASK-118b-T9：db_entry[2] 為 get_mtime_index() 哨兵值時代表壞資料，恆不等於真實張數 → 同樣觸發重掃，fail-safe）
+-                        needs_scan.append(file_info)
++                        if (
++                            db_entry is not None
++                            and db_entry[1] == file_info.get('nfo_mtime', 0)
++                        ):
++                            nfo_unchanged_paths.add(file_uri)
+ 
+                 # 清理已刪除的檔案（限定在此目錄下）
+                 # a5 Codex fix: scan 不完整時（skipped_paths 非空）跳過 deletion 偵測
+@@ -457,6 +493,11 @@
+                 videos_to_upsert = []
+                 cache_hits = len(all_files) - len(needs_scan)
+                 cache_misses = 0
++                scan_uris = [
++                    to_file_uri(file_info['path'], path_mappings)
++                    for file_info in needs_scan
++                ]
++                existing_by_uri = repo.get_by_paths(scan_uris)
+ 
+                 for i, file_info in enumerate(needs_scan, 1):
+                     # TASK-90b-T4: 逐檔中止檢查（每檔處理之前）。單一資料夾內
+@@ -472,6 +513,12 @@
+                     try:
+                         video_info = scanner.scan_file(file_info['path'], None)
+                         video = Video.from_video_info(video_info)
++                        existing = existing_by_uri.get(video.path)
++                        if existing is not None:
++                            if video.path in nfo_unchanged_paths:
++                                video.preserve_existing_metadata(existing)
++                            else:
++                                video.preserve_missing_metadata(existing)
+                         video.mtime = file_info['mtime']
+                         video.nfo_mtime = file_info.get('nfo_mtime', 0)
+                         videos_to_upsert.append(video)
+@@ -550,6 +597,22 @@
+         all_db_videos = [v for v in repo.get_all()
+                          if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
+ 
++        # The generated page can render without an NFO, but title writeback and
++        # later metadata maintenance need one. Surface this before the user
++        # discovers it while translating a title.
++        missing_nfo_count = sum(
++            1 for v in all_db_videos if not _video_has_nfo(v, path_mappings)
++        )
++        if missing_nfo_count > 0:
++            yield _sse_event({
++                "type": "log",
++                "level": "warn",
++                "message": (
++                    f"发现 {missing_nfo_count} 部影片没有 NFO；"
++                    "翻译标题时会自动创建 NFO，也可以先到批量维护中补全"
++                ),
++            })
++
+         # 轉換為 VideoInfo 格式供 HTMLGenerator 使用
+         all_videos = []
+         for v in all_db_videos:
+@@ -562,6 +625,7 @@
+                 maker=v.maker,
+                 date=v.release_date,
+                 genre=','.join(v.tags) if v.tags else '',
++                user_tags=list(v.user_tags or []),
+                 size=v.size_bytes,
+                 mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
+                 img=v.cover_path
+@@ -754,6 +818,7 @@
+                 "video_count": len(all_videos),
+                 "output_path": str(html_path),
+                 "session_update": session_update,
++                "missing_nfo": missing_nfo_count,
+                 "long_paths": long_paths,  # a5
+                 "stats": {
+                     "inserted": total_inserted,
+@@ -786,6 +851,55 @@
+ # `request.is_disconnected()`，非搶 iterate_in_threadpool 的同一組 receive
+ # channel（該輪詢與 StreamingResponse 內部行為互不干擾，spike 已驗證）。
  _DISCONNECT_POLL_INTERVAL_SEC = 0.5
- 
- 
++
++
 +async def _cancelable_sse_response(
 +    request: Request,
 +    generator_factory: Callable[[threading.Event], Generator[str, None, None]],
@@ -135,12 +240,10 @@
 +    response.cancel_event = cancel_event
 +    response.watcher_task = watcher_task
 +    return response
-+
-+
+ 
+ 
  @router.get("/generate")
- async def generate(request: Request):
-     """產生影片列表（SSE 串流回傳進度）
-@@ -959,6 +1040,396 @@
+@@ -959,6 +1073,401 @@
      return cache, skipped_readonly, path_mappings
  
  
@@ -249,6 +352,7 @@
 +        "cancelled": False,
 +        "failed_items": [],
 +        "items": [],
++        "changed_numbers": [],
 +    }
 +    try:
 +        config = load_config()
@@ -408,6 +512,8 @@
 +            if dry_run:
 +                summary["success"] += 1
 +                summary["changed" if changed else "unchanged"] += 1
++                if changed:
++                    summary["changed_numbers"].append(video.number)
 +                if not nfo_path:
 +                    summary["no_nfo"] += 1
 +                summary["items"].append(item)
@@ -495,6 +601,8 @@
 +
 +            summary["success"] += 1
 +            summary["changed" if changed else "unchanged"] += 1
++            if changed:
++                summary["changed_numbers"].append(video.number)
 +            summary["items"].append(item)
 +            yield _sse_event({
 +                "type": "log",
@@ -537,8 +645,82 @@
  @router.get("/update-check")
  def check_update():
      """檢查需要更新的影片數量（從 SQLite 讀取）"""
-@@ -1021,9 +1492,13 @@
-                 continue
+@@ -975,11 +1484,12 @@
+ 
+         stats = check_cache_needs_update(cache)
+ 
+-        # 不要返回 paths 列表（太大）
+         return {
+             "success": True,
+             "data": {
+                 "need_update": stats['need_update'],
++                "paths": stats['paths'],
++                "items": stats['items'],
+                 "details": {
+                     "no_title": stats['no_title'],
+                     "no_date": stats['no_date'],
+@@ -994,6 +1504,34 @@
+         return {"success": False, "error": "檢查更新數量失敗"}
+ 
+ 
++def _video_has_nfo(video: Video, path_mappings: dict) -> bool:
++    """Return whether a row has a usable NFO.
++
++    Check the two real locations (source sidecar and output folder) whenever
++    the video path is accessible. This catches stale ``nfo_mtime`` values and
++    legacy ``.nfo.xml`` names. The DB signal remains the fallback for
++    inaccessible/legacy rows (for example old cache entries).
++    """
++    try:
++        video_path = uri_to_local_fs_path(video.path, path_mappings)
++        video_path_accessible = os.path.isfile(video_path)
++        if video.output_dir:
++            output_dir = Path(
++                uri_to_local_fs_path(video.output_dir, path_mappings)
++            )
++            if video_path_accessible and output_dir.is_dir():
++                if any(
++                    entry.is_file() and entry.name.lower().endswith(".nfo")
++                    for entry in output_dir.iterdir()
++                ):
++                    return True
++        if video_path_accessible:
++            return bool(get_nfo_path_from_video(video.path, path_mappings))
++    except (OSError, ValueError, TypeError):
++        pass
++    return (video.nfo_mtime or 0) > 0
++
++
+ @router.get("/missing-check")
+ def check_missing():
+     """T10: 檢查 DB 中缺少 NFO 或封面的影片數量與清單"""
+@@ -1006,6 +1544,7 @@
+ 
+         repo = VideoRepository(db_path)
+         all_videos = repo.get_all()
++        path_mappings = load_config().get("gallery", {}).get("path_mappings", {})
+ 
+         missing_both = 0
+         missing_nfo = 0
+@@ -1013,17 +1552,24 @@
+         items = []
+ 
+         for v in all_videos:
+-            has_nfo = (v.nfo_mtime or 0) > 0
+-            has_cover = bool(v.cover_path)
+-            produced = bool(v.output_dir)
+-            tried = (v.scrape_attempted_at or 0) > 0
+-            if produced or tried:
+-                continue
++            has_nfo = _video_has_nfo(v, path_mappings)
++            has_cover = False
++            if v.cover_path:
++                try:
++                    has_cover = os.path.isfile(
++                        uri_to_local_fs_path(v.cover_path, path_mappings)
++                    )
++                except Exception:
++                    has_cover = False
              if has_nfo and has_cover:
                  continue
 -            if not v.number:  # skip videos without number (cannot enrich)
@@ -553,7 +735,7 @@
              if not has_nfo and not has_cover:
                  missing_both += 1
                  item["category"] = "both"
-@@ -1053,7 +1528,413 @@
+@@ -1053,7 +1599,413 @@
          return {"success": False, "error": "檢查缺失 NFO/封面失敗"}
  
  
@@ -968,7 +1150,7 @@
      """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
  
      try:
-@@ -1085,6 +1966,27 @@
+@@ -1085,6 +2037,28 @@
              return
  
          paths_to_update = stats['paths']
@@ -989,6 +1171,7 @@
 +                    "no_metadata": 0,
 +                    "cancelled": False,
 +                    "failed_items": [],
++                    "updated_paths": [],
 +                },
 +            })
 +            return
@@ -996,7 +1179,7 @@
          yield _sse_event({
              "type": "log",
              "level": "info",
-@@ -1092,12 +1994,46 @@
+@@ -1092,12 +2066,90 @@
          })
  
          # 執行更新（path_mappings 沿用 _build_nfo_update_cache 算好的那份，不重讀 config）
@@ -1026,7 +1209,51 @@
 +            "no_metadata": 0,
 +            "cancelled": False,
 +            "failed_items": [],
++            "updated_paths": [],
 +        }
++        updated_paths = list(update_stats.get("updated_paths") or [])
++        if updated_paths:
++            try:
++                config = load_config()
++                scanner = VideoScanner(
++                    path_mappings=path_mappings,
++                    nfo_title_format=config.get("scraper", {}).get(
++                        "nfo_title_format", "[{num}]{title}"
++                    ),
++                )
++                refreshed_rows = []
++                existing_by_uri = repo.get_by_paths(updated_paths)
++                for path in updated_paths:
++                    try:
++                        info = scanner.scan_file(
++                            uri_to_local_fs_path(path, path_mappings),
++                            None,
++                        )
++                        video = Video.from_video_info(info)
++                        existing = existing_by_uri.get(path)
++                        if existing is not None:
++                            video.preserve_missing_metadata(existing)
++                        nfo_path = get_nfo_path_from_video(path, path_mappings)
++                        if nfo_path:
++                            video.nfo_mtime = os.stat(nfo_path).st_mtime
++                        elif existing is not None:
++                            video.nfo_mtime = existing.nfo_mtime
++                        refreshed_rows.append(video)
++                    except Exception:
++                        logger.warning(
++                            "NFO 更新後刷新資料庫失敗: %s",
++                            path,
++                            exc_info=True,
++                        )
++                if refreshed_rows:
++                    repo.upsert_batch(refreshed_rows)
++                    yield _sse_event({
++                        "type": "log",
++                        "level": "info",
++                        "message": f"已同步 {len(refreshed_rows)} 部影片的資料庫資料",
++                    })
++            except Exception:
++                logger.warning("NFO 更新後批次刷新資料庫失敗", exc_info=True)
 +        cancelled = bool(update_stats.get("cancelled"))
          yield _sse_event({
              "type": "done",
@@ -1045,7 +1272,7 @@
          })
  
      except Exception as e:
-@@ -1106,15 +2042,62 @@
+@@ -1106,15 +2158,62 @@
  
  
  @router.get("/update")
@@ -1116,7 +1343,7 @@
      )
  
  
-@@ -1211,7 +2194,9 @@
+@@ -1211,7 +2310,9 @@
      return {'need_update': len(need_update), 'items': need_update}
  
  
@@ -1127,7 +1354,7 @@
      """SSE 串流：批次為影片產生 poster + fanart"""
      global _jellyfin_cache_result, _jellyfin_cache_time
  
-@@ -1252,7 +2237,13 @@
+@@ -1252,7 +2353,13 @@
          yield _sse_event({"type": "log", "level": "info", "message": f"需補齊 {total} 部影片的圖片..."})
  
          completed = 0
@@ -1141,7 +1368,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,6 +2252,7 @@
+@@ -1261,6 +2368,7 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -1149,7 +1376,7 @@
                  break
  
              cover = item['cover_path']
-@@ -1271,7 +2263,11 @@
+@@ -1271,7 +2379,11 @@
                  "type": "progress",
                  "current": i,
                  "total": total,
@@ -1162,7 +1389,7 @@
              })
  
              img_result = generate_jellyfin_images(
-@@ -1283,18 +2279,35 @@
+@@ -1283,18 +2395,35 @@
  
              if img_result['poster']:
                  yield _sse_event({"type": "log", "level": "info", "message": f"✓ {num} poster + fanart"})
@@ -1201,7 +1428,7 @@
          })
  
      except Exception as e:
-@@ -1359,15 +2372,11 @@
+@@ -1359,15 +2488,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -1221,7 +1448,7 @@
      )
  
  
-@@ -1621,6 +2630,11 @@
+@@ -1621,6 +2746,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:
@@ -1558,12 +1785,13 @@
                              failed_count += 1
 --- a/web/routers/showcase.py
 +++ b/web/routers/showcase.py
-@@ -33,9 +33,14 @@
+@@ -33,9 +33,15 @@
  from core.scrapers.utils import has_japanese
  from core.nfo_stat import nfo_mtime_or_none
  from core.nfo_title_format import build_display_title
 +from core.nfo_utils import find_sidecar_nfos
  from core.readonly_paths import resolve_owning_output_root
++from core.organizer import generate_nfo
  from core.title_writeback import (
      NfoNotFoundError, NfoParseError, rewrite_nfo_titles, strip_illegal_xml_chars,
 +)
@@ -1573,7 +1801,27 @@
  )
  from core.focal import device_state, format_focal, parse_focal
  from core.focal.subprocess_runner import run_detection
-@@ -494,6 +499,7 @@
+@@ -73,6 +79,11 @@
+ def _needs_translate(title, original_title, nfo_mtime) -> bool:
+     """標題是假名、沒有原文、且有 NFO（nfo_mtime > 0）才算待翻譯（列表與寫回回應共用）。"""
+     return bool((not original_title) and has_japanese(title or '') and (nfo_mtime or 0) > 0)
++
++
++def _can_manual_translate(title, original_title, _nfo_mtime) -> bool:
++    """Lightbox 手動翻譯入口：只要目前有標題且尚未保存原文即可。"""
++    return bool(not original_title and (title or '').strip())
+ 
+ 
+ def _serialize_video(v, path_mappings: dict, enabled: bool = False) -> dict:
+@@ -121,6 +132,7 @@
+         "has_cover": bool(v.cover_path),             # DB 初判（不做 IO）
+         "has_nfo": (v.nfo_mtime or 0) > 0,          # 對齊 41a nfo_mtime 寫入契約，防禦 NULL
+         "needs_translate": _needs_translate(v.title, v.original_title, v.nfo_mtime),  # 無條件輸出（FE-ALPINE-06）
++        "can_translate": _can_manual_translate(v.title, v.original_title, v.nfo_mtime),
+         "auto_focal": v.auto_focal,                  # canonical "x,y" 4dp 字串或 ''（98b：前端 focalObjectPosition 消費）
+         "crop_mode": v.crop_mode,                    # 'auto' | 'default'（98b：default 退 baseline 右裁）
+     }
+@@ -494,6 +506,7 @@
      "no_nfo": "找不到 NFO",
      "nfo_ambiguous": "輸出夾有多份 NFO，無法判斷要改哪一份",
      "nfo_unreadable": "NFO 無法讀取或解析",
@@ -1581,7 +1829,7 @@
      "nfo_write_failed": "NFO 寫入失敗",
      "db_write_failed": "資料庫寫入失敗（NFO 已更新，請再試一次）",
      "invalid_path": "檔案路徑格式無效",
-@@ -541,7 +547,13 @@
+@@ -541,7 +554,13 @@
      owning = resolve_owning_output_root(video.path, config)
      if owning is not None:
          return _locate_readonly_nfo(video, path_mappings, owning[2])
@@ -1596,7 +1844,7 @@
  
  
  def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: str) -> Optional[str]:
-@@ -556,6 +568,11 @@
+@@ -556,10 +575,57 @@
          return "no_nfo"
      except NfoParseError:
          return "nfo_unreadable"
@@ -1608,3 +1856,108 @@
      except Exception as e:
          logger.error("[title-writeback] NFO 寫入失敗: %s", e)
          return "nfo_write_failed"
+     return None
++
++
++def _create_title_nfo(video, body: str, new_original: str, config: dict, path_mappings: dict):
++    """Create the missing sidecar NFO and return ``(path, error)``."""
++    owning = resolve_owning_output_root(video.path, config)
++    if owning is not None:
++        if not video.output_dir:
++            return None, "no_nfo"
++        output_dir = Path(uri_to_local_fs_path(video.output_dir, path_mappings))
++        video_fs = Path(uri_to_local_fs_path(video.path, path_mappings))
++        nfo_path = output_dir / f"{video_fs.stem}.nfo"
++    else:
++        nfo_path = Path(
++            uri_to_local_fs_path(video.path, path_mappings)
++        ).with_suffix(".nfo")
++
++    scraper_config = config.get("scraper", {})
++    external_manager = scraper_config.get("external_manager", "off")
++    created = generate_nfo(
++        number=video.number or "",
++        title=body,
++        original_title=new_original,
++        actors=video.actresses,
++        tags=video.tags,
++        date=video.release_date,
++        maker=video.maker,
++        output_path=str(nfo_path),
++        has_poster=bool(video.cover_path) and external_manager != "off",
++        has_fanart=bool(video.cover_path) and external_manager != "off",
++        director=video.director,
++        duration=video.duration,
++        series=video.series or "",
++        label=video.label,
++        user_tags=video.user_tags,
++        external_manager=external_manager,
++        nfo_title_format=scraper_config.get(
++            "nfo_title_format", "[{num}]{title}"
++        ),
++    )
++    if not created:
++        return None, "nfo_write_failed"
++    return str(nfo_path), None
+ 
+ 
+ def _apply_title_writeback(repo, video, req, config: dict, path_mappings: dict) -> dict:
+@@ -574,6 +640,31 @@
+ 
+     nfo_path, loc_err = _locate_title_nfo(video, config, path_mappings)
+     if nfo_path is None:
++        if loc_err == "no_nfo":
++            nfo_path, create_err = _create_title_nfo(
++                video, body, new_original, config, path_mappings
++            )
++            if create_err is not None:
++                return _title_fail(create_err)
++            new_mtime = nfo_mtime_or_none(Path(nfo_path))
++            if new_mtime is None:
++                new_mtime = video.nfo_mtime
++            written = repo.update_titles(video.path, body, new_original, new_mtime)
++            if not written:
++                return _title_fail("not_found")
++            return {
++                "success": True,
++                "title": body,
++                "original_title": new_original,
++                "needs_translate": _needs_translate(
++                    body, new_original, new_mtime
++                ),
++                "can_translate": _can_manual_translate(
++                    body, new_original, new_mtime
++                ),
++                "nfo_updated": True,
++                "nfo_created": True,
++            }
+         return _title_fail(loc_err)
+     nfo_err = _write_title_nfo(nfo_path, video, body, new_original, fmt)
+     if nfo_err is not None:
+@@ -592,6 +683,7 @@
+         return _title_fail("not_found")
+     return {"success": True, "title": body, "original_title": new_original,
+             "needs_translate": _needs_translate(body, new_original, new_mtime),
++            "can_translate": _can_manual_translate(body, new_original, new_mtime),
+             "nfo_updated": True}
+ 
+ 
+--- a/web/routers/translate.py
++++ b/web/routers/translate.py
+@@ -29,6 +29,7 @@
+     mode: str = "translate"  # "translate" (日文→中文) 或 "optimize" (清理中文)
+     actors: Optional[List[str]] = None
+     number: Optional[str] = None
++    force: bool = False  # 使用者在 Lightbox 明確按下翻譯時，允許漢字-only 標題
+ 
+ 
+ class BatchTranslateRequest(BaseModel):
+@@ -92,7 +93,7 @@
+         return {"success": False, "error": "翻譯功能未啟用"}
+ 
+     # === 新增：日文檢測，只對 translate 模式生效 ===
+-    if request.mode == "translate" and not has_japanese(request.text):
++    if request.mode == "translate" and not request.force and not has_japanese(request.text):
+         return {
+             "skipped": True,
+             "success": True,  # 新增：API 成功執行跳過邏輯

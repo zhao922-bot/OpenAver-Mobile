@@ -70,6 +70,7 @@ class HTMLGenerator:
                 f'maker:"{self.escape_js_string(v.maker)}", '
                 f'date:"{self.escape_js_string(v.date)}", '
                 f'genre:"{self.escape_js_string(v.genre)}", '
+                f'utags:"{self.escape_js_string(",".join(v.user_tags or []))}", '
                 f'size:{v.size}, '
                 f'mdate:{v.mtime}, '
                 f'img:"{self.escape_js_string(v.img)}" }}'
@@ -379,7 +380,7 @@ class HTMLGenerator:
 \t\t\t\t\thtml += '<td>' + escapeHtml(v.num) + '</td>';
 \t\t\t\t\thtml += '<td>' + formatMaker(v.maker) + '</td>';
 \t\t\t\t\thtml += '<td>' + escapeHtml(v.date) + '</td>';
-\t\t\t\t\thtml += '<td>' + formatGenre(v.genre) + '</td>';
+\t\t\t\t\thtml += '<td>' + formatGenre(combinedTags(v)) + '</td>';
 \t\t\t\t\thtml += '<td>' + formatSize(v.size) + '</td>';
 \t\t\t\t\thtml += '</tr>';
 \t\t\t\t}
@@ -389,7 +390,7 @@ class HTMLGenerator:
 \t\t\t\thtml = '<div class="grid">';
 \t\t\t\tfor (var i = start; i < end; i++) {
 \t\t\t\t\tvar v = filtered_videos[i];
-\t\t\t\t\tvar imgSrc = escapeHtml(v.img || '');
+\t\t\t\t\tvar imgSrc = escapeHtml(resolveImageSrc(v.img || ''));
 \t\t\t\t\thtml += '<div class="card">';
 \t\t\t\t\t// 圖片區（含按鈕）
 \t\t\t\t\thtml += '<div class="card-img" onclick="showLightbox(' + i + ')">';
@@ -422,7 +423,7 @@ class HTMLGenerator:
 \t\t\t\t\t\t\tif (v.maker) html += '<span><b>片商：</b>' + formatMaker(v.maker) + '</span>';
 \t\t\t\t\t\t\tif (v.date) html += '<span><b>日期：</b>' + escapeHtml(v.date) + '</span>';
 \t\t\t\t\t\t\thtml += '</div>';
-\t\t\t\t\t\t\tif (v.genre) html += '<div class="info-tags">' + formatGenre(v.genre) + '</div>';
+\t\t\t\t\t\t\tif (combinedTags(v)) html += '<div class="info-tags">' + formatGenre(combinedTags(v)) + '</div>';
 \t\t\t\t\t\t\thtml += '</div>';
 \t\t\t\t\t\t}
 \t\t\t\t\t\thtml += '</div>';
@@ -629,6 +630,37 @@ class HTMLGenerator:
 \t\t\tsetTimeout(function() { toast.classList.remove('show'); }, 2500);
 \t\t}
 
+\t\tfunction resolveImageSrc(src) {
+\t\t\tif (!src || window.location.protocol === 'file:') return src;
+\t\t\tif (/^file:\/\/\//i.test(src)) {
+\t\t\t\tvar fsPath;
+\t\t\t\tif (src.indexOf('file:////') === 0) {
+\t\t\t\t\tfsPath = src.replace(/^file:\/\/\/+/i, '/');
+\t\t\t\t} else {
+\t\t\t\t\tfsPath = src.replace(/^file:\/\/\//i, '');
+\t\t\t\t}
+\t\t\t\tif (fsPath.charAt(0) !== '/' && !/^[A-Za-z]:/.test(fsPath)) {
+\t\t\t\t\tfsPath = '/' + fsPath;
+\t\t\t\t}
+\t\t\t\treturn '/api/gallery/image?path=' + encodeURIComponent(fsPath);
+\t\t\t}
+\t\t\treturn src;
+\t\t}
+
+\t\tfunction combinedTags(v) {
+\t\t\tvar tags = [];
+\t\t\tvar seen = {};
+\t\t\t(v.genre || '').split(',').concat((v.utags || '').split(',')).forEach(function(tag) {
+\t\t\t\ttag = tag.trim();
+\t\t\t\tvar key = tag.toLowerCase();
+\t\t\t\tif (tag && !seen[key]) {
+\t\t\t\t\tseen[key] = true;
+\t\t\t\t\ttags.push(tag);
+\t\t\t\t}
+\t\t\t});
+\t\t\treturn tags.join(',');
+\t\t}
+
 \t\t// Lightbox
 \t\tvar lightbox_open = false;
 \t\tvar lb_move_enabled = false;  // Phase 11.0: 延遲啟用滑鼠關閉
@@ -642,7 +674,7 @@ class HTMLGenerator:
 \t\t\tvar lightboxInfo = document.getElementById('lightbox-info');
 \t\t\t
 \t\t\tif (v.img) {
-\t\t\t\tlightboxImg.src = v.img;
+\t\t\t\tlightboxImg.src = resolveImageSrc(v.img);
 \t\t\t\tlightboxImg.style.display = 'block';
 \t\t\t} else {
 \t\t\t\tlightboxImg.style.display = 'none';
@@ -656,7 +688,8 @@ class HTMLGenerator:
 \t\t\tif (v.maker) html += '<span>' + formatMaker(v.maker) + '</span>';
 \t\t\tif (v.date) html += '<span>' + escapeHtml(v.date) + '</span>';
 \t\t\thtml += '</div>';
-\t\t\tif (v.genre) html += '<div class="lb-tags">' + formatGenrePills(v.genre) + '</div>';
+\t\t\tvar lbTags = combinedTags(v);
+\t\t\tif (lbTags) html += '<div class="lb-tags">' + formatGenrePills(lbTags) + '</div>';
 \t\t\thtml += '<div class="lb-footer">';
 \t\t\thtml += '<div class="lb-actions">';
 \t\t\thtml += '<a class="lb-btn" href="javascript:void(0);" onclick="event.stopPropagation(); playVideo(' + idx + ')">開啟</a>';

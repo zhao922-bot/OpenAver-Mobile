@@ -21,14 +21,9 @@ export function stateLightboxTranslate() {
             return typeof window !== 'undefined' && window.__SHOWCASE_TRANSLATE__?.enabled === true;
         },
 
-        // 標題行尾圖示：標題含假名且尚無原文（needs_translate 由後端算，前端不寫假名 regex）
+        // 主標題固定提供翻譯入口；有原文時翻譯原文，沒有時翻譯目前標題。
         lbTrShowOnTitle() {
-            return this.lbTranslateEnabled && this.currentLightboxVideo?.needs_translate === true;
-        },
-
-        // 原文行尾圖示：已有原文且有 NFO（再翻入口；無 NFO 寫回必回 no_nfo，不給入口）
-        lbTrShowOnOtitle() {
-            return this.lbTranslateEnabled && this.currentLightboxVideo?.has_nfo === true && !!this.currentLightboxVideo?.original_title;
+            return this.lbTranslateEnabled && !!this.currentLightboxVideo?.title;
         },
 
         lbTrIsBusy() {
@@ -51,6 +46,7 @@ export function stateLightboxTranslate() {
                         body: JSON.stringify({
                             text: video.original_title || video.title || '',
                             mode: 'translate',
+                            force: true,
                             actors: (video.actresses || '').split(',').map((a) => a.trim()).filter(Boolean),
                             number: video.number || '',
                         }),
@@ -92,7 +88,10 @@ export function stateLightboxTranslate() {
                 }
                 if (data.success === true) {
                     this._lbTrApply(video, data);
-                    this.showToast(window.t('showcase.lightbox.translate_done'), 'success', LB_TR_UNDO_TOAST_MS, {
+                    const toastKey = data.nfo_created
+                        ? 'showcase.lightbox.translate_done_nfo_created'
+                        : 'showcase.lightbox.translate_done';
+                    this.showToast(window.t(toastKey), 'success', LB_TR_UNDO_TOAST_MS, {
                         label: window.t('showcase.lightbox.translate_undo'),
                         onClick: () => this._lbTrUndo(video, snapshot),
                     });
@@ -114,6 +113,7 @@ export function stateLightboxTranslate() {
             video.title = data.title;
             video.original_title = data.original_title;
             video.needs_translate = data.needs_translate;
+            video.can_translate = data.can_translate;
         },
 
         // 復原：只用按下當下的 snapshot 與當時捕獲的那一片；不佔 _lbTrInFlight（plan 已接受的併發 residual）

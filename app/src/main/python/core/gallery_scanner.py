@@ -98,6 +98,37 @@ class VideoInfo:
         return cls(**{k: v for k, v in d.items() if k in known})
 
 
+def scan_entry_needs_refresh(db_entry, file_info: dict, path_mappings: dict = None) -> bool:
+    """Return whether one cached DB row must be reparsed from its sidecars.
+
+    The first three tuple slots are the historical mtime/NFO/sample-image
+    checks.  ``MtimeIndexEntry`` additionally exposes ``cover_path`` and
+    ``metadata_complete`` so a cache hit is not blindly trusted when the DB
+    still lacks a servable cover or basic metadata.  Older tuple-shaped test
+    doubles remain accepted because the additive checks only run when the
+    extended fields are present.
+    """
+    if db_entry is None:
+        return True
+    if (
+        db_entry[0] != file_info['mtime']
+        or db_entry[1] != file_info.get('nfo_mtime', 0)
+        or db_entry[2] != file_info.get('sample_image_count', 0)
+    ):
+        return True
+    if len(db_entry) < 5:
+        return False
+
+    cover_path = db_entry[3]
+    if not db_entry[4] or not cover_path:
+        return True
+    try:
+        cover_fs = uri_to_local_fs_path(cover_path, path_mappings)
+        return not os.path.isfile(cover_fs)
+    except Exception:
+        return True
+
+
 # 支援的影片副檔名（from core.video_extensions Single Source of Truth）
 VIDEO_EXTENSIONS = set(DEFAULT_VIDEO_EXTENSIONS)
 
@@ -686,7 +717,7 @@ class VideoScanner:
 
         # 步驟 2: 從 SQLite 取得現有 mtime 索引
         # 注意：資料庫中的 path 是 file:/// 格式
-        db_index = repo.get_mtime_index()  # {path: (mtime, nfo_mtime, sample_count)}
+        db_index = repo.get_mtime_index()  # {path: MtimeIndexEntry}
 
         # 建立 file:/// 路徑到原始路徑的映射，以及原始路徑到 mtime 的映射
         # scan_file 會產生 file:/// 格式的路徑（使用 core.path_utils.to_file_uri）
@@ -694,6 +725,7 @@ class VideoScanner:
         # 步驟 3: 比對決定需要處理的檔案
         needs_scan = []
         current_file_uris = set()
+        nfo_unchanged_uris = set()
 
         for file_info in file_infos:
             fs_path = file_info['path']
@@ -701,19 +733,14 @@ class VideoScanner:
             current_file_uris.add(file_uri)
 
             db_entry = db_index.get(file_uri)
-            if db_entry is None:
-                # 新檔案
+            if scan_entry_needs_refresh(db_entry, file_info, self.path_mappings):
+                # 新檔案、mtime/NFO/劇照變更，或 DB 仍缺基本資料／可服務封面。
                 needs_scan.append(file_info)
-            elif (
-                db_entry[0] != file_info['mtime']
-                or db_entry[1] != file_info.get('nfo_mtime', 0)
-                # extrafanart/ 劇照張數變更（新增/刪除）也要觸發重掃（TASK-118b-T9）。
-                # db_entry[2] 可能是 get_mtime_index() 的哨兵值（壞資料，見該函式
-                # docstring）——此時恆不等於任何真實張數，同樣會落入這個分支。
-                or db_entry[2] != file_info.get('sample_image_count', 0)
-            ):
-                # mtime、nfo_mtime 或劇照張數變更
-                needs_scan.append(file_info)
+                if (
+                    db_entry is not None
+                    and db_entry[1] == file_info.get('nfo_mtime', 0)
+                ):
+                    nfo_unchanged_uris.add(file_uri)
 
         # 步驟 4: 清理已刪除的檔案（比對 file:/// 格式的路徑）
         deleted_paths = set(db_index.keys()) - current_file_uris
@@ -724,6 +751,11 @@ class VideoScanner:
         # 步驟 5: 掃描並寫入
         videos_to_upsert = []
         total_needs_scan = len(needs_scan)
+        scan_uris = [
+            to_file_uri(file_info['path'], self.path_mappings)
+            for file_info in needs_scan
+        ]
+        existing_by_uri = repo.get_by_paths(scan_uris)
 
         for i, file_info in enumerate(needs_scan, 1):
             video_name = os.path.basename(file_info['path'])
@@ -737,6 +769,12 @@ class VideoScanner:
             try:
                 video_info = self.scan_file(file_info['path'], None)
                 video = Video.from_video_info(video_info)
+                existing = existing_by_uri.get(video.path)
+                if existing is not None:
+                    if video.path in nfo_unchanged_uris:
+                        video.preserve_existing_metadata(existing)
+                    else:
+                        video.preserve_missing_metadata(existing)
                 video.mtime = file_info['mtime']
                 video.nfo_mtime = file_info.get('nfo_mtime', 0)
                 videos_to_upsert.append(video)

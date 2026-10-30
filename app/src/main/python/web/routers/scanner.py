@@ -32,7 +32,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
 from starlette.background import BackgroundTask
 
-from core.gallery_scanner import VideoScanner, fast_scan_directory, VideoInfo, _run_sample_images_cleanup_pass, is_nas_system_dir_name  # noqa: PLC2701 — scanner 的 rescan 端點需要在特定時機主動觸發 gallery_scanner 內部的樣本圖清理 pass（該 pass 平常只在 scanner 自身流程內被呼叫），避免把整段清理邏輯複製一份到 router 層
+from core.gallery_scanner import VideoScanner, fast_scan_directory, scan_entry_needs_refresh, VideoInfo, _run_sample_images_cleanup_pass, is_nas_system_dir_name  # noqa: PLC2701 — scanner 的 rescan 端點需要在特定時機主動觸發 gallery_scanner 內部的樣本圖清理 pass（該 pass 平常只在 scanner 自身流程內被呼叫），避免把整段清理邏輯複製一份到 router 層
 from core.cover_layout import cover_base_stem
 from core.cover_attributes import effective_tags
 from core.video_extensions import get_video_extensions
@@ -355,6 +355,7 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
         total_inserted = 0
         total_updated = 0
         total_deleted = 0
+        missing_nfo_count = 0
         scan_error_count = 0
         session_added_paths = []  # 追蹤本次新增/變更的影片路徑
         long_paths: list[str] = []  # a5: Windows 長路徑收集（只在 win32 填充）
@@ -447,6 +448,7 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
                 # 比對決定需要處理的檔案
                 needs_scan = []
                 current_paths = set()
+                nfo_unchanged_paths = set()
 
                 for file_info in all_files:
                     path = file_info['path']
@@ -454,12 +456,14 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
                     current_paths.add(file_uri)
 
                     db_entry = db_index.get(file_uri)
-                    if db_entry is None:
-                        # 新檔案
+                    if scan_entry_needs_refresh(db_entry, file_info, path_mappings):
+                        # 新檔案、mtime/NFO/劇照變更，或 DB 仍缺基本資料／可服務封面。
                         needs_scan.append(file_info)
-                    elif db_entry[0] != file_info['mtime'] or db_entry[1] != file_info.get('nfo_mtime', 0) or db_entry[2] != file_info.get('sample_image_count', 0):
-                        # mtime、nfo_mtime 或劇照張數變更（TASK-118b-T9：db_entry[2] 為 get_mtime_index() 哨兵值時代表壞資料，恆不等於真實張數 → 同樣觸發重掃，fail-safe）
-                        needs_scan.append(file_info)
+                        if (
+                            db_entry is not None
+                            and db_entry[1] == file_info.get('nfo_mtime', 0)
+                        ):
+                            nfo_unchanged_paths.add(file_uri)
 
                 # 清理已刪除的檔案（限定在此目錄下）
                 # a5 Codex fix: scan 不完整時（skipped_paths 非空）跳過 deletion 偵測
@@ -489,6 +493,11 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
                 videos_to_upsert = []
                 cache_hits = len(all_files) - len(needs_scan)
                 cache_misses = 0
+                scan_uris = [
+                    to_file_uri(file_info['path'], path_mappings)
+                    for file_info in needs_scan
+                ]
+                existing_by_uri = repo.get_by_paths(scan_uris)
 
                 for i, file_info in enumerate(needs_scan, 1):
                     # TASK-90b-T4: 逐檔中止檢查（每檔處理之前）。單一資料夾內
@@ -504,6 +513,12 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
                     try:
                         video_info = scanner.scan_file(file_info['path'], None)
                         video = Video.from_video_info(video_info)
+                        existing = existing_by_uri.get(video.path)
+                        if existing is not None:
+                            if video.path in nfo_unchanged_paths:
+                                video.preserve_existing_metadata(existing)
+                            else:
+                                video.preserve_missing_metadata(existing)
                         video.mtime = file_info['mtime']
                         video.nfo_mtime = file_info.get('nfo_mtime', 0)
                         videos_to_upsert.append(video)
@@ -582,6 +597,22 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
         all_db_videos = [v for v in repo.get_all()
                          if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
 
+        # The generated page can render without an NFO, but title writeback and
+        # later metadata maintenance need one. Surface this before the user
+        # discovers it while translating a title.
+        missing_nfo_count = sum(
+            1 for v in all_db_videos if not _video_has_nfo(v, path_mappings)
+        )
+        if missing_nfo_count > 0:
+            yield _sse_event({
+                "type": "log",
+                "level": "warn",
+                "message": (
+                    f"发现 {missing_nfo_count} 部影片没有 NFO；"
+                    "翻译标题时会自动创建 NFO，也可以先到批量维护中补全"
+                ),
+            })
+
         # 轉換為 VideoInfo 格式供 HTMLGenerator 使用
         all_videos = []
         for v in all_db_videos:
@@ -594,6 +625,7 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
                 maker=v.maker,
                 date=v.release_date,
                 genre=','.join(v.tags) if v.tags else '',
+                user_tags=list(v.user_tags or []),
                 size=v.size_bytes,
                 mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
                 img=v.cover_path
@@ -786,6 +818,7 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
                 "video_count": len(all_videos),
                 "output_path": str(html_path),
                 "session_update": session_update,
+                "missing_nfo": missing_nfo_count,
                 "long_paths": long_paths,  # a5
                 "stats": {
                     "inserted": total_inserted,
@@ -1145,6 +1178,7 @@ def generate_tag_source_update(
         "cancelled": False,
         "failed_items": [],
         "items": [],
+        "changed_numbers": [],
     }
     try:
         config = load_config()
@@ -1304,6 +1338,8 @@ def generate_tag_source_update(
             if dry_run:
                 summary["success"] += 1
                 summary["changed" if changed else "unchanged"] += 1
+                if changed:
+                    summary["changed_numbers"].append(video.number)
                 if not nfo_path:
                     summary["no_nfo"] += 1
                 summary["items"].append(item)
@@ -1391,6 +1427,8 @@ def generate_tag_source_update(
 
             summary["success"] += 1
             summary["changed" if changed else "unchanged"] += 1
+            if changed:
+                summary["changed_numbers"].append(video.number)
             summary["items"].append(item)
             yield _sse_event({
                 "type": "log",
@@ -1446,11 +1484,12 @@ def check_update():
 
         stats = check_cache_needs_update(cache)
 
-        # 不要返回 paths 列表（太大）
         return {
             "success": True,
             "data": {
                 "need_update": stats['need_update'],
+                "paths": stats['paths'],
+                "items": stats['items'],
                 "details": {
                     "no_title": stats['no_title'],
                     "no_date": stats['no_date'],
@@ -1465,6 +1504,34 @@ def check_update():
         return {"success": False, "error": "檢查更新數量失敗"}
 
 
+def _video_has_nfo(video: Video, path_mappings: dict) -> bool:
+    """Return whether a row has a usable NFO.
+
+    Check the two real locations (source sidecar and output folder) whenever
+    the video path is accessible. This catches stale ``nfo_mtime`` values and
+    legacy ``.nfo.xml`` names. The DB signal remains the fallback for
+    inaccessible/legacy rows (for example old cache entries).
+    """
+    try:
+        video_path = uri_to_local_fs_path(video.path, path_mappings)
+        video_path_accessible = os.path.isfile(video_path)
+        if video.output_dir:
+            output_dir = Path(
+                uri_to_local_fs_path(video.output_dir, path_mappings)
+            )
+            if video_path_accessible and output_dir.is_dir():
+                if any(
+                    entry.is_file() and entry.name.lower().endswith(".nfo")
+                    for entry in output_dir.iterdir()
+                ):
+                    return True
+        if video_path_accessible:
+            return bool(get_nfo_path_from_video(video.path, path_mappings))
+    except (OSError, ValueError, TypeError):
+        pass
+    return (video.nfo_mtime or 0) > 0
+
+
 @router.get("/missing-check")
 def check_missing():
     """T10: 檢查 DB 中缺少 NFO 或封面的影片數量與清單"""
@@ -1477,6 +1544,7 @@ def check_missing():
 
         repo = VideoRepository(db_path)
         all_videos = repo.get_all()
+        path_mappings = load_config().get("gallery", {}).get("path_mappings", {})
 
         missing_both = 0
         missing_nfo = 0
@@ -1484,12 +1552,15 @@ def check_missing():
         items = []
 
         for v in all_videos:
-            has_nfo = (v.nfo_mtime or 0) > 0
-            has_cover = bool(v.cover_path)
-            produced = bool(v.output_dir)
-            tried = (v.scrape_attempted_at or 0) > 0
-            if produced or tried:
-                continue
+            has_nfo = _video_has_nfo(v, path_mappings)
+            has_cover = False
+            if v.cover_path:
+                try:
+                    has_cover = os.path.isfile(
+                        uri_to_local_fs_path(v.cover_path, path_mappings)
+                    )
+                except Exception:
+                    has_cover = False
             if has_nfo and has_cover:
                 continue
             # Older scans could store number=NULL when the filename put CJK text
@@ -1983,6 +2054,7 @@ def generate_nfo_update(
                     "no_metadata": 0,
                     "cancelled": False,
                     "failed_items": [],
+                    "updated_paths": [],
                 },
             })
             return
@@ -2019,7 +2091,51 @@ def generate_nfo_update(
             "no_metadata": 0,
             "cancelled": False,
             "failed_items": [],
+            "updated_paths": [],
         }
+        updated_paths = list(update_stats.get("updated_paths") or [])
+        if updated_paths:
+            try:
+                config = load_config()
+                scanner = VideoScanner(
+                    path_mappings=path_mappings,
+                    nfo_title_format=config.get("scraper", {}).get(
+                        "nfo_title_format", "[{num}]{title}"
+                    ),
+                )
+                refreshed_rows = []
+                existing_by_uri = repo.get_by_paths(updated_paths)
+                for path in updated_paths:
+                    try:
+                        info = scanner.scan_file(
+                            uri_to_local_fs_path(path, path_mappings),
+                            None,
+                        )
+                        video = Video.from_video_info(info)
+                        existing = existing_by_uri.get(path)
+                        if existing is not None:
+                            video.preserve_missing_metadata(existing)
+                        nfo_path = get_nfo_path_from_video(path, path_mappings)
+                        if nfo_path:
+                            video.nfo_mtime = os.stat(nfo_path).st_mtime
+                        elif existing is not None:
+                            video.nfo_mtime = existing.nfo_mtime
+                        refreshed_rows.append(video)
+                    except Exception:
+                        logger.warning(
+                            "NFO 更新後刷新資料庫失敗: %s",
+                            path,
+                            exc_info=True,
+                        )
+                if refreshed_rows:
+                    repo.upsert_batch(refreshed_rows)
+                    yield _sse_event({
+                        "type": "log",
+                        "level": "info",
+                        "message": f"已同步 {len(refreshed_rows)} 部影片的資料庫資料",
+                    })
+            except Exception:
+                logger.warning("NFO 更新後批次刷新資料庫失敗", exc_info=True)
         cancelled = bool(update_stats.get("cancelled"))
         yield _sse_event({
             "type": "done",
