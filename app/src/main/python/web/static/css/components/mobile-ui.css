@@ -665,6 +665,55 @@
     --spotlight-right-slot: 14rem;
   }
 
+  /* Actress photo picker actions were translucent white-on-white on the
+     mobile sheet. Keep both actions visible, use the shared 48px touch
+     target, and reserve space in the source row so the buttons never cover
+     the source label. */
+  [data-is-android="true"] .actress-picker-overlay .picker-current-source {
+    min-height: var(--ui-touch-target);
+    padding-right: calc(var(--ui-touch-target) * 2 + 12px);
+    align-items: center;
+  }
+
+  [data-is-android="true"] .actress-picker-overlay .picker-refresh-btn,
+  [data-is-android="true"] .actress-picker-overlay .picker-upload-btn {
+    top: 8px;
+    width: var(--ui-touch-target);
+    height: var(--ui-touch-target);
+    color: var(--ui-primary-fg);
+    background: var(--ui-primary-bg);
+    border: 1px solid color-mix(in oklch, var(--ui-primary-bg) 82%, black);
+    border-radius: var(--ui-control-radius);
+    box-shadow: var(--fluent-shadow-2);
+    font-size: 1.15rem;
+  }
+
+  [data-is-android="true"] .actress-picker-overlay .picker-refresh-btn {
+    right: 12px;
+  }
+
+  [data-is-android="true"] .actress-picker-overlay .picker-upload-btn {
+    right: calc(12px + var(--ui-touch-target) + 8px);
+  }
+
+  [data-is-android="true"] .actress-picker-overlay .picker-refresh-btn:hover:not(:disabled),
+  [data-is-android="true"] .actress-picker-overlay .picker-upload-btn:hover:not(:disabled) {
+    color: var(--ui-primary-fg);
+    background: color-mix(in oklch, var(--ui-primary-bg) 88%, white);
+    border-color: color-mix(in oklch, var(--ui-primary-bg) 70%, black);
+    box-shadow: var(--fluent-shadow-4);
+  }
+
+  [data-is-android="true"] .actress-picker-overlay .picker-refresh-btn:active:not(:disabled),
+  [data-is-android="true"] .actress-picker-overlay .picker-upload-btn:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  [data-is-android="true"] .actress-picker-overlay .picker-refresh-btn:disabled,
+  [data-is-android="true"] .actress-picker-overlay .picker-upload-btn:disabled {
+    opacity: 0.48;
+  }
+
   [data-is-android="true"] .btn-primary:not(.btn-outline) {
     background: var(--ui-primary-bg);
     color: var(--ui-primary-fg);

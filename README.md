@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r30-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r31-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r30-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r31-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r30`（versionCode `17046`）
+- 版本：`0.17.18-r31`（versionCode `17047`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -164,6 +164,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
     并会自动复用旧版生成的 `.nfo.xml` 文件，避免重复创建
 - r29：修复女优浏览模式搜索框左侧模式按钮遮挡提示文字的问题
 - r30：Android 灯箱标题行的精选星标固定对齐标题第一行；多行标题不再让星标落到整块标题的垂直中间
+- r31：女优照片来源面板的“刷新”和“本地上传”按钮改为深色高对比样式，并扩大到 48px 触控区
 
 ## 限制
 
