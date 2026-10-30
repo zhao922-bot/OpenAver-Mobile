@@ -13,18 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r15-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r16-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r15-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r16-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r15`（versionCode `17031`）
+- 版本：`0.17.18-r16`（versionCode `17032`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：
-  `BE1413C5B863F5BE818595C792274CB88316BDF56856DD1326EF2FA12CEDE213`
+- SHA-256：`签名构建后更新`
 
 ## 安装
 
@@ -87,6 +86,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   fanart 和 curator 原图可逐字节复制到 SD 卡
 - r15：下载图片、衍生图片和 NFO 统一使用字节校验与原子替换路径，写入失败时
   保留旧文件
+- r16：批量补全 NFO 改用统一 SAF 写入路径，修复外置 SD 卡上的
+  `PermissionError`，并兼容 Windows 拷入的 `.NFO` 大写扩展名
+- r16：新增“批量更换标签来源”，可按一个已启用来源重新获取普通标签并同步
+  NFO 与数据库；保留标题、封面、简介和用户标签，字幕侧车文件仍会保留
+  “中文字幕”属性
+- r16：批量标签任务离开页面或连接断开后会主动停止；Cloudflare 手动来源和
+  自定义来源不会出现在批量来源列表中
 
 ## 限制
 
