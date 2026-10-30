@@ -46,7 +46,7 @@ export function stateScan() {
         copyFailDump: '',
 
         // ===== T7b: State Machine =====
-        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | jellyfinUpdating | enriching | done | error | cancelled
+        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | done | error | cancelled
 
         // ===== T7b: Progress =====
         progressStatus: '',
@@ -158,7 +158,7 @@ export function stateScan() {
         },
 
         get taskEtaText() {
-            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'enrich'].includes(this.taskKind)) {
+            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich'].includes(this.taskKind)) {
                 return '';
             }
             let seconds = this.taskEtaSeconds;
@@ -207,6 +207,7 @@ export function stateScan() {
             return this.state === 'generating' || this.state === 'nfoUpdating'
                 || this.state === 'tagSourcePreviewing'
                 || this.state === 'tagSourceUpdating'
+                || this.state === 'renamePreviewing'
                 || this.state === 'jellyfinUpdating' || this.state === 'enriching';
         },
 
@@ -474,6 +475,9 @@ export function stateScan() {
                     const availableSources = this.tagSourceOptions;
                     if (!availableSources.some((source) => source.id === this.tagSourceUpdateSource)) {
                         this.tagSourceUpdateSource = availableSources[0]?.id || 'auto';
+                    }
+                    if (!availableSources.some((source) => source.id === this.renameSource)) {
+                        this.renameSource = availableSources[0]?.id || 'auto';
                     }
                     // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                     this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';

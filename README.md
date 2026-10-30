@@ -13,17 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r27-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r28-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r27-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r28-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r27`（versionCode `17043`）
+- 版本：`0.17.18-r28`（versionCode `17044`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：`EDB7C5534A7EDC4B7F34343F08D6C2A8161BF75ED5A99DEFD5253E368712AB4D`
+- SHA-256：`签名构建后更新`
 
 ## 安装
 
@@ -150,6 +150,9 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
     可在数据库记录仍完整时按番号找回唯一视频，并修复到安全长度
 - r27：视频、封面、NFO、poster 和 fanart 共用同一条截断后的文件名主干，
     超长标题以 `...` 结尾，避免侧车名称不一致或再次超过 Android 文件系统限制
+- r28：合并“统一文件名格式”和“统一文件夹格式”为一个统一命名流程
+- r28：可选择元数据来源，以该来源的标题决定番号后面的视频名和影片文件夹名；
+    预览会同时展示视频、侧车和文件夹变更，并支持整批失败回滚
 
 ## 限制
 

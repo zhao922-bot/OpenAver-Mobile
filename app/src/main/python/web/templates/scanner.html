@@ -402,47 +402,32 @@
                     title="{{ t('scanner.stats.nfo_update_title') }}">
             </button>
         </div>
-        <!-- r16: Replace ordinary tags from one selected source -->
-        <div class="nfo-update-row maintenance-row maintenance-row-rename">
+        <!-- r28: source-titled file and folder normalization -->
+        <div class="nfo-update-row maintenance-row maintenance-row-rename-source">
             <div class="maintenance-copy">
                 <span class="maintenance-icon"><i class="bi bi-input-cursor-text"></i></span>
                 <span class="maintenance-text">
-                    <strong>{{ t('scanner.rename.row_title') }}</strong>
-                    <small>{{ t('scanner.rename.row_hint') }}</small>
+                    <strong>{{ t('scanner.rename.source_row_title') }}</strong>
+                    <small>{{ t('scanner.rename.source_row_hint') }}</small>
                 </span>
             </div>
-            <div class="maintenance-controls">
+            <div class="maintenance-controls rename-source-controls">
+                <select class="select select-bordered select-sm"
+                        x-model="renameSource"
+                        :disabled="isBusy"
+                        :aria-label="window.t('scanner.rename.source_select_label')">
+                    <template x-for="source in tagSourceOptions" :key="source.id">
+                        <option :value="source.id" x-text="source.display_name"></option>
+                    </template>
+                </select>
                 <button class="btn-tag-preview"
                         @click="previewRenamePlan()"
                         :disabled="renamePreviewLoading || isBusy">
                     <span x-show="renamePreviewLoading" class="loading loading-spinner loading-sm"></span>
                     <i class="bi bi-eye" x-show="!renamePreviewLoading"></i>
                     <span x-text="window.t(renamePreviewLoading
-                        ? 'scanner.rename.preview_loading'
-                        : 'scanner.rename.preview_btn')"></span>
-                </button>
-            </div>
-        </div>
-
-        <div class="nfo-update-row maintenance-row maintenance-row-rename-folder">
-            <div class="maintenance-copy">
-                <span class="maintenance-icon"><i class="bi bi-folder-symlink"></i></span>
-                <span class="maintenance-text">
-                    <strong>{{ t('scanner.rename.folder_row_title') }}</strong>
-                    <small>{{ t('scanner.rename.folder_row_hint') }}</small>
-                </span>
-            </div>
-            <div class="maintenance-controls">
-                <button class="btn-tag-preview"
-                        @click="previewRenamePlan('folders')"
-                        :disabled="renamePreviewLoading || isBusy">
-                    <span x-show="renamePreviewLoading && renamePreviewMode === 'folders'"
-                          class="loading loading-spinner loading-sm"></span>
-                    <i class="bi bi-eye"
-                       x-show="!renamePreviewLoading || renamePreviewMode !== 'folders'"></i>
-                    <span x-text="window.t(renamePreviewLoading && renamePreviewMode === 'folders'
-                        ? 'scanner.rename.folder_preview_loading'
-                        : 'scanner.rename.folder_preview_btn')"></span>
+                        ? 'scanner.rename.source_previewing'
+                        : 'scanner.rename.source_preview_btn')"></span>
                 </button>
             </div>
         </div>
@@ -1195,11 +1180,26 @@
                     <strong x-text="renameSecondaryValue"></strong>
                 </div>
                 <div class="batch-confirm-summary-item">
+                    <span>{{ t('scanner.rename.summary_folders') }}</span>
+                    <strong x-text="renameFolderValue"></strong>
+                </div>
+                <div class="batch-confirm-summary-item">
                     <span>{{ t('scanner.rename.summary_conflicts') }}</span>
                     <strong x-text="renamePlan?.summary?.conflicts || 0"></strong>
                 </div>
             </div>
+            <p class="batch-confirm-note">
+                <i class="bi bi-tags"></i>
+                <span x-text="window.t('scanner.rename.source_used', {
+                    source: renameSourceLabel
+                })"></span>
+            </p>
             <p class="fluent-modal-body" x-text="renameModalIntro"></p>
+            <p class="batch-confirm-note is-warning"
+               x-show="renameFailedValue > 0"
+               x-text="window.t('scanner.rename.source_failed', {
+                   count: renameFailedValue
+               })"></p>
             <p class="fluent-modal-body batch-confirm-note">
                 <i class="bi bi-info-circle"></i>
                 <span>{{ t('scanner.rename.modal_note') }}</span>
@@ -1213,6 +1213,17 @@
                             <span class="rename-preview-old" x-text="item.old_name"></span>
                             <i class="bi bi-arrow-right"></i>
                             <span class="rename-preview-new" x-text="item.new_name"></span>
+                        </div>
+                        <div class="rename-preview-videos">
+                            <template x-for="video in item.videos" :key="video.db_old_uri">
+                                <div class="rename-preview-video"
+                                     x-show="video.old_name !== video.new_name">
+                                    <i class="bi bi-film"></i>
+                                    <span x-text="video.old_name"></span>
+                                    <i class="bi bi-arrow-right"></i>
+                                    <span x-text="video.new_name"></span>
+                                </div>
+                            </template>
                         </div>
                         <small x-text="renameRelatedText(item)"></small>
                     </div>
@@ -1249,7 +1260,7 @@
                 </button>
                 <button type="button" class="btn btn-primary"
                         @click="executeRenamePlan()"
-                        x-show="renamePrimaryValue > 0"
+                        x-show="renameHasChanges"
                         :disabled="renameExecuteDisabled">
                     <span x-show="renameExecuting" class="loading loading-spinner loading-xs"></span>
                     <i class="bi bi-shield-check" x-show="!renameExecuting"></i>

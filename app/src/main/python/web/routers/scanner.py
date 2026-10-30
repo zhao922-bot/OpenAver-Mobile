@@ -58,8 +58,11 @@ from core.config import load_config, iter_gallery_sources, get_gallery_source_pa
 from core.data_root import resolve_gallery_output_path
 from core.readonly_producer import produce_source
 from core.rename_normalizer import (
+    build_combined_rename_plan,
     build_folder_rename_plan,
     build_rename_plan,
+    canonicalize_source_stem,
+    execute_combined_rename_plan,
     execute_folder_rename_plan,
     execute_rename_plan,
 )
@@ -86,6 +89,8 @@ router = APIRouter(prefix="/api/gallery", tags=["gallery"])
 _jellyfin_cache_result: dict | None = None
 _jellyfin_cache_time: float = 0
 _rename_execute_lock = threading.Lock()
+_rename_plan_cache: dict[str, tuple[float, dict]] = {}
+_RENAME_PLAN_TTL_SECONDS = 30 * 60
 
 
 class RenameExecuteRequest(BaseModel):
@@ -1034,16 +1039,21 @@ def _build_nfo_update_cache(all_videos, config) -> tuple:
     return cache, skipped_readonly, path_mappings
 
 
-def _validate_batch_tag_source(source: str, config: dict) -> Optional[str]:
-    """Return a user-facing error for sources that cannot run as a tag batch."""
+def _validate_batch_source(
+    source: str,
+    config: dict,
+    *,
+    action: str,
+) -> Optional[str]:
+    """Return a user-facing error for sources that cannot run in a batch."""
     if source == "auto":
         return None
     if source.startswith("custom:"):
-        return "自定义来源不支持批量更换标签，请改用单片重刮"
+        return f"自定义来源不支持{action}，请改用单片重刮"
     if not validate_source_id(source):
         return "未知来源"
     if source in {row.id for row in get_manual_only_sources()}:
-        return "该来源需要 Cloudflare 交互，不能用于批量更换标签"
+        return f"该来源需要 Cloudflare 交互，不能用于{action}"
     source_row = next(
         (
             row
@@ -1053,10 +1063,18 @@ def _validate_batch_tag_source(source: str, config: dict) -> Optional[str]:
         None,
     )
     if source_row and source_row.get("manual_only"):
-        return "该来源需要 Cloudflare 交互，不能用于批量更换标签"
+        return f"该来源需要 Cloudflare 交互，不能用于{action}"
     if not source_row or not source_row.get("enabled"):
         return "该来源未启用，请先在设置中启用"
     return None
+
+
+def _validate_batch_tag_source(source: str, config: dict) -> Optional[str]:
+    return _validate_batch_source(
+        source,
+        config,
+        action="批量更换标签",
+    )
 
 
 def _resolve_tag_update_nfo_path(
@@ -1564,6 +1582,219 @@ def _build_current_rename_plan(scope: str = "files") -> dict:
     )
 
 
+def _remember_rename_plan(plan: dict) -> None:
+    now = time.monotonic()
+    expired = [
+        plan_id
+        for plan_id, (created_at, _plan) in _rename_plan_cache.items()
+        if now - created_at > _RENAME_PLAN_TTL_SECONDS
+    ]
+    for plan_id in expired:
+        _rename_plan_cache.pop(plan_id, None)
+    plan_id = str(plan.get("plan_id") or "")
+    if plan_id:
+        _rename_plan_cache[plan_id] = (now, plan)
+    while len(_rename_plan_cache) > 4:
+        oldest = min(
+            _rename_plan_cache,
+            key=lambda key: _rename_plan_cache[key][0],
+        )
+        _rename_plan_cache.pop(oldest, None)
+
+
+def _combined_rename_sources(config: dict) -> tuple[list[Any], list[str], dict]:
+    gallery = config.get("gallery", {})
+    mappings = gallery.get("path_mappings", {}) or {}
+    ro_prefixes = readonly_source_prefixes(gallery, mappings)
+    writable = writable_source_prefixes(gallery, mappings)
+    videos = []
+    for video in VideoRepository(get_db_path()).get_all():
+        canonical = coerce_to_file_uri(video.path, mappings)
+        if is_path_readonly(canonical, ro_prefixes, writable):
+            continue
+        videos.append(video)
+    roots = []
+    for source in get_gallery_source_paths(gallery):
+        try:
+            roots.append(
+                uri_to_fs_path(coerce_to_file_uri(source, mappings))
+            )
+        except Exception:
+            logger.warning(
+                "rename source root is invalid: %s",
+                source,
+                exc_info=True,
+            )
+    return videos, roots, mappings
+
+
+def generate_source_rename_preview(
+    source: str,
+    cancel_event: Optional[threading.Event] = None,
+) -> Generator[str, None, None]:
+    """Fetch titles from one selected source, then preview file+folder renames."""
+    failed_items: list[dict[str, Any]] = []
+    try:
+        config = load_config()
+        source_error = _validate_batch_source(
+            source,
+            config,
+            action="按来源统一命名",
+        )
+        if source_error:
+            yield _sse_event({"type": "error", "message": source_error})
+            return
+
+        db_path = get_db_path()
+        if not db_path.exists():
+            yield _sse_event({"type": "error", "message": "数据库不存在，请先生成列表"})
+            return
+
+        videos, source_roots, mappings = _combined_rename_sources(config)
+        videos = [video for video in videos if video.path]
+        total = len(videos)
+        if not videos:
+            yield _sse_event({
+                "type": "done",
+                "message": "没有可统一命名的影片",
+                "plan": build_combined_rename_plan(
+                    [],
+                    source_id=source,
+                    stem_overrides={},
+                    source_roots=source_roots,
+                    path_mappings=mappings,
+                    config=config,
+                ),
+            })
+            return
+
+        javbus_lang = get_javbus_lang()
+        title_cache: dict[str, Optional[str]] = {}
+        stem_overrides: dict[str, str] = {}
+        started_at = time.monotonic()
+        cancelled = False
+
+        for index, video in enumerate(videos, start=1):
+            if cancel_event is not None and cancel_event.is_set():
+                cancelled = True
+                break
+            elapsed = max(time.monotonic() - started_at, 0.001)
+            eta_seconds = round(
+                (elapsed / max(index - 1, 1))
+                * max(total - index + 1, 0)
+            )
+            yield _sse_event({
+                "type": "progress",
+                "current": index,
+                "total": total,
+                "number": video.number or "",
+                "status": (
+                    f"读取 {video.number or video.path} 的来源标题"
+                ),
+                "failed": len(failed_items),
+                "eta_seconds": eta_seconds,
+            })
+
+            number = str(video.number or "").strip()
+            if not number:
+                failed_items.append({
+                    "path": video.path,
+                    "number": "",
+                    "error": "缺少番号",
+                })
+                continue
+
+            try:
+                if number not in title_cache:
+                    metadata = search_jav(
+                        number,
+                        source=source,
+                        javbus_lang=javbus_lang,
+                        surface_access_errors=True,
+                    )
+                    title_cache[number] = (
+                        str(metadata.get("title") or "")
+                        if metadata
+                        else None
+                    )
+                source_title = title_cache[number]
+                stem, normalized_number, reason = canonicalize_source_stem(
+                    number,
+                    source_title,
+                )
+                if not stem:
+                    raise ValueError(
+                        "所选来源没有可用标题"
+                        if reason == "empty_title"
+                        else reason
+                    )
+                stem_overrides[video.path] = stem
+                yield _sse_event({
+                    "type": "log",
+                    "level": "info",
+                    "message": f"{normalized_number}: 使用来源标题「{source_title}」",
+                })
+            except Exception as exc:
+                failed_items.append({
+                    "path": video.path,
+                    "number": number,
+                    "error": str(exc),
+                })
+                yield _sse_event({
+                    "type": "log",
+                    "level": "warn",
+                    "message": f"{number}: 来源标题获取失败（{exc}）",
+                })
+
+        eligible = [
+            video for video in videos
+            if video.path in stem_overrides
+        ]
+        plan = build_combined_rename_plan(
+            eligible,
+            source_id=source,
+            stem_overrides=stem_overrides,
+            source_roots=source_roots,
+            path_mappings=mappings,
+            config=config,
+            failed_items=failed_items,
+        )
+        plan["cancelled"] = cancelled
+        plan["summary"]["cancelled"] = cancelled
+        summary = plan["summary"]
+        if (
+            not cancelled
+            and plan.get("plan_id")
+            and (
+                summary["rename_videos"]
+                or summary["rename_files"]
+                or summary["rename_folders"]
+            )
+        ):
+            _remember_rename_plan(plan)
+        if cancelled:
+            message = "来源标题预览已取消"
+        else:
+            message = (
+                f"命名预览完成：{plan['summary']['rename_videos']} 个视频文件，"
+                f"{plan['summary']['rename_folders']} 个文件夹，"
+                f"失败 {plan['summary']['failed']}，"
+                f"冲突 {plan['summary']['conflicts']}"
+            )
+        yield _sse_event({
+            "type": "done",
+            "message": message,
+            "plan": plan,
+            "preview": True,
+        })
+    except Exception:
+        logger.exception("按来源统一命名预览失败: source=%s", source)
+        yield _sse_event({"type": "error", "message": "按来源统一命名预览失败"})
+    finally:
+        if cancel_event is not None:
+            mark_generate_done(cancel_event)
+
+
 @router.get("/rename-preview")
 def rename_preview(scope: str = Query("files")):
     """Preview filename or direct-child folder normalization without writes."""
@@ -1584,6 +1815,49 @@ def rename_execute(request: RenameExecuteRequest):
         }
     try:
         db_path = get_db_path()
+        if request.scope == "combined":
+            cached = _rename_plan_cache.pop(request.plan_id, None)
+            if cached is None:
+                return {
+                    "success": False,
+                    "error": "plan_expired",
+                }
+            created_at, plan = cached
+            if time.monotonic() - created_at > _RENAME_PLAN_TTL_SECONDS:
+                return {
+                    "success": False,
+                    "error": "plan_expired",
+                }
+            if plan.get("cancelled"):
+                return {
+                    "success": False,
+                    "error": "plan_cancelled",
+                }
+            if plan["summary"]["conflicts"]:
+                return {
+                    "success": False,
+                    "error": "plan_has_conflicts",
+                }
+            result = execute_combined_rename_plan(
+                plan,
+                VideoRepository(db_path),
+                manifest_dir=db_path.parent / "rename-manifests",
+            )
+            if result.get("success"):
+                for item in plan["items"]:
+                    if item["status"] != "ready":
+                        continue
+                    for video in item["videos"]:
+                        try:
+                            thumbnail_cache.invalidate(video["db_old_uri"])
+                        except Exception:
+                            logger.warning(
+                                "combined rename thumbnail invalidate failed: %s",
+                                video["db_old_uri"],
+                                exc_info=True,
+                            )
+            return result
+
         plan = _build_current_rename_plan(request.scope)
         if not plan.get("plan_id") or plan["plan_id"] != request.plan_id:
             return {
@@ -1633,6 +1907,21 @@ def rename_execute(request: RenameExecuteRequest):
         return {"success": False, "error": str(exc)}
     finally:
         _rename_execute_lock.release()
+
+
+@router.get("/rename-source-preview")
+async def preview_source_rename(
+    request: Request,
+    source: str = Query(..., min_length=1),
+):
+    """Fetch selected-source titles and preview combined file/folder renames."""
+    return await _cancelable_sse_response(
+        request,
+        lambda cancel_event: generate_source_rename_preview(
+            source,
+            cancel_event,
+        ),
+    )
 
 
 def generate_nfo_update(

@@ -7,9 +7,12 @@ from pathlib import Path
 from core.database import Video
 from core.path_utils import to_file_uri
 from core.rename_normalizer import (
+    build_combined_rename_plan,
     build_folder_rename_plan,
     build_rename_plan,
+    canonicalize_source_stem,
     canonicalize_stem,
+    execute_combined_rename_plan,
     execute_folder_rename_plan,
     execute_rename_plan,
 )
@@ -52,6 +55,22 @@ def test_canonicalize_stem_inserts_space_without_changing_title():
         "ABC-123 標題...",
         "ABC-123",
         "unchanged",
+    )
+
+
+def test_canonicalize_source_stem_sanitizes_and_removes_duplicate_number():
+    assert canonicalize_source_stem(
+        "ABC-123",
+        "ABC-123 新標題 / 第二段：完結?",
+    ) == (
+        "ABC-123 新標題 ／ 第二段：完結？",
+        "ABC-123",
+        "source_title",
+    )
+    assert canonicalize_source_stem("ABC-123", "  ") == (
+        None,
+        "ABC-123",
+        "empty_title",
     )
 
 
@@ -430,6 +449,127 @@ def test_execute_folder_rename_updates_database_paths_without_renaming_files(tmp
     assert Path(result["manifest_path"]).is_file()
 
 
+def test_combined_plan_renames_files_and_folder_from_source_title(tmp_path):
+    source = tmp_path / "library"
+    folder = source / "ABC123 舊名稱"
+    sample = folder / "extrafanart" / "fanart1.jpg"
+    sample.parent.mkdir(parents=True)
+    video = folder / "ABC123 舊名稱.mp4"
+    nfo = folder / "ABC123 舊名稱.nfo"
+    cover = folder / "ABC123 舊名稱.jpg"
+    poster = folder / "ABC123 舊名稱-poster.jpg"
+    for path in (video, nfo, cover, poster, sample):
+        path.write_bytes(path.name.encode("utf-8"))
+
+    old_uri = to_file_uri(str(video))
+    old_cover_uri = to_file_uri(str(cover))
+    old_sample_uri = to_file_uri(str(sample))
+    row = Video(
+        path=old_uri,
+        number="ABC-123",
+        cover_path=old_cover_uri,
+        sample_images=[old_sample_uri],
+        size_bytes=video.stat().st_size,
+    )
+    plan = build_combined_rename_plan(
+        [row],
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 來源新標題"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+    item = plan["items"][0]
+
+    assert plan["summary"]["conflicts"] == 0
+    assert plan["summary"]["rename_folders"] == 1
+    assert plan["summary"]["rename_videos"] == 1
+    assert item["new_name"] == "ABC-123 來源新標題"
+    new_folder = source / "ABC-123 來源新標題"
+    assert item["videos"][0]["db_new_uri"] == to_file_uri(
+        str(new_folder / "ABC-123 來源新標題.mp4")
+    )
+    assert item["videos"][0]["cover_path_new"] == to_file_uri(
+        str(new_folder / "ABC-123 來源新標題.jpg")
+    )
+    assert item["videos"][0]["sample_images_new"] == [
+        to_file_uri(str(new_folder / "extrafanart" / "fanart1.jpg"))
+    ]
+
+    repo = FakeRepo()
+    repo.paths.add(old_uri)
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+    )
+
+    assert result["success"] is True
+    assert new_folder.is_dir()
+    assert (new_folder / "ABC-123 來源新標題.mp4").is_file()
+    assert (new_folder / "ABC-123 來源新標題.nfo").is_file()
+    assert (new_folder / "ABC-123 來源新標題.jpg").is_file()
+    assert (new_folder / "ABC-123 來源新標題-poster.jpg").is_file()
+    assert (new_folder / "extrafanart" / "fanart1.jpg").is_file()
+    assert not folder.exists()
+    assert to_file_uri(str(new_folder / "ABC-123 來源新標題.mp4")) in repo.paths
+    assert repo.cover_updates == [(
+        to_file_uri(str(new_folder / "ABC-123 來源新標題.mp4")),
+        to_file_uri(str(new_folder / "ABC-123 來源新標題.jpg")),
+        old_cover_uri,
+    )]
+    assert repo.sample_updates == [(
+        to_file_uri(str(new_folder / "ABC-123 來源新標題.mp4")),
+        [to_file_uri(str(new_folder / "extrafanart" / "fanart1.jpg"))],
+    )]
+
+
+def test_combined_execute_rolls_back_files_when_folder_rename_fails(tmp_path):
+    source = tmp_path / "library"
+    folder = source / "ABC123 舊名稱"
+    folder.mkdir(parents=True)
+    video = folder / "ABC123 舊名稱.mp4"
+    nfo = folder / "ABC123 舊名稱.nfo"
+    cover = folder / "ABC123 舊名稱.jpg"
+    for path in (video, nfo, cover):
+        path.write_bytes(path.name.encode("utf-8"))
+    old_uri = to_file_uri(str(video))
+    plan = build_combined_rename_plan(
+        [Video(
+            path=old_uri,
+            number="ABC-123",
+            cover_path=to_file_uri(str(cover)),
+        )],
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 來源新標題"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+    repo = FakeRepo()
+    repo.paths.add(old_uri)
+
+    def fail_folder_rename(_source, _target):
+        raise OSError("folder rename failed")
+
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+        folder_rename_fn=fail_folder_rename,
+    )
+
+    assert result["success"] is False
+    assert result["rollback_ok"] is True
+    assert folder.is_dir()
+    assert video.is_file()
+    assert nfo.is_file()
+    assert cover.is_file()
+    assert not (folder / "ABC-123 來源新標題.mp4").exists()
+    assert repo.paths == {old_uri}
+    assert repo.cover_updates == []
+
+
 def test_folder_execute_rolls_back_when_database_update_fails(tmp_path):
     source = tmp_path / "library"
     folder = source / "ABC123標題"
@@ -462,6 +602,19 @@ def test_rename_locales_cover_preview_and_execution_states():
     required = {
         "row_title",
         "row_hint",
+        "source_row_title",
+        "source_row_hint",
+        "source_select_label",
+        "source_preview_btn",
+        "source_previewing",
+        "source_modal_title",
+        "source_modal_intro",
+        "source_used",
+        "source_failed",
+        "source_execute_btn",
+        "source_execute_success",
+        "preview_done",
+        "plan_expired",
         "folder_row_title",
         "folder_row_hint",
         "preview_btn",

@@ -94,13 +94,26 @@
      "var": {
        "num": "ID",
        "title": "Title",
-@@ -801,6 +856,47 @@
+@@ -801,6 +856,60 @@
      }
    },
    "scanner": {
 +    "rename": {
 +      "row_title": "Normalize video filenames",
 +      "row_hint": "Normalize number/title spacing; overlong names are safely truncated with ...",
++      "source_row_title": "Normalize filenames and folders",
++      "source_row_hint": "Choose a metadata source; its title after the number determines both the video and folder names",
++      "source_select_label": "Title source",
++      "source_preview_btn": "Preview unified rename",
++      "source_previewing": "Fetching source titles...",
++      "source_modal_title": "Unified filename and folder preview",
++      "source_modal_intro": "Video files, NFO, covers, poster, fanart, subtitles, and each direct-child movie folder are renamed from the selected source title. extrafanart and unrelated files stay unchanged.",
++      "source_used": "Title source: {source}",
++      "source_failed": "{count} videos could not get a title from this source and will stay unchanged",
++      "source_execute_btn": "Execute unified rename",
++      "source_execute_success": "Unified rename complete: {videos} videos, {files} files, {folders} folders",
++      "preview_done": "Unified rename preview complete",
++      "plan_expired": "The rename preview expired. Please preview again.",
 +      "folder_row_title": "Normalize video folders",
 +      "folder_row_hint": "Preview the direct-child movie folders under each scan root",
 +      "preview_btn": "Preview rename",
@@ -142,7 +155,7 @@
      "page_title": "Scanner",
      "toast": {
        "folder_already_added": "This folder is already in the list",
-@@ -829,6 +925,8 @@
+@@ -829,6 +938,8 @@
        "nfo_update_done": "Update complete! Regenerate the list to refresh",
        "no_jellyfin_update_needed": "No videos need updating",
        "jellyfin_update_done": "Update complete!",
@@ -151,7 +164,7 @@
        "path_copied": "Copied: {path}",
        "browse_dir_fallback": "Your browser can’t read the path of dropped files, so the folder picker has been opened for you"
      },
-@@ -868,13 +966,79 @@
+@@ -868,13 +979,79 @@
        "clear_display_title": "Clear display (restored on reload)",
        "clear_all_title": "Clear all (including history)"
      },
@@ -231,7 +244,7 @@
        "jellyfin_prefix": "Jellyfin cover format missing:",
        "jellyfin_suffix": " videos",
        "jellyfin_update_title": "Generate Jellyfin poster + fanart",
-@@ -1410,10 +1574,90 @@
+@@ -1410,10 +1587,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -322,7 +335,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1845,6 +2089,12 @@
+@@ -1845,6 +2102,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -335,7 +348,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2110,11 @@
+@@ -1860,7 +2123,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -348,7 +361,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2132,15 @@
+@@ -1878,11 +2145,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -451,13 +464,26 @@
      "var": {
        "num": "番号",
        "title": "タイトル",
-@@ -801,6 +856,47 @@
+@@ -801,6 +856,60 @@
      }
    },
    "scanner": {
 +    "rename": {
 +      "row_title": "動画ファイル名を統一",
 +      "row_hint": "品番とタイトルの間隔を統一し、長すぎる名前は ... 付きで安全に短縮",
++      "source_row_title": "ファイル名とフォルダー名を統一",
++      "source_row_hint": "メタデータ取得元を選び、品番の後ろをその取得元のタイトルに統一します",
++      "source_select_label": "タイトル取得元",
++      "source_preview_btn": "統一名前をプレビュー",
++      "source_previewing": "取得元のタイトルを読み込み中...",
++      "source_modal_title": "ファイル・フォルダー統一名プレビュー",
++      "source_modal_intro": "選択した取得元のタイトルから、動画、NFO、カバー、poster、fanart、字幕、各スキャンルート直下の動画フォルダー名を統一します。extrafanart と無関係なファイルは変更しません。",
++      "source_used": "タイトル取得元：{source}",
++      "source_failed": "{count} 件はこの取得元からタイトルを取得できないため、変更しません",
++      "source_execute_btn": "統一名前変更を実行",
++      "source_execute_success": "統一名前変更完了：動画 {videos} 件、ファイル {files} 件、フォルダー {folders} 件",
++      "preview_done": "統一名前のプレビューが完了しました",
++      "plan_expired": "プレビューの有効期限が切れました。もう一度プレビューしてください。",
 +      "folder_row_title": "動画フォルダー名を統一",
 +      "folder_row_hint": "各スキャンルート直下の動画フォルダー名をプレビュー",
 +      "preview_btn": "名前変更をプレビュー",
@@ -499,7 +525,7 @@
      "page_title": "リスト生成",
      "toast": {
        "folder_already_added": "このフォルダはすでにリストにあります",
-@@ -829,6 +925,8 @@
+@@ -829,6 +938,8 @@
        "nfo_update_done": "補完が完了しました。リストを再生成して更新してください",
        "no_jellyfin_update_needed": "補完が必要な動画はありません",
        "jellyfin_update_done": "補完が完了しました！",
@@ -508,7 +534,7 @@
        "path_copied": "コピーしました: {path}",
        "browse_dir_fallback": "ブラウザではドロップしたファイルのパスを直接読み取れないため、フォルダ選択画面を開きました"
      },
-@@ -868,13 +966,79 @@
+@@ -868,13 +979,79 @@
        "clear_display_title": "画面をクリア（リロード後に復元）",
        "clear_all_title": "すべてクリア（履歴含む）"
      },
@@ -588,7 +614,7 @@
        "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
        "jellyfin_suffix": "本",
        "jellyfin_update_title": "Jellyfin poster + fanart を補完",
-@@ -1410,10 +1574,90 @@
+@@ -1410,10 +1587,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -679,7 +705,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1845,6 +2089,12 @@
+@@ -1845,6 +2102,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -692,7 +718,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2110,11 @@
+@@ -1860,7 +2123,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -705,7 +731,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2132,15 @@
+@@ -1878,11 +2145,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -808,13 +834,26 @@
      "var": {
        "num": "番号",
        "title": "标题",
-@@ -801,6 +856,47 @@
+@@ -801,6 +856,60 @@
      }
    },
    "scanner": {
 +    "rename": {
 +      "row_title": "统一文件名格式",
 +      "row_hint": "统一番号与标题间距；超过系统限制的名称会安全截断并加 ...",
++      "source_row_title": "统一文件名与文件夹",
++      "source_row_hint": "选择元数据来源，用该来源的标题决定番号后面的视频名和文件夹名",
++      "source_select_label": "标题来源",
++      "source_preview_btn": "预览统一命名",
++      "source_previewing": "正在读取来源标题...",
++      "source_modal_title": "文件名与文件夹统一命名预览",
++      "source_modal_intro": "将按所选来源的标题，同步重命名视频、NFO、封面、poster、fanart、字幕，以及扫描目录下一层的影片文件夹；extrafanart 和无关文件保持不动。",
++      "source_used": "标题来源：{source}",
++      "source_failed": "有 {count} 部影片无法从该来源取得标题，将保持原名",
++      "source_execute_btn": "确认执行统一命名",
++      "source_execute_success": "统一命名完成：{videos} 部视频，{files} 个文件，{folders} 个文件夹",
++      "preview_done": "统一命名预览完成",
++      "plan_expired": "预览已过期，请重新预览",
 +      "folder_row_title": "统一文件夹格式",
 +      "folder_row_hint": "预览扫描目录下一层的影片文件夹名称",
 +      "preview_btn": "预览重命名",
@@ -856,7 +895,7 @@
      "page_title": "列表生成",
      "toast": {
        "folder_already_added": "此文件夹已在列表中",
-@@ -829,6 +925,8 @@
+@@ -829,6 +938,8 @@
        "nfo_update_done": "补全完成！请重新生成列表以更新",
        "no_jellyfin_update_needed": "没有需要补齐的视频",
        "jellyfin_update_done": "补齐完成！",
@@ -865,7 +904,7 @@
        "path_copied": "已复制: {path}",
        "browse_dir_fallback": "浏览器无法直接读取拖放文件的路径，已为您打开文件夹选择器"
      },
-@@ -868,13 +966,79 @@
+@@ -868,13 +979,79 @@
        "clear_display_title": "清除画面（刷新后恢复）",
        "clear_all_title": "清除全部（包含历史）"
      },
@@ -945,7 +984,7 @@
        "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
-@@ -1410,10 +1574,90 @@
+@@ -1410,10 +1587,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -1036,7 +1075,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1845,6 +2089,12 @@
+@@ -1845,6 +2102,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -1049,7 +1088,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2110,11 @@
+@@ -1860,7 +2123,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -1062,7 +1101,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2132,15 @@
+@@ -1878,11 +2145,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -1165,13 +1204,26 @@
      "var": {
        "num": "番號",
        "title": "標題",
-@@ -801,6 +856,47 @@
+@@ -801,6 +856,60 @@
      }
    },
    "scanner": {
 +    "rename": {
 +      "row_title": "統一檔名格式",
 +      "row_hint": "統一編號與標題間距；超過系統限制的名稱會安全截斷並加上 ...",
++      "source_row_title": "統一檔名與資料夾",
++      "source_row_hint": "選擇中繼資料來源，用該來源的標題決定編號後面的影片名和資料夾名",
++      "source_select_label": "標題來源",
++      "source_preview_btn": "預覽統一命名",
++      "source_previewing": "正在讀取來源標題...",
++      "source_modal_title": "檔名與資料夾統一命名預覽",
++      "source_modal_intro": "將依所選來源的標題，同步重新命名影片、NFO、封面、poster、fanart、字幕，以及掃描目錄下一層的影片資料夾；extrafanart 和無關檔案保持不動。",
++      "source_used": "標題來源：{source}",
++      "source_failed": "有 {count} 部影片無法從該來源取得標題，將保持原名",
++      "source_execute_btn": "確認執行統一命名",
++      "source_execute_success": "統一命名完成：{videos} 部影片，{files} 個檔案，{folders} 個資料夾",
++      "preview_done": "統一命名預覽完成",
++      "plan_expired": "預覽已過期，請重新預覽",
 +      "folder_row_title": "統一資料夾格式",
 +      "folder_row_hint": "預覽掃描目錄下一層的影片資料夾名稱",
 +      "preview_btn": "預覽重新命名",
@@ -1213,7 +1265,7 @@
      "page_title": "列表生成",
      "toast": {
        "folder_already_added": "此資料夾已在列表中",
-@@ -829,6 +925,8 @@
+@@ -829,6 +938,8 @@
        "nfo_update_done": "補全完成！請重新產生列表以更新",
        "no_jellyfin_update_needed": "沒有需要補齊的影片",
        "jellyfin_update_done": "補齊完成！",
@@ -1222,7 +1274,7 @@
        "path_copied": "已複製: {path}",
        "browse_dir_fallback": "瀏覽器無法直接讀取拖放檔案的路徑，已為您開啟資料夾選擇器"
      },
-@@ -868,13 +966,79 @@
+@@ -868,13 +979,79 @@
        "clear_display_title": "清除畫面（重整後恢復）",
        "clear_all_title": "清除全部（包含歷史）"
      },
@@ -1302,7 +1354,7 @@
        "jellyfin_prefix": "外部媒體管理器封面缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "補齊 poster + fanart",
-@@ -1410,10 +1574,90 @@
+@@ -1410,10 +1587,90 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -1393,7 +1445,7 @@
      "hero": {
        "this_computer_unavailable": "暫時讀不到這台電腦的更新資訊，請重新開啟說明頁再試",
        "copy_curl": "複製指令",
-@@ -1850,6 +2094,12 @@
+@@ -1850,6 +2107,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -1406,7 +1458,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1865,7 +2115,11 @@
+@@ -1865,7 +2128,11 @@
        "costar": "與她同片"
      },
      "donut": {
@@ -1419,7 +1471,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2137,15 @@
+@@ -1883,11 +2150,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -3328,7 +3380,7 @@
      border-radius: var(--fluent-radius-md);   /* 互動小元件 4px（§1）*/
 --- a/web/static/css/pages/scanner.css
 +++ b/web/static/css/pages/scanner.css
-@@ -365,3 +365,990 @@
+@@ -365,3 +365,1027 @@
      border-radius: var(--fluent-radius-md);
      color: var(--text-default, currentColor);
  }
@@ -3712,6 +3764,14 @@
 +    display: flex;
 +    align-items: center;
 +    gap: 0.45rem;
++    flex: 0 0 auto;
++}
++
++.rename-source-controls {
++    flex-wrap: wrap;
++}
++
++.rename-source-controls .btn-tag-preview {
 +    flex: 0 0 auto;
 +}
 +
@@ -4132,6 +4192,35 @@
 +}
 +
 +.rename-preview-names i {
++    color: var(--text-muted);
++}
++
++.rename-preview-videos {
++    display: flex;
++    flex-direction: column;
++    gap: 0.25rem;
++    padding-left: 0.7rem;
++}
++
++.rename-preview-video {
++    display: grid;
++    grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
++    align-items: center;
++    gap: 0.35rem;
++    color: var(--text-secondary);
++    font-size: 0.7rem;
++}
++
++.rename-preview-video span {
++    overflow-wrap: anywhere;
++}
++
++.rename-preview-video span:last-child {
++    color: var(--text-primary);
++    font-weight: 600;
++}
++
++.rename-preview-video i {
 +    color: var(--text-muted);
 +}
 +
@@ -5089,7 +5178,7 @@
  
          // ===== T7b: State Machine =====
 -        state: 'idle',  // 'idle' | 'generating' | 'nfoUpdating' | 'done' | 'error'
-+        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | jellyfinUpdating | enriching | done | error | cancelled
++        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | done | error | cancelled
  
          // ===== T7b: Progress =====
          progressStatus: '',
@@ -5141,7 +5230,7 @@
  
          // ===== T6d: Jellyfin Image Update =====
          jellyfinImageCount: 0,
-@@ -102,8 +132,81 @@
+@@ -102,8 +132,82 @@
              return (this.progressCurrent / this.progressTotal) * 100;
          },
  
@@ -5171,7 +5260,7 @@
 +        },
 +
 +        get taskEtaText() {
-+            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'enrich'].includes(this.taskKind)) {
++            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich'].includes(this.taskKind)) {
 +                return '';
 +            }
 +            let seconds = this.taskEtaSeconds;
@@ -5220,10 +5309,11 @@
              return this.state === 'generating' || this.state === 'nfoUpdating'
 +                || this.state === 'tagSourcePreviewing'
 +                || this.state === 'tagSourceUpdating'
++                || this.state === 'renamePreviewing'
                  || this.state === 'jellyfinUpdating' || this.state === 'enriching';
          },
  
-@@ -119,6 +222,68 @@
+@@ -119,6 +223,68 @@
  
          get doneActionsVisible() {
              return this.state === 'done' && this.outputPath !== '';
@@ -5292,7 +5382,7 @@
          },
  
          get generateButtonText() {
-@@ -219,6 +384,7 @@
+@@ -219,6 +385,7 @@
                          if (this.eventSource) { this.eventSource.close(); this.eventSource = null; }
                          window.Alpine?.store?.('toast')?.hide?.();   // 131b-T3：cleanup 不得拋錯（拋了會跳過後面所有 teardown）
                          clearTimeout(this.logTimer);
@@ -5300,7 +5390,7 @@
                          // T2(40c): abort jellyfin check fetch
                          if (this._jellyfinCheckController) {
                              this._jellyfinCheckController.abort();
-@@ -305,6 +471,10 @@
+@@ -305,6 +472,13 @@
                  if (result.success) {
                      this.config = result.data;
                      this.directories = this.config.gallery?.directories || [];
@@ -5308,10 +5398,13 @@
 +                    if (!availableSources.some((source) => source.id === this.tagSourceUpdateSource)) {
 +                        this.tagSourceUpdateSource = availableSources[0]?.id || 'auto';
 +                    }
++                    if (!availableSources.some((source) => source.id === this.renameSource)) {
++                        this.renameSource = availableSources[0]?.id || 'auto';
++                    }
                      // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                      this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
  
-@@ -636,6 +806,9 @@
+@@ -636,6 +810,9 @@
          addLog(level, message) {
              // T7d: 加入結構化陣列
              this.logEntries.push({ level, message, timestamp: Date.now() });
@@ -5321,7 +5414,7 @@
  
              const cls = level === 'error' ? 'log-error' :
                          level === 'warn' ? 'log-warn' : 'log-info';
-@@ -713,10 +886,22 @@
+@@ -713,10 +890,22 @@
              localStorage.removeItem('avlist_last_status');
              this.logHtml = '';
              this.logEntries = [];
@@ -5344,7 +5437,7 @@
          clearLogsDisplay() {
              this.logHtml = '';
              this.logEntries = [];
-@@ -768,6 +953,136 @@
+@@ -768,6 +957,136 @@
              if (confirm(window.t('scanner.toast.confirm_clear_logs'))) {
                  this.clearLogs();
                  this.showToast(window.t('scanner.toast.logs_cleared'), 'success');
@@ -5481,7 +5574,7 @@
              }
          },
  
-@@ -792,9 +1107,7 @@
+@@ -792,9 +1111,7 @@
  
              // 重置狀態
              this.state = 'generating';
@@ -5492,7 +5585,7 @@
              this.outputPath = '';
              this.nfoUpdateVisible = false;
              this.clearLogs();
-@@ -812,16 +1125,21 @@
+@@ -812,16 +1129,21 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -5515,7 +5608,7 @@
  
                          localStorage.setItem('avlist_generating', 'false');
                          localStorage.setItem('avlist_last_status', window.t('scanner.stats.status_done'));
-@@ -890,24 +1208,24 @@
+@@ -890,24 +1212,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -5544,7 +5637,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] generate error:', e);
                  this.showToast(window.t('scanner.toast.generate_error'), 'error', 4000);
-@@ -915,26 +1233,51 @@
+@@ -915,26 +1237,51 @@
          },
  
          // ===== T7b: NFO Update Flow =====
@@ -5602,7 +5695,7 @@
  
                  this.eventSource.onmessage = (event) => {
                      const data = JSON.parse(event.data);
-@@ -943,55 +1286,249 @@
+@@ -943,55 +1290,249 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -5861,7 +5954,7 @@
          // ===== T6d: Jellyfin Image Update Flow =====
          async runJellyfinImageUpdate() {
              if (this.isGenerating) return;
-@@ -1002,9 +1539,7 @@
+@@ -1002,9 +1543,7 @@
              }
  
              this.state = 'jellyfinUpdating';
@@ -5872,7 +5965,7 @@
              this.clearLogs();
  
              localStorage.setItem('avlist_generating', 'true');
-@@ -1019,14 +1554,13 @@
+@@ -1019,14 +1558,13 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -5888,7 +5981,7 @@
                          // TASK-111 P2-b 後續（codex delta review）：done 不再必然代表「全數完成」——
                          // 批次跑到一半若把 external_manager 切成 off，後端會在下一部片 break 並送
                          // done(updated=已完成筆數)。這裡若無條件補滿 progressTotal，UI 會顯示 3/3
-@@ -1035,6 +1569,11 @@
+@@ -1035,6 +1573,11 @@
                          this.progressCurrent = (typeof data.updated === 'number')
                              ? data.updated
                              : this.progressTotal;
@@ -5900,7 +5993,7 @@
  
                          localStorage.setItem('avlist_generating', 'false');
                          localStorage.setItem('avlist_last_status', data.message || window.t('scanner.stats.status_done'));
-@@ -1045,7 +1584,13 @@
+@@ -1045,7 +1588,13 @@
                          this.jellyfinItems = [];
                          this.jellyfinCheckState = 'idle';
  
@@ -5915,7 +6008,7 @@
                          if (data.message) {
                              this.addLog('info', data.message);
                          }
-@@ -1053,24 +1598,24 @@
+@@ -1053,24 +1602,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -5944,7 +6037,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] runJellyfinImageUpdate error:', e);
                  this.showToast(window.t('scanner.toast.jellyfin_update_error'), 'error', 4000);
-@@ -1078,6 +1623,21 @@
+@@ -1078,6 +1627,21 @@
          },
  
          // ===== T7b: Utility =====
@@ -5974,7 +6067,7 @@
  /** TASK-147b-T3 / CD-147b-5：四項判準——真的補到 NFO／封面／欄位／劇照才算成功。
   * 與 core/enrich_contract.py 的 did_enrich_something() 同一判準；改一邊必須改另一邊。
   *
-@@ -22,9 +24,17 @@
+@@ -22,9 +24,18 @@
          missingEnrichOffset: 0,     // batch offset
          missingEnrichSuccess: 0,
          missingEnrichFailed: 0,
@@ -5988,11 +6081,12 @@
 +        renamePreviewLoading: false,
 +        renameExecuting: false,
 +        renamePlan: null,
-+        renamePreviewMode: 'files', // files | folders
++        renamePreviewMode: 'combined',
++        renameSource: 'auto',
  
          // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
          currentCard: null,          // {number, status, source, reason, coverSrc} | null
-@@ -72,6 +82,185 @@
+@@ -72,6 +83,235 @@
                  return '<span class="loading loading-spinner loading-sm"></span> ' + window.t('scanner.stats.missing_enrich_loading');
              }
              return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
@@ -6007,100 +6101,155 @@
 +        },
 +
 +        get renameIsFolders() {
-+            return this.renamePreviewMode === 'folders';
++            return false;
 +        },
 +
 +        get renamePrimaryLabel() {
-+            return window.t(this.renameIsFolders
-+                ? 'scanner.rename.summary_folders'
-+                : 'scanner.rename.summary_videos');
++            return window.t('scanner.rename.summary_videos');
 +        },
 +
 +        get renamePrimaryValue() {
-+            return this.renameIsFolders
-+                ? (this.renamePlan?.summary?.rename_folders || 0)
-+                : (this.renamePlan?.summary?.rename_videos || 0);
++            return this.renamePlan?.summary?.rename_videos || 0;
 +        },
 +
 +        get renameSecondaryLabel() {
-+            return window.t(this.renameIsFolders
-+                ? 'scanner.rename.summary_videos'
-+                : 'scanner.rename.summary_files');
++            return window.t('scanner.rename.summary_files');
 +        },
 +
 +        get renameSecondaryValue() {
-+            return this.renameIsFolders
-+                ? (this.renamePlan?.summary?.rename_videos || 0)
-+                : (this.renamePlan?.summary?.rename_files || 0);
++            return this.renamePlan?.summary?.rename_files || 0;
++        },
++
++        get renameFolderValue() {
++            return this.renamePlan?.summary?.rename_folders || 0;
++        },
++
++        get renameFailedValue() {
++            return this.renamePlan?.summary?.failed || 0;
++        },
++
++        get renameHasChanges() {
++            return this.renamePrimaryValue > 0
++                || this.renameSecondaryValue > 0
++                || this.renameFolderValue > 0;
++        },
++
++        get renameSourceLabel() {
++            const selected = (this.tagSourceOptions || []).find(
++                (source) => source.id === this.renamePlan?.source
++            );
++            return selected ? selected.display_name : (this.renamePlan?.source || '');
 +        },
 +
 +        get renameModalTitle() {
-+            return window.t(this.renameIsFolders
-+                ? 'scanner.rename.folder_modal_title'
-+                : 'scanner.rename.modal_title');
++            return window.t('scanner.rename.source_modal_title');
 +        },
 +
 +        get renameModalIntro() {
-+            return window.t(this.renameIsFolders
-+                ? 'scanner.rename.folder_modal_intro'
-+                : 'scanner.rename.modal_intro');
++            return window.t('scanner.rename.source_modal_intro');
 +        },
 +
 +        get renameNoChangesText() {
-+            return window.t(this.renameIsFolders
-+                ? 'scanner.rename.folder_no_changes'
-+                : 'scanner.rename.no_changes');
++            return window.t('scanner.rename.no_changes');
 +        },
 +
 +        get renameExecuteText() {
 +            if (this.renameExecuting) {
-+                return window.t(this.renameIsFolders
-+                    ? 'scanner.rename.folder_executing_btn'
-+                    : 'scanner.rename.executing_btn');
++                return window.t('scanner.rename.executing_btn');
 +            }
-+            return window.t(this.renameIsFolders
-+                ? 'scanner.rename.folder_execute_btn'
-+                : 'scanner.rename.execute_btn');
++            return window.t('scanner.rename.source_execute_btn');
 +        },
 +
 +        get renameExecuteDisabled() {
 +            return this.renameExecuting
 +                || this.renamePreviewLoading
 +                || !this.renamePlan
-+                || this.renamePrimaryValue === 0
++                || !this.renameHasChanges
 +                || (this.renamePlan.summary?.conflicts || 0) > 0;
 +        },
 +
 +        renameRelatedText(item) {
-+            if (this.renameIsFolders) {
-+                return window.t('scanner.rename.folder_related_videos', {
-+                    count: item.videos?.length || 0,
-+                });
-+            }
 +            return window.t('scanner.rename.related_files', {
-+                count: Math.max(0, item.operations.length - 1),
++                count: (item.videos || []).reduce(
++                    (count, video) => count + Math.max(0, (video.operations || []).length - 1),
++                    0
++                ),
 +            });
 +        },
 +
-+        async previewRenamePlan(scope = 'files') {
++        async previewRenamePlan() {
 +            if (this.renamePreviewLoading || this.isBusy) return;
-+            this.renamePreviewMode = scope === 'folders' ? 'folders' : 'files';
++            const sourceId = this.renameSource || 'auto';
++            this.renamePreviewMode = 'combined';
 +            this.renamePreviewLoading = true;
 +            try {
-+                const resp = await fetch(
-+                    `/api/gallery/rename-preview?scope=${encodeURIComponent(this.renamePreviewMode)}`
++                this.state = 'renamePreviewing';
++                this._startTask(
++                    'rename-preview',
++                    window.t('scanner.rename.source_previewing'),
++                    this.statTotal
 +                );
-+                const result = await resp.json();
-+                if (!result.success) {
-+                    this.showToast(result.error || window.t('scanner.rename.preview_failed'), 'error');
-+                    return;
-+                }
-+                this.renamePlan = result.data;
-+                this.renamePreviewOpen = true;
++                this.clearLogs();
++                const params = new URLSearchParams({ source: sourceId });
++                this.eventSource = new EventSource(
++                    `/api/gallery/rename-source-preview?${params.toString()}`
++                );
++                await new Promise((resolve) => {
++                    this.eventSource.onmessage = (event) => {
++                        const data = JSON.parse(event.data);
++                        if (data.type === 'progress') {
++                            this.progressStatus = data.status
++                                || window.t('scanner.rename.source_previewing');
++                            this.progressCurrent = data.current || 0;
++                            this.progressTotal = data.total || this.progressTotal;
++                            this._applyTaskMetrics(data);
++                        } else if (data.type === 'log') {
++                            this.addLog(data.level || 'info', data.message || '');
++                        } else if (data.type === 'done') {
++                            this.eventSource.close();
++                            this.eventSource = null;
++                            this.renamePlan = data.plan || null;
++                            this.progressCurrent = this.progressTotal;
++                            const cancelled = data.plan?.cancelled;
++                            this._finishTask(
++                                cancelled ? 'cancelled' : 'done',
++                                data.message || window.t('scanner.rename.preview_done')
++                            );
++                            if (data.message) this.addLog('info', data.message);
++                            this.flushLogs();
++                            if (!cancelled) this.renamePreviewOpen = true;
++                            resolve();
++                        } else if (data.type === 'error') {
++                            this.eventSource.close();
++                            this.eventSource = null;
++                            this.addLog('error', data.message || '');
++                            this._finishTask('error', window.t('scanner.rename.preview_failed'));
++                            this.flushLogs();
++                            this.showToast(
++                                data.message || window.t('scanner.rename.preview_failed'),
++                                'error'
++                            );
++                            resolve();
++                        }
++                    };
++                    this.eventSource.onerror = () => {
++                        if (this.eventSource) this.eventSource.close();
++                        this.eventSource = null;
++                        this._finishTask('error', window.t('scanner.rename.preview_failed'));
++                        this.showToast(
++                            window.t('scanner.rename.preview_network_error', {
++                                message: 'SSE',
++                            }),
++                            'error'
++                        );
++                        resolve();
++                    };
++                });
 +            } catch (e) {
 +                this.showToast(window.t('scanner.rename.preview_network_error', { message: e.message }), 'error');
 +            } finally {
 +                this.renamePreviewLoading = false;
++                if (this.state === 'renamePreviewing') this.state = 'idle';
 +            }
 +        },
 +
@@ -6118,27 +6267,23 @@
 +                    headers: { 'Content-Type': 'application/json' },
 +                    body: JSON.stringify({
 +                        plan_id: this.renamePlan.plan_id,
-+                        scope: this.renamePreviewMode,
++                        scope: 'combined',
 +                    }),
 +                });
 +                const result = await resp.json();
 +                if (result.success) {
 +                    this.renamePreviewOpen = false;
-+                    const message = this.renameIsFolders
-+                        ? window.t('scanner.rename.folder_execute_success', {
-+                            folders: result.renamed_folders || 0,
-+                            videos: result.updated_videos || 0,
-+                        })
-+                        : window.t('scanner.rename.execute_success', {
-+                            videos: result.renamed_videos || 0,
-+                            files: result.renamed_files || 0,
-+                        });
++                    const message = window.t('scanner.rename.source_execute_success', {
++                        videos: result.updated_videos || 0,
++                        files: result.renamed_files || 0,
++                        folders: result.renamed_folders || 0,
++                    });
 +                    this.showToast(message, 'success', 5000);
 +                    await this.loadStats();
 +                    await this.checkMissing();
-+                } else if (result.error === 'plan_changed') {
-+                    this.showToast(window.t('scanner.rename.plan_changed'), 'warn');
-+                    await this.previewRenamePlan(this.renamePreviewMode);
++                } else if (result.error === 'plan_expired') {
++                    this.showToast(window.t('scanner.rename.plan_expired'), 'warn');
++                    this.renamePreviewOpen = false;
 +                } else if (result.rollback_ok) {
 +                    this.showToast(window.t('scanner.rename.execute_rolled_back_detail', {
 +                        error: result.error || 'unknown_error',
@@ -6158,15 +6303,14 @@
 +            const lines = [];
 +            for (const item of this.renameReadyItems) {
 +                lines.push(`${item.old_name} -> ${item.new_name}`);
-+                if (this.renameIsFolders) {
-+                    lines.push(`  ${window.t('scanner.rename.folder_related_videos', {
-+                        count: item.videos?.length || 0,
-+                    })}`);
-+                    continue;
-+                }
-+                for (const op of (item.operations || [])) {
-+                    if (op.kind !== 'video') {
-+                        lines.push(`  ${op.old_name} -> ${op.new_name}`);
++                for (const video of (item.videos || [])) {
++                    if (video.old_name !== video.new_name) {
++                        lines.push(`  ${video.old_name} -> ${video.new_name}`);
++                    }
++                    for (const op of (video.operations || [])) {
++                        if (op.kind !== 'video') {
++                            lines.push(`    ${op.old_name} -> ${op.new_name}`);
++                        }
 +                    }
 +                }
 +            }
@@ -6178,7 +6322,7 @@
          },
  
          // ===== T10: Missing NFO/Cover Enrich Methods =====
-@@ -88,8 +277,15 @@
+@@ -88,8 +328,15 @@
                      this.missingCoverCount = d.missing_cover || 0;
                      this.missingItems = Array.isArray(d.items) ? d.items : [];
                      this.missingPillVisible = true;
@@ -6194,7 +6338,7 @@
                  }
              } catch (e) {
                  console.error('checkMissing failed:', e);
-@@ -109,14 +305,17 @@
+@@ -109,14 +356,17 @@
              this.missingEnrichOffset = 0;
              this.missingEnrichSuccess = 0;
              this.missingEnrichFailed = 0;
@@ -6215,7 +6359,7 @@
              this.clearLogs();
  
              const controller = new AbortController();
-@@ -146,7 +345,7 @@
+@@ -146,7 +396,7 @@
                          }
                          this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
                          this.flushLogs();
@@ -6224,7 +6368,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          // Save remaining
-@@ -159,7 +358,7 @@
+@@ -159,7 +409,7 @@
                          const errText = await resp.text().catch(() => '');
                          this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
                          this.flushLogs();
@@ -6233,7 +6377,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -200,6 +399,12 @@
+@@ -200,6 +450,12 @@
                                  this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
                                  this.progressTotal = items.length;
                                  this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
@@ -6246,7 +6390,7 @@
                              } else if (event.type === 'result-item') {
                                  // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
                                  // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
-@@ -234,7 +439,18 @@
+@@ -234,7 +490,18 @@
                                      this.missingEnrichSuccess++;
                                  } else {
                                      this.missingEnrichFailed++;
@@ -6265,7 +6409,7 @@
                                  // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
                                  if (event.reason === 'error') {
                                      this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
-@@ -246,7 +462,7 @@
+@@ -246,7 +513,7 @@
                              } else if (event.type === 'error') {
                                  this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
                                  this.flushLogs();
@@ -6274,7 +6418,7 @@
                                  this.currentCard = null;
                                  this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -258,7 +474,7 @@
+@@ -258,7 +525,7 @@
  
                      // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
                      if (!batchDone) {
@@ -6283,7 +6427,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -284,11 +500,19 @@
+@@ -284,11 +551,19 @@
                      if (lastCover) {
                          this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
                      }
@@ -6305,7 +6449,7 @@
                      const summary = this.missingEnrichFailed > 0
                          ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
                          : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
-@@ -312,7 +536,7 @@
+@@ -312,7 +587,7 @@
                  if (e.name === 'AbortError') return;
                  console.error('runMissingEnrich error:', e);
                  this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
@@ -8045,7 +8189,7 @@
              <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
                  <i class="bi bi-exclamation-circle"></i>
                  {{ t('scanner.stats.nfo_prefix') }}
-@@ -238,14 +396,91 @@
+@@ -238,14 +396,76 @@
                  {{ t('scanner.stats.nfo_suffix') }}
                  {{ number_drilldown_panel() }}
              </span>
@@ -8056,47 +8200,32 @@
                      title="{{ t('scanner.stats.nfo_update_title') }}">
              </button>
          </div>
-+        <!-- r16: Replace ordinary tags from one selected source -->
-+        <div class="nfo-update-row maintenance-row maintenance-row-rename">
++        <!-- r28: source-titled file and folder normalization -->
++        <div class="nfo-update-row maintenance-row maintenance-row-rename-source">
 +            <div class="maintenance-copy">
 +                <span class="maintenance-icon"><i class="bi bi-input-cursor-text"></i></span>
 +                <span class="maintenance-text">
-+                    <strong>{{ t('scanner.rename.row_title') }}</strong>
-+                    <small>{{ t('scanner.rename.row_hint') }}</small>
++                    <strong>{{ t('scanner.rename.source_row_title') }}</strong>
++                    <small>{{ t('scanner.rename.source_row_hint') }}</small>
 +                </span>
 +            </div>
-+            <div class="maintenance-controls">
++            <div class="maintenance-controls rename-source-controls">
++                <select class="select select-bordered select-sm"
++                        x-model="renameSource"
++                        :disabled="isBusy"
++                        :aria-label="window.t('scanner.rename.source_select_label')">
++                    <template x-for="source in tagSourceOptions" :key="source.id">
++                        <option :value="source.id" x-text="source.display_name"></option>
++                    </template>
++                </select>
 +                <button class="btn-tag-preview"
 +                        @click="previewRenamePlan()"
 +                        :disabled="renamePreviewLoading || isBusy">
 +                    <span x-show="renamePreviewLoading" class="loading loading-spinner loading-sm"></span>
 +                    <i class="bi bi-eye" x-show="!renamePreviewLoading"></i>
 +                    <span x-text="window.t(renamePreviewLoading
-+                        ? 'scanner.rename.preview_loading'
-+                        : 'scanner.rename.preview_btn')"></span>
-+                </button>
-+            </div>
-+        </div>
-+
-+        <div class="nfo-update-row maintenance-row maintenance-row-rename-folder">
-+            <div class="maintenance-copy">
-+                <span class="maintenance-icon"><i class="bi bi-folder-symlink"></i></span>
-+                <span class="maintenance-text">
-+                    <strong>{{ t('scanner.rename.folder_row_title') }}</strong>
-+                    <small>{{ t('scanner.rename.folder_row_hint') }}</small>
-+                </span>
-+            </div>
-+            <div class="maintenance-controls">
-+                <button class="btn-tag-preview"
-+                        @click="previewRenamePlan('folders')"
-+                        :disabled="renamePreviewLoading || isBusy">
-+                    <span x-show="renamePreviewLoading && renamePreviewMode === 'folders'"
-+                          class="loading loading-spinner loading-sm"></span>
-+                    <i class="bi bi-eye"
-+                       x-show="!renamePreviewLoading || renamePreviewMode !== 'folders'"></i>
-+                    <span x-text="window.t(renamePreviewLoading && renamePreviewMode === 'folders'
-+                        ? 'scanner.rename.folder_preview_loading'
-+                        : 'scanner.rename.folder_preview_btn')"></span>
++                        ? 'scanner.rename.source_previewing'
++                        : 'scanner.rename.source_preview_btn')"></span>
 +                </button>
 +            </div>
 +        </div>
@@ -8139,7 +8268,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -295,7 +530,7 @@
+@@ -295,7 +515,7 @@
          </div>
  
          <!-- T10: Resume Pill (未完成提示) -->
@@ -8148,7 +8277,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-arrow-repeat"></i>
                  <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-@@ -313,7 +548,7 @@
+@@ -313,7 +533,7 @@
  
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
          <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
@@ -8157,7 +8286,7 @@
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +574,7 @@
+@@ -339,7 +559,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -8166,7 +8295,7 @@
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +609,8 @@
+@@ -374,6 +594,8 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
@@ -8175,7 +8304,7 @@
          </div>
      </div>
  
-@@ -782,6 +1019,140 @@
+@@ -782,6 +1004,140 @@
          </div>
      </dialog>
  
@@ -8316,7 +8445,7 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -805,26 +1176,91 @@
+@@ -805,26 +1161,117 @@
          </div>
      </dialog>
  
@@ -8339,11 +8468,26 @@
 +                    <strong x-text="renameSecondaryValue"></strong>
 +                </div>
 +                <div class="batch-confirm-summary-item">
++                    <span>{{ t('scanner.rename.summary_folders') }}</span>
++                    <strong x-text="renameFolderValue"></strong>
++                </div>
++                <div class="batch-confirm-summary-item">
 +                    <span>{{ t('scanner.rename.summary_conflicts') }}</span>
 +                    <strong x-text="renamePlan?.summary?.conflicts || 0"></strong>
 +                </div>
 +            </div>
++            <p class="batch-confirm-note">
++                <i class="bi bi-tags"></i>
++                <span x-text="window.t('scanner.rename.source_used', {
++                    source: renameSourceLabel
++                })"></span>
++            </p>
 +            <p class="fluent-modal-body" x-text="renameModalIntro"></p>
++            <p class="batch-confirm-note is-warning"
++               x-show="renameFailedValue > 0"
++               x-text="window.t('scanner.rename.source_failed', {
++                   count: renameFailedValue
++               })"></p>
 +            <p class="fluent-modal-body batch-confirm-note">
 +                <i class="bi bi-info-circle"></i>
 +                <span>{{ t('scanner.rename.modal_note') }}</span>
@@ -8357,6 +8501,17 @@
 +                            <span class="rename-preview-old" x-text="item.old_name"></span>
 +                            <i class="bi bi-arrow-right"></i>
 +                            <span class="rename-preview-new" x-text="item.new_name"></span>
++                        </div>
++                        <div class="rename-preview-videos">
++                            <template x-for="video in item.videos" :key="video.db_old_uri">
++                                <div class="rename-preview-video"
++                                     x-show="video.old_name !== video.new_name">
++                                    <i class="bi bi-film"></i>
++                                    <span x-text="video.old_name"></span>
++                                    <i class="bi bi-arrow-right"></i>
++                                    <span x-text="video.new_name"></span>
++                                </div>
++                            </template>
 +                        </div>
 +                        <small x-text="renameRelatedText(item)"></small>
 +                    </div>
@@ -8393,7 +8548,7 @@
 +                </button>
 +                <button type="button" class="btn btn-primary"
 +                        @click="executeRenamePlan()"
-+                        x-show="renamePrimaryValue > 0"
++                        x-show="renameHasChanges"
 +                        :disabled="renameExecuteDisabled">
 +                    <span x-show="renameExecuting" class="loading loading-spinner loading-xs"></span>
 +                    <i class="bi bi-shield-check" x-show="!renameExecuting"></i>
