@@ -7,3 +7,5 @@
 *.woff binary
 *.woff2 binary
 app/src/main/python/core/focal/facefinder binary
+# Unified-diff context lines for empty source lines are a single space.
+patches/*.patch whitespace=-trailing-space

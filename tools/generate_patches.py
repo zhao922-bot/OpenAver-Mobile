@@ -84,6 +84,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "web/config.default.json",
             "web/static/css/pages/showcase/05-lightbox.css",
             "web/static/css/pages/showcase/06-responsive-and-lists.css",
+            "web/static/css/pages/scanner.css",
             "web/static/js/components/mobile-back.js",
             "web/static/js/pages/scanner/state-scan.js",
             "web/static/js/pages/settings/state-config.js",

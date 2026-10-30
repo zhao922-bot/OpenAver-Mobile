@@ -332,6 +332,38 @@
             height: var(--mobile-topbar-height);
         }
 
+        .top-navbar {
+            padding-inline: 0.375rem;
+        }
+
+        .mobile-page-heading {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 0;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-weight: 650;
+            letter-spacing: -0.01em;
+        }
+
+        .mobile-page-heading i {
+            color: var(--accent);
+            font-size: 1.1rem;
+        }
+
+        .mobile-page-heading span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .top-navbar .btn.btn-square,
+        .top-navbar .btn.btn-ghost.btn-sm {
+            min-width: 2.75rem;
+            min-height: 2.75rem;
+        }
+
         /* Offcanvas 選單連結 */
         .offcanvas {
             background-color: var(--surface-1) !important;
@@ -349,6 +381,8 @@
             margin: 0.25rem 0.5rem;
             display: flex;
             align-items: center;
+            min-height: 3rem;
+            position: relative;
             transition: color var(--fluent-duration-normal) var(--fluent-ease-standard), background-color var(--fluent-duration-normal) var(--fluent-ease-standard);
         }
 
@@ -360,6 +394,19 @@
         .offcanvas-nav .nav-link.active {
             color: var(--color-primary-content);
             background-color: var(--accent);
+        }
+
+        .offcanvas-nav .nav-link.active::before {
+            content: "";
+            position: absolute;
+            left: 0.35rem;
+            top: 50%;
+            width: 3px;
+            height: 1.25rem;
+            border-radius: var(--radius-pill);
+            background: var(--color-primary-content);
+            transform: translateY(-50%);
+            opacity: 0.9;
         }
 
         .offcanvas-nav .nav-link i,
@@ -583,6 +630,31 @@
         document.body.classList.add('sidebar-collapsed');
       }
     </script>
+    {% if page == 'search' %}
+    {% set mobile_page_icon = 'bi-search' %}
+    {% set mobile_page_title = t('nav.search') %}
+    {% elif page == 'scanner' %}
+    {% set mobile_page_icon = 'bi-list-ul' %}
+    {% set mobile_page_title = t('nav.scanner') %}
+    {% elif page == 'showcase' %}
+    {% set mobile_page_icon = 'bi-collection-play' %}
+    {% set mobile_page_title = t('nav.showcase') %}
+    {% elif page == 'insights' %}
+    {% set mobile_page_icon = 'bi-bar-chart' %}
+    {% set mobile_page_title = t('nav.insights') %}
+    {% elif page == 'help' %}
+    {% set mobile_page_icon = 'bi-question-circle' %}
+    {% set mobile_page_title = t('nav.help') %}
+    {% elif page == 'settings' %}
+    {% set mobile_page_icon = 'bi-gear' %}
+    {% set mobile_page_title = t('nav.settings') %}
+    {% elif page == 'connect' %}
+    {% set mobile_page_icon = 'bi-plug' %}
+    {% set mobile_page_title = t('nav.connect') %}
+    {% else %}
+    {% set mobile_page_icon = 'bi-film' %}
+    {% set mobile_page_title = 'OpenAver' %}
+    {% endif %}
     <!-- 頂部導航列（僅小螢幕顯示）-->
     <nav class="navbar bg-base-200 lg:hidden fixed top-0 left-0 right-0 z-50 h-14 top-navbar fluent-acrylic border-b border-base-300" x-show="!mobileMenuOpen">
         <div class="navbar-start">
@@ -591,8 +663,9 @@
             </button>
         </div>
         <div class="navbar-center">
-            <span class="text-lg font-semibold">
-                <i class="bi bi-film"></i> OpenAver
+            <span class="mobile-page-heading">
+                <i class="bi {{ mobile_page_icon }}"></i>
+                <span>{{ mobile_page_title }}</span>
             </span>
         </div>
         <div class="navbar-end">
@@ -658,7 +731,7 @@
             <button type="button"
                     class="btn btn-sm btn-circle btn-ghost"
                     @click="mobileMenuOpen = false"
-                    aria-label="Close">
+                    aria-label="{{ t('common.close') }}">
                 <i class="bi bi-x text-xl"></i>
             </button>
         </div>

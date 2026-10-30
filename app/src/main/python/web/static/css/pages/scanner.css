@@ -365,3 +365,527 @@
     border-radius: var(--fluent-radius-md);
     color: var(--text-default, currentColor);
 }
+
+/* ==========================================================================
+   r17 mobile UI pass
+   The scanner page is intentionally a tool, not a second gallery. Keep the
+   controls compact, make the current state legible, and let maintenance
+   actions breathe without adding another layer of nested cards.
+   ========================================================================== */
+
+#progressSection {
+    margin: 1rem 0;
+    background: color-mix(in oklch, var(--bg-card) 92%, var(--color-base-200));
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    box-shadow: var(--fluent-shadow-4);
+}
+
+#progressSection .mini-terminal-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding: 0.65rem 0.8rem;
+}
+
+.terminal-toggle {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+    flex: 1 1 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+}
+
+.terminal-toggle:focus-visible,
+.path-copy-btn:focus-visible,
+.log-filter-btn:focus-visible,
+.log-action-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.terminal-state-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 1.75rem;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 12%, transparent);
+}
+
+#progressSection.is-running .terminal-state-icon {
+    color: var(--color-warning);
+    background: color-mix(in oklch, var(--color-warning) 13%, transparent);
+}
+
+#progressSection.is-running .terminal-state-icon .loading {
+    color: currentColor;
+}
+
+.terminal-title-group {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 auto;
+    gap: 0.1rem;
+}
+
+#progressSection .mini-terminal-header .title {
+    flex: initial;
+    font-size: 0.86rem;
+    font-weight: 650;
+    color: var(--text-primary);
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.terminal-meta {
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+}
+
+.terminal-chevron {
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.terminal-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+    margin-left: 2.3rem;
+}
+
+#progressSection .log-filter-group {
+    min-width: 0;
+}
+
+#progressSection .log-filter-btn {
+    min-height: 2rem;
+    padding-inline: 0.6rem;
+}
+
+#progressSection .log-actions {
+    flex-shrink: 0;
+}
+
+#progressSection .log-action-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+}
+
+#progressSection .progress-mini {
+    height: 4px;
+    margin: 0 0.8rem 0.8rem;
+}
+
+.terminal-log-wrap {
+    border-top: 1px solid var(--border-light);
+    background: color-mix(in oklch, var(--bg-body) 62%, transparent);
+}
+
+.terminal-log-empty {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.9rem 0.8rem;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.terminal-log-empty i {
+    color: var(--accent);
+}
+
+#progressSection .mini-terminal-body {
+    max-height: 180px;
+    padding: 0.8rem;
+    line-height: 1.6;
+}
+
+#statsCard {
+    margin-top: 1rem;
+    padding: 0;
+    overflow: hidden;
+}
+
+.scanner-overview-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.95rem 1rem 0.7rem;
+}
+
+.scanner-overview-title {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-width: 0;
+}
+
+.scanner-overview-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: 0 0 2.25rem;
+    border-radius: var(--fluent-radius-md);
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 11%, transparent);
+}
+
+.scanner-overview-kicker {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.scanner-overview-count {
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    margin-top: 0.08rem;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+#statsCard .scanner-overview-count .stat-value {
+    color: var(--text-primary);
+    font-size: 1.55rem;
+    line-height: 1;
+}
+
+.scanner-clear-cache {
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+}
+
+.scanner-overview-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0 1rem 0.75rem 4rem;
+    color: var(--text-secondary);
+    font-size: 0.76rem;
+}
+
+.scanner-overview-meta i {
+    color: var(--accent);
+}
+
+.scanner-maintenance {
+    border-top: 1px solid var(--border-light);
+    padding: 0.8rem 1rem 0.4rem;
+}
+
+.scanner-maintenance-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-bottom: 0.25rem;
+}
+
+.scanner-maintenance-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    font-weight: 650;
+}
+
+.scanner-maintenance-title i {
+    color: var(--accent);
+}
+
+.scanner-maintenance-head p {
+    margin: 0.25rem 0 0;
+    color: var(--text-secondary);
+    font-size: 0.74rem;
+    line-height: 1.4;
+}
+
+#statsCard .maintenance-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    margin: 0;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--border-light);
+}
+
+#statsCard .maintenance-row:first-of-type {
+    border-top: 0;
+}
+
+#statsCard .maintenance-row > .nfo-badge {
+    min-width: 0;
+    flex: 1 1 14rem;
+}
+
+#statsCard .maintenance-row > .btn-nfo-update {
+    flex: 0 0 auto;
+    min-height: 2.4rem;
+}
+
+.maintenance-copy {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    min-width: 0;
+    flex: 1 1 18rem;
+}
+
+.maintenance-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 1.8rem;
+    width: 1.8rem;
+    height: 1.8rem;
+    border-radius: var(--fluent-radius-sm);
+    color: var(--color-warning);
+    background: color-mix(in oklch, var(--color-warning) 12%, transparent);
+}
+
+.maintenance-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.16rem;
+    min-width: 0;
+}
+
+.maintenance-text strong {
+    color: var(--text-primary);
+    font-size: 0.79rem;
+    line-height: 1.3;
+}
+
+.maintenance-text small {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    line-height: 1.4;
+}
+
+.maintenance-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.maintenance-controls select {
+    min-width: 8.5rem;
+    max-width: 13rem;
+    min-height: 2.4rem;
+}
+
+.output-info-path {
+    gap: 0.75rem;
+}
+
+.output-info-path .path {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.output-info-path .path > i,
+.output-info-path .path-label {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.output-info-path .path code {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.output-info-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex: 0 0 auto;
+}
+
+.path-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--border-light);
+    border-radius: var(--fluent-radius-sm);
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    cursor: pointer;
+    transition: color var(--fluent-duration-fast) var(--fluent-ease-standard),
+        background-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+        border-color var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.path-copy-btn:hover:not(:disabled) {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 8%, var(--bg-card));
+}
+
+.path-copy-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.batch-confirm-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    margin: 1rem 0 0.85rem;
+}
+
+.batch-confirm-summary-item {
+    min-width: 0;
+    padding: 0.7rem 0.75rem;
+    border: 1px solid var(--border-light);
+    border-radius: var(--fluent-radius-md);
+    background: color-mix(in oklch, var(--bg-body) 58%, transparent);
+}
+
+.batch-confirm-summary-item span {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    margin-bottom: 0.2rem;
+}
+
+.batch-confirm-summary-item strong {
+    display: block;
+    color: var(--text-primary);
+    font-size: 0.84rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.batch-confirm-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: var(--fluent-radius-md);
+    color: var(--text-secondary);
+    background: color-mix(in oklch, var(--accent) 7%, transparent);
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+
+.batch-confirm-note i {
+    flex: 0 0 auto;
+    color: var(--accent);
+    margin-top: 0.1rem;
+}
+
+@media (min-width: 720px) {
+    .terminal-toggle {
+        flex-basis: auto;
+    }
+
+    .terminal-toolbar {
+        width: auto;
+        margin-left: 0;
+    }
+}
+
+@media (max-width: 520px) {
+    #progressSection {
+        margin-inline: 0;
+    }
+
+    .terminal-toolbar {
+        margin-left: 0;
+    }
+
+    #progressSection .log-filter-btn {
+        flex: 1 1 0;
+    }
+
+    #statsCard .maintenance-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #statsCard .maintenance-row > .nfo-badge,
+    #statsCard .maintenance-row > .btn-nfo-update,
+    .maintenance-copy,
+    .maintenance-controls {
+        width: 100%;
+        flex-basis: auto;
+    }
+
+    #statsCard .maintenance-row > .btn-nfo-update {
+        justify-content: center;
+    }
+
+    .maintenance-controls {
+        justify-content: stretch;
+    }
+
+    .maintenance-controls select {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: none;
+    }
+
+    .maintenance-controls > .btn-nfo-update {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    .output-info-path {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .output-info-path .path {
+        width: 100%;
+    }
+
+    .output-info-actions {
+        width: 100%;
+        justify-content: flex-end;
+        align-self: flex-end;
+    }
+
+    .batch-confirm-summary {
+        grid-template-columns: 1fr;
+    }
+}

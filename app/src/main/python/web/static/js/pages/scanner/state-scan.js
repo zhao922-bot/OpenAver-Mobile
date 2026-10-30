@@ -60,6 +60,7 @@ export function stateScan() {
         // ===== T7d: Log Terminal 增強 =====
         logEntries: [],        // [{level, message, timestamp}] 結構化陣列
         logFilter: 'all',      // 'all' | 'error' | 'warn' 篩選條件
+        logPanelExpanded: false,
 
         // ===== T7b: Done Actions =====
         outputPath: '',        // 輸出路徑（供複製）
@@ -104,6 +105,15 @@ export function stateScan() {
         get progressPercent() {
             if (this.progressTotal === 0) return 0;
             return (this.progressCurrent / this.progressTotal) * 100;
+        },
+
+        get progressPercentRounded() {
+            return Math.round(this.progressPercent);
+        },
+
+        get progressMetaText() {
+            if (this.progressTotal <= 0) return '';
+            return `${this.progressCurrent} / ${this.progressTotal} · ${this.progressPercentRounded}%`;
         },
 
         get isGenerating() {
@@ -690,6 +700,9 @@ export function stateScan() {
         addLog(level, message) {
             // T7d: 加入結構化陣列
             this.logEntries.push({ level, message, timestamp: Date.now() });
+            if (level === 'error') {
+                this.logPanelExpanded = true;
+            }
 
             const cls = level === 'error' ? 'log-error' :
                         level === 'warn' ? 'log-warn' : 'log-info';
@@ -767,10 +780,22 @@ export function stateScan() {
             localStorage.removeItem('avlist_last_status');
             this.logHtml = '';
             this.logEntries = [];
+            this.logPanelExpanded = false;
             this.$refs.logOutput.innerHTML = '';
         },
 
         // ===== T7d: Log Terminal 增強 =====
+        toggleLogPanel() {
+            this.logPanelExpanded = !this.logPanelExpanded;
+        },
+
+        setLogFilter(filter) {
+            this.logFilter = filter;
+            if (filter !== 'all') {
+                this.logPanelExpanded = true;
+            }
+        },
+
         clearLogsDisplay() {
             this.logHtml = '';
             this.logEntries = [];
@@ -1211,6 +1236,21 @@ export function stateScan() {
         },
 
         // ===== T7b: Utility =====
+        copyDisplayedPath() {
+            const path = this.outputPathDisplay;
+            if (!path) return;
+
+            copyText(path).then((ok) => {
+                this.showToast(
+                    ok
+                        ? window.t('scanner.toast.path_copied', { path })
+                        : window.t('scanner.toast.copy_path_failed').replace('{path}', path),
+                    ok ? 'success' : 'error',
+                    4000
+                );
+            });
+        },
+
         copyOutputPath() {
             if (!this.outputPath) return;
 

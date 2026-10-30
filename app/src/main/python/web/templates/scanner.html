@@ -97,14 +97,24 @@
         </div>
 
         <!-- Output Info -->
-        <div class="output-info">
-            <div class="path">
+        <div class="output-info output-info-path">
+            <div class="path" :title="outputPathDisplay">
                 <i class="bi bi-file-earmark-code"></i>
-                {{ t('scanner.folder.output_prefix') }} <code x-text="outputPathDisplay"></code>
+                <span class="path-label">{{ t('scanner.folder.output_prefix') }}</span>
+                <code x-text="outputPathDisplay"></code>
             </div>
-            <a href="/settings" class="settings-link">
-                <i class="bi bi-gear"></i> {{ t('scanner.folder.settings_link') }}
-            </a>
+            <div class="output-info-actions">
+                <button type="button" class="path-copy-btn"
+                        @click="copyDisplayedPath()"
+                        :disabled="!outputPathDisplay"
+                        :title="window.t('scanner.folder.copy_path')"
+                        :aria-label="window.t('scanner.folder.copy_path')">
+                    <i class="bi bi-clipboard"></i>
+                </button>
+                <a href="/settings" class="settings-link">
+                    <i class="bi bi-gear"></i> {{ t('scanner.folder.settings_link') }}
+                </a>
+            </div>
         </div>
 
         <!-- 跨機器路徑提醒（media-server 風味）：strm 內寫本機路徑，播放端在別機須認得，可到設定設路徑替換規則 -->
@@ -137,37 +147,55 @@
     </div>
 
     <!-- Mini Terminal (hidden by default) -->
-    <div class="mini-terminal" id="progressSection" x-show="progressSectionVisible">
+    <div class="mini-terminal" id="progressSection" x-show="progressSectionVisible"
+         :class="{ 'is-log-collapsed': !logPanelExpanded, 'is-running': isGenerating }">
         <div class="mini-terminal-header">
-            <span class="title" x-text="progressStatus"></span>
+            <button type="button" class="terminal-toggle"
+                    @click="toggleLogPanel()"
+                    :aria-expanded="logPanelExpanded.toString()"
+                    :aria-label="window.t(logPanelExpanded ? 'scanner.stats.log_collapse' : 'scanner.stats.log_expand')">
+                <span class="terminal-state-icon">
+                    <span x-show="isGenerating" class="loading loading-spinner loading-xs"></span>
+                    <i x-show="!isGenerating" class="bi"
+                       :class="state === 'error' ? 'bi-exclamation-circle' : 'bi-check2-circle'"></i>
+                </span>
+                <span class="terminal-title-group">
+                    <span class="title" x-text="progressStatus"></span>
+                    <span class="terminal-meta" x-show="progressMetaText" x-text="progressMetaText"></span>
+                </span>
+                <i class="bi terminal-chevron"
+                   :class="logPanelExpanded ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+            </button>
 
-            <!-- T7d: Filter Badges -->
-            <div class="log-filter-group">
-                <button class="log-filter-btn" :class="{ active: logFilter === 'all' }"
-                        @click="logFilter = 'all'" title="{{ t('scanner.terminal.filter_all_title') }}">
-                    {{ t('scanner.terminal.filter_all') }}
-                </button>
-                <button class="log-filter-btn" :class="{ active: logFilter === 'error' }"
-                        @click="logFilter = 'error'" title="{{ t('scanner.terminal.filter_error_title') }}">
-                    {{ t('scanner.terminal.filter_error') }}
-                </button>
-                <button class="log-filter-btn" :class="{ active: logFilter === 'warn' }"
-                        @click="logFilter = 'warn'" title="{{ t('scanner.terminal.filter_warn_title') }}">
-                    {{ t('scanner.terminal.filter_warn') }}
-                </button>
-            </div>
+            <div class="terminal-toolbar">
+                <!-- T7d: Filter Badges -->
+                <div class="log-filter-group">
+                    <button class="log-filter-btn" :class="{ active: logFilter === 'all' }"
+                            @click="setLogFilter('all')" title="{{ t('scanner.terminal.filter_all_title') }}">
+                        {{ t('scanner.terminal.filter_all') }}
+                    </button>
+                    <button class="log-filter-btn" :class="{ active: logFilter === 'error' }"
+                            @click="setLogFilter('error')" title="{{ t('scanner.terminal.filter_error_title') }}">
+                        {{ t('scanner.terminal.filter_error') }}
+                    </button>
+                    <button class="log-filter-btn" :class="{ active: logFilter === 'warn' }"
+                            @click="setLogFilter('warn')" title="{{ t('scanner.terminal.filter_warn_title') }}">
+                        {{ t('scanner.terminal.filter_warn') }}
+                    </button>
+                </div>
 
-            <!-- T7d: Action Buttons -->
-            <div class="log-actions">
-                <button class="log-action-btn" @click="copyLogs()" title="{{ t('scanner.terminal.copy_title') }}">
-                    <i class="bi bi-clipboard"></i>
-                </button>
-                <button class="log-action-btn" @click="clearLogsDisplay()" title="{{ t('scanner.terminal.clear_display_title') }}">
-                    <i class="bi bi-eraser"></i>
-                </button>
-                <button class="log-action-btn" @click="confirmClearAll()" title="{{ t('scanner.terminal.clear_all_title') }}">
-                    <i class="bi bi-trash"></i>
-                </button>
+                <!-- T7d: Action Buttons -->
+                <div class="log-actions">
+                    <button class="log-action-btn" @click="copyLogs()" title="{{ t('scanner.terminal.copy_title') }}">
+                        <i class="bi bi-clipboard"></i>
+                    </button>
+                    <button class="log-action-btn" @click="clearLogsDisplay()" title="{{ t('scanner.terminal.clear_display_title') }}">
+                        <i class="bi bi-eraser"></i>
+                    </button>
+                    <button class="log-action-btn" @click="confirmClearAll()" title="{{ t('scanner.terminal.clear_all_title') }}">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -207,27 +235,54 @@
             <span class="enrich-card-badge" x-show="enrichBadgeCount > 0" x-text="enrichBadgeCount"></span>
         </div>
 
-        <div class="progress-mini">
+        <div class="progress-mini" :aria-label="progressMetaText || progressStatus">
             <div class="bar" id="progressBar" x-bind:style="{ width: progressPercent + '%' }"></div>
         </div>
-        <div class="mini-terminal-body" id="logOutput" x-ref="logOutput" :class="'filter-' + logFilter"></div>
+        <div class="terminal-log-wrap" x-show="logPanelExpanded" x-collapse>
+            <div class="terminal-log-empty" x-show="logEntries.length === 0">
+                <i class="bi bi-terminal"></i>
+                <span>{{ t('scanner.stats.log_empty') }}</span>
+            </div>
+            <div class="mini-terminal-body" id="logOutput" x-ref="logOutput"
+                 :class="'filter-' + logFilter"></div>
+        </div>
     </div>
 
     <!-- Stats Card -->
-    <div class="stats-card" id="statsCard" x-show="statsVisible">
-        <div class="stats-row">
-            <div class="stat-item">
-                <i class="bi bi-collection-play"></i>
-                <span>{{ t('scanner.stats.cached_prefix') }} <span class="stat-value" x-text="statTotal"></span> {{ t('scanner.stats.cached_suffix') }}</span>
-                <button class="btn btn-ghost btn-xs" @click="clearCacheModalOpen = true"
-                        :disabled="isBusy" title="{{ t('scanner.stats.clear_cache_title') }}">
-                    <i class="bi bi-trash3"></i>
-                </button>
+    <div class="stats-card scanner-overview" id="statsCard" x-show="statsVisible">
+        <div class="scanner-overview-head">
+            <div class="scanner-overview-title">
+                <span class="scanner-overview-icon"><i class="bi bi-collection-play"></i></span>
+                <div>
+                    <span class="scanner-overview-kicker">{{ t('scanner.stats.overview_title') }}</span>
+                    <div class="scanner-overview-count">
+                        <strong class="stat-value" x-text="statTotal"></strong>
+                        <span>{{ t('scanner.stats.cached_suffix') }}</span>
+                    </div>
+                </div>
             </div>
-            <div class="stat-item" x-text="statLastRun"></div>
+            <button class="btn btn-ghost btn-sm scanner-clear-cache" @click="clearCacheModalOpen = true"
+                    :disabled="isBusy" title="{{ t('scanner.stats.clear_cache_title') }}"
+                    :aria-label="window.t('scanner.stats.clear_cache_title')">
+                <i class="bi bi-trash3"></i>
+            </button>
         </div>
+        <div class="scanner-overview-meta" x-show="statLastRun">
+            <i class="bi bi-clock-history"></i>
+            <span x-text="statLastRun"></span>
+        </div>
+        <div class="scanner-maintenance">
+            <div class="scanner-maintenance-head">
+                <div>
+                    <span class="scanner-maintenance-title">
+                        <i class="bi bi-tools"></i>
+                        {{ t('scanner.stats.maintenance_title') }}
+                    </span>
+                    <p>{{ t('scanner.stats.maintenance_hint') }}</p>
+                </div>
+            </div>
         <!-- NFO Update Section (separate row) -->
-        <div class="nfo-update-row" id="statNeedUpdate" x-show="nfoUpdateVisible">
+        <div class="nfo-update-row maintenance-row" id="statNeedUpdate" x-show="nfoUpdateVisible">
             <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
                 <i class="bi bi-exclamation-circle"></i>
                 {{ t('scanner.stats.nfo_prefix') }}
@@ -245,12 +300,16 @@
             </button>
         </div>
         <!-- r16: Replace ordinary tags from one selected source -->
-        <div class="nfo-update-row" x-show="tagSourceOptions.length > 0">
-            <span class="nfo-badge" :title="window.t('scanner.stats.tag_source_hint')">
-                <i class="bi bi-tags"></i>
-                {{ t('scanner.stats.tag_source_label') }}
-            </span>
-            <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+        <div class="nfo-update-row maintenance-row maintenance-row-tag"
+             x-show="tagSourceOptions.length > 0">
+            <div class="maintenance-copy" :title="window.t('scanner.stats.tag_source_hint')">
+                <span class="maintenance-icon"><i class="bi bi-tags"></i></span>
+                <span class="maintenance-text">
+                    <strong>{{ t('scanner.stats.tag_source_label') }}</strong>
+                    <small>{{ t('scanner.stats.tag_source_hint') }}</small>
+                </span>
+            </div>
+            <div class="maintenance-controls">
                 <select class="select select-bordered select-sm"
                         x-model="tagSourceUpdateSource"
                         :disabled="isBusy">
@@ -267,7 +326,7 @@
             </div>
         </div>
         <!-- T10: Missing NFO/Cover Pill -->
-        <div class="nfo-update-row" x-show="missingPillVisible">
+        <div class="nfo-update-row maintenance-row" x-show="missingPillVisible">
             <span class="nfo-badge">
                 <i class="bi bi-file-earmark-x"></i>
                 <span x-show="missingBothCount > 0">
@@ -317,7 +376,7 @@
         </div>
 
         <!-- T10: Resume Pill (未完成提示) -->
-        <div class="nfo-update-row" x-show="resumePillVisible">
+        <div class="nfo-update-row maintenance-row" x-show="resumePillVisible">
             <span class="nfo-badge">
                 <i class="bi bi-arrow-repeat"></i>
                 <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
@@ -335,7 +394,7 @@
 
         <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
         <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
-        <div class="nfo-update-row"
+        <div class="nfo-update-row maintenance-row"
              x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
             <span class="nfo-badge">
                 <i class="bi bi-image"></i>
@@ -361,7 +420,7 @@
                   class="loading loading-spinner loading-sm"></span>
         </div>
         <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
-        <div class="nfo-update-row" x-show="jellyfinImageVisible">
+        <div class="nfo-update-row maintenance-row" x-show="jellyfinImageVisible">
             <span class="nfo-badge" x-data="helpPopover">
                 <i class="bi bi-image"></i>
                 {{ t('scanner.stats.jellyfin_prefix') }}
@@ -396,6 +455,7 @@
                     x-html="jellyfinImageButtonText"
                     title="{{ t('scanner.stats.jellyfin_update_title') }}">
             </button>
+        </div>
         </div>
     </div>
 
@@ -813,12 +873,25 @@
                 <i class="bi bi-tags text-warning"></i>
                 <span>{{ t('scanner.stats.tag_source_confirm_title') }}</span>
             </h3>
+            <div class="batch-confirm-summary">
+                <div class="batch-confirm-summary-item">
+                    <span>{{ t('scanner.stats.tag_source_confirm_source_label') }}</span>
+                    <strong x-text="selectedTagSourceLabel"></strong>
+                </div>
+                <div class="batch-confirm-summary-item">
+                    <span>{{ t('scanner.stats.tag_source_confirm_count_label') }}</span>
+                    <strong x-text="window.t('scanner.stats.tag_source_confirm_count_value', { count: statTotal })"></strong>
+                </div>
+            </div>
             <p class="fluent-modal-body"
                x-text="window.t('scanner.stats.tag_source_confirm_body', {
                    source: selectedTagSourceLabel,
                    count: statTotal
                })"></p>
-            <p class="fluent-modal-body">{{ t('scanner.stats.tag_source_confirm_note') }}</p>
+            <p class="fluent-modal-body batch-confirm-note">
+                <i class="bi bi-info-circle"></i>
+                <span>{{ t('scanner.stats.tag_source_confirm_note') }}</span>
+            </p>
             <div class="modal-action fluent-modal-actions">
                 <button type="button" class="btn btn-ghost" @click="cancelTagSourceUpdate()">
                     {{ t('scanner.stats.tag_source_confirm_cancel') }}
