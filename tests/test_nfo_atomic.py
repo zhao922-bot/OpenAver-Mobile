@@ -197,3 +197,104 @@ def test_generate_nfo_uses_mobile_bridge_for_text_write(
 
     assert captured["path"] == str(output_path)
     assert "<title>[ABC-123]新标题</title>".encode("utf-8") in captured["data"]
+
+
+def test_update_nfo_file_uses_mobile_bridge(tmp_path, monkeypatch):
+    from core import android_storage
+    from core.nfo_updater import update_nfo_file
+
+    nfo = tmp_path / "ABC-123.nfo"
+    nfo.write_text(
+        '<?xml version="1.0" encoding="utf-8"?>'
+        "<movie><title>Existing</title><num>ABC-123</num></movie>",
+        encoding="utf-8",
+    )
+    captured = {}
+
+    def fail_mkstemp(**_kwargs):
+        raise PermissionError("simulated Android SD-card denial")
+
+    monkeypatch.setattr(atomic_write_module.tempfile, "mkstemp", fail_mkstemp)
+    monkeypatch.setattr(android_storage, "has_access", lambda _path: True)
+    monkeypatch.setattr(
+        android_storage,
+        "write_bytes",
+        lambda path, data: captured.update(path=path, data=data),
+    )
+
+    updated, changes = update_nfo_file(
+        str(nfo),
+        {"tags": ["痴女", "巨乳"], "maker": "Maker"},
+        {"title": "Existing", "genre": "", "maker": ""},
+    )
+
+    assert updated is True
+    assert "tags(2)" in changes
+    assert captured["path"] == str(nfo)
+    assert b"<tag>\xe7\x97\xb4\xe5\xa5\xb3</tag>" in captured["data"]
+    assert b"<genre>\xe5\xb7\xa8\xe4\xb9\xb3</genre>" in captured["data"]
+
+
+def test_update_nfo_user_tags_uses_mobile_bridge(tmp_path, monkeypatch):
+    from core import android_storage
+    from core.nfo_updater import update_nfo_user_tags
+
+    nfo = tmp_path / "ABC-123.nfo"
+    nfo.write_text(
+        '<?xml version="1.0" encoding="utf-8"?>'
+        "<movie><title>Keep</title><user_tag>old</user_tag></movie>",
+        encoding="utf-8",
+    )
+    captured = {}
+
+    def fail_mkstemp(**_kwargs):
+        raise PermissionError("simulated Android SD-card denial")
+
+    monkeypatch.setattr(atomic_write_module.tempfile, "mkstemp", fail_mkstemp)
+    monkeypatch.setattr(android_storage, "has_access", lambda _path: True)
+    monkeypatch.setattr(
+        android_storage,
+        "write_bytes",
+        lambda path, data: captured.update(path=path, data=data),
+    )
+
+    assert update_nfo_user_tags(str(nfo), ["收藏", "★5"])
+
+    assert captured["path"] == str(nfo)
+    assert b"<title>Keep</title>" in captured["data"]
+    assert b"<user_tag>\xe6\x94\xb6\xe8\x97\x8f</user_tag>" in captured["data"]
+    assert b"<user_tag>old</user_tag>" not in captured["data"]
+
+
+def test_replace_nfo_tags_preserves_other_nodes(tmp_path):
+    from core.nfo_updater import replace_nfo_tags
+
+    nfo = tmp_path / "ABC-123.nfo"
+    nfo.write_text(
+        '<?xml version="1.0" encoding="utf-8"?>'
+        "<movie><title>Keep</title><tag>old</tag><genre>old</genre>"
+        "<plot>keep plot</plot><user_tag>mine</user_tag></movie>",
+        encoding="utf-8",
+    )
+
+    assert replace_nfo_tags(str(nfo), ["痴女", "巨乳", "痴女"])
+
+    text = nfo.read_text(encoding="utf-8")
+    assert text.count("<tag>痴女</tag>") == 1
+    assert text.count("<genre>巨乳</genre>") == 1
+    assert "<tag>old</tag>" not in text
+    assert "<genre>old</genre>" not in text
+    assert "<title>Keep</title>" in text
+    assert "<plot>keep plot</plot>" in text
+    assert "<user_tag>mine</user_tag>" in text
+
+
+def test_get_nfo_path_from_video_accepts_uppercase_extension(tmp_path):
+    from core.nfo_updater import get_nfo_path_from_video
+
+    video = tmp_path / "ABC-123.mp4"
+    video.write_bytes(b"video")
+    nfo = tmp_path / "ABC-123.NFO"
+    nfo.write_text("<movie />", encoding="utf-8")
+
+    assert get_nfo_path_from_video(str(video)) == str(nfo)

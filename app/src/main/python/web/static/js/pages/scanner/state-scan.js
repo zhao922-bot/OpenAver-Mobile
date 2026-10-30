@@ -45,7 +45,7 @@ export function stateScan() {
         copyFailDump: '',
 
         // ===== T7b: State Machine =====
-        state: 'idle',  // 'idle' | 'generating' | 'nfoUpdating' | 'done' | 'error'
+        state: 'idle',  // 'idle' | 'generating' | 'nfoUpdating' | 'tagSourceUpdating' | 'done' | 'error'
 
         // ===== T7b: Progress =====
         progressStatus: '',
@@ -69,6 +69,10 @@ export function stateScan() {
         nfoUpdatePaths: [],
         nfoUpdateItems: [],
         nfoUpdateVisible: false,
+
+        // ===== r16: Batch tag source update =====
+        tagSourceUpdateSource: 'auto',
+        tagSourceConfirmModalOpen: false,
 
         // ===== T6d: Jellyfin Image Update =====
         jellyfinImageCount: 0,
@@ -104,6 +108,7 @@ export function stateScan() {
 
         get isGenerating() {
             return this.state === 'generating' || this.state === 'nfoUpdating'
+                || this.state === 'tagSourceUpdating'
                 || this.state === 'jellyfinUpdating' || this.state === 'enriching';
         },
 
@@ -119,6 +124,51 @@ export function stateScan() {
 
         get doneActionsVisible() {
             return this.state === 'done' && this.outputPath !== '';
+        },
+
+        get tagSourceOptions() {
+            const options = [{
+                id: 'auto',
+                display_name: window.t('scanner.stats.tag_source_auto'),
+            }];
+            const seen = new Set(['auto']);
+            const rows = (this.config.sources || [])
+                .filter((source) => source
+                    && source.enabled
+                    && !source.manual_only
+                    && !String(source.id || '').startsWith('custom:'))
+                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+            for (const source of rows) {
+                if (!source.id || seen.has(source.id)) continue;
+                seen.add(source.id);
+                options.push({
+                    id: source.id,
+                    display_name: source.type === 'metatube'
+                        ? (source.display_name_raw || source.id)
+                        : (source.display_name_key || source.id),
+                });
+            }
+            return options;
+        },
+
+        get selectedTagSourceLabel() {
+            const selected = this.tagSourceOptions.find(
+                (source) => source.id === this.tagSourceUpdateSource
+            );
+            return selected ? selected.display_name : this.tagSourceUpdateSource;
+        },
+
+        get tagSourceUpdateButtonDisabled() {
+            return this.isBusy || !this.tagSourceUpdateSource || this.statTotal === 0;
+        },
+
+        get tagSourceUpdateButtonText() {
+            if (this.state === 'tagSourceUpdating') {
+                return '<span class="loading loading-spinner loading-sm"></span> '
+                    + window.t('scanner.stats.tag_source_updating');
+            }
+            return '<i class="bi bi-tags"></i> '
+                + window.t('scanner.stats.tag_source_update_btn');
         },
 
         get generateButtonText() {
@@ -305,6 +355,10 @@ export function stateScan() {
                 if (result.success) {
                     this.config = result.data;
                     this.directories = this.config.gallery?.directories || [];
+                    const availableSources = this.tagSourceOptions;
+                    if (!availableSources.some((source) => source.id === this.tagSourceUpdateSource)) {
+                        this.tagSourceUpdateSource = availableSources[0]?.id || 'auto';
+                    }
                     // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                     this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
 
@@ -990,6 +1044,85 @@ export function stateScan() {
                 console.error('[Scanner] runNfoUpdate error:', e);
                 this.showToast(window.t('scanner.toast.nfo_update_error'), 'error', 4000);
             }
+        },
+
+        // ===== r16: Batch tag source update =====
+        openTagSourceUpdateConfirm() {
+            if (this.tagSourceUpdateButtonDisabled) return;
+            this.tagSourceConfirmModalOpen = true;
+        },
+
+        cancelTagSourceUpdate() {
+            this.tagSourceConfirmModalOpen = false;
+        },
+
+        confirmTagSourceUpdate() {
+            this.tagSourceConfirmModalOpen = false;
+            this.startTagSourceUpdate();
+        },
+
+        async startTagSourceUpdate() {
+            if (this.isGenerating || !this.tagSourceUpdateSource) return;
+
+            this.state = 'tagSourceUpdating';
+            this.progressStatus = window.t('scanner.stats.tag_source_preparing');
+            this.progressCurrent = 0;
+            this.progressTotal = this.statTotal;
+            this.clearLogs();
+            localStorage.setItem('avlist_generating', 'true');
+
+            const source = encodeURIComponent(this.tagSourceUpdateSource);
+            this.eventSource = new EventSource(`/api/gallery/tag-source-update?source=${source}`);
+
+            this.eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'progress') {
+                    this.progressStatus = data.status || window.t('scanner.stats.tag_source_updating');
+                    this.progressCurrent = data.current || 0;
+                    this.progressTotal = data.total || this.statTotal;
+                    localStorage.setItem('avlist_last_status', this.progressStatus);
+                } else if (data.type === 'log') {
+                    this.addLog(data.level || 'info', data.message || '');
+                } else if (data.type === 'done') {
+                    this.eventSource.close();
+                    this.eventSource = null;
+                    this.state = 'done';
+                    this.progressStatus = data.message || window.t('scanner.stats.tag_source_done');
+                    this.progressCurrent = this.progressTotal;
+                    localStorage.setItem('avlist_generating', 'false');
+                    localStorage.setItem('avlist_last_status', this.progressStatus);
+                    const failed = data.summary?.failed || 0;
+                    this.showToast(
+                        window.t('scanner.toast.tag_source_update_done'),
+                        failed > 0 ? 'warn' : 'success',
+                        4000
+                    );
+                    if (data.message) this.addLog('info', data.message);
+                    this.flushLogs();
+                } else if (data.type === 'error') {
+                    this.eventSource.close();
+                    this.eventSource = null;
+                    this.state = 'error';
+                    this.addLog(
+                        'error',
+                        window.t('scanner.stats.log_error_prefix', { message: data.message || '' })
+                    );
+                    this.flushLogs();
+                    localStorage.setItem('avlist_generating', 'false');
+                }
+            };
+
+            this.eventSource.onerror = () => {
+                if (this.state === 'done' || this.state === 'error') return;
+                this.eventSource.close();
+                this.eventSource = null;
+                this.state = 'error';
+                this.addLog('error', window.t('scanner.stats.log_disconnected'));
+                this.flushLogs();
+                localStorage.setItem('avlist_generating', 'false');
+                this.showToast(window.t('scanner.toast.tag_source_update_error'), 'error', 4000);
+            };
         },
 
         // ===== T6d: Jellyfin Image Update Flow =====

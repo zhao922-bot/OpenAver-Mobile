@@ -18,7 +18,357 @@
          "side_effect": True,
 --- a/web/routers/scanner.py
 +++ b/web/routers/scanner.py
-@@ -1621,6 +1621,11 @@
+@@ -34,14 +34,24 @@
+ 
+ from core.gallery_scanner import VideoScanner, fast_scan_directory, VideoInfo, _run_sample_images_cleanup_pass, is_nas_system_dir_name  # noqa: PLC2701 — scanner 的 rescan 端點需要在特定時機主動觸發 gallery_scanner 內部的樣本圖清理 pass（該 pass 平常只在 scanner 自身流程內被呼叫），避免把整段清理邏輯複製一份到 router 層
+ from core.cover_layout import cover_base_stem
++from core.cover_attributes import effective_tags
+ from core.video_extensions import get_video_extensions
+ from core.gallery_generator import HTMLGenerator
+ from core.path_utils import to_file_uri, is_path_under_dir, uri_to_fs_path, coerce_to_file_uri, uri_to_local_fs_path
+-from core.nfo_updater import check_cache_needs_update, update_videos_generator
++from core.nfo_updater import (
++    check_cache_needs_update,
++    get_nfo_path_from_video,
++    replace_nfo_tags,
++    update_videos_generator,
++)
+ from core.database import VideoRepository, Video, init_db, get_db_path, migrate_json_to_sqlite
+ from core.focal import requires_face_detection
+ from core.focal_trigger import maybe_submit_video_focal
+-from core.organizer import generate_jellyfin_images, HEADERS as _EMBED_HEADERS
++from core.organizer import (
++    find_subtitle_files,
++    generate_jellyfin_images,
++    HEADERS as _EMBED_HEADERS,
++)
+ from core.config import load_config, iter_gallery_sources, get_gallery_source_paths, STEM_IMAGE_MODES
+ from core.data_root import resolve_gallery_output_path
+ from core.readonly_producer import produce_source
+@@ -49,8 +59,10 @@
+ from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
+ from core.generate_state import try_mark_generate_active, mark_generate_done
+ from core import thumbnail_cache
+-from core.scraper import smart_search
++from core.scraper import get_javbus_lang, search_jav, smart_search
+ from core.source_settings import is_uncensored_mode_effective
++from core.scrapers.utils import check_subtitle
++from core.source_config import get_manual_only_sources, validate_source_id
+ from pydantic import BaseModel
+ from core.logger import get_logger
+ from core.platform_info import DSM_PERMISSION_HINT, is_synology
+@@ -959,6 +971,253 @@
+     return cache, skipped_readonly, path_mappings
+ 
+ 
++def _validate_batch_tag_source(source: str, config: dict) -> Optional[str]:
++    """Return a user-facing error for sources that cannot run as a tag batch."""
++    if source == "auto":
++        return None
++    if source.startswith("custom:"):
++        return "自定义来源不支持批量更换标签，请改用单片重刮"
++    if not validate_source_id(source):
++        return "未知来源"
++    if source in {row.id for row in get_manual_only_sources()}:
++        return "该来源需要 Cloudflare 交互，不能用于批量更换标签"
++    source_row = next(
++        (
++            row
++            for row in config.get("sources", [])
++            if isinstance(row, dict) and row.get("id") == source
++        ),
++        None,
++    )
++    if source_row and source_row.get("manual_only"):
++        return "该来源需要 Cloudflare 交互，不能用于批量更换标签"
++    if not source_row or not source_row.get("enabled"):
++        return "该来源未启用，请先在设置中启用"
++    return None
++
++
++def _resolve_tag_update_nfo_path(
++    video: Video,
++    path_mappings: dict,
++    readonly: bool,
++) -> Optional[str]:
++    """Resolve the NFO to rewrite, including readonly output directories."""
++    if not readonly:
++        writable_nfo = get_nfo_path_from_video(video.path, path_mappings)
++        if writable_nfo:
++            return writable_nfo
++
++    if not video.output_dir:
++        return None
++
++    output_dir = Path(uri_to_local_fs_path(video.output_dir, path_mappings))
++    if video.cover_path:
++        cover_fs = uri_to_local_fs_path(video.cover_path, path_mappings)
++        cover_nfo = Path(cover_base_stem(cover_fs) + ".nfo")
++        if cover_nfo.is_file():
++            return str(cover_nfo)
++
++    try:
++        candidates = sorted(
++            path
++            for path in output_dir.iterdir()
++            if path.is_file() and path.suffix.casefold() == ".nfo"
++        )
++    except OSError:
++        candidates = []
++    if len(candidates) == 1:
++        return str(candidates[0])
++    return None
++
++
++def generate_tag_source_update(
++    source: str,
++    cancel_event: Optional[threading.Event] = None,
++) -> Generator[str, None, None]:
++    """Fetch one source for every numbered video and replace only NFO/DB tags."""
++    summary = {
++        "total": 0,
++        "success": 0,
++        "failed": 0,
++        "skipped": 0,
++        "no_nfo": 0,
++    }
++    try:
++        config = load_config()
++        source_error = _validate_batch_tag_source(source, config)
++        if source_error:
++            yield _sse_event({"type": "error", "message": source_error})
++            return
++
++        db_path = get_db_path()
++        if not db_path.exists():
++            yield _sse_event({"type": "error", "message": "数据库不存在，请先生成列表"})
++            return
++
++        repo = VideoRepository(db_path)
++        videos = [video for video in repo.get_all() if video.number]
++        summary["total"] = len(videos)
++        if not videos:
++            yield _sse_event({
++                "type": "done",
++                "message": "没有可更新标签的影片",
++                "summary": summary,
++            })
++            return
++
++        gallery_config = config.get("gallery", {})
++        path_mappings = gallery_config.get("path_mappings", {})
++        readonly_prefixes = readonly_source_prefixes(gallery_config, path_mappings)
++        writable_prefixes = writable_source_prefixes(gallery_config, path_mappings)
++        javbus_lang = get_javbus_lang()
++
++        for index, video in enumerate(videos, start=1):
++            if cancel_event is not None and cancel_event.is_set():
++                break
++            yield _sse_event({
++                "type": "progress",
++                "current": index,
++                "total": len(videos),
++                "number": video.number,
++                "status": f"获取 {video.number} 的标签",
++            })
++
++            try:
++                metadata = search_jav(
++                    video.number,
++                    source=source,
++                    javbus_lang=javbus_lang,
++                    surface_access_errors=True,
++                )
++            except Exception as exc:
++                summary["failed"] += 1
++                logger.warning(
++                    "tag source update failed: source=%s number=%s error=%s",
++                    source,
++                    video.number,
++                    exc,
++                )
++                yield _sse_event({
++                    "type": "log",
++                    "level": "error",
++                    "message": f"{video.number}: 来源获取失败 ({exc})",
++                })
++                continue
++
++            if not metadata:
++                summary["failed"] += 1
++                yield _sse_event({
++                    "type": "log",
++                    "level": "warn",
++                    "message": f"{video.number}: 所选来源没有结果",
++                })
++                continue
++
++            raw_tags = metadata.get("tags") or []
++            if isinstance(raw_tags, str):
++                raw_tags = [raw_tags]
++            source_tags = [
++                str(tag).strip()
++                for tag in raw_tags
++                if tag is not None and str(tag).strip()
++            ]
++            if not source_tags:
++                summary["skipped"] += 1
++                yield _sse_event({
++                    "type": "log",
++                    "level": "warn",
++                    "message": f"{video.number}: 所选来源没有标签，保留原标签",
++                })
++                continue
++
++            video_fs_path = uri_to_local_fs_path(video.path, path_mappings)
++            filename = os.path.basename(video_fs_path)
++            has_subtitle = check_subtitle(filename) or bool(
++                find_subtitle_files(video_fs_path)
++            )
++            tag_basis = list(source_tags)
++            if has_subtitle:
++                tag_basis.append("中文字幕")
++            merged_tags = effective_tags(filename, tag_basis)
++            readonly = bool(
++                readonly_prefixes
++                and is_path_readonly(
++                    coerce_to_file_uri(video.path, path_mappings),
++                    readonly_prefixes,
++                    writable_prefixes,
++                )
++            )
++            nfo_path = _resolve_tag_update_nfo_path(video, path_mappings, readonly)
++            if nfo_path and not replace_nfo_tags(nfo_path, merged_tags):
++                summary["failed"] += 1
++                yield _sse_event({
++                    "type": "log",
++                    "level": "error",
++                    "message": f"{video.number}: NFO 标签写入失败",
++                })
++                continue
++
++            try:
++                changed = repo.update_tags_if_changed(video.path, merged_tags)
++            except Exception as exc:
++                summary["failed"] += 1
++                logger.warning(
++                    "tag source update: database update failed for %s: %s",
++                    video.path,
++                    exc,
++                )
++                yield _sse_event({
++                    "type": "log",
++                    "level": "error",
++                    "message": f"{video.number}: 数据库标签更新失败",
++                })
++                continue
++
++            if nfo_path:
++                try:
++                    repo.update_titles(
++                        video.path,
++                        video.title,
++                        video.original_title,
++                        Path(nfo_path).stat().st_mtime,
++                    )
++                except Exception:
++                    logger.warning(
++                        "tag source update: failed to refresh nfo mtime for %s",
++                        video.path,
++                        exc_info=True,
++                    )
++            else:
++                summary["no_nfo"] += 1
++
++            summary["success"] += 1
++            yield _sse_event({
++                "type": "log",
++                "level": "info",
++                "message": (
++                    f"{video.number}: 已更新 {len(merged_tags)} 个标签"
++                    + ("（仅更新数据库，NFO 不存在）" if not nfo_path else "")
++                    + ("" if changed else "（值未变化）")
++                ),
++            })
++
++        yield _sse_event({
++            "type": "done",
++            "message": (
++                f"标签来源更新完成：成功 {summary['success']}，"
++                f"失败 {summary['failed']}，跳过 {summary['skipped']}，"
++                f"无 NFO {summary['no_nfo']}"
++            ),
++            "summary": summary,
++        })
++    except Exception:
++        logger.exception("批量更换标签来源失败: source=%s", source)
++        yield _sse_event({"type": "error", "message": "批量更换标签来源失败"})
++    finally:
++        if cancel_event is not None:
++            mark_generate_done(cancel_event)
++
++
+ @router.get("/update-check")
+ def check_update():
+     """檢查需要更新的影片數量（從 SQLite 讀取）"""
+@@ -1116,6 +1375,56 @@
+             "Connection": "keep-alive",
+         }
+     )
++
++
++@router.get("/tag-source-update")
++async def run_tag_source_update(
++    request: Request,
++    source: str = Query(..., min_length=1),
++):
++    """Batch replace ordinary tags using one explicitly selected source."""
++    cancel_event = threading.Event()
++    if not try_mark_generate_active(cancel_event):
++        return StreamingResponse(
++            iter([_sse_event({"type": "error", "message": "已有生成任务正在运行"})]),
++            media_type="text/event-stream",
++            headers={"Cache-Control": "no-cache"},
++        )
++
++    async def _watch_disconnect() -> None:
++        try:
++            while not cancel_event.is_set():
++                if await request.is_disconnected():
++                    cancel_event.set()
++                    return
++                await asyncio.sleep(_DISCONNECT_POLL_INTERVAL_SEC)
++        except asyncio.CancelledError:
++            raise
++        finally:
++            mark_generate_done(cancel_event)
++
++    watcher_task = asyncio.create_task(_watch_disconnect())
++
++    async def _cleanup_watcher() -> None:
++        mark_generate_done(cancel_event)
++        watcher_task.cancel()
++        try:
++            await watcher_task
++        except asyncio.CancelledError:
++            pass
++
++    response = StreamingResponse(
++        generate_tag_source_update(source, cancel_event),
++        media_type="text/event-stream",
++        headers={
++            "Cache-Control": "no-cache",
++            "Connection": "keep-alive",
++        },
++    )
++    response.background = BackgroundTask(_cleanup_watcher)
++    response.cancel_event = cancel_event
++    response.watcher_task = watcher_task
++    return response
+ 
+ 
+ @router.get("/view")
+@@ -1621,6 +1930,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:

@@ -702,6 +702,116 @@
 +            folded.append(candidate)
 +
 +    return sorted(exact) if exact else sorted(folded)
+--- a/core/nfo_updater.py
++++ b/core/nfo_updater.py
+@@ -3,17 +3,32 @@
+ 整合到 Gallery 頁面使用
+ """
+ 
++import io
+ import os
+ import xml.etree.ElementTree as ET
+ from pathlib import Path
+ from typing import Dict, List, Optional, Tuple, Generator
+ 
++from core.atomic_write import atomic_write
+ from core.logger import get_logger
+-from core.nfo_utils import sanitize_nfo_bytes
++from core.nfo_utils import find_sidecar_nfos, sanitize_nfo_bytes
+ from core.path_utils import uri_to_local_fs_path
+ from core.scraper import search_jav
+ 
+ logger = get_logger(__name__)
++
++
++def _write_nfo_tree(tree: ET.ElementTree, nfo_path: str) -> None:
++    """Serialize an NFO tree and write it through the shared Android SAF path."""
++    payload = io.BytesIO()
++    tree.write(payload, encoding="utf-8", xml_declaration=True)
++    with atomic_write(
++        nfo_path,
++        mode="wb",
++        suffix=".nfo.tmp",
++        mobile_fallback=True,
++    ) as handle:
++        handle.write(payload.getvalue())
+ 
+ 
+ def update_nfo_user_tags(nfo_path: str, user_tags: List[str]) -> bool:
+@@ -45,7 +60,7 @@
+             elem = ET.SubElement(root, "user_tag")
+             elem.text = tag
+         tree = ET.ElementTree(root)
+-        tree.write(nfo_path, encoding="utf-8", xml_declaration=True)
++        _write_nfo_tree(tree, nfo_path)
+         return True
+     except Exception as e:
+         logger.warning("[update_nfo_user_tags] NFO 更新失敗: %s — %s", nfo_path, e)
+@@ -151,12 +166,10 @@
+     """
+     video_path = uri_to_local_fs_path(video_path, path_mappings)
+ 
+-    # 取得 NFO 路徑
+-    video_p = Path(video_path)
+-    nfo_path = video_p.with_suffix('.nfo')
+-
+-    if nfo_path.exists():
+-        return str(nfo_path)
++    # 取得 NFO 路徑；Android/Linux 區分大小寫，需接受 Windows 拷入的 .NFO。
++    candidates = find_sidecar_nfos(video_path)
++    if candidates:
++        return str(candidates[0])
+ 
+     return None
+ 
+@@ -372,10 +385,46 @@
+ 
+     if modified:
+         indent_xml(root)
+-        tree.write(nfo_path, encoding='utf-8', xml_declaration=True)
++        _write_nfo_tree(tree, nfo_path)
+         return True, ','.join(changes)
+ 
+     return False, "無需更新"
++
++
++def replace_nfo_tags(nfo_path: str, tags: List[str]) -> bool:
++    """Replace only top-level <tag>/<genre> entries, preserving every other node."""
++    tree, root = parse_nfo(nfo_path)
++    if root is None:
++        return False
++
++    cleaned = []
++    seen = set()
++    for value in tags:
++        if value is None:
++            continue
++        text = str(value).strip()
++        key = text.lower()
++        if text and key not in seen:
++            seen.add(key)
++            cleaned.append(text)
++
++    for elem in list(root):
++        if elem.tag in {"tag", "genre"}:
++            root.remove(elem)
++
++    for text in cleaned:
++        tag_elem = ET.SubElement(root, "tag")
++        tag_elem.text = text
++        genre_elem = ET.SubElement(root, "genre")
++        genre_elem.text = text
++
++    indent_xml(root)
++    try:
++        _write_nfo_tree(tree, nfo_path)
++    except Exception as exc:
++        logger.warning("[replace_nfo_tags] NFO 更新失敗: %s — %s", nfo_path, exc)
++        return False
++    return True
+ 
+ 
+ def update_videos_generator(
 --- a/core/organizer.py
 +++ b/core/organizer.py
 @@ -9,6 +9,7 @@

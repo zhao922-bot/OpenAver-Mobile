@@ -17,7 +17,7 @@
      data-shell-mode="{{ shell_mode or '' }}"
      @dragover.document.prevent="handleDragOver($event)"
      @drop.document.prevent="handleDrop($event)"
-     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel();">
+     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); tagSourceConfirmModalOpen && cancelTagSourceUpdate(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel();">
     <!-- Drag Overlay (must be inside x-data scope) -->
     <div class="drag-overlay" id="dragOverlay" :class="{ active: showDragOverlay }">
         <div class="drag-overlay-content">
@@ -243,6 +243,28 @@
                     x-html="nfoUpdateButtonText"
                     title="{{ t('scanner.stats.nfo_update_title') }}">
             </button>
+        </div>
+        <!-- r16: Replace ordinary tags from one selected source -->
+        <div class="nfo-update-row" x-show="tagSourceOptions.length > 0">
+            <span class="nfo-badge" :title="window.t('scanner.stats.tag_source_hint')">
+                <i class="bi bi-tags"></i>
+                {{ t('scanner.stats.tag_source_label') }}
+            </span>
+            <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+                <select class="select select-bordered select-sm"
+                        x-model="tagSourceUpdateSource"
+                        :disabled="isBusy">
+                    <template x-for="source in tagSourceOptions" :key="source.id">
+                        <option :value="source.id" x-text="source.display_name"></option>
+                    </template>
+                </select>
+                <button class="btn-nfo-update"
+                        @click="openTagSourceUpdateConfirm()"
+                        :disabled="tagSourceUpdateButtonDisabled"
+                        x-html="tagSourceUpdateButtonText"
+                        :title="window.t('scanner.stats.tag_source_hint')">
+                </button>
+            </div>
         </div>
         <!-- T10: Missing NFO/Cover Pill -->
         <div class="nfo-update-row" x-show="missingPillVisible">
@@ -777,6 +799,32 @@
             <div class="modal-action fluent-modal-actions">
                 <button type="button" class="btn btn-ghost" @click="closeCopyFailModal()">
                     {{ t('scanner.copy_fail_modal.close') }}
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- r16: Batch Tag Source Confirm Modal -->
+    <dialog class="modal fluent-modal"
+            :class="{ 'modal-open': tagSourceConfirmModalOpen }"
+            @click.self="cancelTagSourceUpdate()">
+        <div class="modal-box fluent-modal-box">
+            <h3 class="fluent-modal-title">
+                <i class="bi bi-tags text-warning"></i>
+                <span>{{ t('scanner.stats.tag_source_confirm_title') }}</span>
+            </h3>
+            <p class="fluent-modal-body"
+               x-text="window.t('scanner.stats.tag_source_confirm_body', {
+                   source: selectedTagSourceLabel,
+                   count: statTotal
+               })"></p>
+            <p class="fluent-modal-body">{{ t('scanner.stats.tag_source_confirm_note') }}</p>
+            <div class="modal-action fluent-modal-actions">
+                <button type="button" class="btn btn-ghost" @click="cancelTagSourceUpdate()">
+                    {{ t('scanner.stats.tag_source_confirm_cancel') }}
+                </button>
+                <button type="button" class="btn btn-primary" @click="confirmTagSourceUpdate()">
+                    {{ t('scanner.stats.tag_source_confirm_ok') }}
                 </button>
             </div>
         </div>

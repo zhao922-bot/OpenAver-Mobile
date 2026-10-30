@@ -11,7 +11,35 @@
      auto_check_update: bool = True  # 啟動時檢查更新（feature/107）
 --- a/locales/en.json
 +++ b/locales/en.json
-@@ -1410,6 +1410,9 @@
+@@ -829,6 +829,8 @@
+       "nfo_update_done": "Update complete! Regenerate the list to refresh",
+       "no_jellyfin_update_needed": "No videos need updating",
+       "jellyfin_update_done": "Update complete!",
++      "tag_source_update_done": "Tag source update complete. Refresh Showcase to view it.",
++      "tag_source_update_error": "Tag source update failed. Check the log for details.",
+       "path_copied": "Copied: {path}",
+       "browse_dir_fallback": "Your browser can’t read the path of dropped files, so the folder picker has been opened for you"
+     },
+@@ -875,6 +877,18 @@
+       "nfo_prefix": "Incomplete NFO fields:",
+       "nfo_suffix": " videos",
+       "nfo_update_title": "Fill incomplete NFO fields",
++      "tag_source_label": "Batch tag source",
++      "tag_source_hint": "Choose one source to replace ordinary tags and genres while preserving title, cover, plot, and user tags",
++      "tag_source_auto": "Auto (source order)",
++      "tag_source_update_btn": "Replace Tags",
++      "tag_source_updating": "Updating tags...",
++      "tag_source_preparing": "Preparing tag update...",
++      "tag_source_done": "Tag source update complete",
++      "tag_source_confirm_title": "Confirm batch tag source change",
++      "tag_source_confirm_body": "Fetch tags for {count} videos from \"{source}\"?",
++      "tag_source_confirm_note": "Only ordinary tags in the NFO and database will be replaced. Title, cover, plot, and user tags are preserved.",
++      "tag_source_confirm_cancel": "Cancel",
++      "tag_source_confirm_ok": "Replace Tags",
+       "jellyfin_prefix": "Jellyfin cover format missing:",
+       "jellyfin_suffix": " videos",
+       "jellyfin_update_title": "Generate Jellyfin poster + fanart",
+@@ -1410,6 +1424,9 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -23,7 +51,35 @@
    },
 --- a/locales/ja.json
 +++ b/locales/ja.json
-@@ -1410,6 +1410,9 @@
+@@ -829,6 +829,8 @@
+       "nfo_update_done": "補完が完了しました。リストを再生成して更新してください",
+       "no_jellyfin_update_needed": "補完が必要な動画はありません",
+       "jellyfin_update_done": "補完が完了しました！",
++      "tag_source_update_done": "タグ取得元の更新が完了しました。Showcase を再読み込みしてください",
++      "tag_source_update_error": "タグ取得元の更新に失敗しました。ログを確認してください",
+       "path_copied": "コピーしました: {path}",
+       "browse_dir_fallback": "ブラウザではドロップしたファイルのパスを直接読み取れないため、フォルダ選択画面を開きました"
+     },
+@@ -875,6 +877,18 @@
+       "nfo_prefix": "NFO項目不完全:",
+       "nfo_suffix": "本",
+       "nfo_update_title": "NFO項目を補完",
++      "tag_source_label": "タグ取得元を一括変更",
++      "tag_source_hint": "1つの取得元を選び、通常タグとジャンルだけを置換します。タイトル、カバー、あらすじ、ユーザータグは保持します",
++      "tag_source_auto": "自動（取得元の順序）",
++      "tag_source_update_btn": "タグを変更",
++      "tag_source_updating": "タグを更新中...",
++      "tag_source_preparing": "タグ更新を準備中...",
++      "tag_source_done": "タグ取得元の更新が完了しました",
++      "tag_source_confirm_title": "タグ取得元の一括変更を確認",
++      "tag_source_confirm_body": "「{source}」から {count} 本の動画タグを再取得します。",
++      "tag_source_confirm_note": "NFO とデータベース内の通常タグだけを置換します。タイトル、カバー、あらすじ、ユーザータグは変更しません。",
++      "tag_source_confirm_cancel": "キャンセル",
++      "tag_source_confirm_ok": "変更する",
+       "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
+       "jellyfin_suffix": "本",
+       "jellyfin_update_title": "Jellyfin poster + fanart を補完",
+@@ -1410,6 +1424,9 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -35,7 +91,35 @@
    },
 --- a/locales/zh_CN.json
 +++ b/locales/zh_CN.json
-@@ -1410,6 +1410,9 @@
+@@ -829,6 +829,8 @@
+       "nfo_update_done": "补全完成！请重新生成列表以更新",
+       "no_jellyfin_update_needed": "没有需要补齐的视频",
+       "jellyfin_update_done": "补齐完成！",
++      "tag_source_update_done": "标签来源更新完成！请刷新浏览页查看",
++      "tag_source_update_error": "标签来源更新失败，请查看日志",
+       "path_copied": "已复制: {path}",
+       "browse_dir_fallback": "浏览器无法直接读取拖放文件的路径，已为您打开文件夹选择器"
+     },
+@@ -875,6 +877,18 @@
+       "nfo_prefix": "NFO 字段不全:",
+       "nfo_suffix": "部",
+       "nfo_update_title": "补齐 NFO 字段",
++      "tag_source_label": "批量更换标签来源",
++      "tag_source_hint": "选择一个来源，仅替换普通标签与类型，保留标题、封面、简介和用户标签",
++      "tag_source_auto": "自动（按来源顺序）",
++      "tag_source_update_btn": "更换标签",
++      "tag_source_updating": "更新标签中...",
++      "tag_source_preparing": "准备更新标签...",
++      "tag_source_done": "标签来源更新完成",
++      "tag_source_confirm_title": "确认批量更换标签来源",
++      "tag_source_confirm_body": "将使用「{source}」重新获取 {count} 部影片的标签。",
++      "tag_source_confirm_note": "只替换 NFO 和数据库中的普通标签；不会修改标题、封面、简介或用户标签。",
++      "tag_source_confirm_cancel": "取消",
++      "tag_source_confirm_ok": "确认更换",
+       "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
+       "jellyfin_suffix": "部",
+       "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
+@@ -1410,6 +1424,9 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -47,7 +131,35 @@
    },
 --- a/locales/zh_TW.json
 +++ b/locales/zh_TW.json
-@@ -1410,6 +1410,9 @@
+@@ -829,6 +829,8 @@
+       "nfo_update_done": "補全完成！請重新產生列表以更新",
+       "no_jellyfin_update_needed": "沒有需要補齊的影片",
+       "jellyfin_update_done": "補齊完成！",
++      "tag_source_update_done": "標籤來源更新完成！請重新整理瀏覽頁查看",
++      "tag_source_update_error": "標籤來源更新失敗，請查看日誌",
+       "path_copied": "已複製: {path}",
+       "browse_dir_fallback": "瀏覽器無法直接讀取拖放檔案的路徑，已為您開啟資料夾選擇器"
+     },
+@@ -875,6 +877,18 @@
+       "nfo_prefix": "NFO 欄位不全:",
+       "nfo_suffix": "部",
+       "nfo_update_title": "補齊 NFO 欄位",
++      "tag_source_label": "批次更換標籤來源",
++      "tag_source_hint": "選擇一個來源，只替換一般標籤與類型，保留標題、封面、簡介和自訂標籤",
++      "tag_source_auto": "自動（依來源順序）",
++      "tag_source_update_btn": "更換標籤",
++      "tag_source_updating": "更新標籤中...",
++      "tag_source_preparing": "準備更新標籤...",
++      "tag_source_done": "標籤來源更新完成",
++      "tag_source_confirm_title": "確認批次更換標籤來源",
++      "tag_source_confirm_body": "將使用「{source}」重新取得 {count} 部影片的標籤。",
++      "tag_source_confirm_note": "只替換 NFO 和資料庫中的一般標籤；不會修改標題、封面、簡介或自訂標籤。",
++      "tag_source_confirm_cancel": "取消",
++      "tag_source_confirm_ok": "確認更換",
+       "jellyfin_prefix": "外部媒體管理器封面缺失:",
+       "jellyfin_suffix": "部",
+       "jellyfin_update_title": "補齊 poster + fanart",
+@@ -1410,6 +1424,9 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -328,6 +440,185 @@
 +        return handled || closeGenericPopover();
 +    };
 +})();
+--- a/web/static/js/pages/scanner/state-scan.js
++++ b/web/static/js/pages/scanner/state-scan.js
+@@ -45,7 +45,7 @@
+         copyFailDump: '',
+ 
+         // ===== T7b: State Machine =====
+-        state: 'idle',  // 'idle' | 'generating' | 'nfoUpdating' | 'done' | 'error'
++        state: 'idle',  // 'idle' | 'generating' | 'nfoUpdating' | 'tagSourceUpdating' | 'done' | 'error'
+ 
+         // ===== T7b: Progress =====
+         progressStatus: '',
+@@ -69,6 +69,10 @@
+         nfoUpdatePaths: [],
+         nfoUpdateItems: [],
+         nfoUpdateVisible: false,
++
++        // ===== r16: Batch tag source update =====
++        tagSourceUpdateSource: 'auto',
++        tagSourceConfirmModalOpen: false,
+ 
+         // ===== T6d: Jellyfin Image Update =====
+         jellyfinImageCount: 0,
+@@ -104,6 +108,7 @@
+ 
+         get isGenerating() {
+             return this.state === 'generating' || this.state === 'nfoUpdating'
++                || this.state === 'tagSourceUpdating'
+                 || this.state === 'jellyfinUpdating' || this.state === 'enriching';
+         },
+ 
+@@ -119,6 +124,51 @@
+ 
+         get doneActionsVisible() {
+             return this.state === 'done' && this.outputPath !== '';
++        },
++
++        get tagSourceOptions() {
++            const options = [{
++                id: 'auto',
++                display_name: window.t('scanner.stats.tag_source_auto'),
++            }];
++            const seen = new Set(['auto']);
++            const rows = (this.config.sources || [])
++                .filter((source) => source
++                    && source.enabled
++                    && !source.manual_only
++                    && !String(source.id || '').startsWith('custom:'))
++                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
++            for (const source of rows) {
++                if (!source.id || seen.has(source.id)) continue;
++                seen.add(source.id);
++                options.push({
++                    id: source.id,
++                    display_name: source.type === 'metatube'
++                        ? (source.display_name_raw || source.id)
++                        : (source.display_name_key || source.id),
++                });
++            }
++            return options;
++        },
++
++        get selectedTagSourceLabel() {
++            const selected = this.tagSourceOptions.find(
++                (source) => source.id === this.tagSourceUpdateSource
++            );
++            return selected ? selected.display_name : this.tagSourceUpdateSource;
++        },
++
++        get tagSourceUpdateButtonDisabled() {
++            return this.isBusy || !this.tagSourceUpdateSource || this.statTotal === 0;
++        },
++
++        get tagSourceUpdateButtonText() {
++            if (this.state === 'tagSourceUpdating') {
++                return '<span class="loading loading-spinner loading-sm"></span> '
++                    + window.t('scanner.stats.tag_source_updating');
++            }
++            return '<i class="bi bi-tags"></i> '
++                + window.t('scanner.stats.tag_source_update_btn');
+         },
+ 
+         get generateButtonText() {
+@@ -305,6 +355,10 @@
+                 if (result.success) {
+                     this.config = result.data;
+                     this.directories = this.config.gallery?.directories || [];
++                    const availableSources = this.tagSourceOptions;
++                    if (!availableSources.some((source) => source.id === this.tagSourceUpdateSource)) {
++                        this.tagSourceUpdateSource = availableSources[0]?.id || 'auto';
++                    }
+                     // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
+                     this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
+ 
+@@ -992,6 +1046,85 @@
+             }
+         },
+ 
++        // ===== r16: Batch tag source update =====
++        openTagSourceUpdateConfirm() {
++            if (this.tagSourceUpdateButtonDisabled) return;
++            this.tagSourceConfirmModalOpen = true;
++        },
++
++        cancelTagSourceUpdate() {
++            this.tagSourceConfirmModalOpen = false;
++        },
++
++        confirmTagSourceUpdate() {
++            this.tagSourceConfirmModalOpen = false;
++            this.startTagSourceUpdate();
++        },
++
++        async startTagSourceUpdate() {
++            if (this.isGenerating || !this.tagSourceUpdateSource) return;
++
++            this.state = 'tagSourceUpdating';
++            this.progressStatus = window.t('scanner.stats.tag_source_preparing');
++            this.progressCurrent = 0;
++            this.progressTotal = this.statTotal;
++            this.clearLogs();
++            localStorage.setItem('avlist_generating', 'true');
++
++            const source = encodeURIComponent(this.tagSourceUpdateSource);
++            this.eventSource = new EventSource(`/api/gallery/tag-source-update?source=${source}`);
++
++            this.eventSource.onmessage = (event) => {
++                const data = JSON.parse(event.data);
++
++                if (data.type === 'progress') {
++                    this.progressStatus = data.status || window.t('scanner.stats.tag_source_updating');
++                    this.progressCurrent = data.current || 0;
++                    this.progressTotal = data.total || this.statTotal;
++                    localStorage.setItem('avlist_last_status', this.progressStatus);
++                } else if (data.type === 'log') {
++                    this.addLog(data.level || 'info', data.message || '');
++                } else if (data.type === 'done') {
++                    this.eventSource.close();
++                    this.eventSource = null;
++                    this.state = 'done';
++                    this.progressStatus = data.message || window.t('scanner.stats.tag_source_done');
++                    this.progressCurrent = this.progressTotal;
++                    localStorage.setItem('avlist_generating', 'false');
++                    localStorage.setItem('avlist_last_status', this.progressStatus);
++                    const failed = data.summary?.failed || 0;
++                    this.showToast(
++                        window.t('scanner.toast.tag_source_update_done'),
++                        failed > 0 ? 'warn' : 'success',
++                        4000
++                    );
++                    if (data.message) this.addLog('info', data.message);
++                    this.flushLogs();
++                } else if (data.type === 'error') {
++                    this.eventSource.close();
++                    this.eventSource = null;
++                    this.state = 'error';
++                    this.addLog(
++                        'error',
++                        window.t('scanner.stats.log_error_prefix', { message: data.message || '' })
++                    );
++                    this.flushLogs();
++                    localStorage.setItem('avlist_generating', 'false');
++                }
++            };
++
++            this.eventSource.onerror = () => {
++                if (this.state === 'done' || this.state === 'error') return;
++                this.eventSource.close();
++                this.eventSource = null;
++                this.state = 'error';
++                this.addLog('error', window.t('scanner.stats.log_disconnected'));
++                this.flushLogs();
++                localStorage.setItem('avlist_generating', 'false');
++                this.showToast(window.t('scanner.toast.tag_source_update_error'), 'error', 4000);
++            };
++        },
++
+         // ===== T6d: Jellyfin Image Update Flow =====
+         async runJellyfinImageUpdate() {
+             if (this.isGenerating) return;
 --- a/web/static/js/pages/settings/state-config.js
 +++ b/web/static/js/pages/settings/state-config.js
 @@ -88,7 +88,7 @@
@@ -473,6 +764,79 @@
      <!-- Tutorial JS -->
      <script type="module" src="/static/js/components/tutorial.js"></script>
  
+--- a/web/templates/scanner.html
++++ b/web/templates/scanner.html
+@@ -17,7 +17,7 @@
+      data-shell-mode="{{ shell_mode or '' }}"
+      @dragover.document.prevent="handleDragOver($event)"
+      @drop.document.prevent="handleDrop($event)"
+-     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel();">
++     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); tagSourceConfirmModalOpen && cancelTagSourceUpdate(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel();">
+     <!-- Drag Overlay (must be inside x-data scope) -->
+     <div class="drag-overlay" id="dragOverlay" :class="{ active: showDragOverlay }">
+         <div class="drag-overlay-content">
+@@ -243,6 +243,28 @@
+                     x-html="nfoUpdateButtonText"
+                     title="{{ t('scanner.stats.nfo_update_title') }}">
+             </button>
++        </div>
++        <!-- r16: Replace ordinary tags from one selected source -->
++        <div class="nfo-update-row" x-show="tagSourceOptions.length > 0">
++            <span class="nfo-badge" :title="window.t('scanner.stats.tag_source_hint')">
++                <i class="bi bi-tags"></i>
++                {{ t('scanner.stats.tag_source_label') }}
++            </span>
++            <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
++                <select class="select select-bordered select-sm"
++                        x-model="tagSourceUpdateSource"
++                        :disabled="isBusy">
++                    <template x-for="source in tagSourceOptions" :key="source.id">
++                        <option :value="source.id" x-text="source.display_name"></option>
++                    </template>
++                </select>
++                <button class="btn-nfo-update"
++                        @click="openTagSourceUpdateConfirm()"
++                        :disabled="tagSourceUpdateButtonDisabled"
++                        x-html="tagSourceUpdateButtonText"
++                        :title="window.t('scanner.stats.tag_source_hint')">
++                </button>
++            </div>
+         </div>
+         <!-- T10: Missing NFO/Cover Pill -->
+         <div class="nfo-update-row" x-show="missingPillVisible">
+@@ -782,6 +804,32 @@
+         </div>
+     </dialog>
+ 
++    <!-- r16: Batch Tag Source Confirm Modal -->
++    <dialog class="modal fluent-modal"
++            :class="{ 'modal-open': tagSourceConfirmModalOpen }"
++            @click.self="cancelTagSourceUpdate()">
++        <div class="modal-box fluent-modal-box">
++            <h3 class="fluent-modal-title">
++                <i class="bi bi-tags text-warning"></i>
++                <span>{{ t('scanner.stats.tag_source_confirm_title') }}</span>
++            </h3>
++            <p class="fluent-modal-body"
++               x-text="window.t('scanner.stats.tag_source_confirm_body', {
++                   source: selectedTagSourceLabel,
++                   count: statTotal
++               })"></p>
++            <p class="fluent-modal-body">{{ t('scanner.stats.tag_source_confirm_note') }}</p>
++            <div class="modal-action fluent-modal-actions">
++                <button type="button" class="btn btn-ghost" @click="cancelTagSourceUpdate()">
++                    {{ t('scanner.stats.tag_source_confirm_cancel') }}
++                </button>
++                <button type="button" class="btn btn-primary" @click="confirmTagSourceUpdate()">
++                    {{ t('scanner.stats.tag_source_confirm_ok') }}
++                </button>
++            </div>
++        </div>
++    </dialog>
++
+     <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
+     <dialog class="modal fluent-modal"
+             :class="{ 'modal-open': missingConfirmModalOpen }"
 --- a/web/templates/showcase.html
 +++ b/web/templates/showcase.html
 @@ -1184,7 +1184,7 @@

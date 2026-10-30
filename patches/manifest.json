@@ -42,6 +42,7 @@
         "core/enricher.py",
         "core/gallery_scanner.py",
         "core/nfo_utils.py",
+        "core/nfo_updater.py",
         "core/organizer.py",
         "core/readonly_assets.py",
         "core/source_config.py",
@@ -69,11 +70,13 @@
         "web/static/css/pages/showcase/05-lightbox.css",
         "web/static/css/pages/showcase/06-responsive-and-lists.css",
         "web/static/js/components/mobile-back.js",
+        "web/static/js/pages/scanner/state-scan.js",
         "web/static/js/pages/settings/state-config.js",
         "web/static/js/pages/showcase/state-actress.js",
         "web/static/js/pages/showcase/state-lightbox-translate.js",
         "web/static/js/pages/showcase/state-lightbox.js",
         "web/templates/base.html",
+        "web/templates/scanner.html",
         "web/templates/showcase.html"
       ]
     },
