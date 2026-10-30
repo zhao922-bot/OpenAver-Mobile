@@ -1453,7 +1453,7 @@
      {
 --- /dev/null
 +++ b/web/static/css/components/mobile-ui.css
-@@ -0,0 +1,690 @@
+@@ -0,0 +1,696 @@
 +/* r19: shared mobile state, touch, hierarchy, and density rules. */
 +
 +:root {
@@ -2063,6 +2063,12 @@
 +  [data-is-android="true"] .search-bar .spotlight-search--wishlist-toggle {
 +    --spotlight-left-slot: 7rem;
 +    --spotlight-right-slot: 3.5rem;
++  }
++
++  /* Showcase has two mode icons inside the left slot. Reserve a real gap
++     between the second icon and the placeholder on Android WebView. */
++  [data-is-android="true"] .showcase-toolbar .spotlight-search--mode-toggle {
++    --spotlight-left-slot: 6rem;
 +  }
 +
 +  [data-is-android="true"] .spotlight-search input {

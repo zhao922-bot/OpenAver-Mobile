@@ -609,6 +609,12 @@
     --spotlight-right-slot: 3.5rem;
   }
 
+  /* Showcase has two mode icons inside the left slot. Reserve a real gap
+     between the second icon and the placeholder on Android WebView. */
+  [data-is-android="true"] .showcase-toolbar .spotlight-search--mode-toggle {
+    --spotlight-left-slot: 6rem;
+  }
+
   [data-is-android="true"] .spotlight-search input {
     font-size: 0.9rem;
   }
