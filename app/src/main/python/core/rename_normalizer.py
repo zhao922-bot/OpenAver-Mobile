@@ -171,7 +171,12 @@ def _find_repair_video(
     video_extensions: set[str],
 ) -> Path | None:
     """Find a unique same-number video when MTP/FUSE truncated its filename."""
-    if not number or not expected_path.parent.is_dir():
+    if not number:
+        return None
+    try:
+        if not expected_path.parent.is_dir():
+            return None
+    except OSError:
         return None
     normalized = normalize_number_impl(str(number))
     matches = []
@@ -250,7 +255,13 @@ def build_rename_plan(
         }
 
         repaired_source = False
-        if not source_path.is_file():
+        try:
+            source_exists = source_path.is_file()
+        except OSError:
+            # Linux returns ENAMETOOLONG here for the exact path that Android
+            # may expose through a truncated sibling instead.
+            source_exists = False
+        if not source_exists:
             number_hint = extract_number(expected_path.name) or number_hint
             recovered = _find_repair_video(
                 expected_path,

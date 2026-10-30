@@ -171,6 +171,31 @@ def test_preview_repairs_missing_path_and_fits_android_name_limit(tmp_path):
     )
 
 
+def test_preview_treats_enametoolong_database_path_as_missing(
+    tmp_path,
+    monkeypatch,
+):
+    expected_video = tmp_path / f"ABC-123 {'長' * 100}.mp4"
+    actual_video = tmp_path / f"ABC-123 {'長' * 60}.mp4"
+    actual_video.write_bytes(b"video")
+    original_is_file = Path.is_file
+
+    def guarded_is_file(path, *args, **kwargs):
+        if path == expected_video:
+            raise OSError(36, "File name too long")
+        return original_is_file(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "is_file", guarded_is_file)
+    plan = build_rename_plan(
+        [Video(path=to_file_uri(str(expected_video)), number="ABC-123")],
+        config={},
+    )
+
+    assert plan["summary"]["missing"] == 0
+    assert plan["items"][0]["status"] == "ready"
+    assert plan["items"][0]["recovered_missing_source"] is True
+
+
 def test_preview_repairs_truncated_cover_when_database_has_full_name(tmp_path):
     expected_stem = "ABC-123 " + ("長" * 100)
     expected_video = tmp_path / f"{expected_stem}.mp4"
@@ -199,14 +224,14 @@ def test_preview_repairs_truncated_cover_when_database_has_full_name(tmp_path):
     )
 
 
-def test_truncated_preview_is_idempotent_after_rename(tmp_path):
-    old_stem = "ABC-123 " + ("長" * 100)
-    video = tmp_path / f"{old_stem}.mp4"
-    cover = tmp_path / f"{old_stem}.jpg"
+def test_preserved_truncation_marker_is_idempotent(tmp_path):
+    stem = "ABC-123 " + ("長" * 60) + "..."
+    video = tmp_path / f"{stem}.mp4"
+    cover = tmp_path / f"{stem}.jpg"
     for path in (video, cover):
         path.write_bytes(path.name.encode("utf-8"))
 
-    first = build_rename_plan(
+    plan = build_rename_plan(
         [Video(
             path=to_file_uri(str(video)),
             number="ABC-123",
@@ -214,26 +239,12 @@ def test_truncated_preview_is_idempotent_after_rename(tmp_path):
         )],
         config={},
     )
-    first_item = first["items"][0]
-    for operation in first_item["operations"]:
-        Path(operation["old_path"]).rename(operation["new_path"])
+    item = plan["items"][0]
 
-    new_video = Path(first_item["new_video_path"])
-    second = build_rename_plan(
-        [Video(
-            path=to_file_uri(str(new_video)),
-            number="ABC-123",
-            cover_path=first_item["cover_path_new"],
-        )],
-        config={},
-    )
-    second_item = second["items"][0]
-
-    assert first_item["new_name"].endswith("....mp4")
-    assert second["summary"]["rename_videos"] == 0
-    assert second["summary"]["conflicts"] == 0
-    assert second_item["status"] == "unchanged"
-    assert second_item["new_name"] == first_item["new_name"]
+    assert plan["summary"]["rename_videos"] == 0
+    assert plan["summary"]["conflicts"] == 0
+    assert item["status"] == "unchanged"
+    assert item["new_name"] == video.name
 
 
 def test_execute_repairs_truncated_file_when_database_already_has_target_path(tmp_path):
