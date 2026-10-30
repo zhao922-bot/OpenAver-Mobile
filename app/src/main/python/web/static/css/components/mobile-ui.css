@@ -472,6 +472,28 @@
   white-space: normal;
 }
 
+/* Keep the favorite star on the title's first line on Android. The button
+   remains 44px for touch, but its glyph is optically shifted to the first
+   line instead of hanging below a one-line title or centering on a multiline
+   title block. */
+[data-is-android="true"] .lightbox-metadata .lb-title {
+  align-items: flex-start;
+}
+
+[data-is-android="true"] .lightbox-metadata .lb-title .pick-star {
+  align-self: flex-start;
+  /* Title line box = 0.9375rem * 1.4 = 1.3125rem. The 44px touch target
+     is centered on that first line. */
+  margin-top: calc(0.65625rem - 22px);
+}
+
+@media (pointer: fine) {
+  [data-is-android="true"] .lightbox-metadata .lb-title .pick-star {
+    /* 28px pointer-fine target: same first-line center, smaller hit box. */
+    margin-top: calc(0.65625rem - 14px);
+  }
+}
+
 [data-is-android="true"] .player-title,
 [data-is-android="true"] .video-title {
   display: -webkit-box;

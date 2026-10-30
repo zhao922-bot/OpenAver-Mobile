@@ -13,17 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r29-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r30-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r29-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r30-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r29`（versionCode `17045`）
+- 版本：`0.17.18-r30`（versionCode `17046`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：`AB7A26EC917CB7967A740739DA8B7C5116AA64FBB7209AD0CA7DE7C918454F37`
+- SHA-256：`签名构建后更新`
 
 ## 安装
 
@@ -163,6 +163,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r29：生成网页后会提示仍缺少 NFO 的影片；SAF 写入使用不会追加 `.xml` 的文件类型，
     并会自动复用旧版生成的 `.nfo.xml` 文件，避免重复创建
 - r29：修复女优浏览模式搜索框左侧模式按钮遮挡提示文字的问题
+- r30：Android 灯箱标题行的精选星标固定对齐标题第一行；多行标题不再让星标落到整块标题的垂直中间
 
 ## 限制
 
