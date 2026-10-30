@@ -133,6 +133,7 @@ export function stateConfig() {
         savedOpenaiUseCustomModel: false,
         pendingNavigationUrl: '',
         _configLoading: true,  // 初始 true，loadConfig 完成後 false
+        _configSaving: false,
         // 95a-T8: filename 膠囊編輯器收斂式 hydrate 就緒旗標（響應式鏡像，供 x-effect 追蹤；
         // naming.ready 是 closure 布林、非響應式，x-effect 追不到）。loadConfig 開頭重設 false、
         // form 設妥後翻 true；由 hydrateFilenameEditor() 讀取觸發 reactive 補載。
@@ -209,6 +210,17 @@ export function stateConfig() {
             if (!this.savedState) return false;
             return JSON.stringify(this.form) !== JSON.stringify(this.savedState)
                 || this.openaiUseCustomModel !== this.savedOpenaiUseCustomModel;
+        },
+
+        get saveStatusText() {
+            if (this._configLoading) return window.t('settings.save_bar.loading');
+            if (this._configSaving) return window.t('settings.save_bar.saving');
+            if (this.isDirty) return window.t('settings.save_bar.unsaved');
+            return window.t('settings.save_bar.saved');
+        },
+
+        get saveButtonDisabled() {
+            return this._configLoading || this._configSaving || !this.isDirty;
         },
 
         // 命名預覽（依 data 套範例值）。誠實反映後端空值行為（U-A2）：空變數 → 空字串，
@@ -944,33 +956,40 @@ export function stateConfig() {
 
         // 168c-T4：伺服器 + 這台電腦各存各的；互不阻擋。
         async saveConfig() {
-            const localChanged = this.localMachineState === 'ready'
-                && localDiff(this.form, this._localSaved).length > 0;
-            const patch = localChanged ? buildLocalPatch(this.form) : null;
-            const serverOk = await this._saveServerConfig();
-            if (!localChanged) return;
-            const reply = await callBridge('local_settings_save', patch);
-            const localOk = !!reply && reply.ok === true;
-            if (localOk) {
-                this._localSaved = { viewerPlayer: patch.player, closeAction: patch.close_action };
-            } else if (serverOk && this.savedState) {
-                // 伺服器存好但這台失敗：savedState 兩格還原成這台已存的值，讓畫面仍顯示未儲存
-                this.savedState.viewerPlayer = this._localSaved.viewerPlayer;
-                this.savedState.closeAction = this._localSaved.closeAction;
+            if (this._configSaving) return false;
+            this._configSaving = true;
+            try {
+                const localChanged = this.localMachineState === 'ready'
+                    && localDiff(this.form, this._localSaved).length > 0;
+                const patch = localChanged ? buildLocalPatch(this.form) : null;
+                const serverOk = await this._saveServerConfig();
+                if (!localChanged) return serverOk;
+                const reply = await callBridge('local_settings_save', patch);
+                const localOk = !!reply && reply.ok === true;
+                if (localOk) {
+                    this._localSaved = { viewerPlayer: patch.player, closeAction: patch.close_action };
+                } else if (serverOk && this.savedState) {
+                    // 伺服器存好但這台失敗：savedState 兩格還原成這台已存的值，讓畫面仍顯示未儲存
+                    this.savedState.viewerPlayer = this._localSaved.viewerPlayer;
+                    this.savedState.closeAction = this._localSaved.closeAction;
+                }
+                const key = combineSaveOutcome({ serverOk, localChanged, localOk });
+                let msg = null;
+                switch (key) {
+                    case 'settings.toast.config_saved_with_local':
+                        msg = window.t('settings.toast.config_saved_with_local'); break;
+                    case 'settings.toast.local_failed_server_saved':
+                        msg = window.t('settings.toast.local_failed_server_saved'); break;
+                    case 'settings.toast.local_saved_server_failed':
+                        msg = window.t('settings.toast.local_saved_server_failed'); break;
+                    case 'settings.toast.local_failed_server_failed':
+                        msg = window.t('settings.toast.local_failed_server_failed'); break;
+                }
+                if (msg) this.showToast(msg, serverOk && localOk ? 'success' : 'error');
+                return serverOk && localOk;
+            } finally {
+                this._configSaving = false;
             }
-            const key = combineSaveOutcome({ serverOk, localChanged, localOk });
-            let msg = null;
-            switch (key) {
-                case 'settings.toast.config_saved_with_local':
-                    msg = window.t('settings.toast.config_saved_with_local'); break;
-                case 'settings.toast.local_failed_server_saved':
-                    msg = window.t('settings.toast.local_failed_server_saved'); break;
-                case 'settings.toast.local_saved_server_failed':
-                    msg = window.t('settings.toast.local_saved_server_failed'); break;
-                case 'settings.toast.local_failed_server_failed':
-                    msg = window.t('settings.toast.local_failed_server_failed'); break;
-            }
-            if (msg) this.showToast(msg, serverOk && localOk ? 'success' : 'error');
         },
 
         async _saveServerConfig() {

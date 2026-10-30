@@ -164,6 +164,7 @@
         if (!page) return false;
         return closeFlag(page, 'dirtyCheckModalOpen', 'dirtyCheckCancel')
             || closeFlag(page, 'missingConfirmModalOpen', 'cancelLargeMissingEnrich')
+            || closeFlag(page, 'nfoUpdateConfirmModalOpen', 'cancelNfoUpdate')
             || closeFlag(page, 'tagSourceConfirmModalOpen', 'cancelTagSourceUpdate')
             || closeFlag(page, 'deleteAliasGroupModalOpen', 'cancelDeleteAliasGroupModal')
             || closeFlag(page, 'deleteTagAliasGroupModalOpen', 'cancelDeleteTagAliasGroupModal')

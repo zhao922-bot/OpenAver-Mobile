@@ -19,7 +19,21 @@
      "open_local": {
        "folder_opened_copied": "Folder opened (path copied)",
        "folder_opened": "Folder opened",
-@@ -829,6 +830,8 @@
+@@ -723,6 +724,13 @@
+       "reset": "Reset to Default",
+       "save": "Save Settings"
+     },
++    "save_bar": {
++      "loading": "Loading settings...",
++      "saving": "Saving settings...",
++      "unsaved": "Unsaved changes",
++      "saved": "All changes saved",
++      "saving_button": "Saving..."
++    },
+     "var": {
+       "num": "ID",
+       "title": "Title",
+@@ -829,6 +837,8 @@
        "nfo_update_done": "Update complete! Regenerate the list to refresh",
        "no_jellyfin_update_needed": "No videos need updating",
        "jellyfin_update_done": "Update complete!",
@@ -28,13 +42,34 @@
        "path_copied": "Copied: {path}",
        "browse_dir_fallback": "Your browser can’t read the path of dropped files, so the folder picker has been opened for you"
      },
-@@ -872,9 +875,30 @@
+@@ -868,13 +878,79 @@
+       "clear_display_title": "Clear display (restored on reload)",
+       "clear_all_title": "Clear all (including history)"
+     },
++    "task": {
++      "seconds": "{value}s",
++      "minutes": "{minutes}m {seconds}s",
++      "eta_value": "{time} remaining",
++      "current_item": "Current: {item}",
++      "success_count": "Success {count}",
++      "failed_count": "Failed {count}",
++      "skipped_count": "Skipped {count}",
++      "changed_count": "Changed {count}",
++      "retry_failed": "Retry failed",
++      "cancel": "Cancel task",
++      "cancelled": "Task cancelled",
++      "cancelled_log": "The current task was cancelled. Completed writes are kept.",
++      "failed": "Task failed",
++      "done_with_failures": "Completed with {failed} failures"
++    },
+     "stats": {
        "cached_prefix": "Scanned:",
        "cached_suffix": " videos",
        "clear_cache_title": "Clear cache",
 +      "overview_title": "Library overview",
 +      "maintenance_title": "Batch maintenance",
 +      "maintenance_hint": "Manage NFO files, tags, and derived images in one place",
++      "maintenance_summary": "NFO {nfo} · Missing {missing} · Images {images}",
 +      "log_empty": "Run logs will appear here",
 +      "log_expand": "Expand run log",
 +      "log_collapse": "Collapse run log",
@@ -45,6 +80,11 @@
 +      "tag_source_hint": "Choose one source to replace ordinary tags and genres while preserving title, cover, plot, and user tags",
 +      "tag_source_auto": "Auto (source order)",
 +      "tag_source_update_btn": "Replace Tags",
++      "tag_source_preview_btn": "Preview only",
++      "tag_source_preview_update_btn": "Preview & Replace",
++      "tag_source_previewing": "Previewing tag changes...",
++      "tag_source_retry_previewing": "Previewing failed items again...",
++      "tag_source_preview_done": "Tag change preview complete",
 +      "tag_source_updating": "Updating tags...",
 +      "tag_source_preparing": "Preparing tag update...",
 +      "tag_source_done": "Tag source update complete",
@@ -56,10 +96,33 @@
 +      "tag_source_confirm_count_value": "{count} videos",
 +      "tag_source_confirm_cancel": "Cancel",
 +      "tag_source_confirm_ok": "Replace Tags",
++      "tag_source_confirm_backup_ok": "Back up & Replace",
++      "tag_source_preview_title": "Tag change preview",
++      "tag_source_preview_body": "Compared tags from \"{source}\" for {count} videos. No database or NFO files were written.",
++      "tag_source_preview_changed_label": "Tag changes",
++      "tag_source_preview_changed_value": "{count} videos",
++      "tag_source_preview_added": "Added: {tags}",
++      "tag_source_preview_removed": "Removed: {tags}",
++      "tag_source_preview_more": "{count} more changed videos not shown",
++      "tag_source_preview_no_changes": "The selected source produced no tag changes",
++      "tag_source_preview_failures": "{count} videos failed to preview. You can apply the remaining changes and retry the failures later.",
++      "tag_source_preview_close": "Close",
++      "tag_source_backup_label": "Back up NFO before applying",
++      "tag_source_backup_hint": "Each NFO gets an .openaver-backup beside it. A video is skipped if its backup fails.",
++      "nfo_confirm_title": "Confirm batch NFO completion",
++      "nfo_confirm_scope_label": "Scope",
++      "nfo_confirm_write_label": "Write target",
++      "nfo_confirm_write_value": "NFO beside each video",
++      "nfo_confirm_body": "Missing fields will be searched online. Only empty fields are filled; existing titles, covers, plots, and user tags are preserved.",
++      "nfo_confirm_note": "You can cancel during the task. Completed videos keep their results.",
++      "nfo_backup_label": "Back up NFO before applying",
++      "nfo_backup_hint": "Each NFO gets an .openaver-backup beside it. A video is skipped if its backup fails.",
++      "nfo_confirm_ok": "Start Update",
++      "nfo_confirm_backup_ok": "Back up & Update",
        "jellyfin_prefix": "Jellyfin cover format missing:",
        "jellyfin_suffix": " videos",
        "jellyfin_update_title": "Generate Jellyfin poster + fanart",
-@@ -1410,6 +1434,9 @@
+@@ -1410,6 +1486,9 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -79,7 +142,21 @@
      "open_local": {
        "folder_opened_copied": "フォルダを開きました（パスをコピーしました）",
        "folder_opened": "フォルダを開きました",
-@@ -829,6 +830,8 @@
+@@ -723,6 +724,13 @@
+       "reset": "デフォルトにリセット",
+       "save": "設定を保存"
+     },
++    "save_bar": {
++      "loading": "設定を読み込み中...",
++      "saving": "設定を保存中...",
++      "unsaved": "未保存の変更があります",
++      "saved": "すべての変更を保存済み",
++      "saving_button": "保存中..."
++    },
+     "var": {
+       "num": "番号",
+       "title": "タイトル",
+@@ -829,6 +837,8 @@
        "nfo_update_done": "補完が完了しました。リストを再生成して更新してください",
        "no_jellyfin_update_needed": "補完が必要な動画はありません",
        "jellyfin_update_done": "補完が完了しました！",
@@ -88,13 +165,34 @@
        "path_copied": "コピーしました: {path}",
        "browse_dir_fallback": "ブラウザではドロップしたファイルのパスを直接読み取れないため、フォルダ選択画面を開きました"
      },
-@@ -872,9 +875,30 @@
+@@ -868,13 +878,79 @@
+       "clear_display_title": "画面をクリア（リロード後に復元）",
+       "clear_all_title": "すべてクリア（履歴含む）"
+     },
++    "task": {
++      "seconds": "{value} 秒",
++      "minutes": "{minutes} 分 {seconds} 秒",
++      "eta_value": "残り約 {time}",
++      "current_item": "処理中：{item}",
++      "success_count": "成功 {count}",
++      "failed_count": "失敗 {count}",
++      "skipped_count": "スキップ {count}",
++      "changed_count": "変更 {count}",
++      "retry_failed": "失敗項目を再試行",
++      "cancel": "タスクをキャンセル",
++      "cancelled": "タスクをキャンセルしました",
++      "cancelled_log": "現在のタスクをキャンセルしました。完了済みの書き込みは保持されます。",
++      "failed": "タスクに失敗しました",
++      "done_with_failures": "完了しましたが、{failed} 件失敗しました"
++    },
+     "stats": {
        "cached_prefix": "スキャン済み:",
        "cached_suffix": "本",
        "clear_cache_title": "キャッシュをクリア",
 +      "overview_title": "ライブラリ概要",
 +      "maintenance_title": "一括メンテナンス",
 +      "maintenance_hint": "NFO、タグ、生成画像をまとめて管理します",
++      "maintenance_summary": "NFO {nfo} · 不足 {missing} · 画像 {images}",
 +      "log_empty": "実行ログがここに表示されます",
 +      "log_expand": "実行ログを開く",
 +      "log_collapse": "実行ログを閉じる",
@@ -105,6 +203,11 @@
 +      "tag_source_hint": "1つの取得元を選び、通常タグとジャンルだけを置換します。タイトル、カバー、あらすじ、ユーザータグは保持します",
 +      "tag_source_auto": "自動（取得元の順序）",
 +      "tag_source_update_btn": "タグを変更",
++      "tag_source_preview_btn": "プレビューのみ",
++      "tag_source_preview_update_btn": "プレビューして変更",
++      "tag_source_previewing": "タグ差分をプレビュー中...",
++      "tag_source_retry_previewing": "失敗項目を再プレビュー中...",
++      "tag_source_preview_done": "タグ差分のプレビューが完了しました",
 +      "tag_source_updating": "タグを更新中...",
 +      "tag_source_preparing": "タグ更新を準備中...",
 +      "tag_source_done": "タグ取得元の更新が完了しました",
@@ -116,10 +219,33 @@
 +      "tag_source_confirm_count_value": "{count} 本の動画",
 +      "tag_source_confirm_cancel": "キャンセル",
 +      "tag_source_confirm_ok": "変更する",
++      "tag_source_confirm_backup_ok": "バックアップして変更",
++      "tag_source_preview_title": "タグ差分プレビュー",
++      "tag_source_preview_body": "「{source}」と {count} 本の動画タグを比較しました。プレビュー中はデータベースや NFO に書き込んでいません。",
++      "tag_source_preview_changed_label": "タグ変更",
++      "tag_source_preview_changed_value": "{count} 本",
++      "tag_source_preview_added": "追加：{tags}",
++      "tag_source_preview_removed": "削除：{tags}",
++      "tag_source_preview_more": "ほかに {count} 本の変更があります",
++      "tag_source_preview_no_changes": "選択した取得元によるタグ変更はありません",
++      "tag_source_preview_failures": "{count} 本のプレビューに失敗しました。残りを実行し、後で失敗項目だけ再試行できます。",
++      "tag_source_preview_close": "閉じる",
++      "tag_source_backup_label": "実行前に NFO をバックアップ",
++      "tag_source_backup_hint": "各 NFO と同じ場所に .openaver-backup を作成します。バックアップに失敗した動画は書き込みません。",
++      "nfo_confirm_title": "NFO 一括補完を確認",
++      "nfo_confirm_scope_label": "対象範囲",
++      "nfo_confirm_write_label": "書き込み先",
++      "nfo_confirm_write_value": "各動画の横の NFO",
++      "nfo_confirm_body": "不足項目をオンライン検索し、空欄だけを補完します。既存のタイトル、カバー、あらすじ、ユーザータグは上書きしません。",
++      "nfo_confirm_note": "実行中はキャンセルできます。完了済みの動画の結果は保持されます。",
++      "nfo_backup_label": "実行前に NFO をバックアップ",
++      "nfo_backup_hint": "各 NFO と同じ場所に .openaver-backup を作成します。バックアップに失敗した動画は更新しません。",
++      "nfo_confirm_ok": "補完を開始",
++      "nfo_confirm_backup_ok": "バックアップして補完",
        "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
        "jellyfin_suffix": "本",
        "jellyfin_update_title": "Jellyfin poster + fanart を補完",
-@@ -1410,6 +1434,9 @@
+@@ -1410,6 +1486,9 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -139,7 +265,21 @@
      "open_local": {
        "folder_opened_copied": "已打开文件夹（路径已复制）",
        "folder_opened": "已打开文件夹",
-@@ -829,6 +830,8 @@
+@@ -723,6 +724,13 @@
+       "reset": "重置为默认值",
+       "save": "保存设置"
+     },
++    "save_bar": {
++      "loading": "正在加载设置...",
++      "saving": "正在保存设置...",
++      "unsaved": "有未保存的更改",
++      "saved": "所有更改已保存",
++      "saving_button": "保存中..."
++    },
+     "var": {
+       "num": "番号",
+       "title": "标题",
+@@ -829,6 +837,8 @@
        "nfo_update_done": "补全完成！请重新生成列表以更新",
        "no_jellyfin_update_needed": "没有需要补齐的视频",
        "jellyfin_update_done": "补齐完成！",
@@ -148,13 +288,34 @@
        "path_copied": "已复制: {path}",
        "browse_dir_fallback": "浏览器无法直接读取拖放文件的路径，已为您打开文件夹选择器"
      },
-@@ -872,9 +875,30 @@
+@@ -868,13 +878,79 @@
+       "clear_display_title": "清除画面（刷新后恢复）",
+       "clear_all_title": "清除全部（包含历史）"
+     },
++    "task": {
++      "seconds": "{value} 秒",
++      "minutes": "{minutes} 分 {seconds} 秒",
++      "eta_value": "预计剩余 {time}",
++      "current_item": "当前：{item}",
++      "success_count": "成功 {count}",
++      "failed_count": "失败 {count}",
++      "skipped_count": "跳过 {count}",
++      "changed_count": "有变化 {count}",
++      "retry_failed": "重试失败项",
++      "cancel": "取消任务",
++      "cancelled": "任务已取消",
++      "cancelled_log": "用户取消了当前任务；已完成的写入会保留。",
++      "failed": "任务失败",
++      "done_with_failures": "完成，但有 {failed} 项失败"
++    },
+     "stats": {
        "cached_prefix": "已扫描:",
        "cached_suffix": "部",
        "clear_cache_title": "清除缓存",
 +      "overview_title": "片库概览",
 +      "maintenance_title": "批量维护",
 +      "maintenance_hint": "集中处理 NFO、标签和衍生图片",
++      "maintenance_summary": "NFO {nfo} · 缺件 {missing} · 图片 {images}",
 +      "log_empty": "运行日志会显示在这里",
 +      "log_expand": "展开运行日志",
 +      "log_collapse": "收起运行日志",
@@ -165,6 +326,11 @@
 +      "tag_source_hint": "选择一个来源，仅替换普通标签与类型，保留标题、封面、简介和用户标签",
 +      "tag_source_auto": "自动（按来源顺序）",
 +      "tag_source_update_btn": "更换标签",
++      "tag_source_preview_btn": "仅预览",
++      "tag_source_preview_update_btn": "预览并更换",
++      "tag_source_previewing": "预览标签差异中...",
++      "tag_source_retry_previewing": "重新预览失败项...",
++      "tag_source_preview_done": "标签差异预览完成",
 +      "tag_source_updating": "更新标签中...",
 +      "tag_source_preparing": "准备更新标签...",
 +      "tag_source_done": "标签来源更新完成",
@@ -176,10 +342,33 @@
 +      "tag_source_confirm_count_value": "{count} 部影片",
 +      "tag_source_confirm_cancel": "取消",
 +      "tag_source_confirm_ok": "确认更换",
++      "tag_source_confirm_backup_ok": "备份并更换",
++      "tag_source_preview_title": "标签差异预览",
++      "tag_source_preview_body": "已比较「{source}」与 {count} 部影片的标签；预览过程没有写入数据库或 NFO。",
++      "tag_source_preview_changed_label": "标签有变化",
++      "tag_source_preview_changed_value": "{count} 部",
++      "tag_source_preview_added": "新增：{tags}",
++      "tag_source_preview_removed": "移除：{tags}",
++      "tag_source_preview_more": "另有 {count} 部有变化未展开",
++      "tag_source_preview_no_changes": "所选来源没有产生标签变化",
++      "tag_source_preview_failures": "有 {count} 部预览失败，可先执行其余项目，之后再重试失败项。",
++      "tag_source_preview_close": "关闭",
++      "tag_source_backup_label": "执行前备份 NFO",
++      "tag_source_backup_hint": "每份 NFO 会在同目录生成 .openaver-backup；备份失败时不会写入该影片。",
++      "nfo_confirm_title": "确认批量补齐 NFO",
++      "nfo_confirm_scope_label": "处理范围",
++      "nfo_confirm_write_label": "写入位置",
++      "nfo_confirm_write_value": "视频旁的 NFO",
++      "nfo_confirm_body": "将联网搜索缺失字段，只补充空字段，不覆盖已有标题、封面、简介或用户标签。",
++      "nfo_confirm_note": "执行期间可取消；已完成影片会保留结果。",
++      "nfo_backup_label": "执行前备份 NFO",
++      "nfo_backup_hint": "每份 NFO 会在同目录生成 .openaver-backup；备份失败时不会更新该影片。",
++      "nfo_confirm_ok": "确认补齐",
++      "nfo_confirm_backup_ok": "备份并补齐",
        "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
-@@ -1410,6 +1434,9 @@
+@@ -1410,6 +1486,9 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -199,7 +388,21 @@
      "open_local": {
        "folder_opened_copied": "已開啟資料夾（路徑已複製）",
        "folder_opened": "已開啟資料夾",
-@@ -829,6 +830,8 @@
+@@ -723,6 +724,13 @@
+       "reset": "重置為預設值",
+       "save": "儲存設定"
+     },
++    "save_bar": {
++      "loading": "正在載入設定...",
++      "saving": "正在儲存設定...",
++      "unsaved": "有未儲存的變更",
++      "saved": "所有變更已儲存",
++      "saving_button": "儲存中..."
++    },
+     "var": {
+       "num": "番號",
+       "title": "標題",
+@@ -829,6 +837,8 @@
        "nfo_update_done": "補全完成！請重新產生列表以更新",
        "no_jellyfin_update_needed": "沒有需要補齊的影片",
        "jellyfin_update_done": "補齊完成！",
@@ -208,13 +411,34 @@
        "path_copied": "已複製: {path}",
        "browse_dir_fallback": "瀏覽器無法直接讀取拖放檔案的路徑，已為您開啟資料夾選擇器"
      },
-@@ -872,9 +875,30 @@
+@@ -868,13 +878,79 @@
+       "clear_display_title": "清除畫面（重整後恢復）",
+       "clear_all_title": "清除全部（包含歷史）"
+     },
++    "task": {
++      "seconds": "{value} 秒",
++      "minutes": "{minutes} 分 {seconds} 秒",
++      "eta_value": "預計剩餘 {time}",
++      "current_item": "目前：{item}",
++      "success_count": "成功 {count}",
++      "failed_count": "失敗 {count}",
++      "skipped_count": "略過 {count}",
++      "changed_count": "有變化 {count}",
++      "retry_failed": "重試失敗項目",
++      "cancel": "取消工作",
++      "cancelled": "工作已取消",
++      "cancelled_log": "使用者取消了目前工作；已完成的寫入會保留。",
++      "failed": "工作失敗",
++      "done_with_failures": "完成，但有 {failed} 項失敗"
++    },
+     "stats": {
        "cached_prefix": "已掃描:",
        "cached_suffix": "部",
        "clear_cache_title": "清除快取",
 +      "overview_title": "片庫概覽",
 +      "maintenance_title": "批次維護",
 +      "maintenance_hint": "集中處理 NFO、標籤與衍生圖片",
++      "maintenance_summary": "NFO {nfo} · 缺件 {missing} · 圖片 {images}",
 +      "log_empty": "執行日誌會顯示在這裡",
 +      "log_expand": "展開執行日誌",
 +      "log_collapse": "收起執行日誌",
@@ -225,6 +449,11 @@
 +      "tag_source_hint": "選擇一個來源，只替換一般標籤與類型，保留標題、封面、簡介和自訂標籤",
 +      "tag_source_auto": "自動（依來源順序）",
 +      "tag_source_update_btn": "更換標籤",
++      "tag_source_preview_btn": "僅預覽",
++      "tag_source_preview_update_btn": "預覽並更換",
++      "tag_source_previewing": "預覽標籤差異中...",
++      "tag_source_retry_previewing": "重新預覽失敗項目...",
++      "tag_source_preview_done": "標籤差異預覽完成",
 +      "tag_source_updating": "更新標籤中...",
 +      "tag_source_preparing": "準備更新標籤...",
 +      "tag_source_done": "標籤來源更新完成",
@@ -236,10 +465,33 @@
 +      "tag_source_confirm_count_value": "{count} 部影片",
 +      "tag_source_confirm_cancel": "取消",
 +      "tag_source_confirm_ok": "確認更換",
++      "tag_source_confirm_backup_ok": "備份並更換",
++      "tag_source_preview_title": "標籤差異預覽",
++      "tag_source_preview_body": "已比較「{source}」與 {count} 部影片的標籤；預覽過程沒有寫入資料庫或 NFO。",
++      "tag_source_preview_changed_label": "標籤有變化",
++      "tag_source_preview_changed_value": "{count} 部",
++      "tag_source_preview_added": "新增：{tags}",
++      "tag_source_preview_removed": "移除：{tags}",
++      "tag_source_preview_more": "另有 {count} 部有變化未展開",
++      "tag_source_preview_no_changes": "所選來源沒有產生標籤變化",
++      "tag_source_preview_failures": "有 {count} 部預覽失敗，可先執行其餘項目，之後再重試失敗項目。",
++      "tag_source_preview_close": "關閉",
++      "tag_source_backup_label": "執行前備份 NFO",
++      "tag_source_backup_hint": "每份 NFO 會在同目錄產生 .openaver-backup；備份失敗時不會寫入該影片。",
++      "nfo_confirm_title": "確認批次補齊 NFO",
++      "nfo_confirm_scope_label": "處理範圍",
++      "nfo_confirm_write_label": "寫入位置",
++      "nfo_confirm_write_value": "影片旁的 NFO",
++      "nfo_confirm_body": "將連網搜尋缺失欄位，只補充空白欄位，不覆蓋既有標題、封面、簡介或使用者標籤。",
++      "nfo_confirm_note": "執行期間可取消；已完成影片會保留結果。",
++      "nfo_backup_label": "執行前備份 NFO",
++      "nfo_backup_hint": "每份 NFO 會在同目錄產生 .openaver-backup；備份失敗時不會更新該影片。",
++      "nfo_confirm_ok": "確認補齊",
++      "nfo_confirm_backup_ok": "備份並補齊",
        "jellyfin_prefix": "外部媒體管理器封面缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "補齊 poster + fanart",
-@@ -1410,6 +1434,9 @@
+@@ -1410,6 +1486,9 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -308,7 +560,7 @@
      border-radius: var(--fluent-radius-md);   /* 互動小元件 4px（§1）*/
 --- a/web/static/css/pages/scanner.css
 +++ b/web/static/css/pages/scanner.css
-@@ -365,3 +365,527 @@
+@@ -365,3 +365,821 @@
      border-radius: var(--fluent-radius-md);
      color: var(--text-default, currentColor);
  }
@@ -553,7 +805,34 @@
 +    align-items: flex-start;
 +    justify-content: space-between;
 +    gap: 0.75rem;
++    width: 100%;
 +    padding-bottom: 0.25rem;
++    border: 0;
++    background: transparent;
++    color: inherit;
++    text-align: left;
++    cursor: pointer;
++}
++
++.scanner-maintenance-head:focus-visible {
++    outline: 2px solid var(--accent);
++    outline-offset: 3px;
++    border-radius: var(--fluent-radius-sm);
++}
++
++.scanner-maintenance-summary {
++    display: inline-flex;
++    align-items: center;
++    justify-content: flex-end;
++    gap: 0.45rem;
++    flex: 0 0 auto;
++    color: var(--text-secondary);
++    font-size: 0.7rem;
++    line-height: 1.35;
++}
++
++.scanner-maintenance-summary i {
++    color: var(--accent);
 +}
 +
 +.scanner-maintenance-title {
@@ -574,6 +853,12 @@
 +    color: var(--text-secondary);
 +    font-size: 0.74rem;
 +    line-height: 1.4;
++}
++
++.scanner-maintenance-body {
++    border-top: 1px solid var(--border-light);
++    margin-top: 0.55rem;
++    padding-top: 0.1rem;
 +}
 +
 +#statsCard .maintenance-row {
@@ -653,6 +938,133 @@
 +    min-width: 8.5rem;
 +    max-width: 13rem;
 +    min-height: 2.4rem;
++}
++
++.tag-source-actions {
++    display: flex;
++    align-items: center;
++    gap: 0.45rem;
++    flex: 0 0 auto;
++}
++
++.btn-tag-preview {
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    gap: 0.35rem;
++    min-height: 2.4rem;
++    padding: 0.4rem 0.75rem;
++    border: 1px solid var(--border-light);
++    border-radius: var(--radius-pill);
++    color: var(--text-secondary);
++    background: var(--bg-card);
++    font-size: 0.75rem;
++    font-weight: 600;
++    white-space: nowrap;
++    cursor: pointer;
++}
++
++.btn-tag-preview:hover:not(:disabled) {
++    color: var(--accent);
++    border-color: var(--accent);
++}
++
++.btn-tag-preview:disabled {
++    opacity: 0.55;
++    cursor: not-allowed;
++}
++
++.task-control-panel {
++    display: flex;
++    flex-direction: column;
++    gap: 0.6rem;
++    padding: 0 0.8rem 0.8rem;
++}
++
++.task-current-line,
++.task-control-actions,
++.task-metrics,
++.task-control-buttons {
++    display: flex;
++    align-items: center;
++}
++
++.task-current-line {
++    flex-wrap: wrap;
++    gap: 0.4rem 0.8rem;
++    color: var(--text-secondary);
++    font-size: 0.72rem;
++}
++
++.task-current-item,
++.task-clock {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.3rem;
++    min-width: 0;
++}
++
++.task-current-item span {
++    overflow: hidden;
++    text-overflow: ellipsis;
++    white-space: nowrap;
++}
++
++.task-current-item i,
++.task-clock i {
++    color: var(--accent);
++}
++
++.task-result-summary {
++    margin: 0;
++    color: var(--text-secondary);
++    font-size: 0.74rem;
++    line-height: 1.45;
++    overflow-wrap: anywhere;
++}
++
++.task-control-actions {
++    justify-content: space-between;
++    gap: 0.65rem;
++    flex-wrap: wrap;
++}
++
++.task-metrics {
++    flex-wrap: wrap;
++    gap: 0.35rem;
++}
++
++.task-metric {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.25rem;
++    padding: 0.25rem 0.5rem;
++    border-radius: var(--radius-pill);
++    color: var(--text-secondary);
++    background: color-mix(in oklch, var(--bg-body) 70%, transparent);
++    font-size: 0.7rem;
++}
++
++.task-metric.is-success {
++    color: var(--color-success);
++}
++
++.task-metric.is-failed {
++    color: var(--color-error);
++}
++
++.task-metric.is-changed {
++    color: var(--color-warning-dark);
++}
++
++.task-control-buttons {
++    gap: 0.4rem;
++    margin-left: auto;
++}
++
++.task-control-buttons .btn {
++    min-height: 2.35rem;
++    white-space: nowrap;
 +}
 +
 +.output-info-path {
@@ -761,6 +1173,104 @@
 +    margin-top: 0.1rem;
 +}
 +
++.batch-confirm-note.is-warning {
++    color: var(--color-warning-dark);
++    background: color-mix(in oklch, var(--color-warning) 10%, transparent);
++}
++
++.tag-preview-list {
++    display: flex;
++    flex-direction: column;
++    gap: 0.45rem;
++    max-height: 18rem;
++    margin: 0.85rem 0;
++    padding: 0.55rem;
++    overflow-y: auto;
++    border: 1px solid var(--border-light);
++    border-radius: var(--fluent-radius-md);
++    background: color-mix(in oklch, var(--bg-body) 58%, transparent);
++}
++
++.tag-preview-item {
++    display: flex;
++    flex-direction: column;
++    gap: 0.2rem;
++    padding: 0.5rem 0.6rem;
++    border-radius: var(--fluent-radius-sm);
++    background: var(--bg-card);
++}
++
++.tag-preview-item > strong {
++    color: var(--text-primary);
++    font-size: 0.78rem;
++}
++
++.tag-preview-diff {
++    display: flex;
++    flex-direction: column;
++    gap: 0.15rem;
++    font-size: 0.72rem;
++    line-height: 1.45;
++}
++
++.tag-preview-add {
++    color: var(--color-success);
++}
++
++.tag-preview-remove {
++    color: var(--color-error);
++}
++
++.tag-preview-more {
++    margin: 0.2rem 0 0;
++    color: var(--text-secondary);
++    font-size: 0.72rem;
++    text-align: center;
++}
++
++.tag-preview-empty {
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    gap: 0.45rem;
++    margin: 0.85rem 0;
++    padding: 0.8rem;
++    border-radius: var(--fluent-radius-md);
++    color: var(--color-success);
++    background: color-mix(in oklch, var(--color-success) 9%, transparent);
++    font-size: 0.8rem;
++}
++
++.tag-backup-option {
++    display: flex;
++    align-items: flex-start;
++    gap: 0.65rem;
++    margin: 0.8rem 0 0;
++    padding: 0.7rem 0.75rem;
++    border: 1px solid var(--border-light);
++    border-radius: var(--fluent-radius-md);
++    background: color-mix(in oklch, var(--bg-body) 58%, transparent);
++    cursor: pointer;
++}
++
++.tag-backup-option > span {
++    display: flex;
++    flex-direction: column;
++    gap: 0.15rem;
++    min-width: 0;
++}
++
++.tag-backup-option strong {
++    color: var(--text-primary);
++    font-size: 0.78rem;
++}
++
++.tag-backup-option small {
++    color: var(--text-secondary);
++    font-size: 0.7rem;
++    line-height: 1.4;
++}
++
 +@media (min-width: 720px) {
 +    .terminal-toggle {
 +        flex-basis: auto;
@@ -798,6 +1308,11 @@
 +        flex-basis: auto;
 +    }
 +
++    .maintenance-controls {
++        flex-direction: column;
++        align-items: stretch;
++    }
++
 +    #statsCard .maintenance-row > .btn-nfo-update {
 +        justify-content: center;
 +    }
@@ -812,9 +1327,40 @@
 +        max-width: none;
 +    }
 +
++    .tag-source-actions {
++        width: 100%;
++    }
++
++    .tag-source-actions > button {
++        flex: 1 1 0;
++    }
++
 +    .maintenance-controls > .btn-nfo-update {
 +        flex: 0 0 auto;
 +        white-space: nowrap;
++    }
++
++    .scanner-maintenance-head {
++        flex-direction: column;
++    }
++
++    .scanner-maintenance-summary {
++        width: 100%;
++        justify-content: space-between;
++    }
++
++    .task-control-actions,
++    .task-metrics,
++    .task-control-buttons {
++        width: 100%;
++    }
++
++    .task-control-buttons {
++        margin-left: 0;
++    }
++
++    .task-control-buttons .btn {
++        flex: 1 1 0;
 +    }
 +
 +    .output-info-path {
@@ -836,9 +1382,109 @@
 +        grid-template-columns: 1fr;
 +    }
 +}
+--- a/web/static/css/pages/settings.css
++++ b/web/static/css/pages/settings.css
+@@ -1729,3 +1729,97 @@
+     background: color-mix(in oklch, var(--surface-2) 55%, transparent);
+     border-radius: var(--radius-sm);
+ }
++
++/* r18: persistent save state and mobile bottom action bar */
++#settings-components .save-btn-wrapper {
++    position: sticky;
++    bottom: 0.75rem;
++    z-index: 20;
++    align-items: center;
++    justify-content: space-between;
++    gap: 0.75rem;
++    margin: 1rem 0 0.75rem;
++    padding: 0.7rem 0.8rem;
++    border: 1px solid var(--stroke-default);
++    border-radius: var(--fluent-radius-md);
++    background: color-mix(in oklch, var(--surface-1) 88%, transparent);
++    box-shadow: var(--fluent-shadow-8);
++    backdrop-filter: blur(16px);
++}
++
++#settings-components .save-state {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.4rem;
++    min-width: 0;
++    color: var(--text-secondary);
++    font-size: 0.78rem;
++}
++
++#settings-components .save-state span:last-child {
++    overflow: hidden;
++    text-overflow: ellipsis;
++    white-space: nowrap;
++}
++
++#settings-components .save-state i {
++    color: var(--color-success);
++}
++
++#settings-components .save-btn-wrapper.is-dirty {
++    border-color: color-mix(in oklch, var(--color-warning) 55%, var(--stroke-default));
++}
++
++#settings-components .save-btn-wrapper.is-dirty .save-state,
++#settings-components .save-btn-wrapper.is-dirty .save-state i {
++    color: var(--color-warning-dark);
++}
++
++#settings-components .save-btn {
++    flex: 0 0 auto;
++    min-height: 2.75rem;
++    white-space: nowrap;
++}
++
++#settings-components .save-btn:disabled {
++    cursor: not-allowed;
++    opacity: 0.55;
++}
++
++@media (max-width: 768px) {
++    #settingsForm {
++        padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
++    }
++
++    #settings-components .save-btn-wrapper {
++        position: fixed;
++        left: 0;
++        right: 0;
++        bottom: 0;
++        margin: 0;
++        padding:
++            0.7rem
++            max(0.9rem, env(safe-area-inset-right, 0px))
++            calc(0.7rem + env(safe-area-inset-bottom, 0px))
++            max(0.9rem, env(safe-area-inset-left, 0px));
++        border-right: 0;
++        border-bottom: 0;
++        border-left: 0;
++        border-radius: 0;
++        box-shadow: 0 -8px 24px color-mix(in oklch, var(--color-base-content) 12%, transparent);
++    }
++}
++
++@media (max-width: 480px) {
++    #settings-components .save-btn-wrapper {
++        gap: 0.5rem;
++    }
++
++    #settings-components .save-state {
++        font-size: 0.72rem;
++    }
++
++    #settings-components .save-btn {
++        padding-inline: 0.9rem;
++    }
++}
 --- /dev/null
 +++ b/web/static/js/components/mobile-back.js
-@@ -0,0 +1,212 @@
+@@ -0,0 +1,213 @@
 +/**
 + * Android hardware-back bridge for the embedded WebView.
 + *
@@ -1005,6 +1651,7 @@
 +        if (!page) return false;
 +        return closeFlag(page, 'dirtyCheckModalOpen', 'dirtyCheckCancel')
 +            || closeFlag(page, 'missingConfirmModalOpen', 'cancelLargeMissingEnrich')
++            || closeFlag(page, 'nfoUpdateConfirmModalOpen', 'cancelNfoUpdate')
 +            || closeFlag(page, 'tagSourceConfirmModalOpen', 'cancelTagSourceUpdate')
 +            || closeFlag(page, 'deleteAliasGroupModalOpen', 'cancelDeleteAliasGroupModal')
 +            || closeFlag(page, 'deleteTagAliasGroupModalOpen', 'cancelDeleteTagAliasGroupModal')
@@ -1053,16 +1700,42 @@
 +})();
 --- a/web/static/js/pages/scanner/state-scan.js
 +++ b/web/static/js/pages/scanner/state-scan.js
-@@ -45,7 +45,7 @@
+@@ -33,6 +33,7 @@
+         statsVisible: false,
+         statTotal: 0,
+         statLastRun: '',
++        maintenanceExpanded: false,
+         clearCacheModalOpen: false,
+         clearCacheLoading: false,
+ 
+@@ -45,12 +46,25 @@
          copyFailDump: '',
  
          // ===== T7b: State Machine =====
 -        state: 'idle',  // 'idle' | 'generating' | 'nfoUpdating' | 'done' | 'error'
-+        state: 'idle',  // 'idle' | 'generating' | 'nfoUpdating' | 'tagSourceUpdating' | 'done' | 'error'
++        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | jellyfinUpdating | enriching | done | error | cancelled
  
          // ===== T7b: Progress =====
          progressStatus: '',
-@@ -60,6 +60,7 @@
+         progressCurrent: 0,
+         progressTotal: 0,
++        taskKind: '',
++        taskStartedAt: 0,
++        taskEndedAt: 0,
++        taskClockTick: 0,
++        taskTimer: null,
++        taskCurrentItem: '',
++        taskSuccessCount: 0,
++        taskFailedCount: 0,
++        taskSkippedCount: 0,
++        taskChangedCount: 0,
++        taskEtaSeconds: 0,
++        taskSummaryText: '',
++        taskFailedItems: [],
+ 
+         // ===== T7b: Log System =====
+         logHtml: '',           // 日誌 HTML（用於 restoreLogs）
+@@ -60,6 +74,7 @@
          // ===== T7d: Log Terminal 增強 =====
          logEntries: [],        // [{level, message, timestamp}] 結構化陣列
          logFilter: 'all',      // 'all' | 'error' | 'warn' 篩選條件
@@ -1070,7 +1743,7 @@
  
          // ===== T7b: Done Actions =====
          outputPath: '',        // 輸出路徑（供複製）
-@@ -69,6 +70,10 @@
+@@ -69,6 +84,21 @@
          nfoUpdatePaths: [],
          nfoUpdateItems: [],
          nfoUpdateVisible: false,
@@ -1078,10 +1751,21 @@
 +        // ===== r16: Batch tag source update =====
 +        tagSourceUpdateSource: 'auto',
 +        tagSourceConfirmModalOpen: false,
++        tagSourcePreviewSource: '',
++        tagSourcePreviewSourceLabel: '',
++        tagSourcePreviewData: null,
++        tagSourcePreviewNumbers: [],
++        tagSourcePreviewOnly: false,
++        tagSourceBackupEnabled: true,
++
++        // ===== r18: NFO confirmation =====
++        nfoUpdateConfirmModalOpen: false,
++        nfoUpdateRetryPaths: [],
++        nfoUpdateBackupEnabled: true,
  
          // ===== T6d: Jellyfin Image Update =====
          jellyfinImageCount: 0,
-@@ -102,8 +107,18 @@
+@@ -102,8 +132,81 @@
              return (this.progressCurrent / this.progressTotal) * 100;
          },
  
@@ -1094,13 +1778,76 @@
 +            return `${this.progressCurrent} / ${this.progressTotal} · ${this.progressPercentRounded}%`;
 +        },
 +
++        get taskSuccessDisplay() {
++            return this.taskKind === 'enrich' ? this.missingEnrichSuccess : this.taskSuccessCount;
++        },
++
++        get taskFailedDisplay() {
++            return this.taskKind === 'enrich' ? this.missingEnrichFailed : this.taskFailedCount;
++        },
++
++        get taskElapsedText() {
++            if (!this.taskStartedAt) return '';
++            const end = this.isGenerating
++                ? (this.taskClockTick || Date.now())
++                : (this.taskEndedAt || Date.now());
++            return this._formatDuration(Math.max(0, Math.floor((end - this.taskStartedAt) / 1000)));
++        },
++
++        get taskEtaText() {
++            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'enrich'].includes(this.taskKind)) {
++                return '';
++            }
++            let seconds = this.taskEtaSeconds;
++            if (!seconds && this.progressCurrent > 0 && this.progressTotal > this.progressCurrent && this.taskStartedAt) {
++                const elapsed = Math.max(1, ((this.taskClockTick || Date.now()) - this.taskStartedAt) / 1000);
++                seconds = Math.round((elapsed / this.progressCurrent) * (this.progressTotal - this.progressCurrent));
++            }
++            return seconds > 0 ? window.t('scanner.task.eta_value', { time: this._formatDuration(seconds) }) : '';
++        },
++
++        get taskPanelVisible() {
++            return this.state !== 'idle' && (this.taskKind !== '' || this.logHtml !== '');
++        },
++
++        get taskCanRetry() {
++            return !this.isGenerating
++                && this.taskFailedItems.length > 0
++                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update'].includes(this.taskKind);
++        },
++
++        get maintenanceSummaryText() {
++            const nfo = this.nfoNeedUpdateCount || 0;
++            const missing = (this.missingBothCount || 0) + (this.missingNfoCount || 0) + (this.missingCoverCount || 0);
++            const images = this.jellyfinImageCount || 0;
++            return window.t('scanner.stats.maintenance_summary', { nfo, missing, images });
++        },
++
++        get tagSourcePreviewChangedItems() {
++            const items = this.tagSourcePreviewData?.items || [];
++            return items.filter(item => item.status === 'changed');
++        },
++
++        get tagSourcePreviewFailureItems() {
++            return this.tagSourcePreviewData?.failed_items || [];
++        },
++
++        get tagSourcePreviewChangedCount() {
++            return this.tagSourcePreviewData?.changed || 0;
++        },
++
++        get tagSourceConfirmButtonDisabled() {
++            return this.isGenerating || this.tagSourcePreviewOnly || this.tagSourcePreviewChangedCount === 0;
++        },
++
          get isGenerating() {
              return this.state === 'generating' || this.state === 'nfoUpdating'
++                || this.state === 'tagSourcePreviewing'
 +                || this.state === 'tagSourceUpdating'
                  || this.state === 'jellyfinUpdating' || this.state === 'enriching';
          },
  
-@@ -119,6 +134,51 @@
+@@ -119,6 +222,68 @@
  
          get doneActionsVisible() {
              return this.state === 'done' && this.outputPath !== '';
@@ -1138,6 +1885,10 @@
 +            return selected ? selected.display_name : this.tagSourceUpdateSource;
 +        },
 +
++        get tagSourceModalSourceLabel() {
++            return this.tagSourcePreviewSourceLabel || this.selectedTagSourceLabel;
++        },
++
 +        get tagSourceUpdateButtonDisabled() {
 +            return this.isBusy || !this.tagSourceUpdateSource || this.statTotal === 0;
 +        },
@@ -1147,12 +1898,33 @@
 +                return '<span class="loading loading-spinner loading-sm"></span> '
 +                    + window.t('scanner.stats.tag_source_updating');
 +            }
++            if (this.state === 'tagSourcePreviewing') {
++                return '<i class="bi bi-hourglass-split"></i> '
++                    + window.t('scanner.stats.tag_source_preview_update_btn');
++            }
 +            return '<i class="bi bi-tags"></i> '
-+                + window.t('scanner.stats.tag_source_update_btn');
++                + window.t('scanner.stats.tag_source_preview_update_btn');
++        },
++
++        get tagSourcePreviewButtonText() {
++            if (this.state === 'tagSourcePreviewing') {
++                return '<span class="loading loading-spinner loading-sm"></span> '
++                    + window.t('scanner.stats.tag_source_previewing');
++            }
++            return '<i class="bi bi-eye"></i> '
++                + window.t('scanner.stats.tag_source_preview_btn');
          },
  
          get generateButtonText() {
-@@ -305,6 +365,10 @@
+@@ -219,6 +384,7 @@
+                         if (this.eventSource) { this.eventSource.close(); this.eventSource = null; }
+                         window.Alpine?.store?.('toast')?.hide?.();   // 131b-T3：cleanup 不得拋錯（拋了會跳過後面所有 teardown）
+                         clearTimeout(this.logTimer);
++                        this._stopTaskTimer();
+                         // T2(40c): abort jellyfin check fetch
+                         if (this._jellyfinCheckController) {
+                             this._jellyfinCheckController.abort();
+@@ -305,6 +471,10 @@
                  if (result.success) {
                      this.config = result.data;
                      this.directories = this.config.gallery?.directories || [];
@@ -1163,7 +1935,7 @@
                      // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                      this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
  
-@@ -636,6 +700,9 @@
+@@ -636,6 +806,9 @@
          addLog(level, message) {
              // T7d: 加入結構化陣列
              this.logEntries.push({ level, message, timestamp: Date.now() });
@@ -1173,7 +1945,7 @@
  
              const cls = level === 'error' ? 'log-error' :
                          level === 'warn' ? 'log-warn' : 'log-info';
-@@ -713,10 +780,22 @@
+@@ -713,10 +886,22 @@
              localStorage.removeItem('avlist_last_status');
              this.logHtml = '';
              this.logEntries = [];
@@ -1196,59 +1968,415 @@
          clearLogsDisplay() {
              this.logHtml = '';
              this.logEntries = [];
-@@ -992,6 +1071,85 @@
+@@ -768,6 +953,136 @@
+             if (confirm(window.t('scanner.toast.confirm_clear_logs'))) {
+                 this.clearLogs();
+                 this.showToast(window.t('scanner.toast.logs_cleared'), 'success');
++            }
++        },
++
++        // ===== r18: Task control =====
++        toggleMaintenance() {
++            this.maintenanceExpanded = !this.maintenanceExpanded;
++        },
++
++        _formatDuration(seconds) {
++            const value = Math.max(0, Math.floor(seconds || 0));
++            if (value < 60) return window.t('scanner.task.seconds', { value });
++            const minutes = Math.floor(value / 60);
++            const remainder = value % 60;
++            return window.t('scanner.task.minutes', { minutes, seconds: remainder });
++        },
++
++        _startTask(kind, status, total = 0) {
++            this._stopTaskTimer();
++            this.taskKind = kind;
++            this.taskStartedAt = Date.now();
++            this.taskEndedAt = 0;
++            this.taskClockTick = this.taskStartedAt;
++            this.taskCurrentItem = '';
++            this.taskSuccessCount = 0;
++            this.taskFailedCount = 0;
++            this.taskSkippedCount = 0;
++            this.taskChangedCount = 0;
++            this.taskEtaSeconds = 0;
++            this.taskSummaryText = '';
++            this.taskFailedItems = [];
++            this.progressStatus = status;
++            this.progressCurrent = 0;
++            this.progressTotal = total;
++            this.maintenanceExpanded = true;
++            this.taskTimer = setInterval(() => {
++                this.taskClockTick = Date.now();
++            }, 1000);
++        },
++
++        _stopTaskTimer() {
++            if (this.taskTimer) {
++                clearInterval(this.taskTimer);
++                this.taskTimer = null;
++            }
++        },
++
++        _applyTaskMetrics(data) {
++            if (data?.number || data?.num) {
++                this.taskCurrentItem = data.number || data.num;
++            }
++            if (typeof data?.success === 'number') this.taskSuccessCount = data.success;
++            if (typeof data?.failed === 'number') this.taskFailedCount = data.failed;
++            if (typeof data?.skipped === 'number') this.taskSkippedCount = data.skipped;
++            if (typeof data?.changed === 'number') this.taskChangedCount = data.changed;
++            if (typeof data?.eta_seconds === 'number') this.taskEtaSeconds = data.eta_seconds;
++        },
++
++        _syncTaskSummary(summary) {
++            if (!summary) return;
++            if (typeof summary.success === 'number') this.taskSuccessCount = summary.success;
++            if (typeof summary.failed === 'number') this.taskFailedCount = summary.failed;
++            if (typeof summary.skipped === 'number') this.taskSkippedCount = summary.skipped;
++            if (typeof summary.changed === 'number') this.taskChangedCount = summary.changed;
++            if (Array.isArray(summary.failed_items)) this.taskFailedItems = summary.failed_items;
++        },
++
++        _finishTask(nextState, status, summary = null, failedItems = null) {
++            this.state = nextState;
++            this.taskEndedAt = Date.now();
++            this._stopTaskTimer();
++            this.taskCurrentItem = '';
++            this.progressStatus = status || this.progressStatus;
++            this.taskSummaryText = status || '';
++            this._syncTaskSummary(summary);
++            if (Array.isArray(failedItems)) {
++                this.taskFailedItems = failedItems;
++            } else if (Array.isArray(summary?.failed_items)) {
++                this.taskFailedItems = summary.failed_items;
++            }
++            localStorage.setItem('avlist_generating', 'false');
++            localStorage.setItem('avlist_last_status', this.progressStatus);
++        },
++
++        cancelCurrentTask() {
++            if (!this.isGenerating) return;
++
++            if (this.state === 'enriching' && this._enrichAbortController) {
++                this._enrichAbortController.abort();
++                this._enrichAbortController = null;
++            }
++            if (this.eventSource) {
++                this.eventSource.close();
++                this.eventSource = null;
++            }
++            this._finishTask(
++                'cancelled',
++                window.t('scanner.task.cancelled'),
++                {
++                    success: this.taskSuccessDisplay,
++                    failed: this.taskFailedDisplay,
++                    skipped: this.taskSkippedCount,
++                    failed_items: this.taskFailedItems,
++                }
++            );
++            this.addLog('warn', window.t('scanner.task.cancelled_log'));
++            this.flushLogs();
++            this.showToast(window.t('scanner.task.cancelled'), 'info', 3000);
++        },
++
++        retryFailedItems() {
++            if (!this.taskCanRetry) return;
++            const numbers = [...new Set(this.taskFailedItems.map(item => item.number).filter(Boolean))];
++            const paths = [...new Set(this.taskFailedItems.map(item => item.path).filter(Boolean))];
++
++            if (this.taskKind === 'nfo-update' && paths.length > 0) {
++                this.openNfoUpdateConfirm(paths);
++                return;
++            }
++            if (['tag-preview', 'tag-update'].includes(this.taskKind) && numbers.length > 0) {
++                this.startTagSourcePreview({
++                    numbers,
++                    applyAfter: false,
++                    retryMode: true,
++                });
++                return;
++            }
++            if (this.taskKind === 'jellyfin-update') {
++                this.jellyfinImageCount = Math.max(this.taskFailedItems.length, 1);
++                this.jellyfinImageVisible = true;
++                this.runJellyfinImageUpdate();
+             }
+         },
+ 
+@@ -792,9 +1107,7 @@
+ 
+             // 重置狀態
+             this.state = 'generating';
+-            this.progressStatus = window.t('scanner.stats.status_preparing');
+-            this.progressCurrent = 0;
+-            this.progressTotal = 0;
++            this._startTask('generate', window.t('scanner.stats.status_preparing'));
+             this.outputPath = '';
+             this.nfoUpdateVisible = false;
+             this.clearLogs();
+@@ -812,16 +1125,21 @@
+                         this.progressStatus = data.status;
+                         this.progressCurrent = data.current;
+                         this.progressTotal = data.total;
++                        this._applyTaskMetrics(data);
+                         localStorage.setItem('avlist_last_status', data.status);
+                     } else if (data.type === 'log') {
+                         this.addLog(data.level, data.message);
+                     } else if (data.type === 'done') {
+                         this.eventSource.close();
+                         this.eventSource = null;
+-                        this.state = 'done';
+                         this.progressStatus = window.t('scanner.stats.status_done_count', { count: data.video_count });
+                         this.progressCurrent = this.progressTotal;
+                         this.outputPath = data.output_path;
++                        this._finishTask(
++                            'done',
++                            this.progressStatus,
++                            { success: data.video_count || 0, failed: 0, skipped: 0 }
++                        );
+ 
+                         localStorage.setItem('avlist_generating', 'false');
+                         localStorage.setItem('avlist_last_status', window.t('scanner.stats.status_done'));
+@@ -890,24 +1208,24 @@
+                     } else if (data.type === 'error') {
+                         this.eventSource.close();
+                         this.eventSource = null;
+-                        this.state = 'error';
+                         this.addLog('error', window.t('scanner.stats.log_error_prefix', { message: data.message }));
++                        this._finishTask('error', data.message || window.t('scanner.task.failed'));
+                         this.flushLogs();
+                         localStorage.setItem('avlist_generating', 'false');
+                     }
+                 };
+ 
+                 this.eventSource.onerror = () => {
+-                    if (this.state === 'done') return;
++                    if (this.state === 'done' || this.state === 'cancelled') return;
+                     this.eventSource.close();
+                     this.eventSource = null;
+-                    this.state = 'error';
+                     this.addLog('error', window.t('scanner.stats.log_disconnected'));
++                    this._finishTask('error', window.t('scanner.task.failed'));
+                     this.flushLogs();
+                     localStorage.setItem('avlist_generating', 'false');
+                 };
+             } catch (e) {
+-                this.state = 'error';
++                this._finishTask('error', window.t('scanner.task.failed'));
+                 localStorage.setItem('avlist_generating', 'false');
+                 console.error('[Scanner] generate error:', e);
+                 this.showToast(window.t('scanner.toast.generate_error'), 'error', 4000);
+@@ -915,26 +1233,51 @@
+         },
+ 
+         // ===== T7b: NFO Update Flow =====
+-        async runNfoUpdate() {
++        openNfoUpdateConfirm(paths = []) {
++            if (this.isGenerating) return;
++            const count = paths.length > 0 ? paths.length : this.nfoNeedUpdateCount;
++            if (count === 0) {
++                this.showToast(window.t('scanner.toast.no_nfo_update_needed'), 'info');
++                return;
++            }
++            this.nfoUpdateRetryPaths = paths.slice();
++            this.nfoUpdateConfirmModalOpen = true;
++        },
++
++        cancelNfoUpdate() {
++            this.nfoUpdateConfirmModalOpen = false;
++            this.nfoUpdateRetryPaths = [];
++        },
++
++        confirmNfoUpdate() {
++            const paths = this.nfoUpdateRetryPaths.slice();
++            this.nfoUpdateConfirmModalOpen = false;
++            this.runNfoUpdate(paths);
++        },
++
++        async runNfoUpdate(paths = []) {
+             // 互斥鎖定
+             if (this.isGenerating) return;
+ 
+-            if (this.nfoNeedUpdateCount === 0) {
++            const expectedCount = paths.length > 0 ? paths.length : this.nfoNeedUpdateCount;
++            if (expectedCount === 0) {
+                 this.showToast(window.t('scanner.toast.no_nfo_update_needed'), 'info');
+                 return;
+             }
+ 
+             // 重置狀態
+             this.state = 'nfoUpdating';
+-            this.progressStatus = window.t('scanner.stats.status_preparing');
+-            this.progressCurrent = 0;
+-            this.progressTotal = 0;
++            this._startTask('nfo-update', window.t('scanner.stats.status_preparing'), expectedCount);
+             this.clearLogs();
+ 
+             localStorage.setItem('avlist_generating', 'true');
+ 
+             try {
+-                this.eventSource = new EventSource('/api/gallery/update');
++                const params = new URLSearchParams({
++                    backup: this.nfoUpdateBackupEnabled ? 'true' : 'false',
++                });
++                for (const path of paths) params.append('path', path);
++                this.eventSource = new EventSource(`/api/gallery/update?${params.toString()}`);
+ 
+                 this.eventSource.onmessage = (event) => {
+                     const data = JSON.parse(event.data);
+@@ -943,55 +1286,249 @@
+                         this.progressStatus = data.status;
+                         this.progressCurrent = data.current;
+                         this.progressTotal = data.total;
++                        this._applyTaskMetrics(data);
+                         localStorage.setItem('avlist_last_status', data.status);
+                     } else if (data.type === 'log') {
+                         this.addLog(data.level, data.message);
+                     } else if (data.type === 'done') {
+                         this.eventSource.close();
+                         this.eventSource = null;
+-                        this.state = 'done';
+-                        this.progressStatus = data.message || window.t('scanner.stats.status_done');
+                         this.progressCurrent = this.progressTotal;
++                        this._finishTask(
++                            data.summary?.cancelled ? 'cancelled' : 'done',
++                            data.message || window.t('scanner.stats.status_done'),
++                            data.summary || null
++                        );
+ 
+                         localStorage.setItem('avlist_generating', 'false');
+                         localStorage.setItem('avlist_last_status', data.message || window.t('scanner.stats.status_done'));
+ 
+-                        this.showToast(window.t('scanner.toast.nfo_update_done'), 'success');
++                        const failed = data.summary?.failed || 0;
++                        this.showToast(
++                            failed > 0 ? window.t('scanner.task.done_with_failures', { failed }) : window.t('scanner.toast.nfo_update_done'),
++                            failed > 0 ? 'warn' : 'success'
++                        );
+                         if (data.message) {
+                             this.addLog('info', data.message);
+                         }
+                         this.flushLogs();
+ 
+                         // 隱藏 NFO 更新按鈕（已完成）
+-                        this.nfoNeedUpdateCount = 0;
+-                        this.nfoUpdateVisible = false;
++                        if (paths.length === 0) {
++                            this.nfoNeedUpdateCount = 0;
++                            this.nfoUpdateVisible = false;
++                        } else {
++                            this.nfoNeedUpdateCount = Math.max(
++                                0,
++                                this.nfoNeedUpdateCount - (data.summary?.success || 0)
++                            );
++                        }
+                     } else if (data.type === 'error') {
+                         this.eventSource.close();
+                         this.eventSource = null;
+-                        this.state = 'error';
+                         this.addLog('error', window.t('scanner.stats.log_error_prefix', { message: data.message }));
++                        this._finishTask('error', data.message || window.t('scanner.task.failed'));
+                         this.flushLogs();
+                         localStorage.setItem('avlist_generating', 'false');
+                     }
+                 };
+ 
+                 this.eventSource.onerror = () => {
+-                    if (this.state === 'done') return;
++                    if (this.state === 'done' || this.state === 'cancelled') return;
+                     this.eventSource.close();
+                     this.eventSource = null;
+-                    this.state = 'error';
+                     this.addLog('error', window.t('scanner.stats.log_disconnected'));
++                    this._finishTask('error', window.t('scanner.task.failed'));
+                     this.flushLogs();
+                     localStorage.setItem('avlist_generating', 'false');
+                 };
+             } catch (e) {
+-                this.state = 'error';
++                this._finishTask('error', window.t('scanner.task.failed'));
+                 localStorage.setItem('avlist_generating', 'false');
+                 console.error('[Scanner] runNfoUpdate error:', e);
+                 this.showToast(window.t('scanner.toast.nfo_update_error'), 'error', 4000);
              }
          },
  
 +        // ===== r16: Batch tag source update =====
 +        openTagSourceUpdateConfirm() {
 +            if (this.tagSourceUpdateButtonDisabled) return;
-+            this.tagSourceConfirmModalOpen = true;
++            this.startTagSourcePreview({ applyAfter: true });
++        },
++
++        previewTagSourceUpdate() {
++            if (this.tagSourceUpdateButtonDisabled) return;
++            this.startTagSourcePreview({ applyAfter: false });
 +        },
 +
 +        cancelTagSourceUpdate() {
 +            this.tagSourceConfirmModalOpen = false;
++            this.tagSourcePreviewOnly = false;
 +        },
 +
 +        confirmTagSourceUpdate() {
++            if (this.tagSourceConfirmButtonDisabled) return;
 +            this.tagSourceConfirmModalOpen = false;
-+            this.startTagSourceUpdate();
++            this.startTagSourceUpdate({
++                numbers: this.tagSourcePreviewNumbers,
++                backup: this.tagSourceBackupEnabled,
++            });
 +        },
 +
-+        async startTagSourceUpdate() {
++        async startTagSourcePreview({ applyAfter = false, numbers = [], retryMode = false } = {}) {
 +            if (this.isGenerating || !this.tagSourceUpdateSource) return;
 +
-+            this.state = 'tagSourceUpdating';
-+            this.progressStatus = window.t('scanner.stats.tag_source_preparing');
-+            this.progressCurrent = 0;
-+            this.progressTotal = this.statTotal;
++            const sourceId = this.tagSourceUpdateSource;
++            const sourceLabel = this.selectedTagSourceLabel;
++            this.tagSourcePreviewSource = sourceId;
++            this.tagSourcePreviewSourceLabel = sourceLabel;
++            this.tagSourcePreviewOnly = !applyAfter;
++            this.tagSourcePreviewNumbers = numbers.slice();
++            this.state = 'tagSourcePreviewing';
++            this._startTask(
++                'tag-preview',
++                retryMode
++                    ? window.t('scanner.stats.tag_source_retry_previewing')
++                    : window.t('scanner.stats.tag_source_previewing'),
++                numbers.length || this.statTotal
++            );
 +            this.clearLogs();
 +            localStorage.setItem('avlist_generating', 'true');
 +
-+            const source = encodeURIComponent(this.tagSourceUpdateSource);
-+            this.eventSource = new EventSource(`/api/gallery/tag-source-update?source=${source}`);
++            const params = new URLSearchParams({ source: sourceId });
++            if (numbers.length > 0) params.set('numbers', numbers.join(','));
++            this.eventSource = new EventSource(`/api/gallery/tag-source-preview?${params.toString()}`);
 +
 +            this.eventSource.onmessage = (event) => {
 +                const data = JSON.parse(event.data);
 +
 +                if (data.type === 'progress') {
-+                    this.progressStatus = data.status || window.t('scanner.stats.tag_source_updating');
++                    this.progressStatus = data.status || window.t('scanner.stats.tag_source_previewing');
 +                    this.progressCurrent = data.current || 0;
-+                    this.progressTotal = data.total || this.statTotal;
++                    this.progressTotal = data.total || this.progressTotal;
++                    this._applyTaskMetrics(data);
 +                    localStorage.setItem('avlist_last_status', this.progressStatus);
 +                } else if (data.type === 'log') {
 +                    this.addLog(data.level || 'info', data.message || '');
 +                } else if (data.type === 'done') {
 +                    this.eventSource.close();
 +                    this.eventSource = null;
-+                    this.state = 'done';
-+                    this.progressStatus = data.message || window.t('scanner.stats.tag_source_done');
 +                    this.progressCurrent = this.progressTotal;
-+                    localStorage.setItem('avlist_generating', 'false');
-+                    localStorage.setItem('avlist_last_status', this.progressStatus);
++                    this.tagSourcePreviewData = data.summary || null;
++                    this._finishTask(
++                        data.summary?.cancelled ? 'cancelled' : 'done',
++                        data.message || window.t('scanner.stats.tag_source_preview_done'),
++                        data.summary || null
++                    );
++                    this.tagSourceConfirmModalOpen = true;
 +                    const failed = data.summary?.failed || 0;
 +                    this.showToast(
-+                        window.t('scanner.toast.tag_source_update_done'),
++                        data.message || window.t('scanner.stats.tag_source_preview_done'),
 +                        failed > 0 ? 'warn' : 'success',
 +                        4000
 +                    );
@@ -1257,22 +2385,97 @@
 +                } else if (data.type === 'error') {
 +                    this.eventSource.close();
 +                    this.eventSource = null;
-+                    this.state = 'error';
 +                    this.addLog(
 +                        'error',
 +                        window.t('scanner.stats.log_error_prefix', { message: data.message || '' })
 +                    );
++                    this._finishTask('error', data.message || window.t('scanner.task.failed'));
++                    this.flushLogs();
++                    this.showToast(window.t('scanner.toast.tag_source_update_error'), 'error', 4000);
++                }
++            };
++
++            this.eventSource.onerror = () => {
++                if (this.state === 'done' || this.state === 'error' || this.state === 'cancelled') return;
++                this.eventSource.close();
++                this.eventSource = null;
++                this.addLog('error', window.t('scanner.stats.log_disconnected'));
++                this._finishTask('error', window.t('scanner.task.failed'));
++                this.flushLogs();
++                this.showToast(window.t('scanner.toast.tag_source_update_error'), 'error', 4000);
++            };
++        },
++
++        async startTagSourceUpdate({ numbers = [], backup = true } = {}) {
++            if (this.isGenerating || !this.tagSourcePreviewSource) return;
++
++            this.state = 'tagSourceUpdating';
++            this._startTask(
++                'tag-update',
++                window.t('scanner.stats.tag_source_preparing'),
++                numbers.length || this.statTotal
++            );
++            this.clearLogs();
++            localStorage.setItem('avlist_generating', 'true');
++
++            const params = new URLSearchParams({
++                source: this.tagSourcePreviewSource,
++                backup: backup ? 'true' : 'false',
++            });
++            if (numbers.length > 0) params.set('numbers', numbers.join(','));
++            this.eventSource = new EventSource(`/api/gallery/tag-source-update?${params.toString()}`);
++
++            this.eventSource.onmessage = (event) => {
++                const data = JSON.parse(event.data);
++
++                if (data.type === 'progress') {
++                    this.progressStatus = data.status || window.t('scanner.stats.tag_source_updating');
++                    this.progressCurrent = data.current || 0;
++                    this.progressTotal = data.total || this.statTotal;
++                    this._applyTaskMetrics(data);
++                    localStorage.setItem('avlist_last_status', this.progressStatus);
++                } else if (data.type === 'log') {
++                    this.addLog(data.level || 'info', data.message || '');
++                } else if (data.type === 'done') {
++                    this.eventSource.close();
++                    this.eventSource = null;
++                    this.progressCurrent = this.progressTotal;
++                    this._finishTask(
++                        data.summary?.cancelled ? 'cancelled' : 'done',
++                        data.message || window.t('scanner.stats.tag_source_done'),
++                        data.summary || null
++                    );
++                    this.tagSourcePreviewData = data.summary || this.tagSourcePreviewData;
++                    localStorage.setItem('avlist_generating', 'false');
++                    const failed = data.summary?.failed || 0;
++                    this.showToast(
++                        failed > 0
++                            ? window.t('scanner.task.done_with_failures', { failed })
++                            : window.t('scanner.toast.tag_source_update_done'),
++                        failed > 0 ? 'warn' : 'success',
++                        4000
++                    );
++                    if (data.message) this.addLog('info', data.message);
++                    this.flushLogs();
++                } else if (data.type === 'error') {
++                    this.eventSource.close();
++                    this.eventSource = null;
++                    this.addLog(
++                        'error',
++                        window.t('scanner.stats.log_error_prefix', { message: data.message || '' })
++                    );
++                    this._finishTask('error', data.message || window.t('scanner.task.failed'));
 +                    this.flushLogs();
 +                    localStorage.setItem('avlist_generating', 'false');
 +                }
 +            };
 +
 +            this.eventSource.onerror = () => {
-+                if (this.state === 'done' || this.state === 'error') return;
++                if (this.state === 'done' || this.state === 'error' || this.state === 'cancelled') return;
 +                this.eventSource.close();
 +                this.eventSource = null;
-+                this.state = 'error';
 +                this.addLog('error', window.t('scanner.stats.log_disconnected'));
++                this._finishTask('error', window.t('scanner.task.failed'));
 +                this.flushLogs();
 +                localStorage.setItem('avlist_generating', 'false');
 +                this.showToast(window.t('scanner.toast.tag_source_update_error'), 'error', 4000);
@@ -1282,7 +2485,90 @@
          // ===== T6d: Jellyfin Image Update Flow =====
          async runJellyfinImageUpdate() {
              if (this.isGenerating) return;
-@@ -1078,6 +1236,21 @@
+@@ -1002,9 +1539,7 @@
+             }
+ 
+             this.state = 'jellyfinUpdating';
+-            this.progressStatus = window.t('scanner.stats.status_preparing');
+-            this.progressCurrent = 0;
+-            this.progressTotal = 0;
++            this._startTask('jellyfin-update', window.t('scanner.stats.status_preparing'), this.jellyfinImageCount);
+             this.clearLogs();
+ 
+             localStorage.setItem('avlist_generating', 'true');
+@@ -1019,14 +1554,13 @@
+                         this.progressStatus = data.status;
+                         this.progressCurrent = data.current;
+                         this.progressTotal = data.total;
++                        this._applyTaskMetrics(data);
+                         localStorage.setItem('avlist_last_status', data.status);
+                     } else if (data.type === 'log') {
+                         this.addLog(data.level, data.message);
+                     } else if (data.type === 'done') {
+                         this.eventSource.close();
+                         this.eventSource = null;
+-                        this.state = 'done';
+-                        this.progressStatus = data.message || window.t('scanner.stats.status_done');
+                         // TASK-111 P2-b 後續（codex delta review）：done 不再必然代表「全數完成」——
+                         // 批次跑到一半若把 external_manager 切成 off，後端會在下一部片 break 並送
+                         // done(updated=已完成筆數)。這裡若無條件補滿 progressTotal，UI 會顯示 3/3
+@@ -1035,6 +1569,11 @@
+                         this.progressCurrent = (typeof data.updated === 'number')
+                             ? data.updated
+                             : this.progressTotal;
++                        this._finishTask(
++                            data.summary?.cancelled ? 'cancelled' : 'done',
++                            data.message || window.t('scanner.stats.status_done'),
++                            data.summary || { success: data.updated || 0 }
++                        );
+ 
+                         localStorage.setItem('avlist_generating', 'false');
+                         localStorage.setItem('avlist_last_status', data.message || window.t('scanner.stats.status_done'));
+@@ -1045,7 +1584,13 @@
+                         this.jellyfinItems = [];
+                         this.jellyfinCheckState = 'idle';
+ 
+-                        this.showToast(window.t('scanner.toast.jellyfin_update_done'), 'success');
++                        const failed = data.summary?.failed || 0;
++                        this.showToast(
++                            failed > 0
++                                ? window.t('scanner.task.done_with_failures', { failed })
++                                : window.t('scanner.toast.jellyfin_update_done'),
++                            failed > 0 ? 'warn' : 'success'
++                        );
+                         if (data.message) {
+                             this.addLog('info', data.message);
+                         }
+@@ -1053,24 +1598,24 @@
+                     } else if (data.type === 'error') {
+                         this.eventSource.close();
+                         this.eventSource = null;
+-                        this.state = 'error';
+                         this.addLog('error', window.t('scanner.stats.log_error_prefix', { message: data.message }));
++                        this._finishTask('error', data.message || window.t('scanner.task.failed'));
+                         this.flushLogs();
+                         localStorage.setItem('avlist_generating', 'false');
+                     }
+                 };
+ 
+                 this.eventSource.onerror = () => {
+-                    if (this.state === 'done') return;
++                    if (this.state === 'done' || this.state === 'cancelled') return;
+                     this.eventSource.close();
+                     this.eventSource = null;
+-                    this.state = 'error';
+                     this.addLog('error', window.t('scanner.stats.log_disconnected'));
++                    this._finishTask('error', window.t('scanner.task.failed'));
+                     this.flushLogs();
+                     localStorage.setItem('avlist_generating', 'false');
+                 };
+             } catch (e) {
+-                this.state = 'error';
++                this._finishTask('error', window.t('scanner.task.failed'));
+                 localStorage.setItem('avlist_generating', 'false');
+                 console.error('[Scanner] runJellyfinImageUpdate error:', e);
+                 this.showToast(window.t('scanner.toast.jellyfin_update_error'), 'error', 4000);
+@@ -1078,6 +1623,21 @@
          },
  
          // ===== T7b: Utility =====
@@ -1304,6 +2590,136 @@
          copyOutputPath() {
              if (!this.outputPath) return;
  
+--- a/web/static/js/pages/scanner/state-batch.js
++++ b/web/static/js/pages/scanner/state-batch.js
+@@ -22,6 +22,7 @@
+         missingEnrichOffset: 0,     // batch offset
+         missingEnrichSuccess: 0,
+         missingEnrichFailed: 0,
++        _enrichFailedItems: [],
+         resumePillVisible: false,
+         missingConfirmModalOpen: false,   // TASK-13: 大批量補完 confirm dialog 開關
+         _enrichAbortController: null,
+@@ -109,14 +110,17 @@
+             this.missingEnrichOffset = 0;
+             this.missingEnrichSuccess = 0;
+             this.missingEnrichFailed = 0;
++            this._enrichFailedItems = [];
+             this.enrichBadgeCount = 0;
+             this.currentCard = null;
+             this.onDeckCard = null;  // TASK-94-T8：run 開始 reset 待命格
+             this._onDeckParkedAt = 0;
+             this._clearFlushTimer();  // TASK-94 Codex P1：清掉上一個 run 殘留的 flush dwell timer
+-            this.progressStatus = window.t('scanner.stats.missing_enrich_loading');
+-            this.progressCurrent = 0;
+-            this.progressTotal = this.missingItems.length;
++            this._startTask(
++                'enrich',
++                window.t('scanner.stats.missing_enrich_loading'),
++                this.missingItems.length
++            );
+             this.clearLogs();
+ 
+             const controller = new AbortController();
+@@ -146,7 +150,7 @@
+                         }
+                         this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
+                         this.flushLogs();
+-                        this.state = 'error';
++                        this._finishTask('error', window.t('scanner.task.failed'));
+                         this.currentCard = null;
+                         this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
+                         // Save remaining
+@@ -159,7 +163,7 @@
+                         const errText = await resp.text().catch(() => '');
+                         this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
+                         this.flushLogs();
+-                        this.state = 'error';
++                        this._finishTask('error', window.t('scanner.task.failed'));
+                         this.currentCard = null;
+                         this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
+                         localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
+@@ -200,6 +204,12 @@
+                                 this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
+                                 this.progressTotal = items.length;
+                                 this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
++                                this._applyTaskMetrics({
++                                    number: event.number,
++                                    success: this.missingEnrichSuccess,
++                                    failed: this.missingEnrichFailed,
++                                    skipped: 0,
++                                });
+                             } else if (event.type === 'result-item') {
+                                 // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
+                                 // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
+@@ -234,7 +244,18 @@
+                                     this.missingEnrichSuccess++;
+                                 } else {
+                                     this.missingEnrichFailed++;
++                                    this._enrichFailedItems.push({
++                                        path: event.file_path || '',
++                                        number: event.number || '',
++                                        error: event.error || event.reason || '',
++                                    });
+                                 }
++                                this._applyTaskMetrics({
++                                    number: event.number,
++                                    success: this.missingEnrichSuccess,
++                                    failed: this.missingEnrichFailed,
++                                    skipped: 0,
++                                });
+                                 // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
+                                 if (event.reason === 'error') {
+                                     this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
+@@ -246,7 +267,7 @@
+                             } else if (event.type === 'error') {
+                                 this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
+                                 this.flushLogs();
+-                                this.state = 'error';
++                                this._finishTask('error', event.message || window.t('scanner.task.failed'));
+                                 this.currentCard = null;
+                                 this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
+                                 localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
+@@ -258,7 +279,7 @@
+ 
+                     // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
+                     if (!batchDone) {
+-                        this.state = 'error';
++                        this._finishTask('error', window.t('scanner.task.failed'));
+                         this.currentCard = null;
+                         this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
+                         localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
+@@ -284,11 +305,19 @@
+                     if (lastCover) {
+                         this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
+                     }
+-                    this.state = 'done';
+                     this.onDeckCard = null;
+                     this.currentCard = null;
+                     this.enrichBadgeCount = 0;
+-                    this.progressStatus = window.t('scanner.stats.missing_enrich_done');
++                    this._finishTask(
++                        'done',
++                        window.t('scanner.stats.missing_enrich_done'),
++                        {
++                            success: this.missingEnrichSuccess,
++                            failed: this.missingEnrichFailed,
++                            skipped: 0,
++                            failed_items: this._enrichFailedItems,
++                        }
++                    );
+                     const summary = this.missingEnrichFailed > 0
+                         ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
+                         : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
+@@ -312,7 +341,7 @@
+                 if (e.name === 'AbortError') return;
+                 console.error('runMissingEnrich error:', e);
+                 this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
+-                this.state = 'error';
++                this._finishTask('error', window.t('scanner.task.failed'));
+                 this.currentCard = null;
+                 this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
+                 localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
 --- a/web/static/js/pages/settings/state-config.js
 +++ b/web/static/js/pages/settings/state-config.js
 @@ -88,7 +88,7 @@
@@ -1315,6 +2731,100 @@
  
          // ===== Server Mode State (80a-T3) =====
          serverMode: false,
+@@ -133,6 +133,7 @@
+         savedOpenaiUseCustomModel: false,
+         pendingNavigationUrl: '',
+         _configLoading: true,  // 初始 true，loadConfig 完成後 false
++        _configSaving: false,
+         // 95a-T8: filename 膠囊編輯器收斂式 hydrate 就緒旗標（響應式鏡像，供 x-effect 追蹤；
+         // naming.ready 是 closure 布林、非響應式，x-effect 追不到）。loadConfig 開頭重設 false、
+         // form 設妥後翻 true；由 hydrateFilenameEditor() 讀取觸發 reactive 補載。
+@@ -209,6 +210,17 @@
+             if (!this.savedState) return false;
+             return JSON.stringify(this.form) !== JSON.stringify(this.savedState)
+                 || this.openaiUseCustomModel !== this.savedOpenaiUseCustomModel;
++        },
++
++        get saveStatusText() {
++            if (this._configLoading) return window.t('settings.save_bar.loading');
++            if (this._configSaving) return window.t('settings.save_bar.saving');
++            if (this.isDirty) return window.t('settings.save_bar.unsaved');
++            return window.t('settings.save_bar.saved');
++        },
++
++        get saveButtonDisabled() {
++            return this._configLoading || this._configSaving || !this.isDirty;
+         },
+ 
+         // 命名預覽（依 data 套範例值）。誠實反映後端空值行為（U-A2）：空變數 → 空字串，
+@@ -944,33 +956,40 @@
+ 
+         // 168c-T4：伺服器 + 這台電腦各存各的；互不阻擋。
+         async saveConfig() {
+-            const localChanged = this.localMachineState === 'ready'
+-                && localDiff(this.form, this._localSaved).length > 0;
+-            const patch = localChanged ? buildLocalPatch(this.form) : null;
+-            const serverOk = await this._saveServerConfig();
+-            if (!localChanged) return;
+-            const reply = await callBridge('local_settings_save', patch);
+-            const localOk = !!reply && reply.ok === true;
+-            if (localOk) {
+-                this._localSaved = { viewerPlayer: patch.player, closeAction: patch.close_action };
+-            } else if (serverOk && this.savedState) {
+-                // 伺服器存好但這台失敗：savedState 兩格還原成這台已存的值，讓畫面仍顯示未儲存
+-                this.savedState.viewerPlayer = this._localSaved.viewerPlayer;
+-                this.savedState.closeAction = this._localSaved.closeAction;
+-            }
+-            const key = combineSaveOutcome({ serverOk, localChanged, localOk });
+-            let msg = null;
+-            switch (key) {
+-                case 'settings.toast.config_saved_with_local':
+-                    msg = window.t('settings.toast.config_saved_with_local'); break;
+-                case 'settings.toast.local_failed_server_saved':
+-                    msg = window.t('settings.toast.local_failed_server_saved'); break;
+-                case 'settings.toast.local_saved_server_failed':
+-                    msg = window.t('settings.toast.local_saved_server_failed'); break;
+-                case 'settings.toast.local_failed_server_failed':
+-                    msg = window.t('settings.toast.local_failed_server_failed'); break;
+-            }
+-            if (msg) this.showToast(msg, serverOk && localOk ? 'success' : 'error');
++            if (this._configSaving) return false;
++            this._configSaving = true;
++            try {
++                const localChanged = this.localMachineState === 'ready'
++                    && localDiff(this.form, this._localSaved).length > 0;
++                const patch = localChanged ? buildLocalPatch(this.form) : null;
++                const serverOk = await this._saveServerConfig();
++                if (!localChanged) return serverOk;
++                const reply = await callBridge('local_settings_save', patch);
++                const localOk = !!reply && reply.ok === true;
++                if (localOk) {
++                    this._localSaved = { viewerPlayer: patch.player, closeAction: patch.close_action };
++                } else if (serverOk && this.savedState) {
++                    // 伺服器存好但這台失敗：savedState 兩格還原成這台已存的值，讓畫面仍顯示未儲存
++                    this.savedState.viewerPlayer = this._localSaved.viewerPlayer;
++                    this.savedState.closeAction = this._localSaved.closeAction;
++                }
++                const key = combineSaveOutcome({ serverOk, localChanged, localOk });
++                let msg = null;
++                switch (key) {
++                    case 'settings.toast.config_saved_with_local':
++                        msg = window.t('settings.toast.config_saved_with_local'); break;
++                    case 'settings.toast.local_failed_server_saved':
++                        msg = window.t('settings.toast.local_failed_server_saved'); break;
++                    case 'settings.toast.local_saved_server_failed':
++                        msg = window.t('settings.toast.local_saved_server_failed'); break;
++                    case 'settings.toast.local_failed_server_failed':
++                        msg = window.t('settings.toast.local_failed_server_failed'); break;
++                }
++                if (msg) this.showToast(msg, serverOk && localOk ? 'success' : 'error');
++                return serverOk && localOk;
++            } finally {
++                this._configSaving = false;
++            }
+         },
+ 
+         async _saveServerConfig() {
 --- a/web/static/js/pages/showcase/state-actress.js
 +++ b/web/static/js/pages/showcase/state-actress.js
 @@ -183,7 +183,6 @@
@@ -1577,7 +3087,7 @@
       @dragover.document.prevent="handleDragOver($event)"
       @drop.document.prevent="handleDrop($event)"
 -     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel();">
-+     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); tagSourceConfirmModalOpen && cancelTagSourceUpdate(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel();">
++     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); nfoUpdateConfirmModalOpen && cancelNfoUpdate(); tagSourceConfirmModalOpen && cancelTagSourceUpdate(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel();">
      <!-- Drag Overlay (must be inside x-data scope) -->
      <div class="drag-overlay" id="dragOverlay" :class="{ active: showDragOverlay }">
          <div class="drag-overlay-content">
@@ -1613,7 +3123,7 @@
          </div>
  
          <!-- 跨機器路徑提醒（media-server 風味）：strm 內寫本機路徑，播放端在別機須認得，可到設定設路徑替換規則 -->
-@@ -137,37 +147,55 @@
+@@ -137,37 +147,57 @@
      </div>
  
      <!-- Mini Terminal (hidden by default) -->
@@ -1657,7 +3167,9 @@
 +                <span class="terminal-state-icon">
 +                    <span x-show="isGenerating" class="loading loading-spinner loading-xs"></span>
 +                    <i x-show="!isGenerating" class="bi"
-+                       :class="state === 'error' ? 'bi-exclamation-circle' : 'bi-check2-circle'"></i>
++                       :class="state === 'error'
++                           ? 'bi-exclamation-circle'
++                           : (state === 'cancelled' ? 'bi-slash-circle' : 'bi-check2-circle')"></i>
 +                </span>
 +                <span class="terminal-title-group">
 +                    <span class="title" x-text="progressStatus"></span>
@@ -1699,7 +3211,7 @@
              </div>
          </div>
  
-@@ -207,27 +235,54 @@
+@@ -207,27 +237,115 @@
              <span class="enrich-card-badge" x-show="enrichBadgeCount > 0" x-text="enrichBadgeCount"></span>
          </div>
  
@@ -1708,6 +3220,59 @@
              <div class="bar" id="progressBar" x-bind:style="{ width: progressPercent + '%' }"></div>
          </div>
 -        <div class="mini-terminal-body" id="logOutput" x-ref="logOutput" :class="'filter-' + logFilter"></div>
++        <div class="task-control-panel" x-show="taskPanelVisible" x-cloak>
++            <div class="task-current-line" x-show="taskCurrentItem || taskEtaText || taskElapsedText">
++                <span class="task-current-item" x-show="taskCurrentItem">
++                    <i class="bi bi-play-circle"></i>
++                    <span x-text="window.t('scanner.task.current_item', { item: taskCurrentItem })"></span>
++                </span>
++                <span class="task-clock" x-show="taskElapsedText">
++                    <i class="bi bi-stopwatch"></i>
++                    <span x-text="taskElapsedText"></span>
++                </span>
++                <span class="task-clock" x-show="taskEtaText" x-text="taskEtaText"></span>
++            </div>
++            <p class="task-result-summary"
++               x-show="!isGenerating && taskSummaryText"
++               x-text="taskSummaryText"></p>
++            <div class="task-control-actions">
++                <div class="task-metrics"
++                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich'].includes(taskKind)">
++                    <span class="task-metric is-success">
++                        <i class="bi bi-check2"></i>
++                        <span x-text="window.t('scanner.task.success_count', { count: taskSuccessDisplay })"></span>
++                    </span>
++                    <span class="task-metric is-failed" x-show="taskFailedDisplay > 0">
++                        <i class="bi bi-x-circle"></i>
++                        <span x-text="window.t('scanner.task.failed_count', { count: taskFailedDisplay })"></span>
++                    </span>
++                    <span class="task-metric" x-show="taskSkippedCount > 0">
++                        <i class="bi bi-skip-forward"></i>
++                        <span x-text="window.t('scanner.task.skipped_count', { count: taskSkippedCount })"></span>
++                    </span>
++                    <span class="task-metric is-changed" x-show="taskChangedCount > 0">
++                        <i class="bi bi-pencil-square"></i>
++                        <span x-text="window.t('scanner.task.changed_count', { count: taskChangedCount })"></span>
++                    </span>
++                </div>
++                <div class="task-control-buttons">
++                    <button type="button"
++                            class="btn btn-sm btn-outline task-retry-btn"
++                            x-show="taskCanRetry"
++                            @click="retryFailedItems()">
++                        <i class="bi bi-arrow-repeat"></i>
++                        {{ t('scanner.task.retry_failed') }}
++                    </button>
++                    <button type="button"
++                            class="btn btn-sm btn-error task-cancel-btn"
++                            x-show="isGenerating"
++                            @click="cancelCurrentTask()">
++                        <i class="bi bi-stop-circle"></i>
++                        {{ t('scanner.task.cancel') }}
++                    </button>
++                </div>
++            </div>
++        </div>
 +        <div class="terminal-log-wrap" x-show="logPanelExpanded" x-collapse>
 +            <div class="terminal-log-empty" x-show="logEntries.length === 0">
 +                <i class="bi bi-terminal"></i>
@@ -1754,7 +3319,10 @@
 +            <span x-text="statLastRun"></span>
 +        </div>
 +        <div class="scanner-maintenance">
-+            <div class="scanner-maintenance-head">
++            <button type="button"
++                    class="scanner-maintenance-head"
++                    :aria-expanded="maintenanceExpanded.toString()"
++                    @click="toggleMaintenance()">
 +                <div>
 +                    <span class="scanner-maintenance-title">
 +                        <i class="bi bi-tools"></i>
@@ -1762,14 +3330,26 @@
 +                    </span>
 +                    <p>{{ t('scanner.stats.maintenance_hint') }}</p>
 +                </div>
-+            </div>
++                <span class="scanner-maintenance-summary">
++                    <span x-text="maintenanceSummaryText"></span>
++                    <i class="bi" :class="maintenanceExpanded ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
++                </span>
++            </button>
++            <div class="scanner-maintenance-body" x-show="maintenanceExpanded" x-collapse>
          <!-- NFO Update Section (separate row) -->
 -        <div class="nfo-update-row" id="statNeedUpdate" x-show="nfoUpdateVisible">
 +        <div class="nfo-update-row maintenance-row" id="statNeedUpdate" x-show="nfoUpdateVisible">
              <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
                  <i class="bi bi-exclamation-circle"></i>
                  {{ t('scanner.stats.nfo_prefix') }}
-@@ -244,8 +299,34 @@
+@@ -238,14 +356,47 @@
+                 {{ t('scanner.stats.nfo_suffix') }}
+                 {{ number_drilldown_panel() }}
+             </span>
+-            <button class="btn-nfo-update" @click="runNfoUpdate()" id="btnUpdate"
++            <button class="btn-nfo-update" @click="openNfoUpdateConfirm()" id="btnUpdate"
+                     x-bind:disabled="nfoUpdateButtonDisabled"
+                     x-html="nfoUpdateButtonText"
                      title="{{ t('scanner.stats.nfo_update_title') }}">
              </button>
          </div>
@@ -1791,12 +3371,19 @@
 +                        <option :value="source.id" x-text="source.display_name"></option>
 +                    </template>
 +                </select>
-+                <button class="btn-nfo-update"
-+                        @click="openTagSourceUpdateConfirm()"
-+                        :disabled="tagSourceUpdateButtonDisabled"
-+                        x-html="tagSourceUpdateButtonText"
-+                        :title="window.t('scanner.stats.tag_source_hint')">
-+                </button>
++                <div class="tag-source-actions">
++                    <button class="btn-tag-preview"
++                            @click="previewTagSourceUpdate()"
++                            :disabled="tagSourceUpdateButtonDisabled"
++                            x-html="tagSourcePreviewButtonText">
++                    </button>
++                    <button class="btn-nfo-update"
++                            @click="openTagSourceUpdateConfirm()"
++                            :disabled="tagSourceUpdateButtonDisabled"
++                            x-html="tagSourceUpdateButtonText"
++                            :title="window.t('scanner.stats.tag_source_hint')">
++                    </button>
++                </div>
 +            </div>
 +        </div>
          <!-- T10: Missing NFO/Cover Pill -->
@@ -1805,7 +3392,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -295,7 +376,7 @@
+@@ -295,7 +446,7 @@
          </div>
  
          <!-- T10: Resume Pill (未完成提示) -->
@@ -1814,7 +3401,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-arrow-repeat"></i>
                  <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-@@ -313,7 +394,7 @@
+@@ -313,7 +464,7 @@
  
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
          <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
@@ -1823,7 +3410,7 @@
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +420,7 @@
+@@ -339,7 +490,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -1832,52 +3419,148 @@
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +455,7 @@
+@@ -374,6 +525,8 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
 +        </div>
++            </div>
          </div>
      </div>
  
-@@ -782,6 +864,45 @@
+@@ -782,6 +935,140 @@
          </div>
      </dialog>
  
++    <!-- r18: Batch NFO update confirmation -->
++    <dialog class="modal fluent-modal"
++            :class="{ 'modal-open': nfoUpdateConfirmModalOpen }"
++            @click.self="cancelNfoUpdate()">
++        <div class="modal-box fluent-modal-box">
++            <h3 class="fluent-modal-title">
++                <i class="bi bi-file-earmark-text text-warning"></i>
++                {{ t('scanner.stats.nfo_confirm_title') }}
++            </h3>
++            <div class="batch-confirm-summary">
++                <div class="batch-confirm-summary-item">
++                    <span>{{ t('scanner.stats.nfo_confirm_scope_label') }}</span>
++                    <strong x-text="window.t('scanner.stats.tag_source_confirm_count_value', {
++                        count: nfoUpdateRetryPaths.length || nfoNeedUpdateCount
++                    })"></strong>
++                </div>
++                <div class="batch-confirm-summary-item">
++                    <span>{{ t('scanner.stats.nfo_confirm_write_label') }}</span>
++                    <strong>{{ t('scanner.stats.nfo_confirm_write_value') }}</strong>
++                </div>
++            </div>
++            <p class="fluent-modal-body">{{ t('scanner.stats.nfo_confirm_body') }}</p>
++            <p class="fluent-modal-body batch-confirm-note">
++                <i class="bi bi-info-circle"></i>
++                <span>{{ t('scanner.stats.nfo_confirm_note') }}</span>
++            </p>
++            <label class="tag-backup-option">
++                <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="nfoUpdateBackupEnabled">
++                <span>
++                    <strong>{{ t('scanner.stats.nfo_backup_label') }}</strong>
++                    <small>{{ t('scanner.stats.nfo_backup_hint') }}</small>
++                </span>
++            </label>
++            <div class="modal-action fluent-modal-actions">
++                <button type="button" class="btn btn-ghost" @click="cancelNfoUpdate()">
++                    {{ t('scanner.stats.tag_source_confirm_cancel') }}
++                </button>
++                <button type="button" class="btn btn-primary" @click="confirmNfoUpdate()">
++                    <i class="bi bi-shield-check"></i>
++                    <span x-text="window.t(nfoUpdateBackupEnabled
++                        ? 'scanner.stats.nfo_confirm_backup_ok'
++                        : 'scanner.stats.nfo_confirm_ok')"></span>
++                </button>
++            </div>
++        </div>
++    </dialog>
++
 +    <!-- r16: Batch Tag Source Confirm Modal -->
 +    <dialog class="modal fluent-modal"
 +            :class="{ 'modal-open': tagSourceConfirmModalOpen }"
 +            @click.self="cancelTagSourceUpdate()">
 +        <div class="modal-box fluent-modal-box">
 +            <h3 class="fluent-modal-title">
-+                <i class="bi bi-tags text-warning"></i>
-+                <span>{{ t('scanner.stats.tag_source_confirm_title') }}</span>
++                <i class="bi text-warning" :class="tagSourcePreviewOnly ? 'bi-eye' : 'bi-tags'"></i>
++                <span x-text="window.t(tagSourcePreviewOnly
++                    ? 'scanner.stats.tag_source_preview_title'
++                    : 'scanner.stats.tag_source_confirm_title')"></span>
 +            </h3>
 +            <div class="batch-confirm-summary">
 +                <div class="batch-confirm-summary-item">
 +                    <span>{{ t('scanner.stats.tag_source_confirm_source_label') }}</span>
-+                    <strong x-text="selectedTagSourceLabel"></strong>
++                    <strong x-text="tagSourceModalSourceLabel"></strong>
 +                </div>
 +                <div class="batch-confirm-summary-item">
 +                    <span>{{ t('scanner.stats.tag_source_confirm_count_label') }}</span>
-+                    <strong x-text="window.t('scanner.stats.tag_source_confirm_count_value', { count: statTotal })"></strong>
++                    <strong x-text="window.t('scanner.stats.tag_source_confirm_count_value', { count: tagSourcePreviewData?.total || 0 })"></strong>
++                </div>
++                <div class="batch-confirm-summary-item">
++                    <span>{{ t('scanner.stats.tag_source_preview_changed_label') }}</span>
++                    <strong x-text="window.t('scanner.stats.tag_source_preview_changed_value', { count: tagSourcePreviewChangedCount })"></strong>
 +                </div>
 +            </div>
 +            <p class="fluent-modal-body"
-+               x-text="window.t('scanner.stats.tag_source_confirm_body', {
-+                   source: selectedTagSourceLabel,
-+                   count: statTotal
-+               })"></p>
++               x-text="window.t(tagSourcePreviewOnly
++                   ? 'scanner.stats.tag_source_preview_body'
++                   : 'scanner.stats.tag_source_confirm_body', {
++                       source: tagSourceModalSourceLabel,
++                       count: tagSourcePreviewData?.total || 0
++                   })"></p>
++            <div class="tag-preview-list" x-show="tagSourcePreviewChangedItems.length > 0">
++                <template x-for="item in tagSourcePreviewChangedItems.slice(0, 20)" :key="item.path">
++                    <div class="tag-preview-item">
++                        <strong x-text="item.number"></strong>
++                        <div class="tag-preview-diff">
++                            <span class="tag-preview-add" x-show="item.added.length > 0"
++                                  x-text="window.t('scanner.stats.tag_source_preview_added', { tags: item.added.join('、') })"></span>
++                            <span class="tag-preview-remove" x-show="item.removed.length > 0"
++                                  x-text="window.t('scanner.stats.tag_source_preview_removed', { tags: item.removed.join('、') })"></span>
++                        </div>
++                    </div>
++                </template>
++                <p class="tag-preview-more"
++                   x-show="tagSourcePreviewChangedItems.length > 20"
++                   x-text="window.t('scanner.stats.tag_source_preview_more', { count: tagSourcePreviewChangedItems.length - 20 })"></p>
++            </div>
++            <div class="tag-preview-empty"
++                 x-show="tagSourcePreviewChangedItems.length === 0 && tagSourcePreviewFailureItems.length === 0">
++                <i class="bi bi-check2-circle"></i>
++                <span>{{ t('scanner.stats.tag_source_preview_no_changes') }}</span>
++            </div>
++            <p class="batch-confirm-note is-warning"
++               x-show="tagSourcePreviewFailureItems.length > 0"
++               x-text="window.t('scanner.stats.tag_source_preview_failures', { count: tagSourcePreviewFailureItems.length })"></p>
 +            <p class="fluent-modal-body batch-confirm-note">
 +                <i class="bi bi-info-circle"></i>
 +                <span>{{ t('scanner.stats.tag_source_confirm_note') }}</span>
 +            </p>
++            <label class="tag-backup-option" x-show="!tagSourcePreviewOnly">
++                <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="tagSourceBackupEnabled">
++                <span>
++                    <strong>{{ t('scanner.stats.tag_source_backup_label') }}</strong>
++                    <small>{{ t('scanner.stats.tag_source_backup_hint') }}</small>
++                </span>
++            </label>
 +            <div class="modal-action fluent-modal-actions">
 +                <button type="button" class="btn btn-ghost" @click="cancelTagSourceUpdate()">
-+                    {{ t('scanner.stats.tag_source_confirm_cancel') }}
++                    <span x-text="window.t(tagSourcePreviewOnly
++                        ? 'scanner.stats.tag_source_preview_close'
++                        : 'scanner.stats.tag_source_confirm_cancel')"></span>
 +                </button>
-+                <button type="button" class="btn btn-primary" @click="confirmTagSourceUpdate()">
-+                    {{ t('scanner.stats.tag_source_confirm_ok') }}
++                <button type="button"
++                        class="btn btn-primary"
++                        x-show="!tagSourcePreviewOnly"
++                        :disabled="tagSourceConfirmButtonDisabled"
++                        @click="confirmTagSourceUpdate()">
++                    <i class="bi bi-shield-check"></i>
++                    <span x-text="window.t(tagSourceBackupEnabled
++                        ? 'scanner.stats.tag_source_confirm_backup_ok'
++                        : 'scanner.stats.tag_source_confirm_ok')"></span>
 +                </button>
 +            </div>
 +        </div>
@@ -1886,6 +3569,35 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
+--- a/web/templates/settings.html
++++ b/web/templates/settings.html
+@@ -1545,9 +1545,23 @@
+         </section><!-- /sec-system -->
+ 
+         <!-- 儲存按鈕 -->
+-        <div class="save-btn-wrapper">
+-            <button type="submit" class="btn btn-primary save-btn" id="saveBtn">
+-                <i class="bi bi-save"></i> {{ t('settings.action.save') }}
++        <div class="save-btn-wrapper"
++             :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving }">
++            <div class="save-state" role="status" aria-live="polite">
++                <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
++                <i x-show="!_configSaving" class="bi"
++                   :class="isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle'"></i>
++                <span x-text="saveStatusText"></span>
++            </div>
++            <button type="submit"
++                    class="btn btn-primary save-btn"
++                    id="saveBtn"
++                    :disabled="saveButtonDisabled">
++                <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
++                <i x-show="!_configSaving" class="bi bi-save"></i>
++                <span x-text="_configSaving
++                    ? window.t('settings.save_bar.saving_button')
++                    : window.t('settings.action.save')"></span>
+             </button>
+         </div>
+     </form>
 --- a/web/templates/showcase.html
 +++ b/web/templates/showcase.html
 @@ -1184,7 +1184,7 @@

@@ -33,6 +33,7 @@ export function stateScan() {
         statsVisible: false,
         statTotal: 0,
         statLastRun: '',
+        maintenanceExpanded: false,
         clearCacheModalOpen: false,
         clearCacheLoading: false,
 
@@ -45,12 +46,25 @@ export function stateScan() {
         copyFailDump: '',
 
         // ===== T7b: State Machine =====
-        state: 'idle',  // 'idle' | 'generating' | 'nfoUpdating' | 'tagSourceUpdating' | 'done' | 'error'
+        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | jellyfinUpdating | enriching | done | error | cancelled
 
         // ===== T7b: Progress =====
         progressStatus: '',
         progressCurrent: 0,
         progressTotal: 0,
+        taskKind: '',
+        taskStartedAt: 0,
+        taskEndedAt: 0,
+        taskClockTick: 0,
+        taskTimer: null,
+        taskCurrentItem: '',
+        taskSuccessCount: 0,
+        taskFailedCount: 0,
+        taskSkippedCount: 0,
+        taskChangedCount: 0,
+        taskEtaSeconds: 0,
+        taskSummaryText: '',
+        taskFailedItems: [],
 
         // ===== T7b: Log System =====
         logHtml: '',           // 日誌 HTML（用於 restoreLogs）
@@ -74,6 +88,17 @@ export function stateScan() {
         // ===== r16: Batch tag source update =====
         tagSourceUpdateSource: 'auto',
         tagSourceConfirmModalOpen: false,
+        tagSourcePreviewSource: '',
+        tagSourcePreviewSourceLabel: '',
+        tagSourcePreviewData: null,
+        tagSourcePreviewNumbers: [],
+        tagSourcePreviewOnly: false,
+        tagSourceBackupEnabled: true,
+
+        // ===== r18: NFO confirmation =====
+        nfoUpdateConfirmModalOpen: false,
+        nfoUpdateRetryPaths: [],
+        nfoUpdateBackupEnabled: true,
 
         // ===== T6d: Jellyfin Image Update =====
         jellyfinImageCount: 0,
@@ -116,8 +141,71 @@ export function stateScan() {
             return `${this.progressCurrent} / ${this.progressTotal} · ${this.progressPercentRounded}%`;
         },
 
+        get taskSuccessDisplay() {
+            return this.taskKind === 'enrich' ? this.missingEnrichSuccess : this.taskSuccessCount;
+        },
+
+        get taskFailedDisplay() {
+            return this.taskKind === 'enrich' ? this.missingEnrichFailed : this.taskFailedCount;
+        },
+
+        get taskElapsedText() {
+            if (!this.taskStartedAt) return '';
+            const end = this.isGenerating
+                ? (this.taskClockTick || Date.now())
+                : (this.taskEndedAt || Date.now());
+            return this._formatDuration(Math.max(0, Math.floor((end - this.taskStartedAt) / 1000)));
+        },
+
+        get taskEtaText() {
+            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'enrich'].includes(this.taskKind)) {
+                return '';
+            }
+            let seconds = this.taskEtaSeconds;
+            if (!seconds && this.progressCurrent > 0 && this.progressTotal > this.progressCurrent && this.taskStartedAt) {
+                const elapsed = Math.max(1, ((this.taskClockTick || Date.now()) - this.taskStartedAt) / 1000);
+                seconds = Math.round((elapsed / this.progressCurrent) * (this.progressTotal - this.progressCurrent));
+            }
+            return seconds > 0 ? window.t('scanner.task.eta_value', { time: this._formatDuration(seconds) }) : '';
+        },
+
+        get taskPanelVisible() {
+            return this.state !== 'idle' && (this.taskKind !== '' || this.logHtml !== '');
+        },
+
+        get taskCanRetry() {
+            return !this.isGenerating
+                && this.taskFailedItems.length > 0
+                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update'].includes(this.taskKind);
+        },
+
+        get maintenanceSummaryText() {
+            const nfo = this.nfoNeedUpdateCount || 0;
+            const missing = (this.missingBothCount || 0) + (this.missingNfoCount || 0) + (this.missingCoverCount || 0);
+            const images = this.jellyfinImageCount || 0;
+            return window.t('scanner.stats.maintenance_summary', { nfo, missing, images });
+        },
+
+        get tagSourcePreviewChangedItems() {
+            const items = this.tagSourcePreviewData?.items || [];
+            return items.filter(item => item.status === 'changed');
+        },
+
+        get tagSourcePreviewFailureItems() {
+            return this.tagSourcePreviewData?.failed_items || [];
+        },
+
+        get tagSourcePreviewChangedCount() {
+            return this.tagSourcePreviewData?.changed || 0;
+        },
+
+        get tagSourceConfirmButtonDisabled() {
+            return this.isGenerating || this.tagSourcePreviewOnly || this.tagSourcePreviewChangedCount === 0;
+        },
+
         get isGenerating() {
             return this.state === 'generating' || this.state === 'nfoUpdating'
+                || this.state === 'tagSourcePreviewing'
                 || this.state === 'tagSourceUpdating'
                 || this.state === 'jellyfinUpdating' || this.state === 'enriching';
         },
@@ -168,6 +256,10 @@ export function stateScan() {
             return selected ? selected.display_name : this.tagSourceUpdateSource;
         },
 
+        get tagSourceModalSourceLabel() {
+            return this.tagSourcePreviewSourceLabel || this.selectedTagSourceLabel;
+        },
+
         get tagSourceUpdateButtonDisabled() {
             return this.isBusy || !this.tagSourceUpdateSource || this.statTotal === 0;
         },
@@ -177,8 +269,21 @@ export function stateScan() {
                 return '<span class="loading loading-spinner loading-sm"></span> '
                     + window.t('scanner.stats.tag_source_updating');
             }
+            if (this.state === 'tagSourcePreviewing') {
+                return '<i class="bi bi-hourglass-split"></i> '
+                    + window.t('scanner.stats.tag_source_preview_update_btn');
+            }
             return '<i class="bi bi-tags"></i> '
-                + window.t('scanner.stats.tag_source_update_btn');
+                + window.t('scanner.stats.tag_source_preview_update_btn');
+        },
+
+        get tagSourcePreviewButtonText() {
+            if (this.state === 'tagSourcePreviewing') {
+                return '<span class="loading loading-spinner loading-sm"></span> '
+                    + window.t('scanner.stats.tag_source_previewing');
+            }
+            return '<i class="bi bi-eye"></i> '
+                + window.t('scanner.stats.tag_source_preview_btn');
         },
 
         get generateButtonText() {
@@ -279,6 +384,7 @@ export function stateScan() {
                         if (this.eventSource) { this.eventSource.close(); this.eventSource = null; }
                         window.Alpine?.store?.('toast')?.hide?.();   // 131b-T3：cleanup 不得拋錯（拋了會跳過後面所有 teardown）
                         clearTimeout(this.logTimer);
+                        this._stopTaskTimer();
                         // T2(40c): abort jellyfin check fetch
                         if (this._jellyfinCheckController) {
                             this._jellyfinCheckController.abort();
@@ -850,6 +956,136 @@ export function stateScan() {
             }
         },
 
+        // ===== r18: Task control =====
+        toggleMaintenance() {
+            this.maintenanceExpanded = !this.maintenanceExpanded;
+        },
+
+        _formatDuration(seconds) {
+            const value = Math.max(0, Math.floor(seconds || 0));
+            if (value < 60) return window.t('scanner.task.seconds', { value });
+            const minutes = Math.floor(value / 60);
+            const remainder = value % 60;
+            return window.t('scanner.task.minutes', { minutes, seconds: remainder });
+        },
+
+        _startTask(kind, status, total = 0) {
+            this._stopTaskTimer();
+            this.taskKind = kind;
+            this.taskStartedAt = Date.now();
+            this.taskEndedAt = 0;
+            this.taskClockTick = this.taskStartedAt;
+            this.taskCurrentItem = '';
+            this.taskSuccessCount = 0;
+            this.taskFailedCount = 0;
+            this.taskSkippedCount = 0;
+            this.taskChangedCount = 0;
+            this.taskEtaSeconds = 0;
+            this.taskSummaryText = '';
+            this.taskFailedItems = [];
+            this.progressStatus = status;
+            this.progressCurrent = 0;
+            this.progressTotal = total;
+            this.maintenanceExpanded = true;
+            this.taskTimer = setInterval(() => {
+                this.taskClockTick = Date.now();
+            }, 1000);
+        },
+
+        _stopTaskTimer() {
+            if (this.taskTimer) {
+                clearInterval(this.taskTimer);
+                this.taskTimer = null;
+            }
+        },
+
+        _applyTaskMetrics(data) {
+            if (data?.number || data?.num) {
+                this.taskCurrentItem = data.number || data.num;
+            }
+            if (typeof data?.success === 'number') this.taskSuccessCount = data.success;
+            if (typeof data?.failed === 'number') this.taskFailedCount = data.failed;
+            if (typeof data?.skipped === 'number') this.taskSkippedCount = data.skipped;
+            if (typeof data?.changed === 'number') this.taskChangedCount = data.changed;
+            if (typeof data?.eta_seconds === 'number') this.taskEtaSeconds = data.eta_seconds;
+        },
+
+        _syncTaskSummary(summary) {
+            if (!summary) return;
+            if (typeof summary.success === 'number') this.taskSuccessCount = summary.success;
+            if (typeof summary.failed === 'number') this.taskFailedCount = summary.failed;
+            if (typeof summary.skipped === 'number') this.taskSkippedCount = summary.skipped;
+            if (typeof summary.changed === 'number') this.taskChangedCount = summary.changed;
+            if (Array.isArray(summary.failed_items)) this.taskFailedItems = summary.failed_items;
+        },
+
+        _finishTask(nextState, status, summary = null, failedItems = null) {
+            this.state = nextState;
+            this.taskEndedAt = Date.now();
+            this._stopTaskTimer();
+            this.taskCurrentItem = '';
+            this.progressStatus = status || this.progressStatus;
+            this.taskSummaryText = status || '';
+            this._syncTaskSummary(summary);
+            if (Array.isArray(failedItems)) {
+                this.taskFailedItems = failedItems;
+            } else if (Array.isArray(summary?.failed_items)) {
+                this.taskFailedItems = summary.failed_items;
+            }
+            localStorage.setItem('avlist_generating', 'false');
+            localStorage.setItem('avlist_last_status', this.progressStatus);
+        },
+
+        cancelCurrentTask() {
+            if (!this.isGenerating) return;
+
+            if (this.state === 'enriching' && this._enrichAbortController) {
+                this._enrichAbortController.abort();
+                this._enrichAbortController = null;
+            }
+            if (this.eventSource) {
+                this.eventSource.close();
+                this.eventSource = null;
+            }
+            this._finishTask(
+                'cancelled',
+                window.t('scanner.task.cancelled'),
+                {
+                    success: this.taskSuccessDisplay,
+                    failed: this.taskFailedDisplay,
+                    skipped: this.taskSkippedCount,
+                    failed_items: this.taskFailedItems,
+                }
+            );
+            this.addLog('warn', window.t('scanner.task.cancelled_log'));
+            this.flushLogs();
+            this.showToast(window.t('scanner.task.cancelled'), 'info', 3000);
+        },
+
+        retryFailedItems() {
+            if (!this.taskCanRetry) return;
+            const numbers = [...new Set(this.taskFailedItems.map(item => item.number).filter(Boolean))];
+            const paths = [...new Set(this.taskFailedItems.map(item => item.path).filter(Boolean))];
+
+            if (this.taskKind === 'nfo-update' && paths.length > 0) {
+                this.openNfoUpdateConfirm(paths);
+                return;
+            }
+            if (['tag-preview', 'tag-update'].includes(this.taskKind) && numbers.length > 0) {
+                this.startTagSourcePreview({
+                    numbers,
+                    applyAfter: false,
+                    retryMode: true,
+                });
+                return;
+            }
+            if (this.taskKind === 'jellyfin-update') {
+                this.jellyfinImageCount = Math.max(this.taskFailedItems.length, 1);
+                this.jellyfinImageVisible = true;
+                this.runJellyfinImageUpdate();
+            }
+        },
+
         // ===== T7b: Generate Flow =====
         async generate() {
             // 互斥鎖定：generating/nfoUpdating 時不可再次執行
@@ -871,9 +1107,7 @@ export function stateScan() {
 
             // 重置狀態
             this.state = 'generating';
-            this.progressStatus = window.t('scanner.stats.status_preparing');
-            this.progressCurrent = 0;
-            this.progressTotal = 0;
+            this._startTask('generate', window.t('scanner.stats.status_preparing'));
             this.outputPath = '';
             this.nfoUpdateVisible = false;
             this.clearLogs();
@@ -891,16 +1125,21 @@ export function stateScan() {
                         this.progressStatus = data.status;
                         this.progressCurrent = data.current;
                         this.progressTotal = data.total;
+                        this._applyTaskMetrics(data);
                         localStorage.setItem('avlist_last_status', data.status);
                     } else if (data.type === 'log') {
                         this.addLog(data.level, data.message);
                     } else if (data.type === 'done') {
                         this.eventSource.close();
                         this.eventSource = null;
-                        this.state = 'done';
                         this.progressStatus = window.t('scanner.stats.status_done_count', { count: data.video_count });
                         this.progressCurrent = this.progressTotal;
                         this.outputPath = data.output_path;
+                        this._finishTask(
+                            'done',
+                            this.progressStatus,
+                            { success: data.video_count || 0, failed: 0, skipped: 0 }
+                        );
 
                         localStorage.setItem('avlist_generating', 'false');
                         localStorage.setItem('avlist_last_status', window.t('scanner.stats.status_done'));
@@ -969,24 +1208,24 @@ export function stateScan() {
                     } else if (data.type === 'error') {
                         this.eventSource.close();
                         this.eventSource = null;
-                        this.state = 'error';
                         this.addLog('error', window.t('scanner.stats.log_error_prefix', { message: data.message }));
+                        this._finishTask('error', data.message || window.t('scanner.task.failed'));
                         this.flushLogs();
                         localStorage.setItem('avlist_generating', 'false');
                     }
                 };
 
                 this.eventSource.onerror = () => {
-                    if (this.state === 'done') return;
+                    if (this.state === 'done' || this.state === 'cancelled') return;
                     this.eventSource.close();
                     this.eventSource = null;
-                    this.state = 'error';
                     this.addLog('error', window.t('scanner.stats.log_disconnected'));
+                    this._finishTask('error', window.t('scanner.task.failed'));
                     this.flushLogs();
                     localStorage.setItem('avlist_generating', 'false');
                 };
             } catch (e) {
-                this.state = 'error';
+                this._finishTask('error', window.t('scanner.task.failed'));
                 localStorage.setItem('avlist_generating', 'false');
                 console.error('[Scanner] generate error:', e);
                 this.showToast(window.t('scanner.toast.generate_error'), 'error', 4000);
@@ -994,26 +1233,51 @@ export function stateScan() {
         },
 
         // ===== T7b: NFO Update Flow =====
-        async runNfoUpdate() {
+        openNfoUpdateConfirm(paths = []) {
+            if (this.isGenerating) return;
+            const count = paths.length > 0 ? paths.length : this.nfoNeedUpdateCount;
+            if (count === 0) {
+                this.showToast(window.t('scanner.toast.no_nfo_update_needed'), 'info');
+                return;
+            }
+            this.nfoUpdateRetryPaths = paths.slice();
+            this.nfoUpdateConfirmModalOpen = true;
+        },
+
+        cancelNfoUpdate() {
+            this.nfoUpdateConfirmModalOpen = false;
+            this.nfoUpdateRetryPaths = [];
+        },
+
+        confirmNfoUpdate() {
+            const paths = this.nfoUpdateRetryPaths.slice();
+            this.nfoUpdateConfirmModalOpen = false;
+            this.runNfoUpdate(paths);
+        },
+
+        async runNfoUpdate(paths = []) {
             // 互斥鎖定
             if (this.isGenerating) return;
 
-            if (this.nfoNeedUpdateCount === 0) {
+            const expectedCount = paths.length > 0 ? paths.length : this.nfoNeedUpdateCount;
+            if (expectedCount === 0) {
                 this.showToast(window.t('scanner.toast.no_nfo_update_needed'), 'info');
                 return;
             }
 
             // 重置狀態
             this.state = 'nfoUpdating';
-            this.progressStatus = window.t('scanner.stats.status_preparing');
-            this.progressCurrent = 0;
-            this.progressTotal = 0;
+            this._startTask('nfo-update', window.t('scanner.stats.status_preparing'), expectedCount);
             this.clearLogs();
 
             localStorage.setItem('avlist_generating', 'true');
 
             try {
-                this.eventSource = new EventSource('/api/gallery/update');
+                const params = new URLSearchParams({
+                    backup: this.nfoUpdateBackupEnabled ? 'true' : 'false',
+                });
+                for (const path of paths) params.append('path', path);
+                this.eventSource = new EventSource(`/api/gallery/update?${params.toString()}`);
 
                 this.eventSource.onmessage = (event) => {
                     const data = JSON.parse(event.data);
@@ -1022,49 +1286,64 @@ export function stateScan() {
                         this.progressStatus = data.status;
                         this.progressCurrent = data.current;
                         this.progressTotal = data.total;
+                        this._applyTaskMetrics(data);
                         localStorage.setItem('avlist_last_status', data.status);
                     } else if (data.type === 'log') {
                         this.addLog(data.level, data.message);
                     } else if (data.type === 'done') {
                         this.eventSource.close();
                         this.eventSource = null;
-                        this.state = 'done';
-                        this.progressStatus = data.message || window.t('scanner.stats.status_done');
                         this.progressCurrent = this.progressTotal;
+                        this._finishTask(
+                            data.summary?.cancelled ? 'cancelled' : 'done',
+                            data.message || window.t('scanner.stats.status_done'),
+                            data.summary || null
+                        );
 
                         localStorage.setItem('avlist_generating', 'false');
                         localStorage.setItem('avlist_last_status', data.message || window.t('scanner.stats.status_done'));
 
-                        this.showToast(window.t('scanner.toast.nfo_update_done'), 'success');
+                        const failed = data.summary?.failed || 0;
+                        this.showToast(
+                            failed > 0 ? window.t('scanner.task.done_with_failures', { failed }) : window.t('scanner.toast.nfo_update_done'),
+                            failed > 0 ? 'warn' : 'success'
+                        );
                         if (data.message) {
                             this.addLog('info', data.message);
                         }
                         this.flushLogs();
 
                         // 隱藏 NFO 更新按鈕（已完成）
-                        this.nfoNeedUpdateCount = 0;
-                        this.nfoUpdateVisible = false;
+                        if (paths.length === 0) {
+                            this.nfoNeedUpdateCount = 0;
+                            this.nfoUpdateVisible = false;
+                        } else {
+                            this.nfoNeedUpdateCount = Math.max(
+                                0,
+                                this.nfoNeedUpdateCount - (data.summary?.success || 0)
+                            );
+                        }
                     } else if (data.type === 'error') {
                         this.eventSource.close();
                         this.eventSource = null;
-                        this.state = 'error';
                         this.addLog('error', window.t('scanner.stats.log_error_prefix', { message: data.message }));
+                        this._finishTask('error', data.message || window.t('scanner.task.failed'));
                         this.flushLogs();
                         localStorage.setItem('avlist_generating', 'false');
                     }
                 };
 
                 this.eventSource.onerror = () => {
-                    if (this.state === 'done') return;
+                    if (this.state === 'done' || this.state === 'cancelled') return;
                     this.eventSource.close();
                     this.eventSource = null;
-                    this.state = 'error';
                     this.addLog('error', window.t('scanner.stats.log_disconnected'));
+                    this._finishTask('error', window.t('scanner.task.failed'));
                     this.flushLogs();
                     localStorage.setItem('avlist_generating', 'false');
                 };
             } catch (e) {
-                this.state = 'error';
+                this._finishTask('error', window.t('scanner.task.failed'));
                 localStorage.setItem('avlist_generating', 'false');
                 console.error('[Scanner] runNfoUpdate error:', e);
                 this.showToast(window.t('scanner.toast.nfo_update_error'), 'error', 4000);
@@ -1074,52 +1353,77 @@ export function stateScan() {
         // ===== r16: Batch tag source update =====
         openTagSourceUpdateConfirm() {
             if (this.tagSourceUpdateButtonDisabled) return;
-            this.tagSourceConfirmModalOpen = true;
+            this.startTagSourcePreview({ applyAfter: true });
+        },
+
+        previewTagSourceUpdate() {
+            if (this.tagSourceUpdateButtonDisabled) return;
+            this.startTagSourcePreview({ applyAfter: false });
         },
 
         cancelTagSourceUpdate() {
             this.tagSourceConfirmModalOpen = false;
+            this.tagSourcePreviewOnly = false;
         },
 
         confirmTagSourceUpdate() {
+            if (this.tagSourceConfirmButtonDisabled) return;
             this.tagSourceConfirmModalOpen = false;
-            this.startTagSourceUpdate();
+            this.startTagSourceUpdate({
+                numbers: this.tagSourcePreviewNumbers,
+                backup: this.tagSourceBackupEnabled,
+            });
         },
 
-        async startTagSourceUpdate() {
+        async startTagSourcePreview({ applyAfter = false, numbers = [], retryMode = false } = {}) {
             if (this.isGenerating || !this.tagSourceUpdateSource) return;
 
-            this.state = 'tagSourceUpdating';
-            this.progressStatus = window.t('scanner.stats.tag_source_preparing');
-            this.progressCurrent = 0;
-            this.progressTotal = this.statTotal;
+            const sourceId = this.tagSourceUpdateSource;
+            const sourceLabel = this.selectedTagSourceLabel;
+            this.tagSourcePreviewSource = sourceId;
+            this.tagSourcePreviewSourceLabel = sourceLabel;
+            this.tagSourcePreviewOnly = !applyAfter;
+            this.tagSourcePreviewNumbers = numbers.slice();
+            this.state = 'tagSourcePreviewing';
+            this._startTask(
+                'tag-preview',
+                retryMode
+                    ? window.t('scanner.stats.tag_source_retry_previewing')
+                    : window.t('scanner.stats.tag_source_previewing'),
+                numbers.length || this.statTotal
+            );
             this.clearLogs();
             localStorage.setItem('avlist_generating', 'true');
 
-            const source = encodeURIComponent(this.tagSourceUpdateSource);
-            this.eventSource = new EventSource(`/api/gallery/tag-source-update?source=${source}`);
+            const params = new URLSearchParams({ source: sourceId });
+            if (numbers.length > 0) params.set('numbers', numbers.join(','));
+            this.eventSource = new EventSource(`/api/gallery/tag-source-preview?${params.toString()}`);
 
             this.eventSource.onmessage = (event) => {
                 const data = JSON.parse(event.data);
 
                 if (data.type === 'progress') {
-                    this.progressStatus = data.status || window.t('scanner.stats.tag_source_updating');
+                    this.progressStatus = data.status || window.t('scanner.stats.tag_source_previewing');
                     this.progressCurrent = data.current || 0;
-                    this.progressTotal = data.total || this.statTotal;
+                    this.progressTotal = data.total || this.progressTotal;
+                    this._applyTaskMetrics(data);
                     localStorage.setItem('avlist_last_status', this.progressStatus);
                 } else if (data.type === 'log') {
                     this.addLog(data.level || 'info', data.message || '');
                 } else if (data.type === 'done') {
                     this.eventSource.close();
                     this.eventSource = null;
-                    this.state = 'done';
-                    this.progressStatus = data.message || window.t('scanner.stats.tag_source_done');
                     this.progressCurrent = this.progressTotal;
-                    localStorage.setItem('avlist_generating', 'false');
-                    localStorage.setItem('avlist_last_status', this.progressStatus);
+                    this.tagSourcePreviewData = data.summary || null;
+                    this._finishTask(
+                        data.summary?.cancelled ? 'cancelled' : 'done',
+                        data.message || window.t('scanner.stats.tag_source_preview_done'),
+                        data.summary || null
+                    );
+                    this.tagSourceConfirmModalOpen = true;
                     const failed = data.summary?.failed || 0;
                     this.showToast(
-                        window.t('scanner.toast.tag_source_update_done'),
+                        data.message || window.t('scanner.stats.tag_source_preview_done'),
                         failed > 0 ? 'warn' : 'success',
                         4000
                     );
@@ -1128,22 +1432,97 @@ export function stateScan() {
                 } else if (data.type === 'error') {
                     this.eventSource.close();
                     this.eventSource = null;
-                    this.state = 'error';
                     this.addLog(
                         'error',
                         window.t('scanner.stats.log_error_prefix', { message: data.message || '' })
                     );
+                    this._finishTask('error', data.message || window.t('scanner.task.failed'));
+                    this.flushLogs();
+                    this.showToast(window.t('scanner.toast.tag_source_update_error'), 'error', 4000);
+                }
+            };
+
+            this.eventSource.onerror = () => {
+                if (this.state === 'done' || this.state === 'error' || this.state === 'cancelled') return;
+                this.eventSource.close();
+                this.eventSource = null;
+                this.addLog('error', window.t('scanner.stats.log_disconnected'));
+                this._finishTask('error', window.t('scanner.task.failed'));
+                this.flushLogs();
+                this.showToast(window.t('scanner.toast.tag_source_update_error'), 'error', 4000);
+            };
+        },
+
+        async startTagSourceUpdate({ numbers = [], backup = true } = {}) {
+            if (this.isGenerating || !this.tagSourcePreviewSource) return;
+
+            this.state = 'tagSourceUpdating';
+            this._startTask(
+                'tag-update',
+                window.t('scanner.stats.tag_source_preparing'),
+                numbers.length || this.statTotal
+            );
+            this.clearLogs();
+            localStorage.setItem('avlist_generating', 'true');
+
+            const params = new URLSearchParams({
+                source: this.tagSourcePreviewSource,
+                backup: backup ? 'true' : 'false',
+            });
+            if (numbers.length > 0) params.set('numbers', numbers.join(','));
+            this.eventSource = new EventSource(`/api/gallery/tag-source-update?${params.toString()}`);
+
+            this.eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'progress') {
+                    this.progressStatus = data.status || window.t('scanner.stats.tag_source_updating');
+                    this.progressCurrent = data.current || 0;
+                    this.progressTotal = data.total || this.statTotal;
+                    this._applyTaskMetrics(data);
+                    localStorage.setItem('avlist_last_status', this.progressStatus);
+                } else if (data.type === 'log') {
+                    this.addLog(data.level || 'info', data.message || '');
+                } else if (data.type === 'done') {
+                    this.eventSource.close();
+                    this.eventSource = null;
+                    this.progressCurrent = this.progressTotal;
+                    this._finishTask(
+                        data.summary?.cancelled ? 'cancelled' : 'done',
+                        data.message || window.t('scanner.stats.tag_source_done'),
+                        data.summary || null
+                    );
+                    this.tagSourcePreviewData = data.summary || this.tagSourcePreviewData;
+                    localStorage.setItem('avlist_generating', 'false');
+                    const failed = data.summary?.failed || 0;
+                    this.showToast(
+                        failed > 0
+                            ? window.t('scanner.task.done_with_failures', { failed })
+                            : window.t('scanner.toast.tag_source_update_done'),
+                        failed > 0 ? 'warn' : 'success',
+                        4000
+                    );
+                    if (data.message) this.addLog('info', data.message);
+                    this.flushLogs();
+                } else if (data.type === 'error') {
+                    this.eventSource.close();
+                    this.eventSource = null;
+                    this.addLog(
+                        'error',
+                        window.t('scanner.stats.log_error_prefix', { message: data.message || '' })
+                    );
+                    this._finishTask('error', data.message || window.t('scanner.task.failed'));
                     this.flushLogs();
                     localStorage.setItem('avlist_generating', 'false');
                 }
             };
 
             this.eventSource.onerror = () => {
-                if (this.state === 'done' || this.state === 'error') return;
+                if (this.state === 'done' || this.state === 'error' || this.state === 'cancelled') return;
                 this.eventSource.close();
                 this.eventSource = null;
-                this.state = 'error';
                 this.addLog('error', window.t('scanner.stats.log_disconnected'));
+                this._finishTask('error', window.t('scanner.task.failed'));
                 this.flushLogs();
                 localStorage.setItem('avlist_generating', 'false');
                 this.showToast(window.t('scanner.toast.tag_source_update_error'), 'error', 4000);
@@ -1160,9 +1539,7 @@ export function stateScan() {
             }
 
             this.state = 'jellyfinUpdating';
-            this.progressStatus = window.t('scanner.stats.status_preparing');
-            this.progressCurrent = 0;
-            this.progressTotal = 0;
+            this._startTask('jellyfin-update', window.t('scanner.stats.status_preparing'), this.jellyfinImageCount);
             this.clearLogs();
 
             localStorage.setItem('avlist_generating', 'true');
@@ -1177,14 +1554,13 @@ export function stateScan() {
                         this.progressStatus = data.status;
                         this.progressCurrent = data.current;
                         this.progressTotal = data.total;
+                        this._applyTaskMetrics(data);
                         localStorage.setItem('avlist_last_status', data.status);
                     } else if (data.type === 'log') {
                         this.addLog(data.level, data.message);
                     } else if (data.type === 'done') {
                         this.eventSource.close();
                         this.eventSource = null;
-                        this.state = 'done';
-                        this.progressStatus = data.message || window.t('scanner.stats.status_done');
                         // TASK-111 P2-b 後續（codex delta review）：done 不再必然代表「全數完成」——
                         // 批次跑到一半若把 external_manager 切成 off，後端會在下一部片 break 並送
                         // done(updated=已完成筆數)。這裡若無條件補滿 progressTotal，UI 會顯示 3/3
@@ -1193,6 +1569,11 @@ export function stateScan() {
                         this.progressCurrent = (typeof data.updated === 'number')
                             ? data.updated
                             : this.progressTotal;
+                        this._finishTask(
+                            data.summary?.cancelled ? 'cancelled' : 'done',
+                            data.message || window.t('scanner.stats.status_done'),
+                            data.summary || { success: data.updated || 0 }
+                        );
 
                         localStorage.setItem('avlist_generating', 'false');
                         localStorage.setItem('avlist_last_status', data.message || window.t('scanner.stats.status_done'));
@@ -1203,7 +1584,13 @@ export function stateScan() {
                         this.jellyfinItems = [];
                         this.jellyfinCheckState = 'idle';
 
-                        this.showToast(window.t('scanner.toast.jellyfin_update_done'), 'success');
+                        const failed = data.summary?.failed || 0;
+                        this.showToast(
+                            failed > 0
+                                ? window.t('scanner.task.done_with_failures', { failed })
+                                : window.t('scanner.toast.jellyfin_update_done'),
+                            failed > 0 ? 'warn' : 'success'
+                        );
                         if (data.message) {
                             this.addLog('info', data.message);
                         }
@@ -1211,24 +1598,24 @@ export function stateScan() {
                     } else if (data.type === 'error') {
                         this.eventSource.close();
                         this.eventSource = null;
-                        this.state = 'error';
                         this.addLog('error', window.t('scanner.stats.log_error_prefix', { message: data.message }));
+                        this._finishTask('error', data.message || window.t('scanner.task.failed'));
                         this.flushLogs();
                         localStorage.setItem('avlist_generating', 'false');
                     }
                 };
 
                 this.eventSource.onerror = () => {
-                    if (this.state === 'done') return;
+                    if (this.state === 'done' || this.state === 'cancelled') return;
                     this.eventSource.close();
                     this.eventSource = null;
-                    this.state = 'error';
                     this.addLog('error', window.t('scanner.stats.log_disconnected'));
+                    this._finishTask('error', window.t('scanner.task.failed'));
                     this.flushLogs();
                     localStorage.setItem('avlist_generating', 'false');
                 };
             } catch (e) {
-                this.state = 'error';
+                this._finishTask('error', window.t('scanner.task.failed'));
                 localStorage.setItem('avlist_generating', 'false');
                 console.error('[Scanner] runJellyfinImageUpdate error:', e);
                 this.showToast(window.t('scanner.toast.jellyfin_update_error'), 'error', 4000);

@@ -22,6 +22,7 @@ export function stateBatch() {
         missingEnrichOffset: 0,     // batch offset
         missingEnrichSuccess: 0,
         missingEnrichFailed: 0,
+        _enrichFailedItems: [],
         resumePillVisible: false,
         missingConfirmModalOpen: false,   // TASK-13: 大批量補完 confirm dialog 開關
         _enrichAbortController: null,
@@ -109,14 +110,17 @@ export function stateBatch() {
             this.missingEnrichOffset = 0;
             this.missingEnrichSuccess = 0;
             this.missingEnrichFailed = 0;
+            this._enrichFailedItems = [];
             this.enrichBadgeCount = 0;
             this.currentCard = null;
             this.onDeckCard = null;  // TASK-94-T8：run 開始 reset 待命格
             this._onDeckParkedAt = 0;
             this._clearFlushTimer();  // TASK-94 Codex P1：清掉上一個 run 殘留的 flush dwell timer
-            this.progressStatus = window.t('scanner.stats.missing_enrich_loading');
-            this.progressCurrent = 0;
-            this.progressTotal = this.missingItems.length;
+            this._startTask(
+                'enrich',
+                window.t('scanner.stats.missing_enrich_loading'),
+                this.missingItems.length
+            );
             this.clearLogs();
 
             const controller = new AbortController();
@@ -146,7 +150,7 @@ export function stateBatch() {
                         }
                         this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
                         this.flushLogs();
-                        this.state = 'error';
+                        this._finishTask('error', window.t('scanner.task.failed'));
                         this.currentCard = null;
                         this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                         // Save remaining
@@ -159,7 +163,7 @@ export function stateBatch() {
                         const errText = await resp.text().catch(() => '');
                         this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
                         this.flushLogs();
-                        this.state = 'error';
+                        this._finishTask('error', window.t('scanner.task.failed'));
                         this.currentCard = null;
                         this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                         localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
@@ -200,6 +204,12 @@ export function stateBatch() {
                                 this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
                                 this.progressTotal = items.length;
                                 this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
+                                this._applyTaskMetrics({
+                                    number: event.number,
+                                    success: this.missingEnrichSuccess,
+                                    failed: this.missingEnrichFailed,
+                                    skipped: 0,
+                                });
                             } else if (event.type === 'result-item') {
                                 // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
                                 // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
@@ -234,7 +244,18 @@ export function stateBatch() {
                                     this.missingEnrichSuccess++;
                                 } else {
                                     this.missingEnrichFailed++;
+                                    this._enrichFailedItems.push({
+                                        path: event.file_path || '',
+                                        number: event.number || '',
+                                        error: event.error || event.reason || '',
+                                    });
                                 }
+                                this._applyTaskMetrics({
+                                    number: event.number,
+                                    success: this.missingEnrichSuccess,
+                                    failed: this.missingEnrichFailed,
+                                    skipped: 0,
+                                });
                                 // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
                                 if (event.reason === 'error') {
                                     this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
@@ -246,7 +267,7 @@ export function stateBatch() {
                             } else if (event.type === 'error') {
                                 this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
                                 this.flushLogs();
-                                this.state = 'error';
+                                this._finishTask('error', event.message || window.t('scanner.task.failed'));
                                 this.currentCard = null;
                                 this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                                 localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
@@ -258,7 +279,7 @@ export function stateBatch() {
 
                     // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
                     if (!batchDone) {
-                        this.state = 'error';
+                        this._finishTask('error', window.t('scanner.task.failed'));
                         this.currentCard = null;
                         this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                         localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
@@ -284,11 +305,19 @@ export function stateBatch() {
                     if (lastCover) {
                         this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
                     }
-                    this.state = 'done';
                     this.onDeckCard = null;
                     this.currentCard = null;
                     this.enrichBadgeCount = 0;
-                    this.progressStatus = window.t('scanner.stats.missing_enrich_done');
+                    this._finishTask(
+                        'done',
+                        window.t('scanner.stats.missing_enrich_done'),
+                        {
+                            success: this.missingEnrichSuccess,
+                            failed: this.missingEnrichFailed,
+                            skipped: 0,
+                            failed_items: this._enrichFailedItems,
+                        }
+                    );
                     const summary = this.missingEnrichFailed > 0
                         ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
                         : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
@@ -312,7 +341,7 @@ export function stateBatch() {
                 if (e.name === 'AbortError') return;
                 console.error('runMissingEnrich error:', e);
                 this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
-                this.state = 'error';
+                this._finishTask('error', window.t('scanner.task.failed'));
                 this.currentCard = null;
                 this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                 localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));

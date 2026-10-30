@@ -7,7 +7,7 @@ import io
 import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Generator
+from typing import Callable, Dict, List, Optional, Tuple, Generator
 
 from core.atomic_write import atomic_write
 from core.logger import get_logger
@@ -172,6 +172,39 @@ def get_nfo_path_from_video(video_path: str, path_mappings: dict = None) -> Opti
         return str(candidates[0])
 
     return None
+
+
+def read_nfo_tags(nfo_path: str) -> List[str]:
+    """Read the top-level ordinary tags from an NFO without changing it."""
+    tree, root = parse_nfo(nfo_path)
+    if root is None:
+        return []
+
+    tags: list[str] = []
+    seen: set[str] = set()
+    for elem in root.findall("tag"):
+        text = (elem.text or "").strip()
+        key = text.casefold()
+        if text and key not in seen:
+            seen.add(key)
+            tags.append(text)
+    return tags
+
+
+def backup_nfo_file(nfo_path: str) -> Optional[str]:
+    """Create a same-folder ``.openaver-backup`` copy through the shared SAF path."""
+    if not os.path.exists(nfo_path):
+        return None
+    backup_path = str(nfo_path) + ".openaver-backup"
+    payload = Path(nfo_path).read_bytes()
+    with atomic_write(
+        backup_path,
+        mode="wb",
+        suffix=".nfo-backup.tmp",
+        mobile_fallback=True,
+    ) as handle:
+        handle.write(payload)
+    return backup_path
 
 
 def parse_nfo(nfo_path: str) -> Tuple[Optional[ET.ElementTree], Optional[ET.Element]]:
@@ -430,7 +463,9 @@ def replace_nfo_tags(nfo_path: str, tags: List[str]) -> bool:
 def update_videos_generator(
     cache: Dict[str, dict],
     paths: List[str],
-    path_mappings: dict = None
+    path_mappings: dict = None,
+    should_abort: Optional[Callable[[], bool]] = None,
+    backup: bool = False,
 ) -> Generator[dict, None, dict]:
     """更新影片的生成器（用於 SSE 串流）
 
@@ -452,9 +487,16 @@ def update_videos_generator(
         'skipped': 0,
         'no_nfo': 0,
         'no_metadata': 0,
+        'cancelled': False,
+        'backed_up': 0,
+        'failed_items': [],
     }
 
     for i, path in enumerate(paths, 1):
+        if should_abort and should_abort():
+            stats['cancelled'] = True
+            break
+
         data = cache.get(path, {})
         info = data.get('info', {})
         num = info.get('num', '')
@@ -464,7 +506,11 @@ def update_videos_generator(
             'current': i,
             'total': len(paths),
             'num': num,
-            'status': f'處理 {num}'
+            'number': num,
+            'status': f'處理 {num}',
+            'success': stats['success'],
+            'failed': stats['failed'],
+            'skipped': stats['skipped'],
         }
 
         # 取得 NFO 路徑
@@ -478,6 +524,26 @@ def update_videos_generator(
             stats['no_nfo'] += 1
             stats['skipped'] += 1
             continue
+
+        if backup:
+            try:
+                backup_path = backup_nfo_file(nfo_path)
+                if backup_path:
+                    stats['backed_up'] += 1
+            except Exception:
+                logger.exception("備份 NFO 失敗: %s", nfo_path)
+                yield {
+                    'type': 'log',
+                    'level': 'error',
+                    'message': f'[{i}] {num}: NFO 備份失敗，未更新'
+                }
+                stats['failed'] += 1
+                stats['failed_items'].append({
+                    'path': path,
+                    'number': num,
+                    'error': 'NFO 备份失败',
+                })
+                continue
 
         # 從網路取得 metadata
         yield {
@@ -496,6 +562,11 @@ def update_videos_generator(
                 'message': f'[{i}] {num}: 搜尋發生錯誤'
             }
             stats['failed'] += 1
+            stats['failed_items'].append({
+                'path': path,
+                'number': num,
+                'error': '搜尋發生錯誤',
+            })
             continue
 
         if not metadata:
@@ -533,6 +604,11 @@ def update_videos_generator(
                 'message': f'[{i}] {num}: 更新 NFO 發生錯誤'
             }
             stats['failed'] += 1
+            stats['failed_items'].append({
+                'path': path,
+                'number': num,
+                'error': '更新 NFO 發生錯誤',
+            })
 
     return stats  # noqa: B901 — 已知可疑：此 generator 型別註記／docstring 承諾回傳 stats，但唯一呼叫端（web/routers/scanner.py 的 for 迴圈消費）從未接住 StopIteration.value，stats 實質為死碼；不在本 Phase 修（CD-110a-5／CD-110a-10 零產品碼改動），已列入 plan-110a 附錄 A-3 backlog 另案評估
 

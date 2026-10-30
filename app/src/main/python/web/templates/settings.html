@@ -1545,9 +1545,23 @@
         </section><!-- /sec-system -->
 
         <!-- 儲存按鈕 -->
-        <div class="save-btn-wrapper">
-            <button type="submit" class="btn btn-primary save-btn" id="saveBtn">
-                <i class="bi bi-save"></i> {{ t('settings.action.save') }}
+        <div class="save-btn-wrapper"
+             :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving }">
+            <div class="save-state" role="status" aria-live="polite">
+                <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
+                <i x-show="!_configSaving" class="bi"
+                   :class="isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle'"></i>
+                <span x-text="saveStatusText"></span>
+            </div>
+            <button type="submit"
+                    class="btn btn-primary save-btn"
+                    id="saveBtn"
+                    :disabled="saveButtonDisabled">
+                <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
+                <i x-show="!_configSaving" class="bi bi-save"></i>
+                <span x-text="_configSaving
+                    ? window.t('settings.save_bar.saving_button')
+                    : window.t('settings.action.save')"></span>
             </button>
         </div>
     </form>

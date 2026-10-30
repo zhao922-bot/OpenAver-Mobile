@@ -15,7 +15,7 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Any, Dict, List, Literal, Optional
@@ -989,9 +989,9 @@ def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
 
 
 @router.post("/batch-enrich")
-async def batch_enrich_endpoint(request: BatchEnrichRequest):
+async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
     """批次 enrich — SSE streaming，最多 20 筆，按 file_path 去重"""
-    if len(request.items) > 20:
+    if len(batch.items) > 20:
         raise HTTPException(status_code=422, detail="items 上限為 20 筆")
 
     config = await asyncio.to_thread(load_config)
@@ -1007,7 +1007,7 @@ async def batch_enrich_endpoint(request: BatchEnrichRequest):
     # 去重（按 file_path）
     seen_paths: set = set()
     deduped_items = []
-    for item in request.items:
+    for item in batch.items:
         if item.file_path not in seen_paths:
             seen_paths.add(item.file_path)
             deduped_items.append(item)
@@ -1030,7 +1030,11 @@ async def batch_enrich_endpoint(request: BatchEnrichRequest):
 
         try:
             for idx, item in enumerate(deduped_items, start=1):
-                effective_source = item.source or request.source or "auto"
+                if await request.is_disconnected():
+                    yield f"data: {json.dumps({'type': 'done', 'cancelled': True, 'success': success_count, 'failed': failed_count})}\n\n"
+                    return
+
+                effective_source = item.source or batch.source or "auto"
                 _custom_refused = effective_source.startswith('custom:')
                 # 未知 / 非法 source guard：不靜默轉成無效 cache_key，退回 'auto'（最小驚訝）。
                 if not _custom_refused and effective_source != "auto" and not validate_source_id(effective_source):
@@ -1039,7 +1043,7 @@ async def batch_enrich_endpoint(request: BatchEnrichRequest):
                         effective_source, item.number,
                     )
                     effective_source = "auto"
-                effective_lang = item.javbus_lang or request.javbus_lang
+                effective_lang = item.javbus_lang or batch.javbus_lang
 
                 # progress 事件
                 yield f"data: {json.dumps({'type': 'progress', 'current': idx, 'total': total, 'number': item.number})}\n\n"
@@ -1067,14 +1071,14 @@ async def batch_enrich_endpoint(request: BatchEnrichRequest):
                         # comment) — placed before resolve_owning_output_root so it
                         # short-circuits regardless of output_dir configuration.
                         # BatchEnrichRequest has no per-item mode override, so this
-                        # is checked once against the whole-batch `request.mode`.
-                        if request.mode == 'db_to_sidecar':
+                        # is checked once against the whole-batch `batch.mode`.
+                        if batch.mode == 'db_to_sidecar':
                             return ('db_to_sidecar', _READONLY_DB_TO_SIDECAR_ERROR_MSG)
                         # P1 revert + reject (round-3 review 2026-07-21): same
                         # write_nfo=false rejection as enrich_single_endpoint's
                         # readonly branch (see _READONLY_NO_NFO_ERROR_MSG) — readonly
                         # produce is holistic, no per-item override exists.
-                        if not request.write_nfo:
+                        if not batch.write_nfo:
                             return ('no_nfo', _READONLY_NO_NFO_ERROR_MSG)
                         owning = resolve_owning_output_root(uri, config)
                         if owning is None:
@@ -1106,7 +1110,7 @@ async def batch_enrich_endpoint(request: BatchEnrichRequest):
                                 number=itm.number, scraper_cfg=config.get("scraper", {}),
                                 path_mappings=_ro_mappings, action='ingest',
                                 scraper_data=None, scrape_source=es, javbus_lang=el,
-                                write_cover=request.write_cover, overwrite_existing=request.overwrite_existing,
+                                write_cover=batch.write_cover, overwrite_existing=batch.overwrite_existing,
                                 focal_before_cover_recheck=True,
                             )
                         except ReadonlyProduceError:
@@ -1128,7 +1132,7 @@ async def batch_enrich_endpoint(request: BatchEnrichRequest):
                             # 其他 mode 維持 success（refresh_full 可能只更新 DB）。⚠️ 前端
                             # didEnrichSomething() 沒有這道 mode 閘，多出 refresh_full 呼叫端時兩邊一起補。
                             # 今天 fill_missing 零行為變化（readonly nfo_written=True 無條件）；縮圖失效仍掛 ok。
-                            if request.mode != "fill_missing" or did_enrich_something(payload):
+                            if batch.mode != "fill_missing" or did_enrich_something(payload):
                                 success_count += 1
                             else:
                                 failed_count += 1
@@ -1198,7 +1202,7 @@ async def batch_enrich_endpoint(request: BatchEnrichRequest):
 
                     # scraper cache（只對 refresh_full pre-fetch）
                     cached_data = None
-                    if request.mode == "refresh_full":
+                    if batch.mode == "refresh_full":
                         cache_key = (item.number.upper(), effective_source, effective_lang)
                         if cache_key not in scraper_cache:
                             _pf_ctx = contextvars.copy_context()
@@ -1217,11 +1221,11 @@ async def batch_enrich_endpoint(request: BatchEnrichRequest):
                         enrich_single,
                         file_path=item.file_path,
                         number=item.number,
-                        mode=request.mode,
-                        write_nfo=request.write_nfo,
-                        write_cover=request.write_cover,
-                        write_extrafanart=request.write_extrafanart,
-                        overwrite_existing=request.overwrite_existing,
+                        mode=batch.mode,
+                        write_nfo=batch.write_nfo,
+                        write_cover=batch.write_cover,
+                        write_extrafanart=batch.write_extrafanart,
+                        overwrite_existing=batch.overwrite_existing,
                         external_manager=config.get("scraper", {}).get("external_manager", "off"), nfo_title_format=config.get("scraper", {}).get("nfo_title_format", '[{num}]{title}'),
                         source=effective_source if effective_source != "auto" else None,
                         javbus_lang=effective_lang,
@@ -1234,7 +1238,7 @@ async def batch_enrich_endpoint(request: BatchEnrichRequest):
                         # CD-147b-5／147b-T4：fill_missing 才套四項判準（與前端 didEnrichSomething
                         # 同步；⚠️ 前端沒有這道 mode 閘，多出 refresh_full 呼叫端時兩邊一起補）；
                         # 其他 mode 維持 result.success（refresh_full 可能只更新 DB）。縮圖失效仍掛之。
-                        if request.mode != "fill_missing" or did_enrich_something(result):
+                        if batch.mode != "fill_missing" or did_enrich_something(result):
                             success_count += 1
                         else:
                             failed_count += 1

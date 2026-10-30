@@ -39,8 +39,10 @@ from core.video_extensions import get_video_extensions
 from core.gallery_generator import HTMLGenerator
 from core.path_utils import to_file_uri, is_path_under_dir, uri_to_fs_path, coerce_to_file_uri, uri_to_local_fs_path
 from core.nfo_updater import (
+    backup_nfo_file,
     check_cache_needs_update,
     get_nfo_path_from_video,
+    read_nfo_tags,
     replace_nfo_tags,
     update_videos_generator,
 )
@@ -800,6 +802,55 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
 _DISCONNECT_POLL_INTERVAL_SEC = 0.5
 
 
+async def _cancelable_sse_response(
+    request: Request,
+    generator_factory: Callable[[threading.Event], Generator[str, None, None]],
+) -> StreamingResponse:
+    """Wrap a synchronous SSE generator with explicit disconnect cancellation."""
+    cancel_event = threading.Event()
+    if not try_mark_generate_active(cancel_event):
+        return StreamingResponse(
+            iter([_sse_event({"type": "error", "message": "已有生成任务正在运行"})]),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
+
+    async def _watch_disconnect() -> None:
+        try:
+            while not cancel_event.is_set():
+                if await request.is_disconnected():
+                    cancel_event.set()
+                    return
+                await asyncio.sleep(_DISCONNECT_POLL_INTERVAL_SEC)
+        except asyncio.CancelledError:
+            raise
+        finally:
+            mark_generate_done(cancel_event)
+
+    watcher_task = asyncio.create_task(_watch_disconnect())
+
+    async def _cleanup_watcher() -> None:
+        mark_generate_done(cancel_event)
+        watcher_task.cancel()
+        try:
+            await watcher_task
+        except asyncio.CancelledError:
+            pass
+
+    response = StreamingResponse(
+        generator_factory(cancel_event),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )
+    response.background = BackgroundTask(_cleanup_watcher)
+    response.cancel_event = cancel_event
+    response.watcher_task = watcher_task
+    return response
+
+
 @router.get("/generate")
 async def generate(request: Request):
     """產生影片列表（SSE 串流回傳進度）
@@ -1030,17 +1081,39 @@ def _resolve_tag_update_nfo_path(
     return None
 
 
+def _tag_diff(current_tags: list[str], proposed_tags: list[str]) -> dict:
+    """Return a stable, case-insensitive tag diff for preview and task logs."""
+    current_map = {str(tag).strip().casefold(): str(tag).strip() for tag in current_tags if str(tag).strip()}
+    proposed_map = {str(tag).strip().casefold(): str(tag).strip() for tag in proposed_tags if str(tag).strip()}
+    return {
+        "added": [tag for key, tag in proposed_map.items() if key not in current_map],
+        "removed": [tag for key, tag in current_map.items() if key not in proposed_map],
+        "unchanged": len(current_map.keys() & proposed_map.keys()),
+    }
+
+
 def generate_tag_source_update(
     source: str,
     cancel_event: Optional[threading.Event] = None,
+    *,
+    dry_run: bool = False,
+    numbers: Optional[set[str]] = None,
+    backup: bool = False,
 ) -> Generator[str, None, None]:
-    """Fetch one source for every numbered video and replace only NFO/DB tags."""
+    """Preview or replace only ordinary NFO/DB tags from one selected source."""
     summary = {
+        "mode": "preview" if dry_run else "update",
         "total": 0,
         "success": 0,
         "failed": 0,
         "skipped": 0,
+        "changed": 0,
+        "unchanged": 0,
         "no_nfo": 0,
+        "backed_up": 0,
+        "cancelled": False,
+        "failed_items": [],
+        "items": [],
     }
     try:
         config = load_config()
@@ -1055,7 +1128,10 @@ def generate_tag_source_update(
             return
 
         repo = VideoRepository(db_path)
-        videos = [video for video in repo.get_all() if video.number]
+        videos = [
+            video for video in repo.get_all()
+            if video.number and (not numbers or video.number in numbers)
+        ]
         summary["total"] = len(videos)
         if not videos:
             yield _sse_event({
@@ -1070,16 +1146,29 @@ def generate_tag_source_update(
         readonly_prefixes = readonly_source_prefixes(gallery_config, path_mappings)
         writable_prefixes = writable_source_prefixes(gallery_config, path_mappings)
         javbus_lang = get_javbus_lang()
+        started_at = time.monotonic()
 
         for index, video in enumerate(videos, start=1):
             if cancel_event is not None and cancel_event.is_set():
+                summary["cancelled"] = True
                 break
+
+            elapsed = max(time.monotonic() - started_at, 0.001)
+            eta_seconds = round((elapsed / max(index - 1, 1)) * max(len(videos) - index + 1, 0))
             yield _sse_event({
                 "type": "progress",
                 "current": index,
                 "total": len(videos),
                 "number": video.number,
-                "status": f"获取 {video.number} 的标签",
+                "status": (
+                    f"预览 {video.number} 的标签"
+                    if dry_run else f"更新 {video.number} 的标签"
+                ),
+                "success": summary["success"],
+                "failed": summary["failed"],
+                "skipped": summary["skipped"],
+                "changed": summary["changed"],
+                "eta_seconds": eta_seconds,
             })
 
             try:
@@ -1091,6 +1180,11 @@ def generate_tag_source_update(
                 )
             except Exception as exc:
                 summary["failed"] += 1
+                summary["failed_items"].append({
+                    "path": video.path,
+                    "number": video.number,
+                    "error": str(exc),
+                })
                 logger.warning(
                     "tag source update failed: source=%s number=%s error=%s",
                     source,
@@ -1106,6 +1200,11 @@ def generate_tag_source_update(
 
             if not metadata:
                 summary["failed"] += 1
+                summary["failed_items"].append({
+                    "path": video.path,
+                    "number": video.number,
+                    "error": "所选来源没有结果",
+                })
                 yield _sse_event({
                     "type": "log",
                     "level": "warn",
@@ -1123,6 +1222,15 @@ def generate_tag_source_update(
             ]
             if not source_tags:
                 summary["skipped"] += 1
+                summary["items"].append({
+                    "path": video.path,
+                    "number": video.number,
+                    "status": "no_tags",
+                    "current_tags": list(video.tags or []),
+                    "proposed_tags": [],
+                    "added": [],
+                    "removed": [],
+                })
                 yield _sse_event({
                     "type": "log",
                     "level": "warn",
@@ -1148,8 +1256,63 @@ def generate_tag_source_update(
                 )
             )
             nfo_path = _resolve_tag_update_nfo_path(video, path_mappings, readonly)
+            current_tags = read_nfo_tags(nfo_path) if nfo_path else list(video.tags or [])
+            diff = _tag_diff(current_tags, merged_tags)
+            changed = bool(diff["added"] or diff["removed"])
+            item = {
+                "path": video.path,
+                "number": video.number,
+                "nfo_path": nfo_path or "",
+                "current_tags": current_tags,
+                "proposed_tags": merged_tags,
+                "added": diff["added"],
+                "removed": diff["removed"],
+                "status": "changed" if changed else "unchanged",
+            }
+
+            if dry_run:
+                summary["success"] += 1
+                summary["changed" if changed else "unchanged"] += 1
+                if not nfo_path:
+                    summary["no_nfo"] += 1
+                summary["items"].append(item)
+                yield _sse_event({
+                    "type": "log",
+                    "level": "info",
+                    "message": (
+                        f"{video.number}: "
+                        + (f"标签有变化，新增 {len(diff['added'])}，移除 {len(diff['removed'])}"
+                           if changed else "标签无变化")
+                    ),
+                })
+                continue
+
+            if nfo_path and backup:
+                try:
+                    backup_path = backup_nfo_file(nfo_path)
+                    if backup_path:
+                        summary["backed_up"] += 1
+                except Exception as exc:
+                    summary["failed"] += 1
+                    summary["failed_items"].append({
+                        "path": video.path,
+                        "number": video.number,
+                        "error": f"NFO 备份失败: {exc}",
+                    })
+                    yield _sse_event({
+                        "type": "log",
+                        "level": "error",
+                        "message": f"{video.number}: NFO 备份失败，未写入",
+                    })
+                    continue
+
             if nfo_path and not replace_nfo_tags(nfo_path, merged_tags):
                 summary["failed"] += 1
+                summary["failed_items"].append({
+                    "path": video.path,
+                    "number": video.number,
+                    "error": "NFO 标签写入失败",
+                })
                 yield _sse_event({
                     "type": "log",
                     "level": "error",
@@ -1158,9 +1321,14 @@ def generate_tag_source_update(
                 continue
 
             try:
-                changed = repo.update_tags_if_changed(video.path, merged_tags)
+                db_changed = repo.update_tags_if_changed(video.path, merged_tags)
             except Exception as exc:
                 summary["failed"] += 1
+                summary["failed_items"].append({
+                    "path": video.path,
+                    "number": video.number,
+                    "error": "数据库标签更新失败",
+                })
                 logger.warning(
                     "tag source update: database update failed for %s: %s",
                     video.path,
@@ -1191,24 +1359,37 @@ def generate_tag_source_update(
                 summary["no_nfo"] += 1
 
             summary["success"] += 1
+            summary["changed" if changed else "unchanged"] += 1
+            summary["items"].append(item)
             yield _sse_event({
                 "type": "log",
                 "level": "info",
                 "message": (
                     f"{video.number}: 已更新 {len(merged_tags)} 个标签"
                     + ("（仅更新数据库，NFO 不存在）" if not nfo_path else "")
-                    + ("" if changed else "（值未变化）")
+                    + ("" if db_changed else "（数据库值未变化）")
                 ),
             })
 
-        yield _sse_event({
-            "type": "done",
-            "message": (
+        if summary["cancelled"]:
+            message = "标签预览已取消" if dry_run else "标签更新已取消"
+        elif dry_run:
+            message = (
+                f"标签预览完成：{summary['changed']} 部有变化，"
+                f"{summary['unchanged']} 部无变化，失败 {summary['failed']}，"
+                f"跳过 {summary['skipped']}"
+            )
+        else:
+            message = (
                 f"标签来源更新完成：成功 {summary['success']}，"
                 f"失败 {summary['failed']}，跳过 {summary['skipped']}，"
                 f"无 NFO {summary['no_nfo']}"
-            ),
+            )
+        yield _sse_event({
+            "type": "done",
+            "message": message,
             "summary": summary,
+            "preview": dry_run,
         })
     except Exception:
         logger.exception("批量更换标签来源失败: source=%s", source)
@@ -1312,7 +1493,11 @@ def check_missing():
         return {"success": False, "error": "檢查缺失 NFO/封面失敗"}
 
 
-def generate_nfo_update() -> Generator[str, None, None]:
+def generate_nfo_update(
+    cancel_event: Optional[threading.Event] = None,
+    selected_paths: Optional[list[str]] = None,
+    backup: bool = False,
+) -> Generator[str, None, None]:
     """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
 
     try:
@@ -1344,6 +1529,27 @@ def generate_nfo_update() -> Generator[str, None, None]:
             return
 
         paths_to_update = stats['paths']
+        if selected_paths:
+            selected = set(selected_paths)
+            paths_to_update = [path for path in paths_to_update if path in selected]
+        if not paths_to_update:
+            yield _sse_event({
+                "type": "done",
+                "message": "没有需要重试的 NFO",
+                "updated": 0,
+                "summary": {
+                    "total": 0,
+                    "success": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                    "no_nfo": 0,
+                    "no_metadata": 0,
+                    "cancelled": False,
+                    "failed_items": [],
+                },
+            })
+            return
+
         yield _sse_event({
             "type": "log",
             "level": "info",
@@ -1351,12 +1557,46 @@ def generate_nfo_update() -> Generator[str, None, None]:
         })
 
         # 執行更新（path_mappings 沿用 _build_nfo_update_cache 算好的那份，不重讀 config）
-        for msg in update_videos_generator(cache, paths_to_update, path_mappings):
+        update_generator = update_videos_generator(
+            cache,
+            paths_to_update,
+            path_mappings,
+            should_abort=cancel_event.is_set if cancel_event is not None else None,
+            backup=backup,
+        )
+        update_stats = None
+        while True:
+            try:
+                msg = next(update_generator)
+            except StopIteration as stop:
+                update_stats = stop.value
+                break
             yield _sse_event(msg)
 
+        update_stats = update_stats or {
+            "total": len(paths_to_update),
+            "success": 0,
+            "failed": 0,
+            "skipped": 0,
+            "no_nfo": 0,
+            "no_metadata": 0,
+            "cancelled": False,
+            "failed_items": [],
+        }
+        cancelled = bool(update_stats.get("cancelled"))
         yield _sse_event({
             "type": "done",
-            "message": "更新完成，建議重新產生網頁以更新資料庫",
+            "message": (
+                "NFO 更新已取消"
+                if cancelled else
+                (
+                    f"NFO 更新完成：成功 {update_stats.get('success', 0)}，"
+                    f"失败 {update_stats.get('failed', 0)}，"
+                    f"跳过 {update_stats.get('skipped', 0)}"
+                )
+            ),
+            "updated": update_stats.get("success", 0),
+            "summary": update_stats,
         })
 
     except Exception as e:
@@ -1365,15 +1605,19 @@ def generate_nfo_update() -> Generator[str, None, None]:
 
 
 @router.get("/update")
-async def run_update():
+async def run_update(
+    request: Request,
+    path: Optional[list[str]] = Query(default=None),
+    backup: bool = Query(default=True),
+):
     """執行 NFO 更新（SSE 串流回傳進度）"""
-    return StreamingResponse(
-        generate_nfo_update(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        }
+    return await _cancelable_sse_response(
+        request,
+        lambda cancel_event: generate_nfo_update(
+            cancel_event,
+            selected_paths=path,
+            backup=backup,
+        ),
     )
 
 
@@ -1381,50 +1625,43 @@ async def run_update():
 async def run_tag_source_update(
     request: Request,
     source: str = Query(..., min_length=1),
+    numbers: Optional[str] = Query(default=None),
+    backup: bool = Query(default=True),
 ):
     """Batch replace ordinary tags using one explicitly selected source."""
-    cancel_event = threading.Event()
-    if not try_mark_generate_active(cancel_event):
-        return StreamingResponse(
-            iter([_sse_event({"type": "error", "message": "已有生成任务正在运行"})]),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache"},
-        )
-
-    async def _watch_disconnect() -> None:
-        try:
-            while not cancel_event.is_set():
-                if await request.is_disconnected():
-                    cancel_event.set()
-                    return
-                await asyncio.sleep(_DISCONNECT_POLL_INTERVAL_SEC)
-        except asyncio.CancelledError:
-            raise
-        finally:
-            mark_generate_done(cancel_event)
-
-    watcher_task = asyncio.create_task(_watch_disconnect())
-
-    async def _cleanup_watcher() -> None:
-        mark_generate_done(cancel_event)
-        watcher_task.cancel()
-        try:
-            await watcher_task
-        except asyncio.CancelledError:
-            pass
-
-    response = StreamingResponse(
-        generate_tag_source_update(source, cancel_event),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        },
+    selected_numbers = {
+        value.strip() for value in (numbers or "").split(",") if value.strip()
+    } or None
+    return await _cancelable_sse_response(
+        request,
+        lambda cancel_event: generate_tag_source_update(
+            source,
+            cancel_event,
+            numbers=selected_numbers,
+            backup=backup,
+        ),
     )
-    response.background = BackgroundTask(_cleanup_watcher)
-    response.cancel_event = cancel_event
-    response.watcher_task = watcher_task
-    return response
+
+
+@router.get("/tag-source-preview")
+async def preview_tag_source_update(
+    request: Request,
+    source: str = Query(..., min_length=1),
+    numbers: Optional[str] = Query(default=None),
+):
+    """Preview tag changes without writing the database or NFO files."""
+    selected_numbers = {
+        value.strip() for value in (numbers or "").split(",") if value.strip()
+    } or None
+    return await _cancelable_sse_response(
+        request,
+        lambda cancel_event: generate_tag_source_update(
+            source,
+            cancel_event,
+            dry_run=True,
+            numbers=selected_numbers,
+        ),
+    )
 
 
 @router.get("/view")
@@ -1520,7 +1757,9 @@ def check_jellyfin_images_needed(repo: VideoRepository, path_mappings: dict = No
     return {'need_update': len(need_update), 'items': need_update}
 
 
-def generate_jellyfin_images_stream() -> Generator[str, None, None]:
+def generate_jellyfin_images_stream(
+    cancel_event: Optional[threading.Event] = None,
+) -> Generator[str, None, None]:
     """SSE 串流：批次為影片產生 poster + fanart"""
     global _jellyfin_cache_result, _jellyfin_cache_time
 
@@ -1561,7 +1800,13 @@ def generate_jellyfin_images_stream() -> Generator[str, None, None]:
         yield _sse_event({"type": "log", "level": "info", "message": f"需補齊 {total} 部影片的圖片..."})
 
         completed = 0
+        failed = 0
+        cancelled = False
+        failed_items = []
         for i, item in enumerate(items, 1):
+            if cancel_event is not None and cancel_event.is_set():
+                cancelled = True
+                break
             # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
             # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
             # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
@@ -1570,6 +1815,7 @@ def generate_jellyfin_images_stream() -> Generator[str, None, None]:
             current_config = load_config()
             current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
             if current_external_manager not in STEM_IMAGE_MODES:
+                cancelled = True
                 break
 
             cover = item['cover_path']
@@ -1580,7 +1826,11 @@ def generate_jellyfin_images_stream() -> Generator[str, None, None]:
                 "type": "progress",
                 "current": i,
                 "total": total,
-                "status": f"處理 {num}"
+                "number": num,
+                "status": f"處理 {num}",
+                "success": completed,
+                "failed": failed,
+                "skipped": 0,
             })
 
             img_result = generate_jellyfin_images(
@@ -1592,18 +1842,35 @@ def generate_jellyfin_images_stream() -> Generator[str, None, None]:
 
             if img_result['poster']:
                 yield _sse_event({"type": "log", "level": "info", "message": f"✓ {num} poster + fanart"})
+                completed += 1
             else:
+                failed += 1
+                failed_items.append({
+                    "path": item.get("path", ""),
+                    "number": num,
+                    "error": "poster 裁切失敗",
+                })
                 yield _sse_event({"type": "log", "level": "warn", "message": f"{num} poster 裁切失敗"})
-
-            completed += 1
 
         # T3(40c): 清空快取，讓下次 check 反映最新圖片狀態
         _jellyfin_cache_result = None
         _jellyfin_cache_time = 0
         yield _sse_event({
             "type": "done",
-            "message": f"完成！已補齊 {completed} 部影片的圖片",
+            "message": (
+                "图片补全已取消"
+                if cancelled else
+                f"完成！已補齊 {completed} 部影片的圖片"
+            ),
             "updated": completed,
+            "summary": {
+                "total": total,
+                "success": completed,
+                "failed": failed,
+                "skipped": 0,
+                "cancelled": cancelled,
+                "failed_items": failed_items,
+            },
         })
 
     except Exception as e:
@@ -1668,15 +1935,11 @@ async def jellyfin_image_check():
 
 
 @router.get("/jellyfin-update")
-async def jellyfin_image_update():
+async def jellyfin_image_update(request: Request):
     """批次產生 poster + fanart（SSE 串流回傳進度）"""
-    return StreamingResponse(
-        generate_jellyfin_images_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        }
+    return await _cancelable_sse_response(
+        request,
+        generate_jellyfin_images_stream,
     )
 
 
