@@ -69,6 +69,19 @@ jobs:
       - name: Run smoke tests
         run: python -m pytest tests/ -q
 
+      - name: Generate code health report
+        continue-on-error: true
+        run: python tools/code_health.py --json --output code-health.json
+
+      - name: Upload code health report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: openaver-code-health
+          path: code-health.json
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Build unsigned arm64 release APK
         run: |
           chmod +x ./gradlew
