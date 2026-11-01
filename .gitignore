@@ -34,6 +34,22 @@ outputs/
 **/web/config.json
 **/web/config.local.json
 
+# Local device, release-verification, and migration diagnostics
+/.patch-replay-check-*/
+/.r*-ci-release/
+/apk-extract-*/
+/ci-r*/
+/phone-*.png
+/round*-*.png
+/round*-*.json
+/window*.xml
+/wrong-nfo-xml-backup/
+/openaver-*.db
+/openaver-*.json
+/openaver-*.tar
+/*.sse
+/*.tsv
+
 # Local tooling
 # Keep the upstream-sync scripts in the repository; ignore only local scratch
 # files that may be placed under this directory by contributors.

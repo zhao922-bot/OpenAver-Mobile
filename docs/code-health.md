@@ -55,3 +55,25 @@ the top complexity or duplicate CSS unless the change documents why.
 - Python LOC increased slightly because the refactor adds explicit helper
   boundaries and focused tests. The primary result is lower branch density per
   function, not a shorter file.
+
+## Round 9 final checkpoint
+
+- Source files: 398
+- Python: 66,085 LOC / 52,039 SLOC / 4,229 comment lines
+- Highest Python complexity: `generate_avlist` 61
+- Loaded CSS overlap: 1/314 rules (0.3%)
+- Upstream patch surface: 8 patches, 88 files
+- Removed the stale metatube mock-provider injector from the settings page.
+- Fixed five invalid Python escape sequences in the legacy gallery generator;
+  generated JavaScript output is unchanged and now has a regression assertion.
+- `compileall` passes with `SyntaxWarning` promoted to an error.
+- Vulture reports no unused definitions at 80% confidence.
+- The shipped Python, Java, C++, tools, tests, and docs contain no active
+  `TODO`/`FIXME`/`HACK` markers.
+- `.gitignore` now scopes local device screenshots, UI dumps, database backups,
+  CI downloads, and patch-replay scratch directories without hiding source.
+
+The remaining functions above complexity 50 are either router entry points with
+large explicit validation/response contracts or modules already split at their
+natural phase boundaries. Further reduction would require behavior-level
+rewrites and should be handled as feature work, not as cleanup.

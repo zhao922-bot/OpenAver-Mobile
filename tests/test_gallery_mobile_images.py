@@ -23,5 +23,6 @@ def test_generated_gallery_resolves_file_images_and_includes_user_tags(tmp_path)
 
     html = output.read_text(encoding="utf-8")
     assert "function resolveImageSrc" in html
+    assert r"/^file:\/\/\//i.test(src)" in html
     assert "/api/gallery/image?path=" in html
     assert 'utags:"User tag"' in html

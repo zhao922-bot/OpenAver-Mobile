@@ -9879,6 +9879,40 @@
          },
  
          async _saveServerConfig() {
+@@ -1690,33 +1719,6 @@
+             await this.saveConfig();
+         },
+ 
+-        // TODO(B4): remove metatube mock providers after B3 lands （CD-61-13）
+-        // 手動瀏覽器驗證用：console 呼叫 `$data._injectMetatubeMockProviders()` 注入 30 個
+-        // mock metatube provider（available=true，未啟用 → 全進 Parts Bin），驗證摺疊清單
+-        // 30-pill 渲染不爆版 + Recommended group 排序。production 不自動呼叫（metatubeEnabled
+-        // 維持 false）。B3 由真實 /v1/providers 列舉取代。
+-        _injectMetatubeMockProviders(n = 30) {
+-            const baseOrder = this.sources.length;
+-            const mock = Array.from({ length: n }, (_, i) => {
+-                const id = `mt_mock_${i + 1}`;
+-                return {
+-                    id,
+-                    type: 'metatube',
+-                    enabled: false,
+-                    available: true,
+-                    order: baseOrder + i,
+-                    manual_only: false,
+-                    is_beta: false,
+-                    is_censored: false,
+-                    config: {},
+-                    display_name_key: '',
+-                    display_name: `Provider ${i + 1}`,
+-                };
+-            });
+-            this.sources = [...this.sources, ...mock];
+-            this.metatubeEnabled = true;
+-        },
+-
+         // 全開：builtin 先（依序），到 cap 即 break；不碰 metatube / manual_only。
+         enableAllToCap() {
+             for (const s of this.sources) {
 --- a/web/static/js/pages/settings/main.js
 +++ b/web/static/js/pages/settings/main.js
 @@ -1,4 +1,4 @@

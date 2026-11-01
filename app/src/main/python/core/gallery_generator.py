@@ -616,7 +616,7 @@ class HTMLGenerator:
 \t\t\tvar lastSlash = path.lastIndexOf('/');
 \t\t\tif (lastSlash < 0) lastSlash = path.lastIndexOf('\\\\');
 \t\t\tvar folder = lastSlash >= 0 ? path.substring(0, lastSlash) : path;
-\t\t\tvar stripped = folder.replace(/^file:\/\/\//, '');
+\t\t\tvar stripped = folder.replace(/^file:\\/\\/\\//, '');
 \t\t\tvar winPath = /^[A-Za-z]:/.test(stripped) ? stripped.replace(/\\//g, '\\\\') : stripped;
 \t\t\tnavigator.clipboard.writeText(winPath).then(function() {
 \t\t\t\tshowToast('已複製: ' + winPath);
@@ -632,12 +632,12 @@ class HTMLGenerator:
 
 \t\tfunction resolveImageSrc(src) {
 \t\t\tif (!src || window.location.protocol === 'file:') return src;
-\t\t\tif (/^file:\/\/\//i.test(src)) {
+\t\t\tif (/^file:\\/\\/\\//i.test(src)) {
 \t\t\t\tvar fsPath;
 \t\t\t\tif (src.indexOf('file:////') === 0) {
-\t\t\t\t\tfsPath = src.replace(/^file:\/\/\/+/i, '/');
+\t\t\t\t\tfsPath = src.replace(/^file:\\/\\/\\/+/i, '/');
 \t\t\t\t} else {
-\t\t\t\t\tfsPath = src.replace(/^file:\/\/\//i, '');
+\t\t\t\t\tfsPath = src.replace(/^file:\\/\\/\\//i, '');
 \t\t\t\t}
 \t\t\t\tif (fsPath.charAt(0) !== '/' && !/^[A-Za-z]:/.test(fsPath)) {
 \t\t\t\t\tfsPath = '/' + fsPath;

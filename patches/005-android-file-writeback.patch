@@ -955,18 +955,29 @@
  \t\t\t\t\t\t\thtml += '</div>';
  \t\t\t\t\t\t}
  \t\t\t\t\t\thtml += '</div>';
-@@ -629,6 +630,37 @@
+@@ -615,7 +616,7 @@
+ \t\t\tvar lastSlash = path.lastIndexOf('/');
+ \t\t\tif (lastSlash < 0) lastSlash = path.lastIndexOf('\\\\');
+ \t\t\tvar folder = lastSlash >= 0 ? path.substring(0, lastSlash) : path;
+-\t\t\tvar stripped = folder.replace(/^file:\/\/\//, '');
++\t\t\tvar stripped = folder.replace(/^file:\\/\\/\\//, '');
+ \t\t\tvar winPath = /^[A-Za-z]:/.test(stripped) ? stripped.replace(/\\//g, '\\\\') : stripped;
+ \t\t\tnavigator.clipboard.writeText(winPath).then(function() {
+ \t\t\t\tshowToast('已複製: ' + winPath);
+@@ -627,6 +628,37 @@
+ \t\t\ttoast.textContent = msg;
+ \t\t\ttoast.classList.add('show');
  \t\t\tsetTimeout(function() { toast.classList.remove('show'); }, 2500);
- \t\t}
- 
++\t\t}
++
 +\t\tfunction resolveImageSrc(src) {
 +\t\t\tif (!src || window.location.protocol === 'file:') return src;
-+\t\t\tif (/^file:\/\/\//i.test(src)) {
++\t\t\tif (/^file:\\/\\/\\//i.test(src)) {
 +\t\t\t\tvar fsPath;
 +\t\t\t\tif (src.indexOf('file:////') === 0) {
-+\t\t\t\t\tfsPath = src.replace(/^file:\/\/\/+/i, '/');
++\t\t\t\t\tfsPath = src.replace(/^file:\\/\\/\\/+/i, '/');
 +\t\t\t\t} else {
-+\t\t\t\t\tfsPath = src.replace(/^file:\/\/\//i, '');
++\t\t\t\t\tfsPath = src.replace(/^file:\\/\\/\\//i, '');
 +\t\t\t\t}
 +\t\t\t\tif (fsPath.charAt(0) !== '/' && !/^[A-Za-z]:/.test(fsPath)) {
 +\t\t\t\t\tfsPath = '/' + fsPath;
@@ -988,11 +999,9 @@
 +\t\t\t\t}
 +\t\t\t});
 +\t\t\treturn tags.join(',');
-+\t\t}
-+
+ \t\t}
+ 
  \t\t// Lightbox
- \t\tvar lightbox_open = false;
- \t\tvar lb_move_enabled = false;  // Phase 11.0: 延遲啟用滑鼠關閉
 @@ -642,7 +674,7 @@
  \t\t\tvar lightboxInfo = document.getElementById('lightbox-info');
  \t\t\t
