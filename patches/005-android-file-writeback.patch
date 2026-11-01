@@ -503,21 +503,22 @@
  
  from core.config import STEM_IMAGE_MODES
  from core.cover_attributes import effective_tags
-@@ -22,6 +24,7 @@
+@@ -22,7 +24,9 @@
      should_preserve_cover,
  )
  from core.focal_trigger import schedule_focal_after_cover_write
 +from core.image_codec import looks_like_image
  from core.logger import get_logger
++from core.media_io import copy_file, delete_file, ensure_directory
  from core.nfo_read import (
      nfo_actor_names,
-@@ -35,7 +38,14 @@
+     nfo_first_text,
+@@ -35,7 +39,13 @@
  from core.nfo_stat import NFO_MTIME_FILL_MISSING, NFO_MTIME_REFRESH, nfo_mtime_or_none
  from core.nfo_title_format import resolve_preserved_title_for_write, resolve_title_body
  from core.nfo_updater import parse_nfo
 -from core.organizer import crop_to_poster, download_image, find_subtitle_files, generate_nfo, _strip_num_prefixes
 +from core.organizer import (
-+    _copy_file_with_mobile_fallback,
 +    _strip_num_prefixes,
 +    crop_to_poster,
 +    download_image,
@@ -549,7 +550,7 @@
          else:
              try:
 -                shutil.copy2(str(cover_path), str(fanart_path))
-+                _copy_file_with_mobile_fallback(
++                copy_file(
 +                    str(cover_path), str(fanart_path)
 +                )
                  fanart_ok = True
@@ -590,7 +591,7 @@
  
  
  def _write_extrafanart(
-@@ -431,13 +470,25 @@
+@@ -431,13 +470,14 @@
      write_extrafanart: bool,
      path_mappings: dict = None,
      preview_sample_images: List[str] = None,
@@ -603,22 +604,11 @@
      parent = Path(fs_path).parent
      extrafanart_dir = parent / "extrafanart"
 -    os.makedirs(str(extrafanart_dir), exist_ok=True)
-+    try:
-+        os.makedirs(str(extrafanart_dir), exist_ok=True)
-+    except OSError as error:
-+        from core import android_storage
-+
-+        if not android_storage.is_access_error(error):
-+            raise
-+        if not android_storage.has_access(str(extrafanart_dir)):
-+            raise android_storage.AndroidStoragePermissionError(
-+                "storage_tree_not_authorized"
-+            ) from error
-+        android_storage.mkdirs(str(extrafanart_dir))
++    ensure_directory(extrafanart_dir)
  
      # CD-126-2：逐張配對用 index，**不用裸 zip()**——zip 在長度不等時會靜默截斷，
      # 等於少下載幾張圖。長度不等的正確語意是「那幾格沒有代理」，不是「少下載」。
-@@ -445,28 +496,118 @@
+@@ -445,28 +485,107 @@
      uris: List[str] = []
      downloaded = 0
      skipped_existing = 0
@@ -645,18 +635,7 @@
 +                uris.append(to_file_uri(dest, path_mappings))
 +                skipped_existing += 1
 +                continue
-+            try:
-+                os.unlink(dest)
-+            except OSError as error:
-+                from core import android_storage
-+
-+                if not android_storage.is_access_error(error):
-+                    raise
-+                if not android_storage.has_access(dest):
-+                    raise android_storage.AndroidStoragePermissionError(
-+                        "storage_tree_not_authorized"
-+                    ) from error
-+                android_storage.delete(dest)
++            delete_file(dest)
 +            logger.warning(
 +                "extrafanart %d 既有檔案不是圖片，已刪除重抓", i + 1
 +            )
@@ -704,7 +683,7 @@
 +                        "http_status": None,
 +                    })
 +                    try:
-+                        os.unlink(dest)
++                        delete_file(dest)
 +                    except OSError:
 +                        pass
 +                else:
@@ -744,7 +723,7 @@
  
  
  def _preserve_nfo_only_fields(meta: dict, scraper_data: dict, fs_path: str) -> None:
-@@ -761,6 +902,7 @@
+@@ -761,6 +880,7 @@
          write_extrafanart=write_extrafanart,
          path_mappings=path_mappings,
          preview_sample_images=meta.get("preview_sample_images", []),
@@ -752,7 +731,7 @@
      )
      extrafanart_written = extrafanart_res.downloaded
  
-@@ -940,14 +1082,12 @@
+@@ -940,14 +1060,12 @@
      repo.update_sample_images(path_uri, sample_images)
  
  
@@ -770,7 +749,7 @@
      _empty = EnrichResult(
          success=False,
          nfo_written=False,
-@@ -957,6 +1097,16 @@
+@@ -957,6 +1075,16 @@
          source_used="",
          error=None,
      )
@@ -787,7 +766,7 @@
  
      try:
          fs_path = uri_to_local_fs_path(file_path, path_mappings)
-@@ -967,39 +1117,130 @@
+@@ -967,39 +1095,130 @@
      if not os.path.exists(fs_path):
          logger.warning("[fetch_samples_only] 檔案不存在: %s", fs_path)
          _empty.error = "檔案不存在"
@@ -1247,6 +1226,103 @@
          logger.info(f"[*] 找到 {len(all_files)} 個影片檔案")
  
          # 統計緩存命中
+--- /dev/null
++++ b/core/media_io.py
+@@ -0,0 +1,94 @@
++"""Desktop-first media filesystem operations with Android SAF fallback."""
++
++from __future__ import annotations
++
++import os
++import shutil
++from pathlib import Path
++from typing import Union
++
++from core import android_storage
++from core.atomic_write import atomic_write
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++PathLike = Union[str, Path]
++
++
++def write_bytes(
++    destination: PathLike,
++    payload: bytes,
++    *,
++    suffix: str = ".media.tmp",
++) -> None:
++    """Atomically write bytes, falling back to the Android SAF bridge."""
++    with atomic_write(
++        destination,
++        mode="wb",
++        suffix=suffix,
++        mobile_fallback=True,
++    ) as handle:
++        handle.write(payload)
++
++
++def write_text(
++    destination: PathLike,
++    text: str,
++    *,
++    suffix: str = ".text.tmp",
++) -> None:
++    """Atomically write UTF-8 text, falling back to the Android SAF bridge."""
++    with atomic_write(
++        destination,
++        mode="w",
++        encoding="utf-8",
++        suffix=suffix,
++        mobile_fallback=True,
++    ) as handle:
++        handle.write(text)
++
++
++def copy_file(source: PathLike, destination: PathLike) -> None:
++    """Copy a sidecar verbatim, using SAF when the direct copy is denied."""
++    try:
++        shutil.copy2(source, destination)
++        return
++    except OSError as error:
++        if not android_storage.is_access_error(error):
++            raise
++        payload = Path(source).read_bytes()
++        write_bytes(destination, payload, suffix=".copy.tmp")
++        logger.info("file copied through Android SAF: %s", destination)
++
++
++def ensure_directory(path: PathLike) -> None:
++    """Create a directory, using SAF when the direct operation is denied."""
++    try:
++        os.makedirs(path, exist_ok=True)
++        return
++    except OSError as error:
++        if not android_storage.is_access_error(error):
++            raise
++        if not android_storage.has_access(str(path)):
++            raise android_storage.AndroidStoragePermissionError(
++                "storage_tree_not_authorized"
++            ) from error
++        android_storage.mkdirs(str(path))
++
++
++def delete_file(path: PathLike) -> None:
++    """Delete a file, treating a missing path as a successful no-op."""
++    try:
++        os.unlink(path)
++        return
++    except FileNotFoundError:
++        return
++    except OSError as error:
++        if not android_storage.is_access_error(error):
++            raise
++        if not android_storage.has_access(str(path)):
++            raise android_storage.AndroidStoragePermissionError(
++                "storage_tree_not_authorized"
++            ) from error
++        android_storage.delete(str(path))
 --- a/core/multipart_group.py
 +++ b/core/multipart_group.py
 @@ -1,7 +1,7 @@
@@ -1663,17 +1739,23 @@
  import requests
  import html
  from pathlib import Path
-@@ -16,12 +17,17 @@
+@@ -16,12 +17,23 @@
  from typing import Optional, Dict, Any, List, Tuple
  from urllib.parse import urlparse
  
 -from core.atomic_write import atomic_move
++from core.android_storage import AndroidStoragePermissionError
 +from core.atomic_write import atomic_move, atomic_write
  from core.config import STEM_IMAGE_MODES
  from core.cover_attributes import effective_tags
  from core.cover_layout import resolve_cover_target, same_target_verdict
  from core.image_codec import decode_image_payload, looks_like_image
  from core.image_host_policy import codec_for_host
++from core.media_io import (
++    copy_file as _copy_file_with_mobile_fallback,
++    ensure_directory,
++    write_bytes as _write_image_payload,
++)
 +from core.multipart_tokens import (
 +    detect_multipart_token as _detect_multipart_token,
 +    is_multipart_keyword as _is_multipart_kw,
@@ -1682,7 +1764,7 @@
  from core.path_utils import normalize_path, is_fs_path_under_dir
  from core.scrapers.utils import has_chinese, check_subtitle, strip_subtitle_markers, normalize_number_impl
  from core.focal import device_state, requires_face_detection
-@@ -241,99 +247,6 @@
+@@ -241,99 +253,6 @@
  # 多段（multi-part）token 偵測與剝除（CD-8 / plan-72b §1.4）
  # ---------------------------------------------------------------------------
  
@@ -1782,7 +1864,7 @@
  _VR_UNIQUE: frozenset = frozenset({
      'mkx200', 'mkx220', 'vrca220', 'rf52', 'fisheye190', 'fisheye',
      'f180', '180f', '180x180', 'eac360', '360eac', 'mono180', '180mono',
-@@ -523,7 +436,7 @@
+@@ -523,7 +442,7 @@
              ratio = h / w
  
              if ratio >= 1.4:
@@ -1791,7 +1873,7 @@
                  return True
  
              r_window = _poster_window_ratio(w, h)
-@@ -554,7 +467,9 @@
+@@ -554,7 +473,9 @@
  
              cropped = rgb.crop((x0, 0, x0 + crop_w, h))
  
@@ -1802,7 +1884,7 @@
              return True
      except Exception as e:
          logger.warning(f"[!] crop_to_poster 失敗: {e}")
-@@ -630,7 +545,7 @@
+@@ -630,7 +551,7 @@
              result['fanart_path'] = fanart_path
      else:
          try:
@@ -1811,7 +1893,7 @@
              result['fanart'] = True
              result['fanart_path'] = fanart_path
          except shutil.SameFileError:
-@@ -709,13 +624,20 @@
+@@ -709,13 +630,20 @@
              effective_referer = "https://www.dmm.co.jp/"
          elif "jav321.com" in url:
              effective_referer = "https://www.jav321.com/"
@@ -1833,7 +1915,7 @@
  ) -> bool:
      """Try one URL. Record host only on connect-stage failures.
  
-@@ -726,6 +648,16 @@
+@@ -726,6 +654,16 @@
      使用者會從「30 秒後成功」變成「5 秒失敗」，而且**沒有代理可以救**。
      短逾時的收益只存在於「失敗了還有第二條路」的情境，成本卻落在沒有第二條路的人身上。
      """
@@ -1850,7 +1932,7 @@
      headers = build_download_headers(url, referer)
      timeout = (CONNECT_TIMEOUT, REQUEST_TIMEOUT) if short_connect else REQUEST_TIMEOUT
      try:
-@@ -753,45 +685,128 @@
+@@ -753,45 +691,103 @@
                  payload = decode_image_payload(url_host, payload)
                  if not looks_like_image(payload):
                      logger.warning("[!] 下載圖片失敗：解碼後不是圖片 host=%s", url_host)
@@ -1897,31 +1979,6 @@
      return False
  
  
-+def _write_image_payload(save_path: str, payload: bytes) -> None:
-+    """Atomically write image bytes, with the shared Android SAF fallback."""
-+    with atomic_write(
-+        save_path, mode="wb", suffix=".image.tmp", mobile_fallback=True
-+    ) as handle:
-+        handle.write(payload)
-+
-+
-+def _copy_file_with_mobile_fallback(
-+    source_path: str, destination_path: str
-+) -> None:
-+    """Copy a sidecar verbatim, falling back to SAF when direct copy is denied."""
-+    try:
-+        shutil.copy2(source_path, destination_path)
-+        return
-+    except OSError as error:
-+        from core import android_storage
-+
-+        if not android_storage.is_access_error(error):
-+            raise
-+        payload = Path(source_path).read_bytes()
-+        _write_image_payload(destination_path, payload)
-+        logger.info("file copied through Android SAF: %s", destination_path)
-+
-+
  def download_image(
 -    url: str, save_path: str, referer: str = "", fallback_url: str = ""
 +    url: str,
@@ -1995,7 +2052,7 @@
  
  
  # NFO-CTRL-01（PR #191 CodeRabbit F1/加固；BE-GUARD-01：閘門寫在 sink，不寫在上游白名單）：
-@@ -1034,7 +1049,13 @@
+@@ -1034,7 +1030,13 @@
  {title_record_block}</movie>'''
  
      try:
@@ -2010,15 +2067,41 @@
              f.write(nfo_content)
          return True
      except Exception as e:
+@@ -1345,8 +1347,8 @@
+                 result['error'] = containment_error
+                 return result
+             try:
+-                os.makedirs(target_dir, exist_ok=True)
+-            except PermissionError:
++                ensure_directory(target_dir)
++            except (PermissionError, AndroidStoragePermissionError):
+                 result['error'] = _permission_error_message()
+                 return result
+             result['new_folder'] = target_dir
+@@ -1423,7 +1425,7 @@
+                 # 同上：逐張 index 配對（不用裸 zip，長度不等不得截斷下載張數）
+                 sample_previews = metadata.get('preview_sample_images') or []
+                 try:
+-                    os.makedirs(extrafanart_dir, exist_ok=True)
++                    ensure_directory(extrafanart_dir)
+                     for i, url in enumerate(sample_images, 1):
+                         try:
+                             dest = os.path.join(extrafanart_dir, f'fanart{i}.jpg')
 --- a/core/readonly_assets.py
 +++ b/core/readonly_assets.py
-@@ -34,7 +34,13 @@
+@@ -33,8 +33,19 @@
+ )
  from core.gallery_scanner import IMAGE_EXTENSIONS
  from core.logger import get_logger
++from core.media_io import (
++    copy_file,
++    delete_file,
++    ensure_directory,
++    write_text,
++)
  from core.nfo_stat import NFO_MTIME_REFRESH, nfo_mtime_or_none
 -from core.organizer import crop_to_poster, download_image, generate_jellyfin_images, generate_nfo
 +from core.organizer import (
-+    _copy_file_with_mobile_fallback,
 +    crop_to_poster,
 +    download_image,
 +    generate_jellyfin_images,
@@ -2027,33 +2110,93 @@
  from core.path_utils import is_fs_path_under_dir, to_file_uri, uri_to_local_fs_path
  
  logger = get_logger(__name__)
-@@ -316,7 +322,7 @@
+@@ -60,7 +71,7 @@
+         return
+     for f in ef_dir.glob('fanart*.jpg'):
+         try:
+-            f.unlink(missing_ok=True)
++            delete_file(f)
+         except OSError:
+             logger.warning("[readonly_producer] stale extrafanart 清除失敗（略過）: %s", f)
+ 
+@@ -103,7 +114,7 @@
+     only for poster/fanart, defensive against a future non-.jpg format). Never
+     a bare `*.jpg`/`*.*` glob, never rmtree — both would delete files the user
+     placed in the same directory themselves. Missing files are a no-op
+-    (unlink(missing_ok=True)); this must never raise.
++    through ``media_io.delete_file``; this must never raise.
+     """
+     if not old_base or old_base == new_base:
+         return
+@@ -132,7 +143,7 @@
+         targets.extend(d.glob(f"{esc}-fanart.*"))
+     for target in targets:
+         try:
+-            Path(target).unlink(missing_ok=True)
++            delete_file(target)
+         except OSError:
+             logger.warning("[readonly_producer] stale asset 清除失敗（略過）: %s", target)
+ 
+@@ -238,8 +249,7 @@
+         # still surfaces via the warning log.
+         mappings = strm_mappings if strm_mappings is not None else config.get('strm_path_mappings', {})
+         mapped = _apply_path_mapping(source_fs_path, mappings)
+-        with open(strm_fs, 'w', encoding='utf-8') as f:
+-            f.write(mapped)
++        write_text(strm_fs, mapped, suffix='.strm.tmp')
+         return True
+     except Exception as e:  # noqa: BLE001 — best-effort auxiliary artifact, must never propagate
+         logger.warning("[readonly_producer] strm 寫入失敗（略過，best-effort）: %s (%s)", strm_fs, e)
+@@ -316,7 +326,7 @@
          # 同一檔＝curator 原檔已經就在輸出位置上，本身就是 verbatim passthrough。
          return True if os.path.exists(dst) else None
      try:
 -        shutil.copy2(src, dst)
-+        _copy_file_with_mobile_fallback(src, dst)
++        copy_file(src, dst)
          return True
      except shutil.SameFileError:
          # preflight 之後、copy 之前才變成同一檔（別名 race）的 backstop；必須排在
-@@ -376,7 +382,7 @@
+@@ -376,7 +386,7 @@
              has_fanart = certain
          else:
              try:
 -                shutil.copy2(cover_fs, fanart_path)
-+                _copy_file_with_mobile_fallback(cover_fs, fanart_path)
++                copy_file(cover_fs, fanart_path)
                  has_fanart = True
              except shutil.SameFileError:
                  has_fanart = True
-@@ -475,7 +481,7 @@
+@@ -475,7 +485,7 @@
          # steps encode; overwriting it would contradict them.
          return True
      try:
 -        shutil.copyfile(src, dst)
-+        _copy_file_with_mobile_fallback(src, dst)
++        copy_file(src, dst)
          return True
      except shutil.SameFileError:
          return True
+@@ -599,11 +609,11 @@
+     must read them BEFORE _upsert_db overwrites the row. None → [] → byte-identical
+     to pre-T5, which is why the ~40 direct test call sites need no change.
+     """
+-    os.makedirs(movie_dir, exist_ok=True)
++    ensure_directory(movie_dir)
+ 
+     if assets_mode == 'samples_only':
+         ef_dir = Path(movie_dir) / 'extrafanart'
+-        os.makedirs(ef_dir, exist_ok=True)
++        ensure_directory(ef_dir)
+         sample_fs: list = []
+         previews = meta.get('preview_sample_images') or []
+         for i, url in enumerate(meta.get('sample_images', []), 1):
+@@ -681,7 +691,7 @@
+     sample_fs: list = []
+     if config.get('download_sample_images'):
+         ef_dir = Path(movie_dir) / 'extrafanart'
+-        os.makedirs(ef_dir, exist_ok=True)
++        ensure_directory(ef_dir)
+         previews = meta.get('preview_sample_images') or []
+         for i, url in enumerate(meta.get('sample_images', []), 1):
+             dest = str(ef_dir / f'fanart{i}.jpg')
 --- /dev/null
 +++ b/core/rename_combined_plan.py
 @@ -0,0 +1,624 @@

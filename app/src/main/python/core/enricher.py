@@ -26,6 +26,7 @@ from core.enrich_contract import (
 from core.focal_trigger import schedule_focal_after_cover_write
 from core.image_codec import looks_like_image
 from core.logger import get_logger
+from core.media_io import copy_file, delete_file, ensure_directory
 from core.nfo_read import (
     nfo_actor_names,
     nfo_first_text,
@@ -39,7 +40,6 @@ from core.nfo_stat import NFO_MTIME_FILL_MISSING, NFO_MTIME_REFRESH, nfo_mtime_o
 from core.nfo_title_format import resolve_preserved_title_for_write, resolve_title_body
 from core.nfo_updater import parse_nfo
 from core.organizer import (
-    _copy_file_with_mobile_fallback,
     _strip_num_prefixes,
     crop_to_poster,
     download_image,
@@ -399,7 +399,7 @@ def _write_external_images(
             fanart_ok = certain
         else:
             try:
-                _copy_file_with_mobile_fallback(
+                copy_file(
                     str(cover_path), str(fanart_path)
                 )
                 fanart_ok = True
@@ -477,18 +477,7 @@ def _write_extrafanart(
 
     parent = Path(fs_path).parent
     extrafanart_dir = parent / "extrafanart"
-    try:
-        os.makedirs(str(extrafanart_dir), exist_ok=True)
-    except OSError as error:
-        from core import android_storage
-
-        if not android_storage.is_access_error(error):
-            raise
-        if not android_storage.has_access(str(extrafanart_dir)):
-            raise android_storage.AndroidStoragePermissionError(
-                "storage_tree_not_authorized"
-            ) from error
-        android_storage.mkdirs(str(extrafanart_dir))
+    ensure_directory(extrafanart_dir)
 
     # CD-126-2：逐張配對用 index，**不用裸 zip()**——zip 在長度不等時會靜默截斷，
     # 等於少下載幾張圖。長度不等的正確語意是「那幾格沒有代理」，不是「少下載」。
@@ -517,18 +506,7 @@ def _write_extrafanart(
                 uris.append(to_file_uri(dest, path_mappings))
                 skipped_existing += 1
                 continue
-            try:
-                os.unlink(dest)
-            except OSError as error:
-                from core import android_storage
-
-                if not android_storage.is_access_error(error):
-                    raise
-                if not android_storage.has_access(dest):
-                    raise android_storage.AndroidStoragePermissionError(
-                        "storage_tree_not_authorized"
-                    ) from error
-                android_storage.delete(dest)
+            delete_file(dest)
             logger.warning(
                 "extrafanart %d 既有檔案不是圖片，已刪除重抓", i + 1
             )
@@ -572,7 +550,7 @@ def _write_extrafanart(
                         "http_status": None,
                     })
                     try:
-                        os.unlink(dest)
+                        delete_file(dest)
                     except OSError:
                         pass
                 else:

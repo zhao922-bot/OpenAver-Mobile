@@ -33,9 +33,14 @@ from core.cover_layout import (
 )
 from core.gallery_scanner import IMAGE_EXTENSIONS
 from core.logger import get_logger
+from core.media_io import (
+    copy_file,
+    delete_file,
+    ensure_directory,
+    write_text,
+)
 from core.nfo_stat import NFO_MTIME_REFRESH, nfo_mtime_or_none
 from core.organizer import (
-    _copy_file_with_mobile_fallback,
     crop_to_poster,
     download_image,
     generate_jellyfin_images,
@@ -66,7 +71,7 @@ def _clean_stale_extrafanart(movie_dir: str) -> None:
         return
     for f in ef_dir.glob('fanart*.jpg'):
         try:
-            f.unlink(missing_ok=True)
+            delete_file(f)
         except OSError:
             logger.warning("[readonly_producer] stale extrafanart 清除失敗（略過）: %s", f)
 
@@ -109,7 +114,7 @@ def _clean_stale_singletons(
     only for poster/fanart, defensive against a future non-.jpg format). Never
     a bare `*.jpg`/`*.*` glob, never rmtree — both would delete files the user
     placed in the same directory themselves. Missing files are a no-op
-    (unlink(missing_ok=True)); this must never raise.
+    through ``media_io.delete_file``; this must never raise.
     """
     if not old_base or old_base == new_base:
         return
@@ -138,7 +143,7 @@ def _clean_stale_singletons(
         targets.extend(d.glob(f"{esc}-fanart.*"))
     for target in targets:
         try:
-            Path(target).unlink(missing_ok=True)
+            delete_file(target)
         except OSError:
             logger.warning("[readonly_producer] stale asset 清除失敗（略過）: %s", target)
 
@@ -244,8 +249,7 @@ def _write_strm(base_stem: str, source_fs_path: str, config: dict, strm_mappings
         # still surfaces via the warning log.
         mappings = strm_mappings if strm_mappings is not None else config.get('strm_path_mappings', {})
         mapped = _apply_path_mapping(source_fs_path, mappings)
-        with open(strm_fs, 'w', encoding='utf-8') as f:
-            f.write(mapped)
+        write_text(strm_fs, mapped, suffix='.strm.tmp')
         return True
     except Exception as e:  # noqa: BLE001 — best-effort auxiliary artifact, must never propagate
         logger.warning("[readonly_producer] strm 寫入失敗（略過，best-effort）: %s (%s)", strm_fs, e)
@@ -322,7 +326,7 @@ def _copy_curator_sidecar(src: str, dst: str, slot: str) -> Optional[bool]:
         # 同一檔＝curator 原檔已經就在輸出位置上，本身就是 verbatim passthrough。
         return True if os.path.exists(dst) else None
     try:
-        _copy_file_with_mobile_fallback(src, dst)
+        copy_file(src, dst)
         return True
     except shutil.SameFileError:
         # preflight 之後、copy 之前才變成同一檔（別名 race）的 backstop；必須排在
@@ -382,7 +386,7 @@ def _write_media_images(
             has_fanart = certain
         else:
             try:
-                _copy_file_with_mobile_fallback(cover_fs, fanart_path)
+                copy_file(cover_fs, fanart_path)
                 has_fanart = True
             except shutil.SameFileError:
                 has_fanart = True
@@ -481,7 +485,7 @@ def _write_cover_copy(src: str, dst: str) -> bool:
         # steps encode; overwriting it would contradict them.
         return True
     try:
-        _copy_file_with_mobile_fallback(src, dst)
+        copy_file(src, dst)
         return True
     except shutil.SameFileError:
         return True
@@ -605,11 +609,11 @@ def _write_movie_assets(
     must read them BEFORE _upsert_db overwrites the row. None → [] → byte-identical
     to pre-T5, which is why the ~40 direct test call sites need no change.
     """
-    os.makedirs(movie_dir, exist_ok=True)
+    ensure_directory(movie_dir)
 
     if assets_mode == 'samples_only':
         ef_dir = Path(movie_dir) / 'extrafanart'
-        os.makedirs(ef_dir, exist_ok=True)
+        ensure_directory(ef_dir)
         sample_fs: list = []
         previews = meta.get('preview_sample_images') or []
         for i, url in enumerate(meta.get('sample_images', []), 1):
@@ -687,7 +691,7 @@ def _write_movie_assets(
     sample_fs: list = []
     if config.get('download_sample_images'):
         ef_dir = Path(movie_dir) / 'extrafanart'
-        os.makedirs(ef_dir, exist_ok=True)
+        ensure_directory(ef_dir)
         previews = meta.get('preview_sample_images') or []
         for i, url in enumerate(meta.get('sample_images', []), 1):
             dest = str(ef_dir / f'fanart{i}.jpg')

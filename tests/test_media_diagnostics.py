@@ -9,6 +9,7 @@ from PIL import Image
 from core import atomic_write as atomic_write_module
 from core import enricher
 from core import android_storage
+from core import media_io
 from core import organizer
 from core import readonly_assets
 from core.android_storage import AndroidStoragePermissionError
@@ -183,11 +184,13 @@ def test_generate_jellyfin_images_fanart_uses_saf_payload(
     def deny_copy(_src, _dst):
         raise PermissionError("simulated SD-card denial")
 
-    monkeypatch.setattr(organizer.shutil, "copy2", deny_copy)
+    monkeypatch.setattr(media_io.shutil, "copy2", deny_copy)
     monkeypatch.setattr(
-        organizer,
-        "_write_image_payload",
-        lambda path, payload: captured.update(path=path, payload=payload),
+        media_io,
+        "write_bytes",
+        lambda path, payload, **_kwargs: captured.update(
+            path=path, payload=payload
+        ),
     )
     monkeypatch.setattr(organizer, "crop_to_poster", lambda *_args, **_kwargs: True)
 
@@ -212,7 +215,7 @@ def test_readonly_cover_and_sidecar_copies_use_shared_file_bridge(
 
     monkeypatch.setattr(
         readonly_assets,
-        "_copy_file_with_mobile_fallback",
+        "copy_file",
         lambda src, dst: calls.append((src, dst)),
     )
 
@@ -227,3 +230,102 @@ def test_readonly_cover_and_sidecar_copies_use_shared_file_bridge(
         (str(cover), str(tmp_path / "output.jpg")),
         (str(sidecar), str(tmp_path / "output-poster.jpg")),
     ]
+
+
+def test_media_io_copy_file_uses_shared_saf_writer(tmp_path, monkeypatch):
+    source = tmp_path / "source.jpg"
+    destination = tmp_path / "destination.jpg"
+    source.write_bytes(b"cover")
+    captured = {}
+
+    monkeypatch.setattr(
+        media_io.shutil,
+        "copy2",
+        lambda *_args: (_ for _ in ()).throw(
+            PermissionError("simulated SD-card denial")
+        ),
+    )
+    monkeypatch.setattr(
+        media_io,
+        "write_bytes",
+        lambda path, payload, **kwargs: captured.update(
+            path=path, payload=payload, kwargs=kwargs
+        ),
+    )
+
+    media_io.copy_file(source, destination)
+
+    assert captured == {
+        "path": destination,
+        "payload": b"cover",
+        "kwargs": {"suffix": ".copy.tmp"},
+    }
+
+
+def test_media_io_directory_and_delete_use_saf_fallbacks(tmp_path, monkeypatch):
+    directory = tmp_path / "extrafanart"
+    stale = directory / "fanart1.jpg"
+    calls = []
+
+    monkeypatch.setattr(
+        media_io.os,
+        "makedirs",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            PermissionError("simulated SD-card denial")
+        ),
+    )
+    monkeypatch.setattr(
+        media_io.os,
+        "unlink",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            PermissionError("simulated SD-card denial")
+        ),
+    )
+    monkeypatch.setattr(media_io.android_storage, "has_access", lambda _path: True)
+    monkeypatch.setattr(
+        media_io.android_storage,
+        "mkdirs",
+        lambda path: calls.append(("mkdirs", path)),
+    )
+    monkeypatch.setattr(
+        media_io.android_storage,
+        "delete",
+        lambda path: calls.append(("delete", path)),
+    )
+
+    media_io.ensure_directory(directory)
+    media_io.delete_file(stale)
+
+    assert calls == [
+        ("mkdirs", str(directory)),
+        ("delete", str(stale)),
+    ]
+
+
+def test_media_io_delete_missing_file_is_noop(tmp_path):
+    media_io.delete_file(tmp_path / "missing.jpg")
+
+
+def test_readonly_strm_uses_shared_text_writer(tmp_path, monkeypatch):
+    captured = {}
+    base_stem = str(tmp_path / "ABC-123")
+    source = str(tmp_path / "ABC-123.mp4")
+
+    monkeypatch.setattr(
+        readonly_assets,
+        "write_text",
+        lambda path, text, **kwargs: captured.update(
+            path=path, text=text, kwargs=kwargs
+        ),
+    )
+
+    assert readonly_assets._write_strm(  # noqa: SLF001
+        base_stem,
+        source,
+        {"strm_path_mappings": {}},
+    )
+    assert captured == {
+        "path": base_stem + ".strm",
+        "text": source,
+        "kwargs": {"suffix": ".strm.tmp"},
+    }

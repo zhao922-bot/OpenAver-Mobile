@@ -62,6 +62,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "core/enricher.py",
             "core/gallery_generator.py",
             "core/gallery_scanner.py",
+            "core/media_io.py",
             "core/multipart_group.py",
             "core/multipart_tokens.py",
             "core/nfo_utils.py",

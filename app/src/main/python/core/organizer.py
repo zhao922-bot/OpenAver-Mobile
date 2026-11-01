@@ -17,12 +17,18 @@ from PIL import Image
 from typing import Optional, Dict, Any, List, Tuple
 from urllib.parse import urlparse
 
+from core.android_storage import AndroidStoragePermissionError
 from core.atomic_write import atomic_move, atomic_write
 from core.config import STEM_IMAGE_MODES
 from core.cover_attributes import effective_tags
 from core.cover_layout import resolve_cover_target, same_target_verdict
 from core.image_codec import decode_image_payload, looks_like_image
 from core.image_host_policy import codec_for_host
+from core.media_io import (
+    copy_file as _copy_file_with_mobile_fallback,
+    ensure_directory,
+    write_bytes as _write_image_payload,
+)
 from core.multipart_tokens import (
     detect_multipart_token as _detect_multipart_token,
     is_multipart_keyword as _is_multipart_kw,
@@ -726,31 +732,6 @@ def _attempt_download_image(
     return False
 
 
-def _write_image_payload(save_path: str, payload: bytes) -> None:
-    """Atomically write image bytes, with the shared Android SAF fallback."""
-    with atomic_write(
-        save_path, mode="wb", suffix=".image.tmp", mobile_fallback=True
-    ) as handle:
-        handle.write(payload)
-
-
-def _copy_file_with_mobile_fallback(
-    source_path: str, destination_path: str
-) -> None:
-    """Copy a sidecar verbatim, falling back to SAF when direct copy is denied."""
-    try:
-        shutil.copy2(source_path, destination_path)
-        return
-    except OSError as error:
-        from core import android_storage
-
-        if not android_storage.is_access_error(error):
-            raise
-        payload = Path(source_path).read_bytes()
-        _write_image_payload(destination_path, payload)
-        logger.info("file copied through Android SAF: %s", destination_path)
-
-
 def download_image(
     url: str,
     save_path: str,
@@ -1366,8 +1347,8 @@ def organize_file(  # noqa: C901 — 整理主流程；Phase 2（110b）會在�
                 result['error'] = containment_error
                 return result
             try:
-                os.makedirs(target_dir, exist_ok=True)
-            except PermissionError:
+                ensure_directory(target_dir)
+            except (PermissionError, AndroidStoragePermissionError):
                 result['error'] = _permission_error_message()
                 return result
             result['new_folder'] = target_dir
@@ -1444,7 +1425,7 @@ def organize_file(  # noqa: C901 — 整理主流程；Phase 2（110b）會在�
                 # 同上：逐張 index 配對（不用裸 zip，長度不等不得截斷下載張數）
                 sample_previews = metadata.get('preview_sample_images') or []
                 try:
-                    os.makedirs(extrafanart_dir, exist_ok=True)
+                    ensure_directory(extrafanart_dir)
                     for i, url in enumerate(sample_images, 1):
                         try:
                             dest = os.path.join(extrafanart_dir, f'fanart{i}.jpg')
