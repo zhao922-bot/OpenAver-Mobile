@@ -475,6 +475,17 @@
          含 scrape_attempted_at == 0 的 row（不過濾）——呼叫端用 `.get(path, 0) > 0`
          統一判斷「從未試過」（key 不存在或值為 0 皆視為未試過）。
          """
+--- a/core/database/version_tracker.py
++++ b/core/database/version_tracker.py
+@@ -36,7 +36,7 @@
+             _bump_showcase_revision()
+         self._last_committed_total_changes = current
+ 
+-    def __exit__(self, exc_type, exc_val, exc_tb):
++    def __exit__(self, exc_type, _exc_val, _exc_tb):
+         """C 層 __exit__ 不 dispatch 到 Python commit()；改走這裡以維持 revision 不變式。"""
+         if exc_type is None:
+             self.commit()
 --- a/core/enricher.py
 +++ b/core/enricher.py
 @@ -2,12 +2,14 @@
@@ -1071,7 +1082,33 @@
  # 支援的影片副檔名（from core.video_extensions Single Source of Truth）
  VIDEO_EXTENSIONS = set(DEFAULT_VIDEO_EXTENSIONS)
  
-@@ -246,31 +277,32 @@
+@@ -122,6 +153,7 @@
+     extensions: set,
+     min_size_bytes: int = 0,
+     on_skip: Optional[Callable[[str, Exception], None]] = None,
++    recursive: bool = True,
+ ) -> List[dict]:
+     """快速掃描目錄，一次取得所有檔案資訊
+ 
+@@ -137,6 +169,7 @@
+             用於讓呼叫端捕捉「因長路徑/權限而無法存取」的檔案，因為這類 entry
+             根本不會進入回傳 results，僅透過 callback 讓呼叫端知道它們存在。
+             callback 本身拋的例外會被吞掉，不影響掃描進度。
++        recursive: 是否遞迴掃描子目錄。
+     """
+     logger.debug(f"[FastScan] 掃描目錄: {directory}")
+     results = []
+@@ -189,7 +222,8 @@
+                         if entry.is_dir(follow_symlinks=False):
+                             if is_nas_system_dir_name(entry.name):
+                                 continue
+-                            scan_recursive(entry.path)
++                            if recursive:
++                                scan_recursive(entry.path)
+                         elif entry.is_file(follow_symlinks=False):
+                             ext = os.path.splitext(entry.name)[1].lower()
+                             stem = os.path.splitext(entry.name)[0]
+@@ -246,31 +280,32 @@
      # 番號識別正則表達式 (從 galleryHtml.cs 移植)
      NUM_PATTERNS = [
          # FC2-PPV
@@ -1112,7 +1149,7 @@
           lambda m: f"HEYZO-{m.group(3)}"),
      ]
  
-@@ -576,10 +608,11 @@
+@@ -576,10 +611,11 @@
          except OSError:
              pass
  
@@ -1127,7 +1164,7 @@
              logger.debug(f"[Scan]   nfo_exists: {t_nfo_check - t_start:.2f}s")
              nfo_info = self.parse_nfo(str(nfo_path))
              t_parse = time.time()
-@@ -684,7 +717,7 @@
+@@ -684,7 +720,7 @@
  
          # 步驟 2: 從 SQLite 取得現有 mtime 索引
          # 注意：資料庫中的 path 是 file:/// 格式
@@ -1136,7 +1173,7 @@
  
          # 建立 file:/// 路徑到原始路徑的映射，以及原始路徑到 mtime 的映射
          # scan_file 會產生 file:/// 格式的路徑（使用 core.path_utils.to_file_uri）
-@@ -692,6 +725,7 @@
+@@ -692,6 +728,7 @@
          # 步驟 3: 比對決定需要處理的檔案
          needs_scan = []
          current_file_uris = set()
@@ -1144,7 +1181,7 @@
  
          for file_info in file_infos:
              fs_path = file_info['path']
-@@ -699,19 +733,14 @@
+@@ -699,19 +736,14 @@
              current_file_uris.add(file_uri)
  
              db_entry = db_index.get(file_uri)
@@ -1171,7 +1208,7 @@
  
          # 步驟 4: 清理已刪除的檔案（比對 file:/// 格式的路徑）
          deleted_paths = set(db_index.keys()) - current_file_uris
-@@ -722,6 +751,11 @@
+@@ -722,6 +754,11 @@
          # 步驟 5: 掃描並寫入
          videos_to_upsert = []
          total_needs_scan = len(needs_scan)
@@ -1183,7 +1220,7 @@
  
          for i, file_info in enumerate(needs_scan, 1):
              video_name = os.path.basename(file_info['path'])
-@@ -735,6 +769,12 @@
+@@ -735,6 +772,12 @@
              try:
                  video_info = self.scan_file(file_info['path'], None)
                  video = Video.from_video_info(video_info)
@@ -1196,6 +1233,130 @@
                  video.mtime = file_info['mtime']
                  video.nfo_mtime = file_info.get('nfo_mtime', 0)
                  videos_to_upsert.append(video)
+@@ -808,7 +851,12 @@
+         # 使用 fast_scan_directory 一次取得所有檔案資訊
+         # 這大幅減少對 NAS 的系統呼叫次數
+         logger.info("[*] 快速掃描目錄中...")
+-        all_files = fast_scan_directory(str(directory), extensions, min_size_bytes)
++        all_files = fast_scan_directory(
++            str(directory),
++            extensions,
++            min_size_bytes,
++            recursive=recursive,
++        )
+         logger.info(f"[*] 找到 {len(all_files)} 個影片檔案")
+ 
+         # 統計緩存命中
+--- a/core/multipart_group.py
++++ b/core/multipart_group.py
+@@ -1,7 +1,7 @@
+ """core/multipart_group.py — 分集影片分組判斷的單一真理來源（feature/122，CD-122-2）。
+ 
+-依賴 `core.organizer`（`MULTIPART_TOKENS` / `_detect_multipart_token` /
+-`_strip_part_token`，**只 import，不重寫**——那三個原語是檔名組裝用途，本模組反過來
++依賴 `core.multipart_tokens`（`MULTIPART_TOKENS` / `detect_multipart_token` /
++`strip_part_token`，**只 import，不重寫**——那三個原語是檔名組裝用途，本模組反過來
+ 用它們判斷「哪些 DB 列屬於同一組」，兩件事故意不合併，見 CD-122-2）＋ `os.path`
+ （Zone 1 字串運算，同 `core/cover_layout.py` 先例：呼叫端已把 file:// URI 轉成 fs
+ path 才傳進來，不在此模組碰 URI，不違反 `path_utils.py` 的跨 Zone 轉換禁止清單）。
+@@ -34,7 +34,7 @@
+ import os
+ import re
+ 
+-from core.organizer import _detect_multipart_token, _strip_part_token
++from core.multipart_tokens import detect_multipart_token, strip_part_token
+ from core.path_utils import to_file_uri, uri_to_fs_path, uri_to_local_fs_path
+ 
+ T = TypeVar('T')  # 呼叫端的 row 型別（Video ORM 物件、或任意帶 path 的物件）
+@@ -42,7 +42,7 @@
+ 
+ def normalize_stem_key(stem: str) -> str:
+     """CD-122-3：剝 token 後的 stem 正規化比對鍵（去空白 + lower）。"""
+-    stripped = _strip_part_token(stem)
++    stripped = strip_part_token(stem)
+     return re.sub(r'\s+', '', stripped).lower()
+ 
+ 
+@@ -61,10 +61,10 @@
+     """(token 字面, 段號) 一次解析。
+ 
+     `part_token()` / `part_number()` 是它的兩個單欄位包裝，保留給只要一半的呼叫端；
+-    `group_rows()` 走這一支，因為它兩個都要，而 `_detect_multipart_token()` 是
++    `group_rows()` 走這一支，因為它兩個都要，而 `detect_multipart_token()` 是
+     regex 掃描、且那個迴圈跑遍整個片庫（/simplify 效率條目）。
+     """
+-    match = _detect_multipart_token(os.path.basename(fs_path))
++    match = detect_multipart_token(os.path.basename(fs_path))
+     if match:
+         return match[0], match[1]
+     return None, 1  # 單檔片（無 token）視為 part 1
+--- /dev/null
++++ b/core/multipart_tokens.py
+@@ -0,0 +1,64 @@
++"""Shared multipart filename token primitives.
++
++The organizer, rename planner, and grouping layer must agree on which suffix
++tokens identify multiple parts of the same work. Keep the vocabulary and regex
++in one place so those callers cannot drift.
++"""
++
++from __future__ import annotations
++
++import os
++import re
++from typing import Optional, Tuple
++
++
++MULTIPART_TOKENS = frozenset({"cd", "dvd", "part", "pt", "disc"})
++
++# Tokens accept one digit from 1-9. The leading and trailing guards prevent
++# accidental matches inside ordinary words such as "apartment1".
++MULTIPART_RE = re.compile(
++    r"(?<![A-Za-z0-9])(cd|dvd|part|pt|disc)([1-9])(?![0-9])"
++    r"(?=[-_.\s\[\]()]|$)",
++    re.IGNORECASE,
++)
++
++
++def detect_multipart_token(filename: str) -> Optional[Tuple[str, int]]:
++    """Return ``(token, part_number)`` for the last token in a filename."""
++    if not filename:
++        return None
++    stem = os.path.splitext(filename)[0]
++    matches = list(MULTIPART_RE.finditer(stem))
++    if not matches:
++        return None
++    match = matches[-1]
++    token = f"{match.group(1).lower()}{match.group(2)}"
++    return token, int(match.group(2))
++
++
++def strip_part_token(stem: str) -> str:
++    """Remove the last multipart token and its leading separator."""
++    if not stem:
++        return stem
++    matches = list(MULTIPART_RE.finditer(stem))
++    if not matches:
++        return stem
++    match = matches[-1]
++    start = match.start()
++    if start > 0 and stem[start - 1] in "-_. \t([":
++        start -= 1
++    return stem[:start] + stem[match.end():]
++
++
++def is_multipart_keyword(keyword: str) -> bool:
++    """Return whether a suffix keyword is a complete multipart token."""
++    if not keyword:
++        return False
++    stripped = keyword.lstrip("-_. ")
++    if not stripped:
++        return False
++    return re.fullmatch(
++        r"(cd|dvd|part|pt|disc)([1-9])",
++        stripped,
++        re.IGNORECASE,
++    ) is not None
 --- a/core/nfo_utils.py
 +++ b/core/nfo_utils.py
 @@ -6,7 +6,9 @@
@@ -1502,7 +1663,7 @@
  import requests
  import html
  from pathlib import Path
-@@ -16,7 +17,7 @@
+@@ -16,12 +17,17 @@
  from typing import Optional, Dict, Any, List, Tuple
  from urllib.parse import urlparse
  
@@ -1511,7 +1672,117 @@
  from core.config import STEM_IMAGE_MODES
  from core.cover_attributes import effective_tags
  from core.cover_layout import resolve_cover_target, same_target_verdict
-@@ -523,7 +524,7 @@
+ from core.image_codec import decode_image_payload, looks_like_image
+ from core.image_host_policy import codec_for_host
++from core.multipart_tokens import (
++    detect_multipart_token as _detect_multipart_token,
++    is_multipart_keyword as _is_multipart_kw,
++    strip_part_token as _strip_part_token,
++)
+ from core.path_utils import normalize_path, is_fs_path_under_dir
+ from core.scrapers.utils import has_chinese, check_subtitle, strip_subtitle_markers, normalize_number_impl
+ from core.focal import device_state, requires_face_detection
+@@ -241,99 +247,6 @@
+ # 多段（multi-part）token 偵測與剝除（CD-8 / plan-72b §1.4）
+ # ---------------------------------------------------------------------------
+ 
+-#: 支援的多段 token 前綴集合（全小寫）
+-MULTIPART_TOKENS: frozenset = frozenset({'cd', 'dvd', 'part', 'pt', 'disc'})
+-
+-# 共用編譯正則：前後邊界皆檢查，數字限 1-9 且後不可再接數字
+-# - 前緣 (?<![A-Za-z0-9])：避免 apartment1 誤命中 part1
+-# - 後緣 (?=[-_.\s\[\]()]|$)：token 後須為分隔符 / bracket / 字串終點
+-_MULTIPART_RE = re.compile(
+-    r'(?<![A-Za-z0-9])(cd|dvd|part|pt|disc)([1-9])(?![0-9])(?=[-_.\s\[\]()]|$)',
+-    re.IGNORECASE,
+-)
+-
+-
+-def _detect_multipart_token(filename: str) -> Optional[Tuple[str, int]]:
+-    """
+-    偵測原始檔名中的多段 token（cd/dvd/part/pt/disc 後接 1-9）。
+-
+-    Args:
+-        filename: 原始檔名（含副檔名，如 ``MIRD-151-cd1.mkv``）。
+-
+-    Returns:
+-        ``(raw_token_lower, part_number)`` — 如 ``("cd1", 1)``；無匹配回 ``None``。
+-        多個匹配時取 stem 中位置最靠後者（避免標題中段巧合字串蓋過尾端 token）。
+-    """
+-    if not filename:
+-        return None
+-    stem = os.path.splitext(filename)[0]
+-    lower_stem = stem.lower()
+-    matches = list(_MULTIPART_RE.finditer(lower_stem))
+-    if not matches:
+-        return None
+-    # 取最靠後（span 最大 start）的匹配
+-    last = matches[-1]
+-    prefix = last.group(1).lower()
+-    digit = int(last.group(2))
+-    return (f'{prefix}{digit}', digit)
+-
+-
+-def _strip_part_token(stem: str) -> str:
+-    """
+-    從已去副檔名的 stem 剝除最靠後的多段 token（含其前導分隔符）。
+-
+-    與 ``_detect_multipart_token`` 共用同一套邊界正則，確保契約一致。
+-
+-    Args:
+-        stem: 已去副檔名的字串（如 ``MIRD-151-cd1``）。
+-
+-    Returns:
+-        剝除多段 token 及其前導分隔符後的 stem；無 token 時原樣回傳（no-op）。
+-        保留 base 段原始大小寫。
+-    """
+-    if not stem:
+-        return stem
+-    lower_stem = stem.lower()
+-    matches = list(_MULTIPART_RE.finditer(lower_stem))
+-    if not matches:
+-        return stem
+-    last = matches[-1]
+-    token_start = last.start()  # token 本體在 lower_stem 的起始位置
+-    token_end = last.end()      # 不含後緣 lookahead（lookahead 不消耗）
+-    # 若 token 前有分隔符，一併剝除（[-_.\s\[(]）
+-    if token_start > 0 and stem[token_start - 1] in '-_. \t([':
+-        strip_from = token_start - 1
+-    else:
+-        strip_from = token_start
+-    return stem[:strip_from] + stem[token_end:]
+-
+-
+-def _is_multipart_kw(kw: str) -> bool:
+-    """
+-    判斷一個 suffix keyword 是否為多段 token（cd/dvd/part/pt/disc 後接 1-9）。
+-
+-    外部模式下用來濾掉 suffix_keywords 中的多段 token，避免與 part_tail 雙寫。
+-    複用 `_MULTIPART_RE` 與 `MULTIPART_TOKENS`，確保契約與 `_detect_multipart_token` 一致。
+-
+-    Args:
+-        kw: suffix keyword，如 ``'-cd1'``、``'_uc'``、``'-4k'``。
+-
+-    Returns:
+-        True 若 keyword 是多段 token（strip 前導分隔符後 fullmatch）；否則 False。
+-        ``'-cd1'`` / ``'-dvd1'`` / ``'part2'`` → True；``'-4k'`` / ``'_uc'`` → False。
+-    """
+-    if not kw:
+-        return False
+-    # strip 前導分隔符（keyword 慣例帶 -/_/.，也允許無前綴如 'cd1'）
+-    stripped = kw.lstrip('-_. ')
+-    if not stripped:
+-        return False
+-    # fullmatch：整個 stripped 字串必須是 (prefix)(1-9)，且後不再接數字
+-    # 與 _MULTIPART_RE 用同一 MULTIPART_TOKENS 集合、同一數字規則（1-9，不含 cd10+）
+-    m = re.fullmatch(r'(cd|dvd|part|pt|disc)([1-9])', stripped, re.IGNORECASE)
+-    return m is not None
+-
+-
+ _VR_UNIQUE: frozenset = frozenset({
+     'mkx200', 'mkx220', 'vrca220', 'rf52', 'fisheye190', 'fisheye',
+     'f180', '180f', '180x180', 'eac360', '360eac', 'mono180', '180mono',
+@@ -523,7 +436,7 @@
              ratio = h / w
  
              if ratio >= 1.4:
@@ -1520,7 +1791,7 @@
                  return True
  
              r_window = _poster_window_ratio(w, h)
-@@ -554,7 +555,9 @@
+@@ -554,7 +467,9 @@
  
              cropped = rgb.crop((x0, 0, x0 + crop_w, h))
  
@@ -1531,7 +1802,7 @@
              return True
      except Exception as e:
          logger.warning(f"[!] crop_to_poster 失敗: {e}")
-@@ -630,7 +633,7 @@
+@@ -630,7 +545,7 @@
              result['fanart_path'] = fanart_path
      else:
          try:
@@ -1540,7 +1811,7 @@
              result['fanart'] = True
              result['fanart_path'] = fanart_path
          except shutil.SameFileError:
-@@ -709,13 +712,20 @@
+@@ -709,13 +624,20 @@
              effective_referer = "https://www.dmm.co.jp/"
          elif "jav321.com" in url:
              effective_referer = "https://www.jav321.com/"
@@ -1562,7 +1833,7 @@
  ) -> bool:
      """Try one URL. Record host only on connect-stage failures.
  
-@@ -726,6 +736,16 @@
+@@ -726,6 +648,16 @@
      使用者會從「30 秒後成功」變成「5 秒失敗」，而且**沒有代理可以救**。
      短逾時的收益只存在於「失敗了還有第二條路」的情境，成本卻落在沒有第二條路的人身上。
      """
@@ -1579,7 +1850,7 @@
      headers = build_download_headers(url, referer)
      timeout = (CONNECT_TIMEOUT, REQUEST_TIMEOUT) if short_connect else REQUEST_TIMEOUT
      try:
-@@ -753,45 +773,128 @@
+@@ -753,45 +685,128 @@
                  payload = decode_image_payload(url_host, payload)
                  if not looks_like_image(payload):
                      logger.warning("[!] 下載圖片失敗：解碼後不是圖片 host=%s", url_host)
@@ -1724,7 +1995,7 @@
  
  
  # NFO-CTRL-01（PR #191 CodeRabbit F1/加固；BE-GUARD-01：閘門寫在 sink，不寫在上游白名單）：
-@@ -1034,7 +1137,13 @@
+@@ -1034,7 +1049,13 @@
  {title_record_block}</movie>'''
  
      try:
@@ -1785,7 +2056,7 @@
          return True
 --- /dev/null
 +++ b/core/rename_normalizer.py
-@@ -0,0 +1,1680 @@
+@@ -0,0 +1,1660 @@
 +"""Safe, preview-first normalization of video filenames and local sidecars."""
 +
 +from __future__ import annotations
@@ -1799,6 +2070,7 @@
 +from typing import Any, Callable
 +
 +from core import android_storage
++from core.multipart_tokens import detect_multipart_token, strip_part_token
 +from core.path_utils import to_file_uri, uri_to_fs_path
 +from core.scrapers.utils import extract_number, normalize_number_impl
 +from core.video_extensions import get_video_extensions
@@ -1813,12 +2085,6 @@
 +IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp"})
 +MAX_COMPONENT_BYTES = 255
 +TRUNCATION_MARKER = "..."
-+MULTIPART_TOKENS = frozenset({"cd", "dvd", "part", "pt", "disc"})
-+MULTIPART_RE = re.compile(
-+    r"(?<![A-Za-z0-9])(cd|dvd|part|pt|disc)([1-9])(?![0-9])"
-+    r"(?=[-_.\s\[\]()]|$)",
-+    re.IGNORECASE,
-+)
 +PORTABLE_FILENAME_REPLACEMENTS = str.maketrans({
 +    "<": "＜",
 +    ">": "＞",
@@ -1846,28 +2112,13 @@
 +
 +
 +def multipart_token(stem: str) -> str | None:
-+    """Return the last multipart suffix token such as ``cd1``.
-+
-+    The token vocabulary intentionally mirrors ``core.organizer`` so the
-+    rename normalizer and the multipart grouping layer agree on what counts
-+    as a segment marker.
-+    """
-+    matches = list(MULTIPART_RE.finditer(stem))
-+    if not matches:
-+        return None
-+    match = matches[-1]
-+    return f"{match.group(1).lower()}{match.group(2)}"
++    """Return the last multipart suffix token such as ``cd1``."""
++    match = detect_multipart_token(stem)
++    return match[0] if match else None
 +
 +
 +def _strip_multipart_token(stem: str) -> str:
-+    matches = list(MULTIPART_RE.finditer(stem))
-+    if not matches:
-+        return stem
-+    match = matches[-1]
-+    start = match.start()
-+    if start > 0 and stem[start - 1] in "-_. \t([":
-+        start -= 1
-+    return stem[:start] + stem[match.end():]
++    return strip_part_token(stem)
 +
 +
 +def _append_multipart_token(stem: str, token: str | None) -> str:

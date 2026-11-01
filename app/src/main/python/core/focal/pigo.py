@@ -83,7 +83,7 @@ class Pigo:
             root += 4 * n_leaf
         return out - thr[tn - 1]
 
-    def classify_rotated_region(self, r, c, s, a, nrows, ncols, pixels, dim):
+    def classify_rotated_region(self, r, c, s, a, nrows, _ncols, pixels, dim):
         codes = self.tree_codes
         pred = self.tree_pred
         thr = self.tree_threshold

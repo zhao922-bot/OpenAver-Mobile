@@ -153,6 +153,7 @@ def fast_scan_directory(
     extensions: set,
     min_size_bytes: int = 0,
     on_skip: Optional[Callable[[str, Exception], None]] = None,
+    recursive: bool = True,
 ) -> List[dict]:
     """快速掃描目錄，一次取得所有檔案資訊
 
@@ -168,6 +169,7 @@ def fast_scan_directory(
             用於讓呼叫端捕捉「因長路徑/權限而無法存取」的檔案，因為這類 entry
             根本不會進入回傳 results，僅透過 callback 讓呼叫端知道它們存在。
             callback 本身拋的例外會被吞掉，不影響掃描進度。
+        recursive: 是否遞迴掃描子目錄。
     """
     logger.debug(f"[FastScan] 掃描目錄: {directory}")
     results = []
@@ -220,7 +222,8 @@ def fast_scan_directory(
                         if entry.is_dir(follow_symlinks=False):
                             if is_nas_system_dir_name(entry.name):
                                 continue
-                            scan_recursive(entry.path)
+                            if recursive:
+                                scan_recursive(entry.path)
                         elif entry.is_file(follow_symlinks=False):
                             ext = os.path.splitext(entry.name)[1].lower()
                             stem = os.path.splitext(entry.name)[0]
@@ -848,7 +851,12 @@ class VideoScanner:
         # 使用 fast_scan_directory 一次取得所有檔案資訊
         # 這大幅減少對 NAS 的系統呼叫次數
         logger.info("[*] 快速掃描目錄中...")
-        all_files = fast_scan_directory(str(directory), extensions, min_size_bytes)
+        all_files = fast_scan_directory(
+            str(directory),
+            extensions,
+            min_size_bytes,
+            recursive=recursive,
+        )
         logger.info(f"[*] 找到 {len(all_files)} 個影片檔案")
 
         # 統計緩存命中

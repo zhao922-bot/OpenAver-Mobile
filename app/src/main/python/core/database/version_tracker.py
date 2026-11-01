@@ -36,7 +36,7 @@ class _RevisionTrackingConnection(sqlite3.Connection):
             _bump_showcase_revision()
         self._last_committed_total_changes = current
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, _exc_val, _exc_tb):
         """C 層 __exit__ 不 dispatch 到 Python commit()；改走這裡以維持 revision 不變式。"""
         if exc_type is None:
             self.commit()

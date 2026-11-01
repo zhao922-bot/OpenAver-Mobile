@@ -1,7 +1,7 @@
 """core/multipart_group.py — 分集影片分組判斷的單一真理來源（feature/122，CD-122-2）。
 
-依賴 `core.organizer`（`MULTIPART_TOKENS` / `_detect_multipart_token` /
-`_strip_part_token`，**只 import，不重寫**——那三個原語是檔名組裝用途，本模組反過來
+依賴 `core.multipart_tokens`（`MULTIPART_TOKENS` / `detect_multipart_token` /
+`strip_part_token`，**只 import，不重寫**——那三個原語是檔名組裝用途，本模組反過來
 用它們判斷「哪些 DB 列屬於同一組」，兩件事故意不合併，見 CD-122-2）＋ `os.path`
 （Zone 1 字串運算，同 `core/cover_layout.py` 先例：呼叫端已把 file:// URI 轉成 fs
 path 才傳進來，不在此模組碰 URI，不違反 `path_utils.py` 的跨 Zone 轉換禁止清單）。
@@ -34,7 +34,7 @@ from typing import Callable, Generic, List, Optional, Tuple, TypeVar
 import os
 import re
 
-from core.organizer import _detect_multipart_token, _strip_part_token
+from core.multipart_tokens import detect_multipart_token, strip_part_token
 from core.path_utils import to_file_uri, uri_to_fs_path, uri_to_local_fs_path
 
 T = TypeVar('T')  # 呼叫端的 row 型別（Video ORM 物件、或任意帶 path 的物件）
@@ -42,7 +42,7 @@ T = TypeVar('T')  # 呼叫端的 row 型別（Video ORM 物件、或任意帶 pa
 
 def normalize_stem_key(stem: str) -> str:
     """CD-122-3：剝 token 後的 stem 正規化比對鍵（去空白 + lower）。"""
-    stripped = _strip_part_token(stem)
+    stripped = strip_part_token(stem)
     return re.sub(r'\s+', '', stripped).lower()
 
 
@@ -61,10 +61,10 @@ def part_info(fs_path: str) -> Tuple[Optional[str], int]:
     """(token 字面, 段號) 一次解析。
 
     `part_token()` / `part_number()` 是它的兩個單欄位包裝，保留給只要一半的呼叫端；
-    `group_rows()` 走這一支，因為它兩個都要，而 `_detect_multipart_token()` 是
+    `group_rows()` 走這一支，因為它兩個都要，而 `detect_multipart_token()` 是
     regex 掃描、且那個迴圈跑遍整個片庫（/simplify 效率條目）。
     """
-    match = _detect_multipart_token(os.path.basename(fs_path))
+    match = detect_multipart_token(os.path.basename(fs_path))
     if match:
         return match[0], match[1]
     return None, 1  # 單檔片（無 token）視為 part 1

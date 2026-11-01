@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from core import android_storage
+from core.multipart_tokens import detect_multipart_token, strip_part_token
 from core.path_utils import to_file_uri, uri_to_fs_path
 from core.scrapers.utils import extract_number, normalize_number_impl
 from core.video_extensions import get_video_extensions
@@ -25,12 +26,6 @@ LEADING_SEPARATORS = " \t\u3000-_＿－"
 IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp"})
 MAX_COMPONENT_BYTES = 255
 TRUNCATION_MARKER = "..."
-MULTIPART_TOKENS = frozenset({"cd", "dvd", "part", "pt", "disc"})
-MULTIPART_RE = re.compile(
-    r"(?<![A-Za-z0-9])(cd|dvd|part|pt|disc)([1-9])(?![0-9])"
-    r"(?=[-_.\s\[\]()]|$)",
-    re.IGNORECASE,
-)
 PORTABLE_FILENAME_REPLACEMENTS = str.maketrans({
     "<": "＜",
     ">": "＞",
@@ -58,28 +53,13 @@ def _number_pattern(number: str) -> re.Pattern[str]:
 
 
 def multipart_token(stem: str) -> str | None:
-    """Return the last multipart suffix token such as ``cd1``.
-
-    The token vocabulary intentionally mirrors ``core.organizer`` so the
-    rename normalizer and the multipart grouping layer agree on what counts
-    as a segment marker.
-    """
-    matches = list(MULTIPART_RE.finditer(stem))
-    if not matches:
-        return None
-    match = matches[-1]
-    return f"{match.group(1).lower()}{match.group(2)}"
+    """Return the last multipart suffix token such as ``cd1``."""
+    match = detect_multipart_token(stem)
+    return match[0] if match else None
 
 
 def _strip_multipart_token(stem: str) -> str:
-    matches = list(MULTIPART_RE.finditer(stem))
-    if not matches:
-        return stem
-    match = matches[-1]
-    start = match.start()
-    if start > 0 and stem[start - 1] in "-_. \t([":
-        start -= 1
-    return stem[:start] + stem[match.end():]
+    return strip_part_token(stem)
 
 
 def _append_multipart_token(stem: str, token: str | None) -> str:

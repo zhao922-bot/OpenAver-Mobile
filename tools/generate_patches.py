@@ -36,6 +36,8 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "core/focal/detector.py",
             "core/focal/subprocess_runner.py",
+            "core/focal/pigo.py",
+            "core/focal_trigger.py",
         ),
     ),
     (
@@ -56,9 +58,12 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "core/android_storage.py",
             "core/atomic_write.py",
             "core/database/video.py",
+            "core/database/version_tracker.py",
             "core/enricher.py",
             "core/gallery_generator.py",
             "core/gallery_scanner.py",
+            "core/multipart_group.py",
+            "core/multipart_tokens.py",
             "core/nfo_utils.py",
             "core/nfo_updater.py",
             "core/organizer.py",
