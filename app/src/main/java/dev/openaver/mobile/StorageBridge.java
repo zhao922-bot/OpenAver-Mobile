@@ -175,6 +175,47 @@ public final class StorageBridge {
         }
     }
 
+    public static String move(String sourcePath, String targetPath) {
+        synchronized (LOCK) {
+            try {
+                if (findDocument(sourcePath) == null) {
+                    return "source_not_found";
+                }
+                if (findDocument(targetPath) != null) {
+                    return "target_exists";
+                }
+                File source = new File(sourcePath);
+                File target = new File(targetPath);
+                File sourceParent = source.getParentFile();
+                File targetParent = target.getParentFile();
+                if (sourceParent == null || targetParent == null) {
+                    return "invalid_move_path";
+                }
+                Uri sourceParentDoc = resolveDirectory(
+                        sourceParent.getAbsolutePath(), false
+                );
+                Uri targetParentDoc = resolveDirectory(
+                        targetParent.getAbsolutePath(), true
+                );
+                if (sourceParentDoc == null) {
+                    return "source_parent_not_found";
+                }
+                if (targetParentDoc == null) {
+                    return "target_parent_not_found";
+                }
+                Uri moved = DocumentsContract.moveDocument(
+                        resolver(),
+                        findDocument(sourcePath),
+                        sourceParentDoc,
+                        targetParentDoc
+                );
+                return moved == null ? "move_failed" : null;
+            } catch (Exception error) {
+                return errorText(error);
+            }
+        }
+    }
+
     public static String writeBytes(String path, byte[] data, boolean createParents) {
         synchronized (LOCK) {
             Uri existing = null;

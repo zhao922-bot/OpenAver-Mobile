@@ -1282,9 +1282,15 @@
                     <div class="rename-preview-item">
                         <strong x-text="item.number || ''"></strong>
                         <div class="rename-preview-names">
-                            <span class="rename-preview-old" x-text="item.old_name"></span>
-                            <i class="bi bi-arrow-right"></i>
-                            <span class="rename-preview-new" x-text="item.new_name"></span>
+                            <span class="rename-preview-old"
+                                  x-show="item.folder_action !== 'create'"
+                                  x-text="item.old_name"></span>
+                            <i class="bi bi-arrow-right"
+                               x-show="item.folder_action !== 'create'"></i>
+                            <span class="rename-preview-new"
+                                  x-text="item.folder_action === 'create'
+                                      ? window.t('scanner.rename.folder_create_prefix') + item.new_name
+                                      : item.new_name"></span>
                         </div>
                         <div class="rename-preview-videos">
                             <template x-for="video in item.videos" :key="video.db_old_uri">

@@ -59,6 +59,19 @@ def test_canonicalize_stem_inserts_space_without_changing_title():
     )
 
 
+def test_canonicalize_stem_preserves_multipart_suffix():
+    assert canonicalize_stem("SSIS414 小宵 上集-cd1") == (
+        "SSIS-414 小宵 上集-cd1",
+        "SSIS-414",
+        "rename",
+    )
+    assert canonicalize_stem("SSIS-414 小宵-cd2") == (
+        "SSIS-414 小宵-cd2",
+        "SSIS-414",
+        "unchanged",
+    )
+
+
 def test_canonicalize_source_stem_sanitizes_and_removes_duplicate_number():
     assert canonicalize_source_stem(
         "ABC-123",
@@ -72,6 +85,15 @@ def test_canonicalize_source_stem_sanitizes_and_removes_duplicate_number():
         None,
         "ABC-123",
         "empty_title",
+    )
+    assert canonicalize_source_stem(
+        "SSIS-414",
+        "小宵こなん10変化",
+        part_token="cd2",
+    ) == (
+        "SSIS-414 小宵こなん10変化-cd2",
+        "SSIS-414",
+        "source_title",
     )
 
 
@@ -547,6 +569,210 @@ def test_combined_plan_validation_detects_changed_source_size(tmp_path):
     assert validate_combined_rename_plan(plan) is False
 
 
+def test_combined_plan_creates_folder_for_root_video_and_moves_sidecars(tmp_path):
+    source = tmp_path / "library"
+    source.mkdir()
+    video = source / "ABC123 旧名称.mp4"
+    nfo = source / "ABC123 旧名称.nfo"
+    cover = source / "ABC123 旧名称.jpg"
+    unrelated = source / "aes.key"
+    for path in (video, nfo, cover, unrelated):
+        path.write_bytes(path.name.encode("utf-8"))
+
+    old_uri = to_file_uri(str(video))
+    old_cover_uri = to_file_uri(str(cover))
+    row = Video(
+        path=old_uri,
+        number="ABC-123",
+        cover_path=old_cover_uri,
+        size_bytes=video.stat().st_size,
+    )
+    plan = build_combined_rename_plan(
+        [row],
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 来源新标题"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+    item = plan["items"][0]
+    new_folder = source / "ABC-123 来源新标题"
+
+    assert plan["summary"]["conflicts"] == 0
+    assert plan["summary"]["rename_folders"] == 1
+    assert item["folder_action"] == "create"
+    assert item["old_folder_path"] == str(source)
+    assert item["new_folder_path"] == str(new_folder)
+    assert {Path(move["new_path"]).name for move in item["move_files"]} == {
+        "ABC-123 来源新标题.mp4",
+        "ABC-123 来源新标题.nfo",
+        "ABC-123 来源新标题.jpg",
+    }
+    assert unrelated.name not in {
+        Path(move["new_path"]).name for move in item["move_files"]
+    }
+    assert validate_combined_rename_plan(plan) is True
+
+    repo = FakeRepo()
+    repo.paths.add(old_uri)
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+    )
+
+    assert result["success"] is True
+    assert result["created_folders"] == 1
+    assert result["moved_files"] == 3
+    assert new_folder.is_dir()
+    assert (new_folder / "ABC-123 来源新标题.mp4").is_file()
+    assert (new_folder / "ABC-123 来源新标题.nfo").is_file()
+    assert (new_folder / "ABC-123 来源新标题.jpg").is_file()
+    assert not video.exists()
+    assert not nfo.exists()
+    assert not cover.exists()
+    assert unrelated.is_file()
+    assert to_file_uri(str(new_folder / "ABC-123 来源新标题.mp4")) in repo.paths
+    assert repo.cover_updates == [(
+        to_file_uri(str(new_folder / "ABC-123 来源新标题.mp4")),
+        to_file_uri(str(new_folder / "ABC-123 来源新标题.jpg")),
+        old_cover_uri,
+    )]
+
+
+def test_combined_plan_splits_multiple_root_videos_into_distinct_folders(tmp_path):
+    source = tmp_path / "library"
+    source.mkdir()
+    videos = []
+    rows = []
+    for number, old_name in (
+        ("ABC-123", "ABC123 旧名称"),
+        ("XYZ-456", "XYZ456 旧名称"),
+    ):
+        video = source / f"{old_name}.mp4"
+        video.write_bytes(number.encode("ascii"))
+        videos.append(video)
+        rows.append(Video(
+            path=to_file_uri(str(video)),
+            number=number,
+            size_bytes=video.stat().st_size,
+        ))
+
+    plan = build_combined_rename_plan(
+        rows,
+        source_id="javbus",
+        stem_overrides={
+            rows[0].path: "ABC-123 标题一",
+            rows[1].path: "XYZ-456 标题二",
+        },
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+
+    assert plan["summary"]["conflicts"] == 0
+    assert plan["summary"]["rename_folders"] == 2
+    assert {item["new_name"] for item in plan["items"]} == {
+        "ABC-123 标题一",
+        "XYZ-456 标题二",
+    }
+
+
+def test_combined_plan_keeps_root_multipart_together_and_preserves_tokens(tmp_path):
+    source = tmp_path / "library"
+    source.mkdir()
+    rows = []
+    overrides = {}
+    for part in (1, 2):
+        video = source / f"SSIS414 小宵 上集-cd{part}.mp4"
+        video.write_bytes(f"part-{part}".encode("ascii"))
+        row = Video(
+            path=to_file_uri(str(video)),
+            number="SSIS-414",
+            size_bytes=video.stat().st_size,
+        )
+        rows.append(row)
+        stem, _, _ = canonicalize_source_stem(
+            "SSIS-414",
+            "小宵こなん10変化",
+            part_token=f"cd{part}",
+        )
+        overrides[row.path] = stem
+
+    plan = build_combined_rename_plan(
+        rows,
+        source_id="javbus",
+        stem_overrides=overrides,
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+
+    assert plan["summary"]["conflicts"] == 0
+    assert plan["summary"]["rename_folders"] == 1
+    assert len(plan["items"]) == 1
+    item = plan["items"][0]
+    assert item["folder_action"] == "create"
+    assert item["new_name"] == "SSIS-414 小宵こなん10変化"
+    assert {video["new_name"] for video in item["videos"]} == {
+        "SSIS-414 小宵こなん10変化-cd1.mp4",
+        "SSIS-414 小宵こなん10変化-cd2.mp4",
+    }
+    assert validate_combined_rename_plan(plan) is True
+
+    repo = FakeRepo()
+    repo.paths.update(row.path for row in rows)
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+    )
+
+    new_folder = source / "SSIS-414 小宵こなん10変化"
+    assert result["success"] is True
+    assert result["created_folders"] == 1
+    assert result["moved_files"] == 2
+    assert (new_folder / "SSIS-414 小宵こなん10変化-cd1.mp4").is_file()
+    assert (new_folder / "SSIS-414 小宵こなん10変化-cd2.mp4").is_file()
+
+
+def test_combined_root_folder_move_failure_rolls_back_files_and_folder(tmp_path):
+    source = tmp_path / "library"
+    source.mkdir()
+    video = source / "ABC123 旧名称.mp4"
+    nfo = source / "ABC123 旧名称.nfo"
+    for path in (video, nfo):
+        path.write_bytes(path.name.encode("utf-8"))
+    old_uri = to_file_uri(str(video))
+    plan = build_combined_rename_plan(
+        [Video(path=old_uri, number="ABC-123")],
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 来源新标题"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+    repo = FakeRepo()
+    repo.paths.add(old_uri)
+
+    def fail_move(_source, _target):
+        raise OSError("move failed")
+
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+        file_move_fn=fail_move,
+    )
+
+    assert result["success"] is False
+    assert result["rollback_ok"] is True
+    assert video.is_file()
+    assert nfo.is_file()
+    assert not (source / "ABC-123 来源新标题").exists()
+    assert repo.paths == {old_uri}
+
+
 def test_combined_execute_rolls_back_files_when_folder_rename_fails(tmp_path):
     source = tmp_path / "library"
     folder = source / "ABC123 舊名稱"
@@ -653,6 +879,7 @@ def test_rename_locales_cover_preview_and_execution_states():
         "modal_intro",
         "folder_modal_intro",
         "modal_note",
+        "folder_create_prefix",
         "folder_related_videos",
         "conflict_title",
         "no_changes",
@@ -672,3 +899,4 @@ def test_rename_locales_cover_preview_and_execution_states():
         data = json.loads(path.read_text(encoding="utf-8"))
         assert required <= set(data["scanner"]["rename"]), path.name
         assert "aes.key" not in data["scanner"]["rename"]["modal_intro"], path.name
+        assert "aes.key" not in data["scanner"]["rename"]["source_modal_intro"], path.name

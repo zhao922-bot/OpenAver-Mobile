@@ -94,7 +94,7 @@
      "var": {
        "num": "ID",
        "title": "Title",
-@@ -801,6 +856,60 @@
+@@ -801,6 +856,61 @@
      }
    },
    "scanner": {
@@ -102,12 +102,12 @@
 +      "row_title": "Normalize video filenames",
 +      "row_hint": "Normalize number/title spacing; overlong names are safely truncated with ...",
 +      "source_row_title": "Normalize filenames and folders",
-+      "source_row_hint": "Choose a metadata source; its title after the number determines both the video and folder names",
++      "source_row_hint": "Choose a metadata source for video and folder names; root-level videos get a matching folder automatically",
 +      "source_select_label": "Title source",
 +      "source_preview_btn": "Preview unified rename",
 +      "source_previewing": "Fetching source titles...",
 +      "source_modal_title": "Unified filename and folder preview",
-+      "source_modal_intro": "Video files, NFO, covers, poster, fanart, subtitles, and each direct-child movie folder are renamed from the selected source title. extrafanart and unrelated files stay unchanged.",
++      "source_modal_intro": "Video files, NFO, covers, poster, fanart, subtitles, and each direct-child movie folder are renamed from the selected source title. Root-level videos get a matching folder automatically. extrafanart and other unrelated files stay unchanged.",
 +      "source_used": "Title source: {source}",
 +      "source_failed": "{count} videos could not get a title from this source and will stay unchanged",
 +      "source_execute_btn": "Execute unified rename",
@@ -125,13 +125,14 @@
 +      "modal_title": "Filename normalization preview",
 +      "folder_modal_title": "Folder normalization preview",
 +      "summary_videos": "Videos to rename",
-+      "summary_folders": "Folders to rename",
++      "summary_folders": "Folders to process",
 +      "summary_files": "Files including sidecars",
 +      "summary_conflicts": "Conflicts",
 +      "modal_intro": "Only video filenames and sidecars in the same folder are changed: NFO, cover, poster, fanart, and subtitles. Overlong names share a safe limit and end with ..., while folders, extrafanart, and other videos stay unchanged.",
 +      "folder_modal_intro": "Only direct-child movie folder names under each scan root are changed, together with database paths. Videos, NFO, cover, and still-image files inside keep their filenames.",
 +      "modal_note": "The preview is checked again before execution and stops if files changed. Any failure rolls files and database paths back automatically and saves a rename manifest.",
 +      "related_files": "Also handles {count} sidecar files",
++      "folder_create_prefix": "Create folder: ",
 +      "folder_related_videos": "Updates {count} video paths",
 +      "conflict_title": "These items conflict and will not run",
 +      "no_changes": "All recognizable filenames already use the normalized format",
@@ -155,7 +156,7 @@
      "page_title": "Scanner",
      "toast": {
        "folder_already_added": "This folder is already in the list",
-@@ -824,11 +933,14 @@
+@@ -824,11 +934,14 @@
        "no_output_count": "{count} without output folder set",
        "done_with_warnings": "Completed {count}, but {parts}; see log for details",
        "generate_success": "Generated list of {count} videos",
@@ -170,7 +171,7 @@
        "path_copied": "Copied: {path}",
        "browse_dir_fallback": "Your browser can’t read the path of dropped files, so the folder picker has been opened for you"
      },
-@@ -868,13 +980,84 @@
+@@ -868,13 +981,84 @@
        "clear_display_title": "Clear display (restored on reload)",
        "clear_all_title": "Clear all (including history)"
      },
@@ -255,7 +256,7 @@
        "jellyfin_prefix": "Jellyfin cover format missing:",
        "jellyfin_suffix": " videos",
        "jellyfin_update_title": "Generate Jellyfin poster + fanart",
-@@ -1291,6 +1474,7 @@
+@@ -1291,6 +1475,7 @@
        "tag_nfo_write_blocked": "Tag saved, but there's no permission to write the NFO",
        "translate_tooltip": "Translate title",
        "translate_done": "Title translated",
@@ -263,7 +264,7 @@
        "translate_undo": "Undo",
        "translate_skipped": "Nothing in the title needs translating",
        "translate_undone": "Title restored",
-@@ -1410,10 +1594,90 @@
+@@ -1410,10 +1595,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -354,7 +355,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1845,6 +2109,12 @@
+@@ -1845,6 +2110,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -367,7 +368,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2130,11 @@
+@@ -1860,7 +2131,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -380,7 +381,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2152,15 @@
+@@ -1878,11 +2153,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -483,7 +484,7 @@
      "var": {
        "num": "番号",
        "title": "タイトル",
-@@ -801,6 +856,60 @@
+@@ -801,6 +856,61 @@
      }
    },
    "scanner": {
@@ -491,12 +492,12 @@
 +      "row_title": "動画ファイル名を統一",
 +      "row_hint": "品番とタイトルの間隔を統一し、長すぎる名前は ... 付きで安全に短縮",
 +      "source_row_title": "ファイル名とフォルダー名を統一",
-+      "source_row_hint": "メタデータ取得元を選び、品番の後ろをその取得元のタイトルに統一します",
++      "source_row_hint": "取得元のタイトルを動画名とフォルダー名に使用し、ルート直下の動画にはフォルダーを自動作成します",
 +      "source_select_label": "タイトル取得元",
 +      "source_preview_btn": "統一名前をプレビュー",
 +      "source_previewing": "取得元のタイトルを読み込み中...",
 +      "source_modal_title": "ファイル・フォルダー統一名プレビュー",
-+      "source_modal_intro": "選択した取得元のタイトルから、動画、NFO、カバー、poster、fanart、字幕、各スキャンルート直下の動画フォルダー名を統一します。extrafanart と無関係なファイルは変更しません。",
++      "source_modal_intro": "選択した取得元のタイトルから、動画、NFO、カバー、poster、fanart、字幕、各スキャンルート直下の動画フォルダー名を統一します。ルート直下の動画には対応するフォルダーを自動作成して移動します。extrafanart とその他の無関係なファイルは変更しません。",
 +      "source_used": "タイトル取得元：{source}",
 +      "source_failed": "{count} 件はこの取得元からタイトルを取得できないため、変更しません",
 +      "source_execute_btn": "統一名前変更を実行",
@@ -514,13 +515,14 @@
 +      "modal_title": "ファイル名正規化プレビュー",
 +      "folder_modal_title": "フォルダー名正規化プレビュー",
 +      "summary_videos": "名前を変更する動画",
-+      "summary_folders": "名前を変更するフォルダー",
++      "summary_folders": "処理するフォルダー",
 +      "summary_files": "サイドカーファイルを含む",
 +      "summary_conflicts": "競合",
 +      "modal_intro": "同じフォルダー内の動画名と、NFO、カバー、poster、fanart、字幕だけを変更します。長すぎる名前は共通の安全な長さに揃えて ... を付け、フォルダー、extrafanart、他の動画は変更しません。",
 +      "folder_modal_intro": "各スキャンルート直下の動画フォルダー名とデータベースパスだけを変更します。フォルダー内の動画、NFO、カバー、サンプル画像のファイル名は変更しません。",
 +      "modal_note": "実行前にプレビューを再確認し、ファイルが変わっていれば停止します。途中で失敗した場合はファイルとデータベースのパスを自動で元に戻し、名前変更マニフェストを保存します。",
 +      "related_files": "サイドカーファイル {count} 件も処理",
++      "folder_create_prefix": "フォルダーを作成：",
 +      "folder_related_videos": "動画パス {count} 件を更新",
 +      "conflict_title": "次の項目は競合するため実行できません",
 +      "no_changes": "認識できるファイル名はすべて統一形式です",
@@ -544,7 +546,7 @@
      "page_title": "リスト生成",
      "toast": {
        "folder_already_added": "このフォルダはすでにリストにあります",
-@@ -824,11 +933,14 @@
+@@ -824,11 +934,14 @@
        "no_output_count": "{count} 件が出力フォルダ未設定",
        "done_with_warnings": "{count} 本完了、ただし {parts}。詳細はログを参照",
        "generate_success": "{count} 本の動画リストを生成しました",
@@ -559,7 +561,7 @@
        "path_copied": "コピーしました: {path}",
        "browse_dir_fallback": "ブラウザではドロップしたファイルのパスを直接読み取れないため、フォルダ選択画面を開きました"
      },
-@@ -868,13 +980,84 @@
+@@ -868,13 +981,84 @@
        "clear_display_title": "画面をクリア（リロード後に復元）",
        "clear_all_title": "すべてクリア（履歴含む）"
      },
@@ -644,7 +646,7 @@
        "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
        "jellyfin_suffix": "本",
        "jellyfin_update_title": "Jellyfin poster + fanart を補完",
-@@ -1291,6 +1474,7 @@
+@@ -1291,6 +1475,7 @@
        "tag_nfo_write_blocked": "タグは保存されましたが、NFO への書き込み権限がありません",
        "translate_tooltip": "タイトルを翻訳",
        "translate_done": "タイトルを翻訳しました",
@@ -652,7 +654,7 @@
        "translate_undo": "元に戻す",
        "translate_skipped": "翻訳が必要な内容はありません",
        "translate_undone": "タイトルを元に戻しました",
-@@ -1410,10 +1594,90 @@
+@@ -1410,10 +1595,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -743,7 +745,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1845,6 +2109,12 @@
+@@ -1845,6 +2110,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -756,7 +758,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2130,11 @@
+@@ -1860,7 +2131,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -769,7 +771,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2152,15 @@
+@@ -1878,11 +2153,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -872,7 +874,7 @@
      "var": {
        "num": "番号",
        "title": "标题",
-@@ -801,6 +856,60 @@
+@@ -801,6 +856,61 @@
      }
    },
    "scanner": {
@@ -880,12 +882,12 @@
 +      "row_title": "统一文件名格式",
 +      "row_hint": "统一番号与标题间距；超过系统限制的名称会安全截断并加 ...",
 +      "source_row_title": "统一文件名与文件夹",
-+      "source_row_hint": "选择元数据来源，用该来源的标题决定番号后面的视频名和文件夹名",
++      "source_row_hint": "选择元数据来源，用来源标题决定视频名和文件夹名；根目录视频会自动建夹并移入",
 +      "source_select_label": "标题来源",
 +      "source_preview_btn": "预览统一命名",
 +      "source_previewing": "正在读取来源标题...",
 +      "source_modal_title": "文件名与文件夹统一命名预览",
-+      "source_modal_intro": "将按所选来源的标题，同步重命名视频、NFO、封面、poster、fanart、字幕，以及扫描目录下一层的影片文件夹；extrafanart 和无关文件保持不动。",
++      "source_modal_intro": "将按所选来源的标题，同步重命名视频、NFO、封面、poster、fanart、字幕，以及扫描目录下一层的影片文件夹；扫描根目录中的视频会自动建立对应文件夹并移入。extrafanart 和其他无关文件保持不动。",
 +      "source_used": "标题来源：{source}",
 +      "source_failed": "有 {count} 部影片无法从该来源取得标题，将保持原名",
 +      "source_execute_btn": "确认执行统一命名",
@@ -903,13 +905,14 @@
 +      "modal_title": "文件名规范化预览",
 +      "folder_modal_title": "文件夹规范化预览",
 +      "summary_videos": "需要改名的视频",
-+      "summary_folders": "需要改名的文件夹",
++      "summary_folders": "需要处理的文件夹",
 +      "summary_files": "包含侧车文件",
 +      "summary_conflicts": "冲突项",
 +      "modal_intro": "只会修改视频文件名和同目录下的 NFO、封面、poster、fanart、字幕；超长名称会共用安全长度并以 ... 结尾，文件夹、extrafanart 和其他视频保持不动。",
 +      "folder_modal_intro": "只修改扫描目录下一层的影片文件夹名称，并同步数据库路径；文件夹内的视频、NFO、封面和剧照文件保持原名。",
 +      "modal_note": "执行前会再次核对预览结果；若文件发生变化会停止。任何一步失败都会自动回滚文件和数据库路径，并保存重命名清单。",
 +      "related_files": "同时处理 {count} 个侧车文件",
++      "folder_create_prefix": "新建文件夹：",
 +      "folder_related_videos": "同步更新 {count} 个视频路径",
 +      "conflict_title": "以下项目存在冲突，不会执行",
 +      "no_changes": "所有可识别文件名已经符合统一格式",
@@ -933,7 +936,7 @@
      "page_title": "列表生成",
      "toast": {
        "folder_already_added": "此文件夹已在列表中",
-@@ -824,11 +933,14 @@
+@@ -824,11 +934,14 @@
        "no_output_count": "{count} 个未设输出文件夹",
        "done_with_warnings": "完成 {count} 部，但 {parts}，详细见日志",
        "generate_success": "成功生成 {count} 部视频列表",
@@ -948,7 +951,7 @@
        "path_copied": "已复制: {path}",
        "browse_dir_fallback": "浏览器无法直接读取拖放文件的路径，已为您打开文件夹选择器"
      },
-@@ -868,13 +980,84 @@
+@@ -868,13 +981,84 @@
        "clear_display_title": "清除画面（刷新后恢复）",
        "clear_all_title": "清除全部（包含历史）"
      },
@@ -1033,7 +1036,7 @@
        "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
-@@ -1291,6 +1474,7 @@
+@@ -1291,6 +1475,7 @@
        "tag_nfo_write_blocked": "标签已保存，但没有权限写入 NFO",
        "translate_tooltip": "翻译标题",
        "translate_done": "已翻译标题",
@@ -1041,7 +1044,7 @@
        "translate_undo": "复原",
        "translate_skipped": "标题没有需要翻译的内容",
        "translate_undone": "已复原标题",
-@@ -1410,10 +1594,90 @@
+@@ -1410,10 +1595,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -1132,7 +1135,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1845,6 +2109,12 @@
+@@ -1845,6 +2110,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -1145,7 +1148,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2130,11 @@
+@@ -1860,7 +2131,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -1158,7 +1161,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2152,15 @@
+@@ -1878,11 +2153,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -1261,7 +1264,7 @@
      "var": {
        "num": "番號",
        "title": "標題",
-@@ -801,6 +856,60 @@
+@@ -801,6 +856,61 @@
      }
    },
    "scanner": {
@@ -1269,12 +1272,12 @@
 +      "row_title": "統一檔名格式",
 +      "row_hint": "統一編號與標題間距；超過系統限制的名稱會安全截斷並加上 ...",
 +      "source_row_title": "統一檔名與資料夾",
-+      "source_row_hint": "選擇中繼資料來源，用該來源的標題決定編號後面的影片名和資料夾名",
++      "source_row_hint": "選擇中繼資料來源，用來源標題決定影片名和資料夾名；根目錄影片會自動建立資料夾並移入",
 +      "source_select_label": "標題來源",
 +      "source_preview_btn": "預覽統一命名",
 +      "source_previewing": "正在讀取來源標題...",
 +      "source_modal_title": "檔名與資料夾統一命名預覽",
-+      "source_modal_intro": "將依所選來源的標題，同步重新命名影片、NFO、封面、poster、fanart、字幕，以及掃描目錄下一層的影片資料夾；extrafanart 和無關檔案保持不動。",
++      "source_modal_intro": "將依所選來源的標題，同步重新命名影片、NFO、封面、poster、fanart、字幕，以及掃描目錄下一層的影片資料夾；掃描根目錄中的影片會自動建立對應資料夾並移入。extrafanart 和其他無關檔案保持不動。",
 +      "source_used": "標題來源：{source}",
 +      "source_failed": "有 {count} 部影片無法從該來源取得標題，將保持原名",
 +      "source_execute_btn": "確認執行統一命名",
@@ -1292,13 +1295,14 @@
 +      "modal_title": "檔名正規化預覽",
 +      "folder_modal_title": "資料夾正規化預覽",
 +      "summary_videos": "需要改名的影片",
-+      "summary_folders": "需要改名的資料夾",
++      "summary_folders": "需要處理的資料夾",
 +      "summary_files": "包含側車檔案",
 +      "summary_conflicts": "衝突項目",
 +      "modal_intro": "只會修改影片檔名和同目錄下的 NFO、封面、poster、fanart、字幕；超長名稱會共用安全長度並以 ... 結尾，資料夾、extrafanart 和其他影片保持不動。",
 +      "folder_modal_intro": "只修改掃描目錄下一層的影片資料夾名稱，並同步資料庫路徑；資料夾內的影片、NFO、封面和劇照檔案保持原名。",
 +      "modal_note": "執行前會再次核對預覽結果；若檔案發生變化會停止。任何一步失敗都會自動回滾檔案和資料庫路徑，並保存重新命名清單。",
 +      "related_files": "同時處理 {count} 個側車檔案",
++      "folder_create_prefix": "新建資料夾：",
 +      "folder_related_videos": "同步更新 {count} 個影片路徑",
 +      "conflict_title": "以下項目存在衝突，不會執行",
 +      "no_changes": "所有可辨識檔名已經符合統一格式",
@@ -1322,7 +1326,7 @@
      "page_title": "列表生成",
      "toast": {
        "folder_already_added": "此資料夾已在列表中",
-@@ -824,11 +933,14 @@
+@@ -824,11 +934,14 @@
        "no_output_count": "{count} 個未設輸出夾",
        "done_with_warnings": "完成 {count} 部，但 {parts}，詳細見日誌",
        "generate_success": "成功產生 {count} 部影片列表",
@@ -1337,7 +1341,7 @@
        "path_copied": "已複製: {path}",
        "browse_dir_fallback": "瀏覽器無法直接讀取拖放檔案的路徑，已為您開啟資料夾選擇器"
      },
-@@ -868,13 +980,84 @@
+@@ -868,13 +981,84 @@
        "clear_display_title": "清除畫面（重整後恢復）",
        "clear_all_title": "清除全部（包含歷史）"
      },
@@ -1422,7 +1426,7 @@
        "jellyfin_prefix": "外部媒體管理器封面缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "補齊 poster + fanart",
-@@ -1291,6 +1474,7 @@
+@@ -1291,6 +1475,7 @@
        "tag_nfo_write_blocked": "標籤已存，但沒有權限寫入 NFO",
        "translate_tooltip": "翻譯標題",
        "translate_done": "已翻譯標題",
@@ -1430,7 +1434,7 @@
        "translate_undo": "復原",
        "translate_skipped": "標題沒有需要翻譯的內容",
        "translate_undone": "已復原標題",
-@@ -1410,10 +1594,90 @@
+@@ -1410,10 +1595,90 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -1521,7 +1525,7 @@
      "hero": {
        "this_computer_unavailable": "暫時讀不到這台電腦的更新資訊，請重新開啟說明頁再試",
        "copy_curl": "複製指令",
-@@ -1850,6 +2114,12 @@
+@@ -1850,6 +2115,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -1534,7 +1538,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1865,7 +2135,11 @@
+@@ -1865,7 +2136,11 @@
        "costar": "與她同片"
      },
      "donut": {
@@ -1547,7 +1551,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2157,15 @@
+@@ -1883,11 +2158,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -6456,7 +6460,7 @@
  
          // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
          currentCard: null,          // {number, status, source, reason, coverSrc} | null
-@@ -72,6 +84,259 @@
+@@ -72,6 +84,261 @@
                  return '<span class="loading loading-spinner loading-sm"></span> ' + window.t('scanner.stats.missing_enrich_loading');
              }
              return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
@@ -6696,7 +6700,9 @@
 +            if (!this.renamePlan) return;
 +            const lines = [];
 +            for (const item of this.renameReadyItems) {
-+                lines.push(`${item.old_name} -> ${item.new_name}`);
++                lines.push(item.folder_action === 'create'
++                    ? `${window.t('scanner.rename.folder_create_prefix')}${item.new_name}`
++                    : `${item.old_name} -> ${item.new_name}`);
 +                for (const video of (item.videos || [])) {
 +                    if (video.old_name !== video.new_name) {
 +                        lines.push(`  ${video.old_name} -> ${video.new_name}`);
@@ -6716,7 +6722,7 @@
          },
  
          // ===== T10: Missing NFO/Cover Enrich Methods =====
-@@ -88,8 +353,15 @@
+@@ -88,8 +355,15 @@
                      this.missingCoverCount = d.missing_cover || 0;
                      this.missingItems = Array.isArray(d.items) ? d.items : [];
                      this.missingPillVisible = true;
@@ -6732,7 +6738,7 @@
                  }
              } catch (e) {
                  console.error('checkMissing failed:', e);
-@@ -109,14 +381,17 @@
+@@ -109,14 +383,17 @@
              this.missingEnrichOffset = 0;
              this.missingEnrichSuccess = 0;
              this.missingEnrichFailed = 0;
@@ -6753,7 +6759,7 @@
              this.clearLogs();
  
              const controller = new AbortController();
-@@ -146,7 +421,7 @@
+@@ -146,7 +423,7 @@
                          }
                          this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
                          this.flushLogs();
@@ -6762,7 +6768,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          // Save remaining
-@@ -159,7 +434,7 @@
+@@ -159,7 +436,7 @@
                          const errText = await resp.text().catch(() => '');
                          this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
                          this.flushLogs();
@@ -6771,7 +6777,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -200,6 +475,12 @@
+@@ -200,6 +477,12 @@
                                  this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
                                  this.progressTotal = items.length;
                                  this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
@@ -6784,7 +6790,7 @@
                              } else if (event.type === 'result-item') {
                                  // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
                                  // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
-@@ -234,7 +515,18 @@
+@@ -234,7 +517,18 @@
                                      this.missingEnrichSuccess++;
                                  } else {
                                      this.missingEnrichFailed++;
@@ -6803,7 +6809,7 @@
                                  // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
                                  if (event.reason === 'error') {
                                      this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
-@@ -246,7 +538,7 @@
+@@ -246,7 +540,7 @@
                              } else if (event.type === 'error') {
                                  this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
                                  this.flushLogs();
@@ -6812,7 +6818,7 @@
                                  this.currentCard = null;
                                  this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -258,7 +550,7 @@
+@@ -258,7 +552,7 @@
  
                      // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
                      if (!batchDone) {
@@ -6821,7 +6827,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -284,11 +576,19 @@
+@@ -284,11 +578,19 @@
                      if (lastCover) {
                          this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
                      }
@@ -6843,7 +6849,7 @@
                      const summary = this.missingEnrichFailed > 0
                          ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
                          : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
-@@ -312,7 +612,7 @@
+@@ -312,7 +614,7 @@
                  if (e.name === 'AbortError') return;
                  console.error('runMissingEnrich error:', e);
                  this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
@@ -8951,7 +8957,7 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -805,26 +1233,131 @@
+@@ -805,26 +1233,137 @@
          </div>
      </dialog>
  
@@ -9004,9 +9010,15 @@
 +                    <div class="rename-preview-item">
 +                        <strong x-text="item.number || ''"></strong>
 +                        <div class="rename-preview-names">
-+                            <span class="rename-preview-old" x-text="item.old_name"></span>
-+                            <i class="bi bi-arrow-right"></i>
-+                            <span class="rename-preview-new" x-text="item.new_name"></span>
++                            <span class="rename-preview-old"
++                                  x-show="item.folder_action !== 'create'"
++                                  x-text="item.old_name"></span>
++                            <i class="bi bi-arrow-right"
++                               x-show="item.folder_action !== 'create'"></i>
++                            <span class="rename-preview-new"
++                                  x-text="item.folder_action === 'create'
++                                      ? window.t('scanner.rename.folder_create_prefix') + item.new_name
++                                      : item.new_name"></span>
 +                        </div>
 +                        <div class="rename-preview-videos">
 +                            <template x-for="video in item.videos" :key="video.db_old_uri">

@@ -320,7 +320,9 @@ export function stateBatch() {
             if (!this.renamePlan) return;
             const lines = [];
             for (const item of this.renameReadyItems) {
-                lines.push(`${item.old_name} -> ${item.new_name}`);
+                lines.push(item.folder_action === 'create'
+                    ? `${window.t('scanner.rename.folder_create_prefix')}${item.new_name}`
+                    : `${item.old_name} -> ${item.new_name}`);
                 for (const video of (item.videos || [])) {
                     if (video.old_name !== video.new_name) {
                         lines.push(`  ${video.old_name} -> ${video.new_name}`);

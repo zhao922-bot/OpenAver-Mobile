@@ -65,6 +65,7 @@ from core.rename_normalizer import (
     execute_combined_rename_plan,
     execute_folder_rename_plan,
     execute_rename_plan,
+    multipart_token,
     validate_combined_rename_plan,
 )
 from web.routers.gallery_media import safe_realpath
@@ -1793,6 +1794,7 @@ def generate_source_rename_preview(
                 stem, normalized_number, reason = canonicalize_source_stem(
                     number,
                     source_title,
+                    part_token=multipart_token(Path(video.path).stem),
                 )
                 if not stem:
                     raise ValueError(

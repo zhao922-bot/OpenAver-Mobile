@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/core/android_storage.py
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,152 @@
 +"""Fallback writes through the Android Storage Access Framework.
 +
 +Android 10 can read a removable SD card with legacy storage permissions but
@@ -38,6 +38,7 @@
 +        errno.EACCES,
 +        errno.EPERM,
 +        errno.EROFS,
++        errno.EXDEV,
 +    }
 +
 +
@@ -125,6 +126,29 @@
 +    bridge = _bridge()
 +    try:
 +        error = bridge.rename(str(source), str(target))
++    except Exception as exc:
++        raise AndroidStorageWriteError(str(exc)) from exc
++    if error:
++        raise AndroidStorageWriteError(str(error))
++
++
++def move(source: str, target: str) -> None:
++    """Move a file or directory, using SAF for cross-directory Android moves."""
++    try:
++        os.rename(source, target)
++        return
++    except OSError as exc:
++        direct_error = exc
++
++    if not is_access_error(direct_error):
++        raise direct_error
++    if not has_access(source):
++        raise AndroidStoragePermissionError(
++            "storage_tree_not_authorized"
++        ) from direct_error
++    bridge = _bridge()
++    try:
++        error = bridge.move(str(source), str(target))
 +    except Exception as exc:
 +        raise AndroidStorageWriteError(str(exc)) from exc
 +    if error:
@@ -1761,7 +1785,7 @@
          return True
 --- /dev/null
 +++ b/core/rename_normalizer.py
-@@ -0,0 +1,1428 @@
+@@ -0,0 +1,1680 @@
 +"""Safe, preview-first normalization of video filenames and local sidecars."""
 +
 +from __future__ import annotations
@@ -1789,6 +1813,12 @@
 +IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp"})
 +MAX_COMPONENT_BYTES = 255
 +TRUNCATION_MARKER = "..."
++MULTIPART_TOKENS = frozenset({"cd", "dvd", "part", "pt", "disc"})
++MULTIPART_RE = re.compile(
++    r"(?<![A-Za-z0-9])(cd|dvd|part|pt|disc)([1-9])(?![0-9])"
++    r"(?=[-_.\s\[\]()]|$)",
++    re.IGNORECASE,
++)
 +PORTABLE_FILENAME_REPLACEMENTS = str.maketrans({
 +    "<": "＜",
 +    ">": "＞",
@@ -1815,19 +1845,52 @@
 +    )
 +
 +
++def multipart_token(stem: str) -> str | None:
++    """Return the last multipart suffix token such as ``cd1``.
++
++    The token vocabulary intentionally mirrors ``core.organizer`` so the
++    rename normalizer and the multipart grouping layer agree on what counts
++    as a segment marker.
++    """
++    matches = list(MULTIPART_RE.finditer(stem))
++    if not matches:
++        return None
++    match = matches[-1]
++    return f"{match.group(1).lower()}{match.group(2)}"
++
++
++def _strip_multipart_token(stem: str) -> str:
++    matches = list(MULTIPART_RE.finditer(stem))
++    if not matches:
++        return stem
++    match = matches[-1]
++    start = match.start()
++    if start > 0 and stem[start - 1] in "-_. \t([":
++        start -= 1
++    return stem[:start] + stem[match.end():]
++
++
++def _append_multipart_token(stem: str, token: str | None) -> str:
++    if not token:
++        return stem
++    return f"{_strip_multipart_token(stem).rstrip(' .-_')}-{token}"
++
++
 +def canonicalize_stem(stem: str, number_hint: str | None = None) -> tuple[str, str | None, str]:
 +    """Return (new_stem, number, reason). The original title body is preserved."""
-+    number = extract_number(stem) or number_hint
++    token = multipart_token(stem)
++    canonical_input = _strip_multipart_token(stem) if token else stem
++    number = extract_number(canonical_input) or number_hint
 +    if number:
 +        number = normalize_number_impl(str(number))
 +    if not number:
 +        return stem, None, "no_number"
 +
-+    match = _number_pattern(number).search(stem)
++    match = _number_pattern(number).search(canonical_input)
 +    if match is None:
 +        return stem, number, "number_not_located"
 +
-+    title = stem[match.end():].lstrip(LEADING_SEPARATORS)
++    title = canonical_input[match.end():].lstrip(LEADING_SEPARATORS)
 +    canonical = number if not title else f"{number} {title}"
 +    if canonical.endswith(TRUNCATION_MARKER):
 +        # Preserve the safety marker so a preview that truncated a name is
@@ -1840,6 +1903,7 @@
 +        canonical = canonical.rstrip(" .")
 +    if not canonical:
 +        return stem, number, "empty_name"
++    canonical = _append_multipart_token(canonical, token)
 +    if canonical == stem:
 +        return stem, number, "unchanged"
 +    return canonical, number, "rename"
@@ -1848,6 +1912,7 @@
 +def canonicalize_source_stem(
 +    number: str | None,
 +    title: str | None,
++    part_token: str | None = None,
 +) -> tuple[str | None, str | None, str]:
 +    """Build `NUMBER TITLE` from one selected metadata source."""
 +    if not number:
@@ -1869,7 +1934,11 @@
 +    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .-_")
 +    if not cleaned:
 +        return None, normalized, "empty_title"
-+    return f"{normalized} {cleaned}", normalized, "source_title"
++    return (
++        _append_multipart_token(f"{normalized} {cleaned}", part_token),
++        normalized,
++        "source_title",
++    )
 +
 +
 +def _sidecar_matches(old_stem: str, name: str) -> bool:
@@ -2051,6 +2120,7 @@
 +            "cover_path_old": str(getattr(video, "cover_path", "") or ""),
 +            "cover_path_new": str(getattr(video, "cover_path", "") or ""),
 +            "operations": [],
++            "associated_files": [],
 +            "conflicts": [],
 +            "status": "unchanged",
 +            "reason": "unchanged",
@@ -2180,6 +2250,13 @@
 +        item["new_video_path"] = str(new_path)
 +        item["new_name"] = new_path.name
 +        item["db_new_uri"] = to_file_uri(str(new_path), path_mappings)
++        item["associated_files"] = [
++            {
++                "old_path": str(child),
++                "new_path": str(child.with_name(fitted_stem + suffix)),
++            }
++            for child, suffix in selected
++        ]
 +
 +        operations: list[dict[str, Any]] = []
 +        for child, suffix in selected:
@@ -2433,6 +2510,44 @@
 +
 +def _is_direct_child(path: Path, roots: list[Path]) -> bool:
 +    return any(_path_key(str(path.parent)) == _path_key(str(root)) for root in roots)
++
++
++def _is_source_root(path: Path, roots: list[Path]) -> bool:
++    return any(_path_key(str(path)) == _path_key(str(root)) for root in roots)
++
++
++def _create_directory(target: str) -> None:
++    target_path = Path(target)
++    try:
++        target_path.mkdir(parents=False, exist_ok=False)
++        return
++    except OSError as exc:
++        if not android_storage.is_access_error(exc):
++            raise
++        direct_error = exc
++    try:
++        android_storage.mkdirs(target)
++    except Exception as exc:
++        raise exc from direct_error
++
++
++def _move_file(source: str, target: str) -> None:
++    android_storage.move(source, target)
++
++
++def _delete_directory(target: str) -> None:
++    target_path = Path(target)
++    try:
++        target_path.rmdir()
++        return
++    except OSError as exc:
++        if not android_storage.is_access_error(exc):
++            raise
++        direct_error = exc
++    try:
++        android_storage.delete(target)
++    except Exception as exc:
++        raise exc from direct_error
 +
 +
 +def _folder_plan_id(items: list[dict[str, Any]]) -> str:
@@ -2770,6 +2885,15 @@
 +            "source": source_id,
 +            "folder_old": item["old_folder_path"],
 +            "folder_new": item["new_folder_path"],
++            "folder_action": item.get("folder_action", "none"),
++            "move_files": [
++                {
++                    "old": move["old_path"],
++                    "after_rename": move["after_rename_path"],
++                    "new": move["new_path"],
++                }
++                for move in item.get("move_files", [])
++            ],
 +            "videos": [
 +                {
 +                    "old": video["db_old_uri"],
@@ -2788,6 +2912,17 @@
 +        })
 +    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
 +    return hashlib.sha256(raw).hexdigest()
++
++
++def _multipart_item_key(file_item: dict[str, Any]) -> tuple[str, int] | None:
++    stem = Path(file_item["old_video_path"]).stem
++    token = multipart_token(stem)
++    if not token:
++        return None
++    base = re.sub(r"\s+", "", _strip_multipart_token(stem)).casefold()
++    if not base:
++        return None
++    return base, int(token[-1])
 +
 +
 +def build_combined_rename_plan(
@@ -2817,14 +2952,67 @@
 +        grouped.setdefault(_path_key(str(folder)), []).append(file_item)
 +
 +    roots = [Path(uri_to_fs_path(str(root))) for root in source_roots if root]
++    groups: list[list[dict[str, Any]]] = []
++    for group in grouped.values():
++        folder = Path(group[0]["old_video_path"]).parent
++        if _is_source_root(folder, roots):
++            # Root-level videos normally become separate target folders. A
++            # real multipart set is the exception: all parts must move into
++            # one folder so the scanner can present them as a single card.
++            multipart_buckets: dict[str, list[dict[str, Any]]] = {}
++            ordered = sorted(
++                group, key=lambda row: row["old_video_path"].casefold()
++            )
++            for file_item in ordered:
++                key = _multipart_item_key(file_item)
++                if key is None:
++                    groups.append([file_item])
++                    continue
++                multipart_buckets.setdefault(key[0], []).append(file_item)
++            for bucket in multipart_buckets.values():
++                part_numbers = [
++                    key[1]
++                    for key in (_multipart_item_key(item) for item in bucket)
++                    if key is not None
++                ]
++                if (
++                    len(bucket) >= 2
++                    and len(part_numbers) == len(bucket)
++                    and len(set(part_numbers)) == len(part_numbers)
++                ):
++                    groups.append(bucket)
++                else:
++                    groups.extend([item] for item in bucket)
++        else:
++            groups.append(
++                sorted(group, key=lambda row: row["old_video_path"].casefold())
++            )
++
 +    items: list[dict[str, Any]] = []
-+    for group in sorted(grouped.values(), key=lambda rows: rows[0]["old_video_path"].casefold()):
-+        file_items = sorted(group, key=lambda row: row["old_video_path"].casefold())
++    for file_items in sorted(
++        groups, key=lambda rows: rows[0]["old_video_path"].casefold()
++    ):
 +        folder = Path(file_items[0]["old_video_path"]).parent
 +        rows = [rows_by_uri[item["db_old_uri"]] for item in file_items]
 +        folder_number = extract_number(folder.name)
++        multipart_members = [
++            (index, key)
++            for index, item in enumerate(file_items)
++            if (key := _multipart_item_key(item)) is not None
++        ]
++        multipart_group = (
++            len(file_items) >= 2
++            and len(multipart_members) == len(file_items)
++            and len({key[1] for _, key in multipart_members})
++            == len(multipart_members)
++        )
 +        primary_index = 0
-+        if folder_number:
++        if multipart_group:
++            primary_index = min(
++                multipart_members,
++                key=lambda entry: entry[1][1],
++            )[0]
++        elif folder_number:
 +            normalized_folder_number = normalize_number_impl(str(folder_number))
 +            for index, item in enumerate(file_items):
 +                if item.get("number") == normalized_folder_number:
@@ -2837,17 +3025,32 @@
 +            )
 +        primary = file_items[primary_index]
 +        primary_override = stem_overrides.get(primary["db_old_uri"], "")
-+        fitted_folder_stem = _fit_filename_stem(primary_override, 0)
-+        folder_rename_allowed = _is_direct_child(folder, roots) and bool(fitted_folder_stem)
-+        new_folder = folder.with_name(fitted_folder_stem) if folder_rename_allowed else folder
++        folder_stem_override = (
++            _strip_multipart_token(primary_override)
++            if multipart_group
++            else primary_override
++        )
++        fitted_folder_stem = _fit_filename_stem(folder_stem_override, 0)
++        root_level = _is_source_root(folder, roots)
++        if root_level and fitted_folder_stem:
++            folder_action = "create"
++            new_folder = folder / fitted_folder_stem
++        elif _is_direct_child(folder, roots) and fitted_folder_stem:
++            folder_action = "rename"
++            new_folder = folder.with_name(fitted_folder_stem)
++        else:
++            folder_action = "none"
++            new_folder = folder
 +
 +        item: dict[str, Any] = {
 +            "old_folder_path": str(folder),
 +            "new_folder_path": str(new_folder),
 +            "old_name": folder.name,
 +            "new_name": new_folder.name,
++            "folder_action": folder_action,
 +            "number": primary.get("number"),
 +            "source_title": primary_override,
++            "move_files": [],
 +            "videos": [],
 +            "conflicts": [],
 +            "status": "unchanged",
@@ -2865,6 +3068,20 @@
 +                str(value)
 +                for value in (getattr(row, "sample_images", None) or [])
 +            ]
++            if folder_action == "create":
++                samples_new = samples_old
++            else:
++                samples_new = _rebase_path_list(
++                    samples_old, folder, new_folder, path_mappings
++                )
++            if folder_action == "create":
++                for associated in file_item.get("associated_files", []):
++                    after_rename = Path(associated["new_path"])
++                    item["move_files"].append({
++                        "old_path": associated["old_path"],
++                        "after_rename_path": str(after_rename),
++                        "new_path": str(new_folder / after_rename.name),
++                    })
 +            item["videos"].append({
 +                "db_old_uri": file_item["db_old_uri"],
 +                "db_new_uri": to_file_uri(str(final_video), path_mappings),
@@ -2876,9 +3093,7 @@
 +                "cover_path_old": file_item.get("cover_path_old") or "",
 +                "cover_path_new": cover_new,
 +                "sample_images_old": samples_old,
-+                "sample_images_new": _rebase_path_list(
-+                    samples_old, folder, new_folder, path_mappings
-+                ),
++                "sample_images_new": samples_new,
 +                "operations": file_item.get("operations") or [],
 +                "status": file_item["status"],
 +                "reason": file_item["reason"],
@@ -2887,7 +3102,7 @@
 +            item["conflicts"].extend(file_item.get("conflicts") or [])
 +
 +        file_states = {video["status"] for video in item["videos"]}
-+        folder_changed = new_folder != folder
++        folder_changed = folder_action != "none"
 +        has_file_changes = any(
 +            video["operations"] for video in item["videos"]
 +        )
@@ -2911,12 +3126,20 @@
 +    }
 +    folder_targets: dict[str, list[dict[str, Any]]] = {}
 +    video_targets: dict[str, list[dict[str, Any]]] = {}
++    move_targets: dict[str, list[dict[str, Any]]] = {}
 +    for item in items:
-+        folder_targets.setdefault(_path_key(item["new_folder_path"]), []).append(item)
++        if item.get("folder_action") != "none":
++            folder_targets.setdefault(
++                _path_key(item["new_folder_path"]), []
++            ).append(item)
 +        for video in item["videos"]:
 +            video_targets.setdefault(
 +                _path_key(video["new_video_path"]), []
 +            ).append(video)
++        for move in item.get("move_files", []):
++            move_targets.setdefault(
++                _path_key(move["new_path"]), []
++            ).append(move)
 +
 +    for item in items:
 +        if item["status"] in {"missing", "skipped"}:
@@ -2937,6 +3160,11 @@
 +            item["conflicts"].append(f"folder_target_exists:{item['new_name']}")
 +        if len(folder_targets.get(new_folder_key, [])) > 1:
 +            item["conflicts"].append(f"duplicate_folder_target:{item['new_name']}")
++        for move in item.get("move_files", []):
++            if len(move_targets.get(_path_key(move["new_path"]), [])) > 1:
++                item["conflicts"].append(
++                    f"duplicate_move_target:{Path(move['new_path']).name}"
++                )
 +        for video in item["videos"]:
 +            if len(video_targets.get(_path_key(video["new_video_path"]), [])) > 1:
 +                item["conflicts"].append(
@@ -2976,7 +3204,7 @@
 +            ),
 +            "rename_folders": sum(
 +                1 for item in ready
-+                if item["old_folder_path"] != item["new_folder_path"]
++                if item.get("folder_action") != "none"
 +            ),
 +            "updated_videos": len(ready_videos),
 +            "conflicts": len(conflicts),
@@ -2997,6 +3225,9 @@
 +    manifest_dir: Path,
 +    file_rename_fn: Callable[[str, str], None] = _rename_file,
 +    folder_rename_fn: Callable[[str, str], None] = _rename_directory,
++    folder_create_fn: Callable[[str], None] = _create_directory,
++    file_move_fn: Callable[[str, str], None] = _move_file,
++    folder_delete_fn: Callable[[str], None] = _delete_directory,
 +) -> dict[str, Any]:
 +    """Apply a combined file/folder plan and roll everything back on failure."""
 +    if plan.get("summary", {}).get("conflicts", 0):
@@ -3009,6 +3240,8 @@
 +        "execution_status": "started",
 +    })
 +    completed_files: list[tuple[str, str]] = []
++    completed_moves: list[tuple[str, str]] = []
++    completed_creates: list[str] = []
 +    completed_folders: list[tuple[str, str]] = []
 +    completed_db: list[tuple[str, str]] = []
 +    completed_covers: list[tuple[str, str, str]] = []
@@ -3030,7 +3263,30 @@
 +                    completed_files.append(
 +                        (operation["old_path"], operation["new_path"])
 +                    )
-+            if item["old_folder_path"] != item["new_folder_path"]:
++            folder_action = item.get("folder_action", "none")
++            if folder_action == "create":
++                try:
++                    folder_create_fn(item["new_folder_path"])
++                except Exception as exc:
++                    raise RuntimeError(
++                        f"create {item['new_name']}: {exc}"
++                    ) from exc
++                completed_creates.append(item["new_folder_path"])
++                for move in item.get("move_files", []):
++                    try:
++                        file_move_fn(
++                            move["after_rename_path"],
++                            move["new_path"],
++                        )
++                    except Exception as exc:
++                        raise RuntimeError(
++                            f"{Path(move['after_rename_path']).name} -> "
++                            f"{Path(move['new_path']).name}: {exc}"
++                        ) from exc
++                    completed_moves.append(
++                        (move["after_rename_path"], move["new_path"])
++                    )
++            elif folder_action == "rename":
 +                try:
 +                    folder_rename_fn(
 +                        item["old_folder_path"],
@@ -3097,6 +3353,16 @@
 +                    rollback_errors.append(f"db:{new_uri}")
 +            except Exception as rollback_exc:
 +                rollback_errors.append(f"db:{new_uri}:{rollback_exc}")
++        for source, target in reversed(completed_moves):
++            try:
++                file_move_fn(target, source)
++            except Exception as rollback_exc:
++                rollback_errors.append(f"move:{target}:{rollback_exc}")
++        for target in reversed(completed_creates):
++            try:
++                folder_delete_fn(target)
++            except Exception as rollback_exc:
++                rollback_errors.append(f"folder_create:{target}:{rollback_exc}")
 +        for source, target in reversed(completed_folders):
 +            try:
 +                folder_rename_fn(target, source)
@@ -3136,7 +3402,9 @@
 +    return {
 +        "success": True,
 +        "renamed_files": len(completed_files),
-+        "renamed_folders": len(completed_folders),
++        "renamed_folders": len(completed_folders) + len(completed_creates),
++        "created_folders": len(completed_creates),
++        "moved_files": len(completed_moves),
 +        "updated_videos": len(completed_db),
 +        "manifest_path": str(manifest),
 +    }
@@ -3159,7 +3427,7 @@
 +    folder_sources = {
 +        _path_key(item["old_folder_path"])
 +        for item in items
-+        if item["old_folder_path"] != item["new_folder_path"]
++        if item.get("folder_action") == "rename"
 +    }
 +    try:
 +        for item in items:
@@ -3177,15 +3445,23 @@
 +                        and _path_key(str(target)) not in file_sources
 +                    ):
 +                        return False
-+            if item["old_folder_path"] != item["new_folder_path"]:
++            folder_action = item.get("folder_action", "none")
++            if folder_action in {"create", "rename"}:
 +                source = Path(item["old_folder_path"])
 +                target = Path(item["new_folder_path"])
 +                if not source.is_dir():
 +                    return False
-+                if (
++                if folder_action == "rename" and (
 +                    target.exists()
 +                    and _path_key(str(target)) not in folder_sources
 +                ):
++                    return False
++                if folder_action == "create" and target.exists():
++                    return False
++            for move in item.get("move_files", []):
++                if not Path(move["old_path"]).is_file():
++                    return False
++                if Path(move["new_path"]).exists():
 +                    return False
 +    except OSError:
 +        return False
