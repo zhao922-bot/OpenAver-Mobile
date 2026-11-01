@@ -38,3 +38,20 @@ the top complexity or duplicate CSS unless the change documents why.
 - `tailwind.css`: 204,924 bytes -> 142,427 bytes
 - Removed the embedded copy of `theme.css` from the Tailwind bundle while
   keeping the raw theme as the single runtime source.
+
+## Round 8 checkpoint
+
+- Highest Python complexity: 93 -> 61
+- `generate_avlist`: 93 -> 61; source scanning, candidate refresh, deletion
+  protection, per-file scanning, and focal submission are now separate helpers.
+- `_load_config_unlocked`: 93 -> 8; first-run seeding and the three migration
+  stages are isolated while the original lock and single save point remain.
+- `build_combined_rename_plan`: 91 -> below the top-15 report; grouping, item
+  construction, conflict detection, and summary calculation are separate.
+- `organize_file`: 84 -> 41; title selection, template data, fallback reporting,
+  and path computation are now pure planning helpers.
+- `build_rename_plan`: 71 -> below the top-15 report; per-row planning and
+  conflict validation are separated.
+- Python LOC increased slightly because the refactor adds explicit helper
+  boundaries and focused tests. The primary result is lower branch density per
+  function, not a shorter file.

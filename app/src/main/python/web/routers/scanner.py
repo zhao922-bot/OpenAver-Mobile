@@ -296,7 +296,272 @@ def _skipped_scan_warning(directory: str, root: str, skipped_paths: dict[str, OS
     return f"  {directory}: {len(skipped_paths)} 個路徑讀取失敗，跳過刪除偵測以免誤刪（詳見 debug.log）"
 
 
-def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Generator[str, None, None]:  # noqa: C901 — avlist SSE 生成主流程；109 已判定為「列 backlog、現在別搬」（60–100 處測試 patch target 焊死該函式，拆分成本由測試面而非邏輯面決定）
+def _empty_source_scan_stats() -> dict[str, Any]:
+    return {
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "scan_errors": 0,
+        "session_added_paths": [],
+        "long_paths": [],
+    }
+
+
+def _collect_scan_refresh_sets(
+    all_files: list[dict[str, Any]],
+    db_index: dict,
+    path_mappings: dict,
+) -> tuple[list[dict[str, Any]], set[str], set[str]]:
+    """Classify scanned files without mutating the database."""
+    needs_scan = []
+    current_paths = set()
+    nfo_unchanged_paths = set()
+    for file_info in all_files:
+        path = file_info['path']
+        file_uri = to_file_uri(path, path_mappings)
+        current_paths.add(file_uri)
+
+        db_entry = db_index.get(file_uri)
+        if scan_entry_needs_refresh(db_entry, file_info, path_mappings):
+            # 新檔案、mtime/NFO/劇照變更，或 DB 仍缺基本資料／可服務封面。
+            needs_scan.append(file_info)
+            if (
+                db_entry is not None
+                and db_entry[1] == file_info.get('nfo_mtime', 0)
+            ):
+                nfo_unchanged_paths.add(file_uri)
+    return needs_scan, current_paths, nfo_unchanged_paths
+
+
+def _scan_changed_files(
+    needs_scan: list[dict[str, Any]],
+    scanner: VideoScanner,
+    existing_by_uri: dict,
+    nfo_unchanged_paths: set[str],
+    should_abort: Optional[Callable[[], bool]],
+) -> Generator[str, None, tuple[list[Video], list[str], int, int]]:
+    """Scan changed files and return videos plus per-source counters."""
+    videos_to_upsert: list[Video] = []
+    session_added_paths: list[str] = []
+    cache_misses = 0
+    scan_error_count = 0
+
+    for index, file_info in enumerate(needs_scan, 1):
+        # TASK-90b-T4: 逐檔中止檢查（每檔處理之前）。單一資料夾內
+        # 檔案量大時，逐來源層檢查粒度太粗，需要在此內層迴圈頂端
+        # 再插一次，讓中止在「下一個可偵測的時間點」生效（不中斷
+        # 正在進行中的單一 scan_file() 呼叫）。
+        if should_abort and should_abort():
+            break
+
+        video_name = os.path.basename(file_info['path'])
+        yield _sse_event({
+            "type": "log",
+            "level": "info",
+            "message": f"  [{index}/{len(needs_scan)}] {video_name}",
+        })
+
+        try:
+            video_info = scanner.scan_file(file_info['path'], None)
+            video = Video.from_video_info(video_info)
+            existing = existing_by_uri.get(video.path)
+            if existing is not None:
+                if video.path in nfo_unchanged_paths:
+                    video.preserve_existing_metadata(existing)
+                else:
+                    video.preserve_missing_metadata(existing)
+            video.mtime = file_info['mtime']
+            video.nfo_mtime = file_info.get('nfo_mtime', 0)
+            videos_to_upsert.append(video)
+            session_added_paths.append(video.path)
+            cache_misses += 1
+        except Exception:
+            logger.exception("掃描檔案失敗: %s", file_info.get('path', ''))
+            yield _sse_event({
+                "type": "log",
+                "level": "warn",
+                "message": f"  [{index}] 掃描發生錯誤，已跳過",
+            })
+            scan_error_count += 1
+
+    return videos_to_upsert, session_added_paths, cache_misses, scan_error_count
+
+
+def _submit_focal_candidates(
+    repo: VideoRepository,
+    current_paths: set[str],
+    path_mappings: dict,
+    should_abort: Optional[Callable[[], bool]],
+) -> None:
+    """Queue eligible empty-focal candidates from the current source."""
+    # TASK-98b-T2 / Codex PR#105 P2：涵蓋本次掃描 in-scope 的所有空焦點無碼片，
+    # 不只 upsert batch（needs_scan）——既有、未變動、auto_focal='' 的列也要補。
+    if not current_paths or (should_abort and should_abort()):
+        return
+
+    focal_candidates = repo.get_empty_focal_candidates(list(current_paths))
+    for candidate_path, number, maker, cover_path in focal_candidates:
+        # 候選數可達數千；取消可能落在迴圈中途，因此每圈 fresh 查一次。
+        if should_abort and should_abort():
+            break
+        if requires_face_detection(number, maker):
+            cover_fs = uri_to_local_fs_path(cover_path, path_mappings)
+            maybe_submit_video_focal(
+                number,
+                maker,
+                candidate_path,
+                cover_fs,
+                db_path=repo.db_path,
+                cover_path_uri=cover_path,
+            )
+
+
+def _scan_regular_source(
+    *,
+    directory: str,
+    normalized_dir: str,
+    scanner: VideoScanner,
+    repo: VideoRepository,
+    config: dict,
+    min_size_mb: int,
+    path_mappings: dict,
+    should_abort: Optional[Callable[[], bool]],
+) -> Generator[str, None, dict[str, Any]]:
+    """Scan one writable source while preserving SSE and cancellation semantics."""
+    stats = _empty_source_scan_stats()
+    skip_message = _scan_root_skip_message(directory, normalized_dir)
+    if skip_message is not None:
+        yield _sse_event({"type": "log", "level": "warn", "message": skip_message})
+        return stats
+
+    try:
+        min_size_bytes = min_size_mb * 1024 * 1024
+        video_extensions = get_video_extensions(config)
+        # a5 Codex fix: 收集因 OSError/PermissionError 被跳過的路徑
+        # （含 Windows 長路徑觸發的 OSError — 這些 entry 根本不會進 all_files）
+        skipped_paths: dict[str, OSError] = {}
+        all_files = fast_scan_directory(
+            normalized_dir,
+            video_extensions,
+            min_size_bytes,
+            on_skip=lambda path, error: skipped_paths.__setitem__(path, error),
+        )
+
+        if not all_files and not skipped_paths:
+            yield _sse_event({
+                "type": "log",
+                "level": "info",
+                "message": f"{directory}: 沒有影片檔案",
+            })
+            return stats
+
+        # a5: Windows 長路徑警告（gate 在呼叫端，不在 helper）
+        if sys.platform == 'win32':
+            stats["long_paths"].extend(_collect_long_paths(all_files))
+            # 把因長度而失敗的 skipped 路徑也納入警告（filter >260 過濾非長路徑失敗）
+            stats["long_paths"].extend(
+                path for path in skipped_paths if len(path) > 260
+            )
+
+        yield _sse_event({
+            "type": "log",
+            "level": "info",
+            "message": f"{directory}: 找到 {len(all_files)} 個檔案",
+        })
+
+        db_index = repo.get_mtime_index()
+        needs_scan, current_paths, nfo_unchanged_paths = _collect_scan_refresh_sets(
+            all_files,
+            db_index,
+            path_mappings,
+        )
+
+        # 清理已刪除的檔案（限定在此目錄下）。partial scan 只做 insert/update，
+        # 不能 infer 刪除，否則讀取失敗會被誤判成檔案已刪除。
+        if skipped_paths:
+            yield _sse_event({
+                "type": "log",
+                "level": "warn",
+                "message": _skipped_scan_warning(directory, normalized_dir, skipped_paths),
+            })
+        else:
+            normalized_dir_uri = to_file_uri(normalized_dir, path_mappings)
+            deleted_paths = [
+                path
+                for path in db_index
+                if (
+                    is_path_under_dir(path, normalized_dir_uri)
+                    and path not in current_paths
+                )
+            ]
+            if deleted_paths:
+                deleted_count = repo.delete_by_paths(deleted_paths)
+                # feature/71 T8: deleted_paths 已是 DB URI，原樣失效縮圖。
+                for path in deleted_paths:
+                    thumbnail_cache.invalidate(path)
+                stats["deleted"] = deleted_count
+                yield _sse_event({
+                    "type": "log",
+                    "level": "info",
+                    "message": f"  清理 {deleted_count} 個已刪除檔案",
+                })
+
+        cache_hits = len(all_files) - len(needs_scan)
+        scan_uris = [
+            to_file_uri(file_info['path'], path_mappings)
+            for file_info in needs_scan
+        ]
+        existing_by_uri = repo.get_by_paths(scan_uris)
+        (
+            videos_to_upsert,
+            session_added_paths,
+            cache_misses,
+            scan_errors,
+        ) = yield from _scan_changed_files(
+            needs_scan,
+            scanner,
+            existing_by_uri,
+            nfo_unchanged_paths,
+            should_abort,
+        )
+
+        if videos_to_upsert:
+            inserted, updated = repo.upsert_batch(videos_to_upsert)
+            stats["inserted"] = inserted
+            stats["updated"] = updated
+
+        _submit_focal_candidates(
+            repo,
+            current_paths,
+            path_mappings,
+            should_abort,
+        )
+
+        stats["scan_errors"] = scan_errors
+        stats["session_added_paths"] = session_added_paths
+        logger.info(
+            f"[Gallery] {directory}: {len(all_files)} 個檔案，快取命中 {cache_hits}"
+        )
+        yield _sse_event({
+            "type": "log",
+            "level": "info",
+            "message": (
+                f"{directory}: {len(all_files)} 部 "
+                f"(快取: {cache_hits}, 新增/更新: {cache_misses})"
+            ),
+        })
+    except Exception:
+        logger.exception("掃描資料夾失敗: %s", directory)
+        stats["scan_errors"] += 1
+        yield _sse_event({
+            "type": "log",
+            "level": "error",
+            "message": "掃描發生錯誤，已跳過此資料夾",
+        })
+    return stats
+
+
+def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Generator[str, None, None]:
     """產生影片列表（SSE 串流）- 使用 SQLite 儲存"""
 
     try:
@@ -412,166 +677,22 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
                 "current": idx,
                 "total": total_dirs + 1  # +1 for generating
             })
-            skip_message = _scan_root_skip_message(directory, normalized_dir)
-            if skip_message is not None:
-                yield _sse_event({"type": "log", "level": "warn", "message": skip_message})
-                continue
-
-            try:
-                # 快速掃描取得檔案列表
-                min_size_bytes = min_size_mb * 1024 * 1024
-                video_extensions = get_video_extensions(config)
-                # a5 Codex fix: 收集因 OSError/PermissionError 被跳過的路徑
-                # （含 Windows 長路徑觸發的 OSError — 這些 entry 根本不會進 all_files）
-                skipped_paths: dict[str, OSError] = {}  # path → 例外（159-T10a：分辨「沒有權限」）
-                all_files = fast_scan_directory(
-                    normalized_dir,
-                    video_extensions,
-                    min_size_bytes,
-                    on_skip=lambda p, e: skipped_paths.__setitem__(p, e),  # noqa: B023 — callback consumed synchronously within same iteration, not deferred
-                )
-
-                if not all_files and not skipped_paths:
-                    yield _sse_event({"type": "log", "level": "info", "message": f"{directory}: 沒有影片檔案"})
-                    continue
-
-                # a5: Windows 長路徑警告（gate 在呼叫端，不在 helper）
-                if sys.platform == 'win32':
-                    long_paths.extend(_collect_long_paths(all_files))
-                    # 把因長度而失敗的 skipped 路徑也納入警告（filter >260 過濾非長路徑失敗）
-                    long_paths.extend(p for p in skipped_paths if len(p) > 260)
-
-                yield _sse_event({"type": "log", "level": "info", "message": f"{directory}: 找到 {len(all_files)} 個檔案"})
-
-                # 取得現有 mtime 索引
-                db_index = repo.get_mtime_index()
-
-                # 比對決定需要處理的檔案
-                needs_scan = []
-                current_paths = set()
-                nfo_unchanged_paths = set()
-
-                for file_info in all_files:
-                    path = file_info['path']
-                    file_uri = to_file_uri(path, path_mappings)
-                    current_paths.add(file_uri)
-
-                    db_entry = db_index.get(file_uri)
-                    if scan_entry_needs_refresh(db_entry, file_info, path_mappings):
-                        # 新檔案、mtime/NFO/劇照變更，或 DB 仍缺基本資料／可服務封面。
-                        needs_scan.append(file_info)
-                        if (
-                            db_entry is not None
-                            and db_entry[1] == file_info.get('nfo_mtime', 0)
-                        ):
-                            nfo_unchanged_paths.add(file_uri)
-
-                # 清理已刪除的檔案（限定在此目錄下）
-                # a5 Codex fix: scan 不完整時（skipped_paths 非空）跳過 deletion 偵測
-                # current_paths 只含本次成功掃到的檔案；若有路徑因 OSError/PermissionError
-                # 被跳過，current_paths 就不是本目錄完整集合，用它做 diff 會把「原本存在
-                # 但這次沒掃到（因失敗）」的 DB 紀錄誤判為已刪除並清掉。
-                # partial scan 只做 insert/update，不能 infer 刪除。
-                if skipped_paths:
-                    yield _sse_event({
-                        "type": "log",
-                        "level": "warn",
-                        "message": _skipped_scan_warning(directory, normalized_dir, skipped_paths)
-                    })
-                else:
-                    normalized_dir_uri = to_file_uri(normalized_dir, path_mappings)
-                    deleted_paths = [p for p in db_index.keys() if is_path_under_dir(p, normalized_dir_uri) and p not in current_paths]
-                    if deleted_paths:
-                        deleted_count = repo.delete_by_paths(deleted_paths)
-                        # feature/71 T8: prune 連動失效縮圖。deleted_paths 已是 DB URI
-                        # （db_index.keys()）→ 原樣傳入、不過 to_file_uri、不疊轉換（plan §0.1）。
-                        for p in deleted_paths:
-                            thumbnail_cache.invalidate(p)
-                        total_deleted += deleted_count
-                        yield _sse_event({"type": "log", "level": "info", "message": f"  清理 {deleted_count} 個已刪除檔案"})
-
-                # 掃描並寫入需要更新的檔案
-                videos_to_upsert = []
-                cache_hits = len(all_files) - len(needs_scan)
-                cache_misses = 0
-                scan_uris = [
-                    to_file_uri(file_info['path'], path_mappings)
-                    for file_info in needs_scan
-                ]
-                existing_by_uri = repo.get_by_paths(scan_uris)
-
-                for i, file_info in enumerate(needs_scan, 1):
-                    # TASK-90b-T4: 逐檔中止檢查（每檔處理之前）。單一資料夾內
-                    # 檔案量大時，逐來源層檢查粒度太粗，需要在此內層迴圈頂端
-                    # 再插一次，讓中止在「下一個可偵測的時間點」生效（不中斷
-                    # 正在進行中的單一 scan_file() 呼叫）。
-                    if should_abort and should_abort():
-                        break
-
-                    video_name = os.path.basename(file_info['path'])
-                    yield _sse_event({"type": "log", "level": "info", "message": f"  [{i}/{len(needs_scan)}] {video_name}"})
-
-                    try:
-                        video_info = scanner.scan_file(file_info['path'], None)
-                        video = Video.from_video_info(video_info)
-                        existing = existing_by_uri.get(video.path)
-                        if existing is not None:
-                            if video.path in nfo_unchanged_paths:
-                                video.preserve_existing_metadata(existing)
-                            else:
-                                video.preserve_missing_metadata(existing)
-                        video.mtime = file_info['mtime']
-                        video.nfo_mtime = file_info.get('nfo_mtime', 0)
-                        videos_to_upsert.append(video)
-                        session_added_paths.append(video.path)
-                        cache_misses += 1
-                    except Exception:
-                        logger.exception("掃描檔案失敗: %s", file_info.get('path', ''))
-                        yield _sse_event({"type": "log", "level": "warn", "message": f"  [{i}] 掃描發生錯誤，已跳過"})
-                        scan_error_count += 1
-
-                # 批次寫入
-                if videos_to_upsert:
-                    inserted, updated = repo.upsert_batch(videos_to_upsert)
-                    total_inserted += inserted
-                    total_updated += updated
-
-                # 掃描 focal trigger（TASK-98b-T2 / Codex PR#105 P2）：涵蓋本次掃描
-                # in-scope 的所有空焦點無碼片，不只 upsert batch（needs_scan）——既有、
-                # 未變動、auto_focal='' 的列（不在 videos_to_upsert 內）也要補，否則
-                # 「重掃一次自動補焦既有庫」形同虛設。current_paths 是本目錄本次掃到
-                # 的完整 DB-key URI 集合（:457-458 同一套 to_file_uri(path,
-                # path_mappings) 推導），bulk 查詢，不另建 URI、不 N+1。
-                #
-                # TASK-99b-T1（CD-99b-8 sibling 併修）：fresh 查一次 should_abort()——
-                # 中途取消時本段之前無任何中止檢查，若不擋，取消後仍會把整目錄的空
-                # 焦點候選塞進單執行緒 FIFO worker（每 job ~3s），與
-                # readonly_producer.produce_source 的同型洞同批修。只 gate 這段
-                # focal pass，不影響上面的 upsert 與下面的完成通知。
-                if current_paths and not (should_abort and should_abort()):
-                    focal_candidates = repo.get_empty_focal_candidates(list(current_paths))
-                    for c_path, c_number, c_maker, c_cover_path in focal_candidates:
-                        # Codex P1（CD-99b-8 二次修）：:539 入口 gate 只擋「取消已在
-                        # 迴圈開始前發生」；候選數可達數千、每圈一次 os.path.exists，
-                        # 迴圈本身可能跑到秒級，取消也可能落在迴圈中途。此處每圈
-                        # fresh 查一次，與入口 gate 防同一種傷害、只是取消落點不同。
-                        if should_abort and should_abort():
-                            break
-                        if requires_face_detection(c_number, c_maker):
-                            cover_fs = uri_to_local_fs_path(c_cover_path, path_mappings)
-                            maybe_submit_video_focal(c_number, c_maker, c_path, cover_fs, db_path=repo.db_path, cover_path_uri=c_cover_path)
-
-                logger.info(f"[Gallery] {directory}: {len(all_files)} 個檔案，快取命中 {cache_hits}")
-
-                yield _sse_event({
-                    "type": "log",
-                    "level": "info",
-                    "message": f"{directory}: {len(all_files)} 部 (快取: {cache_hits}, 新增/更新: {cache_misses})"
-                })
-            except Exception:
-                logger.exception("掃描資料夾失敗: %s", directory)
-                scan_error_count += 1
-                yield _sse_event({"type": "log", "level": "error", "message": "掃描發生錯誤，已跳過此資料夾"})
+            source_stats = yield from _scan_regular_source(
+                directory=directory,
+                normalized_dir=normalized_dir,
+                scanner=scanner,
+                repo=repo,
+                config=config,
+                min_size_mb=min_size_mb,
+                path_mappings=path_mappings,
+                should_abort=should_abort,
+            )
+            total_inserted += source_stats["inserted"]
+            total_updated += source_stats["updated"]
+            total_deleted += source_stats["deleted"]
+            scan_error_count += source_stats["scan_errors"]
+            session_added_paths.extend(source_stats["session_added_paths"])
+            long_paths.extend(source_stats["long_paths"])
 
         # TASK-90b-T4 / PR#90b Codex P1: 尾段每個外顯副作用（HTML 檔、完成通知、
         # done event）之前各自 fresh 查一次 should_abort()，而非迴圈結束時單次

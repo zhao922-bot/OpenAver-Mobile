@@ -81,33 +81,16 @@ def _multipart_item_key(file_item: dict[str, Any]) -> tuple[str, int] | None:
     return base, int(token[-1])
 
 
-def build_combined_rename_plan(
-    videos: list[Any],
-    *,
-    source_id: str,
-    stem_overrides: dict[str, str],
-    source_roots: list[str],
-    path_mappings: dict | None = None,
-    config: dict | None = None,
-    failed_items: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Combine source-titled file and direct-child folder normalization."""
-    rows_by_uri = {
-        str(getattr(video, "path", "") or ""): video
-        for video in videos
-    }
-    file_plan = build_rename_plan(
-        videos,
-        path_mappings=path_mappings,
-        config=config,
-        stem_overrides=stem_overrides,
-    )
+def _group_file_plan_items(
+    file_plan: dict[str, Any],
+    roots: list[Path],
+) -> list[list[dict[str, Any]]]:
+    """Group file plan rows by folder, splitting source-root files."""
     grouped: dict[str, list[dict[str, Any]]] = {}
     for file_item in file_plan["items"]:
         folder = Path(file_item["old_video_path"]).parent
         grouped.setdefault(_path_key(str(folder)), []).append(file_item)
 
-    roots = [Path(uri_to_fs_path(str(root))) for root in source_roots if root]
     groups: list[list[dict[str, Any]]] = []
     for group in grouped.values():
         folder = Path(group[0]["old_video_path"]).parent
@@ -117,7 +100,8 @@ def build_combined_rename_plan(
             # one folder so the scanner can present them as a single card.
             multipart_buckets: dict[str, list[dict[str, Any]]] = {}
             ordered = sorted(
-                group, key=lambda row: row["old_video_path"].casefold()
+                group,
+                key=lambda row: row["old_video_path"].casefold(),
             )
             for file_item in ordered:
                 key = _multipart_item_key(file_item)
@@ -141,34 +125,58 @@ def build_combined_rename_plan(
                     groups.extend([item] for item in bucket)
         else:
             groups.append(
-                sorted(group, key=lambda row: row["old_video_path"].casefold())
+                sorted(
+                    group,
+                    key=lambda row: row["old_video_path"].casefold(),
+                )
             )
 
-    items: list[dict[str, Any]] = []
-    for file_items in sorted(
-        groups, key=lambda rows: rows[0]["old_video_path"].casefold()
-    ):
-        folder = Path(file_items[0]["old_video_path"]).parent
-        rows = [rows_by_uri[item["db_old_uri"]] for item in file_items]
-        folder_number = extract_number(folder.name)
-        multipart_members = [
-            (index, key)
-            for index, item in enumerate(file_items)
-            if (key := _multipart_item_key(item)) is not None
-        ]
-        multipart_group = (
-            len(file_items) >= 2
-            and len(multipart_members) == len(file_items)
-            and len({key[1] for _, key in multipart_members})
-            == len(multipart_members)
-        )
-        primary_index = 0
-        if multipart_group:
-            primary_index = min(
+    return sorted(
+        groups,
+        key=lambda rows: rows[0]["old_video_path"].casefold(),
+    )
+
+
+def _multipart_primary_index(
+    file_items: list[dict[str, Any]],
+) -> tuple[int, bool]:
+    """Return the primary row index and whether the group is multipart."""
+    multipart_members = [
+        (index, key)
+        for index, item in enumerate(file_items)
+        if (key := _multipart_item_key(item)) is not None
+    ]
+    multipart_group = (
+        len(file_items) >= 2
+        and len(multipart_members) == len(file_items)
+        and len({key[1] for _, key in multipart_members})
+        == len(multipart_members)
+    )
+    if multipart_group:
+        return (
+            min(
                 multipart_members,
                 key=lambda entry: entry[1][1],
-            )[0]
-        elif folder_number:
+            )[0],
+            True,
+        )
+    return 0, False
+
+
+def _build_combined_item(
+    file_items: list[dict[str, Any]],
+    rows_by_uri: dict[str, Any],
+    roots: list[Path],
+    stem_overrides: dict[str, str],
+    path_mappings: dict | None,
+) -> dict[str, Any]:
+    """Build one folder-level item from its source files."""
+    folder = Path(file_items[0]["old_video_path"]).parent
+    rows = [rows_by_uri[item["db_old_uri"]] for item in file_items]
+    folder_number = extract_number(folder.name)
+    primary_index, multipart_group = _multipart_primary_index(file_items)
+    if not multipart_group:
+        if folder_number:
             normalized_folder_number = normalize_number_impl(str(folder_number))
             for index, item in enumerate(file_items):
                 if item.get("number") == normalized_folder_number:
@@ -179,103 +187,114 @@ def build_combined_rename_plan(
                 range(len(rows)),
                 key=lambda index: int(getattr(rows[index], "size_bytes", 0) or 0),
             )
-        primary = file_items[primary_index]
-        primary_override = stem_overrides.get(primary["db_old_uri"], "")
-        folder_stem_override = (
-            _strip_multipart_token(primary_override)
-            if multipart_group
-            else primary_override
-        )
-        fitted_folder_stem = _fit_filename_stem(folder_stem_override, 0)
-        root_level = _is_source_root(folder, roots)
-        if root_level and fitted_folder_stem:
-            folder_action = "create"
-            new_folder = folder / fitted_folder_stem
-        elif _is_direct_child(folder, roots) and fitted_folder_stem:
-            folder_action = "rename"
-            new_folder = folder.with_name(fitted_folder_stem)
+
+    primary = file_items[primary_index]
+    primary_override = stem_overrides.get(primary["db_old_uri"], "")
+    folder_stem_override = (
+        _strip_multipart_token(primary_override)
+        if multipart_group
+        else primary_override
+    )
+    fitted_folder_stem = _fit_filename_stem(folder_stem_override, 0)
+    root_level = _is_source_root(folder, roots)
+    if root_level and fitted_folder_stem:
+        folder_action = "create"
+        new_folder = folder / fitted_folder_stem
+    elif _is_direct_child(folder, roots) and fitted_folder_stem:
+        folder_action = "rename"
+        new_folder = folder.with_name(fitted_folder_stem)
+    else:
+        folder_action = "none"
+        new_folder = folder
+
+    item: dict[str, Any] = {
+        "old_folder_path": str(folder),
+        "new_folder_path": str(new_folder),
+        "old_name": folder.name,
+        "new_name": new_folder.name,
+        "folder_action": folder_action,
+        "number": primary.get("number"),
+        "source_title": primary_override,
+        "move_files": [],
+        "videos": [],
+        "conflicts": [],
+        "status": "unchanged",
+        "reason": "unchanged",
+    }
+
+    for file_item, row in zip(file_items, rows, strict=True):
+        final_video = new_folder / Path(file_item["new_video_path"]).name
+        cover_new = file_item.get("cover_path_new") or ""
+        if cover_new and new_folder != folder:
+            cover_new = _rebase_path(
+                cover_new,
+                folder,
+                new_folder,
+                path_mappings,
+            )
+        samples_old = [
+            str(value)
+            for value in (getattr(row, "sample_images", None) or [])
+        ]
+        if folder_action == "create":
+            samples_new = samples_old
         else:
-            folder_action = "none"
-            new_folder = folder
+            samples_new = _rebase_path_list(
+                samples_old,
+                folder,
+                new_folder,
+                path_mappings,
+            )
+        if folder_action == "create":
+            for associated in file_item.get("associated_files", []):
+                after_rename = Path(associated["new_path"])
+                item["move_files"].append({
+                    "old_path": associated["old_path"],
+                    "after_rename_path": str(after_rename),
+                    "new_path": str(new_folder / after_rename.name),
+                })
+        item["videos"].append({
+            "db_old_uri": file_item["db_old_uri"],
+            "db_new_uri": to_file_uri(str(final_video), path_mappings),
+            "old_video_path": file_item["old_video_path"],
+            "new_video_path": str(final_video),
+            "old_name": file_item["old_name"],
+            "new_name": final_video.name,
+            "number": file_item.get("number"),
+            "cover_path_old": file_item.get("cover_path_old") or "",
+            "cover_path_new": cover_new,
+            "sample_images_old": samples_old,
+            "sample_images_new": samples_new,
+            "operations": file_item.get("operations") or [],
+            "status": file_item["status"],
+            "reason": file_item["reason"],
+            "conflicts": list(file_item.get("conflicts") or []),
+        })
+        item["conflicts"].extend(file_item.get("conflicts") or [])
 
-        item: dict[str, Any] = {
-            "old_folder_path": str(folder),
-            "new_folder_path": str(new_folder),
-            "old_name": folder.name,
-            "new_name": new_folder.name,
-            "folder_action": folder_action,
-            "number": primary.get("number"),
-            "source_title": primary_override,
-            "move_files": [],
-            "videos": [],
-            "conflicts": [],
-            "status": "unchanged",
-            "reason": "unchanged",
-        }
+    file_states = {video["status"] for video in item["videos"]}
+    folder_changed = folder_action != "none"
+    has_file_changes = any(
+        video["operations"]
+        for video in item["videos"]
+    )
+    if "conflict" in file_states:
+        item["status"] = "conflict"
+        item["reason"] = "file_conflict"
+    elif "missing" in file_states:
+        item["status"] = "missing"
+        item["reason"] = "source_not_found"
+    elif "skipped" in file_states:
+        item["status"] = "skipped"
+        item["reason"] = "skipped"
+    elif folder_changed or has_file_changes:
+        item["status"] = "ready"
+        item["reason"] = "source_title"
+    return item
 
-        for file_item, row in zip(file_items, rows, strict=True):
-            final_video = new_folder / Path(file_item["new_video_path"]).name
-            cover_new = file_item.get("cover_path_new") or ""
-            if cover_new and new_folder != folder:
-                cover_new = _rebase_path(
-                    cover_new, folder, new_folder, path_mappings
-                )
-            samples_old = [
-                str(value)
-                for value in (getattr(row, "sample_images", None) or [])
-            ]
-            if folder_action == "create":
-                samples_new = samples_old
-            else:
-                samples_new = _rebase_path_list(
-                    samples_old, folder, new_folder, path_mappings
-                )
-            if folder_action == "create":
-                for associated in file_item.get("associated_files", []):
-                    after_rename = Path(associated["new_path"])
-                    item["move_files"].append({
-                        "old_path": associated["old_path"],
-                        "after_rename_path": str(after_rename),
-                        "new_path": str(new_folder / after_rename.name),
-                    })
-            item["videos"].append({
-                "db_old_uri": file_item["db_old_uri"],
-                "db_new_uri": to_file_uri(str(final_video), path_mappings),
-                "old_video_path": file_item["old_video_path"],
-                "new_video_path": str(final_video),
-                "old_name": file_item["old_name"],
-                "new_name": final_video.name,
-                "number": file_item.get("number"),
-                "cover_path_old": file_item.get("cover_path_old") or "",
-                "cover_path_new": cover_new,
-                "sample_images_old": samples_old,
-                "sample_images_new": samples_new,
-                "operations": file_item.get("operations") or [],
-                "status": file_item["status"],
-                "reason": file_item["reason"],
-                "conflicts": list(file_item.get("conflicts") or []),
-            })
-            item["conflicts"].extend(file_item.get("conflicts") or [])
 
-        file_states = {video["status"] for video in item["videos"]}
-        folder_changed = folder_action != "none"
-        has_file_changes = any(
-            video["operations"] for video in item["videos"]
-        )
-        if "conflict" in file_states:
-            item["status"] = "conflict"
-            item["reason"] = "file_conflict"
-        elif "missing" in file_states:
-            item["status"] = "missing"
-            item["reason"] = "source_not_found"
-        elif "skipped" in file_states:
-            item["status"] = "skipped"
-            item["reason"] = "skipped"
-        elif folder_changed or has_file_changes:
-            item["status"] = "ready"
-            item["reason"] = "source_title"
-        items.append(item)
-
+def _mark_combined_conflicts(items: list[dict[str, Any]]) -> None:
+    """Detect folder, move, and video target collisions in place."""
     source_folders = {
         _path_key(item["old_folder_path"])
         for item in items
@@ -286,15 +305,18 @@ def build_combined_rename_plan(
     for item in items:
         if item.get("folder_action") != "none":
             folder_targets.setdefault(
-                _path_key(item["new_folder_path"]), []
+                _path_key(item["new_folder_path"]),
+                [],
             ).append(item)
         for video in item["videos"]:
             video_targets.setdefault(
-                _path_key(video["new_video_path"]), []
+                _path_key(video["new_video_path"]),
+                [],
             ).append(video)
         for move in item.get("move_files", []):
             move_targets.setdefault(
-                _path_key(move["new_path"]), []
+                _path_key(move["new_path"]),
+                [],
             ).append(move)
 
     for item in items:
@@ -313,9 +335,13 @@ def build_combined_rename_plan(
             and target.exists()
             and new_folder_key not in source_folders
         ):
-            item["conflicts"].append(f"folder_target_exists:{item['new_name']}")
+            item["conflicts"].append(
+                f"folder_target_exists:{item['new_name']}"
+            )
         if len(folder_targets.get(new_folder_key, [])) > 1:
-            item["conflicts"].append(f"duplicate_folder_target:{item['new_name']}")
+            item["conflicts"].append(
+                f"duplicate_folder_target:{item['new_name']}"
+            )
         for move in item.get("move_files", []):
             if len(move_targets.get(_path_key(move["new_path"]), [])) > 1:
                 item["conflicts"].append(
@@ -331,44 +357,88 @@ def build_combined_rename_plan(
             item["reason"] = sorted(set(item["conflicts"]))[0]
         item["conflicts"] = sorted(set(item["conflicts"]))
 
+
+def _combined_plan_summary(
+    items: list[dict[str, Any]],
+    failed_items: list[dict[str, Any]],
+) -> dict[str, Any]:
     ready = [item for item in items if item["status"] == "ready"]
     conflicts = [item for item in items if item["status"] == "conflict"]
     unchanged = [item for item in items if item["status"] == "unchanged"]
     skipped = [item for item in items if item["status"] == "skipped"]
     missing = [item for item in items if item["status"] == "missing"]
-    failed_items = list(failed_items or [])
     ready_videos = [
         video
         for item in ready
         for video in item["videos"]
     ]
     return {
+        "total": len(ready_videos) + len(failed_items),
+        "groups": len(items),
+        "rename_videos": sum(
+            1
+            for video in ready_videos
+            if video["old_name"] != video["new_name"]
+        ),
+        "rename_files": sum(
+            len(video["operations"])
+            for video in ready_videos
+        ),
+        "rename_folders": sum(
+            1
+            for item in ready
+            if item.get("folder_action") != "none"
+        ),
+        "updated_videos": len(ready_videos),
+        "conflicts": len(conflicts),
+        "failed": len(failed_items),
+        "unchanged": len(unchanged),
+        "skipped": len(skipped),
+        "missing": len(missing),
+    }
+
+
+def build_combined_rename_plan(
+    videos: list[Any],
+    *,
+    source_id: str,
+    stem_overrides: dict[str, str],
+    source_roots: list[str],
+    path_mappings: dict | None = None,
+    config: dict | None = None,
+    failed_items: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Combine source-titled file and direct-child folder normalization."""
+    rows_by_uri = {
+        str(getattr(video, "path", "") or ""): video
+        for video in videos
+    }
+    file_plan = build_rename_plan(
+        videos,
+        path_mappings=path_mappings,
+        config=config,
+        stem_overrides=stem_overrides,
+    )
+    roots = [Path(uri_to_fs_path(str(root))) for root in source_roots if root]
+    groups = _group_file_plan_items(file_plan, roots)
+    items = [
+        _build_combined_item(
+            file_items,
+            rows_by_uri,
+            roots,
+            stem_overrides,
+            path_mappings,
+        )
+        for file_items in groups
+    ]
+    _mark_combined_conflicts(items)
+
+    failed_items = list(failed_items or [])
+    return {
         "plan_id": _combined_plan_id(items, source_id),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": source_id,
-        "summary": {
-            "total": len(ready_videos) + len(failed_items),
-            "groups": len(items),
-            "rename_videos": sum(
-                1
-                for video in ready_videos
-                if video["old_name"] != video["new_name"]
-            ),
-            "rename_files": sum(
-                len(video["operations"])
-                for video in ready_videos
-            ),
-            "rename_folders": sum(
-                1 for item in ready
-                if item.get("folder_action") != "none"
-            ),
-            "updated_videos": len(ready_videos),
-            "conflicts": len(conflicts),
-            "failed": len(failed_items),
-            "unchanged": len(unchanged),
-            "skipped": len(skipped),
-            "missing": len(missing),
-        },
+        "summary": _combined_plan_summary(items, failed_items),
         "failed_items": failed_items,
         "items": items,
     }

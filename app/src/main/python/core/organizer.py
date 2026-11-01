@@ -1109,6 +1109,204 @@ def _containment_error(candidate_fs_path: str, root_fs_path: str) -> Optional[st
     return '目標路徑超出允許範圍，請確認命名格式設定'
 
 
+def _resolve_organize_title(
+    original_filename: str,
+    number: str,
+    actors: list,
+    metadata: Dict[str, Any],
+    config: Dict[str, Any],
+    vr_cluster: Optional[str],
+) -> tuple[str, str, str, Optional[str]]:
+    """Choose the translated, extracted, or original title for organizing."""
+    original_title = metadata.get('title', '')
+    translated_title = metadata.get('translated_title', '')
+    extracted_title = extract_chinese_title(original_filename, number, actors)
+
+    # 剝除 extracted_title 尾端的 VR cluster（含可選 bracket/paren 包裝）。
+    if vr_cluster and extracted_title:
+        vr_tail_re = re.compile(
+            r'[\[(]?' + re.escape(vr_cluster) + r'[\])]?[\s_.\-]*$'
+        )
+        match = vr_tail_re.search(extracted_title)
+        if match:
+            trimmed = extracted_title[:match.start()].rstrip('_-. ')
+            extracted_title = trimmed or extracted_title
+
+    # FIX A：B2 junk-validation（CD-c5/c6）
+    if (
+        extracted_title
+        and _extracted_has_organize_junk(
+            extracted_title,
+            number,
+            metadata,
+            config,
+        )
+    ):
+        extracted_title = None
+
+    if translated_title:
+        title = translated_title
+        title_source = 'translated'
+        preserved_extracted_title = None
+    elif extracted_title:
+        title = extracted_title
+        title_source = 'extracted'
+        preserved_extracted_title = extracted_title
+    else:
+        title = original_title
+        title_source = 'original'
+        preserved_extracted_title = None
+
+    if title:
+        title = _strip_num_prefixes(title, number)
+    return title, original_title, title_source, preserved_extracted_title
+
+
+def _build_organize_format_data(
+    original_filename: str,
+    number: str,
+    title: str,
+    actors: list,
+    metadata: Dict[str, Any],
+    config: Dict[str, Any],
+    external_manager: str,
+) -> dict[str, Any]:
+    """Build template values and detect version suffixes."""
+    format_data = {
+        'number': number,
+        'title': truncate_title(title, config.get('max_title_length', 50)),
+        'actors': actors,
+        'maker': metadata.get('maker', ''),
+        'date': metadata.get('date', ''),
+    }
+
+    suffix_keywords = config.get('suffix_keywords', [])
+    if external_manager != 'off':
+        detect_keywords = [
+            keyword
+            for keyword in suffix_keywords
+            if not _is_multipart_kw(keyword)
+        ]
+    else:
+        detect_keywords = suffix_keywords
+    suffix = _detect_suffixes(original_filename, detect_keywords)
+    format_data['suffix'] = suffix
+    return format_data
+
+
+def _collect_folder_fallbacks(
+    config: Dict[str, Any],
+    format_data: dict[str, Any],
+) -> list[str]:
+    """Report folder placeholders that required fallback values."""
+    used_fallbacks = []
+    if not config.get('create_folder', True):
+        return used_fallbacks
+
+    layers = config.get('folder_layers', [])
+    if not layers:
+        old_format = config.get('folder_format', '{num}')
+        layers = [
+            part.strip()
+            for part in old_format.replace('\\', '/').split('/')
+            if part.strip()
+        ]
+    folder_template = ' '.join(layers)
+
+    if (
+        ('{actor}' in folder_template or '{actors}' in folder_template)
+        and not format_data.get('actors')
+    ):
+        used_fallbacks.append('女優')
+    if '{maker}' in folder_template and not format_data.get('maker'):
+        used_fallbacks.append('片商')
+    date_value = format_data.get('date', '') or ''
+    date_missing = (
+        ('{date}' in folder_template and not date_value)
+        or ('{year}' in folder_template and len(date_value) < 4)
+        or ('{month}' in folder_template and len(date_value) < 7)
+        or ('{day}' in folder_template and len(date_value) < 10)
+    )
+    if date_missing:
+        used_fallbacks.append('日期')
+    if '{title}' in folder_template and not format_data.get('title'):
+        used_fallbacks.append('標題')
+    return used_fallbacks
+
+
+def _compute_organize_paths(
+    original_dir: str,
+    original_ext: str,
+    config: Dict[str, Any],
+    format_data: dict[str, Any],
+    vr_tail: str,
+    part_tail: str,
+) -> tuple[str, str, str]:
+    """Compute target directory, filename stem, and full target path."""
+    if config.get('create_folder', True):
+        layers = config.get('folder_layers', [])
+        if not layers:
+            old_format = config.get('folder_format', '{num}')
+            layers = [
+                part.strip()
+                for part in old_format.replace('\\', '/').split('/')
+                if part.strip()
+            ]
+
+        max_folder_chars = min(config.get('max_filename_length', 60), 120)
+        path_parts = []
+        for layer in layers[:3]:
+            if layer:
+                part = truncate_to_chars(
+                    format_string(layer, format_data, use_fallback=True),
+                    max_folder_chars,
+                )
+                if part:
+                    path_parts.append(part)
+        target_dir = (
+            os.path.join(original_dir, *path_parts)
+            if path_parts
+            else original_dir
+        )
+    else:
+        target_dir = original_dir
+
+    filename_template = config.get('filename_format', '{num} {title}')
+    max_filename_chars = min(config.get('max_filename_length', 60), 120)
+    max_chars = max_filename_chars - len(original_ext)
+    reserve = len(vr_tail) + len(part_tail)
+    suffix = format_data.get('suffix', '')
+    if suffix and '{suffix}' in filename_template:
+        no_suffix_data = dict(format_data, suffix='')
+        base_without_suffix = format_string(filename_template, no_suffix_data)
+        base_budget = max(0, max_chars - len(suffix) - reserve)
+        if base_budget == 0:
+            filename_base = truncate_to_chars(
+                suffix,
+                max(0, max_chars - reserve),
+            )
+        else:
+            base_without_suffix = truncate_to_chars(
+                base_without_suffix,
+                base_budget,
+            )
+            filename_base = base_without_suffix + suffix
+    else:
+        filename_base = format_string(filename_template, format_data)
+        filename_base = truncate_to_chars(
+            filename_base,
+            max(0, max_chars - reserve),
+        )
+
+    filename_base = filename_base + vr_tail
+    if part_tail:
+        filename_base = _strip_part_token(filename_base)
+    filename_base = filename_base + part_tail
+    filename_base = truncate_to_chars(filename_base, max_chars)
+    target_path = os.path.join(target_dir, filename_base + original_ext)
+    return target_dir, filename_base, target_path
+
+
 def organize_file(  # noqa: C901 — 整理主流程；Phase 2（110b）會在其中加 containment 防線，加的是「呼叫一個新的小函式」，不得讓本函式本身更複雜（見 plan-110b）
     file_path: str,
     metadata: Dict[str, Any],
@@ -1172,94 +1370,34 @@ def organize_file(  # noqa: C901 — 整理主流程；Phase 2（110b）會在�
     part_match = _detect_multipart_token(original_filename) if ext_mode != 'off' else None
     part_tail = f'-{part_match[0]}' if part_match else ''   # e.g. '-cd1'；off 模式恆 ''
 
-    # budget reserve：兩分支共用，part_tail 也預留；off 模式 part_tail='' → 等同現狀（CD-68-7/CD-72b-T5）
-    reserve = len(vr_tail) + len(part_tail)
-
     # 準備格式化資料
     actors = metadata.get('actors', [])
 
     # 標題優先順序：翻譯 > 檔名提取 > 日文原始
-    original_title = metadata.get('title', '')  # 日文原始標題
-    translated_title = metadata.get('translated_title', '')  # LLM 翻譯/優化的標題
-    extracted_title = extract_chinese_title(original_filename, number, actors)
-
-    # 剝除 extracted_title 尾端的 VR cluster（含可選 bracket/paren 包裝，Codex P2 二次修正）
-    # _detect_vr_cluster 把 []() 當分隔符 → cluster 不含 bracket，但 extracted_title 保留 bracket，
-    # 故需匹配可選的開/閉 bracket/paren 包裝；否則 _[180_LR] 不被剝 → 與尾端 vr_tail 雙寫。
-    if vr_cluster and extracted_title:
-        _vr_tail_re = re.compile(r'[\[(]?' + re.escape(vr_cluster) + r'[\])]?[\s_.\-]*$')
-        _m = _vr_tail_re.search(extracted_title)
-        if _m:
-            _trimmed = extracted_title[:_m.start()].rstrip('_-. ')
-            extracted_title = _trimmed or extracted_title
-
-    # FIX A：B2 junk-validation（CD-c5/c6）
-    # 若提取結果殘留 organize 模板 artifact（日期/maker/suffix），丟棄改用翻譯/刮削源
-    if extracted_title and _extracted_has_organize_junk(extracted_title, number, metadata, config):
-        extracted_title = None   # fall through 到翻譯/刮削源（CD-c6）
-
-    # 決定最終使用的標題
-    if translated_title:
-        title = translated_title
-        result['title_source'] = 'translated'
-    elif extracted_title:
-        title = extracted_title
-        result['title_source'] = 'extracted'
+    title, original_title, title_source, extracted_title = _resolve_organize_title(
+        original_filename,
+        number,
+        actors,
+        metadata,
+        config,
+        vr_cluster,
+    )
+    result['title_source'] = title_source
+    if extracted_title:
         result['extracted_title'] = extracted_title
-    else:
-        title = original_title
-        result['title_source'] = 'original'
 
-    # FIX B：B2 標題決定段去前綴（CD-c7）
-    # 勝出 title 若帶 [{number}]/{number} 前綴，迴圈剝盡至本體
-    # → 檔名（format_data['title']）、NFO <title>、<sorttitle> 同時受惠
-    # → 迴圈剝盡可修復舊 bug 寫進磁碟/DB 的 [ABC-123][ABC-123]Title 雙重堆疊
-    if title:
-        title = _strip_num_prefixes(title, number)
-
-    format_data = {
-        'number': number,
-        'title': truncate_title(title, config.get('max_title_length', 50)),
-        'actors': actors,
-        'maker': metadata.get('maker', ''),
-        'date': metadata.get('date', ''),
-    }
-
-    # 偵測版本後綴；外部模式過濾掉多段 token 避免 {suffix}+part_tail 雙寫（CD-72b-T5）
-    # 注意：絕不 mutate config['suffix_keywords']，只過濾傳入 _detect_suffixes 的區域變數
-    suffix_keywords = config.get('suffix_keywords', [])
-    if ext_mode != 'off':
-        detect_keywords = [kw for kw in suffix_keywords if not _is_multipart_kw(kw)]
-    else:
-        detect_keywords = suffix_keywords   # off 模式：原始未過濾 list，byte-identical
-    suffix = _detect_suffixes(original_filename, detect_keywords)
-    format_data['suffix'] = suffix
+    format_data = _build_organize_format_data(
+        original_filename,
+        number,
+        title,
+        actors,
+        metadata,
+        config,
+        ext_mode,
+    )
 
     # 記錄哪些欄位實際用了 fallback（僅資料夾層級會觸發 fallback）
-    used_fallbacks = []
-    if config.get('create_folder', True):
-        # 解析資料夾層級中實際使用的 placeholder
-        layers = config.get('folder_layers', [])
-        if not layers:
-            old_format = config.get('folder_format', '{num}')
-            layers = [p.strip() for p in old_format.replace('\\', '/').split('/') if p.strip()]
-        folder_template = ' '.join(layers)  # 合併所有層級一次檢查
-
-        if ('{actor}' in folder_template or '{actors}' in folder_template) and not format_data.get('actors'):
-            used_fallbacks.append('女優')
-        if '{maker}' in folder_template and not format_data.get('maker'):
-            used_fallbacks.append('片商')
-        date_val = format_data.get('date', '') or ''
-        date_missing = (
-            ('{date}' in folder_template and not date_val) or
-            ('{year}' in folder_template and len(date_val) < 4) or
-            ('{month}' in folder_template and len(date_val) < 7) or
-            ('{day}' in folder_template and len(date_val) < 10)
-        )
-        if date_missing:
-            used_fallbacks.append('日期')
-        if '{title}' in folder_template and not format_data.get('title'):
-            used_fallbacks.append('標題')
+    used_fallbacks = _collect_folder_fallbacks(config, format_data)
 
     # 字幕偵測：先看 metadata，再補檔案系統級偵測
     has_subtitle = metadata.get('has_subtitle')
@@ -1276,68 +1414,14 @@ def organize_file(  # noqa: C901 — 整理主流程；Phase 2（110b）會在�
         _base_tags.append('VR')
     metadata['tags'] = effective_tags(original_filename, _base_tags)
 
-    # 計算目標路徑
-    if config.get('create_folder', True):
-        # 優先使用新格式 folder_layers
-        layers = config.get('folder_layers', [])
-        if not layers:
-            # 相容舊格式：folder_format 可能含 / 分隔
-            old_format = config.get('folder_format', '{num}')
-            layers = [p.strip() for p in old_format.replace('\\', '/').split('/') if p.strip()]
-
-        # 過濾空值，分別格式化每層
-        # 讀取設定，但上限 120 字符
-        max_folder_chars = min(config.get('max_filename_length', 60), 120)
-        path_parts = []
-        for layer in layers[:3]:  # 限制最多 3 層
-            if layer:
-                part = truncate_to_chars(format_string(layer, format_data, use_fallback=True), max_folder_chars)
-                if part:
-                    path_parts.append(part)
-
-        target_dir = os.path.join(original_dir, *path_parts) if path_parts else original_dir
-    else:
-        target_dir = original_dir
-
-    # 計算新檔名（suffix 保護：先截斷 base，再接回 suffix）
-    filename_template = config.get('filename_format', '{num} {title}')
-    max_filename_chars = min(config.get('max_filename_length', 60), 120)
-    max_chars = max_filename_chars - len(original_ext)
-
-    suffix = format_data.get('suffix', '')
-    if suffix and '{suffix}' in filename_template:
-        # 先用空 suffix 產生 base，截斷後再接回 suffix；base_budget 扣 reserve（CD-68-5/7）
-        no_suffix_data = dict(format_data, suffix='')
-        base_without_suffix = format_string(filename_template, no_suffix_data)
-        base_budget = max(0, max_chars - len(suffix) - reserve)
-        if base_budget == 0:
-            filename_base = truncate_to_chars(suffix, max(0, max_chars - reserve))
-        else:
-            base_without_suffix = truncate_to_chars(base_without_suffix, base_budget)
-            filename_base = base_without_suffix + suffix
-    else:
-        filename_base = format_string(filename_template, format_data)
-        filename_base = truncate_to_chars(filename_base, max(0, max_chars - reserve))
-    # VR tail 永遠最後接（CD-68-6）；vr_tail='' 時零變化（CD-68-9）
-    filename_base = filename_base + vr_tail
-    # P1-A 修正（Codex）：{title} 欄位（尤其是 extracted_title）可能殘留多段 token
-    # （如 extract_chinese_title 保留 '某中文標題-part2[HD]'），導致 part_tail 雙寫。
-    # 在接 part_tail 之前，先從 filename_base 剝除最靠後的多段 token（_strip_part_token
-    # 無 token 時為 no-op → 乾淨標題案例完全不影響輸出）。
-    # off 模式 part_tail='' → if 分支不進入，行為與修前 byte-identical。
-    # 注意：不需另在 extracted_title 層剝除，組裝後整體剝更穩健（任何欄位來源均覆蓋）。
-    if part_tail:
-        filename_base = _strip_part_token(filename_base)  # 移除 {title} 等欄位遺留的多段 token
-    # part token 接在 VR tail 之後（最末）；off 模式 part_tail='' → no-op（CD-72b-T5）
-    # 順序：{base}{vr_tail}{part_tail}；Jellyfin stacking 要求 part token 落在 stem 最末
-    filename_base = filename_base + part_tail
-    # 最終長度上限保護（Codex PR P2）：即使退化情形也不突破 max_filename_length。
-    # 正常/spec 情形 reserve 已預留 → base+vr_tail+part_tail == max_chars → 此為 no-op；
-    # 僅 max_filename_length 被設到連 ext+VR cluster+part token 都裝不下時才作用。
-    filename_base = truncate_to_chars(filename_base, max_chars)
-
-    new_filename = filename_base + original_ext
-    target_path = os.path.join(target_dir, new_filename)
+    target_dir, filename_base, target_path = _compute_organize_paths(
+        original_dir,
+        original_ext,
+        config,
+        format_data,
+        vr_tail,
+        part_tail,
+    )
 
     try:
         # 建立資料夾
