@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r32-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r33-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r32-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r33-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r32`（versionCode `17048`）
+- 版本：`0.17.18-r33`（versionCode `17049`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -166,6 +166,10 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r30：Android 灯箱标题行的精选星标固定对齐标题第一行；多行标题不再让星标落到整块标题的垂直中间
 - r31：女优照片来源面板的“刷新”和“本地上传”按钮改为深色高对比样式，并扩大到 48px 触控区
 - r32：统一文件名与文件夹时，扫描根目录中的视频会自动建立对应文件夹并移入；保留 `cd1/cd2` 等分集标记并把同组分集放入同一文件夹；侧车文件不是前置条件
+- r33：完成 9 轮代码健康优化，不改变现有刮削、数据库和 SAF 写入行为；CI 现在会生成代码健康报告
+- r33：扫描、配置迁移、组合重命名、文件整理和文件名预览的最复杂函数已按职责拆分，最高复杂度从 93 降至 61
+- r33：统一 multipart 解析、Android 安全媒体 I/O、悬浮菜单控制和 toast 实现，移除重复主题 CSS 与残留调试注入器
+- r33：补充配置迁移、扫描取消/部分扫描保护、路径规划和媒体写入回归测试，并清理 Python 无效转义警告
 
 ## 限制
 
