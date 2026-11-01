@@ -68,6 +68,8 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "core/nfo_updater.py",
             "core/organizer.py",
             "core/readonly_assets.py",
+            "core/rename_file_plan.py",
+            "core/rename_names.py",
             "core/rename_normalizer.py",
             "core/source_config.py",
             "core/title_writeback.py",
