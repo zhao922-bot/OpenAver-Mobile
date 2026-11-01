@@ -108,15 +108,21 @@ def test_back_navigation_consumes_page_layers_before_history():
 
 def test_floating_handle_snaps_and_respects_safe_inset():
     activity = read(ROOT / "app/src/main/java/dev/openaver/mobile/MainActivity.java")
+    controller = read(
+        ROOT / "app/src/main/java/dev/openaver/mobile/MenuHandleController.java"
+    )
     layout = read(ROOT / "app/src/main/res/layout/activity_main.xml")
 
-    assert "MENU_HANDLE_IDLE_MS" in activity
-    assert "MENU_HANDLE_VERTICAL_SAFE_INSET_DP" in activity
-    assert "snapMenuHandleToEdge" in activity
-    assert "scheduleMenuHandleCollapse" in activity
-    assert "translationX" in activity
-    assert "TouchDelegate" in activity
-    assert "bg_edge_handle_left" in activity
+    assert "new MenuHandleController" in activity
+    assert "MENU_HANDLE_IDLE_MS" in controller
+    assert "MENU_HANDLE_VERTICAL_SAFE_INSET_DP" in controller
+    assert "snapToEdge" in controller
+    assert "scheduleCollapse" in controller
+    assert "translationX" in controller
+    assert "TouchDelegate" in controller
+    assert "bg_edge_handle_left" in controller
+    assert "menuHandle.addOnLayoutChangeListener" in controller
+    assert "savePosition(targetLeft, top)" in controller
     assert 'android:layout_width="34dp"' in layout
     assert 'android:layout_height="64dp"' in layout
 
