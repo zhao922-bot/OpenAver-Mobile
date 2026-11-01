@@ -6,10 +6,7 @@
  */
 import { pathToDisplay } from './path-utils.js';
 import { copyText } from '../shared/clipboard.js';
-
-function showToast(msg, type = 'success', duration = 2500) {
-    Alpine.store('toast').show(msg, type, duration);
-}
+import { showGlobalToast } from '../shared/state-toast.js';
 
 export function numberDrilldown() {
     return {
@@ -60,10 +57,10 @@ export function numberDrilldown() {
         async copy() {
             const text = this.copyText();
             const onSuccess = () => {
-                showToast(window.t('common.number_drilldown.copy_toast', { count: this.count }), 'success');
+                showGlobalToast(window.t('common.number_drilldown.copy_toast', { count: this.count }), 'success');
             };
             const onFailure = () => {
-                showToast(window.t('common.number_drilldown.copy_failed'), 'error');
+                showGlobalToast(window.t('common.number_drilldown.copy_failed'), 'error');
             };
             return copyText(text).then((ok) => (ok ? onSuccess() : onFailure()));
         },

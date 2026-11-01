@@ -113,10 +113,10 @@
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
     <meta name="theme-color" content="{{ '#2a303c' if theme == 'dim' else '#ffffff' }}">
 
-    <!-- Theme CSS -->
+    <!-- Shared source theme. -->
     <link href="/static/css/theme.css" rel="stylesheet">
-    <!-- Tailwind + DaisyUI CSS -->
-    <link href="/static/css/tailwind.css" rel="stylesheet">
+    <!-- Tailwind + DaisyUI only; input.css intentionally does not embed theme.css. -->
+    <link href="/static/css/tailwind.css?v=17048-1" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="/static/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <!-- Tutorial CSS -->

@@ -31,7 +31,9 @@ SOURCE_SUFFIXES = {".py", ".js", ".css", ".java"}
 SOURCE_ROOTS = ("app/src/main", "tests", "tools")
 CSS_THEME = Path("app/src/main/python/web/static/css/theme.css")
 CSS_BUNDLE = Path("app/src/main/python/web/static/css/tailwind.css")
+BASE_TEMPLATE = Path("app/src/main/python/web/templates/base.html")
 CSS_RULE_RE = re.compile(r"([^{}]+)\{([^{}]*)\}", re.DOTALL)
+CSS_LINK_RE = re.compile(r'<link[^>]+href="([^"]+\.css(?:\?[^"]*)?)"')
 
 
 def _iter_files(root: Path) -> Iterable[Path]:
@@ -131,6 +133,17 @@ def _css_rules(path: Path) -> set[str]:
     return rules
 
 
+def _linked_css(root: Path) -> set[str] | None:
+    path = root / BASE_TEMPLATE
+    if not path.is_file():
+        return None
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return {
+        match.group(1).split("?", 1)[0]
+        for match in CSS_LINK_RE.finditer(text)
+    }
+
+
 def _css_report(root: Path) -> dict[str, Any]:
     theme = root / CSS_THEME
     bundle = root / CSS_BUNDLE
@@ -140,16 +153,30 @@ def _css_report(root: Path) -> dict[str, Any]:
             "bundle_rules": 0,
             "exact_overlap": 0,
             "overlap_percent": 0.0,
+            "loaded_theme_rules": 0,
+            "loaded_bundle_rules": 0,
+            "loaded_exact_overlap": 0,
+            "loaded_overlap_percent": 0.0,
         }
     theme_rules = _css_rules(theme)
     bundle_rules = _css_rules(bundle)
     overlap = theme_rules & bundle_rules
+    linked = _linked_css(root)
+    loaded_theme = theme_rules if linked is None or "/static/css/theme.css" in linked else set()
+    loaded_bundle = bundle_rules if linked is None or "/static/css/tailwind.css" in linked else set()
+    loaded_overlap = loaded_theme & loaded_bundle
     return {
         "theme_rules": len(theme_rules),
         "bundle_rules": len(bundle_rules),
         "exact_overlap": len(overlap),
         "overlap_percent": round(
             100 * len(overlap) / max(len(theme_rules), 1), 1
+        ),
+        "loaded_theme_rules": len(loaded_theme),
+        "loaded_bundle_rules": len(loaded_bundle),
+        "loaded_exact_overlap": len(loaded_overlap),
+        "loaded_overlap_percent": round(
+            100 * len(loaded_overlap) / max(len(loaded_theme), 1), 1
         ),
     }
 
@@ -247,9 +274,14 @@ def _print_text(report: dict[str, Any]) -> None:
         )
     css = report["css"]
     print(
-        "  CSS exact overlap: "
+        "  CSS raw source overlap: "
         f"{css['exact_overlap']}/{css['theme_rules']} "
         f"({css['overlap_percent']}%)"
+    )
+    print(
+        "  CSS loaded overlap: "
+        f"{css['loaded_exact_overlap']}/{css['loaded_theme_rules']} "
+        f"({css['loaded_overlap_percent']}%)"
     )
     patches = report["patches"]
     print(f"  upstream patches: {patches['patches']} files={patches['files']}")

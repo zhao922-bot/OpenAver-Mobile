@@ -14,7 +14,8 @@ The report tracks:
 - Python LOC, SLOC, and comment counts;
 - the largest files;
 - the highest-complexity Python functions;
-- exact CSS rule overlap between `theme.css` and `tailwind.css`;
+- exact CSS rule overlap between `theme.css` and `tailwind.css`, both as raw
+  source and as stylesheets actually linked by `base.html`;
 - the number of upstream patches and touched files.
 
 Run it before and after each optimization round. A round should not increase
@@ -30,3 +31,10 @@ the top complexity or duplicate CSS unless the change documents why.
   `_load_config_unlocked` 93, `build_combined_rename_plan` 91
 - CSS exact rule overlap: 149/314 rules (47.5%)
 - Upstream patch surface: 8 patches, 71 files
+
+## Round 7 checkpoint
+
+- Loaded CSS overlap: 1/314 rules (0.3%)
+- `tailwind.css`: 204,924 bytes -> 142,427 bytes
+- Removed the embedded copy of `theme.css` from the Tailwind bundle while
+  keeping the raw theme as the single runtime source.

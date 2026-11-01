@@ -4,15 +4,7 @@
  * 獨立 Alpine.data() 元件（照 help-popover.js 形狀）。不加 Alpine.store。
  */
 
-/**
- * 獨立元件不在 mergeState 裡，拿不到 `this.showToast`。
- * 逐字照 `web/static/js/shared/state-toast.js` 的既有做法直接打 store——
- * **不新增 `window.toast` 這個全域**：全站現在沒有這個符號，為了一個面板生一個
- * 跨頁全域，等於在 `Alpine.store('toast')` 之外開第二條 toast 路徑。
- */
-function showToast(msg, type = 'success', duration = 2500) {
-    Alpine.store('toast').show(msg, type, duration);
-}
+import { showGlobalToast } from '../shared/state-toast.js';
 
 export function autoOrganizePanel() {
     return {
@@ -85,11 +77,11 @@ export function autoOrganizePanel() {
                     this.enabled = !!enabled;
                 } else {
                     restore();
-                    showToast(window.t('search.auto_organize.config_failed'), 'error');
+                    showGlobalToast(window.t('search.auto_organize.config_failed'), 'error');
                 }
             } catch (_e) {
                 restore();
-                showToast(window.t('search.auto_organize.config_failed'), 'error');
+                showGlobalToast(window.t('search.auto_organize.config_failed'), 'error');
             } finally {
                 this.loading = false;
             }
@@ -105,12 +97,12 @@ export function autoOrganizePanel() {
                 const data = await resp.json();
                 if (data && data.success) {
                     // 毫秒級返回；輪在背景跑——絕不可寫「已完成」
-                    showToast(window.t('search.auto_organize.run_now_started'), 'success');
+                    showGlobalToast(window.t('search.auto_organize.run_now_started'), 'success');
                 } else {
-                    showToast(window.t('search.auto_organize.run_now_busy'), 'warning');
+                    showGlobalToast(window.t('search.auto_organize.run_now_busy'), 'warning');
                 }
             } catch (_e) {
-                showToast(window.t('search.auto_organize.config_failed'), 'error');
+                showGlobalToast(window.t('search.auto_organize.config_failed'), 'error');
             } finally {
                 this.loading = false;
             }
@@ -127,10 +119,10 @@ export function autoOrganizePanel() {
                     this.folderPath = data.folder || this.folderPath;
                     // 就地解鎖；不關面板、不重整
                 } else {
-                    showToast(window.t('search.auto_organize.config_failed'), 'error');
+                    showGlobalToast(window.t('search.auto_organize.config_failed'), 'error');
                 }
             } catch (_e) {
-                showToast(window.t('search.auto_organize.config_failed'), 'error');
+                showGlobalToast(window.t('search.auto_organize.config_failed'), 'error');
             }
         },
 

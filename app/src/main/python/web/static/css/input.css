@@ -27,8 +27,8 @@
   --color-base-100: oklch(98.5% 0.005 85);
 }
 
-/* 保留現有 CSS 變數系統 */
-@import "./theme.css";
+/* theme.css is loaded separately by base.html. Keeping it out of this bundle
+   avoids shipping and parsing the same large theme twice. */
 
 /* ========== Fluent Design Tokens ========== */
 :root {

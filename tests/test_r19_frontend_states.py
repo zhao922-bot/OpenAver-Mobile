@@ -127,6 +127,27 @@ def test_floating_handle_snaps_and_respects_safe_inset():
     assert 'android:layout_height="64dp"' in layout
 
 
+def test_theme_is_loaded_once_and_tailwind_excludes_embedded_copy():
+    base = read(PYTHON_WEB / "templates/base.html")
+    input_css = read(PYTHON_WEB / "static/css/input.css")
+    tailwind = read(PYTHON_WEB / "static/css/tailwind.css")
+    toast = read(PYTHON_WEB / "static/js/shared/state-toast.js")
+    drilldown = read(PYTHON_WEB / "static/js/components/number-drilldown.js")
+    auto_organize = read(PYTHON_WEB / "static/js/components/auto-organize-panel.js")
+
+    assert base.count('/static/css/theme.css') == 1
+    assert '/static/css/tailwind.css' in base
+    assert base.index('/static/css/theme.css') < base.index('/static/css/tailwind.css')
+    assert '@import "./theme.css"' not in input_css
+    assert "theme.css is loaded separately" in tailwind
+    assert "Plus Jakarta Sans" not in tailwind
+    assert "export function showGlobalToast" in toast
+    assert "showGlobalToast" in drilldown
+    assert "showGlobalToast" in auto_organize
+    assert "function showToast" not in drilldown
+    assert "function showToast" not in auto_organize
+
+
 def test_ui_state_locales_are_complete_and_duplicate_free():
     required = {
         "what_happened",
