@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block content %}
-<div id="settings-components" class="page-layer" x-data="settings" data-lan-ip="{{ lan_ip or '' }}" data-shell-mode="{{ shell_mode or '' }}" data-is-android="{{ 'true' if is_android else 'false' }}">
+<div id="settings-components" class="page-layer" x-data="settings" data-lan-ip="{{ lan_ip or '' }}" data-shell-mode="{{ shell_mode or '' }}" data-is-android="{{ 'true' if is_android else 'false' }}" data-focal-auto-enabled="{{ 'true' if focal_auto_enabled else 'false' }}">
     <div class="settings-header">
         <!-- 81b-T1: 左 cluster 包標題 + 膠囊 + 連線 inline 區塊；flex 樣式由 T2 補 -->
         <div class="settings-header-left">
@@ -158,35 +158,56 @@
             {% endif %}
         </div>
         <div class="settings-header-actions">
-            <!-- Font Size Control -->
-            <div class="font-size-control">
-                <template x-for="s in [{k:'xs',l:'A'},{k:'sm',l:'A'},{k:'md',l:'A'},{k:'lg',l:'A'},{k:'xl',l:'A'}]">
-                    <button type="button"
-                            class="font-size-btn"
-                            :class="{ active: fontSize === s.k }"
-                            :style="'font-size:' + {xs:'0.7rem',sm:'0.8rem',md:'0.9rem',lg:'1.05rem',xl:'1.2rem'}[s.k]"
-                            @click="fontSize = s.k"
-                            :title="window.t('settings.header.font_size_prefix') + ': ' + s.k"
-                            x-text="s.l">
+            <div class="settings-appearance-controls">
+                <!-- Font Size Control -->
+                <div class="font-size-control">
+                    <template x-for="s in [{k:'xs',l:'A'},{k:'sm',l:'A'},{k:'md',l:'A'},{k:'lg',l:'A'},{k:'xl',l:'A'}]">
+                        <button type="button"
+                                class="font-size-btn"
+                                :class="{ active: form.fontSize === s.k }"
+                                :style="'font-size:' + {xs:'11px',sm:'12px',md:'14px',lg:'16px',xl:'18px'}[s.k]"
+                                @click="setFontSize(s.k)"
+                                :title="window.t('settings.header.font_size_prefix') + ': ' + s.k"
+                                x-text="s.l">
+                        </button>
+                    </template>
+                </div>
+                <!-- Locale Toggle -->
+                <div class="settings-locale-toggle">
+                    <button class="locale-toggle-btn"
+                            type="button"
+                            x-text="{'zh-TW':'繁','zh-CN':'简','ja':'あ','en':'EN'}[locale] || '繁'" {# cjk-exempt(繁|简|あ|繁): 語言切換器原生字形（繁/简/あ/EN），全球化 UI 慣例不隨介面語言翻譯 — TASK-103-T7 §F.2 #}
+                            @click="cycleLocale()"
+                            :title="window.t('settings.header.locale_prefix') + ': ' + locale">
                     </button>
-                </template>
+                </div>
+                <!-- Theme Toggle -->
+                <div class="settings-theme-toggle">
+                    <button class="theme-toggle-btn"
+                            @click="toggleThemeWithTransition($event, () => { theme = (theme === 'light' ? 'dim' : 'light'); form.theme = theme })"
+                            :title="theme === 'light' ? window.t('settings.header.switch_dark') : window.t('settings.header.switch_light')"
+                            type="button">
+                        <i class="bi" :class="theme === 'light' ? 'bi-moon-stars' : 'bi-sun'"></i>
+                    </button>
+                </div>
             </div>
-            <!-- Locale Toggle -->
-            <div class="settings-locale-toggle">
-                <button class="locale-toggle-btn"
-                        type="button"
-                        x-text="{'zh-TW':'繁','zh-CN':'简','ja':'あ','en':'EN'}[locale] || '繁'" {# cjk-exempt(繁|简|あ|繁): 語言切換器原生字形（繁/简/あ/EN），全球化 UI 慣例不隨介面語言翻譯 — TASK-103-T7 §F.2 #}
-                        @click="cycleLocale()"
-                        :title="window.t('settings.header.locale_prefix') + ': ' + locale">
-                </button>
-            </div>
-            <!-- Theme Toggle -->
-            <div class="settings-theme-toggle">
-                <button class="theme-toggle-btn"
-                        @click="toggleThemeWithTransition($event, () => { theme = (theme === 'light' ? 'dim' : 'light') })"
-                        :title="theme === 'light' ? window.t('settings.header.switch_dark') : window.t('settings.header.switch_light')"
-                        type="button">
-                    <i class="bi" :class="theme === 'light' ? 'bi-moon-stars' : 'bi-sun'"></i>
+            <div class="settings-mobile-save"
+                 :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving, 'is-error': !!_configError }">
+                <div class="save-state" role="status" aria-live="polite">
+                    <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
+                    <i x-show="!_configSaving" class="bi"
+                       :class="_configError ? 'bi-x-circle' : (isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle')"></i>
+                    <span x-text="saveStatusText"></span>
+                </div>
+                <button type="submit"
+                        form="settingsForm"
+                        class="btn btn-primary save-btn settings-mobile-save-btn"
+                        :disabled="saveButtonDisabled">
+                    <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
+                    <i x-show="!_configSaving" class="bi bi-save"></i>
+                    <span x-text="_configSaving
+                        ? window.t('settings.save_bar.saving_button')
+                        : window.t('settings.action.save')"></span>
                 </button>
             </div>
         </div>
@@ -316,6 +337,8 @@
                                 <span x-show="srcProbeStatus !== 'running'">{{ t('settings.sources.probe_btn') }}</span>
                                 <span x-show="srcProbeStatus === 'running'">{{ t('settings.status.testing') }}</span>
                             </button>
+                        </div>
+                        <div class="settings-sources-batchbar-meta">
                             <small class="settings-sources-probe-summary" aria-live="polite"
                                    x-show="srcProbeSummary.total > 0" x-cloak
                                    x-text="window.t('settings.sources.probe_summary', { ok: srcProbeSummary.ok, total: srcProbeSummary.total })"></small>
@@ -546,8 +569,7 @@
                         <label class="settings-label">
                             <input type="checkbox" class="toggle toggle-primary"
                                    id="metatubeEnableToggle"
-                                   x-model="metatubeEnabled"
-                                   @change="onMetatubeEnabledChange()">
+                                   x-model="metatubeEnabled">
                             <span class="label-text">{{ t('settings.sources.mt_enable_label') }}</span>
                         </label>
                         <small class="settings-hint">{{ t('settings.sources.mt_enable_help') }}</small>
@@ -1316,12 +1338,11 @@
                             </div>
                         </div>
 
-                        {# 人臉自動對焦開關（152d-T-D3，CD-152d-3b）：伺服器端算好的 focal_auto_enabled 作初始 checked；@change 寫專用端點 #}
+                        {# 人臉自動對焦開關：跟隨主表單草稿，儲存時才寫專用端點。 #}
                         <div class="settings-form-group popover-anchor" x-data="helpPopover">
                             <label class="settings-label">
                                 <input type="checkbox" data-focal-auto-pill class="toggle toggle-primary"
-                                       {% if focal_auto_enabled %}checked{% endif %}
-                                       @change="setFocalDeviceDisabled($event)">
+                                       x-model="form.focalAutoEnabled">
                                 <span class="label-text">{{ t('settings.scraper.focal_pill_label') }}</span>
                                 <button type="button" class="help-popover-btn"
                                         @click.prevent="toggle()"
@@ -1583,28 +1604,30 @@
             </div>
           </div>
         </section><!-- /sec-system -->
-
-        <!-- 儲存按鈕 -->
-        <div class="save-btn-wrapper"
-             :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving, 'is-error': !!_configError }">
-            <div class="save-state" role="status" aria-live="polite">
-                <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
-                <i x-show="!_configSaving" class="bi"
-                   :class="_configError ? 'bi-x-circle' : (isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle')"></i>
-                <span x-text="saveStatusText"></span>
-            </div>
-            <button type="submit"
-                    class="btn btn-primary save-btn"
-                    id="saveBtn"
-                    :disabled="saveButtonDisabled">
-                <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
-                <i x-show="!_configSaving" class="bi bi-save"></i>
-                <span x-text="_configSaving
-                    ? window.t('settings.save_bar.saving_button')
-                    : window.t('settings.action.save')"></span>
-            </button>
-        </div>
     </form>
+
+    <!-- 儲存按鈕：放在 form 外，避免 Android WebView 在字級變更後
+         把 fixed 子層留在舊的 compositor 位置。 -->
+    <div class="save-btn-wrapper"
+         :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving, 'is-error': !!_configError }">
+        <div class="save-state" role="status" aria-live="polite">
+            <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
+            <i x-show="!_configSaving" class="bi"
+               :class="_configError ? 'bi-x-circle' : (isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle')"></i>
+            <span x-text="saveStatusText"></span>
+        </div>
+        <button type="submit"
+                form="settingsForm"
+                class="btn btn-primary save-btn"
+                id="saveBtn"
+                :disabled="saveButtonDisabled">
+            <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
+            <i x-show="!_configSaving" class="bi bi-save"></i>
+            <span x-text="_configSaving
+                ? window.t('settings.save_bar.saving_button')
+                : window.t('settings.action.save')"></span>
+        </button>
+    </div>
 
     <!-- Dirty Check Modal -->
     <dialog class="modal fluent-modal"

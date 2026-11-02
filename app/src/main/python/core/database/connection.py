@@ -4,6 +4,7 @@ get_db_path / get_connection / init_db / _migrate_old_aliases 同住於此。
 """
 import sqlite3
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -12,6 +13,9 @@ from core.logger import get_logger
 from core.database.version_tracker import _RevisionTrackingConnection
 
 logger = get_logger(__name__)
+
+_db_init_lock = threading.Lock()
+_initialized_db_paths: set[str] = set()
 
 
 def get_db_path() -> Path:
@@ -26,7 +30,15 @@ def get_connection(db_path: Path = None) -> sqlite3.Connection:
     if db_path is None:
         db_path = get_db_path()
 
-    conn = sqlite3.connect(str(db_path), factory=_RevisionTrackingConnection)
+    conn = sqlite3.connect(
+        str(db_path),
+        timeout=5.0,
+        factory=_RevisionTrackingConnection,
+    )
+    # Connection-level settings are centralized here so every repository gets
+    # the same lock/durability behavior.
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA synchronous=NORMAL")
     # 啟用 WAL 模式以提升並發效能
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
@@ -123,7 +135,7 @@ CREATE TABLE IF NOT EXISTS maker_javbus_map (
 """
 
 
-def init_db(db_path: Path = None) -> None:
+def _init_db_schema(db_path: Path = None) -> None:
     """初始化資料庫 Schema"""
     conn = get_connection(db_path)
     cursor = conn.cursor()
@@ -383,3 +395,41 @@ def init_db(db_path: Path = None) -> None:
 
     conn.commit()
     conn.close()
+
+
+def _normalized_db_path(db_path: Path = None) -> Path:
+    path = Path(db_path) if db_path is not None else get_db_path()
+    if str(path) == ":memory:":
+        return path
+    return path.expanduser().resolve()
+
+
+def init_db(db_path: Path = None, *, force: bool = False) -> None:
+    """Initialize schema once per database path in this process.
+
+    Route modules keep their defensive ``init_db()`` calls, but after the
+    first successful initialization those calls must not replay every CREATE
+    TABLE / PRAGMA migration on the request path. ``force=True`` is available
+    for explicit schema rebuilds in maintenance code and tests.
+    """
+    path = _normalized_db_path(db_path)
+    key = str(path)
+
+    with _db_init_lock:
+        if not force and key in _initialized_db_paths and path.exists():
+            return
+
+        if force:
+            _initialized_db_paths.discard(key)
+        try:
+            _init_db_schema(path)
+        except BaseException:
+            _initialized_db_paths.discard(key)
+            raise
+        _initialized_db_paths.add(key)
+
+
+def _clear_db_init_cache() -> None:
+    """Clear process-local initialization state (tests/maintenance only)."""
+    with _db_init_lock:
+        _initialized_db_paths.clear()

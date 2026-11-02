@@ -46,6 +46,7 @@ export function stateConfig() {
 
             // Scraper
             createFolder: true,
+            focalAutoEnabled: true,
             // 資料夾層級：{id,value}[] 動態清單（外→內，上到下）。load 時 slice(0,3) 正規化
             // （後端只用前 3 層，CD-95a-7/12）。id 走 naming.layerSeq，x-for :key="layer.id"。
             folderLayerList: [],
@@ -76,7 +77,10 @@ export function stateConfig() {
 
             // General
             defaultPage: 'search',
-            closeAction: 'ask'
+            closeAction: 'ask',
+            theme: 'light',
+            fontSize: 'md',
+            locale: (window.__locale || 'zh-CN')
         },
 
         // GET /api/config 的 response-only 解析值（不入 saveConfig payload）
@@ -131,6 +135,8 @@ export function stateConfig() {
 
         // ===== Dirty Check State =====
         savedState: null,
+        savedSources: null,
+        savedMetatubeEnabled: false,
         savedOpenaiUseCustomModel: false,
         pendingNavigationUrl: '',
         _configLoading: true,  // 初始 true，loadConfig 完成後 false
@@ -207,11 +213,29 @@ export function stateConfig() {
         },
 
         // ===== Computed Properties =====
+        _sourceSnapshot() {
+            // Only persisted source fields belong in dirty comparison. Runtime
+            // probe fields such as `available` change independently of the form.
+            return this.sources.map((s, index) => ({
+                id: s.id,
+                type: s.type,
+                display_name_key: s.type === 'builtin' ? s.display_name : (s.display_name_key || ''),
+                display_name_raw: s.type === 'metatube' ? s.display_name : '',
+                enabled: s.enabled,
+                order: index,
+                config: s.config || {},
+                is_beta: s.is_beta,
+                manual_only: s.manual_only,
+            }));
+        },
+
         get isDirty() {
             if (this._configLoading) return false;
             if (!this.savedState) return false;
             return JSON.stringify(this.form) !== JSON.stringify(this.savedState)
-                || this.openaiUseCustomModel !== this.savedOpenaiUseCustomModel;
+                || this.openaiUseCustomModel !== this.savedOpenaiUseCustomModel
+                || JSON.stringify(this._sourceSnapshot()) !== JSON.stringify(this.savedSources)
+                || this.metatubeEnabled !== this.savedMetatubeEnabled;
         },
 
         get saveStatusText() {
@@ -314,7 +338,7 @@ export function stateConfig() {
             const censored = this.sources.filter(s => this.CENSORED_SOURCES.includes(s.id));
             return censored.length > 0 && censored.every(s => !s.enabled);
         },
-        // setter(true) = batch 停用 4 個有碼來源後 saveConfig。
+        // setter(true) = batch 停用 4 個有碼來源，等待儲存按鈕提交。
         // setter(false) = NO-OP + transient hint（EC-2：off 不自動重開有碼，由使用者手動重啟任一有碼 pill）。
         set uncensoredMode(v) {
             if (v === true) {
@@ -323,7 +347,6 @@ export function stateConfig() {
                         s.enabled = false;
                     }
                 });
-                this.saveConfig();
             } else {
                 this._flashUncensoredOffHint();
             }
@@ -369,6 +392,8 @@ export function stateConfig() {
             this.lanIp = this.$el?.dataset?.lanIp || '';
             this.shellMode = this.$el?.dataset?.shellMode || '';
             this.isAndroid = this.$el?.dataset?.isAndroid === 'true';
+            this.form.focalAutoEnabled =
+                this.$el?.dataset?.focalAutoEnabled !== 'false';
 
             this.loadConfig().then(() => {
                 // B1: init scanner link state after config loaded
@@ -405,29 +430,20 @@ export function stateConfig() {
         },
 
         // ===== Methods =====
-        async cycleLocale() {
-            if (this.isDirty) {
-                // eslint-disable-next-line no-alert -- cycleLocale dirty-check confirm, backlog migration to fluent-modal, reviewed 2026-05-03
-                if (!confirm(window.t('settings.dirty_modal.locale_switch_confirm'))) return;
-            }
+        setFontSize(size) {
+            this.form.fontSize = size;
+            const root = window.Alpine && typeof window.Alpine.$data === 'function'
+                ? window.Alpine.$data(document.documentElement)
+                : null;
+            if (root) root.fontSize = size;
+        },
+
+        cycleLocale() {
             const order = ['zh-TW', 'zh-CN', 'ja', 'en'];
-            const idx = order.indexOf(this.locale);
+            const idx = order.indexOf(this.form.locale || this.locale);
             const next = order[(idx + 1) % order.length];
-            try {
-                const resp = await fetch('/api/config/general/locale', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ value: next })
-                });
-                const result = await resp.json();
-                if (result.success) {
-                    location.reload();
-                } else {
-                    console.warn('[i18n] cycleLocale failed:', result.error);
-                }
-            } catch (e) {
-                console.error('[i18n] cycleLocale error:', e);
-            }
+            this.form.locale = next;
+            this.locale = next;
         },
 
         // 80a-T3: Server Mode methods ─────────────────────────────────────────
@@ -500,13 +516,7 @@ export function stateConfig() {
                 this.showToast(window.t(val ? 'settings.server_info.toggle_failed' : 'settings.server_info.disable_failed'), 'error');
             }
         },
-        // 不用 base.html configSync：那是外觀同步（debounce/keepalive/吞錯）；這一顆是有行為後果的決定，失敗必須把 checkbox 撥回。
-        async setFocalDeviceDisabled(event) {
-            // checked = 啟用；端點 value = disabled → 取反
-            // await 前快照（同 saveAccessAuth 家規）：event 觸發時 checkbox 已是按下去後的新值，
-            // 失敗要退回按之前，所以回滾寫 !submittedChecked，不是 submittedChecked。
-            const submittedChecked = event.target.checked;
-            const disabled = !submittedChecked;
+        async _saveFocalDeviceDisabled(disabled, notifyOnError = true) {
             try {
                 const resp = await fetch('/api/config/focal-device/disabled', {
                     method: 'PUT',
@@ -514,16 +524,18 @@ export function stateConfig() {
                     body: JSON.stringify({ value: disabled })
                 });
                 const result = await resp.json();
-                if (!result.success) {
-                    console.warn('[focalDevice] setFocalDeviceDisabled failed:', result.error);
+                if (result.success) return true;
+                console.warn('[focalDevice] save failed:', result.error);
+                if (notifyOnError) {
                     this.showToast(window.t('settings.scraper.focal_toggle_failed'), 'error');
-                    event.target.checked = !submittedChecked;
                 }
             } catch (e) {
-                console.warn('[focalDevice] setFocalDeviceDisabled error:', e);
-                this.showToast(window.t('settings.scraper.focal_toggle_failed'), 'error');
-                event.target.checked = !submittedChecked;
+                console.warn('[focalDevice] save error:', e);
+                if (notifyOnError) {
+                    this.showToast(window.t('settings.scraper.focal_toggle_failed'), 'error');
+                }
             }
+            return false;
         },
         async saveAccessAuth() {
             this.accessAuthSaving = true;
@@ -684,6 +696,7 @@ export function stateConfig() {
             this._configError = '';
             // 清空快照（載入期間不判定 dirty）
             this.savedState = null;
+            this.savedSources = null;
             // 95a-T8: 對稱重設 hydrate 旗標（reset 設定 / 重跑 loadConfig 時需重新 hydrate，
             // 否則 one-shot 會擋住 filename editor 的重新載入）。
             this.namingConfigReady = false;
@@ -806,6 +819,13 @@ export function stateConfig() {
                     this.form.viewerPlayer = config.showcase?.player || '';
 
                     // General
+                    this.form.theme = config.general?.theme || 'light';
+                    this.theme = this.form.theme;
+                    this.form.fontSize = config.general?.font_size || 'md';
+                    this.fontSize = this.form.fontSize;
+                    this.form.locale = config.general?.locale || this.locale || 'zh-CN';
+                    this.locale = this.form.locale;
+                    this.form.focalAutoEnabled = config.focal_device?.disabled !== true;
                     let defaultPage = config.general?.default_page || 'search';
                     if (defaultPage === 'gallery') defaultPage = 'scanner';  // 向後兼容
                     this.form.defaultPage = defaultPage;
@@ -869,6 +889,7 @@ export function stateConfig() {
                             available: s.available ?? (s.type !== 'metatube'),  // builtins default available; metatube waits for /status
                         }))
                         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                    this.savedSources = this._sourceSnapshot();
 
                     // 建立初始快照（dirty check 基準）— 必須在解鎖前建立
                     this.savedState = JSON.parse(JSON.stringify(this.form));
@@ -894,6 +915,7 @@ export function stateConfig() {
 
                     // Hydrate metatube fields from config + /status (CD-63b-3)
                     this.metatubeEnabled = config.metatube?.enabled || false;
+                    this.savedMetatubeEnabled = this.metatubeEnabled;
                     this.metatubeServerUrl = config.metatube?.url || '';
                     this.metatubeToken = config.metatube?.token || '';
                     this.metatubeLanMode = !!config.metatube?.allow_lan;   // hydrate LAN opt-in so re-connect doesn't fail SSRF (Codex P2)
@@ -972,8 +994,22 @@ export function stateConfig() {
                 const localChanged = this.localMachineState === 'ready'
                     && localDiff(this.form, this._localSaved).length > 0;
                 const patch = localChanged ? buildLocalPatch(this.form) : null;
+                const previousLocale = this.savedState?.locale;
+                const previousFontSize = this.savedState?.fontSize;
                 const serverOk = await this._saveServerConfig();
-                if (!localChanged) return serverOk;
+                if (!localChanged) {
+                    if (
+                        serverOk
+                        && (
+                            (previousLocale && previousLocale !== this.form.locale)
+                            || (previousFontSize && previousFontSize !== this.form.fontSize)
+                        )
+                        && !this.pendingNavigationUrl
+                    ) {
+                        setTimeout(() => location.reload(), 250);
+                    }
+                    return serverOk;
+                }
                 const reply = await callBridge('local_settings_save', patch);
                 const localOk = !!reply && reply.ok === true;
                 if (localOk) {
@@ -996,7 +1032,18 @@ export function stateConfig() {
                         msg = window.t('settings.toast.local_failed_server_failed'); break;
                 }
                 if (msg) this.showToast(msg, serverOk && localOk ? 'success' : 'error');
-                return serverOk && localOk;
+                const saved = serverOk && localOk;
+                if (
+                    saved
+                    && (
+                        (previousLocale && previousLocale !== this.form.locale)
+                        || (previousFontSize && previousFontSize !== this.form.fontSize)
+                    )
+                    && !this.pendingNavigationUrl
+                ) {
+                    setTimeout(() => location.reload(), 250);
+                }
+                return saved;
             } finally {
                 this._configSaving = false;
             }
@@ -1004,6 +1051,8 @@ export function stateConfig() {
 
         async _saveServerConfig() {
             let saved = false;  // PUT 成功即 true（回傳給 saveConfig 包裝）
+            let focalNeedsRevert = false;
+            let prevFocalAutoEnabled = null;
             try {
                 // 先載入現有設定
                 const currentResp = await fetch('/api/config');
@@ -1016,6 +1065,13 @@ export function stateConfig() {
                 // 71-T5: 存檔前的「已持久化」縮圖快取狀態（authoritative：剛從 server GET 的 config.json）。
                 // 用來在 PUT 成功後判定「這次儲存是否剛把它從開變關」→ 才清空 output/thumb/（現在只有 disable 半在用）。
                 const prevThumbEnabled = config.thumbnail_cache_enabled === true;
+                const prevMetatubeEnabled = config.metatube?.enabled === true;
+                prevFocalAutoEnabled = config.focal_device?.disabled !== true;
+                if (prevFocalAutoEnabled !== this.form.focalAutoEnabled) {
+                    const focalOk = await this._saveFocalDeviceDisabled(!this.form.focalAutoEnabled);
+                    if (!focalOk) return false;
+                    focalNeedsRevert = true;
+                }
                 // 90c-T6: 存前「已持久化」的 strm 映射（authoritative：剛 GET 的 config.json）。
                 // PUT 成功後與新映射比對，判定「這次儲存是否改動了路徑規則」→ 才提示改寫既有 strm。
                 const prevStrmMappings = JSON.stringify(config.scraper?.strm_path_mappings || {});
@@ -1147,8 +1203,11 @@ export function stateConfig() {
                 config.general = {
                     ...config.general,
                     default_page: this.form.defaultPage,
-                    theme: this.theme || document.documentElement.getAttribute('data-theme') || 'light'
-                    // theme / sidebar_collapsed 由 base.html $watch 即時同步，此處僅隨整體設定一併寫入
+                    theme: this.form.theme || this.theme || document.documentElement.getAttribute('data-theme') || 'light',
+                    font_size: this.form.fontSize || 'md',
+                    locale: this.form.locale || this.locale || 'zh-CN',
+                    // Settings appearance controls are live previews; this PUT is
+                    // their only persistence path while the settings page is open.
                 };
 
                 // 168c-T4：showcase.player／general.close_action 依四態決定寫 form 還是保留 GET 原值
@@ -1178,12 +1237,18 @@ export function stateConfig() {
                 });
                 const result = await resp.json();
                 if (result.success) {
+                    focalNeedsRevert = false;
                     saved = true;
                     this.cfWindowProxyRestartNeeded = result.cf_window_proxy_restart_needed === true;
                     this.showToast(window.t('settings.toast.config_saved'), 'success');
                     // 更新快照（避免儲存後仍為 dirty）
                     this.savedState = JSON.parse(JSON.stringify(this.form));
+                    this.savedSources = this._sourceSnapshot();
+                    this.savedMetatubeEnabled = this.metatubeEnabled;
                     this.savedOpenaiUseCustomModel = this.openaiUseCustomModel;
+                    if (prevMetatubeEnabled && !this.metatubeEnabled && this.metatubeConnected) {
+                        await this.metatubeDisconnect();
+                    }
                     // 71b-T2: 縮圖快取「剛被關閉」(persisted true → 現在 false) 才清空 output/thumb/。
                     // 必在 PUT 成功之後——先存才清（config.json 已寫 false）。confirmThumbCacheDisable
                     // 自身不 POST clear，統一收斂於此。
@@ -1214,21 +1279,30 @@ export function stateConfig() {
                             this.showToast(window.t('settings.scraper.strm_mapping.rewrite_failed'), 'error');
                         }
                     }
-                } else if (result.reason === 'generate_in_progress_strm_mapping') {
-                    // PR #93 五審三次 P2：掃描/產生進行中改到 strm 播放映射被後端擋下。
-                    // 直接顯示後端訊息（非「儲存失敗」誤導前綴）——這是「稍後再試」而非錯誤。
-                    this.showToast(result.error, 'warning');
-                } else if (result.reason === 'gallery_output_in_program_area') {
-                    // TASK-153b-T3：輸出目錄落在程式區被擋——請使用者改選位置，非「儲存失敗」。
-                    this.showToast(result.error, 'warning');
-                } else if (result.reason === 'nfo_title_format_invalid') {
-                    // TASK-154b-T4：NFO 標題格式驗證失敗——原樣顯示後端訊息（同 gallery 前例）。
-                    this.showToast(result.error, 'warning');
                 } else {
-                    this.showToast(window.t('settings.toast.save_failed', { error: result.error }), 'error');
+                    if (focalNeedsRevert) {
+                        await this._saveFocalDeviceDisabled(!prevFocalAutoEnabled, false);
+                        focalNeedsRevert = false;
+                    }
+                    if (result.reason === 'generate_in_progress_strm_mapping') {
+                        // PR #93 五審三次 P2：掃描/產生進行中改到 strm 播放映射被後端擋下。
+                        // 直接顯示後端訊息（非「儲存失敗」誤導前綴）——這是「稍後再試」而非錯誤。
+                        this.showToast(result.error, 'warning');
+                    } else if (result.reason === 'gallery_output_in_program_area') {
+                        // TASK-153b-T3：輸出目錄落在程式區被擋——請使用者改選位置，非「儲存失敗」。
+                        this.showToast(result.error, 'warning');
+                    } else if (result.reason === 'nfo_title_format_invalid') {
+                        // TASK-154b-T4：NFO 標題格式驗證失敗——原樣顯示後端訊息（同 gallery 前例）。
+                        this.showToast(result.error, 'warning');
+                    } else {
+                        this.showToast(window.t('settings.toast.save_failed', { error: result.error }), 'error');
+                    }
                 }
                 return saved;
             } catch (e) {
+                if (focalNeedsRevert) {
+                    await this._saveFocalDeviceDisabled(!prevFocalAutoEnabled, false);
+                }
                 this.showToast(window.t('settings.toast.save_failed', { error: e.message }), 'error');
                 return saved;
             }
@@ -1278,9 +1352,9 @@ export function stateConfig() {
         },
 
         // ===== Thumbnail Cache Toggle Handler + Disable Modal (71b-T2) =====
-        // toggle @change 攔截（鏡像 onMetatubeEnabledChange）。x-model 先翻值，
+        // toggle @change 攔截。x-model 先翻值，
         // 故進來時 this.form.thumbnailCacheEnabled 已是使用者撥到的新值。
-        // OFF→ON 直接存檔，不再開 modal（CD-150b-6）；ON→OFF 仍攔截開 disable modal（Codex P2 #1，逐字不變）。
+        // OFF→ON 不再開 modal（CD-150b-6）；ON→OFF 仍攔截開 disable modal。
         async onThumbCacheToggleChange() {
             // x-model 已先翻值 → 進來時 form.thumbnailCacheEnabled 已是使用者撥到的新值。
             if (this.form.thumbnailCacheEnabled !== true) {
@@ -1296,10 +1370,8 @@ export function stateConfig() {
             }
             // persisted 已 true（未存的 OFF 後撥回 ON）：不開 modal，讓 toggle 照常變 true。
             if (this.savedState?.thumbnailCacheEnabled === true) return;
-            // 真正首次開啟（persisted false）：不再開確認視窗，直接存檔
-            //（CD-150b-6：原本確認視窗按下「確認」時做的兩件事 inline 於此）。
+            // 真正首次開啟（persisted false）：不再開確認視窗，保留為草稿。
             this.form.thumbnailCacheEnabled = true;
-            await this.saveConfig();
         },
 
         // 71b-T2: 關閉確認取消 → 關 modal、toggle 維持 true（保持啟用）；不存檔、不清快取。
@@ -1307,13 +1379,10 @@ export function stateConfig() {
             this.thumbCacheDisableConfirmOpen = false;
         },
 
-        // 71b-T2: 關閉確認 → 關 modal → set false → saveConfig()
-        //（命中 saveConfig 內 prevThumbEnabled && now false 鏈 → 背景 _triggerThumbClear()；
-        // 自身不 POST clear，先存才清）。
+        // 71b-T2: 關閉確認 → 關 modal → set false；實際清除快取仍由儲存按鈕觸發。
         async confirmThumbCacheDisable() {
             this.thumbCacheDisableConfirmOpen = false;
             this.form.thumbnailCacheEnabled = false;
-            await this.saveConfig();
         },
 
         // ===== 命名區膠囊編輯器（feature/95 Part A）=====
@@ -1547,7 +1616,7 @@ export function stateConfig() {
         },
 
         // Builtin：原地翻轉 enabled（膠囊留 Active Row、停用 = inline 刪除線）。
-        // cap 滿且要 enable → _flashCapAlert() return。翻轉後 saveConfig 即時 persist。
+        // cap 滿且要 enable → _flashCapAlert() return。翻轉結果保留為草稿。
         toggleBuiltin(id) {
             const s = this.sources.find(x => x.id === id);
             if (!s || s.type !== 'builtin') return;
@@ -1556,7 +1625,6 @@ export function stateConfig() {
                 return;
             }
             s.enabled = !s.enabled;
-            this.saveConfig();
         },
 
         // Promote：Parts Bin → Active Row（enabled=true）。cap 檢查。splice 移到陣列末尾
@@ -1584,7 +1652,6 @@ export function stateConfig() {
                 const [moved] = this.sources.splice(idx, 1);
                 this.sources.push(moved);
             }
-            this.saveConfig();
         },
 
         // Demote：Active Row → Parts Bin（enabled=false）。
@@ -1592,7 +1659,6 @@ export function stateConfig() {
             const s = this.sources.find(x => x.id === id);
             if (!s || s.type !== 'metatube') return;
             s.enabled = false;
-            this.saveConfig();
         },
 
         // 斷線 metatube 點擊：toast 提示重連，無 state mutation（EC-9）。
@@ -1711,14 +1777,6 @@ export function stateConfig() {
             }
         },
 
-        // ─── Toggle callback (CD-63b-3) ───────────────────────────────
-        async onMetatubeEnabledChange() {
-            if (!this.metatubeEnabled && this.metatubeConnected) {
-                await this.metatubeDisconnect();
-            }
-            await this.saveConfig();
-        },
-
         // 全開：builtin 先（依序），到 cap 即 break；不碰 metatube / manual_only。
         enableAllToCap() {
             for (const s of this.sources) {
@@ -1727,7 +1785,6 @@ export function stateConfig() {
                 if (this.enabledCount >= MAX_ENABLED_SOURCES) break;
                 s.enabled = true;
             }
-            this.saveConfig();
         },
 
         _flashCapAlert() {
@@ -1773,7 +1830,6 @@ export function stateConfig() {
             const insertAt = srcIdx < tgtIdx ? tgtIdx - 1 : tgtIdx;
             this.sources.splice(insertAt, 0, moved);
             this.onDragEnd();
-            this.saveConfig();
         },
 
         // ═══════════════════════════════════════════════════════════════
@@ -1787,9 +1843,8 @@ export function stateConfig() {
             if (!src) return;
             if (!this.isDraggable(src)) { this.clickActiveRowPill(src); return; }
             if (this._grabbedId === src.id) {
-                // 放下 → persist
+                // 放下：保留為草稿，等待使用者按下「保存设置」。
                 this._grabbedId = null;
-                this.saveConfig();
             } else {
                 this._grabbedId = src.id;
             }
@@ -1809,11 +1864,10 @@ export function stateConfig() {
             this.sources.splice(targetIdx, 0, moved);
         },
 
-        // Escape 取消拾起（位置已即時移動，此處僅釋放 grab 並 persist 當前序）。
+        // Escape 取消拾起；目前排序保留為草稿。
         onPillEscape() {
             if (this._grabbedId !== null) {
                 this._grabbedId = null;
-                this.saveConfig();
             }
         },
     };

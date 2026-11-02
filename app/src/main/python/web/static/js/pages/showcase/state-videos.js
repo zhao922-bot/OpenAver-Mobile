@@ -6,7 +6,7 @@
  * 從 state-base.js import 共用大陣列（F1：移出 Alpine reactive scope）。
  */
 
-import { _videos, _filteredVideos, _nameToGroup, _tagToGroup, _setVideos, _setFilteredVideos, _recomputeAllBadges, _recomputeCardActorAges } from '@/showcase/state-base.js';
+import { SHOWCASE_MAX_SERVER_PAGE_SIZE, _videos, _filteredVideos, _nameToGroup, _tagToGroup, _setVideos, _setFilteredVideos, _recomputeAllBadges, _recomputeCardActorAges } from '@/showcase/state-base.js';
 import { applyCellFocal } from '@/shared/focal-cell.js';
 import { openLocal } from '@/shared/open-local.js';
 import { notifyOpenResult } from '@/shared/bridge-notify.js';
@@ -30,6 +30,10 @@ function _releaseFieldValue(rawText, isBad) {
     return { has: t != null, raw: t };
 }
 
+// One shared full-list request prevents rapid search/pill changes from
+// starting duplicate network + JSON parses while the first one is in flight.
+var _fullVideosPromise = null;
+
 export function stateVideos() {
     return {
 
@@ -38,28 +42,75 @@ export function stateVideos() {
         // gotcha：naturalWidth 在 decode 完成前恆為 0，reactive binding 不會因 load 事件重跑）---
         applyCellFocal,
 
+        _shouldLoadAllVideosForInitialFetch() {
+            return this.sort === 'random'
+                || Number(this.perPage) === 0
+                || String(this.search || '').trim() !== ''
+                || (Array.isArray(this.pills) && this.pills.length > 0);
+        },
+
         // --- API 呼叫 ---
-        async fetchVideos() {
+        async fetchVideos(options) {
+            options = options || {};
+            const requestId = ++this._videoFetchGeneration;
+            if (this._videoFetchAbort) this._videoFetchAbort.abort();
+            const abortController = new AbortController();
+            this._videoFetchAbort = abortController;
             this.loading = true;
             this.error = '';
             try {
-                const resp = await fetch('/api/showcase/videos');
+                const requestedPerPage = Math.min(
+                    SHOWCASE_MAX_SERVER_PAGE_SIZE,
+                    Math.max(0, parseInt(this.perPage) || 0)
+                );
+                const loadAll = options.all === true
+                    || requestedPerPage === 0
+                    || this.sort === 'random';
+                const requestedPage = Math.max(
+                    1,
+                    parseInt(options.page ?? this.page ?? 1) || 1
+                );
+                const params = new URLSearchParams();
+                if (loadAll) {
+                    params.set('paged', 'false');
+                } else {
+                    params.set('paged', 'true');
+                    params.set('page', String(requestedPage));
+                    params.set('per_page', String(requestedPerPage));
+                    params.set('sort', this.sort);
+                    params.set('order', this.order);
+                }
+                const query = params.toString();
+                const resp = await fetch(
+                    '/api/showcase/videos' + (query ? '?' + query : ''),
+                    { signal: abortController.signal }
+                );
+                if (requestId !== this._videoFetchGeneration) return false;
                 if (!resp.ok) {
                     _videos.length = 0;
                     this.videoCount = 0;
                     _filteredVideos.length = 0;
                     this.filteredCount = 0;
+                    this._serverPaged = false;
+                    this._serverTotal = 0;
+                    this._serverPage = 1;
+                    this._fullVideosLoaded = false;
                     this.error = window.t('showcase.error.server_error', { status: resp.status });
-                    return;
+                    return false;
                 }
                 const data = await resp.json();
+                if (requestId !== this._videoFetchGeneration) return false;
                 if (!data.success) {
                     _videos.length = 0;
                     this.videoCount = 0;
                     _filteredVideos.length = 0;
                     this.filteredCount = 0;
+                    this._serverPaged = false;
+                    this._serverTotal = 0;
+                    this._serverPage = 1;
+                    this._fullVideosLoaded = false;
                     this.error = data.error || window.t('showcase.error.load_failed');
-                    return;
+                    return false;
                 }
                 // Re-assign module-level var via splice/push to keep the same reference
                 // (core.js uses direct assignment; ESM re-exports work because we read
@@ -68,31 +119,76 @@ export function stateVideos() {
                 // 67-A2: per-card 三態旗標。video 物件由此唯一來源流穿整條 render 鏈
                 // （_videos → _filteredVideos → paginatedVideos slice，皆同 ref），故初始化一處即涵蓋
                 // 初次載入/retry/翻頁/搜尋/排序；後端不回此欄位。補封面走 refreshVideoData reset。
-                vids.forEach(function (v) { if (v._imgLoaded === undefined) v._imgLoaded = false; if (v._coverRequested === undefined) v._coverRequested = false; });
+                vids.forEach(function (v, index) {
+                    if (v._imgLoaded === undefined) v._imgLoaded = false;
+                    // First visible row can start decoding immediately. Every other
+                    // cover enters through x-intersect and leaves the image window
+                    // when it is far enough away, releasing its decoded bitmap.
+                    v._coverRequested = index < 8;
+                });
                 _setVideos(vids);
-                this.videoCount = _videos.length;
+                const total = Number.isFinite(data.total) ? data.total : vids.length;
+                const isPaged = data.paged === true && !loadAll;
+                this.videoCount = total;
+                this._serverTotal = total;
+                this._serverPaged = isPaged;
+                this._fullVideosLoaded = !isPaged;
+                if (isPaged) {
+                    this._serverPage = Math.max(1, parseInt(data.page) || requestedPage);
+                    this.page = this._serverPage;
+                }
                 _setFilteredVideos(_videos);
-                this.filteredCount = _filteredVideos.length;
+                this.filteredCount = isPaged ? total : _filteredVideos.length;
+                if (!options.deferRender) this.updatePagination();
+                return true;
             } catch (e) {
+                if (requestId !== this._videoFetchGeneration) return false;
                 console.error('Failed to fetch videos:', e);
                 _videos.splice(0, _videos.length);
                 this.videoCount = 0;
                 _filteredVideos.splice(0, _filteredVideos.length);
                 this.filteredCount = 0;
+                this._serverPaged = false;
+                this._serverTotal = 0;
+                this._serverPage = 1;
+                this._fullVideosLoaded = false;
                 this.error = window.t('showcase.error.cannot_connect');
+                return false;
             } finally {
-                this.loading = false;
+                if (requestId === this._videoFetchGeneration) {
+                    this.loading = false;
+                    this._videoFetchAbort = null;
+                }
             }
+        },
+
+        async _ensureFullVideos() {
+            if (this._fullVideosLoaded) return true;
+            if (!_fullVideosPromise) {
+                _fullVideosPromise = this.fetchVideos({
+                    all: true,
+                    deferRender: true,
+                }).finally(function () {
+                    _fullVideosPromise = null;
+                });
+            }
+            return _fullVideosPromise;
         },
 
         // --- 重試（async 安全） ---
         async retry() {
             this.error = '';
             const savedPage = this.page;
-            await this.fetchVideos();
+            const ok = await this.fetchVideos({
+                page: savedPage,
+                all: this._fullVideosLoaded,
+            });
+            if (!ok) return;
             _recomputeAllBadges();
-            this.applyFilterAndSort(true);  // 跳過 pagination，下面統一處理
-            this.page = savedPage;
+            if (this._fullVideosLoaded) {
+                this.applyFilterAndSort(true);  // 跳過 pagination，下面統一處理
+                this.page = savedPage;
+            }
             this.updatePagination();
             // Settle: retry 也用 settle（不碰 opacity → 不閃）
             if (this.mode === 'grid' && !this.error) {
@@ -443,7 +539,7 @@ export function stateVideos() {
          * B7/B15: 排序動畫共用 helper — flip-guard → capture → change → Flip reorder
          * @param {Function} changeFn - 執行 data change 的函數
          */
-        _sortWithFlip(changeFn) {
+        async _sortWithFlip(changeFn) {
             var savedPage = this.page;
             var grid = null;
             var positionMap = null;
@@ -455,6 +551,14 @@ export function stateVideos() {
                     grid.classList.add('flip-guard');
                     void grid.offsetHeight;  // force reflow
                     positionMap = window.ShowcaseAnimations?.capturePositions?.(grid) || null;
+                }
+            }
+
+            if (!this._fullVideosLoaded) {
+                var loaded = await this._ensureFullVideos();
+                if (!loaded) {
+                    if (grid) grid.classList.remove('flip-guard');
+                    return;
                 }
             }
 
@@ -495,7 +599,7 @@ export function stateVideos() {
          * B8/B15: 篩選動畫共用 helper — flip-guard → capture → change → Flip filter
          * onSearchChange() 和 searchFromMetadata() 共用
          */
-        _animateFilter() {
+        async _animateFilter() {
             var grid = null;
             var state = null;
 
@@ -517,6 +621,17 @@ export function stateVideos() {
                     grid.classList.add('flip-guard');
                     void grid.offsetHeight;  // force reflow
                     state = window.ShowcaseAnimations?.captureFlipState?.(grid) || null;
+                }
+            }
+
+            // The first filter/search may start from a server-paged subset.
+            // Capture the current DOM first, then load the complete collection
+            // so local filtering and sorting keep their existing semantics.
+            if (!this._fullVideosLoaded) {
+                var loaded = await this._ensureFullVideos();
+                if (!loaded) {
+                    if (grid) grid.classList.remove('flip-guard');
+                    return;
                 }
             }
 
@@ -555,7 +670,7 @@ export function stateVideos() {
          * @param {string} direction - 'next' | 'prev'
          * @param {number} [targetPage] - 目標頁碼（goToPage 用，prevPage/nextPage 不傳）
          */
-        _animatePageChange(direction, targetPage) {
+        async _animatePageChange(direction, targetPage) {
             // 清理可能殘留的 flip-guard（sort/filter 動畫被翻頁打斷時）
             var grid = document.querySelector('.showcase-grid');
             if (grid) grid.classList.remove('flip-guard');
@@ -566,9 +681,16 @@ export function stateVideos() {
                 newPage = direction === 'next' ? this.page + 1 : this.page - 1;
             }
 
-            // State mutation FIRST（不再困在回調中）
-            this.page = newPage;
-            this.updatePagination();
+            if (this._serverPaged && !this._fullVideosLoaded) {
+                var loaded = await this.fetchVideos({ page: newPage });
+                if (!loaded) return;
+                this.page = this._serverPage;
+                this.updatePagination();
+            } else {
+                // State mutation FIRST（不再困在回調中）
+                this.page = newPage;
+                this.updatePagination();
+            }
             this.saveState();
             window.scrollTo(0, 0);
 
@@ -842,7 +964,21 @@ export function stateVideos() {
             if (parseInt(this.perPage) === 0 && this.mode === 'grid') {
                 this.perPage = 120;
             }
-            const perPage = Math.max(0, parseInt(this.perPage) || 0);
+            const perPage = Math.min(
+                SHOWCASE_MAX_SERVER_PAGE_SIZE,
+                Math.max(0, parseInt(this.perPage) || 0)
+            );
+            if (perPage !== this.perPage) this.perPage = perPage;
+            if (this._serverPaged && !this._fullVideosLoaded && perPage > 0) {
+                this.totalPages = Math.max(1, Math.ceil(this._serverTotal / perPage));
+                if (this.page > this.totalPages) this.page = this.totalPages;
+                if (this.page < 1) this.page = 1;
+                this.filteredCount = this._serverTotal;
+                var serverPage = _videos.slice();
+                serverPage.forEach(_recomputeCardActorAges);
+                this.paginatedVideos = serverPage;
+                return;
+            }
             var slice;
             if (perPage === 0) {
                 slice = _filteredVideos.slice();
@@ -886,6 +1022,9 @@ export function stateVideos() {
 
         // 工具方法：從 paginatedVideos 的 index 映射到 filteredVideos 的 index
         getCurrentFilteredIndex(paginatedIndex) {
+            if (this._serverPaged && !this._fullVideosLoaded) {
+                return paginatedIndex;
+            }
             const perPage = parseInt(this.perPage);
             return perPage === 0 ? paginatedIndex : (this.page - 1) * perPage + paginatedIndex;
         },

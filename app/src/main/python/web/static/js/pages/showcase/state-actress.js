@@ -52,6 +52,11 @@ async function _fetchActressesAndApply() {
             return;
         }
         var acts = data.actresses || [];
+        acts.forEach(function (actress, index) {
+            // Match the video wall: eager for the first visible row, then a
+            // bounded x-intersect image window for the rest of the actress wall.
+            actress._photoRequested = index < 8;
+        });
         _setActresses(acts);
         // 45: alias map（冪等，init 可能已載入）
         await _loadAliasMap();

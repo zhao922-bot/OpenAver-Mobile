@@ -450,8 +450,10 @@ public final class MainActivity extends Activity {
                     setupScroll.setVisibility(View.GONE);
                     webContainer.setVisibility(View.VISIBLE);
                     applyLocalAuthCookie(() -> {
-                        startCfShell();
                         openLocalPath("/scanner");
+                        // Keep the CF poller available, but do not put WebView
+                        // construction on the page's startup critical path.
+                        startCfShell();
                     });
                 });
             } catch (Throwable error) {

@@ -57,6 +57,8 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "core/android_storage.py",
             "core/atomic_write.py",
+            "core/database/actress.py",
+            "core/database/connection.py",
             "core/database/video.py",
             "core/database/version_tracker.py",
             "core/enricher.py",

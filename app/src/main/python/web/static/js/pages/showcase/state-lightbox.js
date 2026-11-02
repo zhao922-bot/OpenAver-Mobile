@@ -205,7 +205,26 @@ export function stateLightbox() {
         },
 
         // --- Lightbox (M3a) ---
-        openLightbox(index) {
+        async openLightbox(index) {
+            // The normal browse path only has the current server page in memory.
+            // Load the complete collection before opening the lightbox so
+            // prev/next, similar-mode, and detail refresh keep their original
+            // cross-page semantics. The click target is remapped by path.
+            if (this._serverPaged && !this._fullVideosLoaded && !this.showFavoriteActresses) {
+                var clickedVideo = _filteredVideos[index];
+                var clickedPath = clickedVideo ? clickedVideo.path : '';
+                var loaded = await this._ensureFullVideos();
+                if (!loaded) return;
+                this.applyFilterAndSort(true);
+                if (clickedPath) {
+                    var fullIndex = _filteredVideos.findIndex(function (video) {
+                        return video.path === clickedPath;
+                    });
+                    if (fullIndex >= 0) index = fullIndex;
+                }
+                this.updatePagination();
+            }
+
             // F2: cancel pending delayed clear from previous close
             if (this.lightboxCloseTimer) {
                 clearTimeout(this.lightboxCloseTimer);

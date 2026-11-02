@@ -584,22 +584,25 @@
                      @click="openLightbox(getCurrentFilteredIndex(index))"
                      :style="`--card-index: ${index}`"
                      :data-flip-id="video.path">
-                    <div class="av-card-preview-img">
+                    <div class="av-card-preview-img"
+                         x-intersect.margin.900px="video._coverRequested = true"
+                         x-intersect:leave.margin.2400px="video._coverRequested = false; video._imgLoaded = false">
                         <!-- 67-A2: 三態（CD-67-3）。保留單一 <img> 沿用 handleCoverError 換圖；
                              淡入靠 _imgLoaded 的 .cover-loaded class（A1 CSS）；首屏前 8 張 eager+high（CD-67-5，不可 lazy+high 並存）。
                              150b-T3 起「要不要載」改由 _coverRequested / x-intersect 決定，
                              :loading / :fetchpriority 只決定已通過閘之後的下載優先序 -->
-                        <img :src="((index < 8 && mode === 'grid') || video._coverRequested) ? video.cover_url : null"
-                             :alt="video.number"
-                             :loading="index < 8 ? 'eager' : 'lazy'"
-                             :fetchpriority="index < 8 ? 'high' : 'auto'"
-                             x-show="video.cover_url"
-                             :class="{ 'cover-loaded': video._imgLoaded }"
-                             @load="video._imgLoaded = true; applyCellFocal($el, video)"
-                             @error="handleCoverError(video, $event)"
-                             x-intersect.once.margin.690px="video._coverRequested = true"
-                             x-init="$watch('video.auto_focal', () => applyCellFocal($el, video));
-                                     $watch('video.crop_mode', () => applyCellFocal($el, video))">
+                        <template x-if="video._coverRequested && video.cover_url">
+                            <img :src="video.cover_url"
+                                 :alt="video.number"
+                                 :loading="index < 8 ? 'eager' : 'lazy'"
+                                 :fetchpriority="index < 8 ? 'high' : 'auto'"
+                                 decoding="async"
+                                 :class="{ 'cover-loaded': video._imgLoaded }"
+                                 @load="video._imgLoaded = true; applyCellFocal($el, video)"
+                                 @error="handleCoverError(video, $event)"
+                                 x-init="$watch('video.auto_focal', () => applyCellFocal($el, video));
+                                         $watch('video.crop_mode', () => applyCellFocal($el, video))">
+                        </template>
                         <!-- 67-A2: skeleton overlay（pending 時，gate 含 has_cover → stale @error 後 has_cover=false 自動退出）-->
                         <div class="skeleton-cover shimmer"
                              x-show="video.cover_url && video.has_cover && !video._imgLoaded && video._coverRequested"></div>
@@ -821,15 +824,18 @@
                          :data-flip-id="'actress:' + actress.name"
                          @click="openActressLightbox(index)">
                         <!-- Photo -->
-                        <div class="actress-card-photo">
-                            <template x-if="actress.photo_url">
+                        <div class="actress-card-photo"
+                             x-intersect.margin.900px="actress._photoRequested = true"
+                             x-intersect:leave.margin.2400px="actress._photoRequested = false">
+                            <template x-if="actress.photo_url && actress._photoRequested">
                                 <!-- 100b-T4（§A／CD-6）：比照 video 牆格三件套（:330-333），ratioVar
                                      傳 '--actress-crop-ratio'（CD-3）。x-if 只在 photo_url 從無到有時
                                      掛載一次（女優已有照片、換照片/焦點的常態路徑不重新掛載）——
                                      @load 蓋首次掛載，$watch 蓋之後所有欄位變動（applyCellFocal.js
                                      開頭註解：node:test 測不到「resolve 後寫哪個變數」，這裡靠
                                      paginatedActresses[idx] 本身是 reactive 物件，$watch 才追蹤得到）。 -->
-                                <img :src="actress.photo_url" :alt="actress.name" loading="lazy"
+                                <img :src="actress.photo_url"
+                                     :alt="actress.name" loading="lazy" decoding="async"
                                      @load="applyCellFocal($el, actress, '--actress-crop-ratio')"
                                      x-init="$watch('actress.auto_focal', () => applyCellFocal($el, actress, '--actress-crop-ratio'));
                                              $watch('actress.crop_mode', () => applyCellFocal($el, actress, '--actress-crop-ratio'))">

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 
 from core import config as config_module
 
@@ -93,3 +95,63 @@ def test_sources_migration_appends_manual_only_sources(tmp_path, monkeypatch):
     assert result["sources_bak"] == []
     assert "javlibrary" in source_ids
     assert "fc-javten" in source_ids
+
+
+def test_load_config_uses_cached_snapshot_and_invalidates_on_file_change(
+    tmp_path, monkeypatch
+):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"marker": "first", "sources": [], "search": {}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_module, "CONFIG_PATH", config_path)
+
+    calls = 0
+    original_loader = config_module._load_config_unlocked
+
+    def counting_loader():
+        nonlocal calls
+        calls += 1
+        return original_loader()
+
+    monkeypatch.setattr(config_module, "_load_config_unlocked", counting_loader)
+
+    first = config_module.load_config()
+    first["marker"] = "caller-mutated"
+    second = config_module.load_config()
+
+    assert calls == 1
+    assert second["marker"] == "first"
+
+    config_path.write_text(
+        json.dumps({"marker": "second", "sources": [], "search": {}}),
+        encoding="utf-8",
+    )
+    future = time.time() + 1
+    os.utime(config_path, (future, future))
+
+    third = config_module.load_config()
+    assert calls == 2
+    assert third["marker"] == "second"
+
+
+def test_save_config_updates_cached_snapshot(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"marker": "before", "sources": [], "search": {}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_module, "CONFIG_PATH", config_path)
+
+    config = config_module.load_config()
+    config["marker"] = "after"
+    config_module.save_config(config)
+
+    monkeypatch.setattr(
+        config_module,
+        "_load_config_unlocked",
+        lambda: (_ for _ in ()).throw(AssertionError("cache miss")),
+    )
+
+    assert config_module.load_config()["marker"] == "after"

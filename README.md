@@ -13,17 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r33-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r37-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r33-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r37-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r33`（versionCode `17049`）
+- 版本：`0.17.18-r37`（versionCode `17053`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：`7C48C8A13A9519200B1B3D12B9F22EA1AC2E42B82F4A88EFB003232C217BD7A7`
+- SHA-256：`21F3FF3059E44DE4860C4FABED671C88C666554996FBE97171CB834DF1F1F98E`
 
 ## 安装
 
@@ -170,6 +170,21 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r33：扫描、配置迁移、组合重命名、文件整理和文件名预览的最复杂函数已按职责拆分，最高复杂度从 93 降至 61
 - r33：统一 multipart 解析、Android 安全媒体 I/O、悬浮菜单控制和 toast 实现，移除重复主题 CSS 与残留调试注入器
 - r33：补充配置迁移、扫描取消/部分扫描保护、路径规划和媒体写入回归测试，并清理 Python 无效转义警告
+- r34：设置页的字号、语言和显示模式工具栏改为吸顶显示，并使用独立固定尺寸，
+  不随正文字号放大；扫描来源的“测试连接”与“全开/无码模式”在移动端保持同排对齐
+- r34：主设置项改为草稿模式，只有点击“保存设置”才写入；主题、字号和语言仍可即时预览，未保存离开时会提示
+- r34：来源顺序、启用状态、缩略图缓存、Metatube 开关和自动对焦开关都纳入统一的未保存状态判断
+- r34：关闭 Metatube 后不再立即断开，保存成功后才执行；自动对焦写入失败时会保留未保存状态，避免静默丢失
+- r35：启动阶段不再预建两个 Cloudflare 站点 WebView，改为首次实际任务时按需创建，
+  降低启动内存和主页面加载等待
+- r35：配置读取使用带文件签名校验的内存快照，并返回隔离副本，减少高频封面/API 请求重复读盘
+- r35：数据库 schema 初始化按数据根幂等执行，统一 SQLite 连接超时与 PRAGMA，并复用热点查询连接读取列信息
+- r36：展示库列表改为目录前缀 SQL 预过滤和显式字段投影，默认只序列化服务端当前页；
+  搜索、pill、随机排序和灯箱按需加载完整集合，并取消已被新请求取代的旧分页响应
+- r36：GSAP、GhostFly、BurstPicker、播放器及设置页辅助组件按页面加载；
+  Scanner 与 Insights 只加载所需动效运行时，不再连带加载 Flip、Physics2D 等重型插件
+- r37：展示库和女优墙的封面改为双阈值图片窗口：接近视口时异步加载，远离后释放
+  已解码图片并销毁图片节点；手机网格单页上限降为 45 张，避免整页图片长期占用内存
 
 ## 限制
 

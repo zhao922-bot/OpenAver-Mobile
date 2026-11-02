@@ -7,6 +7,11 @@
       :data-theme="theme"
       :style="'font-size:' + {xs:'13px',sm:'14px',md:'16px',lg:'18px',xl:'20px'}[fontSize]">
 
+{% set uses_gsap = page in ['showcase', 'search', 'scanner', 'insights', 'motion-lab', 'design-system'] %}
+{% set uses_motion_plugins = page in ['showcase', 'search', 'motion-lab', 'design-system'] %}
+{% set uses_ghost_fly = page in ['showcase', 'search', 'scanner', 'motion-lab', 'design-system'] %}
+{% set uses_burst_picker = page in ['showcase', 'motion-lab', 'design-system'] %}
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -60,6 +65,9 @@
       function configSync(field) {
         var tid, ctrl;
         return function(val) {
+          // Settings owns an explicit save button. Keep appearance changes as
+          // live previews there, but do not persist them until Save is clicked.
+          if (document.getElementById('settings-components')) return;
           clearTimeout(tid);
           if (ctrl) ctrl.abort();
           tid = setTimeout(function() {
@@ -932,31 +940,46 @@
     }
     </script>
 
-    <!-- GSAP Core (Phase E) — defer 保序：GSAP → prefs → adapter → Alpine -->
+    {% if uses_gsap %}
+    <!-- GSAP Core — only pages with motion consumers pay the parse cost. -->
     <script defer src="/static/vendor/gsap/gsap.min.js"></script>
-    <!-- GSAP Plugins (全站共用) -->
+    <!-- Fluent eases are required by GhostFly and AvatarFly too. -->
+    <script defer src="/static/vendor/gsap/CustomEase.min.js"></script>
+    {% endif %}
+    {% if uses_motion_plugins %}
+    <!-- Heavy GSAP plugins used only by showcase/search/motion-lab/design-system. -->
     <script defer src="/static/vendor/gsap/Flip.min.js"></script>
     <script defer src="/static/vendor/gsap/Physics2DPlugin.min.js"></script>
-    <script defer src="/static/vendor/gsap/CustomEase.min.js"></script>
     <script defer src="/static/vendor/gsap/CustomBounce.min.js"></script>
     <!-- DrawSVGPlugin（56b-T1，DrawSVG free since GSAP 3.12+ / Webflow sponsorship）-->
     <script defer src="/static/vendor/gsap/DrawSVGPlugin.min.js"></script>
+    {% endif %}
     <!-- Path Display Utilities (T7d) -->
     <script type="module" src="/static/js/components/path-utils.js"></script>
     <!-- Motion Preferences Bridge (T4) -->
     <script type="module" src="/static/js/components/motion-prefs.js"></script>
     <!-- Shared mobile state classification and diagnostics (r19) -->
     <script type="module" src="/static/js/shared/ui-state.js?v=17035-2"></script>
+    {% if uses_gsap %}
     <!-- Motion Adapter — shared GSAP wrappers (T5) -->
     <script type="module" src="/static/js/components/motion-adapter.js"></script>
+    {% endif %}
     <!-- Page Lifecycle Manager (T2.1) -->
     <script type="module" src="/static/js/components/page-lifecycle.js"></script>
+    {% if uses_ghost_fly %}
     <!-- Ghost Fly — shared lightbox transition helper (T8) -->
     <script type="module" src="/static/js/shared/ghost-fly.js"></script>
+    {% endif %}
+    {% if page == 'insights' %}
     <script type="module" src="/static/js/shared/avatar-fly.js"></script>
+    {% endif %}
+    {% if page in ['showcase', 'search'] %}
     <script type="module" src="/static/js/shared/video-player.js"></script>
+    {% endif %}
+    {% if uses_burst_picker %}
     <!-- Burst Picker — shared photo-picker animation module (49b-T4a) -->
     <script type="module" src="/static/js/shared/burst-picker.js"></script>
+    {% endif %}
     <!-- Toast store — Alpine.store('toast')（131b-T3） -->
     <script type="module" src="/static/js/components/toast-store.js?v=17035-2"></script>
     <!-- Bridge notify — window.handleBridgeUncovered hook（168a-T4；所有頁面都要有） -->
@@ -966,11 +989,17 @@
     <!-- 168e-T6: shell reload hook -->
     <script type="module" src="/static/js/shared/shell-reload.js"></script>
     <script type="module" src="/static/js/shared/conn-state.js"></script>
+    {% if page in ['settings', 'scanner', 'motion-lab', 'design-system'] %}
     <!-- Help Popover — 說明浮層共用元件（131b-T4） -->
     <script type="module" src="/static/js/components/help-popover.js"></script>
+    {% endif %}
+    {% if page in ['scanner', 'design-system'] %}
     <script type="module" src="/static/js/components/number-drilldown.js"></script>
+    {% endif %}
+    {% if page in ['search', 'design-system'] %}
     <!-- Auto Organize Panel — 搜尋頁自動整理 popover（TASK-144-T7） -->
     <script type="module" src="/static/js/components/auto-organize-panel.js"></script>
+    {% endif %}
 
     {% block pre_alpine_module %}{% endblock %}
 

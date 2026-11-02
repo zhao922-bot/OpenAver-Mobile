@@ -158,6 +158,36 @@ def _serialize_group(group, path_mappings: dict, enabled: bool = False) -> dict:
     return base
 
 
+def _group_sort_key(group, sort: str):
+    """Return the same primary sort value the showcase client uses."""
+    video = group.members[0]
+    if sort == 'size':
+        return sum(member.size_bytes or 0 for member in group.members)
+    if sort == 'mdate':
+        return video.mtime or 0
+    if sort == 'actor':
+        return ','.join(video.actresses or [])
+    if sort == 'title':
+        return video.title or ''
+    if sort == 'num':
+        return video.number or ''
+    if sort == 'maker':
+        return video.maker or ''
+    if sort == 'date':
+        return video.release_date or ''
+    return video.path or ''
+
+
+def _sort_groups(groups, sort: str, order: str):
+    """Sort before slicing so server pages have stable global order."""
+    if sort == 'random':
+        return groups
+    reverse = order == 'desc'
+    # Python's stable sort keeps DB insertion order for equal keys, matching
+    # the browser's stable Array.sort() semantics used by legacy clients.
+    return sorted(groups, key=lambda group: _group_sort_key(group, sort), reverse=reverse)
+
+
 def _etag_matches(if_none_match: str, etag: str) -> bool:
     """比對 `If-None-Match` 語意（抄 Starlette `StaticFiles.is_not_modified()` 的比對方式，
     不 import 該函式本身——它綁定 `FileResponse` 用的 `Headers` 型別，這裡是手寫 JSON 端點）。
@@ -170,7 +200,14 @@ def _etag_matches(if_none_match: str, etag: str) -> bool:
 
 
 @router.get("/videos")
-def get_videos(request: Request):
+def get_videos(
+    request: Request,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(0, ge=0, le=500),
+    sort: str = Query('date'),
+    order: str = Query('desc'),
+    paged: bool = Query(False),
+):
     """取得所有影片資料（用於 Showcase 頁面客戶端渲染）。
 
     帶 ETag（CD-145a-8/11/12）：涵蓋 DB 內部寫入 revision、DB/-wal 檔案指紋（涵蓋外部
@@ -198,18 +235,34 @@ def get_videos(request: Request):
         configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
         thumb_enabled = config.get('thumbnail_cache_enabled', False)
 
+        requested_sort = sort if sort in {
+            'title', 'actor', 'num', 'maker', 'date', 'size', 'mdate', 'random'
+        } else 'date'
+        requested_order = 'asc' if order == 'asc' else 'desc'
+        use_pagination = bool(paged and per_page > 0 and requested_sort != 'random')
+
         projection = {
             "directories": sorted(get_gallery_source_paths(gallery_config)),
             "path_mappings": path_mappings,
             "thumbnail_cache_enabled": thumb_enabled,
+            "page": page if use_pagination else 1,
+            "per_page": per_page if use_pagination else 0,
+            "sort": requested_sort if use_pagination else 'client',
+            "order": requested_order if use_pagination else 'client',
         }
-        etag = compute_etag(get_showcase_revision(), compute_db_fingerprint(db_path), projection)
+        etag = None
+        if requested_sort != 'random':
+            etag = compute_etag(
+                get_showcase_revision(),
+                compute_db_fingerprint(db_path),
+                projection,
+            )
 
-        if _etag_matches(request.headers.get("if-none-match"), etag):
+        if etag and _etag_matches(request.headers.get("if-none-match"), etag):
             return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
 
         repo = VideoRepository(db_path)
-        all_videos = [v for v in repo.get_all()
+        all_videos = [v for v in repo.get_showcase_rows(configured_dir_uris)
                       if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
 
         # feature/122 CD-122-1：分組在序列化層收斂，前端拿到的 videos 陣列已是
@@ -217,15 +270,31 @@ def get_videos(request: Request):
         # 一個 member，_serialize_group() 輸出與改動前逐鍵逐值相同（AC-4）。
         groups = group_rows(all_videos, fs_path_of=lambda v: uri_to_local_fs_path(v.path, path_mappings))
 
-        videos_json = [_serialize_group(g, path_mappings, thumb_enabled)
-                       for g in groups]
+        total = len(groups)
+        total_pages = 1
+        if use_pagination:
+            groups = _sort_groups(groups, requested_sort, requested_order)
+            total_pages = max(1, (total + per_page - 1) // per_page)
+            page = min(page, total_pages)
+            start = (page - 1) * per_page
+            groups = groups[start:start + per_page]
+
+        videos_json = [
+            _serialize_group(g, path_mappings, thumb_enabled)
+            for g in groups
+        ]
 
         resp = JSONResponse({
             "success": True,
             "videos": videos_json,
-            "total": len(videos_json)
+            "total": total,
+            "page": page if use_pagination else 1,
+            "per_page": per_page if use_pagination else 0,
+            "total_pages": total_pages if use_pagination else 1,
+            "paged": use_pagination,
         })
-        resp.headers["ETag"] = etag
+        if etag:
+            resp.headers["ETag"] = etag
         resp.headers["Cache-Control"] = "no-cache"
         return resp
 

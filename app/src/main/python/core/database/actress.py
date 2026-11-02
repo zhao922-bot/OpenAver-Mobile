@@ -118,18 +118,22 @@ class ActressRepository:
         """取得資料庫連線"""
         return connection.get_connection(self.db_path)
 
-    def _get_columns(self) -> List[str]:
+    def _get_columns(self, conn: Optional[sqlite3.Connection] = None) -> List[str]:
         """取得欄位名稱列表（動態從 PRAGMA table_info 取得，確保與 SELECT * 順序一致，
         鏡射 VideoRepository._get_columns；CD-98a-8——手寫清單在 ALTER 加欄後會與
-        SELECT * 長度不符，from_row 的 zip(strict=True) 直接 ValueError）"""
+        SELECT * 長度不符，from_row 的 zip(strict=True) 直接 ValueError）。
+        caller 已有連線時直接重用，避免每次查詢多開一條連線。"""
         if self._columns_cache is None:
-            conn = self._get_connection()
+            owns_connection = conn is None
+            if conn is None:
+                conn = self._get_connection()
             try:
                 cursor = conn.cursor()
                 cursor.execute("PRAGMA table_info(actresses)")
                 self._columns_cache = [row[1] for row in cursor.fetchall()]
             finally:
-                conn.close()
+                if owns_connection:
+                    conn.close()
         return self._columns_cache
 
     def save(self, actress: Actress) -> None:
@@ -264,7 +268,7 @@ class ActressRepository:
             cursor.execute("SELECT * FROM actresses WHERE name = ?", (name,))
             row = cursor.fetchone()
             if row:
-                return Actress.from_row(row, self._get_columns())
+                return Actress.from_row(row, self._get_columns(conn))
             return None
         finally:
             conn.close()
@@ -293,7 +297,8 @@ class ActressRepository:
         try:
             cursor.execute("SELECT * FROM actresses ORDER BY name")
             rows = cursor.fetchall()
-            return [Actress.from_row(row, self._get_columns()) for row in rows]
+            columns = self._get_columns(conn)
+            return [Actress.from_row(row, columns) for row in rows]
         finally:
             conn.close()
 

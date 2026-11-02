@@ -8,6 +8,7 @@ core/config.py — 設定載入 / 儲存 / 遷移邏輯
 - save_config()                    — 儲存設定至 config.json
 """
 
+import copy
 import json
 import shutil
 import threading
@@ -36,6 +37,14 @@ CONFIG_DEFAULT_PATH = _PROJECT_ROOT / "web" / "config.default.json"
 # asyncio.Lock 保護不到；且 plain Lock（非 RLock）—— public locked / private
 # unlocked 嚴格分層，鎖內絕不二次 acquire（mutator 契約禁呼 public API）。
 _config_write_lock = threading.Lock()
+
+# load_config() is a very hot path (gallery cards call it once per image in
+# some flows). Keep the last parsed raw dict in memory, but never expose that
+# object directly: callers are allowed to mutate the dict they receive before
+# save_config()/mutate_config(). The file signature makes hand-edited config
+# files visible without requiring a restart.
+_config_cache: Optional[dict] = None
+_config_cache_signature: Optional[tuple] = None
 
 
 class ConfigRootNotFinalizedError(Exception):
@@ -701,10 +710,37 @@ def _load_config_unlocked() -> dict:
     return AppConfig().model_dump()
 
 
+def _config_file_signature() -> tuple:
+    """Return a cheap invalidation key for the current config file."""
+    try:
+        stat = CONFIG_PATH.stat()
+        return (str(CONFIG_PATH), stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return (str(CONFIG_PATH), None, None)
+
+
+def _store_config_cache(config: dict) -> None:
+    """Store an isolated snapshot after a successful read or write."""
+    global _config_cache, _config_cache_signature
+    _config_cache = copy.deepcopy(config)
+    _config_cache_signature = _config_file_signature()
+
+
+def _load_cached_config_unlocked() -> dict:
+    """Return a copy of the current config, parsing disk only on a cache miss."""
+    signature = _config_file_signature()
+    if _config_cache is not None and _config_cache_signature == signature:
+        return copy.deepcopy(_config_cache)
+
+    raw_config = _load_config_unlocked()
+    _store_config_cache(raw_config)
+    return copy.deepcopy(raw_config)
+
+
 def load_config() -> dict:
-    """載入設定，包含自動遷移邏輯和首次啟動初始化（process-wide 序列化）"""
+    """載入設定；未變更時使用記憶體快照（process-wide 序列化）。"""
     with _config_write_lock:
-        return _load_config_unlocked()
+        return _load_cached_config_unlocked()
 
 
 def _save_config_unlocked(config: dict) -> None:
@@ -725,6 +761,7 @@ def _save_config_unlocked(config: dict) -> None:
 
     with atomic_write(CONFIG_PATH, mode='w', encoding='utf-8') as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
+    _store_config_cache(config)
 
 
 def save_config(config: dict) -> None:
@@ -744,16 +781,19 @@ def mutate_config(mutator: Callable[[dict], None]) -> None:
     mutate_config / reset_config_file）—— 會在已持鎖時二次 acquire → 自我死鎖。
     """
     with _config_write_lock:
-        cfg = _load_config_unlocked()
+        cfg = _load_cached_config_unlocked()
         mutator(cfg)
         _save_config_unlocked(cfg)
 
 
 def reset_config_file() -> None:
     """刪除 config.json（恢復原廠）—— 在鎖內檢查 + 刪除，無 exists/unlink TOCTOU。"""
+    global _config_cache, _config_cache_signature
     with _config_write_lock:
         if CONFIG_PATH.exists():
             CONFIG_PATH.unlink()
+        _config_cache = None
+        _config_cache_signature = None
 
 
 # ============ Gallery source helpers（feature/88, plan §3）============

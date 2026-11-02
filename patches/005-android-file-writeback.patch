@@ -244,6 +244,142 @@
      except BaseException:
          # 路徑 1：區塊內使用者程式碼拋例外；路徑 2：os.replace 自己拋例外
          # （BE-ENV-01：Windows 防毒/縮圖快取會擋，不是必成功）。
+--- a/core/database/actress.py
++++ b/core/database/actress.py
+@@ -118,18 +118,22 @@
+         """取得資料庫連線"""
+         return connection.get_connection(self.db_path)
+ 
+-    def _get_columns(self) -> List[str]:
++    def _get_columns(self, conn: Optional[sqlite3.Connection] = None) -> List[str]:
+         """取得欄位名稱列表（動態從 PRAGMA table_info 取得，確保與 SELECT * 順序一致，
+         鏡射 VideoRepository._get_columns；CD-98a-8——手寫清單在 ALTER 加欄後會與
+-        SELECT * 長度不符，from_row 的 zip(strict=True) 直接 ValueError）"""
++        SELECT * 長度不符，from_row 的 zip(strict=True) 直接 ValueError）。
++        caller 已有連線時直接重用，避免每次查詢多開一條連線。"""
+         if self._columns_cache is None:
+-            conn = self._get_connection()
++            owns_connection = conn is None
++            if conn is None:
++                conn = self._get_connection()
+             try:
+                 cursor = conn.cursor()
+                 cursor.execute("PRAGMA table_info(actresses)")
+                 self._columns_cache = [row[1] for row in cursor.fetchall()]
+             finally:
+-                conn.close()
++                if owns_connection:
++                    conn.close()
+         return self._columns_cache
+ 
+     def save(self, actress: Actress) -> None:
+@@ -264,7 +268,7 @@
+             cursor.execute("SELECT * FROM actresses WHERE name = ?", (name,))
+             row = cursor.fetchone()
+             if row:
+-                return Actress.from_row(row, self._get_columns())
++                return Actress.from_row(row, self._get_columns(conn))
+             return None
+         finally:
+             conn.close()
+@@ -293,7 +297,8 @@
+         try:
+             cursor.execute("SELECT * FROM actresses ORDER BY name")
+             rows = cursor.fetchall()
+-            return [Actress.from_row(row, self._get_columns()) for row in rows]
++            columns = self._get_columns(conn)
++            return [Actress.from_row(row, columns) for row in rows]
+         finally:
+             conn.close()
+ 
+--- a/core/database/connection.py
++++ b/core/database/connection.py
+@@ -4,6 +4,7 @@
+ """
+ import sqlite3
+ import json
++import threading
+ import time
+ from pathlib import Path
+ 
+@@ -12,6 +13,9 @@
+ from core.database.version_tracker import _RevisionTrackingConnection
+ 
+ logger = get_logger(__name__)
++
++_db_init_lock = threading.Lock()
++_initialized_db_paths: set[str] = set()
+ 
+ 
+ def get_db_path() -> Path:
+@@ -26,7 +30,15 @@
+     if db_path is None:
+         db_path = get_db_path()
+ 
+-    conn = sqlite3.connect(str(db_path), factory=_RevisionTrackingConnection)
++    conn = sqlite3.connect(
++        str(db_path),
++        timeout=5.0,
++        factory=_RevisionTrackingConnection,
++    )
++    # Connection-level settings are centralized here so every repository gets
++    # the same lock/durability behavior.
++    conn.execute("PRAGMA busy_timeout=5000")
++    conn.execute("PRAGMA synchronous=NORMAL")
+     # 啟用 WAL 模式以提升並發效能
+     conn.execute("PRAGMA journal_mode=WAL")
+     return conn
+@@ -123,7 +135,7 @@
+ """
+ 
+ 
+-def init_db(db_path: Path = None) -> None:
++def _init_db_schema(db_path: Path = None) -> None:
+     """初始化資料庫 Schema"""
+     conn = get_connection(db_path)
+     cursor = conn.cursor()
+@@ -383,3 +395,41 @@
+ 
+     conn.commit()
+     conn.close()
++
++
++def _normalized_db_path(db_path: Path = None) -> Path:
++    path = Path(db_path) if db_path is not None else get_db_path()
++    if str(path) == ":memory:":
++        return path
++    return path.expanduser().resolve()
++
++
++def init_db(db_path: Path = None, *, force: bool = False) -> None:
++    """Initialize schema once per database path in this process.
++
++    Route modules keep their defensive ``init_db()`` calls, but after the
++    first successful initialization those calls must not replay every CREATE
++    TABLE / PRAGMA migration on the request path. ``force=True`` is available
++    for explicit schema rebuilds in maintenance code and tests.
++    """
++    path = _normalized_db_path(db_path)
++    key = str(path)
++
++    with _db_init_lock:
++        if not force and key in _initialized_db_paths and path.exists():
++            return
++
++        if force:
++            _initialized_db_paths.discard(key)
++        try:
++            _init_db_schema(path)
++        except BaseException:
++            _initialized_db_paths.discard(key)
++            raise
++        _initialized_db_paths.add(key)
++
++
++def _clear_db_init_cache() -> None:
++    """Clear process-local initialization state (tests/maintenance only)."""
++    with _db_init_lock:
++        _initialized_db_paths.clear()
 --- a/core/database/video.py
 +++ b/core/database/video.py
 @@ -3,7 +3,7 @@
@@ -277,11 +413,10 @@
  
  
  @dataclass
-@@ -105,6 +120,71 @@
-         if self.updated_at:
+@@ -106,6 +121,71 @@
              data['updated_at'] = self.updated_at.isoformat()
          return data
-+
+ 
 +    def preserve_missing_metadata(self, existing: 'Video') -> None:
 +        """Keep richer DB metadata when a scanner result omitted fields.
 +
@@ -346,20 +481,89 @@
 +        # A fresh sidecar discovery must win over a stale DB reference.
 +        if not self.cover_path and existing.cover_path:
 +            self.cover_path = existing.cover_path
- 
++
      @classmethod
      def from_row(cls, row: tuple, columns: List[str]) -> 'Video':
-@@ -731,6 +811,28 @@
-         finally:
-             conn.close()
+         """從資料庫 row 建立"""
+@@ -189,6 +269,37 @@
+     "WHEN videos.crop_mode = 'manual' THEN 'auto' ELSE videos.crop_mode END"
+ )
  
++# The showcase list only needs these columns. Keeping the projection explicit
++# avoids pulling migration-only and write-back fields for every card.
++_SHOWCASE_COLUMNS = (
++    'path',
++    'number',
++    'title',
++    'original_title',
++    'actresses',
++    'maker',
++    'director',
++    'series',
++    'label',
++    'tags',
++    'sample_images',
++    'user_tags',
++    'duration',
++    'size_bytes',
++    'cover_path',
++    'release_date',
++    'mtime',
++    'nfo_mtime',
++    'auto_focal',
++    'crop_mode',
++    'user_rating',
++)
++
++
++def _escape_like_prefix(value: str) -> str:
++    """Escape SQLite LIKE wildcards before appending a trailing '%'."""
++    return value.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
++
+ 
+ class VideoRepository:
+     """影片資料存取層"""
+@@ -201,16 +312,19 @@
+         """取得資料庫連線"""
+         return connection.get_connection(self.db_path)
+ 
+-    def _get_columns(self) -> List[str]:
+-        """取得欄位名稱列表（動態從 PRAGMA table_info 取得，確保與 SELECT * 順序一致）"""
++    def _get_columns(self, conn: Optional[sqlite3.Connection] = None) -> List[str]:
++        """取得欄位名稱列表；caller 已有連線時直接重用，避免多開一條。"""
+         if self._columns_cache is None:
+-            conn = self._get_connection()
++            owns_connection = conn is None
++            if conn is None:
++                conn = self._get_connection()
+             try:
+                 cursor = conn.cursor()
+                 cursor.execute("PRAGMA table_info(videos)")
+                 self._columns_cache = [row[1] for row in cursor.fetchall()]
+             finally:
+-                conn.close()
++                if owns_connection:
++                    conn.close()
+         return self._columns_cache
+ 
+     def upsert(self, video: Video) -> int:
+@@ -726,8 +840,30 @@
+             cursor.execute("SELECT * FROM videos WHERE path = ?", (path,))
+             row = cursor.fetchone()
+             if row:
+-                return Video.from_row(row, self._get_columns())
++                return Video.from_row(row, self._get_columns(conn))
+             return None
++        finally:
++            conn.close()
++
 +    def get_by_paths(self, paths: List[str]) -> dict[str, Video]:
 +        """Batch-load complete rows for scanner preservation checks."""
 +        if not paths:
 +            return {}
 +        conn = self._get_connection()
 +        try:
-+            columns = self._get_columns()
++            columns = self._get_columns(conn)
 +            result: dict[str, Video] = {}
 +            for start in range(0, len(paths), 900):
 +                chunk = paths[start:start + 900]
@@ -372,13 +576,54 @@
 +                    video = Video.from_row(row, columns)
 +                    result[video.path] = video
 +            return result
+         finally:
+             conn.close()
+ 
+@@ -832,7 +968,42 @@
+         try:
+             cursor.execute("SELECT * FROM videos ORDER BY id")
+             rows = cursor.fetchall()
+-            return [Video.from_row(row, self._get_columns()) for row in rows]
++            columns = self._get_columns(conn)
++            return [Video.from_row(row, columns) for row in rows]
 +        finally:
 +            conn.close()
 +
-     def get_focal_crop_map(self, paths: List[str]) -> dict:
-         """批次讀 {path: (auto_focal, crop_mode)}（Codex PR#105 P2 修復用，避免 N+1）。
++    def get_showcase_rows(self, configured_dir_uris: set[str]) -> List[Video]:
++        """Load the showcase projection only for configured gallery roots.
++
++        The SQL predicate is intentionally a broad prefix prefilter; callers
++        still run ``is_path_under_dir`` afterwards so path boundaries and
++        platform-specific case rules remain identical to the previous Python
++        filter. This removes unrelated DB rows and avoids ``SELECT *`` while
++        preserving the final scope guard.
++        """
++        if not configured_dir_uris:
++            return []
++
++        clauses: List[str] = []
++        params: List[str] = []
++        for dir_uri in sorted(configured_dir_uris):
++            prefix = dir_uri if dir_uri.endswith('/') else dir_uri + '/'
++            clauses.append("(path = ? OR path LIKE ? ESCAPE '\\')")
++            params.extend((dir_uri, _escape_like_prefix(prefix) + '%'))
++
++        columns = ', '.join(_SHOWCASE_COLUMNS)
++        query = (
++            f"SELECT {columns} FROM videos "
++            f"WHERE {' OR '.join(clauses)} ORDER BY id"
++        )
++        conn = self._get_connection()
++        try:
++            cursor = conn.execute(query, params)
++            return [
++                Video.from_row(row, list(_SHOWCASE_COLUMNS))
++                for row in cursor.fetchall()
++            ]
+         finally:
+             conn.close()
  
-@@ -850,8 +952,8 @@
+@@ -850,8 +1021,8 @@
          finally:
              conn.close()
  
@@ -389,7 +634,7 @@
  
          sample_count（TASK-118b-T9）：合法 JSON list → 實際張數。空字串／NULL／
          損毀 JSON／非 list 的合法 JSON 這四種壞值一律回傳哨兵值
-@@ -859,15 +961,45 @@
+@@ -859,15 +1030,45 @@
          裁決④：壞資料要 fail-safe 成「需要重掃」，不得讓單筆壞資料中止整個
          SELECT／整次掃描）。真實檔案系統算出來的張數恆為 >= 0，-1 必定與任何
          真實張數不相等，呼叫端的比對式因此自然觸發重掃，不需要額外的例外分支。
@@ -442,7 +687,7 @@
                  sample_count = _SAMPLE_COUNT_UNKNOWN
                  if sample_images_raw:
                      try:
-@@ -876,7 +1008,22 @@
+@@ -876,7 +1077,22 @@
                              sample_count = len(parsed)
                      except (json.JSONDecodeError, TypeError):
                          pass
@@ -466,7 +711,7 @@
              return result
          finally:
              conn.close()
-@@ -885,7 +1032,7 @@
+@@ -885,7 +1101,7 @@
          """取得 {path: scrape_attempted_at} 索引，供 T3 `_should_skip` 冷啟動判斷用（TASK-89b-T1）。
  
          Additive read-only method。回傳的是 {path: int}——**不是** get_mtime_index() 的
@@ -475,6 +720,64 @@
          含 scrape_attempted_at == 0 的 row（不過濾）——呼叫端用 `.get(path, 0) > 0`
          統一判斷「從未試過」（key 不存在或值為 0 皆視為未試過）。
          """
+@@ -988,7 +1204,7 @@
+             cursor.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
+             row = cursor.fetchone()
+             if row:
+-                return Video.from_row(row, self._get_columns())
++                return Video.from_row(row, self._get_columns(conn))
+             return None
+         finally:
+             conn.close()
+@@ -1008,7 +1224,7 @@
+             )
+             row = cursor.fetchone()
+             if row:
+-                return Video.from_row(row, self._get_columns())
++                return Video.from_row(row, self._get_columns(conn))
+             return None
+         finally:
+             conn.close()
+@@ -1044,8 +1260,9 @@
+ 
+             # 建立結果字典（使用原始輸入的 key）
+             result = {}
++            columns = self._get_columns(conn)
+             for row in rows:
+-                video = Video.from_row(row, self._get_columns())
++                video = Video.from_row(row, columns)
+                 if video.number:
+                     # 找到原始輸入的 key
+                     original_key = upper_to_original.get(video.number.upper())
+@@ -1109,7 +1326,8 @@
+                 (actress_name,)
+             )
+             rows = cursor.fetchall()
+-            return [Video.from_row(row, self._get_columns()) for row in rows]
++            columns = self._get_columns(conn)
++            return [Video.from_row(row, columns) for row in rows]
+         except sqlite3.OperationalError:
+             logger.exception(
+                 "get_videos_by_actress json_each failed for %r (returning [])",
+@@ -1146,7 +1364,8 @@
+                 tuple(names)
+             )
+             rows = cursor.fetchall()
+-            return [Video.from_row(row, self._get_columns()) for row in rows]
++            columns = self._get_columns(conn)
++            return [Video.from_row(row, columns) for row in rows]
+         except sqlite3.OperationalError:
+             logger.exception(
+                 "get_videos_by_actress_names json_each failed for %d names (returning [])",
+@@ -1566,7 +1785,7 @@
+                 """,
+                 (escaped + '%', escaped + '%/%'),
+             )
+-            columns = self._get_columns()
++            columns = self._get_columns(conn)
+             return [Video.from_row(row, columns) for row in cursor.fetchall()]
+         finally:
+             conn.close()
 --- a/core/database/version_tracker.py
 +++ b/core/database/version_tracker.py
 @@ -36,7 +36,7 @@

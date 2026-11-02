@@ -14,6 +14,9 @@ import { computeBadges, resolveEnabledIds } from '@/shared/cover-badges.js';
 import { formatPartLabel } from '@/shared/part-label.js';
 import { computeActorAgesMap, singleActorAge } from '@/shared/actress-release-age.js';
 
+export const SHOWCASE_MAX_SERVER_PAGE_SIZE = 500;
+export const SHOWCASE_MOBILE_GRID_PAGE_SIZE = 45;
+
 // 53a codex F3: $persist 對 localStorage 壞 JSON 沒 try/catch（會在 Alpine init 階段拋錯炸整頁），
 // 必須在 Alpine.data 註冊前先清掃壞值，讓 $persist fallback 走預設物件
 (function _safeCleanShowcaseState() {
@@ -298,6 +301,12 @@ export function stateBase() {
         videoCount: 0,        // _videos.length 的 reactive scalar
         filteredCount: 0,     // _filteredVideos.length 的 reactive scalar
         paginatedVideos: [],  // 當前頁顯示的影片
+        _serverPaged: false,  // 目前 _videos 是否只包含服務端的一頁
+        _serverTotal: 0,      // 服務端回傳的完整 group 總數
+        _serverPage: 1,       // 服務端目前頁碼
+        _fullVideosLoaded: false, // true 時 _videos 已是完整集合
+        _videoFetchGeneration: 0, // 防止較慢的舊分頁請求覆蓋新頁
+        _videoFetchAbort: null,
         unreachableSources: [],  // /api/showcase/source-status（unreachable / no_permission）
 
         // Card Info 展開狀態 (M3i)
@@ -349,6 +358,9 @@ export function stateBase() {
                     cleanup: () => {
                         this._animGeneration++;       // B13: 使 pending deferred callback 失效
                         this._lightboxGeneration++;   // B19: invalidate pending $nextTick lightbox callbacks
+                        this._videoFetchGeneration++; // 離頁後丟棄尚未回來的影片清單請求
+                        this._videoFetchAbort?.abort();
+                        this._videoFetchAbort = null;
                         if (this.lightboxCloseTimer) clearTimeout(this.lightboxCloseTimer);  // F2: cleanup delayed clear timer
                         window.Alpine?.store?.('toast')?.hide?.();   // 131b-T3：cleanup 不得拋錯（拋了會跳過後面所有 teardown）
                         if (this.lightboxOpen) document.body.classList.remove('overflow-hidden');
@@ -374,7 +386,10 @@ export function stateBase() {
             this._heroCardReconcilePending = true;   // CD-C5：init 作用域旗標，非持久化
             var heroCardPromise = this.showFavoriteActresses ? Promise.resolve() : this._reconcileHeroCard();  // 單行：pill-hero.test.mjs 以單行 regex 擷取本行並 eval，勿換行
 
-            await this.fetchVideos();
+            await this.fetchVideos({
+                page: savedPage,
+                all: this._shouldLoadAllVideosForInitialFetch(),
+            });
             // 57e hotfix：fire-and-forget warm-up SimilarRankerCache，避免 magic icon 首次點擊 cold-start race。
             // 失敗靜默（端點不存在的舊 server / 網路斷線都不影響 showcase 主流程）。
             fetch('/api/similar/warmup').catch(() => {});
@@ -396,9 +411,14 @@ export function stateBase() {
             await _awaitHeroCardWithTimeout(heroCardPromise);
             this._heroCardReconcilePending = false;   // CD-C5：first-frame 窗口結束
 
-            this.applyFilterAndSort(true);  // M4a: 套用搜尋篩選（跳過 pagination，下面統一處理）
-            // 129-T3 的回頁重算已提前到 restoreState 之後平行啟動（見上），此處不再呼叫
-            this.page = savedPage;          // 恢復儲存的頁碼
+            if (this._fullVideosLoaded) {
+                this.applyFilterAndSort(true);  // M4a: 套用搜尋篩選（跳過 pagination，下面統一處理）
+                // 129-T3 的回頁重算已提前到 restoreState 之後平行啟動（見上），此處不再呼叫
+                this.page = savedPage;          // 恢復儲存的頁碼
+            } else {
+                // 首屏由服務端分頁；不要用當頁資料重算全庫總數。
+                this.page = this._serverPage || savedPage;
+            }
             this.updatePagination();        // 單次分頁（會 clamp 超出範圍的頁碼）
 
             // Settle: 初次載入用 settle（不碰 opacity → 不閃）
@@ -542,7 +562,13 @@ export function stateBase() {
             const defaultOrder = cfg.default_order === 'ascending' ? 'asc' : 'desc';
             // T3.2 P2 fix: `??` 而非 `||` — Settings 允許 items_per_page=0（"全部"語意），
             // 必須保留 numeric 0 讓下方 grid+perPage=0→120 降級邏輯有機會觸發。
-            const defaultPerPage = cfg.items_per_page ?? 90;
+            // The API caps server pages at 500; clamp here so older or
+            // hand-edited configs cannot make the first request fail validation.
+            const rawPerPage = cfg.items_per_page ?? 90;
+            const parsedPerPage = parseInt(rawPerPage, 10);
+            const defaultPerPage = Number.isFinite(parsedPerPage)
+                ? Math.min(SHOWCASE_MAX_SERVER_PAGE_SIZE, Math.max(0, parsedPerPage))
+                : 90;
 
             // 2. 從 _persistedShowcase（$persist 自動讀的 localStorage 'showcase_state'）取
             //    53a-T2: 取代手寫 localStorage.getItem + JSON.parse，格式向後相容
@@ -569,6 +595,14 @@ export function stateBase() {
             // F2: grid + perPage=0 組合降級（settings 若存 items_per_page=0 之防呆）
             if (this.mode === 'grid' && this.perPage === 0) {
                 this.perPage = 120;
+            }
+            // A 90-card mobile page keeps 30 rows of decoded covers alive.
+            // Cap only the phone grid; desktop and table/list keep the configured value.
+            const narrowGrid = typeof window !== 'undefined'
+                && typeof window.matchMedia === 'function'
+                && window.matchMedia('(max-width: 899px)').matches;
+            if (narrowGrid && this.mode === 'grid') {
+                this.perPage = Math.min(this.perPage, SHOWCASE_MOBILE_GRID_PAGE_SIZE);
             }
             // ★ 44a: 女優模式 — 只從 _persistedShowcase，不加 URL params（避免汙染 shareable link）
             this.showFavoriteActresses = state.showFavoriteActresses === true;  // 嚴格 === true

@@ -269,6 +269,37 @@ _FOCAL_CROP_MODE_CASE_SQL = (
     "WHEN videos.crop_mode = 'manual' THEN 'auto' ELSE videos.crop_mode END"
 )
 
+# The showcase list only needs these columns. Keeping the projection explicit
+# avoids pulling migration-only and write-back fields for every card.
+_SHOWCASE_COLUMNS = (
+    'path',
+    'number',
+    'title',
+    'original_title',
+    'actresses',
+    'maker',
+    'director',
+    'series',
+    'label',
+    'tags',
+    'sample_images',
+    'user_tags',
+    'duration',
+    'size_bytes',
+    'cover_path',
+    'release_date',
+    'mtime',
+    'nfo_mtime',
+    'auto_focal',
+    'crop_mode',
+    'user_rating',
+)
+
+
+def _escape_like_prefix(value: str) -> str:
+    """Escape SQLite LIKE wildcards before appending a trailing '%'."""
+    return value.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+
 
 class VideoRepository:
     """影片資料存取層"""
@@ -281,16 +312,19 @@ class VideoRepository:
         """取得資料庫連線"""
         return connection.get_connection(self.db_path)
 
-    def _get_columns(self) -> List[str]:
-        """取得欄位名稱列表（動態從 PRAGMA table_info 取得，確保與 SELECT * 順序一致）"""
+    def _get_columns(self, conn: Optional[sqlite3.Connection] = None) -> List[str]:
+        """取得欄位名稱列表；caller 已有連線時直接重用，避免多開一條。"""
         if self._columns_cache is None:
-            conn = self._get_connection()
+            owns_connection = conn is None
+            if conn is None:
+                conn = self._get_connection()
             try:
                 cursor = conn.cursor()
                 cursor.execute("PRAGMA table_info(videos)")
                 self._columns_cache = [row[1] for row in cursor.fetchall()]
             finally:
-                conn.close()
+                if owns_connection:
+                    conn.close()
         return self._columns_cache
 
     def upsert(self, video: Video) -> int:
@@ -806,7 +840,7 @@ class VideoRepository:
             cursor.execute("SELECT * FROM videos WHERE path = ?", (path,))
             row = cursor.fetchone()
             if row:
-                return Video.from_row(row, self._get_columns())
+                return Video.from_row(row, self._get_columns(conn))
             return None
         finally:
             conn.close()
@@ -817,7 +851,7 @@ class VideoRepository:
             return {}
         conn = self._get_connection()
         try:
-            columns = self._get_columns()
+            columns = self._get_columns(conn)
             result: dict[str, Video] = {}
             for start in range(0, len(paths), 900):
                 chunk = paths[start:start + 900]
@@ -934,7 +968,42 @@ class VideoRepository:
         try:
             cursor.execute("SELECT * FROM videos ORDER BY id")
             rows = cursor.fetchall()
-            return [Video.from_row(row, self._get_columns()) for row in rows]
+            columns = self._get_columns(conn)
+            return [Video.from_row(row, columns) for row in rows]
+        finally:
+            conn.close()
+
+    def get_showcase_rows(self, configured_dir_uris: set[str]) -> List[Video]:
+        """Load the showcase projection only for configured gallery roots.
+
+        The SQL predicate is intentionally a broad prefix prefilter; callers
+        still run ``is_path_under_dir`` afterwards so path boundaries and
+        platform-specific case rules remain identical to the previous Python
+        filter. This removes unrelated DB rows and avoids ``SELECT *`` while
+        preserving the final scope guard.
+        """
+        if not configured_dir_uris:
+            return []
+
+        clauses: List[str] = []
+        params: List[str] = []
+        for dir_uri in sorted(configured_dir_uris):
+            prefix = dir_uri if dir_uri.endswith('/') else dir_uri + '/'
+            clauses.append("(path = ? OR path LIKE ? ESCAPE '\\')")
+            params.extend((dir_uri, _escape_like_prefix(prefix) + '%'))
+
+        columns = ', '.join(_SHOWCASE_COLUMNS)
+        query = (
+            f"SELECT {columns} FROM videos "
+            f"WHERE {' OR '.join(clauses)} ORDER BY id"
+        )
+        conn = self._get_connection()
+        try:
+            cursor = conn.execute(query, params)
+            return [
+                Video.from_row(row, list(_SHOWCASE_COLUMNS))
+                for row in cursor.fetchall()
+            ]
         finally:
             conn.close()
 
@@ -1135,7 +1204,7 @@ class VideoRepository:
             cursor.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
             row = cursor.fetchone()
             if row:
-                return Video.from_row(row, self._get_columns())
+                return Video.from_row(row, self._get_columns(conn))
             return None
         finally:
             conn.close()
@@ -1155,7 +1224,7 @@ class VideoRepository:
             )
             row = cursor.fetchone()
             if row:
-                return Video.from_row(row, self._get_columns())
+                return Video.from_row(row, self._get_columns(conn))
             return None
         finally:
             conn.close()
@@ -1191,8 +1260,9 @@ class VideoRepository:
 
             # 建立結果字典（使用原始輸入的 key）
             result = {}
+            columns = self._get_columns(conn)
             for row in rows:
-                video = Video.from_row(row, self._get_columns())
+                video = Video.from_row(row, columns)
                 if video.number:
                     # 找到原始輸入的 key
                     original_key = upper_to_original.get(video.number.upper())
@@ -1256,7 +1326,8 @@ class VideoRepository:
                 (actress_name,)
             )
             rows = cursor.fetchall()
-            return [Video.from_row(row, self._get_columns()) for row in rows]
+            columns = self._get_columns(conn)
+            return [Video.from_row(row, columns) for row in rows]
         except sqlite3.OperationalError:
             logger.exception(
                 "get_videos_by_actress json_each failed for %r (returning [])",
@@ -1293,7 +1364,8 @@ class VideoRepository:
                 tuple(names)
             )
             rows = cursor.fetchall()
-            return [Video.from_row(row, self._get_columns()) for row in rows]
+            columns = self._get_columns(conn)
+            return [Video.from_row(row, columns) for row in rows]
         except sqlite3.OperationalError:
             logger.exception(
                 "get_videos_by_actress_names json_each failed for %d names (returning [])",
@@ -1713,7 +1785,7 @@ class VideoRepository:
                 """,
                 (escaped + '%', escaped + '%/%'),
             )
-            columns = self._get_columns()
+            columns = self._get_columns(conn)
             return [Video.from_row(row, columns) for row in cursor.fetchall()]
         finally:
             conn.close()

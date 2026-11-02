@@ -26,9 +26,10 @@ import android.widget.TextView;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
-import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -51,11 +52,16 @@ public final class AndroidCfTransport {
     private static final long PAGE_TIMEOUT_MS = 45_000L;
     private static final long FETCH_TIMEOUT_MS = 60_000L;
     private static final long READY_TIMEOUT_MS = 10_000L;
+    private static final long SITE_CREATE_TIMEOUT_MS = 10_000L;
+    private static final List<String> KNOWN_SITES = Arrays.asList(
+            SITE_JAVLIBRARY, "fc-javten"
+    );
 
     private final Activity activity;
     private final FrameLayout root;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final Map<String, SiteView> sites = new HashMap<>();
+    private final Map<String, SiteView> sites = new ConcurrentHashMap<>();
+    private final Object siteCreateLock = new Object();
     private final Map<String, CompletableFuture<String>> pendingFetches =
             new ConcurrentHashMap<>();
 
@@ -68,9 +74,6 @@ public final class AndroidCfTransport {
         this.activity = activity;
         this.root = root;
         createOverlay();
-        sites.put(SITE_JAVLIBRARY, createSiteView(SITE_JAVLIBRARY));
-        // Keep the historical source id spelling used by OpenAver.
-        sites.put("fc-javten", createSiteView("fc-javten"));
     }
 
     public boolean isOverlayVisible() {
@@ -161,11 +164,62 @@ public final class AndroidCfTransport {
     }
 
     private SiteView requireSite(String key) throws TransportException {
-        SiteView site = sites.get(key);
-        if (site == null) {
+        if (!KNOWN_SITES.contains(key)) {
             throw new TransportException("unknown CF site: " + key);
         }
-        return site;
+
+        SiteView existing = sites.get(key);
+        if (existing != null) {
+            return existing;
+        }
+
+        // Site WebViews are intentionally created only when the server first
+        // needs this source. The constructor runs on the main thread, while CF
+        // jobs run on the poller thread, so marshal creation back to the UI
+        // thread and wait for the result.
+        synchronized (siteCreateLock) {
+            existing = sites.get(key);
+            if (existing != null) {
+                return existing;
+            }
+
+            CountDownLatch latch = new CountDownLatch(1);
+            AtomicReference<SiteView> created = new AtomicReference<>();
+            AtomicReference<RuntimeException> failure = new AtomicReference<>();
+            mainHandler.post(() -> {
+                try {
+                    SiteView site = createSiteView(key);
+                    sites.put(key, site);
+                    created.set(site);
+                } catch (RuntimeException exc) {
+                    failure.set(exc);
+                } finally {
+                    latch.countDown();
+                }
+            });
+
+            try {
+                if (!latch.await(SITE_CREATE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                    throw new TransportTimeoutException(
+                            "CF WebView creation timed out"
+                    );
+                }
+            } catch (InterruptedException exc) {
+                Thread.currentThread().interrupt();
+                throw new TransportException("CF WebView creation interrupted");
+            }
+
+            if (failure.get() != null) {
+                throw new TransportException(
+                        "CF WebView creation failed: " + failure.get().getMessage()
+                );
+            }
+            SiteView site = created.get();
+            if (site == null) {
+                throw new TransportException("CF WebView creation returned null");
+            }
+            return site;
+        }
     }
 
     private void ensurePageForUrl(SiteView site, String url) throws TransportException {

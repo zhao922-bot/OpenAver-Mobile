@@ -293,6 +293,51 @@
     gap: 0.75rem;
 }
 
+.settings-appearance-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 8px;
+}
+
+/* The appearance bar is a control surface, not document text. Keep its
+   geometry independent from the user's reading font size. */
+#settings-components .settings-header-actions .font-size-control {
+    height: 40px;
+    box-sizing: border-box;
+    gap: 2px;
+    padding: 2px;
+}
+
+#settings-components .settings-header-actions .font-size-btn {
+    flex: 0 0 34px;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    padding: 0;
+    line-height: 1;
+}
+
+#settings-components .settings-header-actions .settings-locale-toggle .locale-toggle-btn,
+#settings-components .settings-header-actions .settings-theme-toggle .theme-toggle-btn {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    box-sizing: border-box;
+    padding: 0;
+    justify-content: center;
+}
+
+#settings-components .settings-header-actions .settings-locale-toggle .locale-toggle-btn {
+    font-size: 14px;
+    line-height: 1;
+}
+
+#settings-components .settings-header-actions .settings-theme-toggle .theme-toggle-btn i {
+    font-size: 18px;
+    line-height: 1;
+}
+
 /* Locale Toggle Button — 與 theme toggle 同款 */
 .settings-locale-toggle {
     flex-shrink: 0;
@@ -392,21 +437,24 @@
 
     /* P2(Codex): settings-header 換行防溢出（需在 .settings-header base rule 之後，避免被 cascade 覆蓋）*/
 
-    /* Mobile controls scroll with the page; only the global top bar stays fixed. */
+    /* Keep section anchors clear of the global top bar and sticky controls. */
     #settings-components .settings-section {
-        scroll-margin-top: 4.5rem;
+        scroll-margin-top: calc(var(--mobile-topbar-height) + 112px);
     }
 
-    /* The page title is already shown in the global mobile top bar. */
+    /* Keep the appearance controls visible while the form scrolls. The
+       global mobile top bar remains above this secondary settings bar. */
     #settings-components[data-is-android="true"] .settings-header {
-        position: static;
+        position: sticky;
+        top: var(--mobile-topbar-height);
         justify-content: center;
-        padding-bottom: 0.25rem;
-        margin-bottom: 0.25rem;
-        background: transparent;
-        border-bottom: 0;
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        margin-bottom: 8px;
+        background: var(--bg-header);
+        border-bottom: 1px solid var(--stroke-subtle);
+        backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
+        -webkit-backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
     }
 
     #settings-components .settings-header-left {
@@ -415,10 +463,18 @@
 
     #settings-components[data-is-android="true"] .settings-header-actions {
         flex: 1 1 100%;
+        flex-direction: column;
+        align-items: stretch;
+        flex-wrap: nowrap;
         min-width: 0;
-        flex-wrap: wrap;
         justify-content: center;
-        gap: 0.5rem;
+        gap: 8px;
+    }
+
+    #settings-components[data-is-android="true"] .settings-appearance-controls {
+        width: 100%;
+        justify-content: center;
+        gap: 8px;
     }
 
     /* quick-toggle-row 子 form-group：窄屏允許縮小（覆蓋 flex-shrink:0），避免橫向溢出 */
@@ -460,10 +516,56 @@
     gap: 0.5rem;
 }
 
+#settings-components .settings-sources-batchbar-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 #settings-components .settings-sources-probe-summary {
     font-size: 0.82rem;
     color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 768px) {
+    /* Keep the two primary actions on one compact row; status/counter follows
+       beneath so the probe button stays aligned with the segmented control. */
+    #settings-components .settings-sources-batchbar {
+        gap: 8px 12px;
+        padding: 10px 12px;
+    }
+
+    #settings-components .settings-sources-batchbar-left,
+    #settings-components .settings-sources-batchbar-right {
+        flex: 0 0 auto;
+    }
+
+    #settings-components .settings-sources-batchbar-right {
+        margin-left: auto;
+    }
+
+    #settings-components .settings-sources-batchbar-meta {
+        flex: 1 0 100%;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    #settings-components .settings-sources-batchbar .settings-sources-segmented button {
+        padding: 8px 10px;
+        font-size: 13px;
+        line-height: 1;
+    }
+
+    #settings-components .settings-sources-batchbar #sourcesProbeBtn {
+        min-height: 38px;
+        height: 38px;
+        padding: 0 12px;
+        font-size: 13px;
+        line-height: 1;
+    }
 }
 
 /* ─── Cap counter (tabular-nums prevents digit jitter on toggle) ─── */
@@ -1729,7 +1831,7 @@ html.theme-transition-active::view-transition-new(root) {
     border-radius: var(--radius-sm);
 }
 
-/* r18: persistent save state and mobile bottom action bar */
+/* r18: persistent save state and desktop bottom action bar */
 #settings-components .save-btn-wrapper {
     position: sticky;
     bottom: 0.75rem;
@@ -1744,6 +1846,10 @@ html.theme-transition-active::view-transition-new(root) {
     background: color-mix(in oklch, var(--surface-1) 88%, transparent);
     box-shadow: var(--fluent-shadow-8);
     backdrop-filter: blur(16px);
+}
+
+#settings-components .settings-mobile-save {
+    display: none;
 }
 
 #settings-components .save-state {
@@ -1787,25 +1893,48 @@ html.theme-transition-active::view-transition-new(root) {
 
 @media (max-width: 768px) {
     #settingsForm {
-        padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+        padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
     }
 
+    /* Keep save controls in the sticky appearance header. Android 10 WebView
+       can fail to repaint a separate fixed bottom layer after font scaling. */
     #settings-components .save-btn-wrapper {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        margin: 0;
-        padding:
-            0.7rem
-            max(0.9rem, env(safe-area-inset-right, 0px))
-            calc(0.7rem + env(safe-area-inset-bottom, 0px))
-            max(0.9rem, env(safe-area-inset-left, 0px));
-        border-right: 0;
-        border-bottom: 0;
-        border-left: 0;
-        border-radius: 0;
-        box-shadow: 0 -8px 24px color-mix(in oklch, var(--color-base-content) 12%, transparent);
+        display: none;
+    }
+
+    #settings-components .settings-mobile-save {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        gap: 8px;
+        min-width: 0;
+        padding-top: 8px;
+        border-top: 1px solid var(--stroke-subtle);
+    }
+
+    #settings-components .settings-mobile-save .save-state {
+        font-size: 12px;
+    }
+
+    #settings-components .settings-mobile-save.is-dirty .save-state,
+    #settings-components .settings-mobile-save.is-dirty .save-state i {
+        color: var(--color-warning-dark);
+    }
+
+    #settings-components .settings-mobile-save.is-error .save-state,
+    #settings-components .settings-mobile-save.is-error .save-state i {
+        color: var(--color-error);
+    }
+
+    #settings-components .settings-mobile-save-btn {
+        min-height: 40px;
+        height: 40px;
+        padding: 0 14px;
+        font-size: 13px;
+        line-height: 1;
+        white-space: nowrap;
     }
 }
 

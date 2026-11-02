@@ -1,6 +1,29 @@
 --- a/core/config.py
 +++ b/core/config.py
-@@ -220,7 +220,7 @@
+@@ -8,6 +8,7 @@
+ - save_config()                    — 儲存設定至 config.json
+ """
+ 
++import copy
+ import json
+ import shutil
+ import threading
+@@ -36,6 +37,14 @@
+ # asyncio.Lock 保護不到；且 plain Lock（非 RLock）—— public locked / private
+ # unlocked 嚴格分層，鎖內絕不二次 acquire（mutator 契約禁呼 public API）。
+ _config_write_lock = threading.Lock()
++
++# load_config() is a very hot path (gallery cards call it once per image in
++# some flows). Keep the last parsed raw dict in memory, but never expose that
++# object directly: callers are allowed to mutate the dict they receive before
++# save_config()/mutate_config(). The file signature makes hand-edited config
++# files visible without requiring a restart.
++_config_cache: Optional[dict] = None
++_config_cache_signature: Optional[tuple] = None
+ 
+ 
+ class ConfigRootNotFinalizedError(Exception):
+@@ -220,7 +229,7 @@
      sidebar_collapsed: bool = False  # 側邊欄預設收合 (僅影響 Desktop)
      tutorial_completed: bool = False  # 新手引導是否已完成
      font_size: str = "md"  # 全站字體大小: xs, sm, md, lg, xl
@@ -9,7 +32,7 @@
      server_mode: bool = False  # LAN 伺服器模式開關（feature/80）
      close_action: Literal["ask", "tray", "exit"] = "ask"  # 視窗關閉行為（feature/82）
      auto_check_update: bool = True  # 啟動時檢查更新（feature/107）
-@@ -302,345 +302,398 @@
+@@ -302,345 +311,398 @@
          return False
  
  
@@ -724,6 +747,75 @@
              _save_config_unlocked(raw_config)
  
          return raw_config
+@@ -648,10 +710,37 @@
+     return AppConfig().model_dump()
+ 
+ 
++def _config_file_signature() -> tuple:
++    """Return a cheap invalidation key for the current config file."""
++    try:
++        stat = CONFIG_PATH.stat()
++        return (str(CONFIG_PATH), stat.st_mtime_ns, stat.st_size)
++    except OSError:
++        return (str(CONFIG_PATH), None, None)
++
++
++def _store_config_cache(config: dict) -> None:
++    """Store an isolated snapshot after a successful read or write."""
++    global _config_cache, _config_cache_signature
++    _config_cache = copy.deepcopy(config)
++    _config_cache_signature = _config_file_signature()
++
++
++def _load_cached_config_unlocked() -> dict:
++    """Return a copy of the current config, parsing disk only on a cache miss."""
++    signature = _config_file_signature()
++    if _config_cache is not None and _config_cache_signature == signature:
++        return copy.deepcopy(_config_cache)
++
++    raw_config = _load_config_unlocked()
++    _store_config_cache(raw_config)
++    return copy.deepcopy(raw_config)
++
++
+ def load_config() -> dict:
+-    """載入設定，包含自動遷移邏輯和首次啟動初始化（process-wide 序列化）"""
++    """載入設定；未變更時使用記憶體快照（process-wide 序列化）。"""
+     with _config_write_lock:
+-        return _load_config_unlocked()
++        return _load_cached_config_unlocked()
+ 
+ 
+ def _save_config_unlocked(config: dict) -> None:
+@@ -672,6 +761,7 @@
+ 
+     with atomic_write(CONFIG_PATH, mode='w', encoding='utf-8') as f:
+         json.dump(config, f, indent=2, ensure_ascii=False)
++    _store_config_cache(config)
+ 
+ 
+ def save_config(config: dict) -> None:
+@@ -691,16 +781,19 @@
+     mutate_config / reset_config_file）—— 會在已持鎖時二次 acquire → 自我死鎖。
+     """
+     with _config_write_lock:
+-        cfg = _load_config_unlocked()
++        cfg = _load_cached_config_unlocked()
+         mutator(cfg)
+         _save_config_unlocked(cfg)
+ 
+ 
+ def reset_config_file() -> None:
+     """刪除 config.json（恢復原廠）—— 在鎖內檢查 + 刪除，無 exists/unlink TOCTOU。"""
++    global _config_cache, _config_cache_signature
+     with _config_write_lock:
+         if CONFIG_PATH.exists():
+             CONFIG_PATH.unlink()
++        _config_cache = None
++        _config_cache_signature = None
+ 
+ 
+ # ============ Gallery source helpers（feature/88, plan §3）============
 --- a/locales/en.json
 +++ b/locales/en.json
 @@ -26,6 +26,7 @@
@@ -7342,12 +7434,64 @@
 +}
 --- a/web/static/css/pages/settings.css
 +++ b/web/static/css/pages/settings.css
-@@ -392,33 +392,32 @@
+@@ -293,6 +293,51 @@
+     gap: 0.75rem;
+ }
+ 
++.settings-appearance-controls {
++    display: flex;
++    align-items: center;
++    flex-wrap: nowrap;
++    gap: 8px;
++}
++
++/* The appearance bar is a control surface, not document text. Keep its
++   geometry independent from the user's reading font size. */
++#settings-components .settings-header-actions .font-size-control {
++    height: 40px;
++    box-sizing: border-box;
++    gap: 2px;
++    padding: 2px;
++}
++
++#settings-components .settings-header-actions .font-size-btn {
++    flex: 0 0 34px;
++    width: 34px;
++    min-width: 34px;
++    height: 34px;
++    padding: 0;
++    line-height: 1;
++}
++
++#settings-components .settings-header-actions .settings-locale-toggle .locale-toggle-btn,
++#settings-components .settings-header-actions .settings-theme-toggle .theme-toggle-btn {
++    width: 40px;
++    min-width: 40px;
++    height: 40px;
++    box-sizing: border-box;
++    padding: 0;
++    justify-content: center;
++}
++
++#settings-components .settings-header-actions .settings-locale-toggle .locale-toggle-btn {
++    font-size: 14px;
++    line-height: 1;
++}
++
++#settings-components .settings-header-actions .settings-theme-toggle .theme-toggle-btn i {
++    font-size: 18px;
++    line-height: 1;
++}
++
+ /* Locale Toggle Button — 與 theme toggle 同款 */
+ .settings-locale-toggle {
+     flex-shrink: 0;
+@@ -392,34 +437,44 @@
  
      /* P2(Codex): settings-header 換行防溢出（需在 .settings-header base rule 之後，避免被 cascade 覆蓋）*/
  
 -    /* scroll-margin-top 加大：sticky header 換兩列後高度增加，避免遮蓋段頭 */
-+    /* Mobile controls scroll with the page; only the global top bar stays fixed. */
++    /* Keep section anchors clear of the global top bar and sticky controls. */
      #settings-components .settings-section {
 -        scroll-margin-top: 9rem;
 -    }
@@ -7361,29 +7505,22 @@
 -    /* 81b-T2: h4 已包進 .settings-header-left，不再是 .settings-header 直接 flex item。
 -       換行接力改由 .settings-header-left 佔第一列全寬；h4 在 cluster 內仍可佔行（標題獨佔，膠囊/inline 落次行）。 */
 -    .settings-header-left {
--        flex: 1 1 100%;
--        min-width: 0;
--    }
--
--    .settings-header-left h4 {
--        flex: 1 1 100%;
--        min-width: 0;
--    }
--
--    .settings-header-actions {
-+        scroll-margin-top: 4.5rem;
++        scroll-margin-top: calc(var(--mobile-topbar-height) + 112px);
 +    }
 +
-+    /* The page title is already shown in the global mobile top bar. */
++    /* Keep the appearance controls visible while the form scrolls. The
++       global mobile top bar remains above this secondary settings bar. */
 +    #settings-components[data-is-android="true"] .settings-header {
-+        position: static;
++        position: sticky;
++        top: var(--mobile-topbar-height);
 +        justify-content: center;
-+        padding-bottom: 0.25rem;
-+        margin-bottom: 0.25rem;
-+        background: transparent;
-+        border-bottom: 0;
-+        backdrop-filter: none;
-+        -webkit-backdrop-filter: none;
++        padding-top: 8px;
++        padding-bottom: 8px;
++        margin-bottom: 8px;
++        background: var(--bg-header);
++        border-bottom: 1px solid var(--stroke-subtle);
++        backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
++        -webkit-backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
 +    }
 +
 +    #settings-components .settings-header-left {
@@ -7392,18 +7529,96 @@
 +
 +    #settings-components[data-is-android="true"] .settings-header-actions {
          flex: 1 1 100%;
++        flex-direction: column;
++        align-items: stretch;
++        flex-wrap: nowrap;
          min-width: 0;
-         flex-wrap: wrap;
+-    }
+-
+-    .settings-header-left h4 {
+-        flex: 1 1 100%;
+-        min-width: 0;
+-    }
+-
+-    .settings-header-actions {
+-        flex: 1 1 100%;
+-        min-width: 0;
+-        flex-wrap: wrap;
+-        gap: 0.5rem;
 +        justify-content: center;
-         gap: 0.5rem;
++        gap: 8px;
++    }
++
++    #settings-components[data-is-android="true"] .settings-appearance-controls {
++        width: 100%;
++        justify-content: center;
++        gap: 8px;
      }
  
-@@ -1729,3 +1728,97 @@
+     /* quick-toggle-row 子 form-group：窄屏允許縮小（覆蓋 flex-shrink:0），避免橫向溢出 */
+@@ -461,10 +516,56 @@
+     gap: 0.5rem;
+ }
+ 
++#settings-components .settings-sources-batchbar-meta {
++    display: flex;
++    align-items: center;
++    justify-content: flex-end;
++    flex-wrap: wrap;
++    gap: 8px;
++}
++
+ #settings-components .settings-sources-probe-summary {
+     font-size: 0.82rem;
+     color: var(--text-secondary);
+     font-variant-numeric: tabular-nums;
++}
++
++@media (max-width: 768px) {
++    /* Keep the two primary actions on one compact row; status/counter follows
++       beneath so the probe button stays aligned with the segmented control. */
++    #settings-components .settings-sources-batchbar {
++        gap: 8px 12px;
++        padding: 10px 12px;
++    }
++
++    #settings-components .settings-sources-batchbar-left,
++    #settings-components .settings-sources-batchbar-right {
++        flex: 0 0 auto;
++    }
++
++    #settings-components .settings-sources-batchbar-right {
++        margin-left: auto;
++    }
++
++    #settings-components .settings-sources-batchbar-meta {
++        flex: 1 0 100%;
++        justify-content: flex-start;
++        gap: 8px;
++    }
++
++    #settings-components .settings-sources-batchbar .settings-sources-segmented button {
++        padding: 8px 10px;
++        font-size: 13px;
++        line-height: 1;
++    }
++
++    #settings-components .settings-sources-batchbar #sourcesProbeBtn {
++        min-height: 38px;
++        height: 38px;
++        padding: 0 12px;
++        font-size: 13px;
++        line-height: 1;
++    }
+ }
+ 
+ /* ─── Cap counter (tabular-nums prevents digit jitter on toggle) ─── */
+@@ -1729,3 +1830,124 @@
      background: color-mix(in oklch, var(--surface-2) 55%, transparent);
      border-radius: var(--radius-sm);
  }
 +
-+/* r18: persistent save state and mobile bottom action bar */
++/* r18: persistent save state and desktop bottom action bar */
 +#settings-components .save-btn-wrapper {
 +    position: sticky;
 +    bottom: 0.75rem;
@@ -7418,6 +7633,10 @@
 +    background: color-mix(in oklch, var(--surface-1) 88%, transparent);
 +    box-shadow: var(--fluent-shadow-8);
 +    backdrop-filter: blur(16px);
++}
++
++#settings-components .settings-mobile-save {
++    display: none;
 +}
 +
 +#settings-components .save-state {
@@ -7461,25 +7680,48 @@
 +
 +@media (max-width: 768px) {
 +    #settingsForm {
-+        padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
++        padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
 +    }
 +
++    /* Keep save controls in the sticky appearance header. Android 10 WebView
++       can fail to repaint a separate fixed bottom layer after font scaling. */
 +    #settings-components .save-btn-wrapper {
-+        position: fixed;
-+        left: 0;
-+        right: 0;
-+        bottom: 0;
-+        margin: 0;
-+        padding:
-+            0.7rem
-+            max(0.9rem, env(safe-area-inset-right, 0px))
-+            calc(0.7rem + env(safe-area-inset-bottom, 0px))
-+            max(0.9rem, env(safe-area-inset-left, 0px));
-+        border-right: 0;
-+        border-bottom: 0;
-+        border-left: 0;
-+        border-radius: 0;
-+        box-shadow: 0 -8px 24px color-mix(in oklch, var(--color-base-content) 12%, transparent);
++        display: none;
++    }
++
++    #settings-components .settings-mobile-save {
++        display: flex;
++        flex: 0 0 auto;
++        align-items: center;
++        justify-content: space-between;
++        width: 100%;
++        gap: 8px;
++        min-width: 0;
++        padding-top: 8px;
++        border-top: 1px solid var(--stroke-subtle);
++    }
++
++    #settings-components .settings-mobile-save .save-state {
++        font-size: 12px;
++    }
++
++    #settings-components .settings-mobile-save.is-dirty .save-state,
++    #settings-components .settings-mobile-save.is-dirty .save-state i {
++        color: var(--color-warning-dark);
++    }
++
++    #settings-components .settings-mobile-save.is-error .save-state,
++    #settings-components .settings-mobile-save.is-error .save-state i {
++        color: var(--color-error);
++    }
++
++    #settings-components .settings-mobile-save-btn {
++        min-height: 40px;
++        height: 40px;
++        padding: 0 14px;
++        font-size: 13px;
++        line-height: 1;
++        white-space: nowrap;
 +    }
 +}
 +
@@ -9673,7 +9915,27 @@
                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
 --- a/web/static/js/pages/settings/state-config.js
 +++ b/web/static/js/pages/settings/state-config.js
-@@ -88,9 +88,10 @@
+@@ -46,6 +46,7 @@
+ 
+             // Scraper
+             createFolder: true,
++            focalAutoEnabled: true,
+             // 資料夾層級：{id,value}[] 動態清單（外→內，上到下）。load 時 slice(0,3) 正規化
+             // （後端只用前 3 層，CD-95a-7/12）。id 走 naming.layerSeq，x-for :key="layer.id"。
+             folderLayerList: [],
+@@ -76,7 +77,10 @@
+ 
+             // General
+             defaultPage: 'search',
+-            closeAction: 'ask'
++            closeAction: 'ask',
++            theme: 'light',
++            fontSize: 'md',
++            locale: (window.__locale || 'zh-CN')
+         },
+ 
+         // GET /api/config 的 response-only 解析值（不入 saveConfig payload）
+@@ -88,9 +92,10 @@
          cfWindowProxyRestartNeeded: false,
  
          // ===== i18n State =====
@@ -9685,7 +9947,12 @@
          serverMode: false,
          lanIp: '',
          // 168c-T4：「這台電腦」兩格（viewerPlayer／closeAction）的讀寫路由。
-@@ -133,6 +134,8 @@
+@@ -130,9 +135,13 @@
+ 
+         // ===== Dirty Check State =====
+         savedState: null,
++        savedSources: null,
++        savedMetatubeEnabled: false,
          savedOpenaiUseCustomModel: false,
          pendingNavigationUrl: '',
          _configLoading: true,  // 初始 true，loadConfig 完成後 false
@@ -9694,10 +9961,36 @@
          // 95a-T8: filename 膠囊編輯器收斂式 hydrate 就緒旗標（響應式鏡像，供 x-effect 追蹤；
          // naming.ready 是 closure 布林、非響應式，x-effect 追不到）。loadConfig 開頭重設 false、
          // form 設妥後翻 true；由 hydrateFilenameEditor() 讀取觸發 reactive 補載。
-@@ -211,6 +214,18 @@
-                 || this.openaiUseCustomModel !== this.savedOpenaiUseCustomModel;
+@@ -204,11 +213,41 @@
          },
  
+         // ===== Computed Properties =====
++        _sourceSnapshot() {
++            // Only persisted source fields belong in dirty comparison. Runtime
++            // probe fields such as `available` change independently of the form.
++            return this.sources.map((s, index) => ({
++                id: s.id,
++                type: s.type,
++                display_name_key: s.type === 'builtin' ? s.display_name : (s.display_name_key || ''),
++                display_name_raw: s.type === 'metatube' ? s.display_name : '',
++                enabled: s.enabled,
++                order: index,
++                config: s.config || {},
++                is_beta: s.is_beta,
++                manual_only: s.manual_only,
++            }));
++        },
++
+         get isDirty() {
+             if (this._configLoading) return false;
+             if (!this.savedState) return false;
+             return JSON.stringify(this.form) !== JSON.stringify(this.savedState)
+-                || this.openaiUseCustomModel !== this.savedOpenaiUseCustomModel;
++                || this.openaiUseCustomModel !== this.savedOpenaiUseCustomModel
++                || JSON.stringify(this._sourceSnapshot()) !== JSON.stringify(this.savedSources)
++                || this.metatubeEnabled !== this.savedMetatubeEnabled;
++        },
++
 +        get saveStatusText() {
 +            if (this._configLoading) return window.t('settings.save_bar.loading');
 +            if (this._configError) return window.t('ui_state.error_title');
@@ -9708,28 +10001,144 @@
 +
 +        get saveButtonDisabled() {
 +            return this._configLoading || this._configSaving || !this.isDirty;
-+        },
-+
+         },
+ 
          // 命名預覽（依 data 套範例值）。誠實反映後端空值行為（U-A2）：空變數 → 空字串，
-         // 殘留分隔符照實呈現、不美化（folderPreviewTextEmpty 用空 actor/suffix 展示）。
-         _previewWith(data) {
-@@ -353,6 +368,7 @@
+@@ -299,7 +338,7 @@
+             const censored = this.sources.filter(s => this.CENSORED_SOURCES.includes(s.id));
+             return censored.length > 0 && censored.every(s => !s.enabled);
+         },
+-        // setter(true) = batch 停用 4 個有碼來源後 saveConfig。
++        // setter(true) = batch 停用 4 個有碼來源，等待儲存按鈕提交。
+         // setter(false) = NO-OP + transient hint（EC-2：off 不自動重開有碼，由使用者手動重啟任一有碼 pill）。
+         set uncensoredMode(v) {
+             if (v === true) {
+@@ -308,7 +347,6 @@
+                         s.enabled = false;
+                     }
+                 });
+-                this.saveConfig();
+             } else {
+                 this._flashUncensoredOffHint();
+             }
+@@ -353,6 +391,9 @@
              // 80a-T3: 讀 data-lan-ip attribute（T2 注入 template context）
              this.lanIp = this.$el?.dataset?.lanIp || '';
              this.shellMode = this.$el?.dataset?.shellMode || '';
 +            this.isAndroid = this.$el?.dataset?.isAndroid === 'true';
++            this.form.focalAutoEnabled =
++                this.$el?.dataset?.focalAutoEnabled !== 'false';
  
              this.loadConfig().then(() => {
                  // B1: init scanner link state after config loaded
-@@ -665,6 +681,7 @@
+@@ -389,29 +430,20 @@
+         },
+ 
+         // ===== Methods =====
+-        async cycleLocale() {
+-            if (this.isDirty) {
+-                // eslint-disable-next-line no-alert -- cycleLocale dirty-check confirm, backlog migration to fluent-modal, reviewed 2026-05-03
+-                if (!confirm(window.t('settings.dirty_modal.locale_switch_confirm'))) return;
+-            }
++        setFontSize(size) {
++            this.form.fontSize = size;
++            const root = window.Alpine && typeof window.Alpine.$data === 'function'
++                ? window.Alpine.$data(document.documentElement)
++                : null;
++            if (root) root.fontSize = size;
++        },
++
++        cycleLocale() {
+             const order = ['zh-TW', 'zh-CN', 'ja', 'en'];
+-            const idx = order.indexOf(this.locale);
++            const idx = order.indexOf(this.form.locale || this.locale);
+             const next = order[(idx + 1) % order.length];
+-            try {
+-                const resp = await fetch('/api/config/general/locale', {
+-                    method: 'PUT',
+-                    headers: { 'Content-Type': 'application/json' },
+-                    body: JSON.stringify({ value: next })
+-                });
+-                const result = await resp.json();
+-                if (result.success) {
+-                    location.reload();
+-                } else {
+-                    console.warn('[i18n] cycleLocale failed:', result.error);
+-                }
+-            } catch (e) {
+-                console.error('[i18n] cycleLocale error:', e);
+-            }
++            this.form.locale = next;
++            this.locale = next;
+         },
+ 
+         // 80a-T3: Server Mode methods ─────────────────────────────────────────
+@@ -484,13 +516,7 @@
+                 this.showToast(window.t(val ? 'settings.server_info.toggle_failed' : 'settings.server_info.disable_failed'), 'error');
+             }
+         },
+-        // 不用 base.html configSync：那是外觀同步（debounce/keepalive/吞錯）；這一顆是有行為後果的決定，失敗必須把 checkbox 撥回。
+-        async setFocalDeviceDisabled(event) {
+-            // checked = 啟用；端點 value = disabled → 取反
+-            // await 前快照（同 saveAccessAuth 家規）：event 觸發時 checkbox 已是按下去後的新值，
+-            // 失敗要退回按之前，所以回滾寫 !submittedChecked，不是 submittedChecked。
+-            const submittedChecked = event.target.checked;
+-            const disabled = !submittedChecked;
++        async _saveFocalDeviceDisabled(disabled, notifyOnError = true) {
+             try {
+                 const resp = await fetch('/api/config/focal-device/disabled', {
+                     method: 'PUT',
+@@ -498,16 +524,18 @@
+                     body: JSON.stringify({ value: disabled })
+                 });
+                 const result = await resp.json();
+-                if (!result.success) {
+-                    console.warn('[focalDevice] setFocalDeviceDisabled failed:', result.error);
++                if (result.success) return true;
++                console.warn('[focalDevice] save failed:', result.error);
++                if (notifyOnError) {
+                     this.showToast(window.t('settings.scraper.focal_toggle_failed'), 'error');
+-                    event.target.checked = !submittedChecked;
+                 }
+             } catch (e) {
+-                console.warn('[focalDevice] setFocalDeviceDisabled error:', e);
+-                this.showToast(window.t('settings.scraper.focal_toggle_failed'), 'error');
+-                event.target.checked = !submittedChecked;
+-            }
++                console.warn('[focalDevice] save error:', e);
++                if (notifyOnError) {
++                    this.showToast(window.t('settings.scraper.focal_toggle_failed'), 'error');
++                }
++            }
++            return false;
+         },
+         async saveAccessAuth() {
+             this.accessAuthSaving = true;
+@@ -665,8 +693,10 @@
          async loadConfig() {
              // 鎖定表單（載入期間不可操作）
              this._configLoading = true;
 +            this._configError = '';
              // 清空快照（載入期間不判定 dirty）
              this.savedState = null;
++            this.savedSources = null;
              // 95a-T8: 對稱重設 hydrate 旗標（reset 設定 / 重跑 loadConfig 時需重新 hydrate，
-@@ -795,38 +812,40 @@
+             // 否則 one-shot 會擋住 filename editor 的重新載入）。
+             this.namingConfigReady = false;
+@@ -789,44 +819,53 @@
+                     this.form.viewerPlayer = config.showcase?.player || '';
+ 
+                     // General
++                    this.form.theme = config.general?.theme || 'light';
++                    this.theme = this.form.theme;
++                    this.form.fontSize = config.general?.font_size || 'md';
++                    this.fontSize = this.form.fontSize;
++                    this.form.locale = config.general?.locale || this.locale || 'zh-CN';
++                    this.locale = this.form.locale;
++                    this.form.focalAutoEnabled = config.focal_device?.disabled !== true;
+                     let defaultPage = config.general?.default_page || 'search';
+                     if (defaultPage === 'gallery') defaultPage = 'scanner';  // 向後兼容
+                     this.form.defaultPage = defaultPage;
                      this.form.closeAction = config.general?.close_action || 'ask';
                      // sidebar_collapsed 已移除（由 Alpine $persist + localStorage 驅動）
  
@@ -9798,7 +10207,23 @@
                      }
  
                      // Sources（61c-2）：讀 config.sources 段填入 unified scope。
-@@ -886,9 +905,12 @@
+@@ -850,6 +889,7 @@
+                             available: s.available ?? (s.type !== 'metatube'),  // builtins default available; metatube waits for /status
+                         }))
+                         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
++                    this.savedSources = this._sourceSnapshot();
+ 
+                     // 建立初始快照（dirty check 基準）— 必須在解鎖前建立
+                     this.savedState = JSON.parse(JSON.stringify(this.form));
+@@ -875,6 +915,7 @@
+ 
+                     // Hydrate metatube fields from config + /status (CD-63b-3)
+                     this.metatubeEnabled = config.metatube?.enabled || false;
++                    this.savedMetatubeEnabled = this.metatubeEnabled;
+                     this.metatubeServerUrl = config.metatube?.url || '';
+                     this.metatubeToken = config.metatube?.token || '';
+                     this.metatubeLanMode = !!config.metatube?.allow_lan;   // hydrate LAN opt-in so re-connect doesn't fail SSRF (Codex P2)
+@@ -886,9 +927,12 @@
                      if (ollamaUrl && config.translate.provider === 'ollama') {
                          this.loadOllamaModels(ollamaUrl, ollamaModel);  // 不 await
                      }
@@ -9811,7 +10236,7 @@
              } finally {
                  this._configLoading = false;
              }
-@@ -944,33 +966,40 @@
+@@ -944,37 +988,71 @@
  
          // 168c-T4：伺服器 + 這台電腦各存各的；互不阻擋。
          async saveConfig() {
@@ -9848,8 +10273,22 @@
 +                const localChanged = this.localMachineState === 'ready'
 +                    && localDiff(this.form, this._localSaved).length > 0;
 +                const patch = localChanged ? buildLocalPatch(this.form) : null;
++                const previousLocale = this.savedState?.locale;
++                const previousFontSize = this.savedState?.fontSize;
 +                const serverOk = await this._saveServerConfig();
-+                if (!localChanged) return serverOk;
++                if (!localChanged) {
++                    if (
++                        serverOk
++                        && (
++                            (previousLocale && previousLocale !== this.form.locale)
++                            || (previousFontSize && previousFontSize !== this.form.fontSize)
++                        )
++                        && !this.pendingNavigationUrl
++                    ) {
++                        setTimeout(() => location.reload(), 250);
++                    }
++                    return serverOk;
++                }
 +                const reply = await callBridge('local_settings_save', patch);
 +                const localOk = !!reply && reply.ok === true;
 +                if (localOk) {
@@ -9872,17 +10311,203 @@
 +                        msg = window.t('settings.toast.local_failed_server_failed'); break;
 +                }
 +                if (msg) this.showToast(msg, serverOk && localOk ? 'success' : 'error');
-+                return serverOk && localOk;
++                const saved = serverOk && localOk;
++                if (
++                    saved
++                    && (
++                        (previousLocale && previousLocale !== this.form.locale)
++                        || (previousFontSize && previousFontSize !== this.form.fontSize)
++                    )
++                    && !this.pendingNavigationUrl
++                ) {
++                    setTimeout(() => location.reload(), 250);
++                }
++                return saved;
 +            } finally {
 +                this._configSaving = false;
 +            }
          },
  
          async _saveServerConfig() {
-@@ -1690,33 +1719,6 @@
-             await this.saveConfig();
+             let saved = false;  // PUT 成功即 true（回傳給 saveConfig 包裝）
++            let focalNeedsRevert = false;
++            let prevFocalAutoEnabled = null;
+             try {
+                 // 先載入現有設定
+                 const currentResp = await fetch('/api/config');
+@@ -987,6 +1065,13 @@
+                 // 71-T5: 存檔前的「已持久化」縮圖快取狀態（authoritative：剛從 server GET 的 config.json）。
+                 // 用來在 PUT 成功後判定「這次儲存是否剛把它從開變關」→ 才清空 output/thumb/（現在只有 disable 半在用）。
+                 const prevThumbEnabled = config.thumbnail_cache_enabled === true;
++                const prevMetatubeEnabled = config.metatube?.enabled === true;
++                prevFocalAutoEnabled = config.focal_device?.disabled !== true;
++                if (prevFocalAutoEnabled !== this.form.focalAutoEnabled) {
++                    const focalOk = await this._saveFocalDeviceDisabled(!this.form.focalAutoEnabled);
++                    if (!focalOk) return false;
++                    focalNeedsRevert = true;
++                }
+                 // 90c-T6: 存前「已持久化」的 strm 映射（authoritative：剛 GET 的 config.json）。
+                 // PUT 成功後與新映射比對，判定「這次儲存是否改動了路徑規則」→ 才提示改寫既有 strm。
+                 const prevStrmMappings = JSON.stringify(config.scraper?.strm_path_mappings || {});
+@@ -1118,8 +1203,11 @@
+                 config.general = {
+                     ...config.general,
+                     default_page: this.form.defaultPage,
+-                    theme: this.theme || document.documentElement.getAttribute('data-theme') || 'light'
+-                    // theme / sidebar_collapsed 由 base.html $watch 即時同步，此處僅隨整體設定一併寫入
++                    theme: this.form.theme || this.theme || document.documentElement.getAttribute('data-theme') || 'light',
++                    font_size: this.form.fontSize || 'md',
++                    locale: this.form.locale || this.locale || 'zh-CN',
++                    // Settings appearance controls are live previews; this PUT is
++                    // their only persistence path while the settings page is open.
+                 };
+ 
+                 // 168c-T4：showcase.player／general.close_action 依四態決定寫 form 還是保留 GET 原值
+@@ -1149,12 +1237,18 @@
+                 });
+                 const result = await resp.json();
+                 if (result.success) {
++                    focalNeedsRevert = false;
+                     saved = true;
+                     this.cfWindowProxyRestartNeeded = result.cf_window_proxy_restart_needed === true;
+                     this.showToast(window.t('settings.toast.config_saved'), 'success');
+                     // 更新快照（避免儲存後仍為 dirty）
+                     this.savedState = JSON.parse(JSON.stringify(this.form));
++                    this.savedSources = this._sourceSnapshot();
++                    this.savedMetatubeEnabled = this.metatubeEnabled;
+                     this.savedOpenaiUseCustomModel = this.openaiUseCustomModel;
++                    if (prevMetatubeEnabled && !this.metatubeEnabled && this.metatubeConnected) {
++                        await this.metatubeDisconnect();
++                    }
+                     // 71b-T2: 縮圖快取「剛被關閉」(persisted true → 現在 false) 才清空 output/thumb/。
+                     // 必在 PUT 成功之後——先存才清（config.json 已寫 false）。confirmThumbCacheDisable
+                     // 自身不 POST clear，統一收斂於此。
+@@ -1185,21 +1279,30 @@
+                             this.showToast(window.t('settings.scraper.strm_mapping.rewrite_failed'), 'error');
+                         }
+                     }
+-                } else if (result.reason === 'generate_in_progress_strm_mapping') {
+-                    // PR #93 五審三次 P2：掃描/產生進行中改到 strm 播放映射被後端擋下。
+-                    // 直接顯示後端訊息（非「儲存失敗」誤導前綴）——這是「稍後再試」而非錯誤。
+-                    this.showToast(result.error, 'warning');
+-                } else if (result.reason === 'gallery_output_in_program_area') {
+-                    // TASK-153b-T3：輸出目錄落在程式區被擋——請使用者改選位置，非「儲存失敗」。
+-                    this.showToast(result.error, 'warning');
+-                } else if (result.reason === 'nfo_title_format_invalid') {
+-                    // TASK-154b-T4：NFO 標題格式驗證失敗——原樣顯示後端訊息（同 gallery 前例）。
+-                    this.showToast(result.error, 'warning');
+                 } else {
+-                    this.showToast(window.t('settings.toast.save_failed', { error: result.error }), 'error');
++                    if (focalNeedsRevert) {
++                        await this._saveFocalDeviceDisabled(!prevFocalAutoEnabled, false);
++                        focalNeedsRevert = false;
++                    }
++                    if (result.reason === 'generate_in_progress_strm_mapping') {
++                        // PR #93 五審三次 P2：掃描/產生進行中改到 strm 播放映射被後端擋下。
++                        // 直接顯示後端訊息（非「儲存失敗」誤導前綴）——這是「稍後再試」而非錯誤。
++                        this.showToast(result.error, 'warning');
++                    } else if (result.reason === 'gallery_output_in_program_area') {
++                        // TASK-153b-T3：輸出目錄落在程式區被擋——請使用者改選位置，非「儲存失敗」。
++                        this.showToast(result.error, 'warning');
++                    } else if (result.reason === 'nfo_title_format_invalid') {
++                        // TASK-154b-T4：NFO 標題格式驗證失敗——原樣顯示後端訊息（同 gallery 前例）。
++                        this.showToast(result.error, 'warning');
++                    } else {
++                        this.showToast(window.t('settings.toast.save_failed', { error: result.error }), 'error');
++                    }
+                 }
+                 return saved;
+             } catch (e) {
++                if (focalNeedsRevert) {
++                    await this._saveFocalDeviceDisabled(!prevFocalAutoEnabled, false);
++                }
+                 this.showToast(window.t('settings.toast.save_failed', { error: e.message }), 'error');
+                 return saved;
+             }
+@@ -1249,9 +1352,9 @@
          },
  
+         // ===== Thumbnail Cache Toggle Handler + Disable Modal (71b-T2) =====
+-        // toggle @change 攔截（鏡像 onMetatubeEnabledChange）。x-model 先翻值，
++        // toggle @change 攔截。x-model 先翻值，
+         // 故進來時 this.form.thumbnailCacheEnabled 已是使用者撥到的新值。
+-        // OFF→ON 直接存檔，不再開 modal（CD-150b-6）；ON→OFF 仍攔截開 disable modal（Codex P2 #1，逐字不變）。
++        // OFF→ON 不再開 modal（CD-150b-6）；ON→OFF 仍攔截開 disable modal。
+         async onThumbCacheToggleChange() {
+             // x-model 已先翻值 → 進來時 form.thumbnailCacheEnabled 已是使用者撥到的新值。
+             if (this.form.thumbnailCacheEnabled !== true) {
+@@ -1267,10 +1370,8 @@
+             }
+             // persisted 已 true（未存的 OFF 後撥回 ON）：不開 modal，讓 toggle 照常變 true。
+             if (this.savedState?.thumbnailCacheEnabled === true) return;
+-            // 真正首次開啟（persisted false）：不再開確認視窗，直接存檔
+-            //（CD-150b-6：原本確認視窗按下「確認」時做的兩件事 inline 於此）。
++            // 真正首次開啟（persisted false）：不再開確認視窗，保留為草稿。
+             this.form.thumbnailCacheEnabled = true;
+-            await this.saveConfig();
+         },
+ 
+         // 71b-T2: 關閉確認取消 → 關 modal、toggle 維持 true（保持啟用）；不存檔、不清快取。
+@@ -1278,13 +1379,10 @@
+             this.thumbCacheDisableConfirmOpen = false;
+         },
+ 
+-        // 71b-T2: 關閉確認 → 關 modal → set false → saveConfig()
+-        //（命中 saveConfig 內 prevThumbEnabled && now false 鏈 → 背景 _triggerThumbClear()；
+-        // 自身不 POST clear，先存才清）。
++        // 71b-T2: 關閉確認 → 關 modal → set false；實際清除快取仍由儲存按鈕觸發。
+         async confirmThumbCacheDisable() {
+             this.thumbCacheDisableConfirmOpen = false;
+             this.form.thumbnailCacheEnabled = false;
+-            await this.saveConfig();
+         },
+ 
+         // ===== 命名區膠囊編輯器（feature/95 Part A）=====
+@@ -1518,7 +1616,7 @@
+         },
+ 
+         // Builtin：原地翻轉 enabled（膠囊留 Active Row、停用 = inline 刪除線）。
+-        // cap 滿且要 enable → _flashCapAlert() return。翻轉後 saveConfig 即時 persist。
++        // cap 滿且要 enable → _flashCapAlert() return。翻轉結果保留為草稿。
+         toggleBuiltin(id) {
+             const s = this.sources.find(x => x.id === id);
+             if (!s || s.type !== 'builtin') return;
+@@ -1527,7 +1625,6 @@
+                 return;
+             }
+             s.enabled = !s.enabled;
+-            this.saveConfig();
+         },
+ 
+         // Promote：Parts Bin → Active Row（enabled=true）。cap 檢查。splice 移到陣列末尾
+@@ -1555,7 +1652,6 @@
+                 const [moved] = this.sources.splice(idx, 1);
+                 this.sources.push(moved);
+             }
+-            this.saveConfig();
+         },
+ 
+         // Demote：Active Row → Parts Bin（enabled=false）。
+@@ -1563,7 +1659,6 @@
+             const s = this.sources.find(x => x.id === id);
+             if (!s || s.type !== 'metatube') return;
+             s.enabled = false;
+-            this.saveConfig();
+         },
+ 
+         // 斷線 metatube 點擊：toast 提示重連，無 state mutation（EC-9）。
+@@ -1682,41 +1777,6 @@
+             }
+         },
+ 
+-        // ─── Toggle callback (CD-63b-3) ───────────────────────────────
+-        async onMetatubeEnabledChange() {
+-            if (!this.metatubeEnabled && this.metatubeConnected) {
+-                await this.metatubeDisconnect();
+-            }
+-            await this.saveConfig();
+-        },
+-
 -        // TODO(B4): remove metatube mock providers after B3 lands （CD-61-13）
 -        // 手動瀏覽器驗證用：console 呼叫 `$data._injectMetatubeMockProviders()` 注入 30 個
 -        // mock metatube provider（available=true，未啟用 → 全進 Parts Bin），驗證摺疊清單
@@ -9913,6 +10538,46 @@
          // 全開：builtin 先（依序），到 cap 即 break；不碰 metatube / manual_only。
          enableAllToCap() {
              for (const s of this.sources) {
+@@ -1725,7 +1785,6 @@
+                 if (this.enabledCount >= MAX_ENABLED_SOURCES) break;
+                 s.enabled = true;
+             }
+-            this.saveConfig();
+         },
+ 
+         _flashCapAlert() {
+@@ -1771,7 +1830,6 @@
+             const insertAt = srcIdx < tgtIdx ? tgtIdx - 1 : tgtIdx;
+             this.sources.splice(insertAt, 0, moved);
+             this.onDragEnd();
+-            this.saveConfig();
+         },
+ 
+         // ═══════════════════════════════════════════════════════════════
+@@ -1785,9 +1843,8 @@
+             if (!src) return;
+             if (!this.isDraggable(src)) { this.clickActiveRowPill(src); return; }
+             if (this._grabbedId === src.id) {
+-                // 放下 → persist
++                // 放下：保留為草稿，等待使用者按下「保存设置」。
+                 this._grabbedId = null;
+-                this.saveConfig();
+             } else {
+                 this._grabbedId = src.id;
+             }
+@@ -1807,11 +1864,10 @@
+             this.sources.splice(targetIdx, 0, moved);
+         },
+ 
+-        // Escape 取消拾起（位置已即時移動，此處僅釋放 grab 並 persist 當前序）。
++        // Escape 取消拾起；目前排序保留為草稿。
+         onPillEscape() {
+             if (this._grabbedId !== null) {
+                 this._grabbedId = null;
+-                this.saveConfig();
+             }
+         },
+     };
 --- a/web/static/js/pages/settings/main.js
 +++ b/web/static/js/pages/settings/main.js
 @@ -1,4 +1,4 @@
@@ -9923,7 +10588,19 @@
  import { stateSourceProbe }  from '@/settings/state-source-probe.js';
 --- a/web/static/js/pages/showcase/state-actress.js
 +++ b/web/static/js/pages/showcase/state-actress.js
-@@ -183,7 +183,6 @@
+@@ -52,6 +52,11 @@
+             return;
+         }
+         var acts = data.actresses || [];
++        acts.forEach(function (actress, index) {
++            // Match the video wall: eager for the first visible row, then a
++            // bounded x-intersect image window for the rest of the actress wall.
++            actress._photoRequested = index < 8;
++        });
+         _setActresses(acts);
+         // 45: alias map（冪等，init 可能已載入）
+         await _loadAliasMap();
+@@ -183,7 +188,6 @@
          _heroCardImageError: false,
          _heroCardImageLoaded: false,   // 67-A3: hero actress photo 載入旗標（獨立於 video _imgLoaded，CD-67-4）
          _fetchSamplesLoading: false,
@@ -10009,7 +10686,35 @@
          // 復原：只用按下當下的 snapshot 與當時捕獲的那一片；不佔 _lbTrInFlight（plan 已接受的併發 residual）
 --- a/web/static/js/pages/showcase/state-lightbox.js
 +++ b/web/static/js/pages/showcase/state-lightbox.js
-@@ -369,7 +369,6 @@
+@@ -205,7 +205,26 @@
+         },
+ 
+         // --- Lightbox (M3a) ---
+-        openLightbox(index) {
++        async openLightbox(index) {
++            // The normal browse path only has the current server page in memory.
++            // Load the complete collection before opening the lightbox so
++            // prev/next, similar-mode, and detail refresh keep their original
++            // cross-page semantics. The click target is remapped by path.
++            if (this._serverPaged && !this._fullVideosLoaded && !this.showFavoriteActresses) {
++                var clickedVideo = _filteredVideos[index];
++                var clickedPath = clickedVideo ? clickedVideo.path : '';
++                var loaded = await this._ensureFullVideos();
++                if (!loaded) return;
++                this.applyFilterAndSort(true);
++                if (clickedPath) {
++                    var fullIndex = _filteredVideos.findIndex(function (video) {
++                        return video.path === clickedPath;
++                    });
++                    if (fullIndex >= 0) index = fullIndex;
++                }
++                this.updatePagination();
++            }
++
+             // F2: cancel pending delayed clear from previous close
+             if (this.lightboxCloseTimer) {
+                 clearTimeout(this.lightboxCloseTimer);
+@@ -369,7 +388,6 @@
  
              this.addingLbTag = false;    // 關閉 lightbox 時重置 user tag 輸入框
              this._resetMask();           // 98b-T4：關燈箱丟棄未提交遮罩態（不 commit）
@@ -10017,7 +10722,7 @@
  
              // ★ C11: fly-back — 必須在 generation++ / lightboxOpen = false 之前捕獲
              // 56c-fix-v3: standalone similar-exit（similarExitVideo set，lightboxIndex 仍是進 similar mode 前舊值）
-@@ -912,19 +911,42 @@
+@@ -912,19 +930,42 @@
                      headers: { 'Content-Type': 'application/json' },
                      body: JSON.stringify({ file_path: video.path, number: video.number })
                  });
@@ -10070,7 +10775,295 @@
              }
 --- a/web/static/js/pages/showcase/state-videos.js
 +++ b/web/static/js/pages/showcase/state-videos.js
-@@ -877,6 +877,8 @@
+@@ -6,7 +6,7 @@
+  * 從 state-base.js import 共用大陣列（F1：移出 Alpine reactive scope）。
+  */
+ 
+-import { _videos, _filteredVideos, _nameToGroup, _tagToGroup, _setVideos, _setFilteredVideos, _recomputeAllBadges, _recomputeCardActorAges } from '@/showcase/state-base.js';
++import { SHOWCASE_MAX_SERVER_PAGE_SIZE, _videos, _filteredVideos, _nameToGroup, _tagToGroup, _setVideos, _setFilteredVideos, _recomputeAllBadges, _recomputeCardActorAges } from '@/showcase/state-base.js';
+ import { applyCellFocal } from '@/shared/focal-cell.js';
+ import { openLocal } from '@/shared/open-local.js';
+ import { notifyOpenResult } from '@/shared/bridge-notify.js';
+@@ -30,6 +30,10 @@
+     return { has: t != null, raw: t };
+ }
+ 
++// One shared full-list request prevents rapid search/pill changes from
++// starting duplicate network + JSON parses while the first one is in flight.
++var _fullVideosPromise = null;
++
+ export function stateVideos() {
+     return {
+ 
+@@ -38,28 +42,75 @@
+         // gotcha：naturalWidth 在 decode 完成前恆為 0，reactive binding 不會因 load 事件重跑）---
+         applyCellFocal,
+ 
++        _shouldLoadAllVideosForInitialFetch() {
++            return this.sort === 'random'
++                || Number(this.perPage) === 0
++                || String(this.search || '').trim() !== ''
++                || (Array.isArray(this.pills) && this.pills.length > 0);
++        },
++
+         // --- API 呼叫 ---
+-        async fetchVideos() {
++        async fetchVideos(options) {
++            options = options || {};
++            const requestId = ++this._videoFetchGeneration;
++            if (this._videoFetchAbort) this._videoFetchAbort.abort();
++            const abortController = new AbortController();
++            this._videoFetchAbort = abortController;
+             this.loading = true;
+             this.error = '';
+             try {
+-                const resp = await fetch('/api/showcase/videos');
++                const requestedPerPage = Math.min(
++                    SHOWCASE_MAX_SERVER_PAGE_SIZE,
++                    Math.max(0, parseInt(this.perPage) || 0)
++                );
++                const loadAll = options.all === true
++                    || requestedPerPage === 0
++                    || this.sort === 'random';
++                const requestedPage = Math.max(
++                    1,
++                    parseInt(options.page ?? this.page ?? 1) || 1
++                );
++                const params = new URLSearchParams();
++                if (loadAll) {
++                    params.set('paged', 'false');
++                } else {
++                    params.set('paged', 'true');
++                    params.set('page', String(requestedPage));
++                    params.set('per_page', String(requestedPerPage));
++                    params.set('sort', this.sort);
++                    params.set('order', this.order);
++                }
++                const query = params.toString();
++                const resp = await fetch(
++                    '/api/showcase/videos' + (query ? '?' + query : ''),
++                    { signal: abortController.signal }
++                );
++                if (requestId !== this._videoFetchGeneration) return false;
+                 if (!resp.ok) {
+                     _videos.length = 0;
+                     this.videoCount = 0;
+                     _filteredVideos.length = 0;
+                     this.filteredCount = 0;
++                    this._serverPaged = false;
++                    this._serverTotal = 0;
++                    this._serverPage = 1;
++                    this._fullVideosLoaded = false;
+                     this.error = window.t('showcase.error.server_error', { status: resp.status });
+-                    return;
++                    return false;
+                 }
+                 const data = await resp.json();
++                if (requestId !== this._videoFetchGeneration) return false;
+                 if (!data.success) {
+                     _videos.length = 0;
+                     this.videoCount = 0;
+                     _filteredVideos.length = 0;
+                     this.filteredCount = 0;
++                    this._serverPaged = false;
++                    this._serverTotal = 0;
++                    this._serverPage = 1;
++                    this._fullVideosLoaded = false;
+                     this.error = data.error || window.t('showcase.error.load_failed');
+-                    return;
++                    return false;
+                 }
+                 // Re-assign module-level var via splice/push to keep the same reference
+                 // (core.js uses direct assignment; ESM re-exports work because we read
+@@ -68,31 +119,76 @@
+                 // 67-A2: per-card 三態旗標。video 物件由此唯一來源流穿整條 render 鏈
+                 // （_videos → _filteredVideos → paginatedVideos slice，皆同 ref），故初始化一處即涵蓋
+                 // 初次載入/retry/翻頁/搜尋/排序；後端不回此欄位。補封面走 refreshVideoData reset。
+-                vids.forEach(function (v) { if (v._imgLoaded === undefined) v._imgLoaded = false; if (v._coverRequested === undefined) v._coverRequested = false; });
++                vids.forEach(function (v, index) {
++                    if (v._imgLoaded === undefined) v._imgLoaded = false;
++                    // First visible row can start decoding immediately. Every other
++                    // cover enters through x-intersect and leaves the image window
++                    // when it is far enough away, releasing its decoded bitmap.
++                    v._coverRequested = index < 8;
++                });
+                 _setVideos(vids);
+-                this.videoCount = _videos.length;
++                const total = Number.isFinite(data.total) ? data.total : vids.length;
++                const isPaged = data.paged === true && !loadAll;
++                this.videoCount = total;
++                this._serverTotal = total;
++                this._serverPaged = isPaged;
++                this._fullVideosLoaded = !isPaged;
++                if (isPaged) {
++                    this._serverPage = Math.max(1, parseInt(data.page) || requestedPage);
++                    this.page = this._serverPage;
++                }
+                 _setFilteredVideos(_videos);
+-                this.filteredCount = _filteredVideos.length;
++                this.filteredCount = isPaged ? total : _filteredVideos.length;
++                if (!options.deferRender) this.updatePagination();
++                return true;
+             } catch (e) {
++                if (requestId !== this._videoFetchGeneration) return false;
+                 console.error('Failed to fetch videos:', e);
+                 _videos.splice(0, _videos.length);
+                 this.videoCount = 0;
+                 _filteredVideos.splice(0, _filteredVideos.length);
+                 this.filteredCount = 0;
++                this._serverPaged = false;
++                this._serverTotal = 0;
++                this._serverPage = 1;
++                this._fullVideosLoaded = false;
+                 this.error = window.t('showcase.error.cannot_connect');
++                return false;
+             } finally {
+-                this.loading = false;
+-            }
++                if (requestId === this._videoFetchGeneration) {
++                    this.loading = false;
++                    this._videoFetchAbort = null;
++                }
++            }
++        },
++
++        async _ensureFullVideos() {
++            if (this._fullVideosLoaded) return true;
++            if (!_fullVideosPromise) {
++                _fullVideosPromise = this.fetchVideos({
++                    all: true,
++                    deferRender: true,
++                }).finally(function () {
++                    _fullVideosPromise = null;
++                });
++            }
++            return _fullVideosPromise;
+         },
+ 
+         // --- 重試（async 安全） ---
+         async retry() {
+             this.error = '';
+             const savedPage = this.page;
+-            await this.fetchVideos();
++            const ok = await this.fetchVideos({
++                page: savedPage,
++                all: this._fullVideosLoaded,
++            });
++            if (!ok) return;
+             _recomputeAllBadges();
+-            this.applyFilterAndSort(true);  // 跳過 pagination，下面統一處理
+-            this.page = savedPage;
++            if (this._fullVideosLoaded) {
++                this.applyFilterAndSort(true);  // 跳過 pagination，下面統一處理
++                this.page = savedPage;
++            }
+             this.updatePagination();
+             // Settle: retry 也用 settle（不碰 opacity → 不閃）
+             if (this.mode === 'grid' && !this.error) {
+@@ -443,7 +539,7 @@
+          * B7/B15: 排序動畫共用 helper — flip-guard → capture → change → Flip reorder
+          * @param {Function} changeFn - 執行 data change 的函數
+          */
+-        _sortWithFlip(changeFn) {
++        async _sortWithFlip(changeFn) {
+             var savedPage = this.page;
+             var grid = null;
+             var positionMap = null;
+@@ -455,6 +551,14 @@
+                     grid.classList.add('flip-guard');
+                     void grid.offsetHeight;  // force reflow
+                     positionMap = window.ShowcaseAnimations?.capturePositions?.(grid) || null;
++                }
++            }
++
++            if (!this._fullVideosLoaded) {
++                var loaded = await this._ensureFullVideos();
++                if (!loaded) {
++                    if (grid) grid.classList.remove('flip-guard');
++                    return;
+                 }
+             }
+ 
+@@ -495,7 +599,7 @@
+          * B8/B15: 篩選動畫共用 helper — flip-guard → capture → change → Flip filter
+          * onSearchChange() 和 searchFromMetadata() 共用
+          */
+-        _animateFilter() {
++        async _animateFilter() {
+             var grid = null;
+             var state = null;
+ 
+@@ -517,6 +621,17 @@
+                     grid.classList.add('flip-guard');
+                     void grid.offsetHeight;  // force reflow
+                     state = window.ShowcaseAnimations?.captureFlipState?.(grid) || null;
++                }
++            }
++
++            // The first filter/search may start from a server-paged subset.
++            // Capture the current DOM first, then load the complete collection
++            // so local filtering and sorting keep their existing semantics.
++            if (!this._fullVideosLoaded) {
++                var loaded = await this._ensureFullVideos();
++                if (!loaded) {
++                    if (grid) grid.classList.remove('flip-guard');
++                    return;
+                 }
+             }
+ 
+@@ -555,7 +670,7 @@
+          * @param {string} direction - 'next' | 'prev'
+          * @param {number} [targetPage] - 目標頁碼（goToPage 用，prevPage/nextPage 不傳）
+          */
+-        _animatePageChange(direction, targetPage) {
++        async _animatePageChange(direction, targetPage) {
+             // 清理可能殘留的 flip-guard（sort/filter 動畫被翻頁打斷時）
+             var grid = document.querySelector('.showcase-grid');
+             if (grid) grid.classList.remove('flip-guard');
+@@ -566,9 +681,16 @@
+                 newPage = direction === 'next' ? this.page + 1 : this.page - 1;
+             }
+ 
+-            // State mutation FIRST（不再困在回調中）
+-            this.page = newPage;
+-            this.updatePagination();
++            if (this._serverPaged && !this._fullVideosLoaded) {
++                var loaded = await this.fetchVideos({ page: newPage });
++                if (!loaded) return;
++                this.page = this._serverPage;
++                this.updatePagination();
++            } else {
++                // State mutation FIRST（不再困在回調中）
++                this.page = newPage;
++                this.updatePagination();
++            }
+             this.saveState();
+             window.scrollTo(0, 0);
+ 
+@@ -842,7 +964,21 @@
+             if (parseInt(this.perPage) === 0 && this.mode === 'grid') {
+                 this.perPage = 120;
+             }
+-            const perPage = Math.max(0, parseInt(this.perPage) || 0);
++            const perPage = Math.min(
++                SHOWCASE_MAX_SERVER_PAGE_SIZE,
++                Math.max(0, parseInt(this.perPage) || 0)
++            );
++            if (perPage !== this.perPage) this.perPage = perPage;
++            if (this._serverPaged && !this._fullVideosLoaded && perPage > 0) {
++                this.totalPages = Math.max(1, Math.ceil(this._serverTotal / perPage));
++                if (this.page > this.totalPages) this.page = this.totalPages;
++                if (this.page < 1) this.page = 1;
++                this.filteredCount = this._serverTotal;
++                var serverPage = _videos.slice();
++                serverPage.forEach(_recomputeCardActorAges);
++                this.paginatedVideos = serverPage;
++                return;
++            }
+             var slice;
+             if (perPage === 0) {
+                 slice = _filteredVideos.slice();
+@@ -877,6 +1013,8 @@
                          console.error('Failed to open file:', err);
                          this.showToast(window.t('showcase.video.play_failed'), 'error');
                      });
@@ -10079,9 +11072,42 @@
              } else {
                  window.open('/api/gallery/player?path=' + encodeURIComponent(path), '_blank');
              }
+@@ -884,6 +1022,9 @@
+ 
+         // 工具方法：從 paginatedVideos 的 index 映射到 filteredVideos 的 index
+         getCurrentFilteredIndex(paginatedIndex) {
++            if (this._serverPaged && !this._fullVideosLoaded) {
++                return paginatedIndex;
++            }
+             const perPage = parseInt(this.perPage);
+             return perPage === 0 ? paginatedIndex : (this.page - 1) * perPage + paginatedIndex;
+         },
 --- a/web/static/js/pages/showcase/state-base.js
 +++ b/web/static/js/pages/showcase/state-base.js
-@@ -328,13 +328,20 @@
+@@ -13,6 +13,9 @@
+ import { computeBadges, resolveEnabledIds } from '@/shared/cover-badges.js';
+ import { formatPartLabel } from '@/shared/part-label.js';
+ import { computeActorAgesMap, singleActorAge } from '@/shared/actress-release-age.js';
++
++export const SHOWCASE_MAX_SERVER_PAGE_SIZE = 500;
++export const SHOWCASE_MOBILE_GRID_PAGE_SIZE = 45;
+ 
+ // 53a codex F3: $persist 對 localStorage 壞 JSON 沒 try/catch（會在 Alpine init 階段拋錯炸整頁），
+ // 必須在 Alpine.data 註冊前先清掃壞值，讓 $persist fallback 走預設物件
+@@ -298,6 +301,12 @@
+         videoCount: 0,        // _videos.length 的 reactive scalar
+         filteredCount: 0,     // _filteredVideos.length 的 reactive scalar
+         paginatedVideos: [],  // 當前頁顯示的影片
++        _serverPaged: false,  // 目前 _videos 是否只包含服務端的一頁
++        _serverTotal: 0,      // 服務端回傳的完整 group 總數
++        _serverPage: 1,       // 服務端目前頁碼
++        _fullVideosLoaded: false, // true 時 _videos 已是完整集合
++        _videoFetchGeneration: 0, // 防止較慢的舊分頁請求覆蓋新頁
++        _videoFetchAbort: null,
+         unreachableSources: [],  // /api/showcase/source-status（unreachable / no_permission）
+ 
+         // Card Info 展開狀態 (M3i)
+@@ -328,13 +337,20 @@
          _animGeneration: 0,  // B13: 防止 stale deferred callback
          _heroCardReconcilePending: false,  // TASK-138-T1（CD-C5）：init first-frame 窗口；非 $persist
  
@@ -10106,6 +11132,76 @@
  
              // 接入 page lifecycle：清理 lightbox timer 和 body class
              if (window.__registerPage) {
+@@ -342,6 +358,9 @@
+                     cleanup: () => {
+                         this._animGeneration++;       // B13: 使 pending deferred callback 失效
+                         this._lightboxGeneration++;   // B19: invalidate pending $nextTick lightbox callbacks
++                        this._videoFetchGeneration++; // 離頁後丟棄尚未回來的影片清單請求
++                        this._videoFetchAbort?.abort();
++                        this._videoFetchAbort = null;
+                         if (this.lightboxCloseTimer) clearTimeout(this.lightboxCloseTimer);  // F2: cleanup delayed clear timer
+                         window.Alpine?.store?.('toast')?.hide?.();   // 131b-T3：cleanup 不得拋錯（拋了會跳過後面所有 teardown）
+                         if (this.lightboxOpen) document.body.classList.remove('overflow-hidden');
+@@ -367,7 +386,10 @@
+             this._heroCardReconcilePending = true;   // CD-C5：init 作用域旗標，非持久化
+             var heroCardPromise = this.showFavoriteActresses ? Promise.resolve() : this._reconcileHeroCard();  // 單行：pill-hero.test.mjs 以單行 regex 擷取本行並 eval，勿換行
+ 
+-            await this.fetchVideos();
++            await this.fetchVideos({
++                page: savedPage,
++                all: this._shouldLoadAllVideosForInitialFetch(),
++            });
+             // 57e hotfix：fire-and-forget warm-up SimilarRankerCache，避免 magic icon 首次點擊 cold-start race。
+             // 失敗靜默（端點不存在的舊 server / 網路斷線都不影響 showcase 主流程）。
+             fetch('/api/similar/warmup').catch(() => {});
+@@ -389,9 +411,14 @@
+             await _awaitHeroCardWithTimeout(heroCardPromise);
+             this._heroCardReconcilePending = false;   // CD-C5：first-frame 窗口結束
+ 
+-            this.applyFilterAndSort(true);  // M4a: 套用搜尋篩選（跳過 pagination，下面統一處理）
+-            // 129-T3 的回頁重算已提前到 restoreState 之後平行啟動（見上），此處不再呼叫
+-            this.page = savedPage;          // 恢復儲存的頁碼
++            if (this._fullVideosLoaded) {
++                this.applyFilterAndSort(true);  // M4a: 套用搜尋篩選（跳過 pagination，下面統一處理）
++                // 129-T3 的回頁重算已提前到 restoreState 之後平行啟動（見上），此處不再呼叫
++                this.page = savedPage;          // 恢復儲存的頁碼
++            } else {
++                // 首屏由服務端分頁；不要用當頁資料重算全庫總數。
++                this.page = this._serverPage || savedPage;
++            }
+             this.updatePagination();        // 單次分頁（會 clamp 超出範圍的頁碼）
+ 
+             // Settle: 初次載入用 settle（不碰 opacity → 不閃）
+@@ -535,7 +562,13 @@
+             const defaultOrder = cfg.default_order === 'ascending' ? 'asc' : 'desc';
+             // T3.2 P2 fix: `??` 而非 `||` — Settings 允許 items_per_page=0（"全部"語意），
+             // 必須保留 numeric 0 讓下方 grid+perPage=0→120 降級邏輯有機會觸發。
+-            const defaultPerPage = cfg.items_per_page ?? 90;
++            // The API caps server pages at 500; clamp here so older or
++            // hand-edited configs cannot make the first request fail validation.
++            const rawPerPage = cfg.items_per_page ?? 90;
++            const parsedPerPage = parseInt(rawPerPage, 10);
++            const defaultPerPage = Number.isFinite(parsedPerPage)
++                ? Math.min(SHOWCASE_MAX_SERVER_PAGE_SIZE, Math.max(0, parsedPerPage))
++                : 90;
+ 
+             // 2. 從 _persistedShowcase（$persist 自動讀的 localStorage 'showcase_state'）取
+             //    53a-T2: 取代手寫 localStorage.getItem + JSON.parse，格式向後相容
+@@ -563,6 +596,14 @@
+             if (this.mode === 'grid' && this.perPage === 0) {
+                 this.perPage = 120;
+             }
++            // A 90-card mobile page keeps 30 rows of decoded covers alive.
++            // Cap only the phone grid; desktop and table/list keep the configured value.
++            const narrowGrid = typeof window !== 'undefined'
++                && typeof window.matchMedia === 'function'
++                && window.matchMedia('(max-width: 899px)').matches;
++            if (narrowGrid && this.mode === 'grid') {
++                this.perPage = Math.min(this.perPage, SHOWCASE_MOBILE_GRID_PAGE_SIZE);
++            }
+             // ★ 44a: 女優模式 — 只從 _persistedShowcase，不加 URL params（避免汙染 shareable link）
+             this.showFavoriteActresses = state.showFavoriteActresses === true;  // 嚴格 === true
+             this.actressSort = state.actressSort || 'video_count';
 --- a/web/static/js/pages/showcase/main.js
 +++ b/web/static/js/pages/showcase/main.js
 @@ -10,7 +10,7 @@
@@ -10489,14 +11585,35 @@
 +{%- endmacro %}
 --- a/web/templates/base.html
 +++ b/web/templates/base.html
-@@ -1,5 +1,5 @@
+@@ -1,11 +1,16 @@
  <!DOCTYPE html>
 -<html lang="{{ locale|default('zh-TW') }}"
 +<html lang="{{ locale|default('zh-CN') }}"
        data-theme="{{ theme|default('light') }}"
        style="font-size: {{ font_size_px|default(16) }}px"
        x-data="{ theme: '{{ theme|default('light') }}', fontSize: '{{ font_size|default('md') }}' }"
-@@ -113,14 +113,13 @@
+       x-init="$watch('theme', configSync('theme')); $watch('theme', v => { document.querySelector('meta[name=&quot;theme-color&quot;]').content = (v === 'dim' ? '#2a303c' : '#ffffff'); }); $watch('fontSize', configSync('font_size'))"
+       :data-theme="theme"
+       :style="'font-size:' + {xs:'13px',sm:'14px',md:'16px',lg:'18px',xl:'20px'}[fontSize]">
++
++{% set uses_gsap = page in ['showcase', 'search', 'scanner', 'insights', 'motion-lab', 'design-system'] %}
++{% set uses_motion_plugins = page in ['showcase', 'search', 'motion-lab', 'design-system'] %}
++{% set uses_ghost_fly = page in ['showcase', 'search', 'scanner', 'motion-lab', 'design-system'] %}
++{% set uses_burst_picker = page in ['showcase', 'motion-lab', 'design-system'] %}
+ 
+ <head>
+     <meta charset="UTF-8">
+@@ -60,6 +65,9 @@
+       function configSync(field) {
+         var tid, ctrl;
+         return function(val) {
++          // Settings owns an explicit save button. Keep appearance changes as
++          // live previews there, but do not persist them until Save is clicked.
++          if (document.getElementById('settings-components')) return;
+           clearTimeout(tid);
+           if (ctrl) ctrl.abort();
+           tid = setTimeout(function() {
+@@ -113,14 +121,13 @@
      <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
      <meta name="theme-color" content="{{ '#2a303c' if theme == 'dim' else '#ffffff' }}">
  
@@ -10514,7 +11631,7 @@
      <!-- Rotating Border Effect -->
      <link href="/static/css/components/rotating-border.css" rel="stylesheet">
      <!-- Help Popover -->
-@@ -332,6 +331,38 @@
+@@ -332,6 +339,38 @@
              height: var(--mobile-topbar-height);
          }
  
@@ -10553,7 +11670,7 @@
          /* Offcanvas 選單連結 */
          .offcanvas {
              background-color: var(--surface-1) !important;
-@@ -349,6 +380,8 @@
+@@ -349,6 +388,8 @@
              margin: 0.25rem 0.5rem;
              display: flex;
              align-items: center;
@@ -10562,7 +11679,7 @@
              transition: color var(--fluent-duration-normal) var(--fluent-ease-standard), background-color var(--fluent-duration-normal) var(--fluent-ease-standard);
          }
  
-@@ -360,6 +393,19 @@
+@@ -360,6 +401,19 @@
          .offcanvas-nav .nav-link.active {
              color: var(--color-primary-content);
              background-color: var(--accent);
@@ -10582,7 +11699,7 @@
          }
  
          .offcanvas-nav .nav-link i,
-@@ -460,10 +506,13 @@
+@@ -460,10 +514,13 @@
           Placed after extra_css expansion so source-order beats page-specific CSS (CD-A2).
           Do NOT move into the component link block above — it would be overridden. -->
      <link href="/static/css/components/fluent-materials.css" rel="stylesheet">
@@ -10597,7 +11714,7 @@
        window.__i18n = {{ merged_translations|default({})|tojson }};
        window.t = function(key, params) {
            params = params || {};
-@@ -571,18 +620,54 @@
+@@ -571,18 +628,54 @@
          await this._pollNotifications();
      },
      formatTimestamp(ts) {
@@ -10654,7 +11771,7 @@
      <!-- 頂部導航列（僅小螢幕顯示）-->
      <nav class="navbar bg-base-200 lg:hidden fixed top-0 left-0 right-0 z-50 h-14 top-navbar fluent-acrylic border-b border-base-300" x-show="!mobileMenuOpen">
          <div class="navbar-start">
-@@ -591,8 +676,9 @@
+@@ -591,8 +684,9 @@
              </button>
          </div>
          <div class="navbar-center">
@@ -10666,7 +11783,7 @@
              </span>
          </div>
          <div class="navbar-end">
-@@ -658,7 +744,7 @@
+@@ -658,7 +752,7 @@
              <button type="button"
                      class="btn btn-sm btn-circle btn-ghost"
                      @click="mobileMenuOpen = false"
@@ -10675,29 +11792,78 @@
                  <i class="bi bi-x text-xl"></i>
              </button>
          </div>
-@@ -859,6 +945,8 @@
+@@ -846,30 +940,48 @@
+     }
+     </script>
+ 
+-    <!-- GSAP Core (Phase E) — defer 保序：GSAP → prefs → adapter → Alpine -->
++    {% if uses_gsap %}
++    <!-- GSAP Core — only pages with motion consumers pay the parse cost. -->
+     <script defer src="/static/vendor/gsap/gsap.min.js"></script>
+-    <!-- GSAP Plugins (全站共用) -->
++    <!-- Fluent eases are required by GhostFly and AvatarFly too. -->
++    <script defer src="/static/vendor/gsap/CustomEase.min.js"></script>
++    {% endif %}
++    {% if uses_motion_plugins %}
++    <!-- Heavy GSAP plugins used only by showcase/search/motion-lab/design-system. -->
+     <script defer src="/static/vendor/gsap/Flip.min.js"></script>
+     <script defer src="/static/vendor/gsap/Physics2DPlugin.min.js"></script>
+-    <script defer src="/static/vendor/gsap/CustomEase.min.js"></script>
+     <script defer src="/static/vendor/gsap/CustomBounce.min.js"></script>
+     <!-- DrawSVGPlugin（56b-T1，DrawSVG free since GSAP 3.12+ / Webflow sponsorship）-->
+     <script defer src="/static/vendor/gsap/DrawSVGPlugin.min.js"></script>
++    {% endif %}
+     <!-- Path Display Utilities (T7d) -->
      <script type="module" src="/static/js/components/path-utils.js"></script>
      <!-- Motion Preferences Bridge (T4) -->
      <script type="module" src="/static/js/components/motion-prefs.js"></script>
 +    <!-- Shared mobile state classification and diagnostics (r19) -->
 +    <script type="module" src="/static/js/shared/ui-state.js?v=17035-2"></script>
++    {% if uses_gsap %}
      <!-- Motion Adapter — shared GSAP wrappers (T5) -->
      <script type="module" src="/static/js/components/motion-adapter.js"></script>
++    {% endif %}
      <!-- Page Lifecycle Manager (T2.1) -->
-@@ -866,10 +954,11 @@
+     <script type="module" src="/static/js/components/page-lifecycle.js"></script>
++    {% if uses_ghost_fly %}
      <!-- Ghost Fly — shared lightbox transition helper (T8) -->
      <script type="module" src="/static/js/shared/ghost-fly.js"></script>
++    {% endif %}
++    {% if page == 'insights' %}
      <script type="module" src="/static/js/shared/avatar-fly.js"></script>
++    {% endif %}
++    {% if page in ['showcase', 'search'] %}
 +    <script type="module" src="/static/js/shared/video-player.js"></script>
++    {% endif %}
++    {% if uses_burst_picker %}
      <!-- Burst Picker — shared photo-picker animation module (49b-T4a) -->
      <script type="module" src="/static/js/shared/burst-picker.js"></script>
++    {% endif %}
      <!-- Toast store — Alpine.store('toast')（131b-T3） -->
 -    <script type="module" src="/static/js/components/toast-store.js"></script>
 +    <script type="module" src="/static/js/components/toast-store.js?v=17035-2"></script>
      <!-- Bridge notify — window.handleBridgeUncovered hook（168a-T4；所有頁面都要有） -->
      <script type="module" src="/static/js/shared/bridge-notify.js"></script>
      <!-- 168c-T5: 殼 → 頁面的「這台電腦有新版」提醒 hook -->
-@@ -915,9 +1004,8 @@
+@@ -877,11 +989,17 @@
+     <!-- 168e-T6: shell reload hook -->
+     <script type="module" src="/static/js/shared/shell-reload.js"></script>
+     <script type="module" src="/static/js/shared/conn-state.js"></script>
++    {% if page in ['settings', 'scanner', 'motion-lab', 'design-system'] %}
+     <!-- Help Popover — 說明浮層共用元件（131b-T4） -->
+     <script type="module" src="/static/js/components/help-popover.js"></script>
++    {% endif %}
++    {% if page in ['scanner', 'design-system'] %}
+     <script type="module" src="/static/js/components/number-drilldown.js"></script>
++    {% endif %}
++    {% if page in ['search', 'design-system'] %}
+     <!-- Auto Organize Panel — 搜尋頁自動整理 popover（TASK-144-T7） -->
+     <script type="module" src="/static/js/components/auto-organize-panel.js"></script>
++    {% endif %}
+ 
+     {% block pre_alpine_module %}{% endblock %}
+ 
+@@ -915,9 +1033,8 @@
      <script defer src="/static/vendor/alpine/anchor.min.js"></script>
      <!-- Alpine Core -->
      <script defer src="/static/vendor/alpine/alpine.min.js"></script>
@@ -12157,7 +13323,7 @@
  
  {% block content %}
 -<div id="settings-components" class="page-layer" x-data="settings" data-lan-ip="{{ lan_ip or '' }}" data-shell-mode="{{ shell_mode or '' }}">
-+<div id="settings-components" class="page-layer" x-data="settings" data-lan-ip="{{ lan_ip or '' }}" data-shell-mode="{{ shell_mode or '' }}" data-is-android="{{ 'true' if is_android else 'false' }}">
++<div id="settings-components" class="page-layer" x-data="settings" data-lan-ip="{{ lan_ip or '' }}" data-shell-mode="{{ shell_mode or '' }}" data-is-android="{{ 'true' if is_android else 'false' }}" data-focal-auto-enabled="{{ 'true' if focal_auto_enabled else 'false' }}">
      <div class="settings-header">
          <!-- 81b-T1: 左 cluster 包標題 + 膠囊 + 連線 inline 區塊；flex 樣式由 T2 補 -->
          <div class="settings-header-left">
@@ -12168,15 +13334,92 @@
              <!-- Server Mode Toggle (80a-T3) — 81b-T1: 從 actions 末尾搬到標題側 -->
              {% if not is_synology %}
              <div class="settings-server-mode">
-@@ -153,6 +155,7 @@
+@@ -153,48 +155,101 @@
                      <span>{{ t('settings.server_info.public_exposure') }}</span>
                  </div>
              </div>
 +            {% endif %}
          </div>
          <div class="settings-header-actions">
-             <!-- Font Size Control -->
-@@ -189,12 +192,43 @@
+-            <!-- Font Size Control -->
+-            <div class="font-size-control">
+-                <template x-for="s in [{k:'xs',l:'A'},{k:'sm',l:'A'},{k:'md',l:'A'},{k:'lg',l:'A'},{k:'xl',l:'A'}]">
+-                    <button type="button"
+-                            class="font-size-btn"
+-                            :class="{ active: fontSize === s.k }"
+-                            :style="'font-size:' + {xs:'0.7rem',sm:'0.8rem',md:'0.9rem',lg:'1.05rem',xl:'1.2rem'}[s.k]"
+-                            @click="fontSize = s.k"
+-                            :title="window.t('settings.header.font_size_prefix') + ': ' + s.k"
+-                            x-text="s.l">
++            <div class="settings-appearance-controls">
++                <!-- Font Size Control -->
++                <div class="font-size-control">
++                    <template x-for="s in [{k:'xs',l:'A'},{k:'sm',l:'A'},{k:'md',l:'A'},{k:'lg',l:'A'},{k:'xl',l:'A'}]">
++                        <button type="button"
++                                class="font-size-btn"
++                                :class="{ active: form.fontSize === s.k }"
++                                :style="'font-size:' + {xs:'11px',sm:'12px',md:'14px',lg:'16px',xl:'18px'}[s.k]"
++                                @click="setFontSize(s.k)"
++                                :title="window.t('settings.header.font_size_prefix') + ': ' + s.k"
++                                x-text="s.l">
++                        </button>
++                    </template>
++                </div>
++                <!-- Locale Toggle -->
++                <div class="settings-locale-toggle">
++                    <button class="locale-toggle-btn"
++                            type="button"
++                            x-text="{'zh-TW':'繁','zh-CN':'简','ja':'あ','en':'EN'}[locale] || '繁'" {# cjk-exempt(繁|简|あ|繁): 語言切換器原生字形（繁/简/あ/EN），全球化 UI 慣例不隨介面語言翻譯 — TASK-103-T7 §F.2 #}
++                            @click="cycleLocale()"
++                            :title="window.t('settings.header.locale_prefix') + ': ' + locale">
+                     </button>
+-                </template>
++                </div>
++                <!-- Theme Toggle -->
++                <div class="settings-theme-toggle">
++                    <button class="theme-toggle-btn"
++                            @click="toggleThemeWithTransition($event, () => { theme = (theme === 'light' ? 'dim' : 'light'); form.theme = theme })"
++                            :title="theme === 'light' ? window.t('settings.header.switch_dark') : window.t('settings.header.switch_light')"
++                            type="button">
++                        <i class="bi" :class="theme === 'light' ? 'bi-moon-stars' : 'bi-sun'"></i>
++                    </button>
++                </div>
+             </div>
+-            <!-- Locale Toggle -->
+-            <div class="settings-locale-toggle">
+-                <button class="locale-toggle-btn"
+-                        type="button"
+-                        x-text="{'zh-TW':'繁','zh-CN':'简','ja':'あ','en':'EN'}[locale] || '繁'" {# cjk-exempt(繁|简|あ|繁): 語言切換器原生字形（繁/简/あ/EN），全球化 UI 慣例不隨介面語言翻譯 — TASK-103-T7 §F.2 #}
+-                        @click="cycleLocale()"
+-                        :title="window.t('settings.header.locale_prefix') + ': ' + locale">
+-                </button>
+-            </div>
+-            <!-- Theme Toggle -->
+-            <div class="settings-theme-toggle">
+-                <button class="theme-toggle-btn"
+-                        @click="toggleThemeWithTransition($event, () => { theme = (theme === 'light' ? 'dim' : 'light') })"
+-                        :title="theme === 'light' ? window.t('settings.header.switch_dark') : window.t('settings.header.switch_light')"
+-                        type="button">
+-                    <i class="bi" :class="theme === 'light' ? 'bi-moon-stars' : 'bi-sun'"></i>
++            <div class="settings-mobile-save"
++                 :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving, 'is-error': !!_configError }">
++                <div class="save-state" role="status" aria-live="polite">
++                    <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
++                    <i x-show="!_configSaving" class="bi"
++                       :class="_configError ? 'bi-x-circle' : (isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle')"></i>
++                    <span x-text="saveStatusText"></span>
++                </div>
++                <button type="submit"
++                        form="settingsForm"
++                        class="btn btn-primary save-btn settings-mobile-save-btn"
++                        :disabled="saveButtonDisabled">
++                    <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
++                    <i x-show="!_configSaving" class="bi bi-save"></i>
++                    <span x-text="_configSaving
++                        ? window.t('settings.save_bar.saving_button')
++                        : window.t('settings.action.save')"></span>
+                 </button>
+             </div>
          </div>
      </div>
  
@@ -12221,7 +13464,26 @@
  
          <!-- ── quick-toggle 列（CD-64-B8）：下載劇照 + 進階搜尋，header 下 section 上 ── -->
          <div class="settings-quick-toggle-row">
-@@ -1248,6 +1282,7 @@
+@@ -282,6 +337,8 @@
+                                 <span x-show="srcProbeStatus !== 'running'">{{ t('settings.sources.probe_btn') }}</span>
+                                 <span x-show="srcProbeStatus === 'running'">{{ t('settings.status.testing') }}</span>
+                             </button>
++                        </div>
++                        <div class="settings-sources-batchbar-meta">
+                             <small class="settings-sources-probe-summary" aria-live="polite"
+                                    x-show="srcProbeSummary.total > 0" x-cloak
+                                    x-text="window.t('settings.sources.probe_summary', { ok: srcProbeSummary.ok, total: srcProbeSummary.total })"></small>
+@@ -512,8 +569,7 @@
+                         <label class="settings-label">
+                             <input type="checkbox" class="toggle toggle-primary"
+                                    id="metatubeEnableToggle"
+-                                   x-model="metatubeEnabled"
+-                                   @change="onMetatubeEnabledChange()">
++                                   x-model="metatubeEnabled">
+                             <span class="label-text">{{ t('settings.sources.mt_enable_label') }}</span>
+                         </label>
+                         <small class="settings-hint">{{ t('settings.sources.mt_enable_help') }}</small>
+@@ -1248,6 +1304,7 @@
                                  <input type="number" class="input input-bordered input-sm" id="maxFilenameLength"
                                      x-model.number="form.maxFilenameLength" min="50" max="255">
                                  <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
@@ -12229,7 +13491,7 @@
                                  <button type="button" class="help-popover-btn"
                                          @click="toggle()"
                                          :aria-expanded="open"
-@@ -1268,6 +1303,7 @@
+@@ -1268,6 +1325,7 @@
                                          {{ t('settings.scraper.path_length_help_line4') }}
                                      </small>
                                  </div>
@@ -12237,7 +13499,22 @@
                              </div>
                          </div>
  
-@@ -1438,6 +1474,7 @@
+@@ -1280,12 +1338,11 @@
+                             </div>
+                         </div>
+ 
+-                        {# 人臉自動對焦開關（152d-T-D3，CD-152d-3b）：伺服器端算好的 focal_auto_enabled 作初始 checked；@change 寫專用端點 #}
++                        {# 人臉自動對焦開關：跟隨主表單草稿，儲存時才寫專用端點。 #}
+                         <div class="settings-form-group popover-anchor" x-data="helpPopover">
+                             <label class="settings-label">
+                                 <input type="checkbox" data-focal-auto-pill class="toggle toggle-primary"
+-                                       {% if focal_auto_enabled %}checked{% endif %}
+-                                       @change="setFocalDeviceDisabled($event)">
++                                       x-model="form.focalAutoEnabled">
+                                 <span class="label-text">{{ t('settings.scraper.focal_pill_label') }}</span>
+                                 <button type="button" class="help-popover-btn"
+                                         @click.prevent="toggle()"
+@@ -1438,6 +1495,7 @@
                          </div>
                      </div>
  
@@ -12245,7 +13522,7 @@
                      <!-- ── 進階摺疊：離線 HTML 匯出（galleryExport，預設收合 G-B1）── -->
                      <button class="collapsible-trigger" type="button" @click="galleryExport = !galleryExport"
                              :aria-expanded="galleryExport.toString()">
-@@ -1487,6 +1524,7 @@
+@@ -1487,6 +1545,7 @@
                          </div>
  
                      </div><!-- /collapsible-content galleryExport -->
@@ -12253,7 +13530,7 @@
  
              </div>
            </div>
-@@ -1518,6 +1556,7 @@
+@@ -1518,6 +1577,7 @@
                          {% if shell_mode == 'client' %}<small class="settings-hint local-machine-unavailable" x-show="localMachineState === 'unavailable'" x-cloak x-text="window.t('settings.system.this_computer_unavailable')"></small>{% endif %}
                      </div>
                      {% endif %}
@@ -12261,7 +13538,7 @@
                      <div class="settings-form-row">
                          <label class="row-label">{{ t('settings.system.player_label') }}{{ local_machine_tag() }}</label>
                          <div class="flex-1 flex flex-col gap-1">
-@@ -1527,6 +1566,7 @@
+@@ -1527,6 +1587,7 @@
                              <small class="settings-hint">{{ t('settings.system.player_hint_prefix') }} C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe</small>
                          </div>
                      </div>
@@ -12269,34 +13546,45 @@
                      <hr class="my-3">
  
                      <!-- 重置按鈕 -->
-@@ -1545,9 +1585,23 @@
+@@ -1543,14 +1604,30 @@
+             </div>
+           </div>
          </section><!-- /sec-system -->
- 
-         <!-- 儲存按鈕 -->
+-
+-        <!-- 儲存按鈕 -->
 -        <div class="save-btn-wrapper">
 -            <button type="submit" class="btn btn-primary save-btn" id="saveBtn">
 -                <i class="bi bi-save"></i> {{ t('settings.action.save') }}
-+        <div class="save-btn-wrapper"
-+             :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving, 'is-error': !!_configError }">
-+            <div class="save-state" role="status" aria-live="polite">
-+                <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
-+                <i x-show="!_configSaving" class="bi"
-+                   :class="_configError ? 'bi-x-circle' : (isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle')"></i>
-+                <span x-text="saveStatusText"></span>
-+            </div>
-+            <button type="submit"
-+                    class="btn btn-primary save-btn"
-+                    id="saveBtn"
-+                    :disabled="saveButtonDisabled">
-+                <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
-+                <i x-show="!_configSaving" class="bi bi-save"></i>
-+                <span x-text="_configSaving
-+                    ? window.t('settings.save_bar.saving_button')
-+                    : window.t('settings.action.save')"></span>
-             </button>
+-            </button>
++    </form>
++
++    <!-- 儲存按鈕：放在 form 外，避免 Android WebView 在字級變更後
++         把 fixed 子層留在舊的 compositor 位置。 -->
++    <div class="save-btn-wrapper"
++         :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving, 'is-error': !!_configError }">
++        <div class="save-state" role="status" aria-live="polite">
++            <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
++            <i x-show="!_configSaving" class="bi"
++               :class="_configError ? 'bi-x-circle' : (isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle')"></i>
++            <span x-text="saveStatusText"></span>
          </div>
-     </form>
-@@ -1629,6 +1683,7 @@
+-    </form>
++        <button type="submit"
++                form="settingsForm"
++                class="btn btn-primary save-btn"
++                id="saveBtn"
++                :disabled="saveButtonDisabled">
++            <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
++            <i x-show="!_configSaving" class="bi bi-save"></i>
++            <span x-text="_configSaving
++                ? window.t('settings.save_bar.saving_button')
++                : window.t('settings.action.save')"></span>
++        </button>
++    </div>
+ 
+     <!-- Dirty Check Modal -->
+     <dialog class="modal fluent-modal"
+@@ -1629,6 +1706,7 @@
          </div>
      </dialog>
  
@@ -12304,7 +13592,7 @@
      <!-- T4: 伺服器模式切換 Confirm Modal -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': serverModeConfirmOpen }"
-@@ -1660,6 +1715,7 @@
+@@ -1660,6 +1738,7 @@
              </div>
          </div>
      </dialog>
@@ -12312,7 +13600,7 @@
  
      <!-- 90c-T5: 全域模式切換（破壞性重設）Confirm Modal -->
      <dialog class="modal fluent-modal"
-@@ -1709,20 +1765,13 @@
+@@ -1709,20 +1788,13 @@
      </dialog>
  
  <!-- Toast 容器（Alpine controlled）-->
@@ -12405,11 +13693,10 @@
  
      <!-- Main Content (API 載入後顯示) -->
      <div x-show="!error && (videoCount > 0 || showFavoriteActresses)" x-cloak>
-@@ -449,6 +460,37 @@
- 
+@@ -450,6 +461,37 @@
          <!-- 81-T3: 行動工具列透明 backdrop（≤480，點擊收合）。用 @click（非 @click.outside，避子元素 .stop 吃掉觸發）-->
          <div class="mobile-toolbar-backdrop" x-show="$store.ui.toolbarOpen" @click="$store.ui.toolbarOpen = false" x-cloak></div>
-+
+ 
 +        <!-- Source availability: text + icon, never color alone. -->
 +        <div class="ui-source-status"
 +             x-show="unreachableSources.length > 0"
@@ -12440,10 +13727,71 @@
 +                <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
 +            </button>
 +        </div>
- 
++
          <!-- 影片模式：status bar + grid / table / list (CD-2: x-if 避免 Alpine 追蹤隱藏陣列 DOM) -->
          <template x-if="!showFavoriteActresses">
-@@ -1184,7 +1226,7 @@
+         <div>
+@@ -542,22 +584,25 @@
+                      @click="openLightbox(getCurrentFilteredIndex(index))"
+                      :style="`--card-index: ${index}`"
+                      :data-flip-id="video.path">
+-                    <div class="av-card-preview-img">
++                    <div class="av-card-preview-img"
++                         x-intersect.margin.900px="video._coverRequested = true"
++                         x-intersect:leave.margin.2400px="video._coverRequested = false; video._imgLoaded = false">
+                         <!-- 67-A2: 三態（CD-67-3）。保留單一 <img> 沿用 handleCoverError 換圖；
+                              淡入靠 _imgLoaded 的 .cover-loaded class（A1 CSS）；首屏前 8 張 eager+high（CD-67-5，不可 lazy+high 並存）。
+                              150b-T3 起「要不要載」改由 _coverRequested / x-intersect 決定，
+                              :loading / :fetchpriority 只決定已通過閘之後的下載優先序 -->
+-                        <img :src="((index < 8 && mode === 'grid') || video._coverRequested) ? video.cover_url : null"
+-                             :alt="video.number"
+-                             :loading="index < 8 ? 'eager' : 'lazy'"
+-                             :fetchpriority="index < 8 ? 'high' : 'auto'"
+-                             x-show="video.cover_url"
+-                             :class="{ 'cover-loaded': video._imgLoaded }"
+-                             @load="video._imgLoaded = true; applyCellFocal($el, video)"
+-                             @error="handleCoverError(video, $event)"
+-                             x-intersect.once.margin.690px="video._coverRequested = true"
+-                             x-init="$watch('video.auto_focal', () => applyCellFocal($el, video));
+-                                     $watch('video.crop_mode', () => applyCellFocal($el, video))">
++                        <template x-if="video._coverRequested && video.cover_url">
++                            <img :src="video.cover_url"
++                                 :alt="video.number"
++                                 :loading="index < 8 ? 'eager' : 'lazy'"
++                                 :fetchpriority="index < 8 ? 'high' : 'auto'"
++                                 decoding="async"
++                                 :class="{ 'cover-loaded': video._imgLoaded }"
++                                 @load="video._imgLoaded = true; applyCellFocal($el, video)"
++                                 @error="handleCoverError(video, $event)"
++                                 x-init="$watch('video.auto_focal', () => applyCellFocal($el, video));
++                                         $watch('video.crop_mode', () => applyCellFocal($el, video))">
++                        </template>
+                         <!-- 67-A2: skeleton overlay（pending 時，gate 含 has_cover → stale @error 後 has_cover=false 自動退出）-->
+                         <div class="skeleton-cover shimmer"
+                              x-show="video.cover_url && video.has_cover && !video._imgLoaded && video._coverRequested"></div>
+@@ -779,15 +824,18 @@
+                          :data-flip-id="'actress:' + actress.name"
+                          @click="openActressLightbox(index)">
+                         <!-- Photo -->
+-                        <div class="actress-card-photo">
+-                            <template x-if="actress.photo_url">
++                        <div class="actress-card-photo"
++                             x-intersect.margin.900px="actress._photoRequested = true"
++                             x-intersect:leave.margin.2400px="actress._photoRequested = false">
++                            <template x-if="actress.photo_url && actress._photoRequested">
+                                 <!-- 100b-T4（§A／CD-6）：比照 video 牆格三件套（:330-333），ratioVar
+                                      傳 '--actress-crop-ratio'（CD-3）。x-if 只在 photo_url 從無到有時
+                                      掛載一次（女優已有照片、換照片/焦點的常態路徑不重新掛載）——
+                                      @load 蓋首次掛載，$watch 蓋之後所有欄位變動（applyCellFocal.js
+                                      開頭註解：node:test 測不到「resolve 後寫哪個變數」，這裡靠
+                                      paginatedActresses[idx] 本身是 reactive 物件，$watch 才追蹤得到）。 -->
+-                                <img :src="actress.photo_url" :alt="actress.name" loading="lazy"
++                                <img :src="actress.photo_url"
++                                     :alt="actress.name" loading="lazy" decoding="async"
+                                      @load="applyCellFocal($el, actress, '--actress-crop-ratio')"
+                                      x-init="$watch('actress.auto_focal', () => applyCellFocal($el, actress, '--actress-crop-ratio'));
+                                              $watch('actress.crop_mode', () => applyCellFocal($el, actress, '--actress-crop-ratio'))">
+@@ -1184,7 +1232,7 @@
                                          :aria-label="(currentLightboxVideo?.user_rating||0) > 0 ? t('showcase.pick.remove_aria') : t('showcase.pick.add_aria')"
                                          :aria-busy="!!_pickInFlight[currentLightboxVideo?.path]"
                                          @click.stop="togglePickStar()"><i class="bi bi-star pick-star-outline" aria-hidden="true"></i><i class="bi bi-star-fill pick-star-fill" aria-hidden="true"
@@ -12452,7 +13800,7 @@
                                          x-show="lbTrShowOnTitle()"
                                          @click.stop="lbTranslate()"
                                          :disabled="lbTrIsBusy()"
-@@ -1200,7 +1242,6 @@
+@@ -1200,7 +1248,6 @@
                                  <!-- §b3: 劇照補抓入口（無劇照時顯示） -->
                                  <button class="fetch-samples-btn"
                                          x-show="(currentLightboxVideo?.sample_images || []).length === 0 && !_fetchSamplesLoading"
@@ -12460,7 +13808,7 @@
                                          @click="fetchSamples(currentLightboxVideo)">
                                      <i class="bi bi-cloud-download" aria-hidden="true"></i>
                                      <span x-text="t('showcase.samples.fetch_btn')"></span>
-@@ -1223,13 +1264,6 @@
+@@ -1223,13 +1270,6 @@
                              <div class="lb-otitle"
                                   x-show="currentLightboxVideo?.original_title"
                                   x-text="currentLightboxVideo?.original_title"></div>
@@ -12474,7 +13822,7 @@
                              </div>
                              <!-- Row 3: Actresses -->
                              <div class="lb-actor" x-show="currentLightboxVideo?.actresses">
-@@ -1900,34 +1934,7 @@
+@@ -1900,34 +1940,7 @@
      </dialog>
  
      <!-- Toast (M3h) -->
