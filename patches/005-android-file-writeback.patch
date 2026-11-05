@@ -547,7 +547,139 @@
          return self._columns_cache
  
      def upsert(self, video: Video) -> int:
-@@ -726,8 +840,30 @@
+@@ -626,6 +740,131 @@
+ 
+         return rowcount > 0
+ 
++    def apply_rename_batch(self, updates: List[dict]) -> bool:
++        """Apply rename path/cover/sample updates in one transaction.
++
++        Rename execution can contain thousands of videos. Calling
++        ``repath_path_only()`` and the metadata mutators once per row would
++        open and commit a separate SQLite connection for every field. This
++        method keeps the same per-row checks but commits the whole rename
++        operation once. A failed check rolls the transaction back and returns
++        ``False`` so the caller can roll back the filesystem changes.
++        """
++        if not updates:
++            return True
++
++        normalized: list[dict] = []
++        old_paths: set[str] = set()
++        new_paths: set[str] = set()
++        for update in updates:
++            old_uri = str(update.get("db_old_uri") or "")
++            new_uri = str(update.get("db_new_uri") or "")
++            if old_uri != new_uri:
++                if not old_uri or not new_uri:
++                    return False
++                if old_uri in old_paths or new_uri in new_paths:
++                    return False
++                old_paths.add(old_uri)
++                new_paths.add(new_uri)
++            normalized.append(update)
++
++        conn = self._get_connection()
++        cursor = conn.cursor()
++        path_changed = False
++        try:
++            existing: set[str] = set()
++            paths = list(old_paths | new_paths)
++            for start in range(0, len(paths), 900):
++                chunk = paths[start:start + 900]
++                placeholders = ', '.join(['?'] * len(chunk))
++                cursor.execute(
++                    f"SELECT path FROM videos WHERE path IN ({placeholders})",
++                    chunk,
++                )
++                existing.update(row[0] for row in cursor.fetchall())
++
++            for update in normalized:
++                old_uri = str(update.get("db_old_uri") or "")
++                new_uri = str(update.get("db_new_uri") or "")
++                if old_uri == new_uri:
++                    continue
++                if old_uri not in existing or new_uri in existing:
++                    conn.rollback()
++                    return False
++
++            for update in normalized:
++                old_uri = str(update.get("db_old_uri") or "")
++                new_uri = str(update.get("db_new_uri") or "")
++                if old_uri == new_uri:
++                    continue
++                cursor.execute(
++                    "UPDATE videos SET path = ?, updated_at = CURRENT_TIMESTAMP "
++                    "WHERE path = ?",
++                    (new_uri, old_uri),
++                )
++                if cursor.rowcount != 1:
++                    conn.rollback()
++                    return False
++                path_changed = True
++
++            for update in normalized:
++                new_uri = str(update.get("db_new_uri") or "")
++                old_cover = str(update.get("cover_path_old") or "")
++                new_cover = str(update.get("cover_path_new") or "")
++                update_cover = update.get(
++                    "cover_update",
++                    old_cover != new_cover,
++                )
++                if not update_cover:
++                    continue
++                cursor.execute(
++                    "UPDATE videos SET cover_path = ?, "
++                    "updated_at = CURRENT_TIMESTAMP "
++                    "WHERE path = ? AND cover_path = ?",
++                    (new_cover, new_uri, old_cover),
++                )
++                if cursor.rowcount != 1:
++                    conn.rollback()
++                    return False
++
++            for update in normalized:
++                new_uri = str(update.get("db_new_uri") or "")
++                old_samples = list(update.get("sample_images_old") or [])
++                new_samples = list(update.get("sample_images_new") or [])
++                update_samples = update.get(
++                    "samples_update",
++                    old_samples != new_samples,
++                )
++                if not update_samples:
++                    continue
++                cursor.execute(
++                    "UPDATE videos SET sample_images = ?, "
++                    "updated_at = CURRENT_TIMESTAMP WHERE path = ?",
++                    (
++                        json.dumps(new_samples, ensure_ascii=False),
++                        new_uri,
++                    ),
++                )
++                if cursor.rowcount != 1:
++                    conn.rollback()
++                    return False
++
++            conn.commit()
++        except Exception:
++            conn.rollback()
++            raise
++        finally:
++            conn.close()
++
++        if path_changed:
++            try:
++                from core.similar.ranker_cache import SimilarRankerCache
++                SimilarRankerCache.invalidate()
++            except Exception:
++                logger.exception("SimilarRankerCache invalidate failed (non-fatal)")
++
++        return True
++
+     def upsert_batch(self, videos: List[Video]) -> tuple:
+         """批次新增或更新
+ 
+@@ -726,8 +965,30 @@
              cursor.execute("SELECT * FROM videos WHERE path = ?", (path,))
              row = cursor.fetchone()
              if row:
@@ -579,7 +711,7 @@
          finally:
              conn.close()
  
-@@ -832,7 +968,42 @@
+@@ -832,7 +1093,122 @@
          try:
              cursor.execute("SELECT * FROM videos ORDER BY id")
              rows = cursor.fetchall()
@@ -589,7 +721,71 @@
 +        finally:
 +            conn.close()
 +
-+    def get_showcase_rows(self, configured_dir_uris: set[str]) -> List[Video]:
++    def get_untranslated_title_candidates(self) -> List[Video]:
++        """Return rows that can enter the missing-title backfill.
++
++        Japanese detection stays in the router so this repository method remains
++        a storage query, not a scraper-language policy.  Filtering in SQL still
++        avoids materialising every unrelated library row.
++        """
++        conn = self._get_connection()
++        try:
++            columns = self._get_columns(conn)
++            cursor = conn.execute(
++                """
++                SELECT * FROM videos
++                WHERE TRIM(COALESCE(title, '')) != ''
++                  AND TRIM(COALESCE(original_title, '')) = ''
++                ORDER BY id
++                """
++            )
++            return [Video.from_row(row, columns) for row in cursor.fetchall()]
++        finally:
++            conn.close()
++
++    def get_missing_sample_candidates(self) -> List[Video]:
++        """Return lightweight rows whose stored sample-image list is empty.
++
++        Only the fields needed to call the existing fetch-samples endpoint are
++        selected.  Malformed/non-list JSON is treated as missing, matching the
++        backfill preview logic in the scanner router.
++        """
++        conn = self._get_connection()
++        try:
++            cursor = conn.execute(
++                """
++                SELECT path, number, title, sample_images
++                FROM videos
++                ORDER BY id
++                """
++            )
++            candidates: List[Video] = []
++            for path, number, title, raw_samples in cursor.fetchall():
++                parsed = []
++                if raw_samples:
++                    try:
++                        loaded = json.loads(raw_samples)
++                        if isinstance(loaded, list):
++                            parsed = loaded
++                    except (json.JSONDecodeError, TypeError):
++                        parsed = []
++                has_sample = any(
++                    isinstance(url, str) and url.strip()
++                    for url in parsed
++                )
++                if not has_sample:
++                    candidates.append(
++                        Video(path=path, number=number, title=title or '')
++                    )
++            return candidates
++        finally:
++            conn.close()
++
++    def get_showcase_rows(
++        self,
++        configured_dir_uris: set[str],
++        actress_names: Optional[List[str]] = None,
++    ) -> List[Video]:
 +        """Load the showcase projection only for configured gallery roots.
 +
 +        The SQL predicate is intentionally a broad prefix prefilter; callers
@@ -597,21 +793,37 @@
 +        platform-specific case rules remain identical to the previous Python
 +        filter. This removes unrelated DB rows and avoids ``SELECT *`` while
 +        preserving the final scope guard.
++
++        When ``actress_names`` is supplied, the SQL prefilter also matches the
++        actress JSON array with exact-name membership. The caller resolves
++        aliases first; this method deliberately does not know alias semantics.
 +        """
 +        if not configured_dir_uris:
 +            return []
 +
-+        clauses: List[str] = []
++        scope_clauses: List[str] = []
 +        params: List[str] = []
 +        for dir_uri in sorted(configured_dir_uris):
 +            prefix = dir_uri if dir_uri.endswith('/') else dir_uri + '/'
-+            clauses.append("(path = ? OR path LIKE ? ESCAPE '\\')")
++            scope_clauses.append("(path = ? OR path LIKE ? ESCAPE '\\')")
 +            params.extend((dir_uri, _escape_like_prefix(prefix) + '%'))
++
++        where_clauses = [f"({' OR '.join(scope_clauses)})"]
++        if actress_names:
++            placeholders = ",".join("?" * len(actress_names))
++            where_clauses.append(
++                "EXISTS ("
++                "SELECT 1 FROM json_each(videos.actresses) "
++                "WHERE json_valid(videos.actresses) "
++                f"AND json_each.value IN ({placeholders})"
++                ")"
++            )
++            params.extend(actress_names)
 +
 +        columns = ', '.join(_SHOWCASE_COLUMNS)
 +        query = (
 +            f"SELECT {columns} FROM videos "
-+            f"WHERE {' OR '.join(clauses)} ORDER BY id"
++            f"WHERE {' AND '.join(where_clauses)} ORDER BY id"
 +        )
 +        conn = self._get_connection()
 +        try:
@@ -623,7 +835,7 @@
          finally:
              conn.close()
  
-@@ -850,8 +1021,8 @@
+@@ -850,8 +1226,8 @@
          finally:
              conn.close()
  
@@ -634,7 +846,7 @@
  
          sample_count（TASK-118b-T9）：合法 JSON list → 實際張數。空字串／NULL／
          損毀 JSON／非 list 的合法 JSON 這四種壞值一律回傳哨兵值
-@@ -859,15 +1030,45 @@
+@@ -859,15 +1235,45 @@
          裁決④：壞資料要 fail-safe 成「需要重掃」，不得讓單筆壞資料中止整個
          SELECT／整次掃描）。真實檔案系統算出來的張數恆為 >= 0，-1 必定與任何
          真實張數不相等，呼叫端的比對式因此自然觸發重掃，不需要額外的例外分支。
@@ -687,7 +899,7 @@
                  sample_count = _SAMPLE_COUNT_UNKNOWN
                  if sample_images_raw:
                      try:
-@@ -876,7 +1077,22 @@
+@@ -876,7 +1282,22 @@
                              sample_count = len(parsed)
                      except (json.JSONDecodeError, TypeError):
                          pass
@@ -711,7 +923,7 @@
              return result
          finally:
              conn.close()
-@@ -885,7 +1101,7 @@
+@@ -885,7 +1306,7 @@
          """取得 {path: scrape_attempted_at} 索引，供 T3 `_should_skip` 冷啟動判斷用（TASK-89b-T1）。
  
          Additive read-only method。回傳的是 {path: int}——**不是** get_mtime_index() 的
@@ -720,7 +932,7 @@
          含 scrape_attempted_at == 0 的 row（不過濾）——呼叫端用 `.get(path, 0) > 0`
          統一判斷「從未試過」（key 不存在或值為 0 皆視為未試過）。
          """
-@@ -988,7 +1204,7 @@
+@@ -988,7 +1409,7 @@
              cursor.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
              row = cursor.fetchone()
              if row:
@@ -729,7 +941,7 @@
              return None
          finally:
              conn.close()
-@@ -1008,7 +1224,7 @@
+@@ -1008,7 +1429,7 @@
              )
              row = cursor.fetchone()
              if row:
@@ -738,7 +950,7 @@
              return None
          finally:
              conn.close()
-@@ -1044,8 +1260,9 @@
+@@ -1044,8 +1465,9 @@
  
              # 建立結果字典（使用原始輸入的 key）
              result = {}
@@ -749,7 +961,7 @@
                  if video.number:
                      # 找到原始輸入的 key
                      original_key = upper_to_original.get(video.number.upper())
-@@ -1109,7 +1326,8 @@
+@@ -1109,7 +1531,8 @@
                  (actress_name,)
              )
              rows = cursor.fetchall()
@@ -759,7 +971,7 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress json_each failed for %r (returning [])",
-@@ -1146,7 +1364,8 @@
+@@ -1146,7 +1569,8 @@
                  tuple(names)
              )
              rows = cursor.fetchall()
@@ -769,7 +981,7 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress_names json_each failed for %d names (returning [])",
-@@ -1566,7 +1785,7 @@
+@@ -1566,7 +1990,7 @@
                  """,
                  (escaped + '%', escaped + '%/%'),
              )
@@ -2909,7 +3121,7 @@
              dest = str(ef_dir / f'fanart{i}.jpg')
 --- /dev/null
 +++ b/core/rename_combined_plan.py
-@@ -0,0 +1,694 @@
+@@ -0,0 +1,681 @@
 +"""Combined filename/folder rename planning, execution, and validation."""
 +
 +from __future__ import annotations
@@ -2930,6 +3142,7 @@
 +    multipart_token,
 +)
 +from core.rename_shared import (
++    _apply_rename_updates,
 +    _create_directory,
 +    _delete_directory,
 +    _is_direct_child,
@@ -3384,6 +3597,7 @@
 +    completed_db: list[tuple[str, str]] = []
 +    completed_covers: list[tuple[str, str, str]] = []
 +    completed_samples: list[tuple[str, list[str], list[str]]] = []
++    db_updates: list[dict[str, Any]] = []
 +
 +    try:
 +        for item in items:
@@ -3439,36 +3653,21 @@
 +                )
 +
 +            for video in item["videos"]:
-+                if video["db_old_uri"] != video["db_new_uri"]:
-+                    if not repo.repath_path_only(
-+                        video["db_old_uri"], video["db_new_uri"]
-+                    ):
-+                        raise RuntimeError("database_path_update_failed")
-+                    completed_db.append(
-+                        (video["db_old_uri"], video["db_new_uri"])
-+                    )
-+
-+                old_cover = video["cover_path_old"]
-+                new_cover = video["cover_path_new"]
-+                if old_cover != new_cover:
-+                    if not repo.update_cover_path_preserve_focal(
-+                        video["db_new_uri"], new_cover, old_cover
-+                    ):
-+                        raise RuntimeError("database_cover_update_failed")
-+                    completed_covers.append(
-+                        (video["db_new_uri"], old_cover, new_cover)
-+                    )
-+
-+                old_samples = video["sample_images_old"]
-+                new_samples = video["sample_images_new"]
-+                if old_samples != new_samples:
-+                    if not repo.update_sample_images(
-+                        video["db_new_uri"], new_samples
-+                    ):
-+                        raise RuntimeError("database_samples_update_failed")
-+                    completed_samples.append(
-+                        (video["db_new_uri"], old_samples, new_samples)
-+                    )
++                db_updates.append({
++                    "db_old_uri": video["db_old_uri"],
++                    "db_new_uri": video["db_new_uri"],
++                    "cover_path_old": video["cover_path_old"],
++                    "cover_path_new": video["cover_path_new"],
++                    "sample_images_old": video["sample_images_old"],
++                    "sample_images_new": video["sample_images_new"],
++                })
++        _apply_rename_updates(
++            repo,
++            db_updates,
++            completed_db,
++            completed_covers,
++            completed_samples,
++        )
 +    except Exception as exc:
 +        rollback_errors: list[str] = []
 +        for db_path, old_samples, new_samples in reversed(completed_samples):
@@ -3606,7 +3805,7 @@
 +    return True
 --- /dev/null
 +++ b/core/rename_file_execution.py
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,118 @@
 +"""Execution and rollback for single-video rename plans."""
 +
 +from __future__ import annotations
@@ -3615,7 +3814,11 @@
 +from pathlib import Path
 +from typing import Any, Callable
 +
-+from core.rename_shared import _rename_file, _write_manifest
++from core.rename_shared import (
++    _apply_rename_updates,
++    _rename_file,
++    _write_manifest,
++)
 +
 +
 +def execute_rename_plan(
@@ -3637,6 +3840,8 @@
 +    completed_files: list[tuple[str, str]] = []
 +    completed_db: list[tuple[str, str]] = []
 +    completed_covers: list[tuple[str, str, str]] = []
++    completed_samples: list[tuple[str, list[str], list[str]]] = []
++    db_updates: list[dict[str, Any]] = []
 +
 +    try:
 +        for item in items:
@@ -3649,19 +3854,25 @@
 +                    ) from exc
 +                completed_files.append((operation["old_path"], operation["new_path"]))
 +
-+            if item["db_old_uri"] != item["db_new_uri"]:
-+                if not repo.repath_path_only(item["db_old_uri"], item["db_new_uri"]):
-+                    raise RuntimeError("database_path_update_failed")
-+                completed_db.append((item["db_old_uri"], item["db_new_uri"]))
-+
 +            old_cover = item.get("cover_path_old") or ""
 +            new_cover = item.get("cover_path_new") or ""
-+            if old_cover and old_cover != new_cover:
-+                if not repo.update_cover_path_preserve_focal(
-+                    item["db_new_uri"], new_cover, old_cover
-+                ):
-+                    raise RuntimeError("database_cover_update_failed")
-+                completed_covers.append((item["db_new_uri"], old_cover, new_cover))
++            db_updates.append({
++                "db_old_uri": item["db_old_uri"],
++                "db_new_uri": item["db_new_uri"],
++                "cover_path_old": old_cover,
++                "cover_path_new": new_cover,
++                "cover_update": bool(old_cover and old_cover != new_cover),
++                "sample_images_old": [],
++                "sample_images_new": [],
++                "samples_update": False,
++            })
++        _apply_rename_updates(
++            repo,
++            db_updates,
++            completed_db,
++            completed_covers,
++            completed_samples,
++        )
 +    except Exception as exc:
 +        rollback_errors: list[str] = []
 +        for db_path, old_cover, new_cover in reversed(completed_covers):
@@ -3715,13 +3926,15 @@
 +    }
 --- /dev/null
 +++ b/core/rename_file_plan.py
-@@ -0,0 +1,356 @@
+@@ -0,0 +1,527 @@
 +"""Preview planning for normalizing individual video filenames."""
 +
 +from __future__ import annotations
 +
 +import hashlib
 +import json
++import os
++from bisect import bisect_left
 +from datetime import datetime, timezone
 +from pathlib import Path
 +from typing import Any
@@ -3748,6 +3961,150 @@
 +        "size": stat.st_size,
 +        "mtime_ns": stat.st_mtime_ns,
 +    }
++
++
++def _name_key(name: str) -> str:
++    """Match the platform's case rules for an actual filesystem lookup."""
++    return os.path.normcase(name)
++
++
++def _filesystem_key(path: str | Path) -> str:
++    return os.path.normcase(os.path.abspath(str(path)))
++
++
++class _DirectorySnapshot:
++    """One directory listing shared by every video in that directory."""
++
++    def __init__(self, parent: Path):
++        self.parent = parent
++        self.children: list[Path] = []
++        self.file_paths: list[Path] = []
++        self.file_names: set[str] = set()
++        self.file_by_key: dict[str, Path] = {}
++        self.file_name_keys: list[str] = []
++        self.files_by_normalized_number: dict[str, list[Path]] = {}
++        self.existing_names: set[str] = set()
++        self.error: OSError | None = None
++        self.signatures: dict[str, dict[str, Any]] = {}
++
++        try:
++            self.children = sorted(
++                parent.iterdir(),
++                key=lambda path: path.name.casefold(),
++            )
++        except OSError as exc:
++            self.error = exc
++            return
++
++        for child in self.children:
++            try:
++                is_file = child.is_file()
++            except OSError:
++                # Path.is_file() also treats an unreadable entry as absent.
++                is_file = False
++            if is_file:
++                self.existing_names.add(_name_key(child.name))
++                self.file_paths.append(child)
++                self.file_names.add(_name_key(child.name))
++                self.file_by_key[_path_key(str(child))] = child
++                self.file_name_keys.append(child.name.casefold())
++                candidate_number = extract_number(child.name)
++                if candidate_number:
++                    normalized_number = normalize_number_impl(candidate_number)
++                    self.files_by_normalized_number.setdefault(
++                        normalized_number,
++                        [],
++                    ).append(child)
++            else:
++                try:
++                    exists = child.exists()
++                except OSError:
++                    exists = False
++                if exists:
++                    self.existing_names.add(_name_key(child.name))
++
++    def has_name(self, name: str) -> bool:
++        return _name_key(name) in self.existing_names
++
++    def has_file(self, name: str) -> bool:
++        return _name_key(name) in self.file_names
++
++    def file_for_path(self, path: Path) -> Path | None:
++        return self.file_by_key.get(_path_key(str(path)))
++
++    def sidecar_paths(self, stem: str) -> list[Path]:
++        """Return files whose names share the sidecar stem prefix."""
++        needle = stem.casefold()
++        start = bisect_left(self.file_name_keys, needle)
++        paths: list[Path] = []
++        for index in range(start, len(self.file_name_keys)):
++            name_key = self.file_name_keys[index]
++            if not name_key.startswith(needle):
++                break
++            paths.append(self.file_paths[index])
++        return paths
++
++    def repair_paths(self, number: str) -> list[Path]:
++        normalized = normalize_number_impl(str(number))
++        return self.files_by_normalized_number.get(normalized, [])
++
++    def signature(self, path: Path) -> dict[str, Any]:
++        key = _filesystem_key(path)
++        signature = self.signatures.get(key)
++        if signature is None:
++            signature = _stat_signature(path)
++            self.signatures[key] = signature
++        return signature
++
++
++class _DirectoryCache:
++    """Cache directory listings and stat results for one rename plan build."""
++
++    def __init__(self):
++        self._directories: dict[str, _DirectorySnapshot] = {}
++
++    def _snapshot(self, parent: Path) -> _DirectorySnapshot:
++        key = _filesystem_key(parent)
++        snapshot = self._directories.get(key)
++        if snapshot is None:
++            snapshot = _DirectorySnapshot(parent)
++            self._directories[key] = snapshot
++        return snapshot
++
++    def repair_paths(self, parent: Path, number: str) -> list[Path]:
++        snapshot = self._snapshot(parent)
++        if snapshot.error is not None:
++            return []
++        return snapshot.repair_paths(number)
++
++    def file_for_path(self, path: Path) -> Path | None:
++        snapshot = self._snapshot(path.parent)
++        if snapshot.error is not None:
++            return None
++        return snapshot.file_for_path(path)
++
++    def sidecar_paths(self, parent: Path, stem: str) -> list[Path]:
++        snapshot = self._snapshot(parent)
++        if snapshot.error is not None:
++            raise snapshot.error
++        return snapshot.sidecar_paths(stem)
++
++    def is_file(self, path: Path) -> bool:
++        snapshot = self._snapshot(path.parent)
++        if snapshot.error is not None:
++            # Preserve the existing behavior when a directory cannot be
++            # enumerated: ask the path directly and let callers handle OSError.
++            return path.is_file()
++        return snapshot.has_file(path.name)
++
++    def target_exists(self, path: Path) -> bool:
++        snapshot = self._snapshot(path.parent)
++        if snapshot.error is not None:
++            return path.exists()
++        return snapshot.has_name(path.name)
++
++    def signature(self, path: Path) -> dict[str, Any]:
++        return self._snapshot(path.parent).signature(path)
 +
 +
 +def _plan_id(items: list[dict[str, Any]]) -> str:
@@ -3782,6 +4139,7 @@
 +    video_extensions: set[str],
 +    path_mappings: dict | None,
 +    stem_overrides: dict[str, str] | None,
++    directory_cache: _DirectoryCache,
 +) -> dict[str, Any] | None:
 +    """Build the preview item for one database row."""
 +    old_uri = str(getattr(video, "path", "") or "")
@@ -3810,7 +4168,7 @@
 +
 +    repaired_source = False
 +    try:
-+        source_exists = source_path.is_file()
++        source_exists = directory_cache.is_file(source_path)
 +    except OSError:
 +        # Linux returns ENAMETOOLONG here for the exact path that Android
 +        # may expose through a truncated sibling instead.
@@ -3821,6 +4179,10 @@
 +            expected_path,
 +            str(number_hint) if number_hint else None,
 +            video_extensions,
++            known_files=directory_cache.repair_paths(
++                expected_path.parent,
++                str(number_hint),
++            ),
 +        )
 +        if recovered is None:
 +            item["status"] = "missing"
@@ -3864,9 +4226,25 @@
 +        item["conflicts"].append(reason)
 +        return item
 +
++    source_stem = source_path.stem
 +    try:
++        candidates: dict[str, Path] = {}
++        current_video = directory_cache.file_for_path(source_path)
++        if current_video is not None:
++            candidates[_path_key(str(current_video))] = current_video
++        for child in directory_cache.sidecar_paths(
++            source_path.parent,
++            source_stem,
++        ):
++            candidates[_path_key(str(child))] = child
++        if repaired_source and number:
++            for child in directory_cache.repair_paths(
++                source_path.parent,
++                str(number),
++            ):
++                candidates[_path_key(str(child))] = child
 +        children = sorted(
-+            source_path.parent.iterdir(),
++            candidates.values(),
 +            key=lambda path: path.name.casefold(),
 +        )
 +    except OSError as exc:
@@ -3875,10 +4253,9 @@
 +        item["conflicts"].append(str(exc))
 +        return item
 +
-+    source_stem = source_path.stem
 +    selected: list[tuple[Path, str]] = []
 +    for child in children:
-+        if not child.is_file():
++        if not directory_cache.is_file(child):
 +            continue
 +        extension = child.suffix.lower()
 +        is_current_video = _path_key(str(child)) == _path_key(str(source_path))
@@ -3954,7 +4331,7 @@
 +            "old_name": child.name,
 +            "new_name": target_name,
 +            "kind": kind,
-+            "signature": _stat_signature(child),
++            "signature": directory_cache.signature(child),
 +        }
 +        operations.append(operation)
 +
@@ -3987,7 +4364,10 @@
 +    return item
 +
 +
-+def _mark_rename_conflicts(items: list[dict[str, Any]]) -> None:
++def _mark_rename_conflicts(
++    items: list[dict[str, Any]],
++    directory_cache: _DirectoryCache,
++) -> None:
 +    """Detect case-only, existing-target, and duplicate-target conflicts."""
 +    source_keys = {
 +        _path_key(op["old_path"])
@@ -4009,7 +4389,7 @@
 +            target = Path(op["new_path"])
 +            if old_key == new_key and op["old_path"] != op["new_path"]:
 +                item["conflicts"].append("case_only_rename")
-+            if target.exists() and new_key not in source_keys:
++            if new_key not in source_keys and directory_cache.target_exists(target):
 +                item["conflicts"].append(
 +                    f"target_exists:{op['new_name']}"
 +                )
@@ -4053,6 +4433,7 @@
 +) -> dict[str, Any]:
 +    """Build a deterministic preview without modifying files or the database."""
 +    video_extensions = get_video_extensions(config or {})
++    directory_cache = _DirectoryCache()
 +    items: list[dict[str, Any]] = []
 +
 +    for video in videos:
@@ -4061,11 +4442,12 @@
 +            video_extensions,
 +            path_mappings,
 +            stem_overrides,
++            directory_cache,
 +        )
 +        if item is not None:
 +            items.append(item)
 +
-+    _mark_rename_conflicts(items)
++    _mark_rename_conflicts(items, directory_cache)
 +    return {
 +        "plan_id": _plan_id(items),
 +        "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -4074,7 +4456,7 @@
 +    }
 --- /dev/null
 +++ b/core/rename_folder_plan.py
-@@ -0,0 +1,338 @@
+@@ -0,0 +1,328 @@
 +"""Folder rename planning and execution."""
 +
 +from __future__ import annotations
@@ -4092,6 +4474,7 @@
 +    canonicalize_stem,
 +)
 +from core.rename_shared import (
++    _apply_rename_updates,
 +    _is_direct_child,
 +    _rebase_path,
 +    _rebase_path_list,
@@ -4314,6 +4697,7 @@
 +    completed_db: list[tuple[str, str]] = []
 +    completed_covers: list[tuple[str, str, str]] = []
 +    completed_samples: list[tuple[str, list[str], list[str]]] = []
++    db_updates: list[dict[str, Any]] = []
 +
 +    try:
 +        for item in items:
@@ -4327,33 +4711,21 @@
 +                (item["old_folder_path"], item["new_folder_path"])
 +            )
 +            for video in item["videos"]:
-+                if not repo.repath_path_only(
-+                    video["db_old_uri"], video["db_new_uri"]
-+                ):
-+                    raise RuntimeError("database_path_update_failed")
-+                completed_db.append((video["db_old_uri"], video["db_new_uri"]))
-+
-+                old_cover = video["cover_path_old"]
-+                new_cover = video["cover_path_new"]
-+                if old_cover != new_cover:
-+                    if not repo.update_cover_path_preserve_focal(
-+                        video["db_new_uri"], new_cover, old_cover
-+                    ):
-+                        raise RuntimeError("database_cover_update_failed")
-+                    completed_covers.append(
-+                        (video["db_new_uri"], old_cover, new_cover)
-+                    )
-+
-+                old_samples = video["sample_images_old"]
-+                new_samples = video["sample_images_new"]
-+                if old_samples != new_samples:
-+                    if not repo.update_sample_images(
-+                        video["db_new_uri"], new_samples
-+                    ):
-+                        raise RuntimeError("database_samples_update_failed")
-+                    completed_samples.append(
-+                        (video["db_new_uri"], old_samples, new_samples)
-+                    )
++                db_updates.append({
++                    "db_old_uri": video["db_old_uri"],
++                    "db_new_uri": video["db_new_uri"],
++                    "cover_path_old": video["cover_path_old"],
++                    "cover_path_new": video["cover_path_new"],
++                    "sample_images_old": video["sample_images_old"],
++                    "sample_images_new": video["sample_images_new"],
++                })
++        _apply_rename_updates(
++            repo,
++            db_updates,
++            completed_db,
++            completed_covers,
++            completed_samples,
++        )
 +    except Exception as exc:
 +        rollback_errors: list[str] = []
 +        for db_path, old_samples, new_samples in reversed(completed_samples):
@@ -4415,7 +4787,7 @@
 +    }
 --- /dev/null
 +++ b/core/rename_names.py
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,260 @@
 +"""Filename normalization primitives shared by rename planning."""
 +
 +from __future__ import annotations
@@ -4635,27 +5007,46 @@
 +    expected_path: Path,
 +    number: str | None,
 +    video_extensions: set[str],
++    *,
++    known_files: list[Path] | None = None,
 +) -> Path | None:
-+    """Find a unique same-number video when MTP/FUSE truncated its filename."""
++    """Find a unique same-number video when MTP/FUSE truncated its filename.
++
++    ``known_files`` lets the caller reuse a directory scan already performed
++    for a large rename preview; the default path remains standalone-safe.
++    """
 +    if not number:
-+        return None
-+    try:
-+        if not expected_path.parent.is_dir():
-+            return None
-+    except OSError:
 +        return None
 +    normalized = normalize_number_impl(str(number))
 +    matches = []
-+    try:
-+        children = expected_path.parent.iterdir()
-+        for child in children:
-+            if not child.is_file() or child.suffix.lower() not in video_extensions:
++    if known_files is None:
++        try:
++            if not expected_path.parent.is_dir():
++                return None
++            children = expected_path.parent.iterdir()
++            for child in children:
++                if not child.is_file():
++                    continue
++                if child.suffix.lower() not in video_extensions:
++                    continue
++                candidate_number = extract_number(child.name)
++                if (
++                    candidate_number
++                    and normalize_number_impl(candidate_number) == normalized
++                ):
++                    matches.append(child)
++        except OSError:
++            return None
++    else:
++        for child in known_files:
++            if child.suffix.lower() not in video_extensions:
 +                continue
 +            candidate_number = extract_number(child.name)
-+            if candidate_number and normalize_number_impl(candidate_number) == normalized:
++            if (
++                candidate_number
++                and normalize_number_impl(candidate_number) == normalized
++            ):
 +                matches.append(child)
-+    except OSError:
-+        return None
 +    return matches[0] if len(matches) == 1 else None
 --- /dev/null
 +++ b/core/rename_normalizer.py
@@ -4707,7 +5098,7 @@
 +)
 --- /dev/null
 +++ b/core/rename_shared.py
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,179 @@
 +"""Shared filesystem helpers for rename plan execution."""
 +
 +from __future__ import annotations
@@ -4830,6 +5221,63 @@
 +    if target_path.exists():
 +        raise FileExistsError(target)
 +    android_storage.rename(source, target)
++
++
++def _apply_rename_updates(
++    repo,
++    updates: list[dict[str, Any]],
++    completed_db: list[tuple[str, str]],
++    completed_covers: list[tuple[str, str, str]],
++    completed_samples: list[tuple[str, list[str], list[str]]],
++) -> None:
++    """Apply collected DB updates, preferring one repository transaction."""
++    if not updates:
++        return
++
++    batch_apply = getattr(repo, "apply_rename_batch", None)
++    if callable(batch_apply):
++        if not batch_apply(updates):
++            raise RuntimeError("database_update_failed")
++        for update in updates:
++            old_uri = str(update.get("db_old_uri") or "")
++            new_uri = str(update.get("db_new_uri") or "")
++            if old_uri != new_uri:
++                completed_db.append((old_uri, new_uri))
++            old_cover = str(update.get("cover_path_old") or "")
++            new_cover = str(update.get("cover_path_new") or "")
++            if update.get("cover_update", old_cover != new_cover):
++                completed_covers.append((new_uri, old_cover, new_cover))
++            old_samples = list(update.get("sample_images_old") or [])
++            new_samples = list(update.get("sample_images_new") or [])
++            if update.get("samples_update", old_samples != new_samples):
++                completed_samples.append((new_uri, old_samples, new_samples))
++        return
++
++    for update in updates:
++        old_uri = str(update.get("db_old_uri") or "")
++        new_uri = str(update.get("db_new_uri") or "")
++        if old_uri != new_uri:
++            if not repo.repath_path_only(old_uri, new_uri):
++                raise RuntimeError("database_path_update_failed")
++            completed_db.append((old_uri, new_uri))
++
++        old_cover = str(update.get("cover_path_old") or "")
++        new_cover = str(update.get("cover_path_new") or "")
++        if update.get("cover_update", old_cover != new_cover):
++            if not repo.update_cover_path_preserve_focal(
++                new_uri,
++                new_cover,
++                old_cover,
++            ):
++                raise RuntimeError("database_cover_update_failed")
++            completed_covers.append((new_uri, old_cover, new_cover))
++
++        old_samples = list(update.get("sample_images_old") or [])
++        new_samples = list(update.get("sample_images_new") or [])
++        if update.get("samples_update", old_samples != new_samples):
++            if not repo.update_sample_images(new_uri, new_samples):
++                raise RuntimeError("database_samples_update_failed")
++            completed_samples.append((new_uri, old_samples, new_samples))
 --- a/core/source_config.py
 +++ b/core/source_config.py
 @@ -9,7 +9,7 @@
@@ -4880,6 +5328,60 @@
  
  
  def render_name(s: SourceConfig) -> str:
+--- a/core/thumbnail_cache.py
++++ b/core/thumbnail_cache.py
+@@ -45,7 +45,17 @@
+ # 縮圖參數（CD-3 / D2，集中為模組常數供日後調參）
+ THUMB_WIDTH = 400      # 目標寬度（px）
+ THUMB_QUALITY = 80     # WebP quality
+-THUMB_METHOD = 4       # WebP method（壓縮努力）
++# Method 2 keeps cold-start generation responsive on phones while retaining
++# substantially better compression than method 0. Method 4 was needlessly
++# expensive when a freshly scanned page asked for dozens of covers at once.
++THUMB_METHOD = 2
++
++# Cold thumbnail generation is CPU-heavy. Without a global gate, a grid page
++# can occupy every Starlette thread with simultaneous Pillow resizes and WebP
++# encodes, which is especially visible on Android. Two workers preserve
++# parallelism without starving the request loop.
++_MAX_CONCURRENT_GENERATES = 2
++_generate_slots = threading.BoundedSemaphore(_MAX_CONCURRENT_GENERATES)
+ 
+ 
+ def _thumb_dir() -> Path:
+@@ -75,17 +85,23 @@
+     # 整個「讀 cover → 處理 → 原子寫」包進 per-thumb 鎖內，與 invalidate 的 unlink
+     # 序列化（Codex round-2 P1 修法 A）。失敗回 False 的語義不變，只是被鎖包住。
+     with _lock_for_thumb(dst):
++        # Two requests for the same card can both observe a miss before the
++        # first one finishes. Re-check under the per-thumb lock so only one
++        # performs the expensive resize/encode.
++        if dst.exists():
++            return True
+         try:
+-            with Image.open(cover_fs_path) as img:
+-                img = img.convert("RGB")  # 去 alpha/CMYK，WebP 友善
+-                # 等比縮到寬 THUMB_WIDTH；原圖更窄則不放大
+-                if img.width > THUMB_WIDTH:
+-                    new_h = max(1, round(img.height * THUMB_WIDTH / img.width))
+-                    img = img.resize((THUMB_WIDTH, new_h), Image.LANCZOS)
++            with _generate_slots:
++                with Image.open(cover_fs_path) as img:
++                    img = img.convert("RGB")  # 去 alpha/CMYK，WebP 友善
++                    # 等比縮到寬 THUMB_WIDTH；原圖更窄則不放大
++                    if img.width > THUMB_WIDTH:
++                        new_h = max(1, round(img.height * THUMB_WIDTH / img.width))
++                        img = img.resize((THUMB_WIDTH, new_h), Image.LANCZOS)
+ 
+-                dst.parent.mkdir(parents=True, exist_ok=True)
+-                with atomic_write(dst) as f:
+-                    img.save(f, "WEBP", quality=THUMB_QUALITY, method=THUMB_METHOD)
++                    dst.parent.mkdir(parents=True, exist_ok=True)
++                    with atomic_write(dst) as f:
++                        img.save(f, "WEBP", quality=THUMB_QUALITY, method=THUMB_METHOD)
+             return True
+         except Exception as e:
+             logger.warning("thumbnail generate failed: cover=%s err=%s", cover_fs_path, e)
 --- a/core/title_writeback.py
 +++ b/core/title_writeback.py
 @@ -9,6 +9,7 @@

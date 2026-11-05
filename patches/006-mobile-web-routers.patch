@@ -68,7 +68,7 @@
 -from core.scraper import smart_search
 +from core.scraper import get_javbus_lang, search_jav, smart_search
  from core.source_settings import is_uncensored_mode_effective
-+from core.scrapers.utils import check_subtitle, extract_number
++from core.scrapers.utils import check_subtitle, extract_number, has_japanese
 +from core.source_config import get_manual_only_sources, validate_source_id
  from pydantic import BaseModel
  from core.logger import get_logger
@@ -1050,7 +1050,7 @@
                  "details": {
                      "no_title": stats['no_title'],
                      "no_date": stats['no_date'],
-@@ -994,6 +1626,34 @@
+@@ -994,36 +1626,125 @@
          return {"success": False, "error": "檢查更新數量失敗"}
  
  
@@ -1082,10 +1082,59 @@
 +    return (video.nfo_mtime or 0) > 0
 +
 +
++def _candidate_number(video: Video) -> str:
++    """Recover a usable number for maintenance rows with stale NULL values."""
++    if video.number:
++        return video.number
++    filename = video.path.rstrip("/").rsplit("/", 1)[-1]
++    return extract_number(filename) or extract_number(video.title or "") or ""
++
++
++def _is_untranslated_title_candidate(video: Video) -> bool:
++    """Only rows with a non-empty Japanese title and no saved original title."""
++    title = (video.title or "").strip()
++    return bool(
++        title
++        and not (video.original_title or "").strip()
++        and has_japanese(title)
++    )
++
++
++def _is_missing_sample_candidate(video: Video) -> bool:
++    """A sample list is present only when it contains at least one usable URI."""
++    samples = video.sample_images
++    if not isinstance(samples, list):
++        return True
++    return not any(
++        isinstance(url, str) and url.strip()
++        for url in samples
++    )
++
++
  @router.get("/missing-check")
  def check_missing():
-     """T10: 檢查 DB 中缺少 NFO 或封面的影片數量與清單"""
-@@ -1006,6 +1666,7 @@
+-    """T10: 檢查 DB 中缺少 NFO 或封面的影片數量與清單"""
++    """Check missing NFO/cover plus the two explicit backfill queues."""
+     try:
+         db_path = get_db_path()
+ 
+         if not db_path.exists():
+-            return {"success": True, "data": {"missing_both": 0, "missing_nfo": 0,
+-                                               "missing_cover": 0, "total_missing": 0, "items": []}}
++            return {
++                "success": True,
++                "data": {
++                    "missing_both": 0,
++                    "missing_nfo": 0,
++                    "missing_cover": 0,
++                    "total_missing": 0,
++                    "items": [],
++                    "untranslated_titles": 0,
++                    "missing_samples": 0,
++                    "untranslated_title_items": [],
++                    "missing_sample_items": [],
++                },
++            }
  
          repo = VideoRepository(db_path)
          all_videos = repo.get_all()
@@ -1093,8 +1142,10 @@
  
          missing_both = 0
          missing_nfo = 0
-@@ -1013,17 +1674,24 @@
+         missing_cover = 0
          items = []
++        untranslated_title_items = []
++        missing_sample_items = []
  
          for v in all_videos:
 -            has_nfo = (v.nfo_mtime or 0) > 0
@@ -1103,6 +1154,20 @@
 -            tried = (v.scrape_attempted_at or 0) > 0
 -            if produced or tried:
 -                continue
++            number = _candidate_number(v)
++            if _is_untranslated_title_candidate(v):
++                untranslated_title_items.append({
++                    "file_path": v.path,
++                    "number": number,
++                    "title": v.title,
++                })
++            if _is_missing_sample_candidate(v):
++                missing_sample_items.append({
++                    "file_path": v.path,
++                    "number": number,
++                    "title": v.title,
++                })
++
 +            has_nfo = _video_has_nfo(v, path_mappings)
 +            has_cover = False
 +            if v.cover_path:
@@ -1115,22 +1180,389 @@
              if has_nfo and has_cover:
                  continue
 -            if not v.number:  # skip videos without number (cannot enrich)
-+            # Older scans could store number=NULL when the filename put CJK text
-+            # directly after the code. Recover the number from the current path so
-+            # already-scanned rows become actionable without clearing the library.
-+            number = v.number or extract_number(v.path.rstrip("/").rsplit("/", 1)[-1])
-+            if not number:  # skip videos without number (cannot enrich)
++            if not number:  # Cannot enrich a row without a recoverable number.
                  continue
 -            item = {"file_path": v.path, "number": v.number}
 +            item = {"file_path": v.path, "number": number}
              if not has_nfo and not has_cover:
                  missing_both += 1
                  item["category"] = "both"
-@@ -1053,7 +1721,414 @@
-         return {"success": False, "error": "檢查缺失 NFO/封面失敗"}
+@@ -1037,7 +1758,7 @@
  
+         total_missing = missing_both + missing_nfo + missing_cover
  
+-        # 永遠回傳完整 items 清單；大批量的 confirm gate 由前端處理
++        # Return complete lists; the frontend owns confirmation/display policy.
+         return {
+             "success": True,
+             "data": {
+@@ -1046,14 +1767,771 @@
+                 "missing_cover": missing_cover,
+                 "total_missing": total_missing,
+                 "items": items,
+-            }
++                "untranslated_titles": len(untranslated_title_items),
++                "missing_samples": len(missing_sample_items),
++                "untranslated_title_items": untranslated_title_items,
++                "missing_sample_items": missing_sample_items,
++            },
+         }
+     except Exception as e:
+-        logger.error("檢查缺失 NFO/封面失敗: %s", e)
+-        return {"success": False, "error": "檢查缺失 NFO/封面失敗"}
+-
+-
 -def generate_nfo_update() -> Generator[str, None, None]:
++        logger.error("檢查維護缺口失敗: %s", e)
++        return {"success": False, "error": "檢查維護缺口失敗"}
++
++
++def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
++    """Translate and write back only rows that are still missing a translation."""
++    try:
++        db_path = get_db_path()
++        if not db_path.exists():
++            yield _sse_event({"type": "error", "message": "資料庫不存在，請先產生列表"})
++            return
++
++        config = load_config()
++        translate_config = config.get("translate", {})
++        if not translate_config.get("enabled", False):
++            yield _sse_event({"type": "error", "message": "翻譯功能未啟用"})
++            return
++        locale = config.get("general", {}).get("locale", "zh-TW")
++        if str(locale).lower().startswith("ja"):
++            yield _sse_event({"type": "error", "message": "目前語言為日文，無需補齊翻譯標題"})
++            return
++
++        from web.routers.showcase import TitleWritebackRequest, _apply_title_writeback
++        from web.routers.translate import get_translate_service
++
++        repo = VideoRepository(db_path)
++        candidates = [
++            video for video in repo.get_untranslated_title_candidates()
++            if _is_untranslated_title_candidate(video)
++        ]
++        total = len(candidates)
++        if total == 0:
++            yield _sse_event({
++                "type": "done",
++                "message": "沒有待補翻譯的標題",
++                "cancelled": False,
++                "summary": {
++                    "success": 0,
++                    "failed": 0,
++                    "skipped": 0,
++                    "failed_items": [],
++                },
++            })
++            return
++
++        try:
++            translate_service = get_translate_service()
++        except Exception:
++            logger.exception("初始化批次標題翻譯服務失敗")
++            yield _sse_event({
++                "type": "error",
++                "message": "翻譯功能設定無效，請檢查設定",
++            })
++            return
++
++        path_mappings = config.get("gallery", {}).get("path_mappings", {})
++        success_count = 0
++        failed_count = 0
++        skipped_count = 0
++        failed_items = []
++
++        yield _sse_event({
++            "type": "log",
++            "level": "info",
++            "message": f"待補翻譯標題：{total} 部",
++        })
++
++        for index, video in enumerate(candidates, start=1):
++            if cancel_event.is_set():
++                yield _sse_event({
++                    "type": "done",
++                    "message": "標題補齊已取消",
++                    "cancelled": True,
++                    "summary": {
++                        "success": success_count,
++                        "failed": failed_count,
++                        "skipped": skipped_count,
++                        "failed_items": failed_items,
++                    },
++                })
++                return
++
++            number = _candidate_number(video)
++            yield _sse_event({
++                "type": "progress",
++                "current": index,
++                "total": total,
++                "number": number,
++                "title": video.title,
++                "status": "正在翻譯標題...",
++                "success": success_count,
++                "failed": failed_count,
++                "skipped": skipped_count,
++            })
++
++            try:
++                translated = asyncio.run(
++                    translate_service.translate_or_raise(
++                        video.title,
++                        {
++                            "actors": video.actresses or [],
++                            "number": number,
++                        },
++                    )
++                )
++                translated = (translated or "").strip()
++                if not translated:
++                    raise ValueError("empty translation")
++                result = _apply_title_writeback(
++                    repo,
++                    video,
++                    TitleWritebackRequest(
++                        file_path=video.path,
++                        title=translated,
++                    ),
++                    config,
++                    path_mappings,
++                )
++            except Exception:
++                logger.exception("批次補齊標題失敗: %s", video.path)
++                result = {
++                    "success": False,
++                    "error": "translate_failed",
++                    "message": "標題翻譯失敗",
++                }
++
++            if result.get("success"):
++                success_count += 1
++                yield _sse_event({
++                    "type": "result-item",
++                    "file_path": video.path,
++                    "number": number,
++                    "success": True,
++                    "skipped": False,
++                    "title": result.get("title", translated),
++                    "original_title": result.get("original_title", video.title),
++                    "success_count": success_count,
++                    "failed_count": failed_count,
++                    "skipped_count": skipped_count,
++                })
++                continue
++
++            failed_count += 1
++            error_code = result.get("error") or "write_failed"
++            error_message = result.get("message") or "標題寫回失敗"
++            failed_items.append({
++                "path": video.path,
++                "number": number,
++                "error": error_message,
++            })
++            yield _sse_event({
++                "type": "result-item",
++                "file_path": video.path,
++                "number": number,
++                "success": False,
++                "skipped": False,
++                "error_code": error_code,
++                "error": error_message,
++                "success_count": success_count,
++                "failed_count": failed_count,
++                "skipped_count": skipped_count,
++            })
++
++        yield _sse_event({
++            "type": "done",
++            "message": (
++                f"標題補齊完成：成功 {success_count}，失敗 {failed_count}"
++            ),
++            "cancelled": False,
++            "summary": {
++                "success": success_count,
++                "failed": failed_count,
++                "skipped": skipped_count,
++                "failed_items": failed_items,
++            },
++        })
++    except Exception:
++        logger.exception("批次補齊標題端點失敗")
++        yield _sse_event({"type": "error", "message": "標題補齊失敗，請查閱日誌"})
++
++
++def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
++    """Fetch samples only for rows whose stored sample-image list is empty."""
++    try:
++        db_path = get_db_path()
++        if not db_path.exists():
++            yield _sse_event({"type": "error", "message": "資料庫不存在，請先產生列表"})
++            return
++
++        from web.routers.scraper import FetchSamplesRequest, fetch_samples_endpoint
++
++        repo = VideoRepository(db_path)
++        candidates = [
++            video for video in repo.get_missing_sample_candidates()
++            if _is_missing_sample_candidate(video)
++        ]
++        total = len(candidates)
++        if total == 0:
++            yield _sse_event({
++                "type": "done",
++                "message": "沒有缺失劇照的影片",
++                "cancelled": False,
++                "summary": {
++                    "success": 0,
++                    "failed": 0,
++                    "skipped": 0,
++                    "failed_items": [],
++                },
++            })
++            return
++
++        success_count = 0
++        failed_count = 0
++        skipped_count = 0
++        failed_items = []
++
++        yield _sse_event({
++            "type": "log",
++            "level": "info",
++            "message": f"待補劇照：{total} 部",
++        })
++
++        for index, video in enumerate(candidates, start=1):
++            if cancel_event.is_set():
++                yield _sse_event({
++                    "type": "done",
++                    "message": "劇照補齊已取消",
++                    "cancelled": True,
++                    "summary": {
++                        "success": success_count,
++                        "failed": failed_count,
++                        "skipped": skipped_count,
++                        "failed_items": failed_items,
++                    },
++                })
++                return
++
++            number = _candidate_number(video)
++            yield _sse_event({
++                "type": "progress",
++                "current": index,
++                "total": total,
++                "number": number,
++                "title": video.title,
++                "status": "正在補齊劇照...",
++                "success": success_count,
++                "failed": failed_count,
++                "skipped": skipped_count,
++            })
++
++            if not number:
++                skipped_count += 1
++                yield _sse_event({
++                    "type": "result-item",
++                    "file_path": video.path,
++                    "number": "",
++                    "success": False,
++                    "skipped": True,
++                    "error_code": "missing_number",
++                    "error": "無法識別番號，已跳過",
++                    "success_count": success_count,
++                    "failed_count": failed_count,
++                    "skipped_count": skipped_count,
++                })
++                continue
++
++            try:
++                result = fetch_samples_endpoint(
++                    FetchSamplesRequest(
++                        file_path=video.path,
++                        number=number,
++                    )
++                )
++            except Exception:
++                logger.exception("批次補齊劇照失敗: %s", video.path)
++                result = {
++                    "success": False,
++                    "error_code": "internal_error",
++                    "message": "劇照補齊處理失敗",
++                }
++
++            if result.get("success"):
++                success_count += 1
++                yield _sse_event({
++                    "type": "result-item",
++                    "file_path": video.path,
++                    "number": number,
++                    "success": True,
++                    "skipped": False,
++                    "downloaded": result.get("downloaded", 0),
++                    "skipped_existing": result.get("skipped_existing", 0),
++                    "extrafanart_on_disk": result.get("extrafanart_on_disk", 0),
++                    "success_count": success_count,
++                    "failed_count": failed_count,
++                    "skipped_count": skipped_count,
++                })
++                continue
++
++            failed_count += 1
++            error_code = result.get("error_code") or "sample_fetch_failed"
++            error_message = result.get("message") or "劇照補齊失敗"
++            failed_items.append({
++                "path": video.path,
++                "number": number,
++                "error": error_message,
++            })
++            yield _sse_event({
++                "type": "result-item",
++                "file_path": video.path,
++                "number": number,
++                "success": False,
++                "skipped": False,
++                "error_code": error_code,
++                "error": error_message,
++                "success_count": success_count,
++                "failed_count": failed_count,
++                "skipped_count": skipped_count,
++            })
++
++        yield _sse_event({
++            "type": "done",
++            "message": (
++                f"劇照補齊完成：成功 {success_count}，失敗 {failed_count}，"
++                f"跳過 {skipped_count}"
++            ),
++            "cancelled": False,
++            "summary": {
++                "success": success_count,
++                "failed": failed_count,
++                "skipped": skipped_count,
++                "failed_items": failed_items,
++            },
++        })
++    except Exception:
++        logger.exception("批次補齊劇照端點失敗")
++        yield _sse_event({"type": "error", "message": "劇照補齊失敗，請查閱日誌"})
++
++
++@router.post("/backfill-titles")
++async def backfill_titles(request: Request):
++    """SSE: fill only untranslated Japanese titles."""
++    return await _cancelable_sse_response(request, _title_backfill_generator)
++
++
++@router.post("/backfill-samples")
++async def backfill_samples(request: Request):
++    """SSE: fetch samples only for rows whose sample list is empty."""
++    return await _cancelable_sse_response(request, _sample_backfill_generator)
++
++
 +def _build_current_rename_plan(scope: str = "files") -> dict:
 +    db_path = get_db_path()
 +    if scope not in {"files", "folders"}:
@@ -1542,7 +1974,7 @@
      """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
  
      try:
-@@ -1085,6 +2160,28 @@
+@@ -1085,6 +2563,28 @@
              return
  
          paths_to_update = stats['paths']
@@ -1571,7 +2003,7 @@
          yield _sse_event({
              "type": "log",
              "level": "info",
-@@ -1092,12 +2189,90 @@
+@@ -1092,12 +2592,90 @@
          })
  
          # 執行更新（path_mappings 沿用 _build_nfo_update_cache 算好的那份，不重讀 config）
@@ -1664,7 +2096,7 @@
          })
  
      except Exception as e:
-@@ -1106,15 +2281,62 @@
+@@ -1106,15 +2684,62 @@
  
  
  @router.get("/update")
@@ -1735,7 +2167,7 @@
      )
  
  
-@@ -1211,7 +2433,9 @@
+@@ -1211,7 +2836,9 @@
      return {'need_update': len(need_update), 'items': need_update}
  
  
@@ -1746,7 +2178,7 @@
      """SSE 串流：批次為影片產生 poster + fanart"""
      global _jellyfin_cache_result, _jellyfin_cache_time
  
-@@ -1252,7 +2476,13 @@
+@@ -1252,7 +2879,13 @@
          yield _sse_event({"type": "log", "level": "info", "message": f"需補齊 {total} 部影片的圖片..."})
  
          completed = 0
@@ -1760,7 +2192,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,6 +2491,7 @@
+@@ -1261,6 +2894,7 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -1768,7 +2200,7 @@
                  break
  
              cover = item['cover_path']
-@@ -1271,7 +2502,11 @@
+@@ -1271,7 +2905,11 @@
                  "type": "progress",
                  "current": i,
                  "total": total,
@@ -1781,7 +2213,7 @@
              })
  
              img_result = generate_jellyfin_images(
-@@ -1283,18 +2518,35 @@
+@@ -1283,18 +2921,35 @@
  
              if img_result['poster']:
                  yield _sse_event({"type": "log", "level": "info", "message": f"✓ {num} poster + fanart"})
@@ -1820,7 +2252,7 @@
          })
  
      except Exception as e:
-@@ -1359,15 +2611,11 @@
+@@ -1359,15 +3014,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -1840,7 +2272,7 @@
      )
  
  
-@@ -1621,6 +2869,11 @@
+@@ -1621,6 +3272,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:
@@ -2177,6 +2609,15 @@
                              failed_count += 1
 --- a/web/routers/showcase.py
 +++ b/web/routers/showcase.py
+@@ -17,7 +17,7 @@
+ from fastapi.responses import JSONResponse, Response
+ from pydantic import BaseModel
+ 
+-from core.database import VideoRepository, get_db_path, init_db
++from core.database import AliasRepository, VideoRepository, get_db_path, init_db
+ from core.database.version_tracker import (
+     compute_db_fingerprint,
+     compute_etag,
 @@ -33,9 +33,15 @@
  from core.scrapers.utils import has_japanese
  from core.nfo_stat import nfo_mtime_or_none
@@ -2250,7 +2691,7 @@
  def _etag_matches(if_none_match: str, etag: str) -> bool:
      """比對 `If-None-Match` 語意（抄 Starlette `StaticFiles.is_not_modified()` 的比對方式，
      不 import 該函式本身——它綁定 `FileResponse` 用的 `Headers` 型別，這裡是手寫 JSON 端點）。
-@@ -158,7 +200,14 @@
+@@ -158,8 +200,20 @@
  
  
  @router.get("/videos")
@@ -2262,11 +2703,17 @@
 +    sort: str = Query('date'),
 +    order: str = Query('desc'),
 +    paged: bool = Query(False),
++    actress: Optional[str] = Query(None, max_length=200),
 +):
      """取得所有影片資料（用於 Showcase 頁面客戶端渲染）。
++
++    ``actress`` 可選：先以 AliasRepository.resolve() 展開別名群組，再在
++    SQLite 的 json_each 上做精確 membership 篩選，避免前端為女優牆下載
++    整份片庫。篩選後的 rows 才進入 group/sort/pagination。
  
      帶 ETag（CD-145a-8/11/12）：涵蓋 DB 內部寫入 revision、DB/-wal 檔案指紋（涵蓋外部
-@@ -186,18 +235,34 @@
+     抽換或還原備份）、無機密設定投影（來源資料夾／path_mappings／縮圖開關）三項，
+@@ -186,18 +240,46 @@
          configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
          thumb_enabled = config.get('thumbnail_cache_enabled', False)
  
@@ -2276,6 +2723,17 @@
 +        requested_order = 'asc' if order == 'asc' else 'desc'
 +        use_pagination = bool(paged and per_page > 0 and requested_sort != 'random')
 +
++        # Direct Python callers (tests and internal callers) may omit the
++        # FastAPI Query default entirely, in which case the default object is
++        # not a string. Treat only a real string as a filter.
++        actress_name = actress.strip() if isinstance(actress, str) else ''
++        actress_names = None
++        if actress_name:
++            # Resolve aliases before touching the video table. A request for
++            # an old name must include rows indexed under every current name
++            # in the same alias group.
++            actress_names = sorted(AliasRepository(db_path).resolve(actress_name))
++
          projection = {
              "directories": sorted(get_gallery_source_paths(gallery_config)),
              "path_mappings": path_mappings,
@@ -2284,6 +2742,7 @@
 +            "per_page": per_page if use_pagination else 0,
 +            "sort": requested_sort if use_pagination else 'client',
 +            "order": requested_order if use_pagination else 'client',
++            "actress_names": actress_names or [],
          }
 -        etag = compute_etag(get_showcase_revision(), compute_db_fingerprint(db_path), projection)
 -
@@ -2301,11 +2760,11 @@
  
          repo = VideoRepository(db_path)
 -        all_videos = [v for v in repo.get_all()
-+        all_videos = [v for v in repo.get_showcase_rows(configured_dir_uris)
++        all_videos = [v for v in repo.get_showcase_rows(configured_dir_uris, actress_names)
                        if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
  
          # feature/122 CD-122-1：分組在序列化層收斂，前端拿到的 videos 陣列已是
-@@ -205,15 +270,31 @@
+@@ -205,15 +287,32 @@
          # 一個 member，_serialize_group() 輸出與改動前逐鍵逐值相同（AC-4）。
          groups = group_rows(all_videos, fs_path_of=lambda v: uri_to_local_fs_path(v.path, path_mappings))
  
@@ -2334,6 +2793,7 @@
 +            "per_page": per_page if use_pagination else 0,
 +            "total_pages": total_pages if use_pagination else 1,
 +            "paged": use_pagination,
++            "actress_filter": actress_name,
          })
 -        resp.headers["ETag"] = etag
 +        if etag:
@@ -2341,7 +2801,7 @@
          resp.headers["Cache-Control"] = "no-cache"
          return resp
  
-@@ -494,6 +575,7 @@
+@@ -494,6 +593,7 @@
      "no_nfo": "找不到 NFO",
      "nfo_ambiguous": "輸出夾有多份 NFO，無法判斷要改哪一份",
      "nfo_unreadable": "NFO 無法讀取或解析",
@@ -2349,7 +2809,7 @@
      "nfo_write_failed": "NFO 寫入失敗",
      "db_write_failed": "資料庫寫入失敗（NFO 已更新，請再試一次）",
      "invalid_path": "檔案路徑格式無效",
-@@ -541,7 +623,13 @@
+@@ -541,7 +641,13 @@
      owning = resolve_owning_output_root(video.path, config)
      if owning is not None:
          return _locate_readonly_nfo(video, path_mappings, owning[2])
@@ -2364,7 +2824,7 @@
  
  
  def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: str) -> Optional[str]:
-@@ -556,10 +644,57 @@
+@@ -556,10 +662,57 @@
          return "no_nfo"
      except NfoParseError:
          return "nfo_unreadable"
@@ -2422,7 +2882,7 @@
  
  
  def _apply_title_writeback(repo, video, req, config: dict, path_mappings: dict) -> dict:
-@@ -574,6 +709,31 @@
+@@ -574,6 +727,31 @@
  
      nfo_path, loc_err = _locate_title_nfo(video, config, path_mappings)
      if nfo_path is None:
@@ -2454,7 +2914,7 @@
          return _title_fail(loc_err)
      nfo_err = _write_title_nfo(nfo_path, video, body, new_original, fmt)
      if nfo_err is not None:
-@@ -592,6 +752,7 @@
+@@ -592,6 +770,7 @@
          return _title_fail("not_found")
      return {"success": True, "title": body, "original_title": new_original,
              "needs_translate": _needs_translate(body, new_original, new_mtime),

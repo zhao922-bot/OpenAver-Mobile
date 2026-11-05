@@ -64,6 +64,7 @@
         "core/rename_normalizer.py",
         "core/rename_shared.py",
         "core/source_config.py",
+        "core/thumbnail_cache.py",
         "core/title_writeback.py"
       ]
     },
@@ -88,6 +89,7 @@
         "web/config.default.json",
         "web/static/css/input.css",
         "web/static/css/tailwind.css",
+        "web/static/css/theme.css",
         "web/static/css/components/mobile-ui.css",
         "web/static/css/pages/help-mobile.css",
         "web/static/css/pages/insights.css",

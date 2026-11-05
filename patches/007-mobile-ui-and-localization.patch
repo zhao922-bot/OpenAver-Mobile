@@ -1004,8 +1004,8 @@
        "clear_cache_title": "Clear cache",
 +      "overview_title": "Library overview",
 +      "maintenance_title": "Batch maintenance",
-+      "maintenance_hint": "Manage NFO files, tags, and derived images in one place",
-+      "maintenance_summary": "NFO {nfo} · Missing {missing} · Images {images}",
++      "maintenance_hint": "Manage NFO files, title translations, samples, tags, and derived images in one place",
++      "maintenance_summary": "NFO {nfo} · Missing {missing} · Backfill {backfill} · Images {images}",
 +      "log_empty": "Run logs will appear here",
 +      "log_expand": "Expand run log",
 +      "log_collapse": "Collapse run log",
@@ -1063,7 +1063,37 @@
        "jellyfin_prefix": "Jellyfin cover format missing:",
        "jellyfin_suffix": " videos",
        "jellyfin_update_title": "Generate Jellyfin poster + fanart",
-@@ -1291,6 +1475,7 @@
+@@ -928,6 +1112,29 @@
+       "missing_enrich_confirm_body_suffix": " minutes. Continue?",
+       "missing_enrich_confirm_cancel": "Cancel",
+       "missing_enrich_confirm_confirm": "Confirm",
++      "title_backfill_prefix": "Untranslated titles:",
++      "title_backfill_suffix": "videos",
++      "title_backfill_drilldown_note": "Only videos with a Japanese title and no saved original title are included.",
++      "title_backfill_idle": "Fill missing titles",
++      "title_backfill_loading": "Filling titles...",
++      "title_backfill_preparing": "Preparing title translation...",
++      "title_backfill_disabled": "Translation disabled",
++      "title_backfill_hint": "Translate only Japanese titles that do not yet have a saved original title",
++      "title_backfill_toast_success": "Title backfill complete: {success} succeeded",
++      "title_backfill_toast_mixed": "Title backfill complete: {success} succeeded, {failed} failed",
++      "title_backfill_error": "Title backfill failed. Please try again later",
++      "sample_backfill_prefix": "Missing samples:",
++      "sample_backfill_suffix": "videos",
++      "sample_backfill_drilldown_note": "Only videos with no sample records in the database are included; existing files on disk are kept.",
++      "sample_backfill_idle": "Fill missing samples",
++      "sample_backfill_loading": "Filling samples...",
++      "sample_backfill_preparing": "Preparing sample backfill...",
++      "sample_backfill_hint": "Fill samples only for videos with no sample records, without refetching existing samples",
++      "sample_backfill_toast_success": "Sample backfill complete: {success} succeeded",
++      "sample_backfill_toast_mixed": "Sample backfill complete: {success} succeeded, {failed} failed",
++      "sample_backfill_error": "Sample backfill failed. Please try again later",
++      "backfill_item_failed": "Failed: {number} — {error}",
++      "backfill_item_skipped": "Skipped: {number} — {error}",
+       "log_interrupted": "⚠ Generation interrupted (left the page)",
+       "status_preparing": "Preparing...",
+       "status_done_count": "Done! {count} videos",
+@@ -1291,6 +1498,7 @@
        "tag_nfo_write_blocked": "Tag saved, but there's no permission to write the NFO",
        "translate_tooltip": "Translate title",
        "translate_done": "Title translated",
@@ -1071,7 +1101,7 @@
        "translate_undo": "Undo",
        "translate_skipped": "Nothing in the title needs translating",
        "translate_undone": "Title restored",
-@@ -1410,10 +1595,90 @@
+@@ -1410,10 +1618,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -1162,7 +1192,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1845,6 +2110,12 @@
+@@ -1845,6 +2133,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -1175,7 +1205,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2131,11 @@
+@@ -1860,7 +2154,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -1188,7 +1218,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2153,15 @@
+@@ -1878,11 +2176,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -1394,8 +1424,8 @@
        "clear_cache_title": "キャッシュをクリア",
 +      "overview_title": "ライブラリ概要",
 +      "maintenance_title": "一括メンテナンス",
-+      "maintenance_hint": "NFO、タグ、生成画像をまとめて管理します",
-+      "maintenance_summary": "NFO {nfo} · 不足 {missing} · 画像 {images}",
++      "maintenance_hint": "NFO、タイトル翻訳、劇照、タグ、生成画像をまとめて管理します",
++      "maintenance_summary": "NFO {nfo} · 不足 {missing} · 補完待ち {backfill} · 画像 {images}",
 +      "log_empty": "実行ログがここに表示されます",
 +      "log_expand": "実行ログを開く",
 +      "log_collapse": "実行ログを閉じる",
@@ -1453,7 +1483,37 @@
        "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
        "jellyfin_suffix": "本",
        "jellyfin_update_title": "Jellyfin poster + fanart を補完",
-@@ -1291,6 +1475,7 @@
+@@ -928,6 +1112,29 @@
+       "missing_enrich_confirm_body_suffix": " 分です。続行しますか？",
+       "missing_enrich_confirm_cancel": "キャンセル",
+       "missing_enrich_confirm_confirm": "補完を確認",
++      "title_backfill_prefix": "未翻訳タイトル:",
++      "title_backfill_suffix": "本",
++      "title_backfill_drilldown_note": "日本語の仮名を含み、元タイトルが未保存の動画だけを対象にします。",
++      "title_backfill_idle": "タイトルを一括補完",
++      "title_backfill_loading": "タイトル補完中...",
++      "title_backfill_preparing": "タイトル翻訳を準備中...",
++      "title_backfill_disabled": "翻訳が無効です",
++      "title_backfill_hint": "元タイトルが未保存の日本語タイトルだけを翻訳し、処理済み動画は再翻訳しません",
++      "title_backfill_toast_success": "タイトル補完完了：{success} 本成功",
++      "title_backfill_toast_mixed": "タイトル補完完了：{success} 本成功、{failed} 本失敗",
++      "title_backfill_error": "タイトル補完に失敗しました。後でもう一度お試しください",
++      "sample_backfill_prefix": "劇照不足:",
++      "sample_backfill_suffix": "本",
++      "sample_backfill_drilldown_note": "データベースに劇照記録がない動画だけを対象にし、ディスク上の既存劇照は保持します。",
++      "sample_backfill_idle": "劇照を一括補完",
++      "sample_backfill_loading": "劇照補完中...",
++      "sample_backfill_preparing": "劇照補完を準備中...",
++      "sample_backfill_hint": "劇照記録がない動画だけを補完し、既存の劇照は再取得しません",
++      "sample_backfill_toast_success": "劇照補完完了：{success} 本成功",
++      "sample_backfill_toast_mixed": "劇照補完完了：{success} 本成功、{failed} 本失敗",
++      "sample_backfill_error": "劇照補完に失敗しました。後でもう一度お試しください",
++      "backfill_item_failed": "失敗：{number} — {error}",
++      "backfill_item_skipped": "スキップ：{number} — {error}",
+       "log_interrupted": "⚠ 生成が中断されました（ページを離れました）",
+       "status_preparing": "準備中...",
+       "status_done_count": "完了！{count} 本の動画",
+@@ -1291,6 +1498,7 @@
        "tag_nfo_write_blocked": "タグは保存されましたが、NFO への書き込み権限がありません",
        "translate_tooltip": "タイトルを翻訳",
        "translate_done": "タイトルを翻訳しました",
@@ -1461,7 +1521,7 @@
        "translate_undo": "元に戻す",
        "translate_skipped": "翻訳が必要な内容はありません",
        "translate_undone": "タイトルを元に戻しました",
-@@ -1410,10 +1595,90 @@
+@@ -1410,10 +1618,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -1552,7 +1612,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1845,6 +2110,12 @@
+@@ -1845,6 +2133,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -1565,7 +1625,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2131,11 @@
+@@ -1860,7 +2154,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -1578,7 +1638,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2153,15 @@
+@@ -1878,11 +2176,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -1784,8 +1844,8 @@
        "clear_cache_title": "清除缓存",
 +      "overview_title": "片库概览",
 +      "maintenance_title": "批量维护",
-+      "maintenance_hint": "集中处理 NFO、标签和衍生图片",
-+      "maintenance_summary": "NFO {nfo} · 缺件 {missing} · 图片 {images}",
++      "maintenance_hint": "集中处理 NFO、标题翻译、剧照、标签和衍生图片",
++      "maintenance_summary": "NFO {nfo} · 缺件 {missing} · 待补 {backfill} · 图片 {images}",
 +      "log_empty": "运行日志会显示在这里",
 +      "log_expand": "展开运行日志",
 +      "log_collapse": "收起运行日志",
@@ -1843,7 +1903,37 @@
        "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
-@@ -1291,6 +1475,7 @@
+@@ -928,6 +1112,29 @@
+       "missing_enrich_confirm_body_suffix": " 分钟，是否继续？",
+       "missing_enrich_confirm_cancel": "取消",
+       "missing_enrich_confirm_confirm": "确认补全",
++      "title_backfill_prefix": "未翻译标题:",
++      "title_backfill_suffix": "部",
++      "title_backfill_drilldown_note": "只处理含日文假名、且尚未保存原文标题的视频。",
++      "title_backfill_idle": "一键补齐标题",
++      "title_backfill_loading": "补齐标题中...",
++      "title_backfill_preparing": "准备翻译标题...",
++      "title_backfill_disabled": "翻译未启用",
++      "title_backfill_hint": "只翻译尚未保存原文标题的日文标题，不重新翻译已处理视频",
++      "title_backfill_toast_success": "标题补齐完成！{success} 部成功",
++      "title_backfill_toast_mixed": "标题补齐完成！{success} 部成功，{failed} 部失败",
++      "title_backfill_error": "标题补齐失败，请稍后重试",
++      "sample_backfill_prefix": "缺剧照:",
++      "sample_backfill_suffix": "部",
++      "sample_backfill_drilldown_note": "只处理数据库尚无剧照记录的视频；磁盘已有剧照会保留。",
++      "sample_backfill_idle": "一键补齐剧照",
++      "sample_backfill_loading": "补齐剧照中...",
++      "sample_backfill_preparing": "准备补齐剧照...",
++      "sample_backfill_hint": "只补数据库中没有剧照的视频，不重新抓取已有剧照",
++      "sample_backfill_toast_success": "剧照补齐完成！{success} 部成功",
++      "sample_backfill_toast_mixed": "剧照补齐完成！{success} 部成功，{failed} 部失败",
++      "sample_backfill_error": "剧照补齐失败，请稍后重试",
++      "backfill_item_failed": "失败：{number} — {error}",
++      "backfill_item_skipped": "已跳过：{number} — {error}",
+       "log_interrupted": "⚠ 生成被中断（离开页面）",
+       "status_preparing": "准备中...",
+       "status_done_count": "完成！{count} 部视频",
+@@ -1291,6 +1498,7 @@
        "tag_nfo_write_blocked": "标签已保存，但没有权限写入 NFO",
        "translate_tooltip": "翻译标题",
        "translate_done": "已翻译标题",
@@ -1851,7 +1941,7 @@
        "translate_undo": "复原",
        "translate_skipped": "标题没有需要翻译的内容",
        "translate_undone": "已复原标题",
-@@ -1410,10 +1595,90 @@
+@@ -1410,10 +1618,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -1942,7 +2032,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1845,6 +2110,12 @@
+@@ -1845,6 +2133,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -1955,7 +2045,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2131,11 @@
+@@ -1860,7 +2154,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -1968,7 +2058,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2153,15 @@
+@@ -1878,11 +2176,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -2174,8 +2264,8 @@
        "clear_cache_title": "清除快取",
 +      "overview_title": "片庫概覽",
 +      "maintenance_title": "批次維護",
-+      "maintenance_hint": "集中處理 NFO、標籤與衍生圖片",
-+      "maintenance_summary": "NFO {nfo} · 缺件 {missing} · 圖片 {images}",
++      "maintenance_hint": "集中處理 NFO、標題翻譯、劇照、標籤與衍生圖片",
++      "maintenance_summary": "NFO {nfo} · 缺件 {missing} · 待補 {backfill} · 圖片 {images}",
 +      "log_empty": "執行日誌會顯示在這裡",
 +      "log_expand": "展開執行日誌",
 +      "log_collapse": "收起執行日誌",
@@ -2233,7 +2323,37 @@
        "jellyfin_prefix": "外部媒體管理器封面缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "補齊 poster + fanart",
-@@ -1291,6 +1475,7 @@
+@@ -928,6 +1112,29 @@
+       "missing_enrich_confirm_body_suffix": " 分鐘，是否繼續？",
+       "missing_enrich_confirm_cancel": "取消",
+       "missing_enrich_confirm_confirm": "確認補完",
++      "title_backfill_prefix": "未翻譯標題:",
++      "title_backfill_suffix": "部",
++      "title_backfill_drilldown_note": "只處理含日文假名、且尚未保存原文標題的影片。",
++      "title_backfill_idle": "一鍵補齊標題",
++      "title_backfill_loading": "補齊標題中...",
++      "title_backfill_preparing": "準備翻譯標題...",
++      "title_backfill_disabled": "翻譯未啟用",
++      "title_backfill_hint": "只翻譯尚未保存原文標題的日文標題，不重新翻譯已處理影片",
++      "title_backfill_toast_success": "標題補齊完成！{success} 部成功",
++      "title_backfill_toast_mixed": "標題補齊完成！{success} 部成功，{failed} 部失敗",
++      "title_backfill_error": "標題補齊失敗，請稍後重試",
++      "sample_backfill_prefix": "缺劇照:",
++      "sample_backfill_suffix": "部",
++      "sample_backfill_drilldown_note": "只處理資料庫尚無劇照記錄的影片；磁碟既有劇照會保留。",
++      "sample_backfill_idle": "一鍵補齊劇照",
++      "sample_backfill_loading": "補齊劇照中...",
++      "sample_backfill_preparing": "準備補齊劇照...",
++      "sample_backfill_hint": "只補資料庫中沒有劇照的影片，不重新抓取已有劇照",
++      "sample_backfill_toast_success": "劇照補齊完成！{success} 部成功",
++      "sample_backfill_toast_mixed": "劇照補齊完成！{success} 部成功，{failed} 部失敗",
++      "sample_backfill_error": "劇照補齊失敗，請稍後重試",
++      "backfill_item_failed": "失敗：{number} — {error}",
++      "backfill_item_skipped": "已跳過：{number} — {error}",
+       "log_interrupted": "⚠ 生成被中斷（離開頁面）",
+       "status_preparing": "準備中...",
+       "status_done_count": "完成！{count} 部影片",
+@@ -1291,6 +1498,7 @@
        "tag_nfo_write_blocked": "標籤已存，但沒有權限寫入 NFO",
        "translate_tooltip": "翻譯標題",
        "translate_done": "已翻譯標題",
@@ -2241,7 +2361,7 @@
        "translate_undo": "復原",
        "translate_skipped": "標題沒有需要翻譯的內容",
        "translate_undone": "已復原標題",
-@@ -1410,10 +1595,90 @@
+@@ -1410,10 +1618,90 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -2332,7 +2452,7 @@
      "hero": {
        "this_computer_unavailable": "暫時讀不到這台電腦的更新資訊，請重新開啟說明頁再試",
        "copy_curl": "複製指令",
-@@ -1850,6 +2115,12 @@
+@@ -1850,6 +2138,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -2345,7 +2465,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1865,7 +2136,11 @@
+@@ -1865,7 +2159,11 @@
        "costar": "與她同片"
      },
      "donut": {
@@ -2358,7 +2478,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2158,15 @@
+@@ -1883,11 +2181,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -4399,6 +4519,20 @@
  :root {
    --fluent-radius-none: 0px;
    --fluent-radius-sm: 2px;
+--- a/web/static/css/theme.css
++++ b/web/static/css/theme.css
+@@ -1393,9 +1393,10 @@
+     position: relative;  /* 支援 .help-popover 絕對定位 */
+ }
+ 
+-/* 浮層以 nfo-badge 為定位基準，寬度改用 viewport 上限（同 .help-popover 的 max-width: calc(100vw - 2rem)） */
++/* 浮層以 nfo-badge 為定位基準；viewport 上限避免超出手機，100% 上限避免窄列被 focus 橫向捲動。 */
+ .nfo-badge .number-drilldown-popover {
+     width: min(28rem, calc(100vw - 2rem));
++    max-width: 100%;
+ }
+ 
+ /* 數字清單浮層開著時，把所在統計卡墊到後面的卡片之上（dim 主題 .stats-card 有 backdrop-filter，自成 stacking context；FE-CSS-24） */
 --- /dev/null
 +++ b/web/static/css/components/mobile-ui.css
 @@ -0,0 +1,770 @@
@@ -8441,7 +8575,7 @@
  
          // ===== T7b: State Machine =====
 -        state: 'idle',  // 'idle' | 'generating' | 'nfoUpdating' | 'done' | 'error'
-+        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | done | error | cancelled
++        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | titleBackfilling | sampleBackfilling | done | error | cancelled
  
          // ===== T7b: Progress =====
          progressStatus: '',
@@ -8495,7 +8629,7 @@
  
          // ===== T6d: Jellyfin Image Update =====
          jellyfinImageCount: 0,
-@@ -102,8 +134,126 @@
+@@ -102,9 +134,129 @@
              return (this.progressCurrent / this.progressTotal) * 100;
          },
  
@@ -8525,7 +8659,7 @@
 +        },
 +
 +        get taskEtaText() {
-+            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich'].includes(this.taskKind)) {
++            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill'].includes(this.taskKind)) {
 +                return '';
 +            }
 +            let seconds = this.taskEtaSeconds;
@@ -8543,14 +8677,15 @@
 +        get taskCanRetry() {
 +            return !this.isGenerating
 +                && this.taskFailedItems.length > 0
-+                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update'].includes(this.taskKind);
++                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill'].includes(this.taskKind);
 +        },
 +
 +        get maintenanceSummaryText() {
 +            const nfo = this.nfoNeedUpdateCount || 0;
 +            const missing = (this.missingBothCount || 0) + (this.missingNfoCount || 0) + (this.missingCoverCount || 0);
++            const backfill = (this.untranslatedTitleCount || 0) + (this.missingSampleCount || 0);
 +            const images = this.jellyfinImageCount || 0;
-+            return window.t('scanner.stats.maintenance_summary', { nfo, missing, images });
++            return window.t('scanner.stats.maintenance_summary', { nfo, missing, backfill, images });
 +        },
 +
 +        get tagSourcePreviewChangedItems() {
@@ -8616,13 +8751,16 @@
 +
          get isGenerating() {
              return this.state === 'generating' || this.state === 'nfoUpdating'
+-                || this.state === 'jellyfinUpdating' || this.state === 'enriching';
 +                || this.state === 'tagSourcePreviewing'
 +                || this.state === 'tagSourceUpdating'
 +                || this.state === 'renamePreviewing'
-                 || this.state === 'jellyfinUpdating' || this.state === 'enriching';
++                || this.state === 'jellyfinUpdating' || this.state === 'enriching'
++                || this.state === 'titleBackfilling' || this.state === 'sampleBackfilling';
          },
  
-@@ -119,6 +269,68 @@
+         get isBusy() {
+@@ -119,6 +271,68 @@
  
          get doneActionsVisible() {
              return this.state === 'done' && this.outputPath !== '';
@@ -8691,7 +8829,7 @@
          },
  
          get generateButtonText() {
-@@ -219,6 +431,7 @@
+@@ -219,6 +433,7 @@
                          if (this.eventSource) { this.eventSource.close(); this.eventSource = null; }
                          window.Alpine?.store?.('toast')?.hide?.();   // 131b-T3：cleanup 不得拋錯（拋了會跳過後面所有 teardown）
                          clearTimeout(this.logTimer);
@@ -8699,7 +8837,18 @@
                          // T2(40c): abort jellyfin check fetch
                          if (this._jellyfinCheckController) {
                              this._jellyfinCheckController.abort();
-@@ -246,6 +459,7 @@
+@@ -233,6 +448,10 @@
+                             this._enrichAbortController.abort();
+                             this._enrichAbortController = null;
+                         }
++                        if (this._backfillAbortController) {
++                            this._backfillAbortController.abort();
++                            this._backfillAbortController = null;
++                        }
+                         // TASK-94 Codex P1：離頁時清最後一片 flush dwell timer，避免 timer 事後
+                         // 觸發 finalize（checkMissing fetch / state 變更）clobber 已離頁狀態。
+                         if (this._flushTimer) {
+@@ -246,6 +465,7 @@
              // 初始載入
              await this.loadConfig();
              this.loadStats();
@@ -8707,7 +8856,7 @@
  
              // T7b: 恢復日誌（logOutput 為 scanner.html 靜態 x-ref 元素，
              // init 時早已 mount，直接同步還原、無需等 $nextTick）
-@@ -305,6 +519,13 @@
+@@ -305,6 +525,13 @@
                  if (result.success) {
                      this.config = result.data;
                      this.directories = this.config.gallery?.directories || [];
@@ -8721,7 +8870,7 @@
                      // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                      this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
  
-@@ -377,6 +598,25 @@
+@@ -377,6 +604,25 @@
              }
          },
  
@@ -8747,7 +8896,7 @@
          async clearCache() {
              this.clearCacheLoading = true;
              try {
-@@ -387,6 +627,10 @@
+@@ -387,6 +633,10 @@
                      this.statTotal = 0;
                      this.statsVisible = false;
                      this.nfoUpdateVisible = false;
@@ -8758,7 +8907,7 @@
                      this.jellyfinImageVisible = false;
                      this.jellyfinCheckState = 'idle';
                      this.clearCacheModalOpen = false;
-@@ -636,6 +880,9 @@
+@@ -636,6 +886,9 @@
          addLog(level, message) {
              // T7d: 加入結構化陣列
              this.logEntries.push({ level, message, timestamp: Date.now() });
@@ -8768,7 +8917,7 @@
  
              const cls = level === 'error' ? 'log-error' :
                          level === 'warn' ? 'log-warn' : 'log-info';
-@@ -713,10 +960,22 @@
+@@ -713,10 +966,22 @@
              localStorage.removeItem('avlist_last_status');
              this.logHtml = '';
              this.logEntries = [];
@@ -8791,7 +8940,7 @@
          clearLogsDisplay() {
              this.logHtml = '';
              this.logEntries = [];
-@@ -768,6 +1027,136 @@
+@@ -768,6 +1033,148 @@
              if (confirm(window.t('scanner.toast.confirm_clear_logs'))) {
                  this.clearLogs();
                  this.showToast(window.t('scanner.toast.logs_cleared'), 'success');
@@ -8885,6 +9034,10 @@
 +                this._enrichAbortController.abort();
 +                this._enrichAbortController = null;
 +            }
++            if (this._backfillAbortController) {
++                this._backfillAbortController.abort();
++                this._backfillAbortController = null;
++            }
 +            if (this.eventSource) {
 +                this.eventSource.close();
 +                this.eventSource = null;
@@ -8925,10 +9078,18 @@
 +                this.jellyfinImageCount = Math.max(this.taskFailedItems.length, 1);
 +                this.jellyfinImageVisible = true;
 +                this.runJellyfinImageUpdate();
++                return;
++            }
++            if (this.taskKind === 'title-backfill') {
++                this.runTitleBackfill();
++                return;
++            }
++            if (this.taskKind === 'sample-backfill') {
++                this.runSampleBackfill();
              }
          },
  
-@@ -792,9 +1181,7 @@
+@@ -792,9 +1199,7 @@
  
              // 重置狀態
              this.state = 'generating';
@@ -8939,7 +9100,7 @@
              this.outputPath = '';
              this.nfoUpdateVisible = false;
              this.clearLogs();
-@@ -812,16 +1199,21 @@
+@@ -812,16 +1217,21 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -8962,7 +9123,7 @@
  
                          localStorage.setItem('avlist_generating', 'false');
                          localStorage.setItem('avlist_last_status', window.t('scanner.stats.status_done'));
-@@ -868,6 +1260,15 @@
+@@ -868,6 +1278,15 @@
                              this.showToast(window.t('scanner.toast.generate_success', { count: data.video_count }), 'success');
                          }
  
@@ -8978,7 +9139,7 @@
                          // a5: Windows 長路徑警告
                          if (data.long_paths && data.long_paths.length > 0) {
                              this.showToast(
-@@ -890,24 +1291,24 @@
+@@ -890,24 +1309,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -9007,7 +9168,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] generate error:', e);
                  this.showToast(window.t('scanner.toast.generate_error'), 'error', 4000);
-@@ -915,26 +1316,63 @@
+@@ -915,26 +1334,63 @@
          },
  
          // ===== T7b: NFO Update Flow =====
@@ -9077,7 +9238,7 @@
  
                  this.eventSource.onmessage = (event) => {
                      const data = JSON.parse(event.data);
-@@ -943,55 +1381,288 @@
+@@ -943,55 +1399,288 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -9375,7 +9536,7 @@
          // ===== T6d: Jellyfin Image Update Flow =====
          async runJellyfinImageUpdate() {
              if (this.isGenerating) return;
-@@ -1002,9 +1673,7 @@
+@@ -1002,9 +1691,7 @@
              }
  
              this.state = 'jellyfinUpdating';
@@ -9386,7 +9547,7 @@
              this.clearLogs();
  
              localStorage.setItem('avlist_generating', 'true');
-@@ -1019,14 +1688,13 @@
+@@ -1019,14 +1706,13 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -9402,7 +9563,7 @@
                          // TASK-111 P2-b 後續（codex delta review）：done 不再必然代表「全數完成」——
                          // 批次跑到一半若把 external_manager 切成 off，後端會在下一部片 break 並送
                          // done(updated=已完成筆數)。這裡若無條件補滿 progressTotal，UI 會顯示 3/3
-@@ -1035,6 +1703,11 @@
+@@ -1035,6 +1721,11 @@
                          this.progressCurrent = (typeof data.updated === 'number')
                              ? data.updated
                              : this.progressTotal;
@@ -9414,7 +9575,7 @@
  
                          localStorage.setItem('avlist_generating', 'false');
                          localStorage.setItem('avlist_last_status', data.message || window.t('scanner.stats.status_done'));
-@@ -1045,7 +1718,13 @@
+@@ -1045,7 +1736,13 @@
                          this.jellyfinItems = [];
                          this.jellyfinCheckState = 'idle';
  
@@ -9429,7 +9590,7 @@
                          if (data.message) {
                              this.addLog('info', data.message);
                          }
-@@ -1053,24 +1732,24 @@
+@@ -1053,24 +1750,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -9458,7 +9619,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] runJellyfinImageUpdate error:', e);
                  this.showToast(window.t('scanner.toast.jellyfin_update_error'), 'error', 4000);
-@@ -1078,6 +1757,21 @@
+@@ -1078,6 +1775,21 @@
          },
  
          // ===== T7b: Utility =====
@@ -9480,7 +9641,7 @@
          copyOutputPath() {
              if (!this.outputPath) return;
  
-@@ -1097,5 +1791,6 @@
+@@ -1097,5 +1809,6 @@
                  }
              });
          },
@@ -9495,7 +9656,7 @@
  /** TASK-147b-T3 / CD-147b-5：四項判準——真的補到 NFO／封面／欄位／劇照才算成功。
   * 與 core/enrich_contract.py 的 did_enrich_something() 同一判準；改一邊必須改另一邊。
   *
-@@ -22,9 +24,19 @@
+@@ -22,9 +24,27 @@
          missingEnrichOffset: 0,     // batch offset
          missingEnrichSuccess: 0,
          missingEnrichFailed: 0,
@@ -9503,6 +9664,14 @@
          resumePillVisible: false,
          missingConfirmModalOpen: false,   // TASK-13: 大批量補完 confirm dialog 開關
          _enrichAbortController: null,
++
++        // ===== Missing-only backfill queues =====
++        untranslatedTitleCount: 0,
++        missingSampleCount: 0,
++        untranslatedTitleItems: [],
++        missingSampleItems: [],
++        _backfillAbortController: null,
++        _missingCheckRequestId: 0,
 +
 +        // ===== r23: Preview-first filename normalization =====
 +        renamePreviewOpen: false,
@@ -9515,12 +9684,81 @@
  
          // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
          currentCard: null,          // {number, status, source, reason, coverSrc} | null
-@@ -72,6 +84,261 @@
-                 return '<span class="loading loading-spinner loading-sm"></span> ' + window.t('scanner.stats.missing_enrich_loading');
-             }
-             return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
+@@ -67,6 +87,70 @@
+             return { title: window.t('scanner.stats.missing_cover_prefix'), items: this.missingCoverDrilldownItems, footnote: window.t('scanner.stats.missing_list_footnote') };
+         },
+ 
++        get titleBackfillDrilldownItems() {
++            return this.untranslatedTitleItems.map(item => ({
++                number: item.number || item.title || '',
++                path: item.file_path,
++                note: item.title || '',
++            }));
 +        },
 +
++        get titleBackfillDrilldownPayload() {
++            return {
++                title: window.t('scanner.stats.title_backfill_prefix'),
++                items: this.titleBackfillDrilldownItems,
++                footnote: window.t('scanner.stats.title_backfill_drilldown_note'),
++            };
++        },
++
++        get sampleBackfillDrilldownItems() {
++            return this.missingSampleItems.map(item => ({
++                number: item.number || item.title || '',
++                path: item.file_path,
++                note: item.title || '',
++            }));
++        },
++
++        get sampleBackfillDrilldownPayload() {
++            return {
++                title: window.t('scanner.stats.sample_backfill_prefix'),
++                items: this.sampleBackfillDrilldownItems,
++                footnote: window.t('scanner.stats.sample_backfill_drilldown_note'),
++            };
++        },
++
++        get titleBackfillButtonText() {
++            if (this.state === 'titleBackfilling') {
++                return '<span class="loading loading-spinner loading-sm"></span> '
++                    + window.t('scanner.stats.title_backfill_loading');
++            }
++            if (this.config?.translate?.enabled !== true) {
++                return '<i class="bi bi-translate"></i> '
++                    + window.t('scanner.stats.title_backfill_disabled');
++            }
++            return '<i class="bi bi-translate"></i> '
++                + window.t('scanner.stats.title_backfill_idle');
++        },
++
++        get titleBackfillDisabled() {
++            return this.isBusy
++                || this.untranslatedTitleCount === 0
++                || this.config?.translate?.enabled !== true;
++        },
++
++        get sampleBackfillButtonText() {
++            if (this.state === 'sampleBackfilling') {
++                return '<span class="loading loading-spinner loading-sm"></span> '
++                    + window.t('scanner.stats.sample_backfill_loading');
++            }
++            return '<i class="bi bi-images"></i> '
++                + window.t('scanner.stats.sample_backfill_idle');
++        },
++
++        get sampleBackfillDisabled() {
++            return this.isBusy || this.missingSampleCount === 0;
++        },
++
+         get missingEnrichButtonText() {
+             if (this.state === 'enriching') {
+                 return '<span class="loading loading-spinner loading-sm"></span> ' + window.t('scanner.stats.missing_enrich_loading');
+@@ -74,13 +158,279 @@
+             return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
+         },
+ 
 +        get renameReadyItems() {
 +            return (this.renamePlan?.items || []).filter(item => item.status === 'ready');
 +        },
@@ -9774,10 +10012,30 @@
 +                window.t(ok ? 'scanner.rename.copy_success' : 'scanner.rename.copy_failed'),
 +                ok ? 'success' : 'error'
 +            );
-         },
- 
++        },
++
          // ===== T10: Missing NFO/Cover Enrich Methods =====
-@@ -88,8 +355,15 @@
+         async checkMissing() {
++            const requestId = (this._missingCheckRequestId || 0) + 1;
++            this._missingCheckRequestId = requestId;
+             try {
+                 const resp = await fetch('/api/gallery/missing-check');
+                 const result = await resp.json();
++                if (requestId !== this._missingCheckRequestId) return;
+                 if (!result.success) return;
+                 const d = result.data;
++                this.untranslatedTitleCount = d.untranslated_titles || 0;
++                this.missingSampleCount = d.missing_samples || 0;
++                this.untranslatedTitleItems = Array.isArray(d.untranslated_title_items)
++                    ? d.untranslated_title_items
++                    : [];
++                this.missingSampleItems = Array.isArray(d.missing_sample_items)
++                    ? d.missing_sample_items
++                    : [];
+                 if (d.total_missing > 0) {
+                     // TASK-13: 後端永遠回傳完整 items 清單；前端於 runMissingEnrich 內做 > 500 confirm gate
+                     this.missingBothCount = d.missing_both || 0;
+@@ -88,11 +438,193 @@
                      this.missingCoverCount = d.missing_cover || 0;
                      this.missingItems = Array.isArray(d.items) ? d.items : [];
                      this.missingPillVisible = true;
@@ -9790,10 +10048,188 @@
 +                    this.missingNfoCount = 0;
 +                    this.missingCoverCount = 0;
 +                    this.missingItems = [];
++                }
++                if (
++                    (d.total_missing || 0) > 0
++                    || this.untranslatedTitleCount > 0
++                    || this.missingSampleCount > 0
++                ) {
++                    this.maintenanceExpanded = true;
                  }
              } catch (e) {
                  console.error('checkMissing failed:', e);
-@@ -109,14 +383,17 @@
++            }
++        },
++
++        async runTitleBackfill() {
++            if (this.titleBackfillDisabled) return;
++            await this._runBackfillStream({
++                url: '/api/gallery/backfill-titles',
++                taskState: 'titleBackfilling',
++                taskKind: 'title-backfill',
++                startStatus: window.t('scanner.stats.title_backfill_preparing'),
++                total: this.untranslatedTitleCount,
++                doneToastKey: 'scanner.stats.title_backfill_toast_success',
++                mixedToastKey: 'scanner.stats.title_backfill_toast_mixed',
++                errorText: window.t('scanner.stats.title_backfill_error'),
++            });
++        },
++
++        async runSampleBackfill() {
++            if (this.sampleBackfillDisabled) return;
++            await this._runBackfillStream({
++                url: '/api/gallery/backfill-samples',
++                taskState: 'sampleBackfilling',
++                taskKind: 'sample-backfill',
++                startStatus: window.t('scanner.stats.sample_backfill_preparing'),
++                total: this.missingSampleCount,
++                doneToastKey: 'scanner.stats.sample_backfill_toast_success',
++                mixedToastKey: 'scanner.stats.sample_backfill_toast_mixed',
++                errorText: window.t('scanner.stats.sample_backfill_error'),
++            });
++        },
++
++        async _runBackfillStream({
++            url,
++            taskState,
++            taskKind,
++            startStatus,
++            total,
++            doneToastKey,
++            mixedToastKey,
++            errorText,
++        }) {
++            if (this.isBusy) return;
++
++            this.state = taskState;
++            this._startTask(taskKind, startStatus, total);
++            this.clearLogs();
++
++            const controller = new AbortController();
++            this._backfillAbortController = controller;
++            let completed = false;
++            let streamFailed = false;
++
++            try {
++                const resp = await fetch(url, {
++                    method: 'POST',
++                    headers: { Accept: 'text/event-stream' },
++                    signal: controller.signal,
++                });
++                if (!resp.ok) {
++                    throw new Error(`HTTP ${resp.status}`);
++                }
++                if (!resp.body) {
++                    throw new Error('missing response body');
++                }
++
++                const reader = resp.body.getReader();
++                const decoder = new TextDecoder();
++                let buffer = '';
++                let streamDone = false;
++
++                while (!streamDone) {
++                    const { done, value } = await reader.read();
++                    if (done) break;
++
++                    buffer += decoder.decode(value, { stream: true });
++                    const lines = buffer.split('\n');
++                    buffer = lines.pop();
++
++                    for (const line of lines) {
++                        if (!line.startsWith('data: ')) continue;
++                        let event;
++                        try {
++                            event = JSON.parse(line.slice(6));
++                        } catch {
++                            continue;
++                        }
++
++                        if (event.type === 'progress') {
++                            this.progressStatus = event.status || startStatus;
++                            this.progressCurrent = event.current || 0;
++                            this.progressTotal = event.total || total;
++                            this._applyTaskMetrics({
++                                number: event.number || event.title || '',
++                                success: event.success,
++                                failed: event.failed,
++                                skipped: event.skipped,
++                            });
++                        } else if (event.type === 'result-item') {
++                            this._applyTaskMetrics({
++                                number: event.number || '',
++                                success: event.success_count,
++                                failed: event.failed_count,
++                                skipped: event.skipped_count,
++                            });
++                            if (!event.success && !event.skipped) {
++                                this.addLog(
++                                    'error',
++                                    window.t('scanner.stats.backfill_item_failed', {
++                                        number: event.number || '',
++                                        error: event.error || errorText,
++                                    })
++                                );
++                            } else if (event.skipped) {
++                                this.addLog(
++                                    'warn',
++                                    window.t('scanner.stats.backfill_item_skipped', {
++                                        number: event.number || '',
++                                        error: event.error || '',
++                                    })
++                                );
++                            }
++                        } else if (event.type === 'log') {
++                            this.addLog(event.level || 'info', event.message || '');
++                        } else if (event.type === 'done') {
++                            completed = true;
++                            streamDone = true;
++                            this.progressCurrent = this.progressTotal;
++                            const cancelled = event.cancelled === true;
++                            this._finishTask(
++                                cancelled ? 'cancelled' : 'done',
++                                event.message || startStatus,
++                                event.summary
++                            );
++                            if (!cancelled) {
++                                const success = event.summary?.success || 0;
++                                const failed = event.summary?.failed || 0;
++                                this.showToast(
++                                    window.t(failed > 0 ? mixedToastKey : doneToastKey, {
++                                        success,
++                                        failed,
++                                    }),
++                                    failed > 0 ? 'warn' : 'success'
++                                );
++                            }
++                        } else if (event.type === 'error') {
++                            streamDone = true;
++                            streamFailed = true;
++                            this._finishTask('error', event.message || errorText);
++                            this.showToast(event.message || errorText, 'error');
++                        }
++                    }
++                }
++
++                if (!completed && !streamFailed) {
++                    this._finishTask('error', errorText);
++                    this.showToast(errorText, 'error');
++                }
++            } catch (e) {
++                if (e.name === 'AbortError') return;
++                console.error(`${taskKind} failed:`, e);
++                this._finishTask('error', errorText);
++                this.showToast(errorText, 'error');
++            } finally {
++                if (this._backfillAbortController === controller) {
++                    this._backfillAbortController = null;
++                }
++                this.flushLogs();
++                await this.checkMissing();
+             }
+         },
+ 
+@@ -109,14 +641,17 @@
              this.missingEnrichOffset = 0;
              this.missingEnrichSuccess = 0;
              this.missingEnrichFailed = 0;
@@ -9814,7 +10250,7 @@
              this.clearLogs();
  
              const controller = new AbortController();
-@@ -146,7 +423,7 @@
+@@ -146,7 +681,7 @@
                          }
                          this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
                          this.flushLogs();
@@ -9823,7 +10259,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          // Save remaining
-@@ -159,7 +436,7 @@
+@@ -159,7 +694,7 @@
                          const errText = await resp.text().catch(() => '');
                          this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
                          this.flushLogs();
@@ -9832,7 +10268,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -200,6 +477,12 @@
+@@ -200,6 +735,12 @@
                                  this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
                                  this.progressTotal = items.length;
                                  this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
@@ -9845,7 +10281,7 @@
                              } else if (event.type === 'result-item') {
                                  // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
                                  // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
-@@ -234,7 +517,18 @@
+@@ -234,7 +775,18 @@
                                      this.missingEnrichSuccess++;
                                  } else {
                                      this.missingEnrichFailed++;
@@ -9864,7 +10300,7 @@
                                  // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
                                  if (event.reason === 'error') {
                                      this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
-@@ -246,7 +540,7 @@
+@@ -246,7 +798,7 @@
                              } else if (event.type === 'error') {
                                  this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
                                  this.flushLogs();
@@ -9873,7 +10309,7 @@
                                  this.currentCard = null;
                                  this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -258,7 +552,7 @@
+@@ -258,7 +810,7 @@
  
                      // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
                      if (!batchDone) {
@@ -9882,7 +10318,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -284,11 +578,19 @@
+@@ -284,11 +836,19 @@
                      if (lastCover) {
                          this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
                      }
@@ -9904,7 +10340,7 @@
                      const summary = this.missingEnrichFailed > 0
                          ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
                          : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
-@@ -312,7 +614,7 @@
+@@ -312,7 +872,7 @@
                  if (e.name === 'AbortError') return;
                  console.error('runMissingEnrich error:', e);
                  this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
@@ -10608,6 +11044,36 @@
  
          // --- helpers in return {} ---
  
+@@ -1413,6 +1417,10 @@
+             var wasActressMode = this.showFavoriteActresses;
+ 
+             try {
++                // Claim the transition before the server fetch. Otherwise a
++                // second tap can abort/replace the first request while the
++                // first continuation still tries to apply its search.
++                this._ghostFlyInFlight = true;
+                 // 捕獲來源 rect / coverSrc（必須在 closeLightbox / state 變更前）
+                 var fromRect = null;
+                 var coverSrc = null;
+@@ -1437,11 +1445,16 @@
+                     this.showFavoriteActresses = false;
+                     this.actressSearch = '';
+                 }
+-                this.search = actressName;
+-                this._animateFilter();
++                var loaded = await this._fetchActressFilteredVideos(actressName);
++                if (!loaded) {
++                    this._ghostFlyInFlight = false;
++                    this._reconcileHeroCard();
++                    return;
++                }
+ 
+                 // 非女優模式 / 無 fromEl / 無 coverSrc → fallback
+                 if (!wasActressMode || !fromRect || !coverSrc) {
++                    this._ghostFlyInFlight = false;
+                     this._reconcileHeroCard();
+                     if (wasActressMode) {
+                         var gen0 = ++this._animGeneration;
 --- a/web/static/js/pages/showcase/state-lightbox-translate.js
 +++ b/web/static/js/pages/showcase/state-lightbox-translate.js
 @@ -21,14 +21,9 @@
@@ -10773,6 +11239,21 @@
              } finally {
                  this._fetchSamplesLoading = false;
              }
+@@ -948,7 +989,13 @@
+                     }
+                     // 67-A2/CD-67-3b: data.video 不帶 _imgLoaded → 舊 true 殘留會讓新封面跳過 skeleton/fade。
+                     // Object.assign 前 reset，讓補封面/重抓的新 cover_url（含上面 &t= cache-bust）重走 skeleton→@load→淡入。
+-                    if (data.video.cover_url) video._imgLoaded = false;
++                    if (data.video.cover_url) {
++                        // An explicit cover refresh should not wait for the card
++                        // to re-enter the image window.
++                        video._coverRequested = true;
++                        video._imgLoaded = false;
++                        video._coverRetryCount = 0;
++                    }
+                     Object.assign(video, data.video);
+                     _recomputeVideoBadges(video);
+                     _recomputeCardActorAges(video);
 --- a/web/static/js/pages/showcase/state-videos.js
 +++ b/web/static/js/pages/showcase/state-videos.js
 @@ -6,7 +6,7 @@
@@ -10795,7 +11276,7 @@
  export function stateVideos() {
      return {
  
-@@ -38,28 +42,75 @@
+@@ -38,28 +42,79 @@
          // gotcha：naturalWidth 在 decode 完成前恆為 0，reactive binding 不會因 load 事件重跑）---
          applyCellFocal,
  
@@ -10810,6 +11291,9 @@
 -        async fetchVideos() {
 +        async fetchVideos(options) {
 +            options = options || {};
++            const requestedActress = options.actress !== undefined
++                ? String(options.actress || '').trim()
++                : String(this._serverActressFilter || '').trim();
 +            const requestId = ++this._videoFetchGeneration;
 +            if (this._videoFetchAbort) this._videoFetchAbort.abort();
 +            const abortController = new AbortController();
@@ -10839,6 +11323,7 @@
 +                    params.set('sort', this.sort);
 +                    params.set('order', this.order);
 +                }
++                if (requestedActress) params.set('actress', requestedActress);
 +                const query = params.toString();
 +                const resp = await fetch(
 +                    '/api/showcase/videos' + (query ? '?' + query : ''),
@@ -10875,13 +11360,14 @@
                  }
                  // Re-assign module-level var via splice/push to keep the same reference
                  // (core.js uses direct assignment; ESM re-exports work because we read
-@@ -68,31 +119,76 @@
+@@ -68,31 +123,118 @@
                  // 67-A2: per-card 三態旗標。video 物件由此唯一來源流穿整條 render 鏈
                  // （_videos → _filteredVideos → paginatedVideos slice，皆同 ref），故初始化一處即涵蓋
                  // 初次載入/retry/翻頁/搜尋/排序；後端不回此欄位。補封面走 refreshVideoData reset。
 -                vids.forEach(function (v) { if (v._imgLoaded === undefined) v._imgLoaded = false; if (v._coverRequested === undefined) v._coverRequested = false; });
 +                vids.forEach(function (v, index) {
 +                    if (v._imgLoaded === undefined) v._imgLoaded = false;
++                    v._coverRetryCount = 0;
 +                    // First visible row can start decoding immediately. Every other
 +                    // cover enters through x-intersect and leaves the image window
 +                    // when it is far enough away, releasing its decoded bitmap.
@@ -10891,10 +11377,20 @@
 -                this.videoCount = _videos.length;
 +                const total = Number.isFinite(data.total) ? data.total : vids.length;
 +                const isPaged = data.paged === true && !loadAll;
++                // Older servers ignore unknown query parameters. Only enter
++                // the server-filtered mode when the response confirms that
++                // the actress predicate was actually applied.
++                const confirmedActress = requestedActress && data.actress_filter === requestedActress
++                    ? requestedActress
++                    : '';
 +                this.videoCount = total;
 +                this._serverTotal = total;
 +                this._serverPaged = isPaged;
-+                this._fullVideosLoaded = !isPaged;
++                // A filtered response is not the full library, even when the
++                // server returned every matching row. Keep this flag false so
++                // later search/clear paths know they must reload normally.
++                this._serverActressFilter = confirmedActress;
++                this._fullVideosLoaded = !isPaged && !confirmedActress;
 +                if (isPaged) {
 +                    this._serverPage = Math.max(1, parseInt(data.page) || requestedPage);
 +                    this.page = this._serverPage;
@@ -10929,6 +11425,11 @@
 +
 +        async _ensureFullVideos() {
 +            if (this._fullVideosLoaded) return true;
++            // This helper's contract is the complete library. If an actress
++            // filter is still active, drop it before issuing the full-list
++            // request; otherwise the server would faithfully return only that
++            // actress and we would incorrectly mark it as complete.
++            if (this._serverActressFilter) this._serverActressFilter = '';
 +            if (!_fullVideosPromise) {
 +                _fullVideosPromise = this.fetchVideos({
 +                    all: true,
@@ -10938,6 +11439,29 @@
 +                });
 +            }
 +            return _fullVideosPromise;
++        },
++
++        /**
++         * Actress-wall shortcut: ask SQLite for only this alias group's rows
++         * instead of downloading the entire library and filtering in JS.
++         * The result is intentionally marked as non-full because clearing the
++         * search or changing to another filter must reload the normal set.
++         */
++        async _fetchActressFilteredVideos(actressName) {
++            var name = String(actressName || '').trim();
++            if (!name) return false;
++            var ok = await this.fetchVideos({
++                actress: name,
++                all: true,
++                deferRender: true,
++            });
++            if (!ok) return false;
++            this.search = name;
++            this.applyFilterAndSort(true);
++            this.page = 1;
++            this.updatePagination();
++            this.saveState();
++            return true;
          },
  
          // --- 重試（async 安全） ---
@@ -10947,20 +11471,45 @@
 -            await this.fetchVideos();
 +            const ok = await this.fetchVideos({
 +                page: savedPage,
-+                all: this._fullVideosLoaded,
++                // An actress-filtered dataset is intentionally not the full
++                // library. Reload all matching rows on retry so local
++                // pagination/lightbox navigation keeps working.
++                all: this._fullVideosLoaded || !!this._serverActressFilter,
 +            });
 +            if (!ok) return;
              _recomputeAllBadges();
 -            this.applyFilterAndSort(true);  // 跳過 pagination，下面統一處理
 -            this.page = savedPage;
-+            if (this._fullVideosLoaded) {
++            if (this._fullVideosLoaded || this._serverActressFilter) {
 +                this.applyFilterAndSort(true);  // 跳過 pagination，下面統一處理
 +                this.page = savedPage;
 +            }
              this.updatePagination();
              // Settle: retry 也用 settle（不碰 opacity → 不閃）
              if (this.mode === 'grid' && !this.error) {
-@@ -443,7 +539,7 @@
+@@ -107,6 +249,13 @@
+ 
+         // --- 互動邏輯 ---
+         onSearchChange() {
++            // Editing the text box means the user has left the actress-wall
++            // shortcut. Drop the server-only dataset and let _animateFilter
++            // load the normal collection before applying the new query.
++            if (this._serverActressFilter
++                && String(this.search || '').trim() !== String(this._serverActressFilter).trim()) {
++                this._serverActressFilter = '';
++            }
+             // B8: 透過 _animateFilter 觸發篩選動畫
+             this._animateFilter();
+             // TASK-115-T8：改走單一判斷點（CD-8），無 pill 時行為逐位元組不變
+@@ -370,6 +519,7 @@
+             } else {
+                 this.search = '';
+                 this.pills = [];
++                this._serverActressFilter = '';
+                 this._animateFilter();            // 影片格：CD-2 步驟 7-9（唯一一次），內含 applyFilterAndSort() + saveState()
+                 this._reconcileHeroCard();        // TASK-115-T8 / RULING 3：清 hero 狀態的單一判斷點
+             }
+@@ -443,7 +593,7 @@
           * B7/B15: 排序動畫共用 helper — flip-guard → capture → change → Flip reorder
           * @param {Function} changeFn - 執行 data change 的函數
           */
@@ -10969,14 +11518,14 @@
              var savedPage = this.page;
              var grid = null;
              var positionMap = null;
-@@ -455,6 +551,14 @@
+@@ -455,6 +605,14 @@
                      grid.classList.add('flip-guard');
                      void grid.offsetHeight;  // force reflow
                      positionMap = window.ShowcaseAnimations?.capturePositions?.(grid) || null;
 +                }
 +            }
 +
-+            if (!this._fullVideosLoaded) {
++            if (!this._fullVideosLoaded && !this._serverActressFilter) {
 +                var loaded = await this._ensureFullVideos();
 +                if (!loaded) {
 +                    if (grid) grid.classList.remove('flip-guard');
@@ -10984,7 +11533,7 @@
                  }
              }
  
-@@ -495,7 +599,7 @@
+@@ -495,7 +653,7 @@
           * B8/B15: 篩選動畫共用 helper — flip-guard → capture → change → Flip filter
           * onSearchChange() 和 searchFromMetadata() 共用
           */
@@ -10993,7 +11542,7 @@
              var grid = null;
              var state = null;
  
-@@ -517,6 +621,17 @@
+@@ -517,6 +675,17 @@
                      grid.classList.add('flip-guard');
                      void grid.offsetHeight;  // force reflow
                      state = window.ShowcaseAnimations?.captureFlipState?.(grid) || null;
@@ -11003,7 +11552,7 @@
 +            // The first filter/search may start from a server-paged subset.
 +            // Capture the current DOM first, then load the complete collection
 +            // so local filtering and sorting keep their existing semantics.
-+            if (!this._fullVideosLoaded) {
++            if (!this._fullVideosLoaded && !this._serverActressFilter) {
 +                var loaded = await this._ensureFullVideos();
 +                if (!loaded) {
 +                    if (grid) grid.classList.remove('flip-guard');
@@ -11011,7 +11560,7 @@
                  }
              }
  
-@@ -555,7 +670,7 @@
+@@ -555,7 +724,7 @@
           * @param {string} direction - 'next' | 'prev'
           * @param {number} [targetPage] - 目標頁碼（goToPage 用，prevPage/nextPage 不傳）
           */
@@ -11020,7 +11569,7 @@
              // 清理可能殘留的 flip-guard（sort/filter 動畫被翻頁打斷時）
              var grid = document.querySelector('.showcase-grid');
              if (grid) grid.classList.remove('flip-guard');
-@@ -566,9 +681,16 @@
+@@ -566,9 +735,16 @@
                  newPage = direction === 'next' ? this.page + 1 : this.page - 1;
              }
  
@@ -11040,7 +11589,22 @@
              this.saveState();
              window.scrollTo(0, 0);
  
-@@ -842,7 +964,21 @@
+@@ -724,6 +900,14 @@
+             // --- Stage 1: pill 精準比對（TASK-115-T2, CD-6）---
+             var pillPredicate = buildPillPredicate(this.pills, _nameToGroup, _tagToGroup);
+             var pillFiltered = _videos.filter(pillPredicate);
++
++            // Server-side actress mode already resolved aliases and applied
++            // the expensive membership query in SQLite. The text box still
++            // shows the selected name for context, but applying the generic
++            // substring search again would drop alias-only rows and would
++            // make the visible count depend on whether the alias map happened
++            // to finish loading. Pills remain local and are applied above.
++            if (this._serverActressFilter) return pillFiltered;
+ 
+             // --- Stage 2: 自由文字模糊比對 (M4a)（現況邏輯，body 逐字保留，僅改輸入來源陣列）---
+             if (this.search && this.search.trim()) {
+@@ -842,7 +1026,21 @@
              if (parseInt(this.perPage) === 0 && this.mode === 'grid') {
                  this.perPage = 120;
              }
@@ -11063,7 +11627,7 @@
              var slice;
              if (perPage === 0) {
                  slice = _filteredVideos.slice();
-@@ -877,6 +1013,8 @@
+@@ -877,6 +1075,8 @@
                          console.error('Failed to open file:', err);
                          this.showToast(window.t('showcase.video.play_failed'), 'error');
                      });
@@ -11072,7 +11636,7 @@
              } else {
                  window.open('/api/gallery/player?path=' + encodeURIComponent(path), '_blank');
              }
-@@ -884,6 +1022,9 @@
+@@ -884,6 +1084,9 @@
  
          // 工具方法：從 paginatedVideos 的 index 映射到 filteredVideos 的 index
          getCurrentFilteredIndex(paginatedIndex) {
@@ -11094,7 +11658,7 @@
  
  // 53a codex F3: $persist 對 localStorage 壞 JSON 沒 try/catch（會在 Alpine init 階段拋錯炸整頁），
  // 必須在 Alpine.data 註冊前先清掃壞值，讓 $persist fallback 走預設物件
-@@ -298,6 +301,12 @@
+@@ -298,6 +301,13 @@
          videoCount: 0,        // _videos.length 的 reactive scalar
          filteredCount: 0,     // _filteredVideos.length 的 reactive scalar
          paginatedVideos: [],  // 當前頁顯示的影片
@@ -11102,12 +11666,13 @@
 +        _serverTotal: 0,      // 服務端回傳的完整 group 總數
 +        _serverPage: 1,       // 服務端目前頁碼
 +        _fullVideosLoaded: false, // true 時 _videos 已是完整集合
++        _serverActressFilter: '', // 非空時 _videos 是服務端按女優（含 alias）篩選的集合
 +        _videoFetchGeneration: 0, // 防止較慢的舊分頁請求覆蓋新頁
 +        _videoFetchAbort: null,
          unreachableSources: [],  // /api/showcase/source-status（unreachable / no_permission）
  
          // Card Info 展開狀態 (M3i)
-@@ -328,13 +337,20 @@
+@@ -328,13 +338,20 @@
          _animGeneration: 0,  // B13: 防止 stale deferred callback
          _heroCardReconcilePending: false,  // TASK-138-T1（CD-C5）：init first-frame 窗口；非 $persist
  
@@ -11132,7 +11697,7 @@
  
              // 接入 page lifecycle：清理 lightbox timer 和 body class
              if (window.__registerPage) {
-@@ -342,6 +358,9 @@
+@@ -342,6 +359,9 @@
                      cleanup: () => {
                          this._animGeneration++;       // B13: 使 pending deferred callback 失效
                          this._lightboxGeneration++;   // B19: invalidate pending $nextTick lightbox callbacks
@@ -11142,7 +11707,7 @@
                          if (this.lightboxCloseTimer) clearTimeout(this.lightboxCloseTimer);  // F2: cleanup delayed clear timer
                          window.Alpine?.store?.('toast')?.hide?.();   // 131b-T3：cleanup 不得拋錯（拋了會跳過後面所有 teardown）
                          if (this.lightboxOpen) document.body.classList.remove('overflow-hidden');
-@@ -367,7 +386,10 @@
+@@ -367,7 +387,10 @@
              this._heroCardReconcilePending = true;   // CD-C5：init 作用域旗標，非持久化
              var heroCardPromise = this.showFavoriteActresses ? Promise.resolve() : this._reconcileHeroCard();  // 單行：pill-hero.test.mjs 以單行 regex 擷取本行並 eval，勿換行
  
@@ -11154,7 +11719,7 @@
              // 57e hotfix：fire-and-forget warm-up SimilarRankerCache，避免 magic icon 首次點擊 cold-start race。
              // 失敗靜默（端點不存在的舊 server / 網路斷線都不影響 showcase 主流程）。
              fetch('/api/similar/warmup').catch(() => {});
-@@ -389,9 +411,14 @@
+@@ -389,9 +412,14 @@
              await _awaitHeroCardWithTimeout(heroCardPromise);
              this._heroCardReconcilePending = false;   // CD-C5：first-frame 窗口結束
  
@@ -11172,7 +11737,7 @@
              this.updatePagination();        // 單次分頁（會 clamp 超出範圍的頁碼）
  
              // Settle: 初次載入用 settle（不碰 opacity → 不閃）
-@@ -535,7 +562,13 @@
+@@ -535,7 +563,13 @@
              const defaultOrder = cfg.default_order === 'ascending' ? 'asc' : 'desc';
              // T3.2 P2 fix: `??` 而非 `||` — Settings 允許 items_per_page=0（"全部"語意），
              // 必須保留 numeric 0 讓下方 grid+perPage=0→120 降級邏輯有機會觸發。
@@ -11187,7 +11752,7 @@
  
              // 2. 從 _persistedShowcase（$persist 自動讀的 localStorage 'showcase_state'）取
              //    53a-T2: 取代手寫 localStorage.getItem + JSON.parse，格式向後相容
-@@ -563,6 +596,14 @@
+@@ -563,6 +597,14 @@
              if (this.mode === 'grid' && this.perPage === 0) {
                  this.perPage = 120;
              }
@@ -11202,6 +11767,24 @@
              // ★ 44a: 女優模式 — 只從 _persistedShowcase，不加 URL params（避免汙染 shareable link）
              this.showFavoriteActresses = state.showFavoriteActresses === true;  // 嚴格 === true
              this.actressSort = state.actressSort || 'video_count';
+@@ -642,6 +684,17 @@
+         // 點 enrich 後自動走 refresh_full 補封面。
+         handleCoverError(video, event) {
+             if (!video) return;
++            var retryCount = Number(video._coverRetryCount || 0);
++            if (retryCount < 1 && video.cover_url) {
++                // A local server / thumbnail generation failure can be
++                // transient. Retry once with a cache-busted URL before
++                // permanently downgrading the card to "missing cover".
++                video._coverRetryCount = retryCount + 1;
++                video._imgLoaded = false;
++                var separator = video.cover_url.indexOf('?') >= 0 ? '&' : '?';
++                video.cover_url = video.cover_url + separator + '_retry=' + Date.now();
++                return;
++            }
+             video.has_cover = false;  // 觸發 reactive — enrich icon 自動出現 + missing-cover class 套用
+             // 67/Codex P2（broken cover）：grid 三態淡入讓 .av-card-preview-img img 預設 opacity:0、靠
+             // .cover-loaded(=_imgLoaded) 才可見。stale/404 換 placeholder 後，可見性原本只依賴 placeholder
 --- a/web/static/js/pages/showcase/main.js
 +++ b/web/static/js/pages/showcase/main.js
 @@ -10,7 +10,7 @@
@@ -12553,7 +13136,7 @@
 +            </div>
 +            <div class="task-control-actions">
 +                <div class="task-metrics"
-+                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich'].includes(taskKind)">
++                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill'].includes(taskKind)">
 +                    <span class="task-metric is-success">
 +                        <i class="bi bi-check2"></i>
 +                        <span x-text="window.t('scanner.task.success_count', { count: taskSuccessDisplay })"></span>
@@ -12746,16 +13329,56 @@
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -295,7 +515,7 @@
+@@ -294,8 +514,47 @@
+             </button>
          </div>
  
++        <!-- Missing-only backfill: titles and samples -->
++        <div class="nfo-update-row maintenance-row">
++            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
++                <i class="bi bi-translate"></i>
++                {{ t('scanner.stats.title_backfill_prefix') }}
++                <button type="button" class="number-drilldown-number-btn"
++                        :aria-expanded="open"
++                        @click="toggle(titleBackfillDrilldownPayload)"
++                        x-text="untranslatedTitleCount"></button>
++                {{ t('scanner.stats.title_backfill_suffix') }}
++                {{ number_drilldown_panel() }}
++            </span>
++            <button class="btn-nfo-update"
++                    @click="runTitleBackfill()"
++                    :disabled="titleBackfillDisabled"
++                    x-html="titleBackfillButtonText"
++                    :title="window.t('scanner.stats.title_backfill_hint')">
++            </button>
++        </div>
++
++        <div class="nfo-update-row maintenance-row">
++            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
++                <i class="bi bi-images"></i>
++                {{ t('scanner.stats.sample_backfill_prefix') }}
++                <button type="button" class="number-drilldown-number-btn"
++                        :aria-expanded="open"
++                        @click="toggle(sampleBackfillDrilldownPayload)"
++                        x-text="missingSampleCount"></button>
++                {{ t('scanner.stats.sample_backfill_suffix') }}
++                {{ number_drilldown_panel() }}
++            </span>
++            <button class="btn-nfo-update"
++                    @click="runSampleBackfill()"
++                    :disabled="sampleBackfillDisabled"
++                    x-html="sampleBackfillButtonText"
++                    :title="window.t('scanner.stats.sample_backfill_hint')">
++            </button>
++        </div>
++
          <!-- T10: Resume Pill (未完成提示) -->
 -        <div class="nfo-update-row" x-show="resumePillVisible">
 +        <div class="nfo-update-row maintenance-row" x-show="resumePillVisible">
              <span class="nfo-badge">
                  <i class="bi bi-arrow-repeat"></i>
                  <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-@@ -313,7 +533,7 @@
+@@ -313,7 +572,7 @@
  
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
          <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
@@ -12764,7 +13387,7 @@
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +559,7 @@
+@@ -339,7 +598,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -12773,7 +13396,7 @@
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +594,8 @@
+@@ -374,6 +633,8 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
@@ -12782,7 +13405,7 @@
          </div>
      </div>
  
-@@ -782,6 +1004,212 @@
+@@ -782,6 +1043,212 @@
          </div>
      </dialog>
  
@@ -12995,7 +13618,7 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -805,26 +1233,137 @@
+@@ -805,26 +1272,137 @@
          </div>
      </dialog>
  
@@ -13731,18 +14354,18 @@
          <!-- 影片模式：status bar + grid / table / list (CD-2: x-if 避免 Alpine 追蹤隱藏陣列 DOM) -->
          <template x-if="!showFavoriteActresses">
          <div>
-@@ -542,22 +584,25 @@
+@@ -542,22 +584,26 @@
                       @click="openLightbox(getCurrentFilteredIndex(index))"
                       :style="`--card-index: ${index}`"
                       :data-flip-id="video.path">
 -                    <div class="av-card-preview-img">
 +                    <div class="av-card-preview-img"
-+                         x-intersect.margin.900px="video._coverRequested = true"
-+                         x-intersect:leave.margin.2400px="video._coverRequested = false; video._imgLoaded = false">
++                         x-intersect.margin.300px="video._coverRequested = true"
++                         x-intersect:leave.margin.900px="video._coverRequested = false; video._imgLoaded = false">
                          <!-- 67-A2: 三態（CD-67-3）。保留單一 <img> 沿用 handleCoverError 換圖；
                               淡入靠 _imgLoaded 的 .cover-loaded class（A1 CSS）；首屏前 8 張 eager+high（CD-67-5，不可 lazy+high 並存）。
                               150b-T3 起「要不要載」改由 _coverRequested / x-intersect 決定，
-                              :loading / :fetchpriority 只決定已通過閘之後的下載優先序 -->
+-                             :loading / :fetchpriority 只決定已通過閘之後的下載優先序 -->
 -                        <img :src="((index < 8 && mode === 'grid') || video._coverRequested) ? video.cover_url : null"
 -                             :alt="video.number"
 -                             :loading="index < 8 ? 'eager' : 'lazy'"
@@ -13754,14 +14377,16 @@
 -                             x-intersect.once.margin.690px="video._coverRequested = true"
 -                             x-init="$watch('video.auto_focal', () => applyCellFocal($el, video));
 -                                     $watch('video.crop_mode', () => applyCellFocal($el, video))">
++                             :fetchpriority 只決定已通過閘之後的下載優先序；
++                             x-intersect 已是唯一 lazy gate，不再疊加原生 loading=lazy
++                             （WebView 對 x-if 重建的 img 偶爾不會重新觸發 lazy 載入）-->
 +                        <template x-if="video._coverRequested && video.cover_url">
 +                            <img :src="video.cover_url"
 +                                 :alt="video.number"
-+                                 :loading="index < 8 ? 'eager' : 'lazy'"
 +                                 :fetchpriority="index < 8 ? 'high' : 'auto'"
 +                                 decoding="async"
 +                                 :class="{ 'cover-loaded': video._imgLoaded }"
-+                                 @load="video._imgLoaded = true; applyCellFocal($el, video)"
++                                 @load="video._imgLoaded = true; video._coverRetryCount = 0; applyCellFocal($el, video)"
 +                                 @error="handleCoverError(video, $event)"
 +                                 x-init="$watch('video.auto_focal', () => applyCellFocal($el, video));
 +                                         $watch('video.crop_mode', () => applyCellFocal($el, video))">
@@ -13769,15 +14394,15 @@
                          <!-- 67-A2: skeleton overlay（pending 時，gate 含 has_cover → stale @error 後 has_cover=false 自動退出）-->
                          <div class="skeleton-cover shimmer"
                               x-show="video.cover_url && video.has_cover && !video._imgLoaded && video._coverRequested"></div>
-@@ -779,15 +824,18 @@
+@@ -779,15 +825,18 @@
                           :data-flip-id="'actress:' + actress.name"
                           @click="openActressLightbox(index)">
                          <!-- Photo -->
 -                        <div class="actress-card-photo">
 -                            <template x-if="actress.photo_url">
 +                        <div class="actress-card-photo"
-+                             x-intersect.margin.900px="actress._photoRequested = true"
-+                             x-intersect:leave.margin.2400px="actress._photoRequested = false">
++                             x-intersect.margin.300px="actress._photoRequested = true"
++                             x-intersect:leave.margin.900px="actress._photoRequested = false">
 +                            <template x-if="actress.photo_url && actress._photoRequested">
                                  <!-- 100b-T4（§A／CD-6）：比照 video 牆格三件套（:330-333），ratioVar
                                       傳 '--actress-crop-ratio'（CD-3）。x-if 只在 photo_url 從無到有時
@@ -13787,11 +14412,11 @@
                                       paginatedActresses[idx] 本身是 reactive 物件，$watch 才追蹤得到）。 -->
 -                                <img :src="actress.photo_url" :alt="actress.name" loading="lazy"
 +                                <img :src="actress.photo_url"
-+                                     :alt="actress.name" loading="lazy" decoding="async"
++                                     :alt="actress.name" decoding="async"
                                       @load="applyCellFocal($el, actress, '--actress-crop-ratio')"
                                       x-init="$watch('actress.auto_focal', () => applyCellFocal($el, actress, '--actress-crop-ratio'));
                                               $watch('actress.crop_mode', () => applyCellFocal($el, actress, '--actress-crop-ratio'))">
-@@ -1184,7 +1232,7 @@
+@@ -1184,7 +1233,7 @@
                                          :aria-label="(currentLightboxVideo?.user_rating||0) > 0 ? t('showcase.pick.remove_aria') : t('showcase.pick.add_aria')"
                                          :aria-busy="!!_pickInFlight[currentLightboxVideo?.path]"
                                          @click.stop="togglePickStar()"><i class="bi bi-star pick-star-outline" aria-hidden="true"></i><i class="bi bi-star-fill pick-star-fill" aria-hidden="true"
@@ -13800,7 +14425,7 @@
                                          x-show="lbTrShowOnTitle()"
                                          @click.stop="lbTranslate()"
                                          :disabled="lbTrIsBusy()"
-@@ -1200,7 +1248,6 @@
+@@ -1200,7 +1249,6 @@
                                  <!-- §b3: 劇照補抓入口（無劇照時顯示） -->
                                  <button class="fetch-samples-btn"
                                          x-show="(currentLightboxVideo?.sample_images || []).length === 0 && !_fetchSamplesLoading"
@@ -13808,7 +14433,7 @@
                                          @click="fetchSamples(currentLightboxVideo)">
                                      <i class="bi bi-cloud-download" aria-hidden="true"></i>
                                      <span x-text="t('showcase.samples.fetch_btn')"></span>
-@@ -1223,13 +1270,6 @@
+@@ -1223,13 +1271,6 @@
                              <div class="lb-otitle"
                                   x-show="currentLightboxVideo?.original_title"
                                   x-text="currentLightboxVideo?.original_title"></div>
@@ -13822,7 +14447,7 @@
                              </div>
                              <!-- Row 3: Actresses -->
                              <div class="lb-actor" x-show="currentLightboxVideo?.actresses">
-@@ -1900,34 +1940,7 @@
+@@ -1900,34 +1941,7 @@
      </dialog>
  
      <!-- Toast (M3h) -->
