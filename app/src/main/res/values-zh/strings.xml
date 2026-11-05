@@ -47,6 +47,10 @@
     <string name="local_runtime_failed_detail">内嵌 OpenAver 服务启动失败。\n\n%1$s</string>
     <string name="page_error_title">本地页面无法加载</string>
     <string name="page_error_body">内嵌服务可能仍在启动，或存储权限发生了变化。</string>
+    <string name="webview_too_old_title">Android System WebView 版本过低</string>
+    <string name="webview_too_old_body">OpenAver 需要 Android System WebView %1$d 或更高版本，当前为 %2$s。请更新“Android System WebView”后重试。</string>
+    <string name="update_webview">更新 WebView</string>
+    <string name="webview_update_unavailable">无法打开 WebView 更新页面。</string>
     <string name="web_renderer_restarted">显示进程已重启。</string>
     <string name="retry">重试</string>
     <string name="menu_refresh">刷新页面</string>

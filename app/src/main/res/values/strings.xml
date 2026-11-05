@@ -47,6 +47,10 @@
     <string name="local_runtime_failed_detail">The embedded OpenAver server could not start.\n\n%1$s</string>
     <string name="page_error_title">The local page could not load</string>
     <string name="page_error_body">The embedded OpenAver server may still be starting or the storage permission changed.</string>
+    <string name="webview_too_old_title">Android System WebView is too old</string>
+    <string name="webview_too_old_body">OpenAver needs Android System WebView %1$d or newer. This device is using %2$s. Update Android System WebView, then tap Retry.</string>
+    <string name="update_webview">Update WebView</string>
+    <string name="webview_update_unavailable">Could not open the WebView update page.</string>
     <string name="web_renderer_restarted">The display process was restarted.</string>
     <string name="retry">Retry</string>
     <string name="menu_refresh">Refresh page</string>

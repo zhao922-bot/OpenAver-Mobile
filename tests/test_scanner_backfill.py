@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
+import time
 
 from core.database import Video, VideoRepository, init_db
 from core.path_utils import to_file_uri
@@ -200,10 +202,94 @@ def test_title_backfill_generator_processes_only_missing_candidates(
     )
 
     assert translated_paths == ["file:///ABC-202.mp4"]
+    translation_logs = [
+        event for event in events
+        if event.get("type") == "log"
+        and "これは未翻訳です → 这是未翻译" in event.get("message", "")
+    ]
+    assert len(translation_logs) == 1
     done = events[-1]
     assert done["type"] == "done"
     assert done["summary"]["success"] == 1
     assert done["summary"]["failed"] == 0
+
+
+def test_title_backfill_translates_concurrently_and_reports_progress(
+    tmp_path,
+    monkeypatch,
+):
+    db_path = tmp_path / "db.sqlite"
+    db_path.write_bytes(b"")
+    candidates = [
+        Video(
+            path=f"file:///ABC-{index}.mp4",
+            number=f"ABC-{index}",
+            title=f"日本語タイトル{index}",
+        )
+        for index in range(1, 6)
+    ]
+
+    class FakeRepo:
+        def __init__(self, _db_path):
+            pass
+
+        def get_untranslated_title_candidates(self):
+            return candidates
+
+    class FakeService:
+        def __init__(self):
+            self.active = 0
+            self.max_active = 0
+
+        async def translate_or_raise(self, title, context):
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+            try:
+                await asyncio.sleep(0.03)
+                return f"译文-{context['number']}"
+            finally:
+                self.active -= 1
+
+    service = FakeService()
+
+    def fake_writeback(_repo, video, req, _config, _path_mappings):
+        return {
+            "success": True,
+            "title": req.title,
+            "original_title": video.title,
+        }
+
+    monkeypatch.setattr(scanner_router, "get_db_path", lambda: db_path)
+    monkeypatch.setattr(scanner_router, "VideoRepository", FakeRepo)
+    monkeypatch.setattr(
+        scanner_router,
+        "load_config",
+        lambda: {
+            "translate": {"enabled": True},
+            "general": {"locale": "zh-CN"},
+            "gallery": {"path_mappings": {}},
+        },
+    )
+    monkeypatch.setattr(
+        "web.routers.translate.get_translate_service",
+        lambda: service,
+    )
+    monkeypatch.setattr(
+        "web.routers.showcase._apply_title_writeback",
+        fake_writeback,
+    )
+
+    events = _drain_events(
+        scanner_router._title_backfill_generator(threading.Event())  # noqa: SLF001
+    )
+
+    assert service.max_active == scanner_router._TITLE_BACKFILL_CONCURRENCY  # noqa: SLF001
+    result_items = [
+        event for event in events if event.get("type") == "result-item"
+    ]
+    assert len(result_items) == len(candidates)
+    assert sorted(event["current"] for event in result_items) == [1, 2, 3, 4, 5]
+    assert all(event["title"].startswith("译文-") for event in result_items)
 
 
 def test_sample_backfill_generator_skips_rows_with_existing_samples(
@@ -254,7 +340,88 @@ def test_sample_backfill_generator_skips_rows_with_existing_samples(
     )
 
     assert fetched_paths == ["file:///ABC-205.mp4"]
+    sample_logs = [
+        event for event in events
+        if event.get("type") == "log"
+        and "ABC-205" in event.get("message", "")
+        and "下载 2 张" in event.get("message", "")
+    ]
+    assert len(sample_logs) == 1
     done = events[-1]
     assert done["type"] == "done"
     assert done["summary"]["success"] == 1
     assert done["summary"]["failed"] == 0
+
+
+def test_sample_backfill_fetches_concurrently_and_logs_progress(
+    tmp_path,
+    monkeypatch,
+):
+    db_path = tmp_path / "db.sqlite"
+    db_path.write_bytes(b"")
+    candidates = [
+        Video(
+            path=f"file:///ABC-{index}.mp4",
+            number=f"ABC-{index}",
+            title=f"Missing samples {index}",
+            sample_images=[],
+        )
+        for index in range(1, 6)
+    ]
+
+    class FakeRepo:
+        def __init__(self, _db_path):
+            pass
+
+        def get_missing_sample_candidates(self):
+            return candidates
+
+    class FakeFetcher:
+        def __init__(self):
+            self.active = 0
+            self.max_active = 0
+            self.lock = threading.Lock()
+            self.paths = []
+
+        def __call__(self, req):
+            with self.lock:
+                self.active += 1
+                self.max_active = max(self.max_active, self.active)
+                self.paths.append(req.file_path)
+            try:
+                time.sleep(0.03)
+                return {
+                    "success": True,
+                    "downloaded": 2,
+                    "skipped_existing": 0,
+                    "extrafanart_on_disk": 2,
+                }
+            finally:
+                with self.lock:
+                    self.active -= 1
+
+    fetcher = FakeFetcher()
+    monkeypatch.setattr(scanner_router, "get_db_path", lambda: db_path)
+    monkeypatch.setattr(scanner_router, "VideoRepository", FakeRepo)
+    monkeypatch.setattr(
+        "web.routers.scraper.fetch_samples_endpoint",
+        fetcher,
+    )
+
+    events = _drain_events(
+        scanner_router._sample_backfill_generator(threading.Event())  # noqa: SLF001
+    )
+
+    assert fetcher.max_active == scanner_router._SAMPLE_BACKFILL_CONCURRENCY  # noqa: SLF001
+    result_items = [
+        event for event in events if event.get("type") == "result-item"
+    ]
+    assert len(result_items) == len(candidates)
+    assert sorted(event["current"] for event in result_items) == [1, 2, 3, 4, 5]
+    progress_logs = [
+        event for event in events
+        if event.get("type") == "log"
+        and "下载 2 张" in event.get("message", "")
+    ]
+    assert len(progress_logs) == len(candidates)
+    assert any(event["message"].startswith("[1/5]") for event in progress_logs)

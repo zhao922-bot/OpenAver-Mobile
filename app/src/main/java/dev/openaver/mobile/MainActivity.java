@@ -9,6 +9,7 @@ import android.app.DownloadManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -74,6 +75,8 @@ public final class MainActivity extends Activity {
     private static final long EXIT_BACK_WINDOW_MS = 2000L;
     private static final long PAGE_LOAD_TIMEOUT_MS = 30000L;
     private static final long LOCAL_START_TIMEOUT_MS = 300_000L;
+    // The web UI uses import maps, Object.hasOwn and AbortSignal.timeout.
+    private static final int MIN_WEBVIEW_MAJOR = 103;
     private static final boolean NATIVE_LOADED;
     private static final String PREFS_NAME = "openaver_mobile";
     private static final String PREF_UI_LOCALE = "ui_locale";
@@ -107,6 +110,10 @@ public final class MainActivity extends Activity {
     private WebView webView;
     private ProgressBar pageProgress;
     private LinearLayout webError;
+    private TextView webErrorTitle;
+    private TextView webErrorBody;
+    private Button webErrorRetryButton;
+    private Button webErrorSecondaryButton;
     private MenuHandleController menuHandleController;
     private FrameLayout loadingOverlay;
     private TextView loadingText;
@@ -130,6 +137,9 @@ public final class MainActivity extends Activity {
     private long lastBackPressMs;
     private long lastWebRendererRecoveryMs;
     private boolean webRendererRecoveryPending;
+    private boolean webViewCompatibilityError;
+    private int webViewMajorVersion = -1;
+    private String webViewVersionLabel = "";
 
     private static native String nativeAbi();
 
@@ -198,6 +208,10 @@ public final class MainActivity extends Activity {
         webView = findViewById(R.id.webView);
         pageProgress = findViewById(R.id.pageProgress);
         webError = findViewById(R.id.webError);
+        webErrorTitle = findViewById(R.id.webErrorTitle);
+        webErrorBody = findViewById(R.id.webErrorBody);
+        webErrorRetryButton = findViewById(R.id.errorRetryButton);
+        webErrorSecondaryButton = findViewById(R.id.errorServerButton);
         loadingOverlay = findViewById(R.id.loadingOverlay);
         loadingText = findViewById(R.id.loadingText);
         fullscreenContainer = findViewById(R.id.fullscreenContainer);
@@ -257,9 +271,17 @@ public final class MainActivity extends Activity {
     }
 
     private void configureErrorUi() {
-        Button retryButton = findViewById(R.id.errorRetryButton);
-        Button storageButton = findViewById(R.id.errorServerButton);
-        retryButton.setOnClickListener(view -> {
+        webErrorRetryButton.setOnClickListener(view -> {
+            if (webViewCompatibilityError) {
+                detectWebViewVersion();
+                if (isWebViewVersionSupported()) {
+                    webViewCompatibilityError = false;
+                    openLocalPath(currentLocalPath);
+                } else {
+                    showWebViewCompatibilityError();
+                }
+                return;
+            }
             if (!hasStorageAccess()) {
                 showPermissionUi();
                 openStoragePermission();
@@ -272,8 +294,14 @@ public final class MainActivity extends Activity {
                 startEmbeddedRuntime();
             }
         });
-        storageButton.setText(storagePermissionButtonText());
-        storageButton.setOnClickListener(view -> openStoragePermission());
+        webErrorSecondaryButton.setText(storagePermissionButtonText());
+        webErrorSecondaryButton.setOnClickListener(view -> {
+            if (webViewCompatibilityError) {
+                openWebViewUpdate();
+            } else {
+                openStoragePermission();
+            }
+        });
     }
 
     private void updatePermissionUi() {
@@ -616,6 +644,10 @@ public final class MainActivity extends Activity {
     private void openLocalPath(String path) {
         ensureWebView();
         currentLocalPath = path == null || path.isEmpty() ? "/scanner" : path;
+        if (!isWebViewVersionSupported()) {
+            showWebViewCompatibilityError();
+            return;
+        }
         webError.setVisibility(View.GONE);
         webPageLoading = true;
         pageProgress.setVisibility(View.VISIBLE);
@@ -711,6 +743,7 @@ public final class MainActivity extends Activity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void configureWebView() {
+        detectWebViewVersion();
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -771,11 +804,98 @@ public final class MainActivity extends Activity {
     }
 
     private void showPageError() {
+        webViewCompatibilityError = false;
+        webErrorTitle.setText(R.string.page_error_title);
+        webErrorBody.setText(R.string.page_error_body);
+        webErrorRetryButton.setText(R.string.retry);
+        webErrorSecondaryButton.setText(storagePermissionButtonText());
+        showPageErrorOverlay();
+    }
+
+    private void showWebViewCompatibilityError() {
+        webViewCompatibilityError = true;
+        webErrorTitle.setText(R.string.webview_too_old_title);
+        webErrorBody.setText(getString(
+                R.string.webview_too_old_body,
+                MIN_WEBVIEW_MAJOR,
+                webViewVersionLabel.isEmpty() ? "unknown" : webViewVersionLabel
+        ));
+        webErrorRetryButton.setText(R.string.retry);
+        webErrorSecondaryButton.setText(R.string.update_webview);
+        showPageErrorOverlay();
+    }
+
+    private void showPageErrorOverlay() {
         webPageLoading = false;
         mainHandler.removeCallbacks(pageLoadTimeout);
         pageProgress.setVisibility(View.GONE);
         webError.setVisibility(View.VISIBLE);
         webError.bringToFront();
+    }
+
+    private void detectWebViewVersion() {
+        try {
+            PackageInfo packageInfo = WebView.getCurrentWebViewPackage();
+            if (packageInfo == null) {
+                webViewVersionLabel = "";
+                webViewMajorVersion = -1;
+                return;
+            }
+            webViewVersionLabel = packageInfo.versionName == null
+                    ? ""
+                    : packageInfo.versionName;
+            webViewMajorVersion = parseMajorVersion(webViewVersionLabel);
+            Log.i(TAG, "WebView version=" + webViewVersionLabel
+                    + " major=" + webViewMajorVersion);
+        } catch (Throwable error) {
+            webViewVersionLabel = "";
+            webViewMajorVersion = -1;
+            Log.w(TAG, "Unable to read WebView version", error);
+        }
+    }
+
+    private static int parseMajorVersion(String version) {
+        if (version == null || version.isEmpty()) {
+            return -1;
+        }
+        int dot = version.indexOf('.');
+        String major = dot >= 0 ? version.substring(0, dot) : version;
+        try {
+            return Integer.parseInt(major.trim());
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
+    }
+
+    private boolean isWebViewVersionSupported() {
+        // Unknown OEM versions are allowed through; the web page remains the
+        // source of truth for unusual WebView implementations.
+        return webViewMajorVersion < 0 || webViewMajorVersion >= MIN_WEBVIEW_MAJOR;
+    }
+
+    private void openWebViewUpdate() {
+        Intent market = new Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("market://details?id=com.google.android.webview")
+        );
+        try {
+            startActivity(market);
+            return;
+        } catch (Exception ignored) {
+            // Fall through to the browser listing.
+        }
+        try {
+            startActivity(new Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.webview")
+            ));
+        } catch (Exception error) {
+            Toast.makeText(
+                    this,
+                    R.string.webview_update_unavailable,
+                    Toast.LENGTH_LONG
+            ).show();
+        }
     }
 
     private void showWebMenu() {

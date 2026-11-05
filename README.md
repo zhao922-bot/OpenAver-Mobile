@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r38-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r39-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r38-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r39-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r38`（versionCode `17054`）
+- 版本：`0.17.18-r39`（versionCode `17055`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -195,6 +195,12 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   缩略图造成的卡顿
 - r38：WebView 渲染进程被系统回收时自动重建并恢复当前页面，Cloudflare WebView
   同步清理挂起请求，减少封面刷新和女优筛选过程中的闪退
+- r39：一键补齐未翻译标题改为 4 路并行翻译，日志实时显示每条的
+  `原标题 → 译文`，完成后只重新检查剩余缺失项
+- r39：一键补齐缺失剧照改为 3 路并行处理，日志实时显示 `[已完成/总数]`、
+  实际下载张数和磁盘现有张数，不再停留在静态的待补数量
+- r39：Android System WebView 低于 103 时显示明确的升级提示和更新入口，
+  避免旧系统 WebView 直接显示白屏
 
 ## 限制
 

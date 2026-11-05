@@ -503,6 +503,9 @@ export function stateBatch() {
             this.state = taskState;
             this._startTask(taskKind, startStatus, total);
             this.clearLogs();
+            if (taskKind === 'title-backfill' || taskKind === 'sample-backfill') {
+                this.logPanelExpanded = true;
+            }
 
             const controller = new AbortController();
             this._backfillAbortController = controller;
@@ -555,6 +558,16 @@ export function stateBatch() {
                                 skipped: event.skipped,
                             });
                         } else if (event.type === 'result-item') {
+                            if (typeof event.current === 'number') {
+                                this.progressCurrent = event.current;
+                            }
+                            if (event.status) {
+                                this.progressStatus = event.status;
+                            }
+                            const progressPrefix = (
+                                typeof event.current === 'number'
+                                && typeof event.total === 'number'
+                            ) ? `[${event.current}/${event.total}] ` : '';
                             this._applyTaskMetrics({
                                 number: event.number || '',
                                 success: event.success_count,
@@ -564,7 +577,7 @@ export function stateBatch() {
                             if (!event.success && !event.skipped) {
                                 this.addLog(
                                     'error',
-                                    window.t('scanner.stats.backfill_item_failed', {
+                                    progressPrefix + window.t('scanner.stats.backfill_item_failed', {
                                         number: event.number || '',
                                         error: event.error || errorText,
                                     })
@@ -572,7 +585,7 @@ export function stateBatch() {
                             } else if (event.skipped) {
                                 this.addLog(
                                     'warn',
-                                    window.t('scanner.stats.backfill_item_skipped', {
+                                    progressPrefix + window.t('scanner.stats.backfill_item_skipped', {
                                         number: event.number || '',
                                         error: event.error || '',
                                     })

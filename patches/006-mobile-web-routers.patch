@@ -18,7 +18,15 @@
          "side_effect": True,
 --- a/web/routers/scanner.py
 +++ b/web/routers/scanner.py
-@@ -32,25 +32,50 @@
+@@ -24,6 +24,7 @@
+ import threading
+ import time
+ import requests
++from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait as futures_wait
+ from datetime import datetime
+ from pathlib import Path
+ from typing import Any, Callable, Dict, Generator, List, Optional
+@@ -32,25 +33,50 @@
  from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
  from starlette.background import BackgroundTask
  
@@ -73,7 +81,7 @@
  from pydantic import BaseModel
  from core.logger import get_logger
  from core.platform_info import DSM_PERMISSION_HINT, is_synology
-@@ -65,6 +90,14 @@
+@@ -65,6 +91,14 @@
  # T3(40c): Jellyfin check TTL 快取（60 秒）
  _jellyfin_cache_result: dict | None = None
  _jellyfin_cache_time: float = 0
@@ -88,7 +96,7 @@
  
  
  def _sse_event(data: dict) -> str:
-@@ -263,7 +296,272 @@
+@@ -263,7 +297,272 @@
      return f"  {directory}: {len(skipped_paths)} 個路徑讀取失敗，跳過刪除偵測以免誤刪（詳見 debug.log）"
  
  
@@ -362,7 +370,7 @@
      """產生影片列表（SSE 串流）- 使用 SQLite 儲存"""
  
      try:
-@@ -323,6 +621,7 @@
+@@ -323,6 +622,7 @@
          total_inserted = 0
          total_updated = 0
          total_deleted = 0
@@ -370,7 +378,7 @@
          scan_error_count = 0
          session_added_paths = []  # 追蹤本次新增/變更的影片路徑
          long_paths: list[str] = []  # a5: Windows 長路徑收集（只在 win32 填充）
-@@ -378,152 +677,22 @@
+@@ -378,152 +678,22 @@
                  "current": idx,
                  "total": total_dirs + 1  # +1 for generating
              })
@@ -539,7 +547,7 @@
  
          # TASK-90b-T4 / PR#90b Codex P1: 尾段每個外顯副作用（HTML 檔、完成通知、
          # done event）之前各自 fresh 查一次 should_abort()，而非迴圈結束時單次
-@@ -549,6 +718,22 @@
+@@ -549,6 +719,22 @@
          # 從 SQLite 取得影片，只保留當前設定資料夾底下的記錄
          all_db_videos = [v for v in repo.get_all()
                           if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
@@ -562,7 +570,7 @@
  
          # 轉換為 VideoInfo 格式供 HTMLGenerator 使用
          all_videos = []
-@@ -562,6 +747,7 @@
+@@ -562,6 +748,7 @@
                  maker=v.maker,
                  date=v.release_date,
                  genre=','.join(v.tags) if v.tags else '',
@@ -570,7 +578,7 @@
                  size=v.size_bytes,
                  mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
                  img=v.cover_path
-@@ -754,6 +940,7 @@
+@@ -754,6 +941,7 @@
                  "video_count": len(all_videos),
                  "output_path": str(html_path),
                  "session_update": session_update,
@@ -578,7 +586,7 @@
                  "long_paths": long_paths,  # a5
                  "stats": {
                      "inserted": total_inserted,
-@@ -786,6 +973,55 @@
+@@ -786,6 +974,55 @@
  # `request.is_disconnected()`，非搶 iterate_in_threadpool 的同一組 receive
  # channel（該輪詢與 StreamingResponse 內部行為互不干擾，spike 已驗證）。
  _DISCONNECT_POLL_INTERVAL_SEC = 0.5
@@ -634,7 +642,7 @@
  
  
  @router.get("/generate")
-@@ -959,6 +1195,401 @@
+@@ -959,6 +1196,401 @@
      return cache, skipped_readonly, path_mappings
  
  
@@ -1036,7 +1044,7 @@
  @router.get("/update-check")
  def check_update():
      """檢查需要更新的影片數量（從 SQLite 讀取）"""
-@@ -975,11 +1606,12 @@
+@@ -975,11 +1607,12 @@
  
          stats = check_cache_needs_update(cache)
  
@@ -1050,7 +1058,7 @@
                  "details": {
                      "no_title": stats['no_title'],
                      "no_date": stats['no_date'],
-@@ -994,36 +1626,125 @@
+@@ -994,36 +1627,125 @@
          return {"success": False, "error": "檢查更新數量失敗"}
  
  
@@ -1187,7 +1195,7 @@
              if not has_nfo and not has_cover:
                  missing_both += 1
                  item["category"] = "both"
-@@ -1037,7 +1758,7 @@
+@@ -1037,7 +1759,7 @@
  
          total_missing = missing_both + missing_nfo + missing_cover
  
@@ -1196,7 +1204,7 @@
          return {
              "success": True,
              "data": {
-@@ -1046,14 +1767,771 @@
+@@ -1046,14 +1768,946 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
@@ -1215,6 +1223,72 @@
 -def generate_nfo_update() -> Generator[str, None, None]:
 +        logger.error("檢查維護缺口失敗: %s", e)
 +        return {"success": False, "error": "檢查維護缺口失敗"}
++
++
++_TITLE_BACKFILL_CONCURRENCY = 4
++_SAMPLE_BACKFILL_CONCURRENCY = 3
++
++
++def _iter_title_translations(
++    translate_service: Any,
++    candidates: List[Video],
++    cancel_event: threading.Event,
++    concurrency: int = _TITLE_BACKFILL_CONCURRENCY,
++) -> Generator[tuple[Video, Optional[str], Optional[Exception]], None, None]:
++    """Translate candidates concurrently and yield results as they finish."""
++    loop = asyncio.new_event_loop()
++    semaphore = asyncio.Semaphore(max(1, concurrency))
++    pending: dict[asyncio.Task[str], tuple[int, Video]] = {}
++
++    async def translate_one(video: Video) -> str:
++        async with semaphore:
++            return await translate_service.translate_or_raise(
++                video.title,
++                {
++                    "actors": video.actresses or [],
++                    "number": _candidate_number(video),
++                },
++            )
++
++    async def drain_pending() -> None:
++        if pending:
++            await asyncio.gather(*pending, return_exceptions=True)
++
++    try:
++        for order, video in enumerate(candidates):
++            task = loop.create_task(translate_one(video))
++            pending[task] = (order, video)
++
++        while pending:
++            if cancel_event.is_set():
++                for task in pending:
++                    task.cancel()
++                loop.run_until_complete(drain_pending())
++                pending.clear()
++                return
++
++            done, _ = loop.run_until_complete(
++                asyncio.wait(
++                    pending,
++                    timeout=_DISCONNECT_POLL_INTERVAL_SEC,
++                    return_when=asyncio.FIRST_COMPLETED,
++                )
++            )
++            for task in sorted(done, key=lambda item: pending[item][0]):
++                _, video = pending.pop(task)
++                try:
++                    translated = task.result()
++                except asyncio.CancelledError:
++                    yield video, None, RuntimeError("translation task cancelled")
++                except Exception as exc:
++                    yield video, None, exc
++                else:
++                    yield video, str(translated or "").strip(), None
++    finally:
++        for task in pending:
++            task.cancel()
++        loop.run_until_complete(drain_pending())
++        loop.close()
 +
 +
 +def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
@@ -1277,48 +1351,33 @@
 +        yield _sse_event({
 +            "type": "log",
 +            "level": "info",
-+            "message": f"待補翻譯標題：{total} 部",
++            "message": (
++                f"待補翻譯標題：{total} 部"
++                f"（並行 {_TITLE_BACKFILL_CONCURRENCY} 路）"
++            ),
 +        })
 +
-+        for index, video in enumerate(candidates, start=1):
-+            if cancel_event.is_set():
-+                yield _sse_event({
-+                    "type": "done",
-+                    "message": "標題補齊已取消",
-+                    "cancelled": True,
-+                    "summary": {
-+                        "success": success_count,
-+                        "failed": failed_count,
-+                        "skipped": skipped_count,
-+                        "failed_items": failed_items,
-+                    },
-+                })
-+                return
++        yield _sse_event({
++            "type": "progress",
++            "current": 0,
++            "total": total,
++            "number": "",
++            "status": f"正在並行翻譯標題（{_TITLE_BACKFILL_CONCURRENCY} 路）...",
++            "success": success_count,
++            "failed": failed_count,
++            "skipped": skipped_count,
++        })
 +
++        processed_count = 0
++        for video, translated, translation_error in _iter_title_translations(
++            translate_service,
++            candidates,
++            cancel_event,
++        ):
 +            number = _candidate_number(video)
-+            yield _sse_event({
-+                "type": "progress",
-+                "current": index,
-+                "total": total,
-+                "number": number,
-+                "title": video.title,
-+                "status": "正在翻譯標題...",
-+                "success": success_count,
-+                "failed": failed_count,
-+                "skipped": skipped_count,
-+            })
-+
 +            try:
-+                translated = asyncio.run(
-+                    translate_service.translate_or_raise(
-+                        video.title,
-+                        {
-+                            "actors": video.actresses or [],
-+                            "number": number,
-+                        },
-+                    )
-+                )
-+                translated = (translated or "").strip()
++                if translation_error is not None:
++                    raise translation_error
 +                if not translated:
 +                    raise ValueError("empty translation")
 +                result = _apply_title_writeback(
@@ -1339,19 +1398,42 @@
 +                    "message": "標題翻譯失敗",
 +                }
 +
++            processed_count += 1
++            status = (
++                f"正在翻譯標題（{processed_count}/{total}，"
++                f"並行 {_TITLE_BACKFILL_CONCURRENCY} 路）..."
++            )
 +            if result.get("success"):
 +                success_count += 1
++                written_title = str(
++                    result.get("title") or translated or ""
++                ).strip()
++                original_title = str(
++                    result.get("original_title") or video.title or ""
++                ).strip()
 +                yield _sse_event({
 +                    "type": "result-item",
 +                    "file_path": video.path,
 +                    "number": number,
 +                    "success": True,
 +                    "skipped": False,
-+                    "title": result.get("title", translated),
-+                    "original_title": result.get("original_title", video.title),
++                    "title": written_title,
++                    "original_title": original_title,
++                    "current": processed_count,
++                    "total": total,
++                    "status": status,
 +                    "success_count": success_count,
 +                    "failed_count": failed_count,
 +                    "skipped_count": skipped_count,
++                })
++                yield _sse_event({
++                    "type": "log",
++                    "level": "info",
++                    "message": (
++                        f"[{processed_count}/{total}] "
++                        f"{number or video.path}："
++                        f"{original_title} → {written_title}"
++                    ),
 +                })
 +                continue
 +
@@ -1371,10 +1453,27 @@
 +                "skipped": False,
 +                "error_code": error_code,
 +                "error": error_message,
++                "current": processed_count,
++                "total": total,
++                "status": status,
 +                "success_count": success_count,
 +                "failed_count": failed_count,
 +                "skipped_count": skipped_count,
 +            })
++
++        if cancel_event.is_set():
++            yield _sse_event({
++                "type": "done",
++                "message": "標題補齊已取消",
++                "cancelled": True,
++                "summary": {
++                    "success": success_count,
++                    "failed": failed_count,
++                    "skipped": skipped_count,
++                    "failed_items": failed_items,
++                },
++            })
++            return
 +
 +        yield _sse_event({
 +            "type": "done",
@@ -1432,52 +1531,31 @@
 +        yield _sse_event({
 +            "type": "log",
 +            "level": "info",
-+            "message": f"待補劇照：{total} 部",
++            "message": (
++                f"開始補齊劇照：{total} 部"
++                f"（並行 {_SAMPLE_BACKFILL_CONCURRENCY} 路）"
++            ),
 +        })
 +
-+        for index, video in enumerate(candidates, start=1):
-+            if cancel_event.is_set():
-+                yield _sse_event({
-+                    "type": "done",
-+                    "message": "劇照補齊已取消",
-+                    "cancelled": True,
-+                    "summary": {
-+                        "success": success_count,
-+                        "failed": failed_count,
-+                        "skipped": skipped_count,
-+                        "failed_items": failed_items,
-+                    },
-+                })
-+                return
++        yield _sse_event({
++            "type": "progress",
++            "current": 0,
++            "total": total,
++            "number": "",
++            "status": f"正在並行補齊劇照（{_SAMPLE_BACKFILL_CONCURRENCY} 路）...",
++            "success": success_count,
++            "failed": failed_count,
++            "skipped": skipped_count,
++        })
 +
++        def fetch_one(video: Video) -> tuple[str, dict]:
 +            number = _candidate_number(video)
-+            yield _sse_event({
-+                "type": "progress",
-+                "current": index,
-+                "total": total,
-+                "number": number,
-+                "title": video.title,
-+                "status": "正在補齊劇照...",
-+                "success": success_count,
-+                "failed": failed_count,
-+                "skipped": skipped_count,
-+            })
-+
 +            if not number:
-+                skipped_count += 1
-+                yield _sse_event({
-+                    "type": "result-item",
-+                    "file_path": video.path,
-+                    "number": "",
++                return "", {
 +                    "success": False,
-+                    "skipped": True,
 +                    "error_code": "missing_number",
-+                    "error": "無法識別番號，已跳過",
-+                    "success_count": success_count,
-+                    "failed_count": failed_count,
-+                    "skipped_count": skipped_count,
-+                })
-+                continue
++                    "message": "無法識別番號，已跳過",
++                }
 +
 +            try:
 +                result = fetch_samples_endpoint(
@@ -1493,44 +1571,149 @@
 +                    "error_code": "internal_error",
 +                    "message": "劇照補齊處理失敗",
 +                }
++            if not isinstance(result, dict):
++                result = {
++                    "success": False,
++                    "error_code": "internal_error",
++                    "message": "劇照補齊處理失敗",
++                }
++            return number, result
 +
-+            if result.get("success"):
-+                success_count += 1
-+                yield _sse_event({
-+                    "type": "result-item",
-+                    "file_path": video.path,
-+                    "number": number,
-+                    "success": True,
-+                    "skipped": False,
-+                    "downloaded": result.get("downloaded", 0),
-+                    "skipped_existing": result.get("skipped_existing", 0),
-+                    "extrafanart_on_disk": result.get("extrafanart_on_disk", 0),
-+                    "success_count": success_count,
-+                    "failed_count": failed_count,
-+                    "skipped_count": skipped_count,
-+                })
-+                continue
++        executor = ThreadPoolExecutor(
++            max_workers=_SAMPLE_BACKFILL_CONCURRENCY,
++            thread_name_prefix="sample-backfill",
++        )
++        futures = {
++            executor.submit(fetch_one, video): video
++            for video in candidates
++        }
++        processed_count = 0
++        cancelled = False
 +
-+            failed_count += 1
-+            error_code = result.get("error_code") or "sample_fetch_failed"
-+            error_message = result.get("message") or "劇照補齊失敗"
-+            failed_items.append({
-+                "path": video.path,
-+                "number": number,
-+                "error": error_message,
-+            })
++        try:
++            while futures:
++                if cancel_event.is_set():
++                    cancelled = True
++                    break
++
++                done, _ = futures_wait(
++                    tuple(futures),
++                    timeout=_DISCONNECT_POLL_INTERVAL_SEC,
++                    return_when=FIRST_COMPLETED,
++                )
++                for future in done:
++                    video = futures.pop(future)
++                    try:
++                        number, result = future.result()
++                    except Exception:
++                        logger.exception("批次補齊劇照失敗: %s", video.path)
++                        number = _candidate_number(video)
++                        result = {
++                            "success": False,
++                            "error_code": "internal_error",
++                            "message": "劇照補齊處理失敗",
++                        }
++
++                    processed_count += 1
++                    status = (
++                        f"正在補齊劇照（{processed_count}/{total}，"
++                        f"並行 {_SAMPLE_BACKFILL_CONCURRENCY} 路）..."
++                    )
++
++                    if result.get("success"):
++                        success_count += 1
++                        downloaded = int(result.get("downloaded") or 0)
++                        skipped_existing = int(
++                            result.get("skipped_existing") or 0
++                        )
++                        extrafanart_on_disk = int(
++                            result.get("extrafanart_on_disk") or 0
++                        )
++                        yield _sse_event({
++                            "type": "result-item",
++                            "file_path": video.path,
++                            "number": number,
++                            "success": True,
++                            "skipped": False,
++                            "downloaded": downloaded,
++                            "skipped_existing": skipped_existing,
++                            "extrafanart_on_disk": extrafanart_on_disk,
++                            "current": processed_count,
++                            "total": total,
++                            "status": status,
++                            "success_count": success_count,
++                            "failed_count": failed_count,
++                            "skipped_count": skipped_count,
++                        })
++                        yield _sse_event({
++                            "type": "log",
++                            "level": "info",
++                            "message": (
++                                f"[{processed_count}/{total}] {number}："
++                                f"下载 {downloaded} 张，已有 {skipped_existing} 张，"
++                                f"共 {extrafanart_on_disk} 张"
++                            ),
++                        })
++                        continue
++
++                    error_code = result.get("error_code") or "sample_fetch_failed"
++                    error_message = result.get("message") or "劇照補齊失敗"
++                    if error_code == "missing_number":
++                        skipped_count += 1
++                        yield _sse_event({
++                            "type": "result-item",
++                            "file_path": video.path,
++                            "number": "",
++                            "success": False,
++                            "skipped": True,
++                            "error_code": error_code,
++                            "error": error_message,
++                            "current": processed_count,
++                            "total": total,
++                            "status": status,
++                            "success_count": success_count,
++                            "failed_count": failed_count,
++                            "skipped_count": skipped_count,
++                        })
++                        continue
++
++                    failed_count += 1
++                    failed_items.append({
++                        "path": video.path,
++                        "number": number,
++                        "error": error_message,
++                    })
++                    yield _sse_event({
++                        "type": "result-item",
++                        "file_path": video.path,
++                        "number": number,
++                        "success": False,
++                        "skipped": False,
++                        "error_code": error_code,
++                        "error": error_message,
++                        "current": processed_count,
++                        "total": total,
++                        "status": status,
++                        "success_count": success_count,
++                        "failed_count": failed_count,
++                        "skipped_count": skipped_count,
++                    })
++        finally:
++            executor.shutdown(wait=True, cancel_futures=True)
++
++        if cancelled:
 +            yield _sse_event({
-+                "type": "result-item",
-+                "file_path": video.path,
-+                "number": number,
-+                "success": False,
-+                "skipped": False,
-+                "error_code": error_code,
-+                "error": error_message,
-+                "success_count": success_count,
-+                "failed_count": failed_count,
-+                "skipped_count": skipped_count,
++                "type": "done",
++                "message": "劇照補齊已取消",
++                "cancelled": True,
++                "summary": {
++                    "success": success_count,
++                    "failed": failed_count,
++                    "skipped": skipped_count,
++                    "failed_items": failed_items,
++                },
 +            })
++            return
 +
 +        yield _sse_event({
 +            "type": "done",
@@ -1974,7 +2157,7 @@
      """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
  
      try:
-@@ -1085,6 +2563,28 @@
+@@ -1085,6 +2739,28 @@
              return
  
          paths_to_update = stats['paths']
@@ -2003,7 +2186,7 @@
          yield _sse_event({
              "type": "log",
              "level": "info",
-@@ -1092,12 +2592,90 @@
+@@ -1092,12 +2768,90 @@
          })
  
          # 執行更新（path_mappings 沿用 _build_nfo_update_cache 算好的那份，不重讀 config）
@@ -2096,7 +2279,7 @@
          })
  
      except Exception as e:
-@@ -1106,15 +2684,62 @@
+@@ -1106,15 +2860,62 @@
  
  
  @router.get("/update")
@@ -2167,7 +2350,7 @@
      )
  
  
-@@ -1211,7 +2836,9 @@
+@@ -1211,7 +3012,9 @@
      return {'need_update': len(need_update), 'items': need_update}
  
  
@@ -2178,7 +2361,7 @@
      """SSE 串流：批次為影片產生 poster + fanart"""
      global _jellyfin_cache_result, _jellyfin_cache_time
  
-@@ -1252,7 +2879,13 @@
+@@ -1252,7 +3055,13 @@
          yield _sse_event({"type": "log", "level": "info", "message": f"需補齊 {total} 部影片的圖片..."})
  
          completed = 0
@@ -2192,7 +2375,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,6 +2894,7 @@
+@@ -1261,6 +3070,7 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -2200,7 +2383,7 @@
                  break
  
              cover = item['cover_path']
-@@ -1271,7 +2905,11 @@
+@@ -1271,7 +3081,11 @@
                  "type": "progress",
                  "current": i,
                  "total": total,
@@ -2213,7 +2396,7 @@
              })
  
              img_result = generate_jellyfin_images(
-@@ -1283,18 +2921,35 @@
+@@ -1283,18 +3097,35 @@
  
              if img_result['poster']:
                  yield _sse_event({"type": "log", "level": "info", "message": f"✓ {num} poster + fanart"})
@@ -2252,7 +2435,7 @@
          })
  
      except Exception as e:
-@@ -1359,15 +3014,11 @@
+@@ -1359,15 +3190,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -2272,7 +2455,7 @@
      )
  
  
-@@ -1621,6 +3272,11 @@
+@@ -1621,6 +3448,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:

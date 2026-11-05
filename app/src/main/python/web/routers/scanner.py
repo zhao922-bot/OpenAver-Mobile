@@ -24,6 +24,7 @@ import sys
 import threading
 import time
 import requests
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait as futures_wait
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Generator, List, Optional
@@ -1778,6 +1779,72 @@ def check_missing():
         return {"success": False, "error": "檢查維護缺口失敗"}
 
 
+_TITLE_BACKFILL_CONCURRENCY = 4
+_SAMPLE_BACKFILL_CONCURRENCY = 3
+
+
+def _iter_title_translations(
+    translate_service: Any,
+    candidates: List[Video],
+    cancel_event: threading.Event,
+    concurrency: int = _TITLE_BACKFILL_CONCURRENCY,
+) -> Generator[tuple[Video, Optional[str], Optional[Exception]], None, None]:
+    """Translate candidates concurrently and yield results as they finish."""
+    loop = asyncio.new_event_loop()
+    semaphore = asyncio.Semaphore(max(1, concurrency))
+    pending: dict[asyncio.Task[str], tuple[int, Video]] = {}
+
+    async def translate_one(video: Video) -> str:
+        async with semaphore:
+            return await translate_service.translate_or_raise(
+                video.title,
+                {
+                    "actors": video.actresses or [],
+                    "number": _candidate_number(video),
+                },
+            )
+
+    async def drain_pending() -> None:
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    try:
+        for order, video in enumerate(candidates):
+            task = loop.create_task(translate_one(video))
+            pending[task] = (order, video)
+
+        while pending:
+            if cancel_event.is_set():
+                for task in pending:
+                    task.cancel()
+                loop.run_until_complete(drain_pending())
+                pending.clear()
+                return
+
+            done, _ = loop.run_until_complete(
+                asyncio.wait(
+                    pending,
+                    timeout=_DISCONNECT_POLL_INTERVAL_SEC,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            )
+            for task in sorted(done, key=lambda item: pending[item][0]):
+                _, video = pending.pop(task)
+                try:
+                    translated = task.result()
+                except asyncio.CancelledError:
+                    yield video, None, RuntimeError("translation task cancelled")
+                except Exception as exc:
+                    yield video, None, exc
+                else:
+                    yield video, str(translated or "").strip(), None
+    finally:
+        for task in pending:
+            task.cancel()
+        loop.run_until_complete(drain_pending())
+        loop.close()
+
+
 def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
     """Translate and write back only rows that are still missing a translation."""
     try:
@@ -1838,48 +1905,33 @@ def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, N
         yield _sse_event({
             "type": "log",
             "level": "info",
-            "message": f"待補翻譯標題：{total} 部",
+            "message": (
+                f"待補翻譯標題：{total} 部"
+                f"（並行 {_TITLE_BACKFILL_CONCURRENCY} 路）"
+            ),
         })
 
-        for index, video in enumerate(candidates, start=1):
-            if cancel_event.is_set():
-                yield _sse_event({
-                    "type": "done",
-                    "message": "標題補齊已取消",
-                    "cancelled": True,
-                    "summary": {
-                        "success": success_count,
-                        "failed": failed_count,
-                        "skipped": skipped_count,
-                        "failed_items": failed_items,
-                    },
-                })
-                return
+        yield _sse_event({
+            "type": "progress",
+            "current": 0,
+            "total": total,
+            "number": "",
+            "status": f"正在並行翻譯標題（{_TITLE_BACKFILL_CONCURRENCY} 路）...",
+            "success": success_count,
+            "failed": failed_count,
+            "skipped": skipped_count,
+        })
 
+        processed_count = 0
+        for video, translated, translation_error in _iter_title_translations(
+            translate_service,
+            candidates,
+            cancel_event,
+        ):
             number = _candidate_number(video)
-            yield _sse_event({
-                "type": "progress",
-                "current": index,
-                "total": total,
-                "number": number,
-                "title": video.title,
-                "status": "正在翻譯標題...",
-                "success": success_count,
-                "failed": failed_count,
-                "skipped": skipped_count,
-            })
-
             try:
-                translated = asyncio.run(
-                    translate_service.translate_or_raise(
-                        video.title,
-                        {
-                            "actors": video.actresses or [],
-                            "number": number,
-                        },
-                    )
-                )
-                translated = (translated or "").strip()
+                if translation_error is not None:
+                    raise translation_error
                 if not translated:
                     raise ValueError("empty translation")
                 result = _apply_title_writeback(
@@ -1900,19 +1952,42 @@ def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, N
                     "message": "標題翻譯失敗",
                 }
 
+            processed_count += 1
+            status = (
+                f"正在翻譯標題（{processed_count}/{total}，"
+                f"並行 {_TITLE_BACKFILL_CONCURRENCY} 路）..."
+            )
             if result.get("success"):
                 success_count += 1
+                written_title = str(
+                    result.get("title") or translated or ""
+                ).strip()
+                original_title = str(
+                    result.get("original_title") or video.title or ""
+                ).strip()
                 yield _sse_event({
                     "type": "result-item",
                     "file_path": video.path,
                     "number": number,
                     "success": True,
                     "skipped": False,
-                    "title": result.get("title", translated),
-                    "original_title": result.get("original_title", video.title),
+                    "title": written_title,
+                    "original_title": original_title,
+                    "current": processed_count,
+                    "total": total,
+                    "status": status,
                     "success_count": success_count,
                     "failed_count": failed_count,
                     "skipped_count": skipped_count,
+                })
+                yield _sse_event({
+                    "type": "log",
+                    "level": "info",
+                    "message": (
+                        f"[{processed_count}/{total}] "
+                        f"{number or video.path}："
+                        f"{original_title} → {written_title}"
+                    ),
                 })
                 continue
 
@@ -1932,10 +2007,27 @@ def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, N
                 "skipped": False,
                 "error_code": error_code,
                 "error": error_message,
+                "current": processed_count,
+                "total": total,
+                "status": status,
                 "success_count": success_count,
                 "failed_count": failed_count,
                 "skipped_count": skipped_count,
             })
+
+        if cancel_event.is_set():
+            yield _sse_event({
+                "type": "done",
+                "message": "標題補齊已取消",
+                "cancelled": True,
+                "summary": {
+                    "success": success_count,
+                    "failed": failed_count,
+                    "skipped": skipped_count,
+                    "failed_items": failed_items,
+                },
+            })
+            return
 
         yield _sse_event({
             "type": "done",
@@ -1993,52 +2085,31 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
         yield _sse_event({
             "type": "log",
             "level": "info",
-            "message": f"待補劇照：{total} 部",
+            "message": (
+                f"開始補齊劇照：{total} 部"
+                f"（並行 {_SAMPLE_BACKFILL_CONCURRENCY} 路）"
+            ),
         })
 
-        for index, video in enumerate(candidates, start=1):
-            if cancel_event.is_set():
-                yield _sse_event({
-                    "type": "done",
-                    "message": "劇照補齊已取消",
-                    "cancelled": True,
-                    "summary": {
-                        "success": success_count,
-                        "failed": failed_count,
-                        "skipped": skipped_count,
-                        "failed_items": failed_items,
-                    },
-                })
-                return
+        yield _sse_event({
+            "type": "progress",
+            "current": 0,
+            "total": total,
+            "number": "",
+            "status": f"正在並行補齊劇照（{_SAMPLE_BACKFILL_CONCURRENCY} 路）...",
+            "success": success_count,
+            "failed": failed_count,
+            "skipped": skipped_count,
+        })
 
+        def fetch_one(video: Video) -> tuple[str, dict]:
             number = _candidate_number(video)
-            yield _sse_event({
-                "type": "progress",
-                "current": index,
-                "total": total,
-                "number": number,
-                "title": video.title,
-                "status": "正在補齊劇照...",
-                "success": success_count,
-                "failed": failed_count,
-                "skipped": skipped_count,
-            })
-
             if not number:
-                skipped_count += 1
-                yield _sse_event({
-                    "type": "result-item",
-                    "file_path": video.path,
-                    "number": "",
+                return "", {
                     "success": False,
-                    "skipped": True,
                     "error_code": "missing_number",
-                    "error": "無法識別番號，已跳過",
-                    "success_count": success_count,
-                    "failed_count": failed_count,
-                    "skipped_count": skipped_count,
-                })
-                continue
+                    "message": "無法識別番號，已跳過",
+                }
 
             try:
                 result = fetch_samples_endpoint(
@@ -2054,44 +2125,149 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
                     "error_code": "internal_error",
                     "message": "劇照補齊處理失敗",
                 }
+            if not isinstance(result, dict):
+                result = {
+                    "success": False,
+                    "error_code": "internal_error",
+                    "message": "劇照補齊處理失敗",
+                }
+            return number, result
 
-            if result.get("success"):
-                success_count += 1
-                yield _sse_event({
-                    "type": "result-item",
-                    "file_path": video.path,
-                    "number": number,
-                    "success": True,
-                    "skipped": False,
-                    "downloaded": result.get("downloaded", 0),
-                    "skipped_existing": result.get("skipped_existing", 0),
-                    "extrafanart_on_disk": result.get("extrafanart_on_disk", 0),
-                    "success_count": success_count,
-                    "failed_count": failed_count,
-                    "skipped_count": skipped_count,
-                })
-                continue
+        executor = ThreadPoolExecutor(
+            max_workers=_SAMPLE_BACKFILL_CONCURRENCY,
+            thread_name_prefix="sample-backfill",
+        )
+        futures = {
+            executor.submit(fetch_one, video): video
+            for video in candidates
+        }
+        processed_count = 0
+        cancelled = False
 
-            failed_count += 1
-            error_code = result.get("error_code") or "sample_fetch_failed"
-            error_message = result.get("message") or "劇照補齊失敗"
-            failed_items.append({
-                "path": video.path,
-                "number": number,
-                "error": error_message,
-            })
+        try:
+            while futures:
+                if cancel_event.is_set():
+                    cancelled = True
+                    break
+
+                done, _ = futures_wait(
+                    tuple(futures),
+                    timeout=_DISCONNECT_POLL_INTERVAL_SEC,
+                    return_when=FIRST_COMPLETED,
+                )
+                for future in done:
+                    video = futures.pop(future)
+                    try:
+                        number, result = future.result()
+                    except Exception:
+                        logger.exception("批次補齊劇照失敗: %s", video.path)
+                        number = _candidate_number(video)
+                        result = {
+                            "success": False,
+                            "error_code": "internal_error",
+                            "message": "劇照補齊處理失敗",
+                        }
+
+                    processed_count += 1
+                    status = (
+                        f"正在補齊劇照（{processed_count}/{total}，"
+                        f"並行 {_SAMPLE_BACKFILL_CONCURRENCY} 路）..."
+                    )
+
+                    if result.get("success"):
+                        success_count += 1
+                        downloaded = int(result.get("downloaded") or 0)
+                        skipped_existing = int(
+                            result.get("skipped_existing") or 0
+                        )
+                        extrafanart_on_disk = int(
+                            result.get("extrafanart_on_disk") or 0
+                        )
+                        yield _sse_event({
+                            "type": "result-item",
+                            "file_path": video.path,
+                            "number": number,
+                            "success": True,
+                            "skipped": False,
+                            "downloaded": downloaded,
+                            "skipped_existing": skipped_existing,
+                            "extrafanart_on_disk": extrafanart_on_disk,
+                            "current": processed_count,
+                            "total": total,
+                            "status": status,
+                            "success_count": success_count,
+                            "failed_count": failed_count,
+                            "skipped_count": skipped_count,
+                        })
+                        yield _sse_event({
+                            "type": "log",
+                            "level": "info",
+                            "message": (
+                                f"[{processed_count}/{total}] {number}："
+                                f"下载 {downloaded} 张，已有 {skipped_existing} 张，"
+                                f"共 {extrafanart_on_disk} 张"
+                            ),
+                        })
+                        continue
+
+                    error_code = result.get("error_code") or "sample_fetch_failed"
+                    error_message = result.get("message") or "劇照補齊失敗"
+                    if error_code == "missing_number":
+                        skipped_count += 1
+                        yield _sse_event({
+                            "type": "result-item",
+                            "file_path": video.path,
+                            "number": "",
+                            "success": False,
+                            "skipped": True,
+                            "error_code": error_code,
+                            "error": error_message,
+                            "current": processed_count,
+                            "total": total,
+                            "status": status,
+                            "success_count": success_count,
+                            "failed_count": failed_count,
+                            "skipped_count": skipped_count,
+                        })
+                        continue
+
+                    failed_count += 1
+                    failed_items.append({
+                        "path": video.path,
+                        "number": number,
+                        "error": error_message,
+                    })
+                    yield _sse_event({
+                        "type": "result-item",
+                        "file_path": video.path,
+                        "number": number,
+                        "success": False,
+                        "skipped": False,
+                        "error_code": error_code,
+                        "error": error_message,
+                        "current": processed_count,
+                        "total": total,
+                        "status": status,
+                        "success_count": success_count,
+                        "failed_count": failed_count,
+                        "skipped_count": skipped_count,
+                    })
+        finally:
+            executor.shutdown(wait=True, cancel_futures=True)
+
+        if cancelled:
             yield _sse_event({
-                "type": "result-item",
-                "file_path": video.path,
-                "number": number,
-                "success": False,
-                "skipped": False,
-                "error_code": error_code,
-                "error": error_message,
-                "success_count": success_count,
-                "failed_count": failed_count,
-                "skipped_count": skipped_count,
+                "type": "done",
+                "message": "劇照補齊已取消",
+                "cancelled": True,
+                "summary": {
+                    "success": success_count,
+                    "failed": failed_count,
+                    "skipped": skipped_count,
+                    "failed_items": failed_items,
+                },
             })
+            return
 
         yield _sse_event({
             "type": "done",
