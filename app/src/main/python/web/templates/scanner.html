@@ -288,7 +288,7 @@
             </div>
             <div class="task-control-actions">
                 <div class="task-metrics"
-                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich'].includes(taskKind)">
+                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill'].includes(taskKind)">
                     <span class="task-metric is-success">
                         <i class="bi bi-check2"></i>
                         <span x-text="window.t('scanner.task.success_count', { count: taskSuccessDisplay })"></span>
@@ -511,6 +511,45 @@
             <button class="btn-nfo-update" @click="runMissingEnrich()"
                     x-bind:disabled="isBusy || missingItems.length === 0"
                     x-html="missingEnrichButtonText">
+            </button>
+        </div>
+
+        <!-- Missing-only backfill: titles and samples -->
+        <div class="nfo-update-row maintenance-row">
+            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
+                <i class="bi bi-translate"></i>
+                {{ t('scanner.stats.title_backfill_prefix') }}
+                <button type="button" class="number-drilldown-number-btn"
+                        :aria-expanded="open"
+                        @click="toggle(titleBackfillDrilldownPayload)"
+                        x-text="untranslatedTitleCount"></button>
+                {{ t('scanner.stats.title_backfill_suffix') }}
+                {{ number_drilldown_panel() }}
+            </span>
+            <button class="btn-nfo-update"
+                    @click="runTitleBackfill()"
+                    :disabled="titleBackfillDisabled"
+                    x-html="titleBackfillButtonText"
+                    :title="window.t('scanner.stats.title_backfill_hint')">
+            </button>
+        </div>
+
+        <div class="nfo-update-row maintenance-row">
+            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
+                <i class="bi bi-images"></i>
+                {{ t('scanner.stats.sample_backfill_prefix') }}
+                <button type="button" class="number-drilldown-number-btn"
+                        :aria-expanded="open"
+                        @click="toggle(sampleBackfillDrilldownPayload)"
+                        x-text="missingSampleCount"></button>
+                {{ t('scanner.stats.sample_backfill_suffix') }}
+                {{ number_drilldown_panel() }}
+            </span>
+            <button class="btn-nfo-update"
+                    @click="runSampleBackfill()"
+                    :disabled="sampleBackfillDisabled"
+                    x-html="sampleBackfillButtonText"
+                    :title="window.t('scanner.stats.sample_backfill_hint')">
             </button>
         </div>
 

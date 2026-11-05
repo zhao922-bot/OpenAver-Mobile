@@ -17,7 +17,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from core.database import VideoRepository, get_db_path, init_db
+from core.database import AliasRepository, VideoRepository, get_db_path, init_db
 from core.database.version_tracker import (
     compute_db_fingerprint,
     compute_etag,
@@ -207,8 +207,13 @@ def get_videos(
     sort: str = Query('date'),
     order: str = Query('desc'),
     paged: bool = Query(False),
+    actress: Optional[str] = Query(None, max_length=200),
 ):
     """取得所有影片資料（用於 Showcase 頁面客戶端渲染）。
+
+    ``actress`` 可選：先以 AliasRepository.resolve() 展開別名群組，再在
+    SQLite 的 json_each 上做精確 membership 篩選，避免前端為女優牆下載
+    整份片庫。篩選後的 rows 才進入 group/sort/pagination。
 
     帶 ETag（CD-145a-8/11/12）：涵蓋 DB 內部寫入 revision、DB/-wal 檔案指紋（涵蓋外部
     抽換或還原備份）、無機密設定投影（來源資料夾／path_mappings／縮圖開關）三項，
@@ -241,6 +246,17 @@ def get_videos(
         requested_order = 'asc' if order == 'asc' else 'desc'
         use_pagination = bool(paged and per_page > 0 and requested_sort != 'random')
 
+        # Direct Python callers (tests and internal callers) may omit the
+        # FastAPI Query default entirely, in which case the default object is
+        # not a string. Treat only a real string as a filter.
+        actress_name = actress.strip() if isinstance(actress, str) else ''
+        actress_names = None
+        if actress_name:
+            # Resolve aliases before touching the video table. A request for
+            # an old name must include rows indexed under every current name
+            # in the same alias group.
+            actress_names = sorted(AliasRepository(db_path).resolve(actress_name))
+
         projection = {
             "directories": sorted(get_gallery_source_paths(gallery_config)),
             "path_mappings": path_mappings,
@@ -249,6 +265,7 @@ def get_videos(
             "per_page": per_page if use_pagination else 0,
             "sort": requested_sort if use_pagination else 'client',
             "order": requested_order if use_pagination else 'client',
+            "actress_names": actress_names or [],
         }
         etag = None
         if requested_sort != 'random':
@@ -262,7 +279,7 @@ def get_videos(
             return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
 
         repo = VideoRepository(db_path)
-        all_videos = [v for v in repo.get_showcase_rows(configured_dir_uris)
+        all_videos = [v for v in repo.get_showcase_rows(configured_dir_uris, actress_names)
                       if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
 
         # feature/122 CD-122-1：分組在序列化層收斂，前端拿到的 videos 陣列已是
@@ -292,6 +309,7 @@ def get_videos(
             "per_page": per_page if use_pagination else 0,
             "total_pages": total_pages if use_pagination else 1,
             "paged": use_pagination,
+            "actress_filter": actress_name,
         })
         if etag:
             resp.headers["ETag"] = etag

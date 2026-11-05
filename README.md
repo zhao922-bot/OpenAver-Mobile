@@ -13,17 +13,17 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r37-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r38-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r37-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r38-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r37`（versionCode `17053`）
+- 版本：`0.17.18-r38`（versionCode `17054`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：`21F3FF3059E44DE4860C4FABED671C88C666554996FBE97171CB834DF1F1F98E`
+- SHA-256：发布后以 Release 附件中的 `SHA256SUMS.txt` 为准
 
 ## 安装
 
@@ -185,6 +185,16 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   Scanner 与 Insights 只加载所需动效运行时，不再连带加载 Flip、Physics2D 等重型插件
 - r37：展示库和女优墙的封面改为双阈值图片窗口：接近视口时异步加载，远离后释放
   已解码图片并销毁图片节点；手机网格单页上限降为 45 张，避免整页图片长期占用内存
+- r38：扫描页新增“一键补齐未翻译标题”和“一键补齐缺失剧照”，只处理缺失项，
+  支持数量预览、SSE 进度、失败重试和取消
+- r38：统一文件名与文件夹改为单事务数据库更新并复用目录扫描结果，批量重命名在
+  大影片库下减少重复文件枚举和 SQLite 提交
+- r38：女优墙直接按别名组在 SQLite 服务端筛选，不再先下载整库再前端过滤；
+  封面加载失败自动重试一次，显式刷新封面时立即重新挂载图片窗口
+- r38：缩略图冷生成限制并发并跳过重复任务，降低扫描大量新视频后同时生成封面
+  缩略图造成的卡顿
+- r38：WebView 渲染进程被系统回收时自动重建并恢复当前页面，Cloudflare WebView
+  同步清理挂起请求，减少封面刷新和女优筛选过程中的闪退
 
 ## 限制
 

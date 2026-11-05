@@ -45,7 +45,17 @@ def _lock_for_thumb(dst) -> threading.Lock:
 # 縮圖參數（CD-3 / D2，集中為模組常數供日後調參）
 THUMB_WIDTH = 400      # 目標寬度（px）
 THUMB_QUALITY = 80     # WebP quality
-THUMB_METHOD = 4       # WebP method（壓縮努力）
+# Method 2 keeps cold-start generation responsive on phones while retaining
+# substantially better compression than method 0. Method 4 was needlessly
+# expensive when a freshly scanned page asked for dozens of covers at once.
+THUMB_METHOD = 2
+
+# Cold thumbnail generation is CPU-heavy. Without a global gate, a grid page
+# can occupy every Starlette thread with simultaneous Pillow resizes and WebP
+# encodes, which is especially visible on Android. Two workers preserve
+# parallelism without starving the request loop.
+_MAX_CONCURRENT_GENERATES = 2
+_generate_slots = threading.BoundedSemaphore(_MAX_CONCURRENT_GENERATES)
 
 
 def _thumb_dir() -> Path:
@@ -75,17 +85,23 @@ def generate(cover_fs_path: str, dst: Path) -> bool:
     # 整個「讀 cover → 處理 → 原子寫」包進 per-thumb 鎖內，與 invalidate 的 unlink
     # 序列化（Codex round-2 P1 修法 A）。失敗回 False 的語義不變，只是被鎖包住。
     with _lock_for_thumb(dst):
+        # Two requests for the same card can both observe a miss before the
+        # first one finishes. Re-check under the per-thumb lock so only one
+        # performs the expensive resize/encode.
+        if dst.exists():
+            return True
         try:
-            with Image.open(cover_fs_path) as img:
-                img = img.convert("RGB")  # 去 alpha/CMYK，WebP 友善
-                # 等比縮到寬 THUMB_WIDTH；原圖更窄則不放大
-                if img.width > THUMB_WIDTH:
-                    new_h = max(1, round(img.height * THUMB_WIDTH / img.width))
-                    img = img.resize((THUMB_WIDTH, new_h), Image.LANCZOS)
+            with _generate_slots:
+                with Image.open(cover_fs_path) as img:
+                    img = img.convert("RGB")  # 去 alpha/CMYK，WebP 友善
+                    # 等比縮到寬 THUMB_WIDTH；原圖更窄則不放大
+                    if img.width > THUMB_WIDTH:
+                        new_h = max(1, round(img.height * THUMB_WIDTH / img.width))
+                        img = img.resize((THUMB_WIDTH, new_h), Image.LANCZOS)
 
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                with atomic_write(dst) as f:
-                    img.save(f, "WEBP", quality=THUMB_QUALITY, method=THUMB_METHOD)
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    with atomic_write(dst) as f:
+                        img.save(f, "WEBP", quality=THUMB_QUALITY, method=THUMB_METHOD)
             return True
         except Exception as e:
             logger.warning("thumbnail generate failed: cover=%s err=%s", cover_fs_path, e)

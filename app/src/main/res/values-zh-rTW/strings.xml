@@ -47,6 +47,7 @@
     <string name="local_runtime_failed_detail">內嵌 OpenAver 服務啟動失敗。\n\n%1$s</string>
     <string name="page_error_title">本機頁面無法載入</string>
     <string name="page_error_body">內嵌服務可能仍在啟動，或儲存權限發生了變化。</string>
+    <string name="web_renderer_restarted">顯示程序已重新啟動。</string>
     <string name="retry">重試</string>
     <string name="menu_refresh">重新整理頁面</string>
     <string name="menu_scanner">開啟列表生成</string>

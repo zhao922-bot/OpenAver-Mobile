@@ -47,6 +47,7 @@
     <string name="local_runtime_failed_detail">The embedded OpenAver server could not start.\n\n%1$s</string>
     <string name="page_error_title">The local page could not load</string>
     <string name="page_error_body">The embedded OpenAver server may still be starting or the storage permission changed.</string>
+    <string name="web_renderer_restarted">The display process was restarted.</string>
     <string name="retry">Retry</string>
     <string name="menu_refresh">Refresh page</string>
     <string name="menu_scanner">Open scanner</string>

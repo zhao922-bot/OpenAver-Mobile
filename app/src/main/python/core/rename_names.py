@@ -217,25 +217,44 @@ def _find_repair_video(
     expected_path: Path,
     number: str | None,
     video_extensions: set[str],
+    *,
+    known_files: list[Path] | None = None,
 ) -> Path | None:
-    """Find a unique same-number video when MTP/FUSE truncated its filename."""
+    """Find a unique same-number video when MTP/FUSE truncated its filename.
+
+    ``known_files`` lets the caller reuse a directory scan already performed
+    for a large rename preview; the default path remains standalone-safe.
+    """
     if not number:
-        return None
-    try:
-        if not expected_path.parent.is_dir():
-            return None
-    except OSError:
         return None
     normalized = normalize_number_impl(str(number))
     matches = []
-    try:
-        children = expected_path.parent.iterdir()
-        for child in children:
-            if not child.is_file() or child.suffix.lower() not in video_extensions:
+    if known_files is None:
+        try:
+            if not expected_path.parent.is_dir():
+                return None
+            children = expected_path.parent.iterdir()
+            for child in children:
+                if not child.is_file():
+                    continue
+                if child.suffix.lower() not in video_extensions:
+                    continue
+                candidate_number = extract_number(child.name)
+                if (
+                    candidate_number
+                    and normalize_number_impl(candidate_number) == normalized
+                ):
+                    matches.append(child)
+        except OSError:
+            return None
+    else:
+        for child in known_files:
+            if child.suffix.lower() not in video_extensions:
                 continue
             candidate_number = extract_number(child.name)
-            if candidate_number and normalize_number_impl(candidate_number) == normalized:
+            if (
+                candidate_number
+                and normalize_number_impl(candidate_number) == normalized
+            ):
                 matches.append(child)
-    except OSError:
-        return None
     return matches[0] if len(matches) == 1 else None

@@ -1417,6 +1417,10 @@ export function stateActress() {
             var wasActressMode = this.showFavoriteActresses;
 
             try {
+                // Claim the transition before the server fetch. Otherwise a
+                // second tap can abort/replace the first request while the
+                // first continuation still tries to apply its search.
+                this._ghostFlyInFlight = true;
                 // 捕獲來源 rect / coverSrc（必須在 closeLightbox / state 變更前）
                 var fromRect = null;
                 var coverSrc = null;
@@ -1441,11 +1445,16 @@ export function stateActress() {
                     this.showFavoriteActresses = false;
                     this.actressSearch = '';
                 }
-                this.search = actressName;
-                this._animateFilter();
+                var loaded = await this._fetchActressFilteredVideos(actressName);
+                if (!loaded) {
+                    this._ghostFlyInFlight = false;
+                    this._reconcileHeroCard();
+                    return;
+                }
 
                 // 非女優模式 / 無 fromEl / 無 coverSrc → fallback
                 if (!wasActressMode || !fromRect || !coverSrc) {
+                    this._ghostFlyInFlight = false;
                     this._reconcileHeroCard();
                     if (wasActressMode) {
                         var gen0 = ++this._animGeneration;

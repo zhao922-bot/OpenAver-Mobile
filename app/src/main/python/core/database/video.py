@@ -740,6 +740,131 @@ class VideoRepository:
 
         return rowcount > 0
 
+    def apply_rename_batch(self, updates: List[dict]) -> bool:
+        """Apply rename path/cover/sample updates in one transaction.
+
+        Rename execution can contain thousands of videos. Calling
+        ``repath_path_only()`` and the metadata mutators once per row would
+        open and commit a separate SQLite connection for every field. This
+        method keeps the same per-row checks but commits the whole rename
+        operation once. A failed check rolls the transaction back and returns
+        ``False`` so the caller can roll back the filesystem changes.
+        """
+        if not updates:
+            return True
+
+        normalized: list[dict] = []
+        old_paths: set[str] = set()
+        new_paths: set[str] = set()
+        for update in updates:
+            old_uri = str(update.get("db_old_uri") or "")
+            new_uri = str(update.get("db_new_uri") or "")
+            if old_uri != new_uri:
+                if not old_uri or not new_uri:
+                    return False
+                if old_uri in old_paths or new_uri in new_paths:
+                    return False
+                old_paths.add(old_uri)
+                new_paths.add(new_uri)
+            normalized.append(update)
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        path_changed = False
+        try:
+            existing: set[str] = set()
+            paths = list(old_paths | new_paths)
+            for start in range(0, len(paths), 900):
+                chunk = paths[start:start + 900]
+                placeholders = ', '.join(['?'] * len(chunk))
+                cursor.execute(
+                    f"SELECT path FROM videos WHERE path IN ({placeholders})",
+                    chunk,
+                )
+                existing.update(row[0] for row in cursor.fetchall())
+
+            for update in normalized:
+                old_uri = str(update.get("db_old_uri") or "")
+                new_uri = str(update.get("db_new_uri") or "")
+                if old_uri == new_uri:
+                    continue
+                if old_uri not in existing or new_uri in existing:
+                    conn.rollback()
+                    return False
+
+            for update in normalized:
+                old_uri = str(update.get("db_old_uri") or "")
+                new_uri = str(update.get("db_new_uri") or "")
+                if old_uri == new_uri:
+                    continue
+                cursor.execute(
+                    "UPDATE videos SET path = ?, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE path = ?",
+                    (new_uri, old_uri),
+                )
+                if cursor.rowcount != 1:
+                    conn.rollback()
+                    return False
+                path_changed = True
+
+            for update in normalized:
+                new_uri = str(update.get("db_new_uri") or "")
+                old_cover = str(update.get("cover_path_old") or "")
+                new_cover = str(update.get("cover_path_new") or "")
+                update_cover = update.get(
+                    "cover_update",
+                    old_cover != new_cover,
+                )
+                if not update_cover:
+                    continue
+                cursor.execute(
+                    "UPDATE videos SET cover_path = ?, "
+                    "updated_at = CURRENT_TIMESTAMP "
+                    "WHERE path = ? AND cover_path = ?",
+                    (new_cover, new_uri, old_cover),
+                )
+                if cursor.rowcount != 1:
+                    conn.rollback()
+                    return False
+
+            for update in normalized:
+                new_uri = str(update.get("db_new_uri") or "")
+                old_samples = list(update.get("sample_images_old") or [])
+                new_samples = list(update.get("sample_images_new") or [])
+                update_samples = update.get(
+                    "samples_update",
+                    old_samples != new_samples,
+                )
+                if not update_samples:
+                    continue
+                cursor.execute(
+                    "UPDATE videos SET sample_images = ?, "
+                    "updated_at = CURRENT_TIMESTAMP WHERE path = ?",
+                    (
+                        json.dumps(new_samples, ensure_ascii=False),
+                        new_uri,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    conn.rollback()
+                    return False
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+        if path_changed:
+            try:
+                from core.similar.ranker_cache import SimilarRankerCache
+                SimilarRankerCache.invalidate()
+            except Exception:
+                logger.exception("SimilarRankerCache invalidate failed (non-fatal)")
+
+        return True
+
     def upsert_batch(self, videos: List[Video]) -> tuple:
         """批次新增或更新
 
@@ -973,7 +1098,71 @@ class VideoRepository:
         finally:
             conn.close()
 
-    def get_showcase_rows(self, configured_dir_uris: set[str]) -> List[Video]:
+    def get_untranslated_title_candidates(self) -> List[Video]:
+        """Return rows that can enter the missing-title backfill.
+
+        Japanese detection stays in the router so this repository method remains
+        a storage query, not a scraper-language policy.  Filtering in SQL still
+        avoids materialising every unrelated library row.
+        """
+        conn = self._get_connection()
+        try:
+            columns = self._get_columns(conn)
+            cursor = conn.execute(
+                """
+                SELECT * FROM videos
+                WHERE TRIM(COALESCE(title, '')) != ''
+                  AND TRIM(COALESCE(original_title, '')) = ''
+                ORDER BY id
+                """
+            )
+            return [Video.from_row(row, columns) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+    def get_missing_sample_candidates(self) -> List[Video]:
+        """Return lightweight rows whose stored sample-image list is empty.
+
+        Only the fields needed to call the existing fetch-samples endpoint are
+        selected.  Malformed/non-list JSON is treated as missing, matching the
+        backfill preview logic in the scanner router.
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.execute(
+                """
+                SELECT path, number, title, sample_images
+                FROM videos
+                ORDER BY id
+                """
+            )
+            candidates: List[Video] = []
+            for path, number, title, raw_samples in cursor.fetchall():
+                parsed = []
+                if raw_samples:
+                    try:
+                        loaded = json.loads(raw_samples)
+                        if isinstance(loaded, list):
+                            parsed = loaded
+                    except (json.JSONDecodeError, TypeError):
+                        parsed = []
+                has_sample = any(
+                    isinstance(url, str) and url.strip()
+                    for url in parsed
+                )
+                if not has_sample:
+                    candidates.append(
+                        Video(path=path, number=number, title=title or '')
+                    )
+            return candidates
+        finally:
+            conn.close()
+
+    def get_showcase_rows(
+        self,
+        configured_dir_uris: set[str],
+        actress_names: Optional[List[str]] = None,
+    ) -> List[Video]:
         """Load the showcase projection only for configured gallery roots.
 
         The SQL predicate is intentionally a broad prefix prefilter; callers
@@ -981,21 +1170,37 @@ class VideoRepository:
         platform-specific case rules remain identical to the previous Python
         filter. This removes unrelated DB rows and avoids ``SELECT *`` while
         preserving the final scope guard.
+
+        When ``actress_names`` is supplied, the SQL prefilter also matches the
+        actress JSON array with exact-name membership. The caller resolves
+        aliases first; this method deliberately does not know alias semantics.
         """
         if not configured_dir_uris:
             return []
 
-        clauses: List[str] = []
+        scope_clauses: List[str] = []
         params: List[str] = []
         for dir_uri in sorted(configured_dir_uris):
             prefix = dir_uri if dir_uri.endswith('/') else dir_uri + '/'
-            clauses.append("(path = ? OR path LIKE ? ESCAPE '\\')")
+            scope_clauses.append("(path = ? OR path LIKE ? ESCAPE '\\')")
             params.extend((dir_uri, _escape_like_prefix(prefix) + '%'))
+
+        where_clauses = [f"({' OR '.join(scope_clauses)})"]
+        if actress_names:
+            placeholders = ",".join("?" * len(actress_names))
+            where_clauses.append(
+                "EXISTS ("
+                "SELECT 1 FROM json_each(videos.actresses) "
+                "WHERE json_valid(videos.actresses) "
+                f"AND json_each.value IN ({placeholders})"
+                ")"
+            )
+            params.extend(actress_names)
 
         columns = ', '.join(_SHOWCASE_COLUMNS)
         query = (
             f"SELECT {columns} FROM videos "
-            f"WHERE {' OR '.join(clauses)} ORDER BY id"
+            f"WHERE {' AND '.join(where_clauses)} ORDER BY id"
         )
         conn = self._get_connection()
         try:

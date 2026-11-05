@@ -168,6 +168,27 @@ def test_cloudflare_webviews_are_created_lazily():
     )
 
 
+def test_webview_renderer_death_is_handled_without_killing_the_app():
+    activity = (
+        ROOT
+        / "app/src/main/java/dev/openaver/mobile/MainActivity.java"
+    ).read_text(encoding="utf-8")
+    transport = (
+        ROOT
+        / "app/src/main/java/dev/openaver/mobile/AndroidCfTransport.java"
+    ).read_text(encoding="utf-8")
+
+    assert "public boolean onRenderProcessGone(" in activity
+    assert "recoverWebView(view, detail);" in activity
+    assert "webView = new WebView(this);" in activity
+    assert "deadView.destroy();" in activity
+    assert "return true;" in activity
+
+    assert "public boolean onRenderProcessGone(" in transport
+    assert "destroySite(this, true)" in transport
+    assert "failPendingFetches(message)" in transport
+
+
 def test_showcase_uses_server_page_with_full_fetch_fallback():
     state = (
         ROOT

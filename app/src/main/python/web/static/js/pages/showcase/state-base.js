@@ -305,6 +305,7 @@ export function stateBase() {
         _serverTotal: 0,      // 服務端回傳的完整 group 總數
         _serverPage: 1,       // 服務端目前頁碼
         _fullVideosLoaded: false, // true 時 _videos 已是完整集合
+        _serverActressFilter: '', // 非空時 _videos 是服務端按女優（含 alias）篩選的集合
         _videoFetchGeneration: 0, // 防止較慢的舊分頁請求覆蓋新頁
         _videoFetchAbort: null,
         unreachableSources: [],  // /api/showcase/source-status（unreachable / no_permission）
@@ -683,6 +684,17 @@ export function stateBase() {
         // 點 enrich 後自動走 refresh_full 補封面。
         handleCoverError(video, event) {
             if (!video) return;
+            var retryCount = Number(video._coverRetryCount || 0);
+            if (retryCount < 1 && video.cover_url) {
+                // A local server / thumbnail generation failure can be
+                // transient. Retry once with a cache-busted URL before
+                // permanently downgrading the card to "missing cover".
+                video._coverRetryCount = retryCount + 1;
+                video._imgLoaded = false;
+                var separator = video.cover_url.indexOf('?') >= 0 ? '&' : '?';
+                video.cover_url = video.cover_url + separator + '_retry=' + Date.now();
+                return;
+            }
             video.has_cover = false;  // 觸發 reactive — enrich icon 自動出現 + missing-cover class 套用
             // 67/Codex P2（broken cover）：grid 三態淡入讓 .av-card-preview-img img 預設 opacity:0、靠
             // .cover-loaded(=_imgLoaded) 才可見。stale/404 換 placeholder 後，可見性原本只依賴 placeholder

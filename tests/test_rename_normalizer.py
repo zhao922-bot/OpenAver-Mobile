@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from core.database import Video
+from core.database import Video, VideoRepository, connection
 from core.path_utils import to_file_uri
 from core.rename_normalizer import (
     build_combined_rename_plan,
@@ -139,6 +139,36 @@ def test_preview_renames_video_and_sidecars_but_not_folder_or_key(tmp_path):
     assert "aes.key" not in renamed_names
     assert "fanart1.jpg" not in renamed_names
     assert folder.exists()
+
+
+def test_preview_reuses_one_directory_listing_for_many_videos(tmp_path, monkeypatch):
+    folder = tmp_path / "ABC123 原始資料夾"
+    folder.mkdir()
+    rows = []
+    for index in range(20):
+        stem = f"ABC{index:03d}標題"
+        video = folder / f"{stem}.mp4"
+        video.write_bytes(b"video")
+        (folder / f"{stem}.nfo").write_bytes(b"nfo")
+        (folder / f"{stem}.jpg").write_bytes(b"cover")
+        rows.append(Video(
+            path=to_file_uri(str(video)),
+            number=f"ABC-{index:03d}",
+            cover_path=to_file_uri(str(folder / f"{stem}.jpg")),
+        ))
+
+    original_iterdir = Path.iterdir
+    listings = []
+
+    def counting_iterdir(path):
+        listings.append(path)
+        return original_iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", counting_iterdir)
+    plan = build_rename_plan(rows, config={})
+
+    assert plan["summary"]["rename_videos"] == 20
+    assert sum(path == folder for path in listings) == 1
 
 
 def test_preview_rejects_target_conflict(tmp_path):
@@ -546,6 +576,59 @@ def test_combined_plan_renames_files_and_folder_from_source_title(tmp_path):
         to_file_uri(str(new_folder / "ABC-123 來源新標題.mp4")),
         [to_file_uri(str(new_folder / "extrafanart" / "fanart1.jpg"))],
     )]
+
+
+def test_combined_execute_uses_repository_batch_for_metadata_updates(tmp_path):
+    source = tmp_path / "library"
+    folder = source / "ABC123 舊名稱"
+    folder.mkdir(parents=True)
+    video = folder / "ABC123 舊名稱.mp4"
+    cover = folder / "ABC123 舊名稱.jpg"
+    sample = folder / "extrafanart" / "fanart1.jpg"
+    sample.parent.mkdir()
+    for path in (video, cover, sample):
+        path.write_bytes(path.name.encode("utf-8"))
+
+    db_path = tmp_path / "openaver.db"
+    connection._clear_db_init_cache()
+    connection.init_db(db_path)
+    repo = VideoRepository(db_path)
+    old_uri = to_file_uri(str(video))
+    old_cover = to_file_uri(str(cover))
+    old_sample = to_file_uri(str(sample))
+    repo.upsert(Video(
+        path=old_uri,
+        number="ABC-123",
+        cover_path=old_cover,
+        sample_images=[old_sample],
+    ))
+
+    plan = build_combined_rename_plan(
+        repo.get_all(),
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 來源新標題"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+    )
+
+    new_folder = source / "ABC-123 來源新標題"
+    new_uri = to_file_uri(str(new_folder / "ABC-123 來源新標題.mp4"))
+    renamed = repo.get_by_path(new_uri)
+    assert result["success"] is True
+    assert renamed is not None
+    assert renamed.cover_path == to_file_uri(
+        str(new_folder / "ABC-123 來源新標題.jpg")
+    )
+    assert renamed.sample_images == [
+        to_file_uri(str(new_folder / "extrafanart" / "fanart1.jpg"))
+    ]
+    assert repo.get_by_path(old_uri) is None
 
 
 def test_combined_plan_validation_detects_changed_source_size(tmp_path):

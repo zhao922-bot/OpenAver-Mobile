@@ -585,20 +585,21 @@
                      :style="`--card-index: ${index}`"
                      :data-flip-id="video.path">
                     <div class="av-card-preview-img"
-                         x-intersect.margin.900px="video._coverRequested = true"
-                         x-intersect:leave.margin.2400px="video._coverRequested = false; video._imgLoaded = false">
+                         x-intersect.margin.300px="video._coverRequested = true"
+                         x-intersect:leave.margin.900px="video._coverRequested = false; video._imgLoaded = false">
                         <!-- 67-A2: 三態（CD-67-3）。保留單一 <img> 沿用 handleCoverError 換圖；
                              淡入靠 _imgLoaded 的 .cover-loaded class（A1 CSS）；首屏前 8 張 eager+high（CD-67-5，不可 lazy+high 並存）。
                              150b-T3 起「要不要載」改由 _coverRequested / x-intersect 決定，
-                             :loading / :fetchpriority 只決定已通過閘之後的下載優先序 -->
+                             :fetchpriority 只決定已通過閘之後的下載優先序；
+                             x-intersect 已是唯一 lazy gate，不再疊加原生 loading=lazy
+                             （WebView 對 x-if 重建的 img 偶爾不會重新觸發 lazy 載入）-->
                         <template x-if="video._coverRequested && video.cover_url">
                             <img :src="video.cover_url"
                                  :alt="video.number"
-                                 :loading="index < 8 ? 'eager' : 'lazy'"
                                  :fetchpriority="index < 8 ? 'high' : 'auto'"
                                  decoding="async"
                                  :class="{ 'cover-loaded': video._imgLoaded }"
-                                 @load="video._imgLoaded = true; applyCellFocal($el, video)"
+                                 @load="video._imgLoaded = true; video._coverRetryCount = 0; applyCellFocal($el, video)"
                                  @error="handleCoverError(video, $event)"
                                  x-init="$watch('video.auto_focal', () => applyCellFocal($el, video));
                                          $watch('video.crop_mode', () => applyCellFocal($el, video))">
@@ -825,8 +826,8 @@
                          @click="openActressLightbox(index)">
                         <!-- Photo -->
                         <div class="actress-card-photo"
-                             x-intersect.margin.900px="actress._photoRequested = true"
-                             x-intersect:leave.margin.2400px="actress._photoRequested = false">
+                             x-intersect.margin.300px="actress._photoRequested = true"
+                             x-intersect:leave.margin.900px="actress._photoRequested = false">
                             <template x-if="actress.photo_url && actress._photoRequested">
                                 <!-- 100b-T4（§A／CD-6）：比照 video 牆格三件套（:330-333），ratioVar
                                      傳 '--actress-crop-ratio'（CD-3）。x-if 只在 photo_url 從無到有時
@@ -835,7 +836,7 @@
                                      開頭註解：node:test 測不到「resolve 後寫哪個變數」，這裡靠
                                      paginatedActresses[idx] 本身是 reactive 物件，$watch 才追蹤得到）。 -->
                                 <img :src="actress.photo_url"
-                                     :alt="actress.name" loading="lazy" decoding="async"
+                                     :alt="actress.name" decoding="async"
                                      @load="applyCellFocal($el, actress, '--actress-crop-ratio')"
                                      x-init="$watch('actress.auto_focal', () => applyCellFocal($el, actress, '--actress-crop-ratio'));
                                              $watch('actress.crop_mode', () => applyCellFocal($el, actress, '--actress-crop-ratio'))">

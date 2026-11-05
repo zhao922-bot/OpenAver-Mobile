@@ -4,6 +4,7 @@ import json
 from types import SimpleNamespace
 
 from core.database import connection
+from core.database.alias import AliasRepository
 from core.database.video import Video, VideoRepository
 from core.path_utils import to_file_uri
 from web.routers import showcase as showcase_router
@@ -108,6 +109,69 @@ def test_showcase_server_pagination_returns_global_total_and_page(tmp_path, monk
     assert data["per_page"] == 1
     assert data["total_pages"] == 2
     assert [video["number"] for video in data["videos"]] == ["B-002"]
+
+
+def test_showcase_actress_filter_resolves_aliases_before_paging(tmp_path, monkeypatch):
+    db_path, gallery_dir = _prepare_route(tmp_path, monkeypatch)
+    repo = VideoRepository(db_path)
+    repo.upsert_batch([
+        Video(
+            path=to_file_uri(str(gallery_dir / "C-003.mp4")),
+            number="C-003",
+            title="Alias Match",
+            actresses=["Old Name"],
+            release_date="2024-03-01",
+        ),
+        Video(
+            path=to_file_uri(str(gallery_dir / "D-004.mp4")),
+            number="D-004",
+            title="Other Actress",
+            actresses=["Other"],
+            release_date="2024-04-01",
+        ),
+        Video(
+            path=to_file_uri(str(gallery_dir / "E-005.mp4")),
+            number="E-005",
+            title="Alias Match Two",
+            actresses=["Old Name"],
+            release_date="2024-05-01",
+        ),
+    ])
+    AliasRepository(db_path).add("New Name", ["Old Name"])
+
+    response = showcase_router.get_videos(
+        _request(),
+        page=1,
+        per_page=0,
+        sort="date",
+        order="desc",
+        paged=False,
+        actress="Old Name",
+    )
+    data = json.loads(response.body)
+
+    assert response.status_code == 200
+    assert data["success"] is True
+    assert data["actress_filter"] == "Old Name"
+    assert data["total"] == 2
+    assert [video["number"] for video in data["videos"]] == ["C-003", "E-005"]
+
+    paged_response = showcase_router.get_videos(
+        _request(),
+        page=2,
+        per_page=1,
+        sort="num",
+        order="asc",
+        paged=True,
+        actress="Old Name",
+    )
+    paged_data = json.loads(paged_response.body)
+
+    assert paged_response.status_code == 200
+    assert paged_data["paged"] is True
+    assert paged_data["total"] == 2
+    assert paged_data["page"] == 2
+    assert [video["number"] for video in paged_data["videos"]] == ["E-005"]
 
 
 def test_showcase_sort_is_stable_for_equal_primary_keys():

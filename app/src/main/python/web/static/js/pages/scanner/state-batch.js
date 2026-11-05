@@ -29,6 +29,14 @@ export function stateBatch() {
         missingConfirmModalOpen: false,   // TASK-13: 大批量補完 confirm dialog 開關
         _enrichAbortController: null,
 
+        // ===== Missing-only backfill queues =====
+        untranslatedTitleCount: 0,
+        missingSampleCount: 0,
+        untranslatedTitleItems: [],
+        missingSampleItems: [],
+        _backfillAbortController: null,
+        _missingCheckRequestId: 0,
+
         // ===== r23: Preview-first filename normalization =====
         renamePreviewOpen: false,
         renamePreviewLoading: false,
@@ -77,6 +85,70 @@ export function stateBatch() {
         },
         get missingCoverDrilldownPayload() {
             return { title: window.t('scanner.stats.missing_cover_prefix'), items: this.missingCoverDrilldownItems, footnote: window.t('scanner.stats.missing_list_footnote') };
+        },
+
+        get titleBackfillDrilldownItems() {
+            return this.untranslatedTitleItems.map(item => ({
+                number: item.number || item.title || '',
+                path: item.file_path,
+                note: item.title || '',
+            }));
+        },
+
+        get titleBackfillDrilldownPayload() {
+            return {
+                title: window.t('scanner.stats.title_backfill_prefix'),
+                items: this.titleBackfillDrilldownItems,
+                footnote: window.t('scanner.stats.title_backfill_drilldown_note'),
+            };
+        },
+
+        get sampleBackfillDrilldownItems() {
+            return this.missingSampleItems.map(item => ({
+                number: item.number || item.title || '',
+                path: item.file_path,
+                note: item.title || '',
+            }));
+        },
+
+        get sampleBackfillDrilldownPayload() {
+            return {
+                title: window.t('scanner.stats.sample_backfill_prefix'),
+                items: this.sampleBackfillDrilldownItems,
+                footnote: window.t('scanner.stats.sample_backfill_drilldown_note'),
+            };
+        },
+
+        get titleBackfillButtonText() {
+            if (this.state === 'titleBackfilling') {
+                return '<span class="loading loading-spinner loading-sm"></span> '
+                    + window.t('scanner.stats.title_backfill_loading');
+            }
+            if (this.config?.translate?.enabled !== true) {
+                return '<i class="bi bi-translate"></i> '
+                    + window.t('scanner.stats.title_backfill_disabled');
+            }
+            return '<i class="bi bi-translate"></i> '
+                + window.t('scanner.stats.title_backfill_idle');
+        },
+
+        get titleBackfillDisabled() {
+            return this.isBusy
+                || this.untranslatedTitleCount === 0
+                || this.config?.translate?.enabled !== true;
+        },
+
+        get sampleBackfillButtonText() {
+            if (this.state === 'sampleBackfilling') {
+                return '<span class="loading loading-spinner loading-sm"></span> '
+                    + window.t('scanner.stats.sample_backfill_loading');
+            }
+            return '<i class="bi bi-images"></i> '
+                + window.t('scanner.stats.sample_backfill_idle');
+        },
+
+        get sampleBackfillDisabled() {
+            return this.isBusy || this.missingSampleCount === 0;
         },
 
         get missingEnrichButtonText() {
@@ -343,11 +415,22 @@ export function stateBatch() {
 
         // ===== T10: Missing NFO/Cover Enrich Methods =====
         async checkMissing() {
+            const requestId = (this._missingCheckRequestId || 0) + 1;
+            this._missingCheckRequestId = requestId;
             try {
                 const resp = await fetch('/api/gallery/missing-check');
                 const result = await resp.json();
+                if (requestId !== this._missingCheckRequestId) return;
                 if (!result.success) return;
                 const d = result.data;
+                this.untranslatedTitleCount = d.untranslated_titles || 0;
+                this.missingSampleCount = d.missing_samples || 0;
+                this.untranslatedTitleItems = Array.isArray(d.untranslated_title_items)
+                    ? d.untranslated_title_items
+                    : [];
+                this.missingSampleItems = Array.isArray(d.missing_sample_items)
+                    ? d.missing_sample_items
+                    : [];
                 if (d.total_missing > 0) {
                     // TASK-13: 後端永遠回傳完整 items 清單；前端於 runMissingEnrich 內做 > 500 confirm gate
                     this.missingBothCount = d.missing_both || 0;
@@ -365,8 +448,183 @@ export function stateBatch() {
                     this.missingCoverCount = 0;
                     this.missingItems = [];
                 }
+                if (
+                    (d.total_missing || 0) > 0
+                    || this.untranslatedTitleCount > 0
+                    || this.missingSampleCount > 0
+                ) {
+                    this.maintenanceExpanded = true;
+                }
             } catch (e) {
                 console.error('checkMissing failed:', e);
+            }
+        },
+
+        async runTitleBackfill() {
+            if (this.titleBackfillDisabled) return;
+            await this._runBackfillStream({
+                url: '/api/gallery/backfill-titles',
+                taskState: 'titleBackfilling',
+                taskKind: 'title-backfill',
+                startStatus: window.t('scanner.stats.title_backfill_preparing'),
+                total: this.untranslatedTitleCount,
+                doneToastKey: 'scanner.stats.title_backfill_toast_success',
+                mixedToastKey: 'scanner.stats.title_backfill_toast_mixed',
+                errorText: window.t('scanner.stats.title_backfill_error'),
+            });
+        },
+
+        async runSampleBackfill() {
+            if (this.sampleBackfillDisabled) return;
+            await this._runBackfillStream({
+                url: '/api/gallery/backfill-samples',
+                taskState: 'sampleBackfilling',
+                taskKind: 'sample-backfill',
+                startStatus: window.t('scanner.stats.sample_backfill_preparing'),
+                total: this.missingSampleCount,
+                doneToastKey: 'scanner.stats.sample_backfill_toast_success',
+                mixedToastKey: 'scanner.stats.sample_backfill_toast_mixed',
+                errorText: window.t('scanner.stats.sample_backfill_error'),
+            });
+        },
+
+        async _runBackfillStream({
+            url,
+            taskState,
+            taskKind,
+            startStatus,
+            total,
+            doneToastKey,
+            mixedToastKey,
+            errorText,
+        }) {
+            if (this.isBusy) return;
+
+            this.state = taskState;
+            this._startTask(taskKind, startStatus, total);
+            this.clearLogs();
+
+            const controller = new AbortController();
+            this._backfillAbortController = controller;
+            let completed = false;
+            let streamFailed = false;
+
+            try {
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: { Accept: 'text/event-stream' },
+                    signal: controller.signal,
+                });
+                if (!resp.ok) {
+                    throw new Error(`HTTP ${resp.status}`);
+                }
+                if (!resp.body) {
+                    throw new Error('missing response body');
+                }
+
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let streamDone = false;
+
+                while (!streamDone) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        let event;
+                        try {
+                            event = JSON.parse(line.slice(6));
+                        } catch {
+                            continue;
+                        }
+
+                        if (event.type === 'progress') {
+                            this.progressStatus = event.status || startStatus;
+                            this.progressCurrent = event.current || 0;
+                            this.progressTotal = event.total || total;
+                            this._applyTaskMetrics({
+                                number: event.number || event.title || '',
+                                success: event.success,
+                                failed: event.failed,
+                                skipped: event.skipped,
+                            });
+                        } else if (event.type === 'result-item') {
+                            this._applyTaskMetrics({
+                                number: event.number || '',
+                                success: event.success_count,
+                                failed: event.failed_count,
+                                skipped: event.skipped_count,
+                            });
+                            if (!event.success && !event.skipped) {
+                                this.addLog(
+                                    'error',
+                                    window.t('scanner.stats.backfill_item_failed', {
+                                        number: event.number || '',
+                                        error: event.error || errorText,
+                                    })
+                                );
+                            } else if (event.skipped) {
+                                this.addLog(
+                                    'warn',
+                                    window.t('scanner.stats.backfill_item_skipped', {
+                                        number: event.number || '',
+                                        error: event.error || '',
+                                    })
+                                );
+                            }
+                        } else if (event.type === 'log') {
+                            this.addLog(event.level || 'info', event.message || '');
+                        } else if (event.type === 'done') {
+                            completed = true;
+                            streamDone = true;
+                            this.progressCurrent = this.progressTotal;
+                            const cancelled = event.cancelled === true;
+                            this._finishTask(
+                                cancelled ? 'cancelled' : 'done',
+                                event.message || startStatus,
+                                event.summary
+                            );
+                            if (!cancelled) {
+                                const success = event.summary?.success || 0;
+                                const failed = event.summary?.failed || 0;
+                                this.showToast(
+                                    window.t(failed > 0 ? mixedToastKey : doneToastKey, {
+                                        success,
+                                        failed,
+                                    }),
+                                    failed > 0 ? 'warn' : 'success'
+                                );
+                            }
+                        } else if (event.type === 'error') {
+                            streamDone = true;
+                            streamFailed = true;
+                            this._finishTask('error', event.message || errorText);
+                            this.showToast(event.message || errorText, 'error');
+                        }
+                    }
+                }
+
+                if (!completed && !streamFailed) {
+                    this._finishTask('error', errorText);
+                    this.showToast(errorText, 'error');
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') return;
+                console.error(`${taskKind} failed:`, e);
+                this._finishTask('error', errorText);
+                this.showToast(errorText, 'error');
+            } finally {
+                if (this._backfillAbortController === controller) {
+                    this._backfillAbortController = null;
+                }
+                this.flushLogs();
+                await this.checkMissing();
             }
         },
 

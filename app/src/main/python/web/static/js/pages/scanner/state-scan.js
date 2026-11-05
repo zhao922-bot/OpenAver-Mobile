@@ -46,7 +46,7 @@ export function stateScan() {
         copyFailDump: '',
 
         // ===== T7b: State Machine =====
-        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | done | error | cancelled
+        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | titleBackfilling | sampleBackfilling | done | error | cancelled
 
         // ===== T7b: Progress =====
         progressStatus: '',
@@ -160,7 +160,7 @@ export function stateScan() {
         },
 
         get taskEtaText() {
-            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich'].includes(this.taskKind)) {
+            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill'].includes(this.taskKind)) {
                 return '';
             }
             let seconds = this.taskEtaSeconds;
@@ -178,14 +178,15 @@ export function stateScan() {
         get taskCanRetry() {
             return !this.isGenerating
                 && this.taskFailedItems.length > 0
-                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update'].includes(this.taskKind);
+                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill'].includes(this.taskKind);
         },
 
         get maintenanceSummaryText() {
             const nfo = this.nfoNeedUpdateCount || 0;
             const missing = (this.missingBothCount || 0) + (this.missingNfoCount || 0) + (this.missingCoverCount || 0);
+            const backfill = (this.untranslatedTitleCount || 0) + (this.missingSampleCount || 0);
             const images = this.jellyfinImageCount || 0;
-            return window.t('scanner.stats.maintenance_summary', { nfo, missing, images });
+            return window.t('scanner.stats.maintenance_summary', { nfo, missing, backfill, images });
         },
 
         get tagSourcePreviewChangedItems() {
@@ -254,7 +255,8 @@ export function stateScan() {
                 || this.state === 'tagSourcePreviewing'
                 || this.state === 'tagSourceUpdating'
                 || this.state === 'renamePreviewing'
-                || this.state === 'jellyfinUpdating' || this.state === 'enriching';
+                || this.state === 'jellyfinUpdating' || this.state === 'enriching'
+                || this.state === 'titleBackfilling' || this.state === 'sampleBackfilling';
         },
 
         get isBusy() {
@@ -445,6 +447,10 @@ export function stateScan() {
                         if (this._enrichAbortController) {
                             this._enrichAbortController.abort();
                             this._enrichAbortController = null;
+                        }
+                        if (this._backfillAbortController) {
+                            this._backfillAbortController.abort();
+                            this._backfillAbortController = null;
                         }
                         // TASK-94 Codex P1：離頁時清最後一片 flush dwell timer，避免 timer 事後
                         // 觸發 finalize（checkMissing fetch / state 變更）clobber 已離頁狀態。
@@ -1117,6 +1123,10 @@ export function stateScan() {
                 this._enrichAbortController.abort();
                 this._enrichAbortController = null;
             }
+            if (this._backfillAbortController) {
+                this._backfillAbortController.abort();
+                this._backfillAbortController = null;
+            }
             if (this.eventSource) {
                 this.eventSource.close();
                 this.eventSource = null;
@@ -1157,6 +1167,14 @@ export function stateScan() {
                 this.jellyfinImageCount = Math.max(this.taskFailedItems.length, 1);
                 this.jellyfinImageVisible = true;
                 this.runJellyfinImageUpdate();
+                return;
+            }
+            if (this.taskKind === 'title-backfill') {
+                this.runTitleBackfill();
+                return;
+            }
+            if (this.taskKind === 'sample-backfill') {
+                this.runSampleBackfill();
             }
         },
 

@@ -11,6 +11,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -26,10 +27,11 @@ import android.widget.TextView;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
-import java.util.Locale;
-import java.util.Map;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -102,16 +104,50 @@ public final class AndroidCfTransport {
 
     public void destroy() {
         hideOverlay();
-        for (SiteView site : sites.values()) {
-            site.webView.stopLoading();
-            site.webView.setWebChromeClient(null);
-            site.webView.setWebViewClient(null);
-            site.webView.destroy();
+        for (SiteView site : new ArrayList<>(sites.values())) {
+            destroySite(site, false);
         }
         sites.clear();
         pendingFetches.clear();
         if (overlay != null && overlay.getParent() instanceof ViewGroup) {
             ((ViewGroup) overlay.getParent()).removeView(overlay);
+        }
+    }
+
+    private void destroySite(SiteView site, boolean removeFromMap) {
+        if (site == null) {
+            return;
+        }
+        synchronized (site.lock) {
+            if (site.destroyed) {
+                return;
+            }
+            site.destroyed = true;
+        }
+        if (removeFromMap) {
+            sites.remove(site.key, site);
+        }
+        ViewGroup parent = site.webView.getParent() instanceof ViewGroup
+                ? (ViewGroup) site.webView.getParent()
+                : null;
+        if (parent != null) {
+            parent.removeView(site.webView);
+        }
+        site.webView.stopLoading();
+        site.webView.setWebChromeClient(null);
+        site.webView.setWebViewClient(null);
+        site.webView.destroy();
+        if (site.key.equals(activeSite)) {
+            activeSite = null;
+            hideOverlayNow();
+        }
+    }
+
+    private void failPendingFetches(String message) {
+        String payload = "{\"finalUrl\":\"\",\"status\":0,\"html\":\"\",\"error\":"
+                + JSONObject.quote(message) + "}";
+        for (CompletableFuture<String> future : pendingFetches.values()) {
+            future.complete(payload);
         }
     }
 
@@ -498,6 +534,7 @@ public final class AndroidCfTransport {
         long generation;
         boolean started;
         boolean finished;
+        boolean destroyed;
         String error;
         String currentUrl = "";
 
@@ -641,6 +678,21 @@ public final class AndroidCfTransport {
         public void onReceivedHttpError(WebView view, WebResourceRequest request,
                                         WebResourceResponse errorResponse) {
             // A 403 can be a Cloudflare page that still needs to be displayed.
+        }
+
+        @Override
+        public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            String message = detail != null && detail.didCrash()
+                    ? "WebView renderer crashed"
+                    : "WebView renderer stopped to reclaim memory";
+            synchronized (lock) {
+                error = message;
+                finished = true;
+                lock.notifyAll();
+            }
+            failPendingFetches(message);
+            mainHandler.post(() -> destroySite(this, true));
+            return true;
         }
     }
 

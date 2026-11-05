@@ -120,3 +120,60 @@ def _rename_directory(source: str, target: str) -> None:
     if target_path.exists():
         raise FileExistsError(target)
     android_storage.rename(source, target)
+
+
+def _apply_rename_updates(
+    repo,
+    updates: list[dict[str, Any]],
+    completed_db: list[tuple[str, str]],
+    completed_covers: list[tuple[str, str, str]],
+    completed_samples: list[tuple[str, list[str], list[str]]],
+) -> None:
+    """Apply collected DB updates, preferring one repository transaction."""
+    if not updates:
+        return
+
+    batch_apply = getattr(repo, "apply_rename_batch", None)
+    if callable(batch_apply):
+        if not batch_apply(updates):
+            raise RuntimeError("database_update_failed")
+        for update in updates:
+            old_uri = str(update.get("db_old_uri") or "")
+            new_uri = str(update.get("db_new_uri") or "")
+            if old_uri != new_uri:
+                completed_db.append((old_uri, new_uri))
+            old_cover = str(update.get("cover_path_old") or "")
+            new_cover = str(update.get("cover_path_new") or "")
+            if update.get("cover_update", old_cover != new_cover):
+                completed_covers.append((new_uri, old_cover, new_cover))
+            old_samples = list(update.get("sample_images_old") or [])
+            new_samples = list(update.get("sample_images_new") or [])
+            if update.get("samples_update", old_samples != new_samples):
+                completed_samples.append((new_uri, old_samples, new_samples))
+        return
+
+    for update in updates:
+        old_uri = str(update.get("db_old_uri") or "")
+        new_uri = str(update.get("db_new_uri") or "")
+        if old_uri != new_uri:
+            if not repo.repath_path_only(old_uri, new_uri):
+                raise RuntimeError("database_path_update_failed")
+            completed_db.append((old_uri, new_uri))
+
+        old_cover = str(update.get("cover_path_old") or "")
+        new_cover = str(update.get("cover_path_new") or "")
+        if update.get("cover_update", old_cover != new_cover):
+            if not repo.update_cover_path_preserve_focal(
+                new_uri,
+                new_cover,
+                old_cover,
+            ):
+                raise RuntimeError("database_cover_update_failed")
+            completed_covers.append((new_uri, old_cover, new_cover))
+
+        old_samples = list(update.get("sample_images_old") or [])
+        new_samples = list(update.get("sample_images_new") or [])
+        if update.get("samples_update", old_samples != new_samples):
+            if not repo.update_sample_images(new_uri, new_samples):
+                raise RuntimeError("database_samples_update_failed")
+            completed_samples.append((new_uri, old_samples, new_samples))

@@ -1393,9 +1393,10 @@ body {
     position: relative;  /* 支援 .help-popover 絕對定位 */
 }
 
-/* 浮層以 nfo-badge 為定位基準，寬度改用 viewport 上限（同 .help-popover 的 max-width: calc(100vw - 2rem)） */
+/* 浮層以 nfo-badge 為定位基準；viewport 上限避免超出手機，100% 上限避免窄列被 focus 橫向捲動。 */
 .nfo-badge .number-drilldown-popover {
     width: min(28rem, calc(100vw - 2rem));
+    max-width: 100%;
 }
 
 /* 數字清單浮層開著時，把所在統計卡墊到後面的卡片之上（dim 主題 .stats-card 有 backdrop-filter，自成 stacking context；FE-CSS-24） */

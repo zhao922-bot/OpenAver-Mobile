@@ -989,7 +989,13 @@ export function stateLightbox() {
                     }
                     // 67-A2/CD-67-3b: data.video 不帶 _imgLoaded → 舊 true 殘留會讓新封面跳過 skeleton/fade。
                     // Object.assign 前 reset，讓補封面/重抓的新 cover_url（含上面 &t= cache-bust）重走 skeleton→@load→淡入。
-                    if (data.video.cover_url) video._imgLoaded = false;
+                    if (data.video.cover_url) {
+                        // An explicit cover refresh should not wait for the card
+                        // to re-enter the image window.
+                        video._coverRequested = true;
+                        video._imgLoaded = false;
+                        video._coverRetryCount = 0;
+                    }
                     Object.assign(video, data.video);
                     _recomputeVideoBadges(video);
                     _recomputeCardActorAges(video);

@@ -18,6 +18,7 @@ from core.rename_names import (
     multipart_token,
 )
 from core.rename_shared import (
+    _apply_rename_updates,
     _create_directory,
     _delete_directory,
     _is_direct_child,
@@ -472,6 +473,7 @@ def execute_combined_rename_plan(
     completed_db: list[tuple[str, str]] = []
     completed_covers: list[tuple[str, str, str]] = []
     completed_samples: list[tuple[str, list[str], list[str]]] = []
+    db_updates: list[dict[str, Any]] = []
 
     try:
         for item in items:
@@ -527,36 +529,21 @@ def execute_combined_rename_plan(
                 )
 
             for video in item["videos"]:
-                if video["db_old_uri"] != video["db_new_uri"]:
-                    if not repo.repath_path_only(
-                        video["db_old_uri"], video["db_new_uri"]
-                    ):
-                        raise RuntimeError("database_path_update_failed")
-                    completed_db.append(
-                        (video["db_old_uri"], video["db_new_uri"])
-                    )
-
-                old_cover = video["cover_path_old"]
-                new_cover = video["cover_path_new"]
-                if old_cover != new_cover:
-                    if not repo.update_cover_path_preserve_focal(
-                        video["db_new_uri"], new_cover, old_cover
-                    ):
-                        raise RuntimeError("database_cover_update_failed")
-                    completed_covers.append(
-                        (video["db_new_uri"], old_cover, new_cover)
-                    )
-
-                old_samples = video["sample_images_old"]
-                new_samples = video["sample_images_new"]
-                if old_samples != new_samples:
-                    if not repo.update_sample_images(
-                        video["db_new_uri"], new_samples
-                    ):
-                        raise RuntimeError("database_samples_update_failed")
-                    completed_samples.append(
-                        (video["db_new_uri"], old_samples, new_samples)
-                    )
+                db_updates.append({
+                    "db_old_uri": video["db_old_uri"],
+                    "db_new_uri": video["db_new_uri"],
+                    "cover_path_old": video["cover_path_old"],
+                    "cover_path_new": video["cover_path_new"],
+                    "sample_images_old": video["sample_images_old"],
+                    "sample_images_new": video["sample_images_new"],
+                })
+        _apply_rename_updates(
+            repo,
+            db_updates,
+            completed_db,
+            completed_covers,
+            completed_samples,
+        )
     except Exception as exc:
         rollback_errors: list[str] = []
         for db_path, old_samples, new_samples in reversed(completed_samples):

@@ -74,7 +74,7 @@ from core.generate_state import try_mark_generate_active, mark_generate_done
 from core import thumbnail_cache
 from core.scraper import get_javbus_lang, search_jav, smart_search
 from core.source_settings import is_uncensored_mode_effective
-from core.scrapers.utils import check_subtitle, extract_number
+from core.scrapers.utils import check_subtitle, extract_number, has_japanese
 from core.source_config import get_manual_only_sources, validate_source_id
 from pydantic import BaseModel
 from core.logger import get_logger
@@ -1654,15 +1654,56 @@ def _video_has_nfo(video: Video, path_mappings: dict) -> bool:
     return (video.nfo_mtime or 0) > 0
 
 
+def _candidate_number(video: Video) -> str:
+    """Recover a usable number for maintenance rows with stale NULL values."""
+    if video.number:
+        return video.number
+    filename = video.path.rstrip("/").rsplit("/", 1)[-1]
+    return extract_number(filename) or extract_number(video.title or "") or ""
+
+
+def _is_untranslated_title_candidate(video: Video) -> bool:
+    """Only rows with a non-empty Japanese title and no saved original title."""
+    title = (video.title or "").strip()
+    return bool(
+        title
+        and not (video.original_title or "").strip()
+        and has_japanese(title)
+    )
+
+
+def _is_missing_sample_candidate(video: Video) -> bool:
+    """A sample list is present only when it contains at least one usable URI."""
+    samples = video.sample_images
+    if not isinstance(samples, list):
+        return True
+    return not any(
+        isinstance(url, str) and url.strip()
+        for url in samples
+    )
+
+
 @router.get("/missing-check")
 def check_missing():
-    """T10: 檢查 DB 中缺少 NFO 或封面的影片數量與清單"""
+    """Check missing NFO/cover plus the two explicit backfill queues."""
     try:
         db_path = get_db_path()
 
         if not db_path.exists():
-            return {"success": True, "data": {"missing_both": 0, "missing_nfo": 0,
-                                               "missing_cover": 0, "total_missing": 0, "items": []}}
+            return {
+                "success": True,
+                "data": {
+                    "missing_both": 0,
+                    "missing_nfo": 0,
+                    "missing_cover": 0,
+                    "total_missing": 0,
+                    "items": [],
+                    "untranslated_titles": 0,
+                    "missing_samples": 0,
+                    "untranslated_title_items": [],
+                    "missing_sample_items": [],
+                },
+            }
 
         repo = VideoRepository(db_path)
         all_videos = repo.get_all()
@@ -1672,8 +1713,24 @@ def check_missing():
         missing_nfo = 0
         missing_cover = 0
         items = []
+        untranslated_title_items = []
+        missing_sample_items = []
 
         for v in all_videos:
+            number = _candidate_number(v)
+            if _is_untranslated_title_candidate(v):
+                untranslated_title_items.append({
+                    "file_path": v.path,
+                    "number": number,
+                    "title": v.title,
+                })
+            if _is_missing_sample_candidate(v):
+                missing_sample_items.append({
+                    "file_path": v.path,
+                    "number": number,
+                    "title": v.title,
+                })
+
             has_nfo = _video_has_nfo(v, path_mappings)
             has_cover = False
             if v.cover_path:
@@ -1685,11 +1742,7 @@ def check_missing():
                     has_cover = False
             if has_nfo and has_cover:
                 continue
-            # Older scans could store number=NULL when the filename put CJK text
-            # directly after the code. Recover the number from the current path so
-            # already-scanned rows become actionable without clearing the library.
-            number = v.number or extract_number(v.path.rstrip("/").rsplit("/", 1)[-1])
-            if not number:  # skip videos without number (cannot enrich)
+            if not number:  # Cannot enrich a row without a recoverable number.
                 continue
             item = {"file_path": v.path, "number": number}
             if not has_nfo and not has_cover:
@@ -1705,7 +1758,7 @@ def check_missing():
 
         total_missing = missing_both + missing_nfo + missing_cover
 
-        # 永遠回傳完整 items 清單；大批量的 confirm gate 由前端處理
+        # Return complete lists; the frontend owns confirmation/display policy.
         return {
             "success": True,
             "data": {
@@ -1714,11 +1767,361 @@ def check_missing():
                 "missing_cover": missing_cover,
                 "total_missing": total_missing,
                 "items": items,
-            }
+                "untranslated_titles": len(untranslated_title_items),
+                "missing_samples": len(missing_sample_items),
+                "untranslated_title_items": untranslated_title_items,
+                "missing_sample_items": missing_sample_items,
+            },
         }
     except Exception as e:
-        logger.error("檢查缺失 NFO/封面失敗: %s", e)
-        return {"success": False, "error": "檢查缺失 NFO/封面失敗"}
+        logger.error("檢查維護缺口失敗: %s", e)
+        return {"success": False, "error": "檢查維護缺口失敗"}
+
+
+def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
+    """Translate and write back only rows that are still missing a translation."""
+    try:
+        db_path = get_db_path()
+        if not db_path.exists():
+            yield _sse_event({"type": "error", "message": "資料庫不存在，請先產生列表"})
+            return
+
+        config = load_config()
+        translate_config = config.get("translate", {})
+        if not translate_config.get("enabled", False):
+            yield _sse_event({"type": "error", "message": "翻譯功能未啟用"})
+            return
+        locale = config.get("general", {}).get("locale", "zh-TW")
+        if str(locale).lower().startswith("ja"):
+            yield _sse_event({"type": "error", "message": "目前語言為日文，無需補齊翻譯標題"})
+            return
+
+        from web.routers.showcase import TitleWritebackRequest, _apply_title_writeback
+        from web.routers.translate import get_translate_service
+
+        repo = VideoRepository(db_path)
+        candidates = [
+            video for video in repo.get_untranslated_title_candidates()
+            if _is_untranslated_title_candidate(video)
+        ]
+        total = len(candidates)
+        if total == 0:
+            yield _sse_event({
+                "type": "done",
+                "message": "沒有待補翻譯的標題",
+                "cancelled": False,
+                "summary": {
+                    "success": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                    "failed_items": [],
+                },
+            })
+            return
+
+        try:
+            translate_service = get_translate_service()
+        except Exception:
+            logger.exception("初始化批次標題翻譯服務失敗")
+            yield _sse_event({
+                "type": "error",
+                "message": "翻譯功能設定無效，請檢查設定",
+            })
+            return
+
+        path_mappings = config.get("gallery", {}).get("path_mappings", {})
+        success_count = 0
+        failed_count = 0
+        skipped_count = 0
+        failed_items = []
+
+        yield _sse_event({
+            "type": "log",
+            "level": "info",
+            "message": f"待補翻譯標題：{total} 部",
+        })
+
+        for index, video in enumerate(candidates, start=1):
+            if cancel_event.is_set():
+                yield _sse_event({
+                    "type": "done",
+                    "message": "標題補齊已取消",
+                    "cancelled": True,
+                    "summary": {
+                        "success": success_count,
+                        "failed": failed_count,
+                        "skipped": skipped_count,
+                        "failed_items": failed_items,
+                    },
+                })
+                return
+
+            number = _candidate_number(video)
+            yield _sse_event({
+                "type": "progress",
+                "current": index,
+                "total": total,
+                "number": number,
+                "title": video.title,
+                "status": "正在翻譯標題...",
+                "success": success_count,
+                "failed": failed_count,
+                "skipped": skipped_count,
+            })
+
+            try:
+                translated = asyncio.run(
+                    translate_service.translate_or_raise(
+                        video.title,
+                        {
+                            "actors": video.actresses or [],
+                            "number": number,
+                        },
+                    )
+                )
+                translated = (translated or "").strip()
+                if not translated:
+                    raise ValueError("empty translation")
+                result = _apply_title_writeback(
+                    repo,
+                    video,
+                    TitleWritebackRequest(
+                        file_path=video.path,
+                        title=translated,
+                    ),
+                    config,
+                    path_mappings,
+                )
+            except Exception:
+                logger.exception("批次補齊標題失敗: %s", video.path)
+                result = {
+                    "success": False,
+                    "error": "translate_failed",
+                    "message": "標題翻譯失敗",
+                }
+
+            if result.get("success"):
+                success_count += 1
+                yield _sse_event({
+                    "type": "result-item",
+                    "file_path": video.path,
+                    "number": number,
+                    "success": True,
+                    "skipped": False,
+                    "title": result.get("title", translated),
+                    "original_title": result.get("original_title", video.title),
+                    "success_count": success_count,
+                    "failed_count": failed_count,
+                    "skipped_count": skipped_count,
+                })
+                continue
+
+            failed_count += 1
+            error_code = result.get("error") or "write_failed"
+            error_message = result.get("message") or "標題寫回失敗"
+            failed_items.append({
+                "path": video.path,
+                "number": number,
+                "error": error_message,
+            })
+            yield _sse_event({
+                "type": "result-item",
+                "file_path": video.path,
+                "number": number,
+                "success": False,
+                "skipped": False,
+                "error_code": error_code,
+                "error": error_message,
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "skipped_count": skipped_count,
+            })
+
+        yield _sse_event({
+            "type": "done",
+            "message": (
+                f"標題補齊完成：成功 {success_count}，失敗 {failed_count}"
+            ),
+            "cancelled": False,
+            "summary": {
+                "success": success_count,
+                "failed": failed_count,
+                "skipped": skipped_count,
+                "failed_items": failed_items,
+            },
+        })
+    except Exception:
+        logger.exception("批次補齊標題端點失敗")
+        yield _sse_event({"type": "error", "message": "標題補齊失敗，請查閱日誌"})
+
+
+def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
+    """Fetch samples only for rows whose stored sample-image list is empty."""
+    try:
+        db_path = get_db_path()
+        if not db_path.exists():
+            yield _sse_event({"type": "error", "message": "資料庫不存在，請先產生列表"})
+            return
+
+        from web.routers.scraper import FetchSamplesRequest, fetch_samples_endpoint
+
+        repo = VideoRepository(db_path)
+        candidates = [
+            video for video in repo.get_missing_sample_candidates()
+            if _is_missing_sample_candidate(video)
+        ]
+        total = len(candidates)
+        if total == 0:
+            yield _sse_event({
+                "type": "done",
+                "message": "沒有缺失劇照的影片",
+                "cancelled": False,
+                "summary": {
+                    "success": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                    "failed_items": [],
+                },
+            })
+            return
+
+        success_count = 0
+        failed_count = 0
+        skipped_count = 0
+        failed_items = []
+
+        yield _sse_event({
+            "type": "log",
+            "level": "info",
+            "message": f"待補劇照：{total} 部",
+        })
+
+        for index, video in enumerate(candidates, start=1):
+            if cancel_event.is_set():
+                yield _sse_event({
+                    "type": "done",
+                    "message": "劇照補齊已取消",
+                    "cancelled": True,
+                    "summary": {
+                        "success": success_count,
+                        "failed": failed_count,
+                        "skipped": skipped_count,
+                        "failed_items": failed_items,
+                    },
+                })
+                return
+
+            number = _candidate_number(video)
+            yield _sse_event({
+                "type": "progress",
+                "current": index,
+                "total": total,
+                "number": number,
+                "title": video.title,
+                "status": "正在補齊劇照...",
+                "success": success_count,
+                "failed": failed_count,
+                "skipped": skipped_count,
+            })
+
+            if not number:
+                skipped_count += 1
+                yield _sse_event({
+                    "type": "result-item",
+                    "file_path": video.path,
+                    "number": "",
+                    "success": False,
+                    "skipped": True,
+                    "error_code": "missing_number",
+                    "error": "無法識別番號，已跳過",
+                    "success_count": success_count,
+                    "failed_count": failed_count,
+                    "skipped_count": skipped_count,
+                })
+                continue
+
+            try:
+                result = fetch_samples_endpoint(
+                    FetchSamplesRequest(
+                        file_path=video.path,
+                        number=number,
+                    )
+                )
+            except Exception:
+                logger.exception("批次補齊劇照失敗: %s", video.path)
+                result = {
+                    "success": False,
+                    "error_code": "internal_error",
+                    "message": "劇照補齊處理失敗",
+                }
+
+            if result.get("success"):
+                success_count += 1
+                yield _sse_event({
+                    "type": "result-item",
+                    "file_path": video.path,
+                    "number": number,
+                    "success": True,
+                    "skipped": False,
+                    "downloaded": result.get("downloaded", 0),
+                    "skipped_existing": result.get("skipped_existing", 0),
+                    "extrafanart_on_disk": result.get("extrafanart_on_disk", 0),
+                    "success_count": success_count,
+                    "failed_count": failed_count,
+                    "skipped_count": skipped_count,
+                })
+                continue
+
+            failed_count += 1
+            error_code = result.get("error_code") or "sample_fetch_failed"
+            error_message = result.get("message") or "劇照補齊失敗"
+            failed_items.append({
+                "path": video.path,
+                "number": number,
+                "error": error_message,
+            })
+            yield _sse_event({
+                "type": "result-item",
+                "file_path": video.path,
+                "number": number,
+                "success": False,
+                "skipped": False,
+                "error_code": error_code,
+                "error": error_message,
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "skipped_count": skipped_count,
+            })
+
+        yield _sse_event({
+            "type": "done",
+            "message": (
+                f"劇照補齊完成：成功 {success_count}，失敗 {failed_count}，"
+                f"跳過 {skipped_count}"
+            ),
+            "cancelled": False,
+            "summary": {
+                "success": success_count,
+                "failed": failed_count,
+                "skipped": skipped_count,
+                "failed_items": failed_items,
+            },
+        })
+    except Exception:
+        logger.exception("批次補齊劇照端點失敗")
+        yield _sse_event({"type": "error", "message": "劇照補齊失敗，請查閱日誌"})
+
+
+@router.post("/backfill-titles")
+async def backfill_titles(request: Request):
+    """SSE: fill only untranslated Japanese titles."""
+    return await _cancelable_sse_response(request, _title_backfill_generator)
+
+
+@router.post("/backfill-samples")
+async def backfill_samples(request: Request):
+    """SSE: fetch samples only for rows whose sample list is empty."""
+    return await _cancelable_sse_response(request, _sample_backfill_generator)
 
 
 def _build_current_rename_plan(scope: str = "files") -> dict:

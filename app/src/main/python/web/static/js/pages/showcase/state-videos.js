@@ -52,6 +52,9 @@ export function stateVideos() {
         // --- API 呼叫 ---
         async fetchVideos(options) {
             options = options || {};
+            const requestedActress = options.actress !== undefined
+                ? String(options.actress || '').trim()
+                : String(this._serverActressFilter || '').trim();
             const requestId = ++this._videoFetchGeneration;
             if (this._videoFetchAbort) this._videoFetchAbort.abort();
             const abortController = new AbortController();
@@ -80,6 +83,7 @@ export function stateVideos() {
                     params.set('sort', this.sort);
                     params.set('order', this.order);
                 }
+                if (requestedActress) params.set('actress', requestedActress);
                 const query = params.toString();
                 const resp = await fetch(
                     '/api/showcase/videos' + (query ? '?' + query : ''),
@@ -121,6 +125,7 @@ export function stateVideos() {
                 // 初次載入/retry/翻頁/搜尋/排序；後端不回此欄位。補封面走 refreshVideoData reset。
                 vids.forEach(function (v, index) {
                     if (v._imgLoaded === undefined) v._imgLoaded = false;
+                    v._coverRetryCount = 0;
                     // First visible row can start decoding immediately. Every other
                     // cover enters through x-intersect and leaves the image window
                     // when it is far enough away, releasing its decoded bitmap.
@@ -129,10 +134,20 @@ export function stateVideos() {
                 _setVideos(vids);
                 const total = Number.isFinite(data.total) ? data.total : vids.length;
                 const isPaged = data.paged === true && !loadAll;
+                // Older servers ignore unknown query parameters. Only enter
+                // the server-filtered mode when the response confirms that
+                // the actress predicate was actually applied.
+                const confirmedActress = requestedActress && data.actress_filter === requestedActress
+                    ? requestedActress
+                    : '';
                 this.videoCount = total;
                 this._serverTotal = total;
                 this._serverPaged = isPaged;
-                this._fullVideosLoaded = !isPaged;
+                // A filtered response is not the full library, even when the
+                // server returned every matching row. Keep this flag false so
+                // later search/clear paths know they must reload normally.
+                this._serverActressFilter = confirmedActress;
+                this._fullVideosLoaded = !isPaged && !confirmedActress;
                 if (isPaged) {
                     this._serverPage = Math.max(1, parseInt(data.page) || requestedPage);
                     this.page = this._serverPage;
@@ -164,6 +179,11 @@ export function stateVideos() {
 
         async _ensureFullVideos() {
             if (this._fullVideosLoaded) return true;
+            // This helper's contract is the complete library. If an actress
+            // filter is still active, drop it before issuing the full-list
+            // request; otherwise the server would faithfully return only that
+            // actress and we would incorrectly mark it as complete.
+            if (this._serverActressFilter) this._serverActressFilter = '';
             if (!_fullVideosPromise) {
                 _fullVideosPromise = this.fetchVideos({
                     all: true,
@@ -175,17 +195,43 @@ export function stateVideos() {
             return _fullVideosPromise;
         },
 
+        /**
+         * Actress-wall shortcut: ask SQLite for only this alias group's rows
+         * instead of downloading the entire library and filtering in JS.
+         * The result is intentionally marked as non-full because clearing the
+         * search or changing to another filter must reload the normal set.
+         */
+        async _fetchActressFilteredVideos(actressName) {
+            var name = String(actressName || '').trim();
+            if (!name) return false;
+            var ok = await this.fetchVideos({
+                actress: name,
+                all: true,
+                deferRender: true,
+            });
+            if (!ok) return false;
+            this.search = name;
+            this.applyFilterAndSort(true);
+            this.page = 1;
+            this.updatePagination();
+            this.saveState();
+            return true;
+        },
+
         // --- 重試（async 安全） ---
         async retry() {
             this.error = '';
             const savedPage = this.page;
             const ok = await this.fetchVideos({
                 page: savedPage,
-                all: this._fullVideosLoaded,
+                // An actress-filtered dataset is intentionally not the full
+                // library. Reload all matching rows on retry so local
+                // pagination/lightbox navigation keeps working.
+                all: this._fullVideosLoaded || !!this._serverActressFilter,
             });
             if (!ok) return;
             _recomputeAllBadges();
-            if (this._fullVideosLoaded) {
+            if (this._fullVideosLoaded || this._serverActressFilter) {
                 this.applyFilterAndSort(true);  // 跳過 pagination，下面統一處理
                 this.page = savedPage;
             }
@@ -203,6 +249,13 @@ export function stateVideos() {
 
         // --- 互動邏輯 ---
         onSearchChange() {
+            // Editing the text box means the user has left the actress-wall
+            // shortcut. Drop the server-only dataset and let _animateFilter
+            // load the normal collection before applying the new query.
+            if (this._serverActressFilter
+                && String(this.search || '').trim() !== String(this._serverActressFilter).trim()) {
+                this._serverActressFilter = '';
+            }
             // B8: 透過 _animateFilter 觸發篩選動畫
             this._animateFilter();
             // TASK-115-T8：改走單一判斷點（CD-8），無 pill 時行為逐位元組不變
@@ -466,6 +519,7 @@ export function stateVideos() {
             } else {
                 this.search = '';
                 this.pills = [];
+                this._serverActressFilter = '';
                 this._animateFilter();            // 影片格：CD-2 步驟 7-9（唯一一次），內含 applyFilterAndSort() + saveState()
                 this._reconcileHeroCard();        // TASK-115-T8 / RULING 3：清 hero 狀態的單一判斷點
             }
@@ -554,7 +608,7 @@ export function stateVideos() {
                 }
             }
 
-            if (!this._fullVideosLoaded) {
+            if (!this._fullVideosLoaded && !this._serverActressFilter) {
                 var loaded = await this._ensureFullVideos();
                 if (!loaded) {
                     if (grid) grid.classList.remove('flip-guard');
@@ -627,7 +681,7 @@ export function stateVideos() {
             // The first filter/search may start from a server-paged subset.
             // Capture the current DOM first, then load the complete collection
             // so local filtering and sorting keep their existing semantics.
-            if (!this._fullVideosLoaded) {
+            if (!this._fullVideosLoaded && !this._serverActressFilter) {
                 var loaded = await this._ensureFullVideos();
                 if (!loaded) {
                     if (grid) grid.classList.remove('flip-guard');
@@ -846,6 +900,14 @@ export function stateVideos() {
             // --- Stage 1: pill 精準比對（TASK-115-T2, CD-6）---
             var pillPredicate = buildPillPredicate(this.pills, _nameToGroup, _tagToGroup);
             var pillFiltered = _videos.filter(pillPredicate);
+
+            // Server-side actress mode already resolved aliases and applied
+            // the expensive membership query in SQLite. The text box still
+            // shows the selected name for context, but applying the generic
+            // substring search again would drop alias-only rows and would
+            // make the visible count depend on whether the alias map happened
+            // to finish loading. Pills remain local and are applied above.
+            if (this._serverActressFilter) return pillFiltered;
 
             // --- Stage 2: 自由文字模糊比對 (M4a)（現況邏輯，body 逐字保留，僅改輸入來源陣列）---
             if (this.search && this.search.trim()) {

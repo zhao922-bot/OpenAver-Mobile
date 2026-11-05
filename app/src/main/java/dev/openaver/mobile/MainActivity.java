@@ -32,6 +32,7 @@ import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.PermissionRequest;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.SslErrorHandler;
 import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
@@ -125,7 +126,10 @@ public final class MainActivity extends Activity {
     private volatile int localPort = LOCAL_PORT;
     private volatile String localAuthToken = "";
     private volatile String localAuthCookieName = "";
+    private String currentLocalPath = "/scanner";
     private long lastBackPressMs;
+    private long lastWebRendererRecoveryMs;
+    private boolean webRendererRecoveryPending;
 
     private static native String nativeAbi();
 
@@ -597,13 +601,97 @@ public final class MainActivity extends Activity {
         mainHandler.post(() -> loadingText.setText(text));
     }
 
+    private void ensureWebView() {
+        if (webView != null) {
+            return;
+        }
+        webView = new WebView(this);
+        webContainer.addView(webView, 0, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        configureWebView();
+    }
+
     private void openLocalPath(String path) {
+        ensureWebView();
+        currentLocalPath = path == null || path.isEmpty() ? "/scanner" : path;
         webError.setVisibility(View.GONE);
         webPageLoading = true;
         pageProgress.setVisibility(View.VISIBLE);
-        webView.loadUrl(localBaseUrl() + path);
+        webView.loadUrl(localBaseUrl() + currentLocalPath);
         mainHandler.removeCallbacks(pageLoadTimeout);
         mainHandler.postDelayed(pageLoadTimeout, PAGE_LOAD_TIMEOUT_MS);
+    }
+
+    private void recoverWebView(WebView deadView, RenderProcessGoneDetail detail) {
+        if (webRendererRecoveryPending) {
+            return;
+        }
+        webRendererRecoveryPending = true;
+        boolean didCrash = detail != null && detail.didCrash();
+        Log.e(TAG, "WebView renderer gone (didCrash=" + didCrash + ")");
+
+        mainHandler.post(() -> {
+            if (isFinishing() || isDestroyed()) {
+                webRendererRecoveryPending = false;
+                return;
+            }
+            if (deadView != webView) {
+                webRendererRecoveryPending = false;
+                return;
+            }
+            try {
+                String restorePath = currentLocalPath;
+                String deadUrl = deadView.getUrl();
+                String localBase = localBaseUrl();
+                if (deadUrl != null && deadUrl.startsWith(localBase)) {
+                    restorePath = deadUrl.substring(localBase.length());
+                    if (restorePath.isEmpty()) {
+                        restorePath = "/scanner";
+                    }
+                    currentLocalPath = restorePath;
+                }
+                final String resolvedRestorePath = restorePath;
+                ViewGroup parent = deadView.getParent() instanceof ViewGroup
+                        ? (ViewGroup) deadView.getParent()
+                        : null;
+                if (parent != null) {
+                    parent.removeView(deadView);
+                }
+                deadView.stopLoading();
+                deadView.setWebChromeClient(null);
+                deadView.setWebViewClient(null);
+                deadView.destroy();
+
+                webView = new WebView(this);
+                webContainer.addView(webView, 0, new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                ));
+                configureWebView();
+
+                long now = SystemClock.elapsedRealtime();
+                boolean repeated = lastWebRendererRecoveryMs > 0
+                        && now - lastWebRendererRecoveryMs < 15_000L;
+                lastWebRendererRecoveryMs = now;
+                webPageLoading = false;
+                pageProgress.setVisibility(View.GONE);
+                if (repeated) {
+                    // Avoid a tight renderer death/reload loop. Keep the fresh
+                    // WebView idle until the user explicitly retries.
+                    showPageError();
+                } else {
+                    applyLocalAuthCookie(() -> openLocalPath(resolvedRestorePath));
+                }
+                Toast.makeText(this, R.string.web_renderer_restarted, Toast.LENGTH_SHORT).show();
+            } catch (Throwable error) {
+                Log.e(TAG, "failed to recreate WebView", error);
+                showPageError();
+            } finally {
+                webRendererRecoveryPending = false;
+            }
+        });
     }
 
     private void applyLocalAuthCookie(Runnable afterCookieSet) {
@@ -661,6 +749,10 @@ public final class MainActivity extends Activity {
     }
 
     private void refreshWeb() {
+        if (webView == null || webView.getUrl() == null || webView.getUrl().isEmpty()) {
+            openLocalPath(currentLocalPath);
+            return;
+        }
         webError.setVisibility(View.GONE);
         webPageLoading = true;
         pageProgress.setVisibility(View.VISIBLE);
@@ -979,6 +1071,10 @@ public final class MainActivity extends Activity {
     }
 
     private void dispatchWebBack() {
+        if (webView == null) {
+            performWebHistoryBackOrExit();
+            return;
+        }
         if (webBackDispatchPending) {
             return;
         }
@@ -1001,7 +1097,7 @@ public final class MainActivity extends Activity {
     }
 
     private void performWebHistoryBackOrExit() {
-        if (webView.canGoBack()) {
+        if (webView != null && webView.canGoBack()) {
             webView.goBack();
             return;
         }
@@ -1133,6 +1229,12 @@ public final class MainActivity extends Activity {
     }
 
     private final class OpenAverWebViewClient extends WebViewClient {
+        @Override
+        public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            recoverWebView(view, detail);
+            return true;
+        }
+
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             return handleNavigation(request.getUrl());

@@ -6,7 +6,11 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-from core.rename_shared import _rename_file, _write_manifest
+from core.rename_shared import (
+    _apply_rename_updates,
+    _rename_file,
+    _write_manifest,
+)
 
 
 def execute_rename_plan(
@@ -28,6 +32,8 @@ def execute_rename_plan(
     completed_files: list[tuple[str, str]] = []
     completed_db: list[tuple[str, str]] = []
     completed_covers: list[tuple[str, str, str]] = []
+    completed_samples: list[tuple[str, list[str], list[str]]] = []
+    db_updates: list[dict[str, Any]] = []
 
     try:
         for item in items:
@@ -40,19 +46,25 @@ def execute_rename_plan(
                     ) from exc
                 completed_files.append((operation["old_path"], operation["new_path"]))
 
-            if item["db_old_uri"] != item["db_new_uri"]:
-                if not repo.repath_path_only(item["db_old_uri"], item["db_new_uri"]):
-                    raise RuntimeError("database_path_update_failed")
-                completed_db.append((item["db_old_uri"], item["db_new_uri"]))
-
             old_cover = item.get("cover_path_old") or ""
             new_cover = item.get("cover_path_new") or ""
-            if old_cover and old_cover != new_cover:
-                if not repo.update_cover_path_preserve_focal(
-                    item["db_new_uri"], new_cover, old_cover
-                ):
-                    raise RuntimeError("database_cover_update_failed")
-                completed_covers.append((item["db_new_uri"], old_cover, new_cover))
+            db_updates.append({
+                "db_old_uri": item["db_old_uri"],
+                "db_new_uri": item["db_new_uri"],
+                "cover_path_old": old_cover,
+                "cover_path_new": new_cover,
+                "cover_update": bool(old_cover and old_cover != new_cover),
+                "sample_images_old": [],
+                "sample_images_new": [],
+                "samples_update": False,
+            })
+        _apply_rename_updates(
+            repo,
+            db_updates,
+            completed_db,
+            completed_covers,
+            completed_samples,
+        )
     except Exception as exc:
         rollback_errors: list[str] = []
         for db_path, old_cover, new_cover in reversed(completed_covers):
