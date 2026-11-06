@@ -37,6 +37,18 @@ def test_android_video_launcher_uses_native_scheme():
     assert "FLAG_GRANT_READ_URI_PERMISSION" in player
 
 
+def test_single_video_offers_builtin_player_choice():
+    player = (
+        ROOT
+        / "app/src/main/java/dev/openaver/mobile/ExternalPlayer.java"
+    ).read_text(encoding="utf-8")
+
+    assert "showPlayerChoice(activity, selectedPart, fallback);" in player
+    assert "R.string.play_with_external_player" in player
+    assert "R.string.play_in_builtin_player" in player
+    assert "fallback.open(part.path, part.number);" in player
+
+
 def test_mobile_scanner_hides_redundant_page_header():
     css = (
         ROOT

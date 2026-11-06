@@ -73,6 +73,7 @@
     <string name="choose_video_player">動画プレーヤーを選択</string>
     <string name="choose_video_part">再生するパートを選択</string>
     <string name="video_part_number">パート %1$d</string>
+    <string name="play_with_external_player">外部プレーヤーを使う</string>
     <string name="play_in_builtin_player">内蔵プレーヤーを使う</string>
     <string name="opened_with_builtin_player">外部プレーヤーが見つからないため、内蔵プレーヤーで開きます。</string>
     <string name="video_player_missing">利用できる動画プレーヤーがありません。</string>

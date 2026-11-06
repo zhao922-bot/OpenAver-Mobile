@@ -73,7 +73,33 @@ final class ExternalPlayer {
         VideoPartParser.Part selectedPart = parts.isEmpty()
                 ? new VideoPartParser.Part(selectedPath, "", 1)
                 : parts.get(0);
+        if (fallback != null) {
+            showPlayerChoice(activity, selectedPart, fallback);
+            return true;
+        }
         return openExternalOrFallback(activity, selectedPart, fallback);
+    }
+
+    private static void showPlayerChoice(
+            Activity activity,
+            VideoPartParser.Part part,
+            BuiltInFallback fallback
+    ) {
+        String[] choices = {
+                activity.getString(R.string.play_with_external_player),
+                activity.getString(R.string.play_in_builtin_player),
+        };
+        new AlertDialog.Builder(activity, android.R.style.Theme_Material_Dialog_Alert)
+                .setTitle(R.string.choose_video_player)
+                .setItems(choices, (dialog, which) -> {
+                    if (which == 0) {
+                        openExternalOrFallback(activity, part, fallback);
+                    } else {
+                        fallback.open(part.path, part.number);
+                    }
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
     }
 
     private static boolean openExternalOrFallback(

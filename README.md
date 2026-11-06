@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r43-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r44-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r43-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r44-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r43`（versionCode `17059`）
+- 版本：`0.17.18-r44`（versionCode `17060`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -213,6 +213,8 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r43：简体中文、繁体中文、日语和英语四种界面语言统一使用各自语言包，包括
   Android 原生菜单与离开确认；修复日期、扫描/翻译/补剧照日志、错误提示及扫描
   日志缓存仍显示其他语言的问题
+- r44：普通视频播放时同样提供外部播放器与内置播放器选择；分段视频继续支持
+  分段选择和内置播放器播放
 
 ## 限制
 

@@ -73,6 +73,7 @@
     <string name="choose_video_player">Choose a video player</string>
     <string name="choose_video_part">Choose a video part</string>
     <string name="video_part_number">Part %1$d</string>
+    <string name="play_with_external_player">Use external player</string>
     <string name="play_in_builtin_player">Use built-in player</string>
     <string name="opened_with_builtin_player">No external player found. Opening the built-in player.</string>
     <string name="video_player_missing">No video player is available.</string>

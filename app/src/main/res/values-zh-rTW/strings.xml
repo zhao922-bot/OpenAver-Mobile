@@ -73,6 +73,7 @@
     <string name="choose_video_player">選擇影片播放器</string>
     <string name="choose_video_part">選擇要播放的分段</string>
     <string name="video_part_number">第 %1$d 段</string>
+    <string name="play_with_external_player">使用外部播放器</string>
     <string name="play_in_builtin_player">使用內建播放器</string>
     <string name="opened_with_builtin_player">找不到外部播放器，已改用內建播放器。</string>
     <string name="video_player_missing">沒有可用的影片播放器。</string>
