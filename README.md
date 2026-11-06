@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r40-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r41-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r40-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r41-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r40`（versionCode `17056`）
+- 版本：`0.17.18-r41`（versionCode `17057`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -204,6 +204,10 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r40：修复展示库在搜索、女优筛选和列表刷新后，滚动位置附近卡片封面变空白、
   必须刷新页面才恢复的问题；复用卡片时保留图片窗口和已加载状态，并补做缓存图片
   的加载状态同步
+- r41：同一文件夹内的完整 `cd1/cd2` 等分集视频可共用一键补剧照任务，
+  剧照会同步写入全部分集记录；混有无关影片的文件夹仍会拒绝执行
+- r41：片库播放分集视频时可在 `cd1/cd2` 之间选择，网页播放器支持分段切换与
+  自动续播，Android 端会先弹出原生分段选择框
 
 ## 限制
 

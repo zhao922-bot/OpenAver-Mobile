@@ -46,6 +46,7 @@ from core.cf_transport import get_cf_transport, CfChallengeRequired, CfTransport
 from core.scrapers.javlibrary import JAVLIBRARY_ORIGIN
 from core.logger import get_logger
 from core.config import load_config, STEM_IMAGE_MODES
+from core.multipart_group import resolve_group
 from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
 from core.readonly_paths import resolve_owning_output_root
 from core.readonly_producer import (
@@ -855,6 +856,45 @@ def _samples_failure(code: str, message: str, **diagnostics) -> dict:
     return payload
 
 
+def _resolve_sample_multipart_group(
+    repo: VideoRepository,
+    canonical_path: str,
+    path_mappings: dict,
+    expected_count: Optional[int] = None,
+):
+    """Resolve a complete multipart group for sample backfill.
+
+    Sample images live in one folder-level ``extrafanart`` directory.  A
+    complete cd1/cd2 group can therefore share it safely; unrelated videos in
+    the same folder still cannot.  ``expected_count`` is the folder's DB row
+    count, so the returned group is accepted only when it accounts for every
+    row in that folder.
+    """
+    try:
+        group = resolve_group(
+            repo,
+            canonical_path,
+            path_mappings,
+            folder_source_uri=canonical_path,
+        )
+    except Exception:
+        logger.warning("fetch_samples_endpoint 分組查詢失敗", exc_info=True)
+        return None
+    if group is None or len(group.members) < 2:
+        return None
+    if expected_count is not None and len(group.members) != expected_count:
+        return None
+    return group
+
+
+def _fanart_file_sort_key(path: Path):
+    """Keep fanart1, fanart2, ..., fanart10 in display order."""
+    suffix = path.stem[6:]
+    if path.stem.lower().startswith("fanart") and suffix.isdigit():
+        return (0, int(suffix))
+    return (1, path.name.lower())
+
+
 @router.post("/scraper/fetch-samples")
 def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
     config = load_config()
@@ -891,6 +931,11 @@ def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
             fs_path = uri_to_local_fs_path(req.file_path, path_mappings)
             repo = VideoRepository()
             existing = repo.get_by_path(canonical)
+            group = _resolve_sample_multipart_group(
+                repo,
+                existing.path if existing is not None else canonical,
+                path_mappings,
+            )
             file_info = {
                 "path": fs_path,
                 "size": existing.size_bytes if existing else os.path.getsize(fs_path),
@@ -905,12 +950,33 @@ def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
             written = len(assets.get('sample_fs', []))
             extrafanart_dir = Path(movie_dir) / "extrafanart"
             try:
-                on_disk = sum(
-                    1 for path in extrafanart_dir.iterdir()
-                    if path.is_file() and path.name.lower().endswith(".jpg")
+                sample_files = sorted(
+                    (
+                        path for path in extrafanart_dir.iterdir()
+                        if path.is_file() and path.name.lower().endswith(".jpg")
+                    ),
+                    key=_fanart_file_sort_key,
                 )
+                on_disk = len(sample_files)
             except OSError:
+                sample_files = []
                 on_disk = written
+            if group is not None and sample_files:
+                sample_uris = [
+                    to_file_uri(str(path), path_mappings)
+                    for path in sample_files
+                ]
+                try:
+                    for member in group.members:
+                        repo.update_sample_images(member.path, sample_uris)
+                except Exception:
+                    logger.exception("fetch_samples_endpoint 分集劇照 DB 更新失敗")
+                    return _samples_failure(
+                        "db_write_failed",
+                        "劇照已下載，但資料庫更新失敗，請再試一次",
+                        source=meta.get("source", ""),
+                        sample_urls_found=len(sample_images),
+                    )
             if on_disk == 0:
                 return _samples_failure(
                     "sample_download_failed", "已找到劇照，但全部下載失敗",
@@ -963,18 +1029,35 @@ def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
     folder_uri_prefix = to_file_uri(os.path.dirname(uri_to_fs_path(req.file_path)), path_mappings) + "/"
     repo = VideoRepository()
     count = repo.count_videos_in_folder(folder_uri_prefix)
+    group = None
     if count > 1:
-        return _samples_failure(
-            "multi_video_folder",
-            "此資料夾有其他影片，補抓劇照會污染其他片，請先移到獨立資料夾",
-            count=count,
+        group = _resolve_sample_multipart_group(
+            repo,
+            canonical,
+            path_mappings,
+            expected_count=count,
         )
+        if group is None:
+            return _samples_failure(
+                "multi_video_folder",
+                (
+                    "此資料夾有無關影片，補抓劇照會污染其他片；"
+                    "只有同一作品的完整分集（例如 cd1/cd2）可以共用劇照"
+                ),
+                count=count,
+            )
+
+    related_db_paths = (
+        [member.path for member in group.members if member.path != canonical]
+        if group is not None else []
+    )
 
     try:
         result, diagnostics = fetch_samples_only_detailed(
             file_path=req.file_path,
             number=req.number,
             path_mappings=path_mappings,
+            related_db_paths=related_db_paths,
         )
         payload = asdict(result)
         payload.update(diagnostics)

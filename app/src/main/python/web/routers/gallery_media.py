@@ -11,7 +11,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Query, Request
@@ -344,7 +344,10 @@ def _render_player_html(
 
 
 @router.get("/player")
-def video_player(path: str = Query(..., description="影片路徑（file:/// URI 或 FS 路徑）")):
+def video_player(
+    path: str = Query(..., description="影片路徑（file:/// URI 或 FS 路徑）"),
+    part: Optional[int] = Query(None, ge=1, description="要開始播放的分段（1 起算）"),
+):
     """影片播放頁面 — 用 HTML5 <video> 標籤在新分頁播放"""
     from html import escape as html_escape
     from core.i18n import t as i18n_t
@@ -373,6 +376,7 @@ def video_player(path: str = Query(..., description="影片路徑（file:/// URI
     path_mappings = gallery_config.get('path_mappings', {})
 
     group = None
+    selected_member_index = 0
     try:
         db_path = get_db_path()
         if db_path.exists():
@@ -380,31 +384,62 @@ def video_player(path: str = Query(..., description="影片路徑（file:/// URI
             v = repo.get_by_path(path)
             if v is not None:
                 group = resolve_group(repo, path, path_mappings, folder_source_uri=v.path)
+                if group is not None:
+                    selected_member_index = next(
+                        (
+                            index for index, member in enumerate(group.members)
+                            if member.path == v.path
+                        ),
+                        0,
+                    )
     except Exception:
         logger.warning("video_player: 分組查詢失敗，退回單檔播放", exc_info=True)
         group = None
 
     if group is not None and len(group.members) > 1:
         parts_urls = [f"/api/gallery/video?path={quote(m.path, safe='')}" for m in group.members]
-        data_parts_json = html_escape(json.dumps(parts_urls), quote=True)
+        data_parts_json = html_escape(
+            json.dumps(parts_urls, separators=(',', ':')),
+            quote=True,
+        )
+        data_part_tokens_json = html_escape(
+            json.dumps(group.part_tokens, separators=(',', ':')),
+            quote=True,
+        )
         part_label_template = html_escape(i18n_t('showcase.video.part_progress', locale=html_lang), quote=True)
-        first_src = html_escape(parts_urls[0])
+        if part is not None:
+            selected_member_index = min(part - 1, len(parts_urls) - 1)
+        selected_src = html_escape(parts_urls[selected_member_index])
         return HTMLResponse(content=_render_player_html(
             html_lang_safe=html_lang_safe,
             filename=filename,
-            src=first_src,
+            src=selected_src,
             hint_text_network=hint_text_network,
             hint_text_format=hint_text_format,
             extra_style=(
                 "\n        #oa-player-progress { position: fixed; top: 1rem; left: 1rem;"
                 " z-index: 1; pointer-events: none; color: #fff; font: 14px/1.4 sans-serif; }"
+                "\n        #oa-player-parts { position: fixed; left: 50%;"
+                " bottom: max(1rem, env(safe-area-inset-bottom)); transform: translateX(-50%);"
+                " z-index: 2; display: flex; gap: .5rem; padding: .35rem;"
+                " border-radius: 999px; background: rgba(0,0,0,.68); backdrop-filter: blur(8px); }"
+                "\n        .oa-player-part { min-width: 3.5rem; min-height: 2.75rem;"
+                " padding: 0 .9rem; border: 1px solid rgba(255,255,255,.45);"
+                " border-radius: 999px; background: rgba(255,255,255,.12); color: #fff;"
+                " font: 600 14px/1 sans-serif; }"
+                "\n        .oa-player-part[aria-current='true'] { background: #fff; color: #000; }"
             ),
             video_open_attrs='id="oa-player" ',
             video_data_attrs=(
                 f' data-parts="{data_parts_json}"'
                 f' data-part-label-template="{part_label_template}"'
+                f' data-part-tokens="{data_part_tokens_json}"'
+                f' data-start-index="{selected_member_index}"'
             ),
-            extra_body='\n    <div id="oa-player-progress"></div>',
+            extra_body=(
+                '\n    <div id="oa-player-progress"></div>'
+                '\n    <nav id="oa-player-parts" aria-label="Video parts"></nav>'
+            ),
             extra_script='\n    <script type="module" src="/static/js/pages/player.js"></script>',
         ))
 

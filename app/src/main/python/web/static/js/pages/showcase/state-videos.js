@@ -1088,7 +1088,20 @@ export function stateVideos() {
         },
 
         // --- 播放影片 (PyWebView 整合) ---
-        playVideo(path) {
+        playVideo(videoOrPath) {
+            const video = (
+                videoOrPath && typeof videoOrPath === 'object'
+            ) ? videoOrPath : null;
+            const path = video?.path || (
+                typeof videoOrPath === 'string' ? videoOrPath : ''
+            );
+            if (!path) return;
+            const parts = Array.isArray(video?.part_paths)
+                ? video.part_paths
+                : [];
+            const labels = Array.isArray(video?.part_tokens)
+                ? video.part_tokens
+                : [];
             if (window.pywebview && window.pywebview.api) {
                 window.pywebview.api.open_file(path)
                     .then(result => {
@@ -1099,7 +1112,7 @@ export function stateVideos() {
                         this.showToast(window.t('showcase.video.play_failed'), 'error');
                     });
             } else if (window.openVideoPlayer) {
-                window.openVideoPlayer(path);
+                window.openVideoPlayer(path, { parts, labels });
             } else {
                 window.open('/api/gallery/player?path=' + encodeURIComponent(path), '_blank');
             }

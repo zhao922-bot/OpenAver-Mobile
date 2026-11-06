@@ -996,7 +996,11 @@ public final class MainActivity extends Activity {
         scheme = scheme.toLowerCase(Locale.ROOT);
 
         if ("openaver-player".equals(scheme)) {
-            ExternalPlayer.open(this, uri.getQueryParameter("path"));
+            ExternalPlayer.open(
+                    this,
+                    uri.getQueryParameter("path"),
+                    uri.getQueryParameter("parts")
+            );
             return true;
         }
         if ("http".equals(scheme) || "https".equals(scheme)

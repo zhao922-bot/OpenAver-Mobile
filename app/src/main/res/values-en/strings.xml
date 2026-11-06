@@ -70,6 +70,8 @@
     <string name="ok">OK</string>
     <string name="external_browser_missing">No browser is available.</string>
     <string name="choose_video_player">Choose a video player</string>
+    <string name="choose_video_part">Choose a video part</string>
+    <string name="video_part_number">Part %1$d</string>
     <string name="video_player_missing">No video player is available.</string>
     <string name="video_file_unavailable">This video cannot be opened from the app.</string>
     <string name="download_started">Download started.</string>

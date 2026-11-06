@@ -634,7 +634,7 @@
                         </template>
                         <div class="av-card-preview-overlay">
                             <button class="btn-glass-circle"
-                                    @click.stop="playVideo(video.path)"
+                                    @click.stop="playVideo(video)"
                                     title="{{ t('showcase.action.play_video') }}">
                                 <i class="bi bi-play-fill"></i>
                             </button>
@@ -1187,7 +1187,7 @@
                                  similar-exit mode (path undefined) — regular lightbox items always have
                                  path so existing behavior is unaffected. -->
                             <div class="cover-actions" x-show="!!currentLightboxVideo?.path" :class="{'cover-actions--focal-edit': _maskVisible}">
-                                <button class="lb-action-btn" x-show="!_maskVisible" @click="playVideo(currentLightboxVideo?.path)" data-tooltip="{{ t('showcase.action.play') }}" aria-label="{{ t('showcase.action.play') }}">
+                                <button class="lb-action-btn" x-show="!_maskVisible" @click="playVideo(currentLightboxVideo)" data-tooltip="{{ t('showcase.action.play') }}" aria-label="{{ t('showcase.action.play') }}">
                                     <i class="bi bi-play-fill"></i>
                                 </button>
                                 <button class="lb-action-btn js-open-folder" x-show="!_maskVisible" @click="openLocal(currentLightboxVideo?.path)" data-tooltip="{{ t('search.action.open_folder') }}" aria-label="{{ t('search.action.open_folder') }}">
@@ -1778,7 +1778,7 @@
                 <button class="similar-mobile-play-btn"
                         x-show="!!currentLightboxVideo?.path"
                         :disabled="similarModeAnimating"
-                        @click.stop="playVideo(currentLightboxVideo?.path)"
+                        @click.stop="playVideo(currentLightboxVideo)"
                         :aria-label="t('showcase.action.play')">
                     <i class="bi bi-play-fill" aria-hidden="true"></i>
                 </button>

@@ -73,6 +73,7 @@ from web.routers.gallery_media import safe_realpath
 from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
 from core.generate_state import try_mark_generate_active, mark_generate_done
 from core import thumbnail_cache
+from core.multipart_group import resolve_groups_bulk
 from core.scraper import get_javbus_lang, search_jav, smart_search
 from core.source_settings import is_uncensored_mode_effective
 from core.scrapers.utils import check_subtitle, extract_number, has_japanese
@@ -1684,6 +1685,47 @@ def _is_missing_sample_candidate(video: Video) -> bool:
     )
 
 
+def _dedupe_multipart_sample_candidates(
+    repo: VideoRepository,
+    candidates: List[Video],
+    path_mappings: dict,
+) -> List[Video]:
+    """Collapse complete multipart rows to one logical sample-backfill item.
+
+    ``fetch_samples_endpoint`` writes one shared ``extrafanart`` directory and
+    updates every member row.  Scheduling cd1 and cd2 independently would
+    scrape/download the same work twice concurrently, so the queue and the
+    missing-count preview both use the same representative-per-group rule.
+    Resolution failures preserve the old one-row-per-candidate behaviour.
+    """
+    if len(candidates) < 2:
+        return candidates
+    try:
+        groups = resolve_groups_bulk(
+            repo,
+            [video.path for video in candidates],
+            path_mappings,
+        )
+    except Exception:
+        logger.warning(
+            "批次補齊劇照：分集分組失敗，保留逐列候選",
+            exc_info=True,
+        )
+        return candidates
+
+    seen_groups = set()
+    deduped = []
+    for video in candidates:
+        group = groups.get(video.path)
+        if group is not None and len(group.members) > 1:
+            group_key = tuple(member.path for member in group.members)
+            if group_key in seen_groups:
+                continue
+            seen_groups.add(group_key)
+        deduped.append(video)
+    return deduped
+
+
 @router.get("/missing-check")
 def check_missing():
     """Check missing NFO/cover plus the two explicit backfill queues."""
@@ -1715,7 +1757,7 @@ def check_missing():
         missing_cover = 0
         items = []
         untranslated_title_items = []
-        missing_sample_items = []
+        missing_sample_candidates = []
 
         for v in all_videos:
             number = _candidate_number(v)
@@ -1726,11 +1768,7 @@ def check_missing():
                     "title": v.title,
                 })
             if _is_missing_sample_candidate(v):
-                missing_sample_items.append({
-                    "file_path": v.path,
-                    "number": number,
-                    "title": v.title,
-                })
+                missing_sample_candidates.append(v)
 
             has_nfo = _video_has_nfo(v, path_mappings)
             has_cover = False
@@ -1757,6 +1795,19 @@ def check_missing():
                 item["category"] = "cover"
             items.append(item)
 
+        missing_sample_candidates = _dedupe_multipart_sample_candidates(
+            repo,
+            missing_sample_candidates,
+            path_mappings,
+        )
+        missing_sample_items = [
+            {
+                "file_path": v.path,
+                "number": _candidate_number(v),
+                "title": v.title,
+            }
+            for v in missing_sample_candidates
+        ]
         total_missing = missing_both + missing_nfo + missing_cover
 
         # Return complete lists; the frontend owns confirmation/display policy.
@@ -2062,6 +2113,24 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
             video for video in repo.get_missing_sample_candidates()
             if _is_missing_sample_candidate(video)
         ]
+        if len(candidates) > 1:
+            try:
+                path_mappings = (
+                    load_config()
+                    .get("gallery", {})
+                    .get("path_mappings", {})
+                )
+            except Exception:
+                logger.warning(
+                    "批次補齊劇照：讀取路徑映射失敗，保留逐列候選",
+                    exc_info=True,
+                )
+                path_mappings = {}
+            candidates = _dedupe_multipart_sample_candidates(
+                repo,
+                candidates,
+                path_mappings,
+            )
         total = len(candidates)
         if total == 0:
             yield _sse_event({

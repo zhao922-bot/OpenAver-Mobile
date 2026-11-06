@@ -8560,6 +8560,107 @@
                  this.ganttLegend = Object.keys(slots)
                      .map(function (name) {
                          return { name: name, slot: slots[name] };
+--- a/web/static/js/pages/player.js
++++ b/web/static/js/pages/player.js
+@@ -14,7 +14,27 @@
+ 
+     const labelTemplate = video.dataset.partLabelTemplate ?? '';
+     const labelEl = document.getElementById('oa-player-progress');
+-    let currentIndex = 0;  // FE-JS-01：0 是合法索引，下面全用 ?? / === undefined，不用 ||
++    const partsNav = document.getElementById('oa-player-parts');
++    let partTokens = [];
++    try {
++        const parsedTokens = JSON.parse(video.dataset.partTokens ?? '[]');
++        if (Array.isArray(parsedTokens)) partTokens = parsedTokens;
++    } catch {
++        partTokens = [];
++    }
++    const parsedStartIndex = Number.parseInt(video.dataset.startIndex ?? '0', 10);
++    let currentIndex = (
++        Number.isInteger(parsedStartIndex)
++        && parsedStartIndex >= 0
++        && parsedStartIndex < parts.length
++    ) ? parsedStartIndex : 0;
++
++    function partLabel(index) {
++        const token = partTokens[index];
++        return typeof token === 'string' && token.trim()
++            ? token.trim()
++            : `Part ${index + 1}`;
++    }
+ 
+     function renderLabel() {
+         if (!labelEl) return;
+@@ -23,16 +43,63 @@
+             .replace('{total}', String(parts.length));
+     }
+ 
++    function renderParts() {
++        if (!partsNav) return;
++        if (!partsNav.childElementCount) {
++            parts.forEach((_, index) => {
++                const button = document.createElement('button');
++                button.type = 'button';
++                button.className = 'oa-player-part';
++                button.textContent = partLabel(index);
++                button.addEventListener('click', () => selectPart(index));
++                partsNav.appendChild(button);
++            });
++        }
++        Array.from(partsNav.children).forEach((button, index) => {
++            button.setAttribute(
++                'aria-current',
++                index === currentIndex ? 'true' : 'false'
++            );
++        });
++    }
++
++    function clearErrorHints() {
++        video.style.display = '';
++        document.getElementById('video-error-hint-network').style.display = 'none';
++        document.getElementById('video-error-hint-format').style.display = 'none';
++    }
++
++    function updateLocation() {
++        try {
++            const url = new URL(window.location.href);
++            url.searchParams.set('part', String(currentIndex + 1));
++            window.history.replaceState(null, '', url);
++        } catch {
++            // Playback must not depend on History API availability.
++        }
++    }
++
++    function selectPart(index, { autoplay = true } = {}) {
++        if (!Number.isInteger(index) || index < 0 || index >= parts.length) return;
++        currentIndex = index;
++        clearErrorHints();
++        video.src = parts[currentIndex];
++        video.load();
++        if (autoplay) {
++            const p = video.play();
++            if (p && typeof p.catch === 'function') p.catch(() => {});
++        }
++        renderLabel();
++        renderParts();
++        updateLocation();
++    }
++
+     video.addEventListener('ended', () => {
+         const nextIndex = currentIndex + 1;
+         if (nextIndex >= parts.length) return;  // 最後一段播完，停止
+-        currentIndex = nextIndex;
+-        video.src = parts[currentIndex];
+-        video.load();
+-        const p = video.play();
+-        if (p && typeof p.catch === 'function') p.catch(() => {});
+-        renderLabel();
++        selectPart(nextIndex);
+     });
+ 
+     renderLabel();  // 初始「第 1／N 段」
++    renderParts();
+ });
 --- a/web/static/js/pages/scanner/state-scan.js
 +++ b/web/static/js/pages/scanner/state-scan.js
 @@ -33,6 +33,7 @@
@@ -11664,16 +11765,38 @@
              var slice;
              if (perPage === 0) {
                  slice = _filteredVideos.slice();
-@@ -877,6 +1098,8 @@
+@@ -867,7 +1088,20 @@
+         },
+ 
+         // --- 播放影片 (PyWebView 整合) ---
+-        playVideo(path) {
++        playVideo(videoOrPath) {
++            const video = (
++                videoOrPath && typeof videoOrPath === 'object'
++            ) ? videoOrPath : null;
++            const path = video?.path || (
++                typeof videoOrPath === 'string' ? videoOrPath : ''
++            );
++            if (!path) return;
++            const parts = Array.isArray(video?.part_paths)
++                ? video.part_paths
++                : [];
++            const labels = Array.isArray(video?.part_tokens)
++                ? video.part_tokens
++                : [];
+             if (window.pywebview && window.pywebview.api) {
+                 window.pywebview.api.open_file(path)
+                     .then(result => {
+@@ -877,6 +1111,8 @@
                          console.error('Failed to open file:', err);
                          this.showToast(window.t('showcase.video.play_failed'), 'error');
                      });
 +            } else if (window.openVideoPlayer) {
-+                window.openVideoPlayer(path);
++                window.openVideoPlayer(path, { parts, labels });
              } else {
                  window.open('/api/gallery/player?path=' + encodeURIComponent(path), '_blank');
              }
-@@ -884,6 +1107,9 @@
+@@ -884,6 +1120,9 @@
  
          // 工具方法：從 paginatedVideos 的 index 映射到 filteredVideos 的 index
          getCurrentFilteredIndex(paginatedIndex) {
@@ -12072,16 +12195,27 @@
  }
 --- /dev/null
 +++ b/web/static/js/shared/video-player.js
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,31 @@
 +const ANDROID_SHELL_UA = /(?:^|\s)OpenAverMobile\/\S+/;
 +
-+export function openVideoPlayer(path) {
++export function openVideoPlayer(path, options = {}) {
 +    const value = String(path || '').trim();
 +    if (!value) return false;
 +
 +    if (ANDROID_SHELL_UA.test(navigator.userAgent)) {
-+        window.location.href =
-+            'openaver-player://play?path=' + encodeURIComponent(value);
++        const paths = Array.isArray(options.parts)
++            ? options.parts.filter(item => typeof item === 'string' && item.trim())
++            : [];
++        const labels = Array.isArray(options.labels) ? options.labels : [];
++        let target = 'openaver-player://play?path=' + encodeURIComponent(value);
++        if (paths.length > 1) {
++            const parts = paths.map((partPath, index) => ({
++                path: partPath,
++                label: typeof labels[index] === 'string' ? labels[index] : '',
++            }));
++            target += '&parts=' + encodeURIComponent(JSON.stringify(parts));
++        }
++        window.location.href = target;
 +        return true;
 +    }
 +
@@ -14438,6 +14572,15 @@
                          <!-- 67-A2: skeleton overlay（pending 時，gate 含 has_cover → stale @error 後 has_cover=false 自動退出）-->
                          <div class="skeleton-cover shimmer"
                               x-show="video.cover_url && video.has_cover && !video._imgLoaded && video._coverRequested"></div>
+@@ -581,7 +634,7 @@
+                         </template>
+                         <div class="av-card-preview-overlay">
+                             <button class="btn-glass-circle"
+-                                    @click.stop="playVideo(video.path)"
++                                    @click.stop="playVideo(video)"
+                                     title="{{ t('showcase.action.play_video') }}">
+                                 <i class="bi bi-play-fill"></i>
+                             </button>
 @@ -779,15 +832,18 @@
                           :data-flip-id="'actress:' + actress.name"
                           @click="openActressLightbox(index)">
@@ -14460,6 +14603,15 @@
                                       @load="applyCellFocal($el, actress, '--actress-crop-ratio')"
                                       x-init="$watch('actress.auto_focal', () => applyCellFocal($el, actress, '--actress-crop-ratio'));
                                               $watch('actress.crop_mode', () => applyCellFocal($el, actress, '--actress-crop-ratio'))">
+@@ -1131,7 +1187,7 @@
+                                  similar-exit mode (path undefined) — regular lightbox items always have
+                                  path so existing behavior is unaffected. -->
+                             <div class="cover-actions" x-show="!!currentLightboxVideo?.path" :class="{'cover-actions--focal-edit': _maskVisible}">
+-                                <button class="lb-action-btn" x-show="!_maskVisible" @click="playVideo(currentLightboxVideo?.path)" data-tooltip="{{ t('showcase.action.play') }}" aria-label="{{ t('showcase.action.play') }}">
++                                <button class="lb-action-btn" x-show="!_maskVisible" @click="playVideo(currentLightboxVideo)" data-tooltip="{{ t('showcase.action.play') }}" aria-label="{{ t('showcase.action.play') }}">
+                                     <i class="bi bi-play-fill"></i>
+                                 </button>
+                                 <button class="lb-action-btn js-open-folder" x-show="!_maskVisible" @click="openLocal(currentLightboxVideo?.path)" data-tooltip="{{ t('search.action.open_folder') }}" aria-label="{{ t('search.action.open_folder') }}">
 @@ -1184,7 +1240,7 @@
                                          :aria-label="(currentLightboxVideo?.user_rating||0) > 0 ? t('showcase.pick.remove_aria') : t('showcase.pick.add_aria')"
                                          :aria-busy="!!_pickInFlight[currentLightboxVideo?.path]"
@@ -14491,6 +14643,15 @@
                              </div>
                              <!-- Row 3: Actresses -->
                              <div class="lb-actor" x-show="currentLightboxVideo?.actresses">
+@@ -1730,7 +1778,7 @@
+                 <button class="similar-mobile-play-btn"
+                         x-show="!!currentLightboxVideo?.path"
+                         :disabled="similarModeAnimating"
+-                        @click.stop="playVideo(currentLightboxVideo?.path)"
++                        @click.stop="playVideo(currentLightboxVideo)"
+                         :aria-label="t('showcase.action.play')">
+                     <i class="bi bi-play-fill" aria-hidden="true"></i>
+                 </button>
 @@ -1900,34 +1948,7 @@
      </dialog>
  

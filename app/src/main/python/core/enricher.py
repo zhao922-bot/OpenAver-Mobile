@@ -46,7 +46,12 @@ from core.organizer import (
     find_subtitle_files,
     generate_nfo,
 )
-from core.path_utils import to_file_uri, uri_to_fs_path, uri_to_local_fs_path
+from core.path_utils import (
+    coerce_to_file_uri,
+    to_file_uri,
+    uri_to_fs_path,
+    uri_to_local_fs_path,
+)
 from core.scraper import search_jav
 from core.scrapers.utils import check_subtitle
 
@@ -1064,8 +1069,15 @@ def fetch_samples_only_detailed(
     file_path: str,
     number: str,
     path_mappings: dict = None,
+    related_db_paths: Optional[List[str]] = None,
 ) -> tuple[EnrichResult, dict]:
-    """只補抓劇照，並回傳足以區分「查無／無劇照／下載失敗／DB 失敗」的診斷。"""
+    """只補抓劇照，並回傳足以區分「查無／無劇照／下載失敗／DB 失敗」的診斷。
+
+    ``related_db_paths`` lets a complete multipart group share one physical
+    ``extrafanart`` directory: after the files are written, the same on-disk
+    sample list is stored on every member row. Paths are DB-key URIs (or values
+    accepted by ``coerce_to_file_uri``); duplicate/current paths are ignored.
+    """
     _empty = EnrichResult(
         success=False,
         nfo_written=False,
@@ -1166,6 +1178,14 @@ def fetch_samples_only_detailed(
             repo = VideoRepository()
             # db-ns-ok: fs_path_for_db, DB round-trip value passed to wrapper sink
             _db_upsert_samples_only(repo, fs_path_for_db, extrafanart_res.uris)
+            current_uri = coerce_to_file_uri(fs_path_for_db)
+            seen_uris = {current_uri}
+            for related_path in related_db_paths or []:
+                related_uri = coerce_to_file_uri(related_path)
+                if not related_uri or related_uri in seen_uris:
+                    continue
+                seen_uris.add(related_uri)
+                repo.update_sample_images(related_uri, extrafanart_res.uris)
         except Exception as exc:
             logger.exception("[fetch_samples_only] DB 更新失敗: %s", exc)
             _empty.error = "劇照已下載，但資料庫更新失敗，請再試一次"

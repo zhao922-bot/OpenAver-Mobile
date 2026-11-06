@@ -87,6 +87,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "006-mobile-web-routers.patch",
         (
             "web/routers/capabilities.py",
+            "web/routers/gallery_media.py",
             "web/routers/scanner.py",
             "web/routers/scraper.py",
             "web/routers/showcase.py",
@@ -119,6 +120,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "web/static/js/pages/insights/aggregate.js",
             "web/static/js/pages/insights/charts.js",
             "web/static/js/pages/insights/state.js",
+            "web/static/js/pages/player.js",
             "web/static/js/pages/scanner/state-scan.js",
             "web/static/js/pages/scanner/state-batch.js",
             "web/static/js/pages/settings/state-config.js",

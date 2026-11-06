@@ -343,7 +343,7 @@ _TOOLS: list[dict] = [
     },
     {
         "name": "fetch_samples",
-        "description": "自動下載影片對應番號的劇照（sample images）到本機 extrafanart 資料夾，並更新 DB sample_images 欄位。僅下載劇照，不改 NFO / 封面 / 其他欄位。既有的劇照不會被取代——只補缺的那幾張；要整組換掉請由用戶自行刪除 extrafanart 資料夾後再執行。若影片所在資料夾有多於 1 個影片會拒絕執行（避免污染）。",
+        "description": "自動下載影片對應番號的劇照（sample images）到本機 extrafanart 資料夾，並更新 DB sample_images 欄位。僅下載劇照，不改 NFO / 封面 / 其他欄位。既有的劇照不會被取代——只補缺的那幾張；要整組換掉請由用戶自行刪除 extrafanart 資料夾後再執行。同一作品的完整分集（例如 cd1/cd2）可共用 extrafanart 並一次更新全部成員；若資料夾混有無關影片仍會拒絕執行（避免污染）。",
         "method": "POST",
         "path": "/api/scraper/fetch-samples",
         "input_schema": {
@@ -369,7 +369,7 @@ _TOOLS: list[dict] = [
             "skipped_existing": "integer — 本機已存在而跳過的數量",
             "extrafanart_on_disk": "integer — extrafanart 目錄目前可用的劇照總數",
             "download_failed": "integer — 本次下載失敗數",
-            "count": "integer — multi_video_folder 時，資料夾內的影片數",
+            "count": "integer — multi_video_folder 時，資料夾內的影片數；完整 cd1/cd2 等分集組不會觸發此錯誤",
         },
         "side_effect": True,
         "confirmation_required": True,

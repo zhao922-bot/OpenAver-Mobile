@@ -1,10 +1,20 @@
 --- a/web/routers/capabilities.py
 +++ b/web/routers/capabilities.py
-@@ -361,7 +361,14 @@
+@@ -343,7 +343,7 @@
+     },
+     {
+         "name": "fetch_samples",
+-        "description": "自動下載影片對應番號的劇照（sample images）到本機 extrafanart 資料夾，並更新 DB sample_images 欄位。僅下載劇照，不改 NFO / 封面 / 其他欄位。既有的劇照不會被取代——只補缺的那幾張；要整組換掉請由用戶自行刪除 extrafanart 資料夾後再執行。若影片所在資料夾有多於 1 個影片會拒絕執行（避免污染）。",
++        "description": "自動下載影片對應番號的劇照（sample images）到本機 extrafanart 資料夾，並更新 DB sample_images 欄位。僅下載劇照，不改 NFO / 封面 / 其他欄位。既有的劇照不會被取代——只補缺的那幾張；要整組換掉請由用戶自行刪除 extrafanart 資料夾後再執行。同一作品的完整分集（例如 cd1/cd2）可共用 extrafanart 並一次更新全部成員；若資料夾混有無關影片仍會拒絕執行（避免污染）。",
+         "method": "POST",
+         "path": "/api/scraper/fetch-samples",
+         "input_schema": {
+@@ -361,8 +361,15 @@
              "extrafanart_written": "integer — 本次成功下載的劇照數；0 也可能代表「本來就齊全、沒有缺的要補」，不必然是失敗",
              "fields_filled": "[string] — 本次補齊的欄位名",
              "source_used": "string — 使用的來源",
 -            "error": "string|null — 錯誤訊息；multi_video_folder=資料夾有多片，拒絕執行",
+-            "count": "integer — multi_video_folder 時，資料夾內的影片數",
 +            "error": "string|null — 錯誤訊息",
 +            "error_code": "string|null — samples_search_failed／no_sample_images／sample_download_failed／db_write_failed／multi_video_folder 等穩定錯誤碼",
 +            "message": "string — 可供使用者閱讀的錯誤說明",
@@ -13,9 +23,108 @@
 +            "skipped_existing": "integer — 本機已存在而跳過的數量",
 +            "extrafanart_on_disk": "integer — extrafanart 目錄目前可用的劇照總數",
 +            "download_failed": "integer — 本次下載失敗數",
-             "count": "integer — multi_video_folder 時，資料夾內的影片數",
++            "count": "integer — multi_video_folder 時，資料夾內的影片數；完整 cd1/cd2 等分集組不會觸發此錯誤",
          },
          "side_effect": True,
+         "confirmation_required": True,
+--- a/web/routers/gallery_media.py
++++ b/web/routers/gallery_media.py
+@@ -11,7 +11,7 @@
+ import os
+ import time
+ from pathlib import Path
+-from typing import List
++from typing import List, Optional
+ from urllib.parse import quote, unquote
+ 
+ from fastapi import APIRouter, Query, Request
+@@ -344,7 +344,10 @@
+ 
+ 
+ @router.get("/player")
+-def video_player(path: str = Query(..., description="影片路徑（file:/// URI 或 FS 路徑）")):
++def video_player(
++    path: str = Query(..., description="影片路徑（file:/// URI 或 FS 路徑）"),
++    part: Optional[int] = Query(None, ge=1, description="要開始播放的分段（1 起算）"),
++):
+     """影片播放頁面 — 用 HTML5 <video> 標籤在新分頁播放"""
+     from html import escape as html_escape
+     from core.i18n import t as i18n_t
+@@ -373,6 +376,7 @@
+     path_mappings = gallery_config.get('path_mappings', {})
+ 
+     group = None
++    selected_member_index = 0
+     try:
+         db_path = get_db_path()
+         if db_path.exists():
+@@ -380,31 +384,62 @@
+             v = repo.get_by_path(path)
+             if v is not None:
+                 group = resolve_group(repo, path, path_mappings, folder_source_uri=v.path)
++                if group is not None:
++                    selected_member_index = next(
++                        (
++                            index for index, member in enumerate(group.members)
++                            if member.path == v.path
++                        ),
++                        0,
++                    )
+     except Exception:
+         logger.warning("video_player: 分組查詢失敗，退回單檔播放", exc_info=True)
+         group = None
+ 
+     if group is not None and len(group.members) > 1:
+         parts_urls = [f"/api/gallery/video?path={quote(m.path, safe='')}" for m in group.members]
+-        data_parts_json = html_escape(json.dumps(parts_urls), quote=True)
++        data_parts_json = html_escape(
++            json.dumps(parts_urls, separators=(',', ':')),
++            quote=True,
++        )
++        data_part_tokens_json = html_escape(
++            json.dumps(group.part_tokens, separators=(',', ':')),
++            quote=True,
++        )
+         part_label_template = html_escape(i18n_t('showcase.video.part_progress', locale=html_lang), quote=True)
+-        first_src = html_escape(parts_urls[0])
++        if part is not None:
++            selected_member_index = min(part - 1, len(parts_urls) - 1)
++        selected_src = html_escape(parts_urls[selected_member_index])
+         return HTMLResponse(content=_render_player_html(
+             html_lang_safe=html_lang_safe,
+             filename=filename,
+-            src=first_src,
++            src=selected_src,
+             hint_text_network=hint_text_network,
+             hint_text_format=hint_text_format,
+             extra_style=(
+                 "\n        #oa-player-progress { position: fixed; top: 1rem; left: 1rem;"
+                 " z-index: 1; pointer-events: none; color: #fff; font: 14px/1.4 sans-serif; }"
++                "\n        #oa-player-parts { position: fixed; left: 50%;"
++                " bottom: max(1rem, env(safe-area-inset-bottom)); transform: translateX(-50%);"
++                " z-index: 2; display: flex; gap: .5rem; padding: .35rem;"
++                " border-radius: 999px; background: rgba(0,0,0,.68); backdrop-filter: blur(8px); }"
++                "\n        .oa-player-part { min-width: 3.5rem; min-height: 2.75rem;"
++                " padding: 0 .9rem; border: 1px solid rgba(255,255,255,.45);"
++                " border-radius: 999px; background: rgba(255,255,255,.12); color: #fff;"
++                " font: 600 14px/1 sans-serif; }"
++                "\n        .oa-player-part[aria-current='true'] { background: #fff; color: #000; }"
+             ),
+             video_open_attrs='id="oa-player" ',
+             video_data_attrs=(
+                 f' data-parts="{data_parts_json}"'
+                 f' data-part-label-template="{part_label_template}"'
++                f' data-part-tokens="{data_part_tokens_json}"'
++                f' data-start-index="{selected_member_index}"'
+             ),
+-            extra_body='\n    <div id="oa-player-progress"></div>',
++            extra_body=(
++                '\n    <div id="oa-player-progress"></div>'
++                '\n    <nav id="oa-player-parts" aria-label="Video parts"></nav>'
++            ),
+             extra_script='\n    <script type="module" src="/static/js/pages/player.js"></script>',
+         ))
+ 
 --- a/web/routers/scanner.py
 +++ b/web/routers/scanner.py
 @@ -24,6 +24,7 @@
@@ -26,7 +135,7 @@
  from datetime import datetime
  from pathlib import Path
  from typing import Any, Callable, Dict, Generator, List, Optional
-@@ -32,25 +33,50 @@
+@@ -32,25 +33,51 @@
  from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
  from starlette.background import BackgroundTask
  
@@ -74,6 +183,7 @@
  from core.generate_state import try_mark_generate_active, mark_generate_done
  from core import thumbnail_cache
 -from core.scraper import smart_search
++from core.multipart_group import resolve_groups_bulk
 +from core.scraper import get_javbus_lang, search_jav, smart_search
  from core.source_settings import is_uncensored_mode_effective
 +from core.scrapers.utils import check_subtitle, extract_number, has_japanese
@@ -81,7 +191,7 @@
  from pydantic import BaseModel
  from core.logger import get_logger
  from core.platform_info import DSM_PERMISSION_HINT, is_synology
-@@ -65,6 +91,14 @@
+@@ -65,6 +92,14 @@
  # T3(40c): Jellyfin check TTL 快取（60 秒）
  _jellyfin_cache_result: dict | None = None
  _jellyfin_cache_time: float = 0
@@ -96,7 +206,7 @@
  
  
  def _sse_event(data: dict) -> str:
-@@ -263,7 +297,272 @@
+@@ -263,7 +298,272 @@
      return f"  {directory}: {len(skipped_paths)} 個路徑讀取失敗，跳過刪除偵測以免誤刪（詳見 debug.log）"
  
  
@@ -370,7 +480,7 @@
      """產生影片列表（SSE 串流）- 使用 SQLite 儲存"""
  
      try:
-@@ -323,6 +622,7 @@
+@@ -323,6 +623,7 @@
          total_inserted = 0
          total_updated = 0
          total_deleted = 0
@@ -378,7 +488,7 @@
          scan_error_count = 0
          session_added_paths = []  # 追蹤本次新增/變更的影片路徑
          long_paths: list[str] = []  # a5: Windows 長路徑收集（只在 win32 填充）
-@@ -378,152 +678,22 @@
+@@ -378,152 +679,22 @@
                  "current": idx,
                  "total": total_dirs + 1  # +1 for generating
              })
@@ -547,7 +657,7 @@
  
          # TASK-90b-T4 / PR#90b Codex P1: 尾段每個外顯副作用（HTML 檔、完成通知、
          # done event）之前各自 fresh 查一次 should_abort()，而非迴圈結束時單次
-@@ -549,6 +719,22 @@
+@@ -549,6 +720,22 @@
          # 從 SQLite 取得影片，只保留當前設定資料夾底下的記錄
          all_db_videos = [v for v in repo.get_all()
                           if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
@@ -570,7 +680,7 @@
  
          # 轉換為 VideoInfo 格式供 HTMLGenerator 使用
          all_videos = []
-@@ -562,6 +748,7 @@
+@@ -562,6 +749,7 @@
                  maker=v.maker,
                  date=v.release_date,
                  genre=','.join(v.tags) if v.tags else '',
@@ -578,7 +688,7 @@
                  size=v.size_bytes,
                  mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
                  img=v.cover_path
-@@ -754,6 +941,7 @@
+@@ -754,6 +942,7 @@
                  "video_count": len(all_videos),
                  "output_path": str(html_path),
                  "session_update": session_update,
@@ -586,7 +696,7 @@
                  "long_paths": long_paths,  # a5
                  "stats": {
                      "inserted": total_inserted,
-@@ -786,6 +974,55 @@
+@@ -786,6 +975,55 @@
  # `request.is_disconnected()`，非搶 iterate_in_threadpool 的同一組 receive
  # channel（該輪詢與 StreamingResponse 內部行為互不干擾，spike 已驗證）。
  _DISCONNECT_POLL_INTERVAL_SEC = 0.5
@@ -642,7 +752,7 @@
  
  
  @router.get("/generate")
-@@ -959,6 +1196,401 @@
+@@ -959,6 +1197,401 @@
      return cache, skipped_readonly, path_mappings
  
  
@@ -1044,7 +1154,7 @@
  @router.get("/update-check")
  def check_update():
      """檢查需要更新的影片數量（從 SQLite 讀取）"""
-@@ -975,11 +1607,12 @@
+@@ -975,11 +1608,12 @@
  
          stats = check_cache_needs_update(cache)
  
@@ -1058,7 +1168,7 @@
                  "details": {
                      "no_title": stats['no_title'],
                      "no_date": stats['no_date'],
-@@ -994,36 +1627,125 @@
+@@ -994,36 +1628,162 @@
          return {"success": False, "error": "檢查更新數量失敗"}
  
  
@@ -1119,6 +1229,47 @@
 +    )
 +
 +
++def _dedupe_multipart_sample_candidates(
++    repo: VideoRepository,
++    candidates: List[Video],
++    path_mappings: dict,
++) -> List[Video]:
++    """Collapse complete multipart rows to one logical sample-backfill item.
++
++    ``fetch_samples_endpoint`` writes one shared ``extrafanart`` directory and
++    updates every member row.  Scheduling cd1 and cd2 independently would
++    scrape/download the same work twice concurrently, so the queue and the
++    missing-count preview both use the same representative-per-group rule.
++    Resolution failures preserve the old one-row-per-candidate behaviour.
++    """
++    if len(candidates) < 2:
++        return candidates
++    try:
++        groups = resolve_groups_bulk(
++            repo,
++            [video.path for video in candidates],
++            path_mappings,
++        )
++    except Exception:
++        logger.warning(
++            "批次補齊劇照：分集分組失敗，保留逐列候選",
++            exc_info=True,
++        )
++        return candidates
++
++    seen_groups = set()
++    deduped = []
++    for video in candidates:
++        group = groups.get(video.path)
++        if group is not None and len(group.members) > 1:
++            group_key = tuple(member.path for member in group.members)
++            if group_key in seen_groups:
++                continue
++            seen_groups.add(group_key)
++        deduped.append(video)
++    return deduped
++
++
  @router.get("/missing-check")
  def check_missing():
 -    """T10: 檢查 DB 中缺少 NFO 或封面的影片數量與清單"""
@@ -1153,7 +1304,7 @@
          missing_cover = 0
          items = []
 +        untranslated_title_items = []
-+        missing_sample_items = []
++        missing_sample_candidates = []
  
          for v in all_videos:
 -            has_nfo = (v.nfo_mtime or 0) > 0
@@ -1170,11 +1321,7 @@
 +                    "title": v.title,
 +                })
 +            if _is_missing_sample_candidate(v):
-+                missing_sample_items.append({
-+                    "file_path": v.path,
-+                    "number": number,
-+                    "title": v.title,
-+                })
++                missing_sample_candidates.append(v)
 +
 +            has_nfo = _video_has_nfo(v, path_mappings)
 +            has_cover = False
@@ -1195,8 +1342,23 @@
              if not has_nfo and not has_cover:
                  missing_both += 1
                  item["category"] = "both"
-@@ -1037,7 +1759,7 @@
+@@ -1035,9 +1795,22 @@
+                 item["category"] = "cover"
+             items.append(item)
  
++        missing_sample_candidates = _dedupe_multipart_sample_candidates(
++            repo,
++            missing_sample_candidates,
++            path_mappings,
++        )
++        missing_sample_items = [
++            {
++                "file_path": v.path,
++                "number": _candidate_number(v),
++                "title": v.title,
++            }
++            for v in missing_sample_candidates
++        ]
          total_missing = missing_both + missing_nfo + missing_cover
  
 -        # 永遠回傳完整 items 清單；大批量的 confirm gate 由前端處理
@@ -1204,7 +1366,7 @@
          return {
              "success": True,
              "data": {
-@@ -1046,14 +1768,946 @@
+@@ -1046,14 +1819,964 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
@@ -1508,6 +1670,24 @@
 +            video for video in repo.get_missing_sample_candidates()
 +            if _is_missing_sample_candidate(video)
 +        ]
++        if len(candidates) > 1:
++            try:
++                path_mappings = (
++                    load_config()
++                    .get("gallery", {})
++                    .get("path_mappings", {})
++                )
++            except Exception:
++                logger.warning(
++                    "批次補齊劇照：讀取路徑映射失敗，保留逐列候選",
++                    exc_info=True,
++                )
++                path_mappings = {}
++            candidates = _dedupe_multipart_sample_candidates(
++                repo,
++                candidates,
++                path_mappings,
++            )
 +        total = len(candidates)
 +        if total == 0:
 +            yield _sse_event({
@@ -2157,7 +2337,7 @@
      """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
  
      try:
-@@ -1085,6 +2739,28 @@
+@@ -1085,6 +2808,28 @@
              return
  
          paths_to_update = stats['paths']
@@ -2186,7 +2366,7 @@
          yield _sse_event({
              "type": "log",
              "level": "info",
-@@ -1092,12 +2768,90 @@
+@@ -1092,12 +2837,90 @@
          })
  
          # 執行更新（path_mappings 沿用 _build_nfo_update_cache 算好的那份，不重讀 config）
@@ -2279,7 +2459,7 @@
          })
  
      except Exception as e:
-@@ -1106,15 +2860,62 @@
+@@ -1106,15 +2929,62 @@
  
  
  @router.get("/update")
@@ -2350,7 +2530,7 @@
      )
  
  
-@@ -1211,7 +3012,9 @@
+@@ -1211,7 +3081,9 @@
      return {'need_update': len(need_update), 'items': need_update}
  
  
@@ -2361,7 +2541,7 @@
      """SSE 串流：批次為影片產生 poster + fanart"""
      global _jellyfin_cache_result, _jellyfin_cache_time
  
-@@ -1252,7 +3055,13 @@
+@@ -1252,7 +3124,13 @@
          yield _sse_event({"type": "log", "level": "info", "message": f"需補齊 {total} 部影片的圖片..."})
  
          completed = 0
@@ -2375,7 +2555,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,6 +3070,7 @@
+@@ -1261,6 +3139,7 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -2383,7 +2563,7 @@
                  break
  
              cover = item['cover_path']
-@@ -1271,7 +3081,11 @@
+@@ -1271,7 +3150,11 @@
                  "type": "progress",
                  "current": i,
                  "total": total,
@@ -2396,7 +2576,7 @@
              })
  
              img_result = generate_jellyfin_images(
-@@ -1283,18 +3097,35 @@
+@@ -1283,18 +3166,35 @@
  
              if img_result['poster']:
                  yield _sse_event({"type": "log", "level": "info", "message": f"✓ {num} poster + fanart"})
@@ -2435,7 +2615,7 @@
          })
  
      except Exception as e:
-@@ -1359,15 +3190,11 @@
+@@ -1359,15 +3259,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -2455,7 +2635,7 @@
      )
  
  
-@@ -1621,6 +3448,11 @@
+@@ -1621,6 +3517,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:
@@ -2498,7 +2678,15 @@
  from core.scraper import (
      search_jav, search_jav_single_source, access_error_info,
      search_javlib_versions, fetch_javlib_by_detail_url, internal_nfo_carriers,
-@@ -838,6 +844,17 @@
+@@ -40,6 +46,7 @@
+ from core.scrapers.javlibrary import JAVLIBRARY_ORIGIN
+ from core.logger import get_logger
+ from core.config import load_config, STEM_IMAGE_MODES
++from core.multipart_group import resolve_group
+ from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
+ from core.readonly_paths import resolve_owning_output_root
+ from core.readonly_producer import (
+@@ -838,6 +845,56 @@
      number: str
  
  
@@ -2513,10 +2701,49 @@
 +    return payload
 +
 +
++def _resolve_sample_multipart_group(
++    repo: VideoRepository,
++    canonical_path: str,
++    path_mappings: dict,
++    expected_count: Optional[int] = None,
++):
++    """Resolve a complete multipart group for sample backfill.
++
++    Sample images live in one folder-level ``extrafanart`` directory.  A
++    complete cd1/cd2 group can therefore share it safely; unrelated videos in
++    the same folder still cannot.  ``expected_count`` is the folder's DB row
++    count, so the returned group is accepted only when it accounts for every
++    row in that folder.
++    """
++    try:
++        group = resolve_group(
++            repo,
++            canonical_path,
++            path_mappings,
++            folder_source_uri=canonical_path,
++        )
++    except Exception:
++        logger.warning("fetch_samples_endpoint 分組查詢失敗", exc_info=True)
++        return None
++    if group is None or len(group.members) < 2:
++        return None
++    if expected_count is not None and len(group.members) != expected_count:
++        return None
++    return group
++
++
++def _fanart_file_sort_key(path: Path):
++    """Keep fanart1, fanart2, ..., fanart10 in display order."""
++    suffix = path.stem[6:]
++    if path.stem.lower().startswith("fanart") and suffix.isdigit():
++        return (0, int(suffix))
++    return (1, path.name.lower())
++
++
  @router.post("/scraper/fetch-samples")
  def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
      config = load_config()
-@@ -853,33 +870,24 @@
+@@ -853,93 +910,171 @@
      owning = resolve_owning_output_root(canonical, config)
      if owning is not None:
          source, output_root, output_uri = owning
@@ -2564,7 +2791,13 @@
              fs_path = uri_to_local_fs_path(req.file_path, path_mappings)
              repo = VideoRepository()
              existing = repo.get_by_path(canonical)
-@@ -888,58 +896,102 @@
++            group = _resolve_sample_multipart_group(
++                repo,
++                existing.path if existing is not None else canonical,
++                path_mappings,
++            )
+             file_info = {
+                 "path": fs_path,
                  "size": existing.size_bytes if existing else os.path.getsize(fs_path),
                  "mtime": existing.mtime if existing else os.path.getmtime(fs_path),
              }
@@ -2587,12 +2820,33 @@
 -            return asdict(enrich_success(
 +            extrafanart_dir = Path(movie_dir) / "extrafanart"
 +            try:
-+                on_disk = sum(
-+                    1 for path in extrafanart_dir.iterdir()
-+                    if path.is_file() and path.name.lower().endswith(".jpg")
++                sample_files = sorted(
++                    (
++                        path for path in extrafanart_dir.iterdir()
++                        if path.is_file() and path.name.lower().endswith(".jpg")
++                    ),
++                    key=_fanart_file_sort_key,
 +                )
++                on_disk = len(sample_files)
 +            except OSError:
++                sample_files = []
 +                on_disk = written
++            if group is not None and sample_files:
++                sample_uris = [
++                    to_file_uri(str(path), path_mappings)
++                    for path in sample_files
++                ]
++                try:
++                    for member in group.members:
++                        repo.update_sample_images(member.path, sample_uris)
++                except Exception:
++                    logger.exception("fetch_samples_endpoint 分集劇照 DB 更新失敗")
++                    return _samples_failure(
++                        "db_write_failed",
++                        "劇照已下載，但資料庫更新失敗，請再試一次",
++                        source=meta.get("source", ""),
++                        sample_urls_found=len(sample_images),
++                    )
 +            if on_disk == 0:
 +                return _samples_failure(
 +                    "sample_download_failed", "已找到劇照，但全部下載失敗",
@@ -2650,13 +2904,29 @@
      folder_uri_prefix = to_file_uri(os.path.dirname(uri_to_fs_path(req.file_path)), path_mappings) + "/"
      repo = VideoRepository()
      count = repo.count_videos_in_folder(folder_uri_prefix)
++    group = None
      if count > 1:
 -        return {"success": False, "error": "multi_video_folder", "count": count, "extrafanart_written": 0}
-+        return _samples_failure(
-+            "multi_video_folder",
-+            "此資料夾有其他影片，補抓劇照會污染其他片，請先移到獨立資料夾",
-+            count=count,
++        group = _resolve_sample_multipart_group(
++            repo,
++            canonical,
++            path_mappings,
++            expected_count=count,
 +        )
++        if group is None:
++            return _samples_failure(
++                "multi_video_folder",
++                (
++                    "此資料夾有無關影片，補抓劇照會污染其他片；"
++                    "只有同一作品的完整分集（例如 cd1/cd2）可以共用劇照"
++                ),
++                count=count,
++            )
++
++    related_db_paths = (
++        [member.path for member in group.members if member.path != canonical]
++        if group is not None else []
++    )
  
      try:
 -        result = fetch_samples_only(
@@ -2664,6 +2934,7 @@
              file_path=req.file_path,
              number=req.number,
              path_mappings=path_mappings,
++            related_db_paths=related_db_paths,
          )
 -        return asdict(result)
 +        payload = asdict(result)
@@ -2688,7 +2959,7 @@
          raise HTTPException(status_code=422, detail="items 上限為 20 筆")
  
      config = await asyncio.to_thread(load_config)
-@@ -955,7 +1007,7 @@
+@@ -955,7 +1090,7 @@
      # 去重（按 file_path）
      seen_paths: set = set()
      deduped_items = []
@@ -2697,7 +2968,7 @@
          if item.file_path not in seen_paths:
              seen_paths.add(item.file_path)
              deduped_items.append(item)
-@@ -978,7 +1030,11 @@
+@@ -978,7 +1113,11 @@
  
          try:
              for idx, item in enumerate(deduped_items, start=1):
@@ -2710,7 +2981,7 @@
                  _custom_refused = effective_source.startswith('custom:')
                  # 未知 / 非法 source guard：不靜默轉成無效 cache_key，退回 'auto'（最小驚訝）。
                  if not _custom_refused and effective_source != "auto" and not validate_source_id(effective_source):
-@@ -987,7 +1043,7 @@
+@@ -987,7 +1126,7 @@
                          effective_source, item.number,
                      )
                      effective_source = "auto"
@@ -2719,7 +2990,7 @@
  
                  # progress 事件
                  yield f"data: {json.dumps({'type': 'progress', 'current': idx, 'total': total, 'number': item.number})}\n\n"
-@@ -1015,14 +1071,14 @@
+@@ -1015,14 +1154,14 @@
                          # comment) — placed before resolve_owning_output_root so it
                          # short-circuits regardless of output_dir configuration.
                          # BatchEnrichRequest has no per-item mode override, so this
@@ -2737,7 +3008,7 @@
                              return ('no_nfo', _READONLY_NO_NFO_ERROR_MSG)
                          owning = resolve_owning_output_root(uri, config)
                          if owning is None:
-@@ -1054,7 +1110,7 @@
+@@ -1054,7 +1193,7 @@
                                  number=itm.number, scraper_cfg=config.get("scraper", {}),
                                  path_mappings=_ro_mappings, action='ingest',
                                  scraper_data=None, scrape_source=es, javbus_lang=el,
@@ -2746,7 +3017,7 @@
                                  focal_before_cover_recheck=True,
                              )
                          except ReadonlyProduceError:
-@@ -1076,7 +1132,7 @@
+@@ -1076,7 +1215,7 @@
                              # 其他 mode 維持 success（refresh_full 可能只更新 DB）。⚠️ 前端
                              # didEnrichSomething() 沒有這道 mode 閘，多出 refresh_full 呼叫端時兩邊一起補。
                              # 今天 fill_missing 零行為變化（readonly nfo_written=True 無條件）；縮圖失效仍掛 ok。
@@ -2755,7 +3026,7 @@
                                  success_count += 1
                              else:
                                  failed_count += 1
-@@ -1146,7 +1202,7 @@
+@@ -1146,7 +1285,7 @@
  
                      # scraper cache（只對 refresh_full pre-fetch）
                      cached_data = None
@@ -2764,7 +3035,7 @@
                          cache_key = (item.number.upper(), effective_source, effective_lang)
                          if cache_key not in scraper_cache:
                              _pf_ctx = contextvars.copy_context()
-@@ -1165,11 +1221,11 @@
+@@ -1165,11 +1304,11 @@
                          enrich_single,
                          file_path=item.file_path,
                          number=item.number,
@@ -2781,7 +3052,7 @@
                          external_manager=config.get("scraper", {}).get("external_manager", "off"), nfo_title_format=config.get("scraper", {}).get("nfo_title_format", '[{num}]{title}'),
                          source=effective_source if effective_source != "auto" else None,
                          javbus_lang=effective_lang,
-@@ -1182,7 +1238,7 @@
+@@ -1182,7 +1321,7 @@
                          # CD-147b-5／147b-T4：fill_missing 才套四項判準（與前端 didEnrichSomething
                          # 同步；⚠️ 前端沒有這道 mode 閘，多出 refresh_full 呼叫端時兩邊一起補）；
                          # 其他 mode 維持 result.success（refresh_full 可能只更新 DB）。縮圖失效仍掛之。
@@ -2837,10 +3108,30 @@
          "auto_focal": v.auto_focal,                  # canonical "x,y" 4dp 字串或 ''（98b：前端 focalObjectPosition 消費）
          "crop_mode": v.crop_mode,                    # 'auto' | 'default'（98b：default 退 baseline 右裁）
      }
-@@ -146,6 +158,36 @@
+@@ -132,9 +144,9 @@
+     以 `group.members[0]`（part-1，group_rows 已依 part_number 升冪排序）的
+     `_serialize_video()` 結果為基底，只在**真的多段時**覆寫 `size`（各段 size_bytes 加總，`or 0`
+     是必要防禦——`Video.from_row()` 對 DB NULL 不做防禦，size_bytes 可能是 None）
+-    與新增 `part_tokens`。其餘欄位（含 `duration`）逐字取 part-1，不做欄位級 merge。
+-    單檔片：members==[v]、part_tokens==[]，輸出與今天 `_serialize_video(v, ...)`
+-    逐鍵逐值相同，只多 `part_tokens: []` 一個新鍵（AC-4）。
++    與新增 `part_tokens` / `part_paths`。其餘欄位（含 `duration`）逐字取 part-1，
++    不做欄位級 merge。單檔片：members==[v]、part_tokens/part_paths==[]，輸出與
++    `_serialize_video(v, ...)` 相同，只多這兩個新鍵（AC-4）。
+     """
+     base = _serialize_video(group.members[0], path_mappings, enabled)
+     # 單檔片不碰 size：`_serialize_video()` 原樣傳 `v.size_bytes`（DB NULL → None），
+@@ -143,7 +155,41 @@
+     if len(group.members) > 1:
+         base['size'] = sum(m.size_bytes or 0 for m in group.members)
+     base['part_tokens'] = group.part_tokens
++    base['part_paths'] = (
++        [member.path for member in group.members]
++        if len(group.members) > 1 else []
++    )
      return base
- 
- 
++
++
 +def _group_sort_key(group, sort: str):
 +    """Return the same primary sort value the showcase client uses."""
 +    video = group.members[0]
@@ -2869,12 +3160,10 @@
 +    # Python's stable sort keeps DB insertion order for equal keys, matching
 +    # the browser's stable Array.sort() semantics used by legacy clients.
 +    return sorted(groups, key=lambda group: _group_sort_key(group, sort), reverse=reverse)
-+
-+
+ 
+ 
  def _etag_matches(if_none_match: str, etag: str) -> bool:
-     """比對 `If-None-Match` 語意（抄 Starlette `StaticFiles.is_not_modified()` 的比對方式，
-     不 import 該函式本身——它綁定 `FileResponse` 用的 `Headers` 型別，這裡是手寫 JSON 端點）。
-@@ -158,8 +200,20 @@
+@@ -158,8 +204,20 @@
  
  
  @router.get("/videos")
@@ -2896,7 +3185,7 @@
  
      帶 ETag（CD-145a-8/11/12）：涵蓋 DB 內部寫入 revision、DB/-wal 檔案指紋（涵蓋外部
      抽換或還原備份）、無機密設定投影（來源資料夾／path_mappings／縮圖開關）三項，
-@@ -186,18 +240,46 @@
+@@ -186,18 +244,46 @@
          configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
          thumb_enabled = config.get('thumbnail_cache_enabled', False)
  
@@ -2947,7 +3236,7 @@
                        if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
  
          # feature/122 CD-122-1：分組在序列化層收斂，前端拿到的 videos 陣列已是
-@@ -205,15 +287,32 @@
+@@ -205,15 +291,32 @@
          # 一個 member，_serialize_group() 輸出與改動前逐鍵逐值相同（AC-4）。
          groups = group_rows(all_videos, fs_path_of=lambda v: uri_to_local_fs_path(v.path, path_mappings))
  
@@ -2984,7 +3273,7 @@
          resp.headers["Cache-Control"] = "no-cache"
          return resp
  
-@@ -494,6 +593,7 @@
+@@ -494,6 +597,7 @@
      "no_nfo": "找不到 NFO",
      "nfo_ambiguous": "輸出夾有多份 NFO，無法判斷要改哪一份",
      "nfo_unreadable": "NFO 無法讀取或解析",
@@ -2992,7 +3281,7 @@
      "nfo_write_failed": "NFO 寫入失敗",
      "db_write_failed": "資料庫寫入失敗（NFO 已更新，請再試一次）",
      "invalid_path": "檔案路徑格式無效",
-@@ -541,7 +641,13 @@
+@@ -541,7 +645,13 @@
      owning = resolve_owning_output_root(video.path, config)
      if owning is not None:
          return _locate_readonly_nfo(video, path_mappings, owning[2])
@@ -3007,7 +3296,7 @@
  
  
  def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: str) -> Optional[str]:
-@@ -556,10 +662,57 @@
+@@ -556,10 +666,57 @@
          return "no_nfo"
      except NfoParseError:
          return "nfo_unreadable"
@@ -3065,7 +3354,7 @@
  
  
  def _apply_title_writeback(repo, video, req, config: dict, path_mappings: dict) -> dict:
-@@ -574,6 +727,31 @@
+@@ -574,6 +731,31 @@
  
      nfo_path, loc_err = _locate_title_nfo(video, config, path_mappings)
      if nfo_path is None:
@@ -3097,7 +3386,7 @@
          return _title_fail(loc_err)
      nfo_err = _write_title_nfo(nfo_path, video, body, new_original, fmt)
      if nfo_err is not None:
-@@ -592,6 +770,7 @@
+@@ -592,6 +774,7 @@
          return _title_fail("not_found")
      return {"success": True, "title": body, "original_title": new_original,
              "needs_translate": _needs_translate(body, new_original, new_mtime),
