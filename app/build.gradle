@@ -31,8 +31,8 @@ android {
         applicationId "dev.openaver.mobile"
         minSdk 29
         targetSdk 29
-        versionCode 17057
-        versionName "0.17.18-r41"
+        versionCode 17058
+        versionName "0.17.18-r42"
 
         buildConfigField "String", "OPENAVER_RELEASE", "\"${openaverRelease}\""
         buildConfigField "String", "OPENAVER_COMMIT", "\"${openaverCommit}\""
@@ -111,6 +111,11 @@ android {
     }
 }
 
+dependencies {
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.json:json:20240303"
+}
+
 chaquopy {
     defaultConfig {
         version = "3.13"
@@ -119,8 +124,9 @@ chaquopy {
         }
         extractPackages("core", "web")
         pip {
-            install("fastapi==0.125.0")
-            install("starlette==0.50.0")
+            options("--find-links", "wheels")
+            install("fastapi==0.136.1")
+            install("starlette==1.6.0")
             install("uvicorn==0.46.0")
             install("jinja2==3.1.6")
             install("python-multipart==0.0.32")
@@ -128,7 +134,7 @@ chaquopy {
             install("httpx==0.28.1")
             install("beautifulsoup4==4.14.3")
             install("lxml==5.3.0")
-            install("pydantic==1.10.24")
+            install("pydantic==2.12.5")
             install("pillow==11.0.0")
             install("PyYAML==6.0.3")
         }

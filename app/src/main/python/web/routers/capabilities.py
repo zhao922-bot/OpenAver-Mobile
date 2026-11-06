@@ -163,6 +163,20 @@ _TOOLS: list[dict] = [
         "_example_template": "curl '{base}/api/search/local-status?numbers=SONE-205,ABW-001'",
     },
     {
+        "name": "database_export",
+        "description": "匯出 SQLite 資料庫的一致性 ZIP 快照，包含 manifest 與 SHA-256。僅供備份，不包含影片或媒體檔案。",
+        "side_effect": False,
+        "method": "GET",
+        "path": "/api/database/export",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+        "output_schema": "application/zip attachment：openaver.db + manifest.json",
+        "retry_safe": True,
+        "_example_template": "curl -OJ '{base}/api/database/export'",
+    },
+    {
         "name": "parse_filename",
         "description": "從檔名提取番號和字幕偵測。不修改資料庫",
         "side_effect": False,

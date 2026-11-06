@@ -72,6 +72,8 @@
     <string name="choose_video_player">选择视频播放器</string>
     <string name="choose_video_part">选择要播放的分段</string>
     <string name="video_part_number">第 %1$d 段</string>
+    <string name="play_in_builtin_player">使用内置播放器</string>
+    <string name="opened_with_builtin_player">未找到外部播放器，已改用内置播放器。</string>
     <string name="video_player_missing">没有可用的视频播放器。</string>
     <string name="video_file_unavailable">无法从 App 打开这个视频文件。</string>
     <string name="download_started">已开始下载。</string>

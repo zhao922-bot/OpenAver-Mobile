@@ -1,6 +1,27 @@
 --- a/web/routers/capabilities.py
 +++ b/web/routers/capabilities.py
-@@ -343,7 +343,7 @@
+@@ -161,6 +161,20 @@
+         },
+         "retry_safe": True,
+         "_example_template": "curl '{base}/api/search/local-status?numbers=SONE-205,ABW-001'",
++    },
++    {
++        "name": "database_export",
++        "description": "匯出 SQLite 資料庫的一致性 ZIP 快照，包含 manifest 與 SHA-256。僅供備份，不包含影片或媒體檔案。",
++        "side_effect": False,
++        "method": "GET",
++        "path": "/api/database/export",
++        "input_schema": {
++            "type": "object",
++            "properties": {},
++        },
++        "output_schema": "application/zip attachment：openaver.db + manifest.json",
++        "retry_safe": True,
++        "_example_template": "curl -OJ '{base}/api/database/export'",
+     },
+     {
+         "name": "parse_filename",
+@@ -343,7 +357,7 @@
      },
      {
          "name": "fetch_samples",
@@ -9,7 +30,7 @@
          "method": "POST",
          "path": "/api/scraper/fetch-samples",
          "input_schema": {
-@@ -361,8 +361,15 @@
+@@ -361,8 +375,15 @@
              "extrafanart_written": "integer — 本次成功下載的劇照數；0 也可能代表「本來就齊全、沒有缺的要補」，不必然是失敗",
              "fields_filled": "[string] — 本次補齊的欄位名",
              "source_used": "string — 使用的來源",
@@ -27,6 +48,142 @@
          },
          "side_effect": True,
          "confirmation_required": True,
+--- a/web/routers/config.py
++++ b/web/routers/config.py
+@@ -28,6 +28,7 @@
+ from core.config import (
+     AppConfig,
+     FocalDeviceState,
++    add_computed_source_fields,
+     load_config,
+     mutate_config,
+     reset_config_file,
+@@ -85,7 +86,7 @@
+     ``resolved`` 是 response-only 頂層欄位（與 ``data`` 同層），前端不得把它
+     寫進 ``config.gallery`` 再 PUT 回來。
+     """
+-    data = render_config_secrets(load_config())
++    data = add_computed_source_fields(render_config_secrets(load_config()))
+     gallery = data.get("gallery") or {}
+     return {
+         "success": True,
+--- /dev/null
++++ b/web/routers/database_backup.py
+@@ -0,0 +1,114 @@
++"""Consistent SQLite snapshot export for OpenAver Mobile."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import os
++import sqlite3
++import tempfile
++import time
++import zipfile
++from pathlib import Path
++
++from fastapi import APIRouter, HTTPException
++from fastapi.responses import FileResponse
++from starlette.background import BackgroundTask
++
++from core.database import get_connection, get_db_path
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++router = APIRouter(prefix="/api/database", tags=["database"])
++
++_BACKUP_FORMAT_VERSION = 1
++
++
++def _sha256_file(path: Path) -> str:
++    digest = hashlib.sha256()
++    with path.open("rb") as handle:
++        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
++            digest.update(chunk)
++    return digest.hexdigest()
++
++
++def _safe_unlink(path: str) -> None:
++    try:
++        Path(path).unlink(missing_ok=True)
++    except OSError:
++        logger.warning("database export cleanup failed: %s", path, exc_info=True)
++
++
++def create_database_snapshot(db_path: Path, snapshot_path: Path) -> None:
++    """Create a transactionally consistent snapshot, including WAL contents."""
++    source = get_connection(db_path)
++    try:
++        source.execute("VACUUM INTO ?", (str(snapshot_path),))
++    finally:
++        source.close()
++
++    snapshot = sqlite3.connect(str(snapshot_path))
++    try:
++        integrity = snapshot.execute("PRAGMA integrity_check").fetchone()
++    finally:
++        snapshot.close()
++    if not integrity or integrity[0] != "ok":
++        raise RuntimeError(f"database snapshot integrity check failed: {integrity!r}")
++
++
++def write_database_backup_zip(db_path: Path, zip_path: Path) -> None:
++    with tempfile.TemporaryDirectory(prefix="openaver-db-export-") as temp_dir:
++        snapshot_path = Path(temp_dir) / "openaver.db"
++        create_database_snapshot(db_path, snapshot_path)
++        manifest = {
++            "format": "openaver-mobile-database-backup",
++            "format_version": _BACKUP_FORMAT_VERSION,
++            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
++            "database_file": snapshot_path.name,
++            "database_size": snapshot_path.stat().st_size,
++            "database_sha256": _sha256_file(snapshot_path),
++        }
++        with zipfile.ZipFile(
++            zip_path,
++            "w",
++            compression=zipfile.ZIP_DEFLATED,
++            compresslevel=6,
++        ) as archive:
++            archive.write(snapshot_path, arcname="openaver.db")
++            archive.writestr(
++                "manifest.json",
++                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
++            )
++
++
++@router.get("/export")
++def export_database() -> FileResponse:
++    """Download a consistent database snapshot as a ZIP archive."""
++    db_path = get_db_path()
++    if not db_path.exists():
++        raise HTTPException(status_code=404, detail="資料庫不存在，請先產生列表")
++
++    descriptor, temp_name = tempfile.mkstemp(
++        prefix="openaver-db-export-",
++        suffix=".zip",
++    )
++    os.close(descriptor)
++    zip_path = Path(temp_name)
++    try:
++        write_database_backup_zip(db_path, zip_path)
++    except Exception:
++        _safe_unlink(str(zip_path))
++        logger.exception("database export failed")
++        raise HTTPException(status_code=500, detail="資料庫匯出失敗") from None
++
++    filename = time.strftime(
++        "openaver-database-%Y%m%d-%H%M%S.zip",
++        time.localtime(),
++    )
++    return FileResponse(
++        zip_path,
++        media_type="application/zip",
++        filename=filename,
++        headers={"Cache-Control": "no-store"},
++        background=BackgroundTask(_safe_unlink, str(zip_path)),
++    )
 --- a/web/routers/gallery_media.py
 +++ b/web/routers/gallery_media.py
 @@ -11,7 +11,7 @@
@@ -1366,7 +1523,7 @@
          return {
              "success": True,
              "data": {
-@@ -1046,14 +1819,964 @@
+@@ -1046,14 +1819,979 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
@@ -1404,6 +1561,8 @@
 +
 +    async def translate_one(video: Video) -> str:
 +        async with semaphore:
++            if cancel_event.is_set():
++                raise asyncio.CancelledError()
 +            return await translate_service.translate_or_raise(
 +                video.title,
 +                {
@@ -1663,7 +1822,10 @@
 +            yield _sse_event({"type": "error", "message": "資料庫不存在，請先產生列表"})
 +            return
 +
-+        from web.routers.scraper import FetchSamplesRequest, fetch_samples_endpoint
++        from web.routers.scraper import (
++            FetchSamplesRequest,
++            fetch_samples_for_backfill,
++        )
 +
 +        repo = VideoRepository(db_path)
 +        candidates = [
@@ -1738,11 +1900,12 @@
 +                }
 +
 +            try:
-+                result = fetch_samples_endpoint(
++                result = fetch_samples_for_backfill(
 +                    FetchSamplesRequest(
 +                        file_path=video.path,
 +                        number=number,
-+                    )
++                    ),
++                    cancel_event,
 +                )
 +            except Exception:
 +                logger.exception("批次補齊劇照失敗: %s", video.path)
@@ -1782,6 +1945,9 @@
 +                    return_when=FIRST_COMPLETED,
 +                )
 +                for future in done:
++                    if cancel_event.is_set():
++                        cancelled = True
++                        break
 +                    video = futures.pop(future)
 +                    try:
 +                        number, result = future.result()
@@ -1793,6 +1959,10 @@
 +                            "error_code": "internal_error",
 +                            "message": "劇照補齊處理失敗",
 +                        }
++
++                    if result.get("error_code") == "cancelled":
++                        cancelled = True
++                        break
 +
 +                    processed_count += 1
 +                    status = (
@@ -1878,8 +2048,10 @@
 +                        "failed_count": failed_count,
 +                        "skipped_count": skipped_count,
 +                    })
++                if cancelled:
++                    break
 +        finally:
-+            executor.shutdown(wait=True, cancel_futures=True)
++            executor.shutdown(wait=False, cancel_futures=True)
 +
 +        if cancelled:
 +            yield _sse_event({
@@ -2337,7 +2509,7 @@
      """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
  
      try:
-@@ -1085,6 +2808,28 @@
+@@ -1085,6 +2823,28 @@
              return
  
          paths_to_update = stats['paths']
@@ -2366,7 +2538,7 @@
          yield _sse_event({
              "type": "log",
              "level": "info",
-@@ -1092,12 +2837,90 @@
+@@ -1092,12 +2852,90 @@
          })
  
          # 執行更新（path_mappings 沿用 _build_nfo_update_cache 算好的那份，不重讀 config）
@@ -2459,7 +2631,7 @@
          })
  
      except Exception as e:
-@@ -1106,15 +2929,62 @@
+@@ -1106,15 +2944,62 @@
  
  
  @router.get("/update")
@@ -2530,7 +2702,7 @@
      )
  
  
-@@ -1211,7 +3081,9 @@
+@@ -1211,7 +3096,9 @@
      return {'need_update': len(need_update), 'items': need_update}
  
  
@@ -2541,7 +2713,7 @@
      """SSE 串流：批次為影片產生 poster + fanart"""
      global _jellyfin_cache_result, _jellyfin_cache_time
  
-@@ -1252,7 +3124,13 @@
+@@ -1252,7 +3139,13 @@
          yield _sse_event({"type": "log", "level": "info", "message": f"需補齊 {total} 部影片的圖片..."})
  
          completed = 0
@@ -2555,7 +2727,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,6 +3139,7 @@
+@@ -1261,6 +3154,7 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -2563,7 +2735,7 @@
                  break
  
              cover = item['cover_path']
-@@ -1271,7 +3150,11 @@
+@@ -1271,7 +3165,11 @@
                  "type": "progress",
                  "current": i,
                  "total": total,
@@ -2576,7 +2748,7 @@
              })
  
              img_result = generate_jellyfin_images(
-@@ -1283,18 +3166,35 @@
+@@ -1283,18 +3181,35 @@
  
              if img_result['poster']:
                  yield _sse_event({"type": "log", "level": "info", "message": f"✓ {num} poster + fanart"})
@@ -2615,7 +2787,7 @@
          })
  
      except Exception as e:
-@@ -1359,15 +3259,11 @@
+@@ -1359,15 +3274,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -2635,7 +2807,7 @@
      )
  
  
-@@ -1621,6 +3517,11 @@
+@@ -1621,6 +3532,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:
@@ -2686,7 +2858,7 @@
  from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
  from core.readonly_paths import resolve_owning_output_root
  from core.readonly_producer import (
-@@ -838,6 +845,56 @@
+@@ -838,8 +845,73 @@
      number: str
  
  
@@ -2742,8 +2914,25 @@
 +
  @router.post("/scraper/fetch-samples")
  def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
++    return _fetch_samples_impl(req, cancel_event=None)
++
++
++def fetch_samples_for_backfill(
++    req: FetchSamplesRequest,
++    cancel_event,
++) -> dict:
++    """Batch-only entry point with cooperative cancellation."""
++    return _fetch_samples_impl(req, cancel_event=cancel_event)
++
++
++def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
++    if cancel_event is not None and cancel_event.is_set():
++        return _samples_failure("cancelled", "劇照補齊已取消")
++
      config = load_config()
-@@ -853,93 +910,171 @@
+     # TASK-91-T3：站台5 outer to_file_uri 補傳 path_mappings（inner uri_to_fs_path 維持不變，
+     # 見 TASK-91-T3.md 站台5 inner/outer 分析結論）。
+@@ -853,93 +925,180 @@
      owning = resolve_owning_output_root(canonical, config)
      if owning is not None:
          source, output_root, output_uri = owning
@@ -2755,6 +2944,8 @@
 -            return asdict(_readonly_enrich_failure("未設定媒體庫輸出路徑", "error"))
 +            return _samples_failure("output_root_missing", "未設定媒體庫輸出路徑")
          try:
++            if cancel_event is not None and cancel_event.is_set():
++                return _samples_failure("cancelled", "劇照補齊已取消")
              meta = search_jav(req.number, source="auto")
 -            # P2 review round 3 (FIX#2/FIX#3): mirror core.enricher.fetch_samples_only
 -            # field-for-field. That function NEVER sets `reason` (EnrichResult's
@@ -2766,6 +2957,8 @@
 -            # defaults to [], nothing to write, success=True/extrafanart_written=0).
 -            # The old `not meta or not meta.get(...)` conflated both into one
 -            # success=True branch, silently swallowing total search failures.
++            if cancel_event is not None and cancel_event.is_set():
++                return _samples_failure("cancelled", "劇照補齊已取消")
              if not meta:
 -                return asdict(_readonly_enrich_failure(f"找不到 {req.number} 的資料"))
 -            if not meta.get("sample_images"):
@@ -2810,12 +3003,16 @@
 -            # — the same source `_upsert_db` uses to (conditionally) update
 -            # sample_images, so this count and the DB state can never disagree.
 -            _, assets = _produce_one(
++            if cancel_event is not None and cancel_event.is_set():
++                return _samples_failure("cancelled", "劇照補齊已取消")
 +            movie_dir, assets = _produce_one(
                  repo, source, config.get("scraper", {}), file_info=file_info,
                  meta=meta, cover_strategy=('none',), assets_mode='samples_only',
                  existing=existing, output_root=output_root, output_uri=output_uri,
                  allocated_this_run=set(), path_mappings=path_mappings,
              )
++            if cancel_event is not None and cancel_event.is_set():
++                return _samples_failure("cancelled", "劇照補齊已取消")
              written = len(assets.get('sample_fs', []))
 -            return asdict(enrich_success(
 +            extrafanart_dir = Path(movie_dir) / "extrafanart"
@@ -2935,6 +3132,7 @@
              number=req.number,
              path_mappings=path_mappings,
 +            related_db_paths=related_db_paths,
++            cancel_event=cancel_event,
          )
 -        return asdict(result)
 +        payload = asdict(result)
@@ -2959,7 +3157,7 @@
          raise HTTPException(status_code=422, detail="items 上限為 20 筆")
  
      config = await asyncio.to_thread(load_config)
-@@ -955,7 +1090,7 @@
+@@ -955,7 +1114,7 @@
      # 去重（按 file_path）
      seen_paths: set = set()
      deduped_items = []
@@ -2968,7 +3166,7 @@
          if item.file_path not in seen_paths:
              seen_paths.add(item.file_path)
              deduped_items.append(item)
-@@ -978,7 +1113,11 @@
+@@ -978,7 +1137,11 @@
  
          try:
              for idx, item in enumerate(deduped_items, start=1):
@@ -2981,7 +3179,7 @@
                  _custom_refused = effective_source.startswith('custom:')
                  # 未知 / 非法 source guard：不靜默轉成無效 cache_key，退回 'auto'（最小驚訝）。
                  if not _custom_refused and effective_source != "auto" and not validate_source_id(effective_source):
-@@ -987,7 +1126,7 @@
+@@ -987,7 +1150,7 @@
                          effective_source, item.number,
                      )
                      effective_source = "auto"
@@ -2990,7 +3188,7 @@
  
                  # progress 事件
                  yield f"data: {json.dumps({'type': 'progress', 'current': idx, 'total': total, 'number': item.number})}\n\n"
-@@ -1015,14 +1154,14 @@
+@@ -1015,14 +1178,14 @@
                          # comment) — placed before resolve_owning_output_root so it
                          # short-circuits regardless of output_dir configuration.
                          # BatchEnrichRequest has no per-item mode override, so this
@@ -3008,7 +3206,7 @@
                              return ('no_nfo', _READONLY_NO_NFO_ERROR_MSG)
                          owning = resolve_owning_output_root(uri, config)
                          if owning is None:
-@@ -1054,7 +1193,7 @@
+@@ -1054,7 +1217,7 @@
                                  number=itm.number, scraper_cfg=config.get("scraper", {}),
                                  path_mappings=_ro_mappings, action='ingest',
                                  scraper_data=None, scrape_source=es, javbus_lang=el,
@@ -3017,7 +3215,7 @@
                                  focal_before_cover_recheck=True,
                              )
                          except ReadonlyProduceError:
-@@ -1076,7 +1215,7 @@
+@@ -1076,7 +1239,7 @@
                              # 其他 mode 維持 success（refresh_full 可能只更新 DB）。⚠️ 前端
                              # didEnrichSomething() 沒有這道 mode 閘，多出 refresh_full 呼叫端時兩邊一起補。
                              # 今天 fill_missing 零行為變化（readonly nfo_written=True 無條件）；縮圖失效仍掛 ok。
@@ -3026,7 +3224,7 @@
                                  success_count += 1
                              else:
                                  failed_count += 1
-@@ -1146,7 +1285,7 @@
+@@ -1146,7 +1309,7 @@
  
                      # scraper cache（只對 refresh_full pre-fetch）
                      cached_data = None
@@ -3035,7 +3233,7 @@
                          cache_key = (item.number.upper(), effective_source, effective_lang)
                          if cache_key not in scraper_cache:
                              _pf_ctx = contextvars.copy_context()
-@@ -1165,11 +1304,11 @@
+@@ -1165,11 +1328,11 @@
                          enrich_single,
                          file_path=item.file_path,
                          number=item.number,
@@ -3052,7 +3250,7 @@
                          external_manager=config.get("scraper", {}).get("external_manager", "off"), nfo_title_format=config.get("scraper", {}).get("nfo_title_format", '[{num}]{title}'),
                          source=effective_source if effective_source != "auto" else None,
                          javbus_lang=effective_lang,
-@@ -1182,7 +1321,7 @@
+@@ -1182,7 +1345,7 @@
                          # CD-147b-5／147b-T4：fill_missing 才套四項判準（與前端 didEnrichSomething
                          # 同步；⚠️ 前端沒有這道 mode 閘，多出 refresh_full 呼叫端時兩邊一起補）；
                          # 其他 mode 維持 result.success（refresh_full 可能只更新 DB）。縮圖失效仍掛之。
@@ -3061,6 +3259,116 @@
                              success_count += 1
                          else:
                              failed_count += 1
+--- a/web/routers/search.py
++++ b/web/routers/search.py
+@@ -32,7 +32,9 @@
+ from core.video_extensions import ZERO_SIZE_EXTENSIONS, get_video_extensions
+ logger = get_logger(__name__)
+ 
+-from core.database import VideoRepository, get_db_path as get_db_path, init_db
++from core.database import Video, VideoRepository, get_db_path as get_db_path, init_db
++from core.multipart_group import group_rows
++from core.path_utils import uri_to_local_fs_path
+ from core.image_codec import (
+     decode_image_payload,
+     image_media_type,
+@@ -1173,7 +1175,17 @@
+ 
+     Returns:
+         {
+-            "SONE-205": { "exists": true, "count": 2, "paths": ["/path/1.mp4", "/path/2.mp4"] },
++            "SONE-205": {
++                "exists": true,
++                "count": 2,
++                "paths": ["/path/cd1.mp4", "/path/cd2.mp4"],
++                "playback": {
++                    "path": "/path/cd1.mp4",
++                    "paths": ["/path/cd1.mp4", "/path/cd2.mp4"],
++                    "part_tokens": ["cd1", "cd2"]
++                },
++                "groups": [...]
++            },
+             "ABW-001": { "exists": false }
+         }
+ 
+@@ -1195,23 +1207,72 @@
+     init_db()  # 確保 DB 存在
+     repo = VideoRepository()
+     videos_by_number = repo.get_by_numbers(number_list)
++    path_mappings = (
++        load_config()
++        .get("gallery", {})
++        .get("path_mappings", {})
++    )
+ 
+     # 建立回應
+     result = {}
+     for number in number_list:
+         videos = videos_by_number.get(number, [])
+         if videos:
+-            result[number] = {
+-                "exists": True,
+-                "count": len(videos),
+-                "paths": [v.path for v in videos]
+-            }
++            result[number] = _serialize_local_status(videos, path_mappings)
+         else:
+             result[number] = {
+                 "exists": False
+             }
+ 
+     return result
++
++
++def _serialize_local_status(videos: List[Video], path_mappings: dict) -> dict:
++    """Return the legacy local-status fields plus real multipart groups."""
++    try:
++        groups = group_rows(
++            videos,
++            lambda video: uri_to_local_fs_path(video.path, path_mappings),
++        )
++    except Exception:
++        logger.warning("search/local-status: multipart grouping failed", exc_info=True)
++        groups = []
++
++    group_payloads = [
++        {
++            "path": group.members[0].path,
++            "paths": [member.path for member in group.members],
++            "part_tokens": (
++                list(group.part_tokens)
++                if len(group.members) > 1 else []
++            ),
++        }
++        for group in groups
++    ]
++    if not group_payloads:
++        group_payloads = [
++            {
++                "path": video.path,
++                "paths": [video.path],
++                "part_tokens": [],
++            }
++            for video in videos
++        ]
++
++    playback = next(
++        (
++            group for group in group_payloads
++            if len(group["paths"]) > 1
++        ),
++        group_payloads[0],
++    )
++    return {
++        "exists": True,
++        "count": len(videos),
++        "paths": [video.path for video in videos],
++        "playback": playback,
++        "groups": group_payloads,
++    }
+ 
+ 
+ class AutoOrganizeConfigRequest(BaseModel):
 --- a/web/routers/showcase.py
 +++ b/web/routers/showcase.py
 @@ -17,7 +17,7 @@

@@ -69,6 +69,14 @@ jobs:
       - name: Run smoke tests
         run: python -m pytest tests/ -q
 
+      - name: Check JavaScript syntax
+        run: find app/src/main/python/web/static/js -name '*.js' -exec node --check {} \;
+
+      - name: Run Android JVM unit tests
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon testDebugUnitTest -Pabi=arm64-v8a
+
       - name: Generate code health report
         continue-on-error: true
         run: python tools/code_health.py --json --output code-health.json

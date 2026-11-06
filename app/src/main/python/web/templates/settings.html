@@ -1590,6 +1590,23 @@
                     {% endif %}
                     <hr class="my-3">
 
+                    {% if is_android %}
+                    <!-- Database backup is intentionally export-only in r42. -->
+                    <div class="settings-form-row">
+                        <label class="row-label">
+                            {{ t('settings.system.database_backup_label') }}
+                            <small class="settings-hint">{{ t('settings.system.database_backup_hint') }}</small>
+                        </label>
+                        <a class="btn btn-sm btn-outline btn-neutral"
+                           href="/api/database/export"
+                           download>
+                            <i class="bi bi-database-down"></i>
+                            {{ t('settings.system.database_backup_action') }}
+                        </a>
+                    </div>
+                    <hr class="my-3">
+                    {% endif %}
+
                     <!-- 重置按鈕 -->
                     <div class="settings-form-row">
                         <label class="row-label text-error">

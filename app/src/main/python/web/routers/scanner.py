@@ -1847,6 +1847,8 @@ def _iter_title_translations(
 
     async def translate_one(video: Video) -> str:
         async with semaphore:
+            if cancel_event.is_set():
+                raise asyncio.CancelledError()
             return await translate_service.translate_or_raise(
                 video.title,
                 {
@@ -2106,7 +2108,10 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
             yield _sse_event({"type": "error", "message": "資料庫不存在，請先產生列表"})
             return
 
-        from web.routers.scraper import FetchSamplesRequest, fetch_samples_endpoint
+        from web.routers.scraper import (
+            FetchSamplesRequest,
+            fetch_samples_for_backfill,
+        )
 
         repo = VideoRepository(db_path)
         candidates = [
@@ -2181,11 +2186,12 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
                 }
 
             try:
-                result = fetch_samples_endpoint(
+                result = fetch_samples_for_backfill(
                     FetchSamplesRequest(
                         file_path=video.path,
                         number=number,
-                    )
+                    ),
+                    cancel_event,
                 )
             except Exception:
                 logger.exception("批次補齊劇照失敗: %s", video.path)
@@ -2225,6 +2231,9 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
                     return_when=FIRST_COMPLETED,
                 )
                 for future in done:
+                    if cancel_event.is_set():
+                        cancelled = True
+                        break
                     video = futures.pop(future)
                     try:
                         number, result = future.result()
@@ -2236,6 +2245,10 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
                             "error_code": "internal_error",
                             "message": "劇照補齊處理失敗",
                         }
+
+                    if result.get("error_code") == "cancelled":
+                        cancelled = True
+                        break
 
                     processed_count += 1
                     status = (
@@ -2321,8 +2334,10 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
                         "failed_count": failed_count,
                         "skipped_count": skipped_count,
                     })
+                if cancelled:
+                    break
         finally:
-            executor.shutdown(wait=True, cancel_futures=True)
+            executor.shutdown(wait=False, cancel_futures=True)
 
         if cancelled:
             yield _sse_event({

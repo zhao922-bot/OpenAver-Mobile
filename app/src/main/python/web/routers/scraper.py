@@ -897,6 +897,21 @@ def _fanart_file_sort_key(path: Path):
 
 @router.post("/scraper/fetch-samples")
 def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
+    return _fetch_samples_impl(req, cancel_event=None)
+
+
+def fetch_samples_for_backfill(
+    req: FetchSamplesRequest,
+    cancel_event,
+) -> dict:
+    """Batch-only entry point with cooperative cancellation."""
+    return _fetch_samples_impl(req, cancel_event=cancel_event)
+
+
+def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
+    if cancel_event is not None and cancel_event.is_set():
+        return _samples_failure("cancelled", "劇照補齊已取消")
+
     config = load_config()
     # TASK-91-T3：站台5 outer to_file_uri 補傳 path_mappings（inner uri_to_fs_path 維持不變，
     # 見 TASK-91-T3.md 站台5 inner/outer 分析結論）。
@@ -913,7 +928,11 @@ def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
         if not output_root:
             return _samples_failure("output_root_missing", "未設定媒體庫輸出路徑")
         try:
+            if cancel_event is not None and cancel_event.is_set():
+                return _samples_failure("cancelled", "劇照補齊已取消")
             meta = search_jav(req.number, source="auto")
+            if cancel_event is not None and cancel_event.is_set():
+                return _samples_failure("cancelled", "劇照補齊已取消")
             if not meta:
                 return _samples_failure(
                     "samples_search_failed", f"找不到 {req.number} 的資料",
@@ -941,12 +960,16 @@ def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
                 "size": existing.size_bytes if existing else os.path.getsize(fs_path),
                 "mtime": existing.mtime if existing else os.path.getmtime(fs_path),
             }
+            if cancel_event is not None and cancel_event.is_set():
+                return _samples_failure("cancelled", "劇照補齊已取消")
             movie_dir, assets = _produce_one(
                 repo, source, config.get("scraper", {}), file_info=file_info,
                 meta=meta, cover_strategy=('none',), assets_mode='samples_only',
                 existing=existing, output_root=output_root, output_uri=output_uri,
                 allocated_this_run=set(), path_mappings=path_mappings,
             )
+            if cancel_event is not None and cancel_event.is_set():
+                return _samples_failure("cancelled", "劇照補齊已取消")
             written = len(assets.get('sample_fs', []))
             extrafanart_dir = Path(movie_dir) / "extrafanart"
             try:
@@ -1058,6 +1081,7 @@ def fetch_samples_endpoint(req: FetchSamplesRequest) -> dict:
             number=req.number,
             path_mappings=path_mappings,
             related_db_paths=related_db_paths,
+            cancel_event=cancel_event,
         )
         payload = asdict(result)
         payload.update(diagnostics)

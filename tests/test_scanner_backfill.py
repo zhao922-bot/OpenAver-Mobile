@@ -319,7 +319,7 @@ def test_sample_backfill_generator_skips_rows_with_existing_samples(
         def get_missing_sample_candidates(self):
             return [missing, present]
 
-    def fake_fetch(req):
+    def fake_fetch(req, _cancel_event):
         fetched_paths.append(req.file_path)
         return {
             "success": True,
@@ -331,7 +331,7 @@ def test_sample_backfill_generator_skips_rows_with_existing_samples(
     monkeypatch.setattr(scanner_router, "get_db_path", lambda: db_path)
     monkeypatch.setattr(scanner_router, "VideoRepository", FakeRepo)
     monkeypatch.setattr(
-        "web.routers.scraper.fetch_samples_endpoint",
+        "web.routers.scraper.fetch_samples_for_backfill",
         fake_fetch,
     )
 
@@ -383,7 +383,7 @@ def test_sample_backfill_fetches_concurrently_and_logs_progress(
             self.lock = threading.Lock()
             self.paths = []
 
-        def __call__(self, req):
+        def __call__(self, req, _cancel_event):
             with self.lock:
                 self.active += 1
                 self.max_active = max(self.max_active, self.active)
@@ -404,7 +404,7 @@ def test_sample_backfill_fetches_concurrently_and_logs_progress(
     monkeypatch.setattr(scanner_router, "get_db_path", lambda: db_path)
     monkeypatch.setattr(scanner_router, "VideoRepository", FakeRepo)
     monkeypatch.setattr(
-        "web.routers.scraper.fetch_samples_endpoint",
+        "web.routers.scraper.fetch_samples_for_backfill",
         fetcher,
     )
 

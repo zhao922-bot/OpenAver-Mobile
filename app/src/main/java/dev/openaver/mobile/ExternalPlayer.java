@@ -12,22 +12,15 @@ import android.provider.MediaStore;
 import android.webkit.MimeTypeMap;
 import android.widget.Toast;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Locale;
 import java.util.List;
-import java.util.Set;
 
 final class ExternalPlayer {
-    private static final String[] VIDEO_EXTENSIONS = {
-            ".mp4", ".mkv", ".avi", ".wmv", ".rmvb", ".flv", ".mov",
-            ".m4v", ".ts", ".m2ts", ".webm", ".mpeg", ".mpg"
-    };
-
     private ExternalPlayer() {
+    }
+
+    interface BuiltInFallback {
+        void open(String rawPath, int partNumber);
     }
 
     static boolean open(Activity activity, String rawPath) {
@@ -35,35 +28,108 @@ final class ExternalPlayer {
     }
 
     static boolean open(Activity activity, String rawPath, String rawParts) {
-        List<VideoPart> parts = parseParts(activity, rawPath, rawParts);
+        return open(activity, rawPath, rawParts, null);
+    }
+
+    static boolean open(
+            Activity activity,
+            String rawPath,
+            String rawParts,
+            BuiltInFallback fallback
+    ) {
+        List<VideoPartParser.Part> parts = VideoPartParser.parse(rawPath, rawParts);
         if (parts.size() > 1) {
             String[] labels = new String[parts.size()];
             for (int index = 0; index < parts.size(); index++) {
-                labels[index] = parts.get(index).label;
+                VideoPartParser.Part part = parts.get(index);
+                labels[index] = part.label.isEmpty()
+                        ? activity.getString(R.string.video_part_number, part.number)
+                        : part.label;
             }
-            new AlertDialog.Builder(activity, android.R.style.Theme_Material_Dialog_Alert)
+            AlertDialog.Builder builder = new AlertDialog.Builder(
+                    activity,
+                    android.R.style.Theme_Material_Dialog_Alert
+            )
                     .setTitle(R.string.choose_video_part)
                     .setItems(labels, (dialog, which) ->
-                            openSelected(activity, parts.get(which).path))
-                    .setNegativeButton(R.string.cancel, null)
-                    .show();
+                            openExternalOrFallback(
+                                    activity,
+                                    parts.get(which),
+                                    fallback
+                            ))
+                    .setNegativeButton(R.string.cancel, null);
+            if (fallback != null) {
+                builder.setNeutralButton(
+                        R.string.play_in_builtin_player,
+                        (dialog, which) ->
+                                showBuiltInPartPicker(activity, parts, fallback)
+                );
+            }
+            builder.show();
             return true;
         }
 
         String selectedPath = parts.isEmpty() ? rawPath : parts.get(0).path;
-        return openSelected(activity, selectedPath);
+        VideoPartParser.Part selectedPart = parts.isEmpty()
+                ? new VideoPartParser.Part(selectedPath, "", 1)
+                : parts.get(0);
+        return openExternalOrFallback(activity, selectedPart, fallback);
     }
 
-    private static boolean openSelected(Activity activity, String rawPath) {
+    private static boolean openExternalOrFallback(
+            Activity activity,
+            VideoPartParser.Part part,
+            BuiltInFallback fallback
+    ) {
+        boolean opened = openSelected(activity, part.path, fallback == null);
+        if (opened || fallback == null) {
+            return opened;
+        }
+        toast(activity, R.string.opened_with_builtin_player);
+        fallback.open(part.path, part.number);
+        return true;
+    }
+
+    private static void showBuiltInPartPicker(
+            Activity activity,
+            List<VideoPartParser.Part> parts,
+            BuiltInFallback fallback
+    ) {
+        String[] labels = new String[parts.size()];
+        for (int index = 0; index < parts.size(); index++) {
+            VideoPartParser.Part part = parts.get(index);
+            labels[index] = part.label.isEmpty()
+                    ? activity.getString(R.string.video_part_number, part.number)
+                    : part.label;
+        }
+        new AlertDialog.Builder(activity, android.R.style.Theme_Material_Dialog_Alert)
+                .setTitle(R.string.choose_video_part)
+                .setItems(labels, (dialog, which) -> {
+                    VideoPartParser.Part part = parts.get(which);
+                    fallback.open(part.path, part.number);
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private static boolean openSelected(
+            Activity activity,
+            String rawPath,
+            boolean notifyFailure
+    ) {
         String path = normalizePath(rawPath);
-        if (path.isEmpty() || !isVideoPath(path)) {
-            toast(activity, R.string.video_file_unavailable);
+        if (path.isEmpty() || !VideoPartParser.looksLikeVideoPath(path)) {
+            if (notifyFailure) {
+                toast(activity, R.string.video_file_unavailable);
+            }
             return false;
         }
 
         Uri uri = resolveUri(activity, rawPath, path);
         if (uri == null) {
-            toast(activity, R.string.video_file_unavailable);
+            if (notifyFailure) {
+                toast(activity, R.string.video_file_unavailable);
+            }
             return false;
         }
 
@@ -91,55 +157,11 @@ final class ExternalPlayer {
             activity.startActivity(chooser);
             return true;
         } catch (ActivityNotFoundException | SecurityException error) {
-            toast(activity, R.string.video_player_missing);
+            if (notifyFailure) {
+                toast(activity, R.string.video_player_missing);
+            }
             return false;
         }
-    }
-
-    private static List<VideoPart> parseParts(
-            Activity activity,
-            String rawPath,
-            String rawParts
-    ) {
-        List<VideoPart> parts = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        if (rawParts != null && !rawParts.trim().isEmpty()) {
-            try {
-                JSONArray array = new JSONArray(rawParts);
-                for (int index = 0; index < array.length(); index++) {
-                    JSONObject item = array.optJSONObject(index);
-                    if (item == null) {
-                        continue;
-                    }
-                    String path = item.optString("path", "").trim();
-                    if (path.isEmpty()
-                            || !isVideoPath(normalizePath(path))
-                            || !seen.add(path)) {
-                        continue;
-                    }
-                    String label = item.optString("label", "").trim();
-                    if (label.isEmpty()) {
-                        label = activity.getString(
-                                R.string.video_part_number,
-                                parts.size() + 1
-                        );
-                    }
-                    if (label.length() > 80) {
-                        label = label.substring(0, 80);
-                    }
-                    parts.add(new VideoPart(path, label));
-                }
-            } catch (Exception ignored) {
-                // Invalid payloads fall back to the single path supplied by the page.
-            }
-        }
-        if (parts.isEmpty() && rawPath != null && !rawPath.trim().isEmpty()) {
-            parts.add(new VideoPart(
-                    rawPath,
-                    activity.getString(R.string.video_part_number, 1)
-            ));
-        }
-        return parts;
     }
 
     private static Uri resolveUri(Activity activity, String rawPath, String path) {
@@ -196,27 +218,7 @@ final class ExternalPlayer {
         return value;
     }
 
-    private static boolean isVideoPath(String path) {
-        String lower = path.toLowerCase(Locale.ROOT);
-        for (String extension : VIDEO_EXTENSIONS) {
-            if (lower.endsWith(extension)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static void toast(Activity activity, int message) {
         Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
-    }
-
-    private static final class VideoPart {
-        final String path;
-        final String label;
-
-        VideoPart(String path, String label) {
-            this.path = path;
-            this.label = label;
-        }
     }
 }

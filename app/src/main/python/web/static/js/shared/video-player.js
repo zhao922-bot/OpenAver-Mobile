@@ -28,4 +28,27 @@ export function openVideoPlayer(path, options = {}) {
     return true;
 }
 
+export function openLocalVideoStatus(status) {
+    if (!status || !status.exists) return false;
+    const playback = status.playback || {};
+    const paths = Array.isArray(playback.paths)
+        ? playback.paths.filter(item => typeof item === 'string' && item.trim())
+        : [];
+    const legacyPaths = Array.isArray(status.paths)
+        ? status.paths.filter(item => typeof item === 'string' && item.trim())
+        : [];
+    const selectedPaths = paths.length ? paths : legacyPaths;
+    const path = String(
+        playback.path || selectedPaths[0] || ''
+    ).trim();
+    if (!path) return false;
+    return openVideoPlayer(path, {
+        parts: selectedPaths,
+        labels: Array.isArray(playback.part_tokens)
+            ? playback.part_tokens
+            : [],
+    });
+}
+
 window.openVideoPlayer = openVideoPlayer;
+window.openLocalVideoStatus = openLocalVideoStatus;

@@ -75,6 +75,14 @@ jobs:
       - name: Run smoke tests
         run: python -m pytest tests/ -q
 
+      - name: Check JavaScript syntax
+        run: find app/src/main/python/web/static/js -name '*.js' -exec node --check {} \;
+
+      - name: Run Android JVM unit tests
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon testDebugUnitTest -Pabi=arm64-v8a
+
       - name: Decode required release keystore
         shell: bash
         run: |

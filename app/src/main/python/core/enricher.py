@@ -8,6 +8,7 @@ import shutil
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from threading import Event
 from typing import List, NamedTuple, Optional
 from urllib.parse import urljoin, urlparse
 
@@ -58,6 +59,15 @@ from core.scrapers.utils import check_subtitle
 logger = get_logger(__name__)
 
 VALID_MODES = {"fill_missing", "db_to_sidecar", "refresh_full"}
+
+
+class SampleBackfillCancelled(Exception):
+    """Raised when a cooperative sample-backfill cancellation is observed."""
+
+
+def _raise_if_cancelled(cancel_event: Optional[Event]) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        raise SampleBackfillCancelled()
 
 
 _FILL_MISSING_REQUIRED = ["title", "actresses", "maker", "director", "series", "label", "tags", "release_date"]
@@ -476,6 +486,7 @@ def _write_extrafanart(
     path_mappings: dict = None,
     preview_sample_images: List[str] = None,
     base_url: str = "",
+    cancel_event: Optional[Event] = None,
 ) -> ExtrafanartResult:
     if not write_extrafanart or not sample_images:
         return ExtrafanartResult([], 0, 0, len(sample_images or []), 0)
@@ -494,6 +505,7 @@ def _write_extrafanart(
     errors = []
     seen = set()
     for i, url in enumerate(sample_images):
+        _raise_if_cancelled(cancel_event)
         dest = str(extrafanart_dir / f"fanart{i+1}.jpg")
         primary_url = _normalize_image_url(url, base_url)
         fallback = _normalize_image_url(
@@ -541,6 +553,7 @@ def _write_extrafanart(
                     diagnostics=diagnostics,
                 )
             )
+            _raise_if_cancelled(cancel_event)
             if ok and _is_valid_sample_file(dest):
                 uris.append(to_file_uri(dest, path_mappings))
                 downloaded += 1
@@ -569,6 +582,8 @@ def _write_extrafanart(
                         ),
                         "http_status": last.get("http_status"),
                     })
+        except SampleBackfillCancelled:
+            raise
         except Exception as e:
             from core.android_storage import AndroidStorageError
 
@@ -1070,6 +1085,7 @@ def fetch_samples_only_detailed(
     number: str,
     path_mappings: dict = None,
     related_db_paths: Optional[List[str]] = None,
+    cancel_event: Optional[Event] = None,
 ) -> tuple[EnrichResult, dict]:
     """只補抓劇照，並回傳足以區分「查無／無劇照／下載失敗／DB 失敗」的診斷。
 
@@ -1098,6 +1114,11 @@ def fetch_samples_only_detailed(
         "download_errors": [],
     }
 
+    if cancel_event is not None and cancel_event.is_set():
+        _empty.error = "劇照補齊已取消"
+        diagnostics["error_code"] = "cancelled"
+        return _empty, diagnostics
+
     try:
         fs_path = uri_to_local_fs_path(file_path, path_mappings)
     except Exception:
@@ -1111,7 +1132,13 @@ def fetch_samples_only_detailed(
         return _empty, diagnostics
 
     try:
+        _raise_if_cancelled(cancel_event)
         meta = search_jav(number, source="auto", javbus_lang=None)
+        _raise_if_cancelled(cancel_event)
+    except SampleBackfillCancelled:
+        _empty.error = "劇照補齊已取消"
+        diagnostics["error_code"] = "cancelled"
+        return _empty, diagnostics
     except Exception as exc:
         logger.exception("[fetch_samples_only] 來源查詢失敗: %s", exc)
         _empty.error = f"劇照來源查詢失敗：{type(exc).__name__}"
@@ -1139,12 +1166,18 @@ def fetch_samples_only_detailed(
         return _empty, diagnostics
 
     try:
+        _raise_if_cancelled(cancel_event)
         extrafanart_res = _write_extrafanart(
             fs_path, sample_images, write_extrafanart=True,
             path_mappings=path_mappings,
             preview_sample_images=meta.get("preview_sample_images", []),
             base_url=meta.get("url", ""),
+            cancel_event=cancel_event,
         )
+    except SampleBackfillCancelled:
+        _empty.error = "劇照補齊已取消"
+        diagnostics["error_code"] = "cancelled"
+        return _empty, diagnostics
     except Exception as exc:
         from core.android_storage import (
             AndroidStoragePermissionError,
@@ -1175,6 +1208,7 @@ def fetch_samples_only_detailed(
 
     if extrafanart_res.uris:                      # ← 既有 gate，語意不變（磁碟真相非空才寫 DB）
         try:
+            _raise_if_cancelled(cancel_event)
             repo = VideoRepository()
             # db-ns-ok: fs_path_for_db, DB round-trip value passed to wrapper sink
             _db_upsert_samples_only(repo, fs_path_for_db, extrafanart_res.uris)
@@ -1186,6 +1220,10 @@ def fetch_samples_only_detailed(
                     continue
                 seen_uris.add(related_uri)
                 repo.update_sample_images(related_uri, extrafanart_res.uris)
+        except SampleBackfillCancelled:
+            _empty.error = "劇照補齊已取消"
+            diagnostics["error_code"] = "cancelled"
+            return _empty, diagnostics
         except Exception as exc:
             logger.exception("[fetch_samples_only] DB 更新失敗: %s", exc)
             _empty.error = "劇照已下載，但資料庫更新失敗，請再試一次"

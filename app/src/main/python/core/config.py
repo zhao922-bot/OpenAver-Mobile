@@ -261,6 +261,43 @@ class AppConfig(BaseModel):
     metatube: MetatubeConfig = MetatubeConfig()  # CD-63b-3；Pydantic default 自動補缺漏（no migration needed）
     focal_device: FocalDeviceState = FocalDeviceState()
 
+    def model_dump(self, *args, **kwargs):
+        data = super().model_dump(*args, **kwargs)
+        sources_by_id = {source.id: source for source in self.sources}
+        for source_data in data.get('sources', []):
+            if not isinstance(source_data, dict):
+                continue
+            source = sources_by_id.get(source_data.get('id'))
+            if source is not None:
+                # Pydantic v2 serializes nested models without calling their
+                # model_dump() override, so preserve the computed field here.
+                source_data['is_censored'] = source.is_censored
+        return data
+
+
+def add_computed_source_fields(config: dict) -> dict:
+    """Attach response-only source fields to an isolated config snapshot.
+
+    ``load_config()`` returns the raw stored dictionary, so older config files
+    may not contain the computed ``is_censored`` field. API serializers call
+    this after copying the config; the result must not be written back to disk.
+    """
+    sources = config.get("sources")
+    if not isinstance(sources, list):
+        return config
+
+    for source_data in sources:
+        if not isinstance(source_data, dict):
+            continue
+        try:
+            source = SourceConfig.model_validate(source_data)
+            source_data["is_censored"] = source.is_censored
+        except Exception:
+            # Keep malformed entries visible to the UI. The conservative
+            # default matches SourceConfig's unknown-source behavior.
+            source_data.setdefault("is_censored", True)
+    return config
+
 
 # ============ 載入 / 儲存 ============
 

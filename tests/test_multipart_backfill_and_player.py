@@ -220,7 +220,7 @@ def test_sample_backfill_deduplicates_complete_multipart_group(
     db_path.write_bytes(b"")
     fetched = []
 
-    def fake_fetch(req):
+    def fake_fetch(req, _cancel_event):
         fetched.append(req.file_path)
         return {
             "success": True,
@@ -235,7 +235,7 @@ def test_sample_backfill_deduplicates_complete_multipart_group(
         "gallery": {"path_mappings": {}},
     })
     monkeypatch.setattr(
-        "web.routers.scraper.fetch_samples_endpoint",
+        "web.routers.scraper.fetch_samples_for_backfill",
         fake_fetch,
     )
 

@@ -28,6 +28,7 @@ from core.logger import get_logger
 from core.config import (
     AppConfig,
     FocalDeviceState,
+    add_computed_source_fields,
     load_config,
     mutate_config,
     reset_config_file,
@@ -85,7 +86,7 @@ def get_config() -> dict:
     ``resolved`` 是 response-only 頂層欄位（與 ``data`` 同層），前端不得把它
     寫進 ``config.gallery`` 再 PUT 回來。
     """
-    data = render_config_secrets(load_config())
+    data = add_computed_source_fields(render_config_secrets(load_config()))
     gallery = data.get("gallery") or {}
     return {
         "success": True,

@@ -97,6 +97,13 @@ class SourceConfig(BaseModel):
         data['is_censored'] = self.is_censored
         return data
 
+    def model_dump(self, *args, **kwargs):
+        # Pydantic v2 does not route model_dump() through the legacy dict()
+        # override. Keep the computed contract identical on both versions.
+        data = super().model_dump(*args, **kwargs)
+        data['is_censored'] = self.is_censored
+        return data
+
 
 def render_name(s: SourceConfig) -> str:
     """解析來源顯示名稱。

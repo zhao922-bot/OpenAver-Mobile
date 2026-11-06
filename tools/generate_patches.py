@@ -87,9 +87,12 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "006-mobile-web-routers.patch",
         (
             "web/routers/capabilities.py",
+            "web/routers/config.py",
+            "web/routers/database_backup.py",
             "web/routers/gallery_media.py",
             "web/routers/scanner.py",
             "web/routers/scraper.py",
+            "web/routers/search.py",
             "web/routers/showcase.py",
             "web/routers/translate.py",
         ),

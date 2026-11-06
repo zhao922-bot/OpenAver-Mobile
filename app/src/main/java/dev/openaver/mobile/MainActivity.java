@@ -656,6 +656,18 @@ public final class MainActivity extends Activity {
         mainHandler.postDelayed(pageLoadTimeout, PAGE_LOAD_TIMEOUT_MS);
     }
 
+    private void openBuiltInPlayer(String rawPath, int partNumber) {
+        if (rawPath == null || rawPath.trim().isEmpty()) {
+            toast(R.string.video_file_unavailable);
+            return;
+        }
+        int safePart = Math.max(1, partNumber);
+        openLocalPath(
+                "/api/gallery/player?path=" + Uri.encode(rawPath)
+                        + "&part=" + safePart
+        );
+    }
+
     private void recoverWebView(WebView deadView, RenderProcessGoneDetail detail) {
         if (webRendererRecoveryPending) {
             return;
@@ -999,7 +1011,8 @@ public final class MainActivity extends Activity {
             ExternalPlayer.open(
                     this,
                     uri.getQueryParameter("path"),
-                    uri.getQueryParameter("parts")
+                    uri.getQueryParameter("parts"),
+                    this::openBuiltInPlayer
             );
             return true;
         }

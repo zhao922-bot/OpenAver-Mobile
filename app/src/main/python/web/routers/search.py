@@ -32,7 +32,9 @@ from core.logger import get_logger
 from core.video_extensions import ZERO_SIZE_EXTENSIONS, get_video_extensions
 logger = get_logger(__name__)
 
-from core.database import VideoRepository, get_db_path as get_db_path, init_db
+from core.database import Video, VideoRepository, get_db_path as get_db_path, init_db
+from core.multipart_group import group_rows
+from core.path_utils import uri_to_local_fs_path
 from core.image_codec import (
     decode_image_payload,
     image_media_type,
@@ -1173,7 +1175,17 @@ def get_local_status(numbers: str = Query(..., description="逗號分隔的番�
 
     Returns:
         {
-            "SONE-205": { "exists": true, "count": 2, "paths": ["/path/1.mp4", "/path/2.mp4"] },
+            "SONE-205": {
+                "exists": true,
+                "count": 2,
+                "paths": ["/path/cd1.mp4", "/path/cd2.mp4"],
+                "playback": {
+                    "path": "/path/cd1.mp4",
+                    "paths": ["/path/cd1.mp4", "/path/cd2.mp4"],
+                    "part_tokens": ["cd1", "cd2"]
+                },
+                "groups": [...]
+            },
             "ABW-001": { "exists": false }
         }
 
@@ -1195,23 +1207,72 @@ def get_local_status(numbers: str = Query(..., description="逗號分隔的番�
     init_db()  # 確保 DB 存在
     repo = VideoRepository()
     videos_by_number = repo.get_by_numbers(number_list)
+    path_mappings = (
+        load_config()
+        .get("gallery", {})
+        .get("path_mappings", {})
+    )
 
     # 建立回應
     result = {}
     for number in number_list:
         videos = videos_by_number.get(number, [])
         if videos:
-            result[number] = {
-                "exists": True,
-                "count": len(videos),
-                "paths": [v.path for v in videos]
-            }
+            result[number] = _serialize_local_status(videos, path_mappings)
         else:
             result[number] = {
                 "exists": False
             }
 
     return result
+
+
+def _serialize_local_status(videos: List[Video], path_mappings: dict) -> dict:
+    """Return the legacy local-status fields plus real multipart groups."""
+    try:
+        groups = group_rows(
+            videos,
+            lambda video: uri_to_local_fs_path(video.path, path_mappings),
+        )
+    except Exception:
+        logger.warning("search/local-status: multipart grouping failed", exc_info=True)
+        groups = []
+
+    group_payloads = [
+        {
+            "path": group.members[0].path,
+            "paths": [member.path for member in group.members],
+            "part_tokens": (
+                list(group.part_tokens)
+                if len(group.members) > 1 else []
+            ),
+        }
+        for group in groups
+    ]
+    if not group_payloads:
+        group_payloads = [
+            {
+                "path": video.path,
+                "paths": [video.path],
+                "part_tokens": [],
+            }
+            for video in videos
+        ]
+
+    playback = next(
+        (
+            group for group in group_payloads
+            if len(group["paths"]) > 1
+        ),
+        group_payloads[0],
+    )
+    return {
+        "exists": True,
+        "count": len(videos),
+        "paths": [video.path for video in videos],
+        "playback": playback,
+        "groups": group_payloads,
+    }
 
 
 class AutoOrganizeConfigRequest(BaseModel):

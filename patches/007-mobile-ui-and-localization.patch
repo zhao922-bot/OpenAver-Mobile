@@ -32,7 +32,51 @@
      server_mode: bool = False  # LAN 伺服器模式開關（feature/80）
      close_action: Literal["ask", "tray", "exit"] = "ask"  # 視窗關閉行為（feature/82）
      auto_check_update: bool = True  # 啟動時檢查更新（feature/107）
-@@ -302,345 +311,398 @@
+@@ -251,6 +260,43 @@
+     thumbnail_cache_enabled: bool = False  # 縮圖快取開關（feature/71 T2）；預設關閉；top-level additive migration 補缺漏
+     metatube: MetatubeConfig = MetatubeConfig()  # CD-63b-3；Pydantic default 自動補缺漏（no migration needed）
+     focal_device: FocalDeviceState = FocalDeviceState()
++
++    def model_dump(self, *args, **kwargs):
++        data = super().model_dump(*args, **kwargs)
++        sources_by_id = {source.id: source for source in self.sources}
++        for source_data in data.get('sources', []):
++            if not isinstance(source_data, dict):
++                continue
++            source = sources_by_id.get(source_data.get('id'))
++            if source is not None:
++                # Pydantic v2 serializes nested models without calling their
++                # model_dump() override, so preserve the computed field here.
++                source_data['is_censored'] = source.is_censored
++        return data
++
++
++def add_computed_source_fields(config: dict) -> dict:
++    """Attach response-only source fields to an isolated config snapshot.
++
++    ``load_config()`` returns the raw stored dictionary, so older config files
++    may not contain the computed ``is_censored`` field. API serializers call
++    this after copying the config; the result must not be written back to disk.
++    """
++    sources = config.get("sources")
++    if not isinstance(sources, list):
++        return config
++
++    for source_data in sources:
++        if not isinstance(source_data, dict):
++            continue
++        try:
++            source = SourceConfig.model_validate(source_data)
++            source_data["is_censored"] = source.is_censored
++        except Exception:
++            # Keep malformed entries visible to the UI. The conservative
++            # default matches SourceConfig's unknown-source behavior.
++            source_data.setdefault("is_censored", True)
++    return config
+ 
+ 
+ # ============ 載入 / 儲存 ============
+@@ -302,345 +348,398 @@
          return False
  
  
@@ -747,7 +791,7 @@
              _save_config_unlocked(raw_config)
  
          return raw_config
-@@ -648,10 +710,37 @@
+@@ -648,10 +747,37 @@
      return AppConfig().model_dump()
  
  
@@ -787,7 +831,7 @@
  
  
  def _save_config_unlocked(config: dict) -> None:
-@@ -672,6 +761,7 @@
+@@ -672,6 +798,7 @@
  
      with atomic_write(CONFIG_PATH, mode='w', encoding='utf-8') as f:
          json.dump(config, f, indent=2, ensure_ascii=False)
@@ -795,7 +839,7 @@
  
  
  def save_config(config: dict) -> None:
-@@ -691,16 +781,19 @@
+@@ -691,16 +818,19 @@
      mutate_config / reset_config_file）—— 會在已持鎖時二次 acquire → 自我死鎖。
      """
      with _config_write_lock:
@@ -887,21 +931,31 @@
        "tag": "Tag name",
        "actors": "Actor names (separate with 、, or ,)"
      },
-@@ -723,6 +771,13 @@
+@@ -707,6 +755,9 @@
+       "player_label": "Video Player",
+       "player_placeholder": "Leave blank for system default",
+       "player_hint_prefix": "E.g.:",
++      "database_backup_label": "Database Backup",
++      "database_backup_hint": "Exports favorites, tags, aliases, ratings and cover crop data as a ZIP. Videos and media files are not included.",
++      "database_backup_action": "Export database",
+       "reset_label": "Reset All Settings",
+       "reset_hint": "Delete all custom settings and restore defaults",
+       "close_action_label": "When closing the window",
+@@ -722,6 +773,13 @@
+       "variable": "Variable",
        "reset": "Reset to Default",
        "save": "Save Settings"
-     },
++    },
 +    "save_bar": {
 +      "loading": "Loading settings...",
 +      "saving": "Saving settings...",
 +      "unsaved": "Unsaved changes",
 +      "saved": "All changes saved",
 +      "saving_button": "Saving..."
-+    },
+     },
      "var": {
        "num": "ID",
-       "title": "Title",
-@@ -801,6 +856,61 @@
+@@ -801,6 +859,61 @@
      }
    },
    "scanner": {
@@ -963,7 +1017,7 @@
      "page_title": "Scanner",
      "toast": {
        "folder_already_added": "This folder is already in the list",
-@@ -824,11 +934,14 @@
+@@ -824,11 +937,14 @@
        "no_output_count": "{count} without output folder set",
        "done_with_warnings": "Completed {count}, but {parts}; see log for details",
        "generate_success": "Generated list of {count} videos",
@@ -978,7 +1032,7 @@
        "path_copied": "Copied: {path}",
        "browse_dir_fallback": "Your browser can’t read the path of dropped files, so the folder picker has been opened for you"
      },
-@@ -868,13 +981,84 @@
+@@ -868,13 +984,84 @@
        "clear_display_title": "Clear display (restored on reload)",
        "clear_all_title": "Clear all (including history)"
      },
@@ -1063,7 +1117,7 @@
        "jellyfin_prefix": "Jellyfin cover format missing:",
        "jellyfin_suffix": " videos",
        "jellyfin_update_title": "Generate Jellyfin poster + fanart",
-@@ -928,6 +1112,29 @@
+@@ -928,6 +1115,29 @@
        "missing_enrich_confirm_body_suffix": " minutes. Continue?",
        "missing_enrich_confirm_cancel": "Cancel",
        "missing_enrich_confirm_confirm": "Confirm",
@@ -1093,7 +1147,7 @@
        "log_interrupted": "⚠ Generation interrupted (left the page)",
        "status_preparing": "Preparing...",
        "status_done_count": "Done! {count} videos",
-@@ -1291,6 +1498,7 @@
+@@ -1291,6 +1501,7 @@
        "tag_nfo_write_blocked": "Tag saved, but there's no permission to write the NFO",
        "translate_tooltip": "Translate title",
        "translate_done": "Title translated",
@@ -1101,7 +1155,7 @@
        "translate_undo": "Undo",
        "translate_skipped": "Nothing in the title needs translating",
        "translate_undone": "Title restored",
-@@ -1410,10 +1618,90 @@
+@@ -1410,10 +1621,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -1192,7 +1246,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1845,6 +2133,12 @@
+@@ -1845,6 +2136,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -1205,7 +1259,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2154,11 @@
+@@ -1860,7 +2157,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -1218,7 +1272,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2176,15 @@
+@@ -1878,11 +2179,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -1307,21 +1361,31 @@
        "tag": "タグ名",
        "actors": "女優名（、，, で複数区切り可）"
      },
-@@ -723,6 +771,13 @@
+@@ -707,6 +755,9 @@
+       "player_label": "動画プレイヤー",
+       "player_placeholder": "空欄 = システムデフォルトを使用",
+       "player_hint_prefix": "例：",
++      "database_backup_label": "データベースバックアップ",
++      "database_backup_hint": "お気に入り、タグ、別名、評価、カバー切り抜き情報をZIPで書き出します。動画やメディアファイルは含まれません。",
++      "database_backup_action": "データベースを書き出す",
+       "reset_label": "すべての設定をリセット",
+       "reset_hint": "すべてのカスタム設定を削除してデフォルトに戻す",
+       "close_action_label": "ウィンドウを閉じるとき",
+@@ -722,6 +773,13 @@
+       "variable": "変数",
        "reset": "デフォルトにリセット",
        "save": "設定を保存"
-     },
++    },
 +    "save_bar": {
 +      "loading": "設定を読み込み中...",
 +      "saving": "設定を保存中...",
 +      "unsaved": "未保存の変更があります",
 +      "saved": "すべての変更を保存済み",
 +      "saving_button": "保存中..."
-+    },
+     },
      "var": {
        "num": "番号",
-       "title": "タイトル",
-@@ -801,6 +856,61 @@
+@@ -801,6 +859,61 @@
      }
    },
    "scanner": {
@@ -1383,7 +1447,7 @@
      "page_title": "リスト生成",
      "toast": {
        "folder_already_added": "このフォルダはすでにリストにあります",
-@@ -824,11 +934,14 @@
+@@ -824,11 +937,14 @@
        "no_output_count": "{count} 件が出力フォルダ未設定",
        "done_with_warnings": "{count} 本完了、ただし {parts}。詳細はログを参照",
        "generate_success": "{count} 本の動画リストを生成しました",
@@ -1398,7 +1462,7 @@
        "path_copied": "コピーしました: {path}",
        "browse_dir_fallback": "ブラウザではドロップしたファイルのパスを直接読み取れないため、フォルダ選択画面を開きました"
      },
-@@ -868,13 +981,84 @@
+@@ -868,13 +984,84 @@
        "clear_display_title": "画面をクリア（リロード後に復元）",
        "clear_all_title": "すべてクリア（履歴含む）"
      },
@@ -1483,7 +1547,7 @@
        "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
        "jellyfin_suffix": "本",
        "jellyfin_update_title": "Jellyfin poster + fanart を補完",
-@@ -928,6 +1112,29 @@
+@@ -928,6 +1115,29 @@
        "missing_enrich_confirm_body_suffix": " 分です。続行しますか？",
        "missing_enrich_confirm_cancel": "キャンセル",
        "missing_enrich_confirm_confirm": "補完を確認",
@@ -1513,7 +1577,7 @@
        "log_interrupted": "⚠ 生成が中断されました（ページを離れました）",
        "status_preparing": "準備中...",
        "status_done_count": "完了！{count} 本の動画",
-@@ -1291,6 +1498,7 @@
+@@ -1291,6 +1501,7 @@
        "tag_nfo_write_blocked": "タグは保存されましたが、NFO への書き込み権限がありません",
        "translate_tooltip": "タイトルを翻訳",
        "translate_done": "タイトルを翻訳しました",
@@ -1521,7 +1585,7 @@
        "translate_undo": "元に戻す",
        "translate_skipped": "翻訳が必要な内容はありません",
        "translate_undone": "タイトルを元に戻しました",
-@@ -1410,10 +1618,90 @@
+@@ -1410,10 +1621,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -1612,7 +1676,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1845,6 +2133,12 @@
+@@ -1845,6 +2136,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -1625,7 +1689,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2154,11 @@
+@@ -1860,7 +2157,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -1638,7 +1702,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2176,15 @@
+@@ -1878,11 +2179,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -1727,21 +1791,31 @@
        "tag": "标签名称",
        "actors": "演员名称（可用、，,分隔多人）"
      },
-@@ -723,6 +771,13 @@
+@@ -707,6 +755,9 @@
+       "player_label": "视频播放器",
+       "player_placeholder": "留空使用系统默认",
+       "player_hint_prefix": "例如:",
++      "database_backup_label": "数据库备份",
++      "database_backup_hint": "导出收藏、标签、别名、评分和封面裁切数据；不包含视频和媒体文件。",
++      "database_backup_action": "导出数据库",
+       "reset_label": "重置所有设置",
+       "reset_hint": "删除所有自定义设置，恢复默认值",
+       "close_action_label": "关闭窗口时",
+@@ -722,6 +773,13 @@
+       "variable": "变量",
        "reset": "重置为默认值",
        "save": "保存设置"
-     },
++    },
 +    "save_bar": {
 +      "loading": "正在加载设置...",
 +      "saving": "正在保存设置...",
 +      "unsaved": "有未保存的更改",
 +      "saved": "所有更改已保存",
 +      "saving_button": "保存中..."
-+    },
+     },
      "var": {
        "num": "番号",
-       "title": "标题",
-@@ -801,6 +856,61 @@
+@@ -801,6 +859,61 @@
      }
    },
    "scanner": {
@@ -1803,7 +1877,7 @@
      "page_title": "列表生成",
      "toast": {
        "folder_already_added": "此文件夹已在列表中",
-@@ -824,11 +934,14 @@
+@@ -824,11 +937,14 @@
        "no_output_count": "{count} 个未设输出文件夹",
        "done_with_warnings": "完成 {count} 部，但 {parts}，详细见日志",
        "generate_success": "成功生成 {count} 部视频列表",
@@ -1818,7 +1892,7 @@
        "path_copied": "已复制: {path}",
        "browse_dir_fallback": "浏览器无法直接读取拖放文件的路径，已为您打开文件夹选择器"
      },
-@@ -868,13 +981,84 @@
+@@ -868,13 +984,84 @@
        "clear_display_title": "清除画面（刷新后恢复）",
        "clear_all_title": "清除全部（包含历史）"
      },
@@ -1903,7 +1977,7 @@
        "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
-@@ -928,6 +1112,29 @@
+@@ -928,6 +1115,29 @@
        "missing_enrich_confirm_body_suffix": " 分钟，是否继续？",
        "missing_enrich_confirm_cancel": "取消",
        "missing_enrich_confirm_confirm": "确认补全",
@@ -1933,7 +2007,7 @@
        "log_interrupted": "⚠ 生成被中断（离开页面）",
        "status_preparing": "准备中...",
        "status_done_count": "完成！{count} 部视频",
-@@ -1291,6 +1498,7 @@
+@@ -1291,6 +1501,7 @@
        "tag_nfo_write_blocked": "标签已保存，但没有权限写入 NFO",
        "translate_tooltip": "翻译标题",
        "translate_done": "已翻译标题",
@@ -1941,7 +2015,7 @@
        "translate_undo": "复原",
        "translate_skipped": "标题没有需要翻译的内容",
        "translate_undone": "已复原标题",
-@@ -1410,10 +1618,90 @@
+@@ -1410,10 +1621,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -2032,7 +2106,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1845,6 +2133,12 @@
+@@ -1845,6 +2136,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -2045,7 +2119,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2154,11 @@
+@@ -1860,7 +2157,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -2058,7 +2132,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2176,15 @@
+@@ -1878,11 +2179,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -2147,21 +2221,31 @@
        "tag": "標籤名稱",
        "actors": "演員名稱（可用、，,分隔多人）"
      },
-@@ -723,6 +771,13 @@
+@@ -710,6 +758,9 @@
+       "this_computer_unavailable": "暫時讀不到這台電腦的設定，這兩項先不能改",
+       "player_placeholder": "留空使用系統預設",
+       "player_hint_prefix": "例如:",
++      "database_backup_label": "資料庫備份",
++      "database_backup_hint": "匯出收藏、標籤、別名、評分和封面裁切資料；不包含影片與媒體檔案。",
++      "database_backup_action": "匯出資料庫",
+       "reset_label": "重置所有設定",
+       "reset_hint": "刪除所有自訂設定，恢復預設值",
+       "close_action_label": "關閉視窗時",
+@@ -722,6 +773,13 @@
+       "variable": "變數",
        "reset": "重置為預設值",
        "save": "儲存設定"
-     },
++    },
 +    "save_bar": {
 +      "loading": "正在載入設定...",
 +      "saving": "正在儲存設定...",
 +      "unsaved": "有未儲存的變更",
 +      "saved": "所有變更已儲存",
 +      "saving_button": "儲存中..."
-+    },
+     },
      "var": {
        "num": "番號",
-       "title": "標題",
-@@ -801,6 +856,61 @@
+@@ -801,6 +859,61 @@
      }
    },
    "scanner": {
@@ -2223,7 +2307,7 @@
      "page_title": "列表生成",
      "toast": {
        "folder_already_added": "此資料夾已在列表中",
-@@ -824,11 +934,14 @@
+@@ -824,11 +937,14 @@
        "no_output_count": "{count} 個未設輸出夾",
        "done_with_warnings": "完成 {count} 部，但 {parts}，詳細見日誌",
        "generate_success": "成功產生 {count} 部影片列表",
@@ -2238,7 +2322,7 @@
        "path_copied": "已複製: {path}",
        "browse_dir_fallback": "瀏覽器無法直接讀取拖放檔案的路徑，已為您開啟資料夾選擇器"
      },
-@@ -868,13 +981,84 @@
+@@ -868,13 +984,84 @@
        "clear_display_title": "清除畫面（重整後恢復）",
        "clear_all_title": "清除全部（包含歷史）"
      },
@@ -2323,7 +2407,7 @@
        "jellyfin_prefix": "外部媒體管理器封面缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "補齊 poster + fanart",
-@@ -928,6 +1112,29 @@
+@@ -928,6 +1115,29 @@
        "missing_enrich_confirm_body_suffix": " 分鐘，是否繼續？",
        "missing_enrich_confirm_cancel": "取消",
        "missing_enrich_confirm_confirm": "確認補完",
@@ -2353,7 +2437,7 @@
        "log_interrupted": "⚠ 生成被中斷（離開頁面）",
        "status_preparing": "準備中...",
        "status_done_count": "完成！{count} 部影片",
-@@ -1291,6 +1498,7 @@
+@@ -1291,6 +1501,7 @@
        "tag_nfo_write_blocked": "標籤已存，但沒有權限寫入 NFO",
        "translate_tooltip": "翻譯標題",
        "translate_done": "已翻譯標題",
@@ -2361,7 +2445,7 @@
        "translate_undo": "復原",
        "translate_skipped": "標題沒有需要翻譯的內容",
        "translate_undone": "已復原標題",
-@@ -1410,10 +1618,90 @@
+@@ -1410,10 +1621,90 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -2452,7 +2536,7 @@
      "hero": {
        "this_computer_unavailable": "暫時讀不到這台電腦的更新資訊，請重新開啟說明頁再試",
        "copy_curl": "複製指令",
-@@ -1850,6 +2138,12 @@
+@@ -1850,6 +2141,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -2465,7 +2549,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1865,7 +2159,11 @@
+@@ -1865,7 +2162,11 @@
        "costar": "與她同片"
      },
      "donut": {
@@ -2478,7 +2562,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2181,15 @@
+@@ -1883,11 +2184,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -12195,7 +12279,7 @@
  }
 --- /dev/null
 +++ b/web/static/js/shared/video-player.js
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,54 @@
 +const ANDROID_SHELL_UA = /(?:^|\s)OpenAverMobile\/\S+/;
 +
 +export function openVideoPlayer(path, options = {}) {
@@ -12226,7 +12310,30 @@
 +    return true;
 +}
 +
++export function openLocalVideoStatus(status) {
++    if (!status || !status.exists) return false;
++    const playback = status.playback || {};
++    const paths = Array.isArray(playback.paths)
++        ? playback.paths.filter(item => typeof item === 'string' && item.trim())
++        : [];
++    const legacyPaths = Array.isArray(status.paths)
++        ? status.paths.filter(item => typeof item === 'string' && item.trim())
++        : [];
++    const selectedPaths = paths.length ? paths : legacyPaths;
++    const path = String(
++        playback.path || selectedPaths[0] || ''
++    ).trim();
++    if (!path) return false;
++    return openVideoPlayer(path, {
++        parts: selectedPaths,
++        labels: Array.isArray(playback.part_tokens)
++            ? playback.part_tokens
++            : [],
++    });
++}
++
 +window.openVideoPlayer = openVideoPlayer;
++window.openLocalVideoStatus = openLocalVideoStatus;
 --- /dev/null
 +++ b/web/templates/_macros/ui_state.html
 @@ -0,0 +1,107 @@
@@ -13966,7 +14073,7 @@
                      <!-- TASK-140-T6: 播放 -->
                      <button class="lb-action-btn"
 -                            @click="window.open('/api/gallery/player?path=' + encodeURIComponent(currentLightboxVideo()?._localStatus?.paths?.[0] || ''), '_blank')"
-+                            @click="window.openVideoPlayer ? window.openVideoPlayer(currentLightboxVideo()?._localStatus?.paths?.[0] || '') : window.open('/api/gallery/player?path=' + encodeURIComponent(currentLightboxVideo()?._localStatus?.paths?.[0] || ''), '_blank')"
++                            @click="window.openLocalVideoStatus ? window.openLocalVideoStatus(currentLightboxVideo()?._localStatus) : window.openVideoPlayer?.(currentLightboxVideo()?._localStatus?.paths?.[0] || '')"
                              x-show="!actressLightboxMode() && (cardActionState(currentLightboxVideo()) === 'play' || cardActionState(currentLightboxVideo()) === 'play+folder')"
                              data-tooltip="{{ t('search.action.play') }}" aria-label="{{ t('search.action.play') }}">
                          <i class="bi bi-play-fill"></i>
@@ -14067,7 +14174,7 @@
                                  <!-- TASK-140-T6: 播放（count===1 或 count>1 皆顯示）-->
                                  <button class="btn-glass-circle"
 -                                        @click.stop="window.open('/api/gallery/player?path=' + encodeURIComponent(result._localStatus?.paths?.[0] || ''), '_blank')"
-+                                        @click.stop="window.openVideoPlayer ? window.openVideoPlayer(result._localStatus?.paths?.[0] || '') : window.open('/api/gallery/player?path=' + encodeURIComponent(result._localStatus?.paths?.[0] || ''), '_blank')"
++                                        @click.stop="window.openLocalVideoStatus ? window.openLocalVideoStatus(result._localStatus) : window.openVideoPlayer?.(result._localStatus?.paths?.[0] || '')"
                                          x-show="cardActionState(result) === 'play' || cardActionState(result) === 'play+folder'"
                                          title="{{ t('search.action.play') }}">
                                      <i class="bi bi-play-fill"></i>
@@ -14332,15 +14439,33 @@
                      <div class="settings-form-row">
                          <label class="row-label">{{ t('settings.system.player_label') }}{{ local_machine_tag() }}</label>
                          <div class="flex-1 flex flex-col gap-1">
-@@ -1527,6 +1587,7 @@
+@@ -1527,7 +1587,25 @@
                              <small class="settings-hint">{{ t('settings.system.player_hint_prefix') }} C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe</small>
                          </div>
                      </div>
 +                    {% endif %}
                      <hr class="my-3">
++
++                    {% if is_android %}
++                    <!-- Database backup is intentionally export-only in r42. -->
++                    <div class="settings-form-row">
++                        <label class="row-label">
++                            {{ t('settings.system.database_backup_label') }}
++                            <small class="settings-hint">{{ t('settings.system.database_backup_hint') }}</small>
++                        </label>
++                        <a class="btn btn-sm btn-outline btn-neutral"
++                           href="/api/database/export"
++                           download>
++                            <i class="bi bi-database-down"></i>
++                            {{ t('settings.system.database_backup_action') }}
++                        </a>
++                    </div>
++                    <hr class="my-3">
++                    {% endif %}
  
                      <!-- 重置按鈕 -->
-@@ -1543,14 +1604,30 @@
+                     <div class="settings-form-row">
+@@ -1543,14 +1621,30 @@
              </div>
            </div>
          </section><!-- /sec-system -->
@@ -14378,7 +14503,7 @@
  
      <!-- Dirty Check Modal -->
      <dialog class="modal fluent-modal"
-@@ -1629,6 +1706,7 @@
+@@ -1629,6 +1723,7 @@
          </div>
      </dialog>
  
@@ -14386,7 +14511,7 @@
      <!-- T4: 伺服器模式切換 Confirm Modal -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': serverModeConfirmOpen }"
-@@ -1660,6 +1738,7 @@
+@@ -1660,6 +1755,7 @@
              </div>
          </div>
      </dialog>
@@ -14394,7 +14519,7 @@
  
      <!-- 90c-T5: 全域模式切換（破壞性重設）Confirm Modal -->
      <dialog class="modal fluent-modal"
-@@ -1709,20 +1788,13 @@
+@@ -1709,20 +1805,13 @@
      </dialog>
  
  <!-- Toast 容器（Alpine controlled）-->

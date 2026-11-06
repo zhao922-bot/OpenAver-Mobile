@@ -1003,7 +1003,7 @@
              self.commit()
 --- a/core/enricher.py
 +++ b/core/enricher.py
-@@ -2,12 +2,14 @@
+@@ -2,12 +2,15 @@
  enricher.py - 舊片原地補完（NFO / 封面 / 劇照），絕對不搬移、不改名、不建目錄
  """
  
@@ -1013,12 +1013,13 @@
  import time
  import xml.etree.ElementTree as ET
  from pathlib import Path
++from threading import Event
  from typing import List, NamedTuple, Optional
 +from urllib.parse import urljoin, urlparse
  
  from core.config import STEM_IMAGE_MODES
  from core.cover_attributes import effective_tags
-@@ -22,7 +24,9 @@
+@@ -22,7 +25,9 @@
      should_preserve_cover,
  )
  from core.focal_trigger import schedule_focal_after_cover_write
@@ -1028,7 +1029,7 @@
  from core.nfo_read import (
      nfo_actor_names,
      nfo_first_text,
-@@ -35,8 +39,19 @@
+@@ -35,14 +40,34 @@
  from core.nfo_stat import NFO_MTIME_FILL_MISSING, NFO_MTIME_REFRESH, nfo_mtime_or_none
  from core.nfo_title_format import resolve_preserved_title_for_write, resolve_title_body
  from core.nfo_updater import parse_nfo
@@ -1050,7 +1051,22 @@
  from core.scraper import search_jav
  from core.scrapers.utils import check_subtitle
  
-@@ -273,7 +288,7 @@
+ logger = get_logger(__name__)
+ 
+ VALID_MODES = {"fill_missing", "db_to_sidecar", "refresh_full"}
++
++
++class SampleBackfillCancelled(Exception):
++    """Raised when a cooperative sample-backfill cancellation is observed."""
++
++
++def _raise_if_cancelled(cancel_event: Optional[Event]) -> None:
++    if cancel_event is not None and cancel_event.is_set():
++        raise SampleBackfillCancelled()
+ 
+ 
+ _FILL_MISSING_REQUIRED = ["title", "actresses", "maker", "director", "series", "label", "tags", "release_date"]
+@@ -273,7 +298,7 @@
          existing = repo.get_by_path(path_uri)
          user_tags = existing.user_tags if existing else []
  
@@ -1059,7 +1075,7 @@
          number=number,
          title=meta.get("title", ""),
          original_title=meta.get("original_title", ""),
-@@ -300,7 +315,6 @@
+@@ -300,7 +325,6 @@
          has_fanart=has_fanart,
          nfo_title_format=nfo_title_format,
      )
@@ -1067,7 +1083,7 @@
  
  
  def _write_cover(
-@@ -390,7 +404,9 @@
+@@ -390,7 +414,9 @@
              fanart_ok = certain
          else:
              try:
@@ -1078,7 +1094,7 @@
                  fanart_ok = True
              except shutil.SameFileError:
                  fanart_ok = True
-@@ -423,6 +439,34 @@
+@@ -423,6 +449,34 @@
      uris: List[str]
      downloaded: int
      skipped_existing: int
@@ -1113,11 +1129,12 @@
  
  
  def _write_extrafanart(
-@@ -431,13 +475,14 @@
+@@ -431,13 +485,15 @@
      write_extrafanart: bool,
      path_mappings: dict = None,
      preview_sample_images: List[str] = None,
 +    base_url: str = "",
++    cancel_event: Optional[Event] = None,
  ) -> ExtrafanartResult:
      if not write_extrafanart or not sample_images:
 -        return ExtrafanartResult([], 0, 0)
@@ -1130,7 +1147,7 @@
  
      # CD-126-2：逐張配對用 index，**不用裸 zip()**——zip 在長度不等時會靜默截斷，
      # 等於少下載幾張圖。長度不等的正確語意是「那幾格沒有代理」，不是「少下載」。
-@@ -445,28 +490,107 @@
+@@ -445,28 +501,111 @@
      uris: List[str] = []
      downloaded = 0
      skipped_existing = 0
@@ -1138,6 +1155,7 @@
 +    errors = []
 +    seen = set()
      for i, url in enumerate(sample_images):
++        _raise_if_cancelled(cancel_event)
          dest = str(extrafanart_dir / f"fanart{i+1}.jpg")
 +        primary_url = _normalize_image_url(url, base_url)
 +        fallback = _normalize_image_url(
@@ -1191,6 +1209,7 @@
 +                )
              )
 -            if ok:
++            _raise_if_cancelled(cancel_event)
 +            if ok and _is_valid_sample_file(dest):
                  uris.append(to_file_uri(dest, path_mappings))
                  downloaded += 1
@@ -1219,6 +1238,8 @@
 +                        ),
 +                        "http_status": last.get("http_status"),
 +                    })
++        except SampleBackfillCancelled:
++            raise
          except Exception as e:
 +            from core.android_storage import AndroidStorageError
 +
@@ -1245,7 +1266,7 @@
  
  
  def _preserve_nfo_only_fields(meta: dict, scraper_data: dict, fs_path: str) -> None:
-@@ -761,6 +885,7 @@
+@@ -761,6 +900,7 @@
          write_extrafanart=write_extrafanart,
          path_mappings=path_mappings,
          preview_sample_images=meta.get("preview_sample_images", []),
@@ -1253,7 +1274,7 @@
      )
      extrafanart_written = extrafanart_res.downloaded
  
-@@ -940,13 +1065,18 @@
+@@ -940,13 +1080,19 @@
      repo.update_sample_images(path_uri, sample_images)
  
  
@@ -1266,6 +1287,7 @@
 -    """只補抓劇照：呼叫 scraper → 下載 extrafanart → 更新 DB sample_images。
 -    不寫 NFO / cover / 其他欄位。
 +    related_db_paths: Optional[List[str]] = None,
++    cancel_event: Optional[Event] = None,
 +) -> tuple[EnrichResult, dict]:
 +    """只補抓劇照，並回傳足以區分「查無／無劇照／下載失敗／DB 失敗」的診斷。
 +
@@ -1276,7 +1298,7 @@
      """
      _empty = EnrichResult(
          success=False,
-@@ -957,6 +1087,16 @@
+@@ -957,6 +1103,21 @@
          source_used="",
          error=None,
      )
@@ -1290,10 +1312,15 @@
 +        "download_failed": 0,
 +        "download_errors": [],
 +    }
++
++    if cancel_event is not None and cancel_event.is_set():
++        _empty.error = "劇照補齊已取消"
++        diagnostics["error_code"] = "cancelled"
++        return _empty, diagnostics
  
      try:
          fs_path = uri_to_local_fs_path(file_path, path_mappings)
-@@ -967,39 +1107,138 @@
+@@ -967,39 +1128,155 @@
      if not os.path.exists(fs_path):
          logger.warning("[fetch_samples_only] 檔案不存在: %s", fs_path)
          _empty.error = "檔案不存在"
@@ -1305,7 +1332,13 @@
 +        return _empty, diagnostics
 +
 +    try:
++        _raise_if_cancelled(cancel_event)
 +        meta = search_jav(number, source="auto", javbus_lang=None)
++        _raise_if_cancelled(cancel_event)
++    except SampleBackfillCancelled:
++        _empty.error = "劇照補齊已取消"
++        diagnostics["error_code"] = "cancelled"
++        return _empty, diagnostics
 +    except Exception as exc:
 +        logger.exception("[fetch_samples_only] 來源查詢失敗: %s", exc)
 +        _empty.error = f"劇照來源查詢失敗：{type(exc).__name__}"
@@ -1340,12 +1373,18 @@
 +        return _empty, diagnostics
 +
 +    try:
++        _raise_if_cancelled(cancel_event)
 +        extrafanart_res = _write_extrafanart(
 +            fs_path, sample_images, write_extrafanart=True,
 +            path_mappings=path_mappings,
 +            preview_sample_images=meta.get("preview_sample_images", []),
 +            base_url=meta.get("url", ""),
++            cancel_event=cancel_event,
 +        )
++    except SampleBackfillCancelled:
++        _empty.error = "劇照補齊已取消"
++        diagnostics["error_code"] = "cancelled"
++        return _empty, diagnostics
 +    except Exception as exc:
 +        from core.android_storage import (
 +            AndroidStoragePermissionError,
@@ -1379,6 +1418,7 @@
 -        # db-ns-ok: fs_path_for_db, DB round-trip value passed to wrapper sink
 -        _db_upsert_samples_only(repo, fs_path_for_db, extrafanart_res.uris)
 +        try:
++            _raise_if_cancelled(cancel_event)
 +            repo = VideoRepository()
 +            # db-ns-ok: fs_path_for_db, DB round-trip value passed to wrapper sink
 +            _db_upsert_samples_only(repo, fs_path_for_db, extrafanart_res.uris)
@@ -1390,6 +1430,10 @@
 +                    continue
 +                seen_uris.add(related_uri)
 +                repo.update_sample_images(related_uri, extrafanart_res.uris)
++        except SampleBackfillCancelled:
++            _empty.error = "劇照補齊已取消"
++            diagnostics["error_code"] = "cancelled"
++            return _empty, diagnostics
 +        except Exception as exc:
 +            logger.exception("[fetch_samples_only] DB 更新失敗: %s", exc)
 +            _empty.error = "劇照已下載，但資料庫更新失敗，請再試一次"
@@ -5336,13 +5380,20 @@
      @property
      def is_censored(self) -> bool:
          """是否為有碼來源（CD-61-3 round-2 雙路徑）。
-@@ -92,6 +91,11 @@
+@@ -92,6 +91,18 @@
              censored_type,
          )
          return True
 +
 +    def dict(self, *args, **kwargs):
 +        data = super().dict(*args, **kwargs)
++        data['is_censored'] = self.is_censored
++        return data
++
++    def model_dump(self, *args, **kwargs):
++        # Pydantic v2 does not route model_dump() through the legacy dict()
++        # override. Keep the computed contract identical on both versions.
++        data = super().model_dump(*args, **kwargs)
 +        data['is_censored'] = self.is_censored
 +        return data
  
