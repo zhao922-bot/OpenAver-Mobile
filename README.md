@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r39-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r40-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r39-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r40-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r39`（versionCode `17055`）
+- 版本：`0.17.18-r40`（versionCode `17056`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -201,6 +201,9 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   实际下载张数和磁盘现有张数，不再停留在静态的待补数量
 - r39：Android System WebView 低于 103 时显示明确的升级提示和更新入口，
   避免旧系统 WebView 直接显示白屏
+- r40：修复展示库在搜索、女优筛选和列表刷新后，滚动位置附近卡片封面变空白、
+  必须刷新页面才恢复的问题；复用卡片时保留图片窗口和已加载状态，并补做缓存图片
+  的加载状态同步
 
 ## 限制
 

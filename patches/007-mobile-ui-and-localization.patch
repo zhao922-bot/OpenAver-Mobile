@@ -11289,7 +11289,7 @@
  export function stateVideos() {
      return {
  
-@@ -38,28 +42,79 @@
+@@ -38,61 +42,222 @@
          // gotcha：naturalWidth 在 decode 完成前恆為 0，reactive binding 不會因 load 事件重跑）---
          applyCellFocal,
  
@@ -11373,18 +11373,42 @@
                  }
                  // Re-assign module-level var via splice/push to keep the same reference
                  // (core.js uses direct assignment; ESM re-exports work because we read
-@@ -68,31 +123,118 @@
+                 // _videos/_filteredVideos at call time, not at import time)
+                 var vids = data.videos || [];
++                // Keyed x-for nodes can survive a list refresh. If a visible card
++                // is reused while its new object starts at _coverRequested=false,
++                // IntersectionObserver sees no intersection change and never fires
++                // the enter callback. Preserve the per-path image-window state so
++                // an in-place refresh cannot turn a visible cover into a blank card.
++                var previousCoverState = new Map();
++                _videos.forEach(function (v) {
++                    if (!v || !v.path) return;
++                    previousCoverState.set(v.path, {
++                        requested: v._coverRequested === true,
++                        loaded: v._imgLoaded === true,
++                        coverUrl: String(v.cover_url || ''),
++                    });
++                });
                  // 67-A2: per-card 三態旗標。video 物件由此唯一來源流穿整條 render 鏈
                  // （_videos → _filteredVideos → paginatedVideos slice，皆同 ref），故初始化一處即涵蓋
                  // 初次載入/retry/翻頁/搜尋/排序；後端不回此欄位。補封面走 refreshVideoData reset。
 -                vids.forEach(function (v) { if (v._imgLoaded === undefined) v._imgLoaded = false; if (v._coverRequested === undefined) v._coverRequested = false; });
 +                vids.forEach(function (v, index) {
-+                    if (v._imgLoaded === undefined) v._imgLoaded = false;
++                    var previous = previousCoverState.get(v.path);
++                    var sameCover = !!previous
++                        && previous.coverUrl === String(v.cover_url || '');
++                    // A changed cover must fade in again. An unchanged reused
++                    // <img> will not emit another load event, so retain its loaded
++                    // state instead of leaving the new object permanently false.
++                    v._imgLoaded = !!v.cover_url && sameCover
++                        ? previous.loaded
++                        : false;
 +                    v._coverRetryCount = 0;
 +                    // First visible row can start decoding immediately. Every other
 +                    // cover enters through x-intersect and leaves the image window
 +                    // when it is far enough away, releasing its decoded bitmap.
-+                    v._coverRequested = index < 8;
++                    v._coverRequested = index < 8
++                        || (!!previous && previous.requested);
 +                });
                  _setVideos(vids);
 -                this.videoCount = _videos.length;
@@ -11500,7 +11524,7 @@
              this.updatePagination();
              // Settle: retry 也用 settle（不碰 opacity → 不閃）
              if (this.mode === 'grid' && !this.error) {
-@@ -107,6 +249,13 @@
+@@ -107,6 +272,13 @@
  
          // --- 互動邏輯 ---
          onSearchChange() {
@@ -11514,7 +11538,7 @@
              // B8: 透過 _animateFilter 觸發篩選動畫
              this._animateFilter();
              // TASK-115-T8：改走單一判斷點（CD-8），無 pill 時行為逐位元組不變
-@@ -370,6 +519,7 @@
+@@ -370,6 +542,7 @@
              } else {
                  this.search = '';
                  this.pills = [];
@@ -11522,7 +11546,7 @@
                  this._animateFilter();            // 影片格：CD-2 步驟 7-9（唯一一次），內含 applyFilterAndSort() + saveState()
                  this._reconcileHeroCard();        // TASK-115-T8 / RULING 3：清 hero 狀態的單一判斷點
              }
-@@ -443,7 +593,7 @@
+@@ -443,7 +616,7 @@
           * B7/B15: 排序動畫共用 helper — flip-guard → capture → change → Flip reorder
           * @param {Function} changeFn - 執行 data change 的函數
           */
@@ -11531,7 +11555,7 @@
              var savedPage = this.page;
              var grid = null;
              var positionMap = null;
-@@ -455,6 +605,14 @@
+@@ -455,6 +628,14 @@
                      grid.classList.add('flip-guard');
                      void grid.offsetHeight;  // force reflow
                      positionMap = window.ShowcaseAnimations?.capturePositions?.(grid) || null;
@@ -11546,7 +11570,7 @@
                  }
              }
  
-@@ -495,7 +653,7 @@
+@@ -495,7 +676,7 @@
           * B8/B15: 篩選動畫共用 helper — flip-guard → capture → change → Flip filter
           * onSearchChange() 和 searchFromMetadata() 共用
           */
@@ -11555,7 +11579,7 @@
              var grid = null;
              var state = null;
  
-@@ -517,6 +675,17 @@
+@@ -517,6 +698,17 @@
                      grid.classList.add('flip-guard');
                      void grid.offsetHeight;  // force reflow
                      state = window.ShowcaseAnimations?.captureFlipState?.(grid) || null;
@@ -11573,7 +11597,7 @@
                  }
              }
  
-@@ -555,7 +724,7 @@
+@@ -555,7 +747,7 @@
           * @param {string} direction - 'next' | 'prev'
           * @param {number} [targetPage] - 目標頁碼（goToPage 用，prevPage/nextPage 不傳）
           */
@@ -11582,7 +11606,7 @@
              // 清理可能殘留的 flip-guard（sort/filter 動畫被翻頁打斷時）
              var grid = document.querySelector('.showcase-grid');
              if (grid) grid.classList.remove('flip-guard');
-@@ -566,9 +735,16 @@
+@@ -566,9 +758,16 @@
                  newPage = direction === 'next' ? this.page + 1 : this.page - 1;
              }
  
@@ -11602,7 +11626,7 @@
              this.saveState();
              window.scrollTo(0, 0);
  
-@@ -724,6 +900,14 @@
+@@ -724,6 +923,14 @@
              // --- Stage 1: pill 精準比對（TASK-115-T2, CD-6）---
              var pillPredicate = buildPillPredicate(this.pills, _nameToGroup, _tagToGroup);
              var pillFiltered = _videos.filter(pillPredicate);
@@ -11617,7 +11641,7 @@
  
              // --- Stage 2: 自由文字模糊比對 (M4a)（現況邏輯，body 逐字保留，僅改輸入來源陣列）---
              if (this.search && this.search.trim()) {
-@@ -842,7 +1026,21 @@
+@@ -842,7 +1049,21 @@
              if (parseInt(this.perPage) === 0 && this.mode === 'grid') {
                  this.perPage = 120;
              }
@@ -11640,7 +11664,7 @@
              var slice;
              if (perPage === 0) {
                  slice = _filteredVideos.slice();
-@@ -877,6 +1075,8 @@
+@@ -877,6 +1098,8 @@
                          console.error('Failed to open file:', err);
                          this.showToast(window.t('showcase.video.play_failed'), 'error');
                      });
@@ -11649,7 +11673,7 @@
              } else {
                  window.open('/api/gallery/player?path=' + encodeURIComponent(path), '_blank');
              }
-@@ -884,6 +1084,9 @@
+@@ -884,6 +1107,9 @@
  
          // 工具方法：從 paginatedVideos 的 index 映射到 filteredVideos 的 index
          getCurrentFilteredIndex(paginatedIndex) {
@@ -14367,7 +14391,7 @@
          <!-- 影片模式：status bar + grid / table / list (CD-2: x-if 避免 Alpine 追蹤隱藏陣列 DOM) -->
          <template x-if="!showFavoriteActresses">
          <div>
-@@ -542,22 +584,26 @@
+@@ -542,22 +584,33 @@
                       @click="openLightbox(getCurrentFilteredIndex(index))"
                       :style="`--card-index: ${index}`"
                       :data-flip-id="video.path">
@@ -14402,12 +14426,19 @@
 +                                 @load="video._imgLoaded = true; video._coverRetryCount = 0; applyCellFocal($el, video)"
 +                                 @error="handleCoverError(video, $event)"
 +                                 x-init="$watch('video.auto_focal', () => applyCellFocal($el, video));
-+                                         $watch('video.crop_mode', () => applyCellFocal($el, video))">
++                                          $watch('video.crop_mode', () => applyCellFocal($el, video));
++                                          $nextTick(() => {
++                                              if ($el.complete && $el.naturalWidth > 0) {
++                                                  video._imgLoaded = true;
++                                                  video._coverRetryCount = 0;
++                                                  applyCellFocal($el, video);
++                                              }
++                                          })">
 +                        </template>
                          <!-- 67-A2: skeleton overlay（pending 時，gate 含 has_cover → stale @error 後 has_cover=false 自動退出）-->
                          <div class="skeleton-cover shimmer"
                               x-show="video.cover_url && video.has_cover && !video._imgLoaded && video._coverRequested"></div>
-@@ -779,15 +825,18 @@
+@@ -779,15 +832,18 @@
                           :data-flip-id="'actress:' + actress.name"
                           @click="openActressLightbox(index)">
                          <!-- Photo -->
@@ -14429,7 +14460,7 @@
                                       @load="applyCellFocal($el, actress, '--actress-crop-ratio')"
                                       x-init="$watch('actress.auto_focal', () => applyCellFocal($el, actress, '--actress-crop-ratio'));
                                               $watch('actress.crop_mode', () => applyCellFocal($el, actress, '--actress-crop-ratio'))">
-@@ -1184,7 +1233,7 @@
+@@ -1184,7 +1240,7 @@
                                          :aria-label="(currentLightboxVideo?.user_rating||0) > 0 ? t('showcase.pick.remove_aria') : t('showcase.pick.add_aria')"
                                          :aria-busy="!!_pickInFlight[currentLightboxVideo?.path]"
                                          @click.stop="togglePickStar()"><i class="bi bi-star pick-star-outline" aria-hidden="true"></i><i class="bi bi-star-fill pick-star-fill" aria-hidden="true"
@@ -14438,7 +14469,7 @@
                                          x-show="lbTrShowOnTitle()"
                                          @click.stop="lbTranslate()"
                                          :disabled="lbTrIsBusy()"
-@@ -1200,7 +1249,6 @@
+@@ -1200,7 +1256,6 @@
                                  <!-- §b3: 劇照補抓入口（無劇照時顯示） -->
                                  <button class="fetch-samples-btn"
                                          x-show="(currentLightboxVideo?.sample_images || []).length === 0 && !_fetchSamplesLoading"
@@ -14446,7 +14477,7 @@
                                          @click="fetchSamples(currentLightboxVideo)">
                                      <i class="bi bi-cloud-download" aria-hidden="true"></i>
                                      <span x-text="t('showcase.samples.fetch_btn')"></span>
-@@ -1223,13 +1271,6 @@
+@@ -1223,13 +1278,6 @@
                              <div class="lb-otitle"
                                   x-show="currentLightboxVideo?.original_title"
                                   x-text="currentLightboxVideo?.original_title"></div>
@@ -14460,7 +14491,7 @@
                              </div>
                              <!-- Row 3: Actresses -->
                              <div class="lb-actor" x-show="currentLightboxVideo?.actresses">
-@@ -1900,34 +1941,7 @@
+@@ -1900,34 +1948,7 @@
      </dialog>
  
      <!-- Toast (M3h) -->

@@ -14,7 +14,11 @@ def test_showcase_video_covers_use_a_bounded_image_window():
         / "app/src/main/python/web/templates/showcase.html"
     ).read_text(encoding="utf-8")
 
+    assert "var previousCoverState = new Map();" in state
+    assert "previous.coverUrl === String(v.cover_url || '')" in state
+    assert "v._imgLoaded = !!v.cover_url && sameCover" in state
     assert "v._coverRequested = index < 8" in state
+    assert "|| (!!previous && previous.requested)" in state
     assert "SHOWCASE_MOBILE_GRID_PAGE_SIZE = 45" in (
         ROOT
         / "app/src/main/python/web/static/js/pages/showcase/state-base.js"
@@ -32,6 +36,7 @@ def test_showcase_video_covers_use_a_bounded_image_window():
     assert 'decoding="async"' in template
     video_img = template.split('<template x-if="video._coverRequested && video.cover_url">', 1)[1].split('</template>', 1)[0]
     assert ':loading=' not in video_img
+    assert "if ($el.complete && $el.naturalWidth > 0)" in video_img
 
 
 def test_showcase_actress_photos_share_the_image_window():

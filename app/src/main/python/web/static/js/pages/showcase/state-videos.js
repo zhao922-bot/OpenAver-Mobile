@@ -120,16 +120,39 @@ export function stateVideos() {
                 // (core.js uses direct assignment; ESM re-exports work because we read
                 // _videos/_filteredVideos at call time, not at import time)
                 var vids = data.videos || [];
+                // Keyed x-for nodes can survive a list refresh. If a visible card
+                // is reused while its new object starts at _coverRequested=false,
+                // IntersectionObserver sees no intersection change and never fires
+                // the enter callback. Preserve the per-path image-window state so
+                // an in-place refresh cannot turn a visible cover into a blank card.
+                var previousCoverState = new Map();
+                _videos.forEach(function (v) {
+                    if (!v || !v.path) return;
+                    previousCoverState.set(v.path, {
+                        requested: v._coverRequested === true,
+                        loaded: v._imgLoaded === true,
+                        coverUrl: String(v.cover_url || ''),
+                    });
+                });
                 // 67-A2: per-card 三態旗標。video 物件由此唯一來源流穿整條 render 鏈
                 // （_videos → _filteredVideos → paginatedVideos slice，皆同 ref），故初始化一處即涵蓋
                 // 初次載入/retry/翻頁/搜尋/排序；後端不回此欄位。補封面走 refreshVideoData reset。
                 vids.forEach(function (v, index) {
-                    if (v._imgLoaded === undefined) v._imgLoaded = false;
+                    var previous = previousCoverState.get(v.path);
+                    var sameCover = !!previous
+                        && previous.coverUrl === String(v.cover_url || '');
+                    // A changed cover must fade in again. An unchanged reused
+                    // <img> will not emit another load event, so retain its loaded
+                    // state instead of leaving the new object permanently false.
+                    v._imgLoaded = !!v.cover_url && sameCover
+                        ? previous.loaded
+                        : false;
                     v._coverRetryCount = 0;
                     // First visible row can start decoding immediately. Every other
                     // cover enters through x-intersect and leaves the image window
                     // when it is far enough away, releasing its decoded bitmap.
-                    v._coverRequested = index < 8;
+                    v._coverRequested = index < 8
+                        || (!!previous && previous.requested);
                 });
                 _setVideos(vids);
                 const total = Number.isFinite(data.total) ? data.total : vids.length;

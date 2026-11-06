@@ -602,7 +602,14 @@
                                  @load="video._imgLoaded = true; video._coverRetryCount = 0; applyCellFocal($el, video)"
                                  @error="handleCoverError(video, $event)"
                                  x-init="$watch('video.auto_focal', () => applyCellFocal($el, video));
-                                         $watch('video.crop_mode', () => applyCellFocal($el, video))">
+                                          $watch('video.crop_mode', () => applyCellFocal($el, video));
+                                          $nextTick(() => {
+                                              if ($el.complete && $el.naturalWidth > 0) {
+                                                  video._imgLoaded = true;
+                                                  video._coverRetryCount = 0;
+                                                  applyCellFocal($el, video);
+                                              }
+                                          })">
                         </template>
                         <!-- 67-A2: skeleton overlay（pending 時，gate 含 has_cover → stale @error 後 has_cover=false 自動退出）-->
                         <div class="skeleton-cover shimmer"
