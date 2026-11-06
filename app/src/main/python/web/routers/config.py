@@ -59,12 +59,23 @@ from core.source_config import MAX_ENABLED_SOURCES
 from core.translate_service import OllamaTranslateService
 from core.cloud_translate import TranslateError
 from core.platform_info import is_synology
+from core.i18n import get_config_locale, t as i18n_t
 from core import cf_handoff
 from core.proxy_policy import cf_window_proxy_restart_needed, current_settings
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api", tags=["config"])
+
+
+def _config_text(key: str, locale: str | None = None, **params) -> str:
+    """Return a config-API message in the requested or current UI language."""
+    return i18n_t(
+        f"runtime.config.{key}",
+        locale=locale or get_config_locale(),
+        **params,
+    )
+
 
 # 序列化「server_mode 切換交易」的單一鎖（Codex P2）：toggle（start/persist/stop）與
 # reset（clear/stop）共用此鎖，避免併發 enable/disable/reset 交錯導致 config↔listener
@@ -104,6 +115,7 @@ def get_config() -> dict:
 @router.put("/config")
 def update_config(config: AppConfig) -> dict:
     """更新所有設定"""
+    response_locale = getattr(config.general, "locale", None)
     # PR #93 P2-e：整份設定儲存納入 switch 互斥窗口（owner 拍板：互斥鎖）。否則另一分頁帶
     # 「切模式前的舊 directories 快照」的整份存檔會與 purge 交錯、把剛被 purge 的離線來源
     # 條目寫回 gallery.directories（DB 卡已刪）→ 殭屍條目。
@@ -127,7 +139,7 @@ def update_config(config: AppConfig) -> dict:
         != load_config().get("scraper", {}).get("strm_path_mappings", {})
     ):
         return {"success": False, "reason": "generate_in_progress_strm_mapping",
-                "error": "掃描／產生進行中，請完成後再修改媒體伺服器播放路徑映射。"}
+                "error": _config_text("save_in_progress_strm_mapping", response_locale)}
     # 程式區守衛（TASK-153b-T3 / spec §5.1）：非空自訂值解析後落在 get_project_root()
     # 之下 → 拒絕。更新時程式區會被整包換掉；要跟著資料根走請留空。
     custom_output_dir = (config.gallery.output_dir or "").strip()
@@ -136,16 +148,19 @@ def update_config(config: AppConfig) -> dict:
         return {
             "success": False,
             "reason": "gallery_output_in_program_area",
-            "error": "輸出目錄不可設在程式安裝目錄內。請改選其他位置，或留空以跟隨資料根目錄。",
+            "error": _config_text("output_in_program_area", response_locale),
         }
-    title_fmt_error = validate_nfo_title_format(config.scraper.nfo_title_format)
+    title_fmt_error = validate_nfo_title_format(
+        config.scraper.nfo_title_format,
+        locale=response_locale,
+    )
     if title_fmt_error:
         return {"success": False, "reason": "nfo_title_format_invalid", "error": title_fmt_error}
     save_token = object()  # 每 request 唯一身份 token（比照 generate 的 _active_tokens）
     reason = try_begin_config_save(save_token)
     if reason is not None:
         return {"success": False, "reason": reason,
-                "error": "設定切換中，請稍後再儲存。"}
+                "error": _config_text("config_save_in_progress", response_locale)}
     try:
         # Cap 守衛（CD-61-16，endpoint-level；非 model_validator）：
         # 同時啟用且非 manual_only 的來源數不得超過 MAX_ENABLED_SOURCES。
@@ -195,10 +210,10 @@ def update_config(config: AppConfig) -> dict:
 
             mutate_config(_write_preserving_server_owned)
             _reset_translate_service()  # 重置翻譯服務，讓新配置生效
-            return {"success": True, "message": "設定已儲存", "cf_window_proxy_restart_needed": cf_window_proxy_restart_needed() or cf_handoff.restart_needed_here(current_settings())}
+            return {"success": True, "message": _config_text("saved", response_locale), "cf_window_proxy_restart_needed": cf_window_proxy_restart_needed() or cf_handoff.restart_needed_here(current_settings())}
         except Exception as e:
             logger.error("儲存設定失敗: %s", e)
-            return {"success": False, "error": "儲存設定失敗"}
+            return {"success": False, "error": _config_text("save_failed", response_locale)}
     finally:
         end_config_save(save_token)
 
@@ -218,10 +233,10 @@ def reset_config() -> dict:
             else:
                 lan_listener.stop()
         _reset_translate_service()  # 清除舊服務實例（與 server_mode 無關，鎖外）
-        return {"success": True, "message": "已恢復預設設定"}
+        return {"success": True, "message": _config_text("reset_done")}
     except Exception as e:
         logger.error("恢復預設設定失敗: %s", e)
-        return {"success": False, "error": "恢復預設設定失敗"}
+        return {"success": False, "error": _config_text("reset_failed")}
 
 
 @router.get("/tutorial-status")
@@ -265,25 +280,30 @@ def update_general_field(field: str, request: GeneralFieldRequest, raw_request: 
     註：保持同步 def —— body 內 mutate_config 走檔案 I/O，依 async-offload 守衛
     （feature/71）須在 Starlette threadpool 執行，不可改 async def 卡 event loop。
     """
+    response_locale = (
+        request.value
+        if field == "locale" and isinstance(request.value, str)
+        else get_config_locale()
+    )
     allowed = {"sidebar_collapsed", "theme", "font_size", "locale", "server_mode", "auto_check_update"}
     if field not in allowed:
-        return {"success": False, "error": f"不允許更新欄位: {field}"}
+        return {"success": False, "error": _config_text("field_not_allowed", response_locale, field=field)}
     try:
         # server_mode 嚴格 bool 驗正（TASK-80a-T1）：StrictBool|StrictStr 已擋整數，
         # 此處再擋字串 —— 關鍵安全性：字串 "false" 是 truthy，若存進 config 會讓
         # middleware `bool(server_mode)` 誤判為開啟對外。非 bool 字串 → 400。
         if field == "server_mode" and not isinstance(request.value, bool):
-            raise HTTPException(status_code=400, detail="server_mode 必須為布林值")
+            raise HTTPException(status_code=400, detail=_config_text("server_mode_bool", response_locale))
 
         # auto_check_update 布林語意欄位擋字串 truthy 反轉（Codex P2），比照 server_mode：
         # 字串 "false" 是 truthy，若落盤 lifespan `not "false"`=False 會誤判 gate 通過、
         # help data-attr 也誤算 true → 使用者關閉卻被當開啟。非 bool → 400。
         if field == "auto_check_update" and not isinstance(request.value, bool):
-            raise HTTPException(status_code=400, detail="auto_check_update 必須為布林值")
+            raise HTTPException(status_code=400, detail=_config_text("auto_check_update_bool", response_locale))
 
         if field == "server_mode" and is_synology():
             return {"success": False, "reason": "synology_fixed",
-                    "error": "Synology 版伺服器模式為固定值，無法變更"}
+                    "error": _config_text("synology_fixed", response_locale)}
 
         # server_mode 是主機決定，遠端連入的客人不得切換（spec「遠端自鎖不防護」的更乾淨版本）。
         # 僅允許 loopback 來源切換；fail-closed：client None → 視為非 loopback → 拒絕。
@@ -297,7 +317,7 @@ def update_general_field(field: str, request: GeneralFieldRequest, raw_request: 
                 )
                 # reason 供前端對應專屬 i18n 訊息（remote_only），而非通用「請稍後再試」
                 return {"success": False, "reason": "remote_forbidden",
-                        "error": "server_mode 僅能在主機本機切換"}
+                        "error": _config_text("server_mode_local_only", response_locale)}
 
         # server_mode 專屬分支：start/stop LAN listener，確保 runtime ≠ persisted 不分離。
         # 整個交易在 _server_mode_toggle_lock 內序列化（Codex P2）：防併發 enable/disable
@@ -312,7 +332,7 @@ def update_general_field(field: str, request: GeneralFieldRequest, raw_request: 
                         lan_port = lan_listener.start()
                     except Exception as e:                    # noqa: BLE001
                         logger.error("server_mode 啟用失敗: %s", e)
-                        return {"success": False, "error": "無法啟動 LAN 伺服器"}
+                        return {"success": False, "error": _config_text("lan_start_failed", response_locale)}
                     try:
                         mutate_config(lambda cfg: cfg.setdefault("general", {}).update({"server_mode": True}))
                     except Exception as e:                    # noqa: BLE001
@@ -322,7 +342,7 @@ def update_general_field(field: str, request: GeneralFieldRequest, raw_request: 
                             lan_listener.stop()
                         except Exception:                     # noqa: BLE001,S110 — rollback best-effort
                             pass
-                        return {"success": False, "error": "無法儲存伺服器模式設定"}
+                        return {"success": False, "error": _config_text("server_mode_save_failed", response_locale)}
                     from web.lan_listener import get_lan_ip, is_public_exposure
                     lan_ip = get_lan_ip()
                     return {
@@ -341,14 +361,14 @@ def update_general_field(field: str, request: GeneralFieldRequest, raw_request: 
                         mutate_config(lambda cfg: cfg.setdefault("general", {}).update({"server_mode": False}))
                     except Exception as e:                    # noqa: BLE001
                         logger.error("server_mode disable persist 失敗: %s", e)
-                        return {"success": False, "error": "無法儲存伺服器模式設定"}
+                        return {"success": False, "error": _config_text("server_mode_save_failed", response_locale)}
                     lan_listener.stop()
                     return {"success": True, "lan_port": None}
 
         # locale 驗證在 mutate 前（保留既有順序：驗證 → 寫入 → translate reset）
         if field == "locale" and request.value not in ("zh-TW", "zh-CN", "ja", "en"):
             logger.warning("嘗試設定不支援的語系: %s", request.value)
-            return {"success": False, "error": "不支援的語系"}
+            return {"success": False, "error": _config_text("locale_unsupported", response_locale)}
 
         def _mut(cfg):
             cfg.setdefault("general", {})[field] = request.value
@@ -361,7 +381,7 @@ def update_general_field(field: str, request: GeneralFieldRequest, raw_request: 
         raise
     except Exception as e:
         logger.error("更新設定欄位失敗: %s", e)
-        return {"success": False, "error": "更新設定欄位失敗"}
+        return {"success": False, "error": _config_text("update_field_failed", response_locale)}
 
 
 class FocalDeviceDisabledRequest(BaseModel):
@@ -382,7 +402,7 @@ def update_focal_device_disabled(request: FocalDeviceDisabledRequest) -> dict:
         return {"success": True}
     except Exception as e:
         logger.error("更新 focal_device.disabled 失敗: %s", e)
-        return {"success": False, "error": "操作失敗"}
+        return {"success": False, "error": _config_text("operation_failed")}
 
 
 @router.get("/config/general/lan-port")
@@ -441,14 +461,15 @@ def switch_external_manager(request: SwitchExternalManagerRequest) -> dict:
     #       成功佔住後必 end_switch()（finally 保證）。
     reason = try_begin_switch()
     if reason is not None:
+        locale = get_config_locale()
         _switch_refuse_msg = {
-            "generate_in_progress": "產生進行中，請稍後再切換模式。",
-            "config_save_in_progress": "設定儲存中，請稍後再切換模式。",
+            "generate_in_progress": _config_text("switch_generate_in_progress", locale),
+            "config_save_in_progress": _config_text("switch_config_save_in_progress", locale),
         }
         return {
             "success": False,
             "reason": reason,
-            "error": _switch_refuse_msg.get(reason, "另一個切換正在進行中，請稍後再試。"),
+            "error": _switch_refuse_msg.get(reason, _config_text("switch_busy", locale)),
         }
     try:
         return _switch_external_manager_locked(request)
@@ -524,7 +545,7 @@ def _switch_external_manager_locked(request: SwitchExternalManagerRequest) -> di
         mutate_config(_mutator)
     except Exception as e:  # noqa: BLE001
         logger.error("switch_external_manager config 落盤失敗（卡已刪、離線仍在 config，可自癒）: %s", e)
-        return {"success": False, "error": "無法儲存媒體伺服器模式設定"}
+        return {"success": False, "error": _config_text("media_server_mode_save_failed")}
 
     # Step 6：回傳（Step 5 = 零檔案系統刪除，全程未 rmtree/unlink/os.remove）
     return {
@@ -602,7 +623,7 @@ def rewrite_strm(dry_run: bool = False) -> dict:
     # 此處再擋獨立/直接呼叫，防禦縱深）。dry_run 也擋，讓前端 heads-up 階段就明確拒絕。
     if is_generate_in_progress():
         return {"success": False, "reason": "generate_in_progress",
-                "error": "掃描／產生進行中，請完成後再改寫 .strm。"}
+                "error": _config_text("rewrite_in_progress")}
     try:
         cfg = load_config()
         scraper_cfg = cfg.get('scraper', {})
@@ -629,7 +650,7 @@ def rewrite_strm(dry_run: bool = False) -> dict:
         return {"success": True, "rewritten": rewritten}
     except Exception as e:  # noqa: BLE001 — 端點層例外收斂為 success:False（比照 config.py 慣例）
         logger.error("rewrite_strm 失敗: %s", e)
-        return {"success": False, "error": "改寫 strm 失敗"}
+        return {"success": False, "error": _config_text("rewrite_failed")}
 
 
 @router.get("/version")
@@ -667,6 +688,7 @@ async def get_format_variables() -> dict:
 @router.get("/ollama/models")
 async def get_ollama_models(url: str) -> dict:
     """取得 Ollama 可用模型列表"""
+    locale = get_config_locale()
     try:
         # 確保 URL 格式正確
         url = url.rstrip('/')
@@ -681,12 +703,12 @@ async def get_ollama_models(url: str) -> dict:
             return {"success": True, "models": models}
 
     except httpx.TimeoutException:
-        return {"success": False, "error": "連線逾時"}
+        return {"success": False, "error": _config_text("ollama_timeout", locale)}
     except httpx.ConnectError:
-        return {"success": False, "error": "無法連線到 Ollama"}
+        return {"success": False, "error": _config_text("ollama_unreachable", locale)}
     except Exception as e:
         logger.error("取得 Ollama 模型列表失敗: %s", e)
-        return {"success": False, "error": "取得模型列表失敗"}
+        return {"success": False, "error": _config_text("ollama_models_failed", locale)}
 
 
 class OllamaTestRequest(BaseModel):
@@ -695,29 +717,34 @@ class OllamaTestRequest(BaseModel):
 
 
 _OLLAMA_TEST_ERRORS = {
-    "connection_timeout": "連線逾時",
-    "connection_failed": "無法連線到 Ollama",
-    "empty_response": "模型無回應",
+    "connection_timeout": "ollama_timeout",
+    "connection_failed": "ollama_unreachable",
+    "empty_response": "ollama_empty_response",
 }
 
 
 @router.post("/ollama/test")
 async def test_ollama_model(request: OllamaTestRequest) -> dict:
     """測試 Ollama 模型是否能正常回應（與搜尋頁真翻譯共用引擎請求）"""
+    locale = get_config_locale()
     try:
         url = request.url.rstrip('/')
 
         config = await asyncio.to_thread(load_config)
-        locale = config.get("general", {}).get("locale", "zh-TW")
+        locale = get_config_locale(config)
         if locale == "ja":
             return {"success": True, "result": "ja_skip"}
 
         service = OllamaTranslateService({"url": url, "model": request.model}, locale)
         result = await service.translate_or_raise("新人女優デビュー")
-        return {"success": True, "result": f"回應：{result}"}
+        return {"success": True, "result": _config_text("ollama_response", locale, result=result)}
 
     except TranslateError as e:
-        return {"success": False, "error": _OLLAMA_TEST_ERRORS.get(e.kind, "測試模型失敗")}
+        key = _OLLAMA_TEST_ERRORS.get(e.kind)
+        return {
+            "success": False,
+            "error": _config_text(key, locale) if key else _config_text("ollama_test_failed", locale),
+        }
     except Exception as e:
         logger.error("測試 Ollama 模型失敗: %s", e)
-        return {"success": False, "error": "測試模型失敗"}
+        return {"success": False, "error": _config_text("ollama_test_failed", locale)}

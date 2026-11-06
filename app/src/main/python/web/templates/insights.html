@@ -137,7 +137,7 @@
                     <div class="insights-tile-error-msg" x-text="t('insights.snapshot_error')"></div>
                 </div>
                 <div x-show="!snapshotError" class="insights-big-number">
-                    <span class="insights-tile-value" x-text="Number(displayScopedCount).toLocaleString()"></span>
+                    <span class="insights-tile-value" x-text="Number(displayScopedCount).toLocaleString(window.__locale || document.documentElement.lang || 'zh-CN')"></span>
                     <span class="insights-tile-unit" x-text="t('insights.unit')"></span>
                     <span class="insights-open-arrow" aria-hidden="true">↗</span>
                 </div>

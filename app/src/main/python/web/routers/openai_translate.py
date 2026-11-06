@@ -142,7 +142,7 @@ async def test_openai_translate(request: TestTranslateRequest):
 
     config = await asyncio.to_thread(load_config)
     key = resolve_secret(request.api_key, read_secret(config, "translate.openai.api_key"))
-    locale = config.get("general", {}).get("locale", "zh-TW")
+    locale = config.get("general", {}).get("locale", "zh-CN")
 
     # F2: ja short-circuit — 與 translate_service.py 的行為保持一致
     if locale == "ja":

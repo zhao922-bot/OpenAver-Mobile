@@ -53,6 +53,7 @@ from core.database.maker_javbus_map import list_not_found_keys
 from core.scrapers.javbus import JAVBUS_LIST_PAGE_SIZE
 from core.auto_organize_state import mark_manual_activity, request_abort, get_status
 from core.config import get_configured_gallery_dirs, load_config, mutate_config
+from core.i18n import get_config_locale, t as i18n_t
 from core.favorite_scan import resolve_favorite_folder
 from core.proxy_policy import proxy_kwargs
 from web import auto_organize_scheduler
@@ -69,6 +70,15 @@ from core.search_providers.relay import maker_capsule_policy
 router = APIRouter(prefix="/api", tags=["search"])
 
 
+def _search_text(key: str, locale: str | None = None, **params) -> str:
+    """Return a search-API message in the active UI language."""
+    return i18n_t(
+        f"runtime.search.{key}",
+        locale=locale or get_config_locale(),
+        **params,
+    )
+
+
 # 168d：指定來源搜尋的 CF 錯誤句主詞。javlibrary 與舊版逐字相同（含站名後的空格）；其餘來源中性。
 _CF_ERROR_SUBJECT = {"javlibrary": "JavLibrary ", "fc-javten": "FC2-javten "}
 
@@ -80,7 +90,7 @@ def _today() -> datetime.date:
 
 # ── 173：片商最新作品（容量端點 ＋ stream／REST 的 maker 分支）──
 
-_MAKER_PARAM_ERROR = "片商參數無效"
+_MAKER_PARAM_ERROR = "maker_invalid"
 
 
 def _since_twelve_months_ago(today: datetime.date) -> str:
@@ -205,10 +215,13 @@ def _maker_result_extras(maker_key: str, results: list, result) -> dict:
     return extras
 
 
-def _search_maker_rest(maker_key, maker, spellings, offset, cursor=None) -> dict:
+def _search_maker_rest(maker_key, maker, spellings, offset, cursor=None, locale=None) -> dict:
     error = _maker_param_error(maker_key, spellings, offset)
     if error:
-        return JSONResponse(status_code=400, content={"success": False, "error": error})
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": _search_text(error, locale)},
+        )
     meta: dict = {}
     result = _run_maker_search(maker_key, maker, spellings, offset, cursor=cursor, meta=meta)
     extras = _maker_result_extras(maker_key, result.results, result)
@@ -219,13 +232,23 @@ def _search_maker_rest(maker_key, maker, spellings, offset, cursor=None) -> dict
             "actress_profile": None, **extras, **_cursor_fields(meta),
         }
     return {
-        "success": False, "error": f"找不到 {maker or maker_key} 的資料", "data": [], "total": 0,
+        "success": False,
+        "error": _search_text(
+            "maker_no_results",
+            locale,
+            maker=maker or maker_key,
+        ),
+        "data": [],
+        "total": 0,
         "mode": "maker", "has_more": False, "actress_profile": None, **extras,
     }
 
 
-def _cf_error_subject(source) -> str:
-    return _CF_ERROR_SUBJECT.get(source, "此來源")
+def _cf_error_subject(source, locale=None) -> str:
+    return _CF_ERROR_SUBJECT.get(
+        source,
+        _search_text("cf_subject_generic", locale),
+    )
 
 # 載入片商前綴對照表（啟動時一次性載入）
 _MAKER_MAPPING = load_prefix_mapping()
@@ -352,31 +375,40 @@ def search(
     - **limit**: 每頁結果數（預設 20，最大 50）
     - **offset**: 跳過前 N 個結果，用於載入更多
     """
+    config = load_config()
+    locale = get_config_locale(config)
     cursor = _cursor_arg(cursor)
     if maker_key is not None:
-        return _search_maker_rest(maker_key, maker, spellings, offset, cursor)
+        return _search_maker_rest(maker_key, maker, spellings, offset, cursor, locale)
 
     q = (q or "").strip()
     if not q or len(q) < 2:
-        return {"success": False, "error": "請輸入有效的搜尋關鍵字", "data": [], "total": 0}
+        return {"success": False, "error": _search_text("invalid_query", locale), "data": [], "total": 0}
 
     # 驗證 since 格式
     if since is not None:
         if not re.match(r'^\d{4}-\d{2}-\d{2}$', since):
-            return JSONResponse(status_code=400, content={"success": False, "error": "since 參數格式錯誤，需為 YYYY-MM-DD"})
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": _search_text("invalid_since", locale)},
+            )
 
     # 驗證 source 參數
     if source is not None and not validate_source_id(source):
-        return JSONResponse(status_code=400, content={"success": False, "error": f"未知來源: {source}"})
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": _search_text("unknown_source", locale, source=source)},
+        )
 
     # source 只在 exact 模式生效（CD-135-9 / AC-13）；auto 語意上不是「指定了具體來源」
     # （見 core/source_config.py:244 的特判），不受本檢查限制
     if source is not None and source != "auto" and mode != "exact":
-        return JSONResponse(status_code=400, content={"success": False, "error": "source 僅在 mode=exact 時生效，請改用 mode=exact 或移除 source"})
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": _search_text("source_exact_only", locale)},
+        )
 
     # 讀取設定（無碼模式）
-    from core.config import load_config
-    config = load_config()
     uncensored_mode = is_uncensored_mode_effective(config)
 
     # discovery 僅在明確指定 actress/partial/prefix 模式時生效
@@ -414,7 +446,11 @@ def search(
                 logger.warning("search: CfChallengeRequired for source=%s q=%s", source, q)
                 return {
                     "success": False,
-                    "error": f"{_cf_error_subject(source)}需要解決 CF 驗證（請使用桌面應用程式）",
+                    "error": _search_text(
+                        "cf_required",
+                        locale,
+                        source=_cf_error_subject(source, locale),
+                    ),
                     "data": [],
                     "total": 0,
                     "mode": "exact",
@@ -425,7 +461,11 @@ def search(
                 logger.warning("search: CfTransportUnavailable for source=%s q=%s", source, q)
                 return {
                     "success": False,
-                    "error": f"{_cf_error_subject(source)}僅限桌面應用程式（standalone）使用",
+                    "error": _search_text(
+                        "desktop_only",
+                        locale,
+                        source=_cf_error_subject(source, locale),
+                    ),
                     "data": [],
                     "total": 0,
                     "mode": "exact",
@@ -437,7 +477,7 @@ def search(
                 logger.warning("search: parse_empty source=%s q=%s", source, q)
                 return {
                     "success": False,
-                    "error": parse_empty_text(source),
+                    "error": parse_empty_text(source, locale),
                     "custom_error": "parse_empty",
                     "source": source,
                     "data": [],
@@ -447,7 +487,7 @@ def search(
                     "actress_profile": None,
                 }
             except (SourceBlocked, SourceUnreachable) as e:
-                info = access_error_info(e, source)
+                info = access_error_info(e, source, locale=locale)
                 logger.warning("search: %s source=%s q=%s", info["access_error"], source, q)
                 return {
                     "success": False,
@@ -511,7 +551,7 @@ def search(
 
     base_response = {
         "success": False,
-        "error": f"找不到 {q} 的資料",
+        "error": _search_text("no_results", locale, query=q),
         "data": [],
         "total": 0,
         "mode": detected_mode,
@@ -723,10 +763,16 @@ def batch_search(body: BatchSearchRequest) -> dict:
     ))
 
     if not numbers:
-        return JSONResponse(status_code=400, content={"success": False, "error": "numbers 不可為空"})
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": _search_text("batch_empty")},
+        )
 
     if len(numbers) > 50:
-        return JSONResponse(status_code=422, content={"success": False, "error": "最多支援 50 筆批量搜尋"})
+        return JSONResponse(
+            status_code=422,
+            content={"success": False, "error": _search_text("batch_limit")},
+        )
 
     results = {}
 
@@ -781,18 +827,19 @@ async def search_stream(
     """
     mark_manual_activity()
     cursor = _cursor_arg(cursor)
+    config = await asyncio.to_thread(load_config)
+    locale = get_config_locale(config)
     is_maker = maker_key is not None
     q = (q or "").strip()
     invalid = _maker_param_error(maker_key, spellings, offset) if is_maker else (
-        None if len(q) >= 2 else "請輸入有效的搜尋關鍵字")
+        None if len(q) >= 2 else "invalid_query")
     if invalid:
+        message = _search_text(invalid, locale)
         async def error_gen():
-            yield f"data: {json.dumps({'type': 'error', 'message': invalid})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': message})}\n\n"
         return StreamingResponse(error_gen(), media_type="text/event-stream")
 
     # 讀取設定（無碼模式）
-    from core.config import load_config
-    config = await asyncio.to_thread(load_config)
     uncensored_mode = is_uncensored_mode_effective(config)
 
     status_queue = Queue()
@@ -919,7 +966,7 @@ async def search_stream(
 
             except Exception as e:
                 logger.error("串流搜尋失敗: %s", e)
-                yield f"data: {json.dumps({'type': 'error', 'message': '搜尋失敗', 'actress_profile': None})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message': _search_text('failed', locale), 'actress_profile': None})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -927,24 +974,29 @@ async def search_stream(
 @router.get("/search/sources")
 async def get_sources() -> dict:
     """取得可用的搜尋來源"""
+    locale = get_config_locale()
     # 來源描述（保留向後相容）
     source_descriptions = {
-        "auto": "依優先順序自動選擇",
-        "dmm": "日本官方（需 Proxy）",
-        "javbus": "最常用的來源（封面無浮水印）",
-        "jav321": "備用來源（封面完整）",
-        "javdb": "資料完整（有片商）",
+        "auto": _search_text("source_auto", locale),
+        "dmm": _search_text("source_dmm", locale),
+        "javbus": _search_text("source_javbus", locale),
+        "jav321": _search_text("source_jav321", locale),
+        "javdb": _search_text("source_javdb", locale),
         "d2pass": "1Pondo / Caribbeancom / 10musume",
-        "heyzo": "HEYZO 專用",
-        "fc2": "FC2 專用",
-        "avsox": "無碼片源",
+        "heyzo": _search_text("source_heyzo", locale),
+        "fc2": _search_text("source_fc2", locale),
+        "avsox": _search_text("source_avsox", locale),
     }
 
     # ⟳ switch-source 可輪替來源（builtin non-manual，依 config 拖曳順序；D7 修正）
     switchable_ids = get_switchable_source_ids_ordered()
 
     # 動態生成 sources 列表
-    sources = [{"id": "auto", "name": "自動", "description": source_descriptions["auto"]}]
+    sources = [{
+        "id": "auto",
+        "name": _search_text("source_name_auto", locale),
+        "description": source_descriptions["auto"],
+    }]
     for source_id in switchable_ids:
         sources.append({
             "id": source_id,
@@ -976,6 +1028,7 @@ def get_favorite_files() -> dict:
     from core.favorite_scan import list_favorite_video_files, resolve_favorite_folder
 
     config = load_config()
+    locale = get_config_locale(config)
     original_folder = config.get('search', {}).get('favorite_folder', '').strip()
 
     # 處理資料夾路徑
@@ -985,7 +1038,7 @@ def get_favorite_files() -> dict:
         logger.error("路徑轉換失敗: %s", e)
         return {
             "success": False,
-            "error": "路徑轉換失敗，請檢查我的最愛資料夾設定",
+            "error": _search_text("favorite_path_invalid", locale),
             "folder": original_folder
         }
 
@@ -996,7 +1049,11 @@ def get_favorite_files() -> dict:
     if not folder_path.exists():
         return {
             "success": False,
-            "error": f"資料夾不存在：{original_folder or folder}",
+            "error": _search_text(
+                "favorite_missing",
+                locale,
+                path=original_folder or folder,
+            ),
             "folder": original_folder or folder
         }
 
@@ -1006,14 +1063,14 @@ def get_favorite_files() -> dict:
     except PermissionError:
         return {
             "success": False,
-            "error": "無權限讀取資料夾",
+            "error": _search_text("favorite_no_permission", locale),
             "folder": folder
         }
 
     if len(files) == 0:
         return {
             "success": False,
-            "error": "資料夾內無有效影片檔案",
+            "error": _search_text("favorite_no_videos", locale),
             "folder": folder
         }
 

@@ -335,7 +335,9 @@ export function connectPage() {
             if (this.mode !== 'client' || !this.lastOk) return '';
             const when = new Date(this.lastOk);
             if (Number.isNaN(when.getTime())) return '';
-            return window.t('connect.last_ok', { time: when.toLocaleString() });
+            return window.t('connect.last_ok', {
+                time: when.toLocaleString(window.__locale || document.documentElement.lang || 'zh-CN')
+            });
         },
 
         dotName() {

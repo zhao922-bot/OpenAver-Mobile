@@ -3614,7 +3614,7 @@ this.showToast('已翻譯', 'success', 6000, { label: '復原', onClick() {} }) 
                                         <div class="text-sm font-medium" x-text="window.t(item.title_key)"></div>
                                         <div class="text-xs text-base-content/60" x-text="item.message"></div>
                                         <div class="text-xs text-base-content/40 mt-1"
-                                             x-text="new Date(item.timestamp * 1000).toLocaleString('zh-TW')"></div>
+                                             x-text="new Date(item.timestamp * 1000).toLocaleString(window.__locale || 'zh-CN')"></div>
                                     </div>
                                 </div>
                             </div>

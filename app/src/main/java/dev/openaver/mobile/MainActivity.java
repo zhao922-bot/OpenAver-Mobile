@@ -32,6 +32,7 @@ import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
+import android.webkit.JsResult;
 import android.webkit.PermissionRequest;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.SslErrorHandler;
@@ -81,6 +82,9 @@ public final class MainActivity extends Activity {
     private static final String PREFS_NAME = "openaver_mobile";
     private static final String PREF_UI_LOCALE = "ui_locale";
     private static final String DEFAULT_UI_LOCALE = "zh-CN";
+    private static final String[] SUPPORTED_UI_LOCALES = {
+            "zh-CN", "zh-TW", "ja", "en"
+    };
 
     static {
         boolean loaded = false;
@@ -642,6 +646,10 @@ public final class MainActivity extends Activity {
     }
 
     private void openLocalPath(String path) {
+        confirmNativeLeave(() -> openLocalPathNow(path));
+    }
+
+    private void openLocalPathNow(String path) {
         ensureWebView();
         currentLocalPath = path == null || path.isEmpty() ? "/scanner" : path;
         if (!isWebViewVersionSupported()) {
@@ -793,9 +801,105 @@ public final class MainActivity extends Activity {
         webView.setDownloadListener(new OpenAverDownloadListener());
     }
 
-    private void refreshWeb() {
+    private void syncUiLocaleFromWebView() {
+        if (webView == null) {
+            return;
+        }
+        try {
+            webView.evaluateJavascript(
+                    "(function(){return window.__locale"
+                            + "||document.documentElement.lang||'';})()",
+                    value -> applyUiLocale(decodeJavascriptString(value))
+            );
+        } catch (Throwable error) {
+            Log.w(TAG, "Unable to read the web UI locale", error);
+        }
+    }
+
+    private static String decodeJavascriptString(String value) {
+        if (value == null) {
+            return "";
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() >= 2
+                && trimmed.charAt(0) == '"'
+                && trimmed.charAt(trimmed.length() - 1) == '"') {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+        return trimmed;
+    }
+
+    private void applyUiLocale(String localeTag) {
+        boolean supported = false;
+        for (String candidate : SUPPORTED_UI_LOCALES) {
+            if (candidate.equals(localeTag)) {
+                supported = true;
+                break;
+            }
+        }
+        if (!supported) {
+            return;
+        }
+
+        SharedPreferences preferences =
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        if (localeTag.equals(preferences.getString(PREF_UI_LOCALE, DEFAULT_UI_LOCALE))) {
+            return;
+        }
+
+        preferences.edit().putString(PREF_UI_LOCALE, localeTag).apply();
+        Locale locale = Locale.forLanguageTag(localeTag);
+        Locale.setDefault(locale);
+        Configuration configuration = new Configuration(
+                getResources().getConfiguration()
+        );
+        configuration.setLocale(locale);
+        getResources().updateConfiguration(
+                configuration,
+                getResources().getDisplayMetrics()
+        );
+    }
+
+    private void confirmNativeLeave(Runnable action) {
         if (webView == null || webView.getUrl() == null || webView.getUrl().isEmpty()) {
-            openLocalPath(currentLocalPath);
+            action.run();
+            return;
+        }
+        try {
+            webView.evaluateJavascript(
+                    "(function(){try{return window.__openaverNativeLeaveMessage"
+                            + "?window.__openaverNativeLeaveMessage():'';}"
+                            + "catch(e){return '';}})()",
+                    value -> {
+                        String message = decodeJavascriptString(value);
+                        if (message.isEmpty()) {
+                            action.run();
+                            return;
+                        }
+                        new AlertDialog.Builder(
+                                MainActivity.this,
+                                android.R.style.Theme_Material_Dialog_Alert
+                        )
+                                .setTitle(R.string.confirm_title)
+                                .setMessage(message)
+                                .setPositiveButton(R.string.ok, (dialog, which) -> action.run())
+                                .setNegativeButton(R.string.cancel, null)
+                                .show();
+                    }
+            );
+        } catch (Throwable error) {
+            Log.w(TAG, "Unable to check unsaved changes before navigation", error);
+            action.run();
+        }
+    }
+
+    private void refreshWeb() {
+        confirmNativeLeave(this::refreshWebNow);
+    }
+
+    private void refreshWebNow() {
+        if (webView == null || webView.getUrl() == null || webView.getUrl().isEmpty()) {
+            openLocalPathNow(currentLocalPath);
             return;
         }
         webError.setVisibility(View.GONE);
@@ -1234,6 +1338,10 @@ public final class MainActivity extends Activity {
     }
 
     private void performWebHistoryBackOrExit() {
+        confirmNativeLeave(this::performWebHistoryBackOrExitNow);
+    }
+
+    private void performWebHistoryBackOrExitNow() {
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
             return;
@@ -1397,6 +1505,7 @@ public final class MainActivity extends Activity {
             webPageLoading = false;
             mainHandler.removeCallbacks(pageLoadTimeout);
             pageProgress.setVisibility(View.GONE);
+            syncUiLocaleFromWebView();
         }
 
         @Override
@@ -1426,6 +1535,22 @@ public final class MainActivity extends Activity {
     }
 
     private final class OpenAverChromeClient extends WebChromeClient {
+        @Override
+        public boolean onJsConfirm(WebView view, String url, String message,
+                                   final JsResult result) {
+            new AlertDialog.Builder(
+                    MainActivity.this,
+                    android.R.style.Theme_Material_Dialog_Alert
+            )
+                    .setTitle(R.string.confirm_title)
+                    .setMessage(message)
+                    .setPositiveButton(R.string.ok, (dialog, which) -> result.confirm())
+                    .setNegativeButton(R.string.cancel, (dialog, which) -> result.cancel())
+                    .setOnCancelListener(dialog -> result.cancel())
+                    .show();
+            return true;
+        }
+
         @Override
         public void onProgressChanged(WebView view, int newProgress) {
             super.onProgressChanged(view, newProgress);

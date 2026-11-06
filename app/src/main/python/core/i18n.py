@@ -4,7 +4,7 @@ core/i18n.py — 多語系翻譯核心模組
 提供：
 - load_locale(): 載入並快取 locale JSON
 - t(): 帶 fallback chain 的翻譯函數
-- get_merged_translations(): 深層 merge zh-TW base + overlay（供前端 window.__i18n）
+- get_merged_translations(): 深層 merge zh-CN base + overlay（供前端 window.__i18n）
 - detect_locale_from_accept_language(): 解析 HTTP Accept-Language header
 """
 
@@ -19,7 +19,32 @@ logger = get_logger(__name__)
 
 LOCALES_DIR = Path(__file__).parent.parent / "locales"
 SUPPORTED_LOCALES = ("zh-TW", "zh-CN", "ja", "en")
-FALLBACK_LOCALE = "zh-TW"
+FALLBACK_LOCALE = "zh-CN"
+
+
+def normalize_locale(locale: str | None) -> str:
+    """Return a supported UI locale, defaulting to Simplified Chinese."""
+    if locale in SUPPORTED_LOCALES:
+        return locale
+    return FALLBACK_LOCALE
+
+
+def get_config_locale(config: dict | None = None) -> str:
+    """Read the UI locale from config without allowing unsupported values."""
+    if config is None:
+        try:
+            from core.config import load_config
+
+            config = load_config()
+        except Exception as exc:
+            # Keep pure generators usable in tests and during early startup
+            # before the config seed exists. The UI still gets the default
+            # Simplified Chinese locale instead of crashing.
+            logger.warning("[i18n] 無法讀取 locale 設定，使用預設值: %s", exc)
+            return FALLBACK_LOCALE
+    general = config.get("general") if isinstance(config, dict) else None
+    value = general.get("locale") if isinstance(general, dict) else None
+    return normalize_locale(value)
 
 
 @lru_cache(maxsize=8)
@@ -73,13 +98,13 @@ def _substitute_params(text: str, params: dict) -> str:
 
 def t(key: str, locale: str = FALLBACK_LOCALE, **params) -> str:
     """
-    Fallback chain: 當前語系 → zh-TW → [key]。
+    Fallback chain: 當前語系 → zh-CN → [key]。
     params 以 {placeholder} 格式填入（缺 param 保留原樣）。
     永不 throw。
     """
     try:
         # 防衛性：locale 為 None 時回退到 FALLBACK_LOCALE
-        effective_locale = locale if locale else FALLBACK_LOCALE
+        effective_locale = normalize_locale(locale)
 
         # 嘗試當前語系
         if effective_locale != FALLBACK_LOCALE:
@@ -88,7 +113,7 @@ def t(key: str, locale: str = FALLBACK_LOCALE, **params) -> str:
             if isinstance(value, str):
                 return _substitute_params(value, params)
 
-        # 嘗試 zh-TW fallback
+        # 嘗試 zh-CN fallback
         data = load_locale(FALLBACK_LOCALE)
         value = _nested_get(data, key)
         if isinstance(value, str):
@@ -115,10 +140,11 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 
 def get_merged_translations(locale: str) -> dict:
     """
-    回傳 zh-TW base dict 深層合併 locale overlay。
+    回傳 zh-CN base dict 深層合併 locale overlay。
     前端 window.__i18n 直接使用，不需 fallback chain。
     """
     base = load_locale(FALLBACK_LOCALE)
+    locale = normalize_locale(locale)
     if locale == FALLBACK_LOCALE:
         return deepcopy(base)
     overlay = load_locale(locale)

@@ -28,11 +28,20 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, StrictBool, StrictStr
 
 from core.access_auth import attempt_pin, get_auth_settings, load_snapshot, set_auth, snapshot, verify_ticket
+from core.i18n import get_config_locale, t as i18n_t
 from core.logger import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/access", tags=["access"])
+
+
+def _access_text(key: str, **params) -> str:
+    return i18n_t(
+        f"runtime.api.{key}",
+        locale=get_config_locale(),
+        **params,
+    )
 
 _VERIFY_DELAY_SECONDS = 1.0
 _COOKIE_MAX_AGE_SECONDS = 10 * 365 * 24 * 3600  # 十年（CD-114a-6）
@@ -162,14 +171,14 @@ def update_access_settings(request: AccessSettingsRequest, raw_request: Request)
     else:
         return JSONResponse(status_code=403, content={
             "success": False, "reason": "need_login",
-            "error": "請先登入",
+            "error": _access_text("need_login"),
         })
     try:
         set_auth(request.enabled, request.pin)
     except ValueError:
         return JSONResponse(status_code=400, content={
             "success": False, "reason": "invalid_pin",
-            "error": "密碼必須是 4 位英文或數字",
+            "error": _access_text("invalid_pin"),
         })
     if request.enabled:
         # 首次設定與已登入者改密碼共用：set_auth 撤銷了所有票，重發一張讓呼叫端不被登出。

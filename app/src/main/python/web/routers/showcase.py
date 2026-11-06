@@ -47,10 +47,22 @@ from core.focal import device_state, format_focal, parse_focal
 from core.focal.subprocess_runner import run_detection
 from core import thumbnail_cache
 from core.multipart_group import group_rows, resolve_group
+from core.i18n import get_config_locale, t as i18n_t
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/showcase", tags=["showcase"])
+
+
+def _showcase_locale(config: dict | None = None) -> str:
+    try:
+        return get_config_locale(config)
+    except Exception:
+        return "zh-CN"
+
+
+def _showcase_text(key: str, locale: str, **params) -> str:
+    return i18n_t(f"runtime.api.{key}", locale=locale, **params)
 
 
 class DetectFocalRequest(BaseModel):
@@ -322,9 +334,10 @@ def get_videos(
 
     except Exception as e:
         logger.error("取得影片資料失敗: %s", e)
+        locale = _showcase_locale()
         return JSONResponse({
             "success": False,
-            "error": "取得影片資料失敗",
+            "error": _showcase_text("video_data_load_failed", locale),
             "videos": [],
             "total": 0
         }, status_code=500)
@@ -333,23 +346,43 @@ def get_videos(
 @router.get("/video")
 def get_video(path: str = Query(..., description="file:/// URI")):
     """取得單筆影片資料（用於 T3 refreshVideoData enrich 後刷新卡片）"""
+    locale = _showcase_locale()
     try:
         db_path = get_db_path()
         if not db_path.exists():
-            return JSONResponse({"success": False, "error": "video not found"}, status_code=404)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": _showcase_text("video_not_found", locale),
+                },
+                status_code=404,
+            )
 
         init_db(db_path)
         repo = VideoRepository(db_path)
 
         config = load_config()
+        locale = _showcase_locale(config)
         configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
 
         if not any(is_path_under_dir(path, uri) for uri in configured_dir_uris):
-            return JSONResponse({"success": False, "error": "video not found"}, status_code=404)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": _showcase_text("video_not_found", locale),
+                },
+                status_code=404,
+            )
 
         v = repo.get_by_path(path)
         if v is None:
-            return JSONResponse({"success": False, "error": "video not found"}, status_code=404)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": _showcase_text("video_not_found", locale),
+                },
+                status_code=404,
+            )
 
         thumb_enabled = config.get('thumbnail_cache_enabled', False)
 
@@ -367,7 +400,15 @@ def get_video(path: str = Query(..., description="file:/// URI")):
 
     except Exception as e:
         logger.error("取得單筆影片失敗: %s", e)
-        return JSONResponse({"success": False, "error": "取得影片資料失敗"}, status_code=500)
+        return JSONResponse(
+            {
+                "success": False,
+                "error": _showcase_text(
+                    "video_data_load_failed", _showcase_locale()
+                ),
+            },
+            status_code=500,
+        )
 
 
 @router.delete("/video")
@@ -456,30 +497,58 @@ def detect_video_focal(req: DetectFocalRequest):
     ⚠️ 停用狀態已於上方端點層短路，不會走到這裡，所以「關掉之後直接進手動」不受鎖排隊影響。
     **不進 capabilities（不揭露）。**
     """
+    locale = _showcase_locale()
     try:
         db_path = get_db_path()
         if not db_path.exists():
-            return JSONResponse({"success": False, "error": "找不到影片"}, status_code=404)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": _showcase_text("video_not_found", locale),
+                },
+                status_code=404,
+            )
 
         init_db(db_path)
         repo = VideoRepository(db_path)
 
         row = repo.get_by_path(req.path)
         if row is None:
-            return JSONResponse({"success": False, "error": "找不到影片"}, status_code=404)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": _showcase_text("video_not_found", locale),
+                },
+                status_code=404,
+            )
 
         config = load_config()
+        locale = _showcase_locale(config)
         configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
 
         in_scope = any(is_path_under_dir(row.path, uri) for uri in configured_dir_uris)
         if not in_scope:
-            return JSONResponse({"success": False, "error": "此影片不在收藏範圍，無法偵測焦點"}, status_code=403)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": _showcase_text(
+                        "video_out_of_scope_detect", locale
+                    ),
+                },
+                status_code=403,
+            )
 
         # ★ Codex P0：取 row.cover_path（非 body path）反解封面 fs
         cover_fs = uri_to_local_fs_path(row.cover_path, path_mappings) if row.cover_path else ''
         if not row.cover_path or not os.path.isfile(cover_fs):
-            return JSONResponse({"success": False, "error": "找不到封面檔案",
-                                 "cover_path": row.cover_path}, status_code=400)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": _showcase_text("cover_not_found", locale),
+                    "cover_path": row.cover_path,
+                },
+                status_code=400,
+            )
 
         # 152d-T-D8：停用時在這裡就回，不要進 run_detection ——
         # pre_spawn_check 跑在全域 _slot_lock 裡面（subprocess_runner.py:298→309），
@@ -533,7 +602,13 @@ def detect_video_focal(req: DetectFocalRequest):
 
     except Exception as e:
         logger.error("偵測焦點失敗: %s", e)
-        return JSONResponse({"success": False, "error": "偵測焦點失敗"}, status_code=500)
+        return JSONResponse(
+            {
+                "success": False,
+                "error": _showcase_text("focal_detect_failed", locale),
+            },
+            status_code=500,
+        )
 
 
 @router.post("/video/save-focal")
@@ -554,59 +629,102 @@ def set_manual_focal(req: ManualFocalRequest):
     rescrape 期間換了封面）→ 409，DB 不變，前端應提示使用者重新開啟裁切工具。
     `def`（非 async）→ Starlette threadpool。**不進 capabilities（不揭露）。**
     """
+    locale = _showcase_locale()
     parsed = parse_focal(req.focal)
     if parsed is None:
-        return JSONResponse({"success": False, "error": "無效的焦點座標格式"}, status_code=400)
+        return JSONResponse(
+            {
+                "success": False,
+                "error": _showcase_text("focal_invalid", locale),
+            },
+            status_code=400,
+        )
 
     try:
         db_path = get_db_path()
         if not db_path.exists():
-            return JSONResponse({"success": False, "error": "找不到影片"}, status_code=404)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": _showcase_text("video_not_found", locale),
+                },
+                status_code=404,
+            )
 
         init_db(db_path)
         repo = VideoRepository(db_path)
 
         row = repo.get_by_path(req.path)
         if row is None:
-            return JSONResponse({"success": False, "error": "找不到影片"}, status_code=404)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": _showcase_text("video_not_found", locale),
+                },
+                status_code=404,
+            )
 
         config = load_config()
+        locale = _showcase_locale(config)
         configured_dir_uris, _path_mappings = get_configured_gallery_dirs(config)
 
         in_scope = any(is_path_under_dir(row.path, uri) for uri in configured_dir_uris)
         if not in_scope:
-            return JSONResponse({"success": False, "error": "此影片不在收藏範圍，無法存入焦點"}, status_code=403)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": _showcase_text(
+                        "video_out_of_scope_save", locale
+                    ),
+                },
+                status_code=403,
+            )
 
         normalized = format_focal(parsed)
         written = repo.update_manual_focal(req.path, normalized, req.expected_cover_path)
         if not written:
             return JSONResponse(
-                {"success": False, "error": "封面已變更，請重新開啟裁切工具再試一次"},
+                {
+                    "success": False,
+                    "error": _showcase_text("cover_changed", locale),
+                },
                 status_code=409,
             )
         return JSONResponse({"success": True, "auto_focal": normalized})
 
     except Exception as e:
         logger.error("存入手動焦點失敗: %s", e)
-        return JSONResponse({"success": False, "error": "存入手動焦點失敗"}, status_code=500)
+        return JSONResponse(
+            {
+                "success": False,
+                "error": _showcase_text("focal_save_failed", locale),
+            },
+            status_code=500,
+        )
 
 
-_TITLE_ERROR_MESSAGES = {
-    "not_found": "找不到影片",
-    "title_empty": "標題不可為空",
-    "no_nfo": "找不到 NFO",
-    "nfo_ambiguous": "輸出夾有多份 NFO，無法判斷要改哪一份",
-    "nfo_unreadable": "NFO 無法讀取或解析",
-    "storage_permission_required": "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
-    "nfo_write_failed": "NFO 寫入失敗",
-    "db_write_failed": "資料庫寫入失敗（NFO 已更新，請再試一次）",
-    "invalid_path": "檔案路徑格式無效",
+_TITLE_ERROR_KEYS = {
+    "not_found": "error_not_found",
+    "title_empty": "error_title_empty",
+    "no_nfo": "error_no_nfo",
+    "nfo_ambiguous": "error_nfo_ambiguous",
+    "nfo_unreadable": "error_nfo_unreadable",
+    "storage_permission_required": "error_storage_permission_required",
+    "nfo_write_failed": "error_nfo_write_failed",
+    "db_write_failed": "error_db_write_failed",
+    "invalid_path": "error_invalid_path",
 }
 
 
-def _title_fail(code: str) -> dict:
+def _title_fail(code: str, locale: str | None = None) -> dict:
     """寫回失敗一律 HTTP 200 ＋ {success:false, error:<code>, message}。"""
-    return {"success": False, "error": code, "message": _TITLE_ERROR_MESSAGES[code]}
+    locale = locale or _showcase_locale()
+    key = _TITLE_ERROR_KEYS.get(code, "error_nfo_write_failed")
+    return {
+        "success": False,
+        "error": code,
+        "message": i18n_t(f"runtime.title.{key}", locale=locale),
+    }
 
 
 def _new_original_title(req, video) -> str:
@@ -719,14 +837,22 @@ def _create_title_nfo(video, body: str, new_original: str, config: dict, path_ma
     return str(nfo_path), None
 
 
-def _apply_title_writeback(repo, video, req, config: dict, path_mappings: dict) -> dict:
+def _apply_title_writeback(
+    repo,
+    video,
+    req,
+    config: dict,
+    path_mappings: dict,
+    locale: str | None = None,
+) -> dict:
+    locale = locale or _showcase_locale(config)
     fmt = config.get("scraper", {}).get("nfo_title_format", '[{num}]{title}')
     _display, body = build_display_title(
         video.number or '', strip_illegal_xml_chars(req.title).strip(), '',
         video.actresses, video.maker, video.release_date, fmt,
     )
     if not body:
-        return _title_fail("title_empty")
+        return _title_fail("title_empty", locale)
     new_original = strip_illegal_xml_chars(_new_original_title(req, video))
 
     nfo_path, loc_err = _locate_title_nfo(video, config, path_mappings)
@@ -736,13 +862,13 @@ def _apply_title_writeback(repo, video, req, config: dict, path_mappings: dict) 
                 video, body, new_original, config, path_mappings
             )
             if create_err is not None:
-                return _title_fail(create_err)
+                return _title_fail(create_err, locale)
             new_mtime = nfo_mtime_or_none(Path(nfo_path))
             if new_mtime is None:
                 new_mtime = video.nfo_mtime
             written = repo.update_titles(video.path, body, new_original, new_mtime)
             if not written:
-                return _title_fail("not_found")
+                return _title_fail("not_found", locale)
             return {
                 "success": True,
                 "title": body,
@@ -756,10 +882,10 @@ def _apply_title_writeback(repo, video, req, config: dict, path_mappings: dict) 
                 "nfo_updated": True,
                 "nfo_created": True,
             }
-        return _title_fail(loc_err)
+        return _title_fail(loc_err, locale)
     nfo_err = _write_title_nfo(nfo_path, video, body, new_original, fmt)
     if nfo_err is not None:
-        return _title_fail(nfo_err)
+        return _title_fail(nfo_err, locale)
 
     # 取實際寫入那份 NFO 的 mtime；取不到沿用舊值（下次掃描最多多讀一次）
     new_mtime = nfo_mtime_or_none(Path(nfo_path))
@@ -769,9 +895,9 @@ def _apply_title_writeback(repo, video, req, config: dict, path_mappings: dict) 
         written = repo.update_titles(video.path, body, new_original, new_mtime)
     except Exception as e:
         logger.error("[title-writeback] DB 寫入失敗: %s", e)
-        return _title_fail("db_write_failed")
+        return _title_fail("db_write_failed", locale)
     if not written:
-        return _title_fail("not_found")
+        return _title_fail("not_found", locale)
     return {"success": True, "title": body, "original_title": new_original,
             "needs_translate": _needs_translate(body, new_original, new_mtime),
             "can_translate": _can_manual_translate(body, new_original, new_mtime),
@@ -785,25 +911,29 @@ def write_video_title(req: TitleWritebackRequest):
     失敗一律 HTTP 200 ＋ {success:false, error:<code>}。`def`（非 async）→ threadpool。
     端點內不呼叫翻譯；唯讀來源只改輸出夾那份 NFO，來源零寫入。
     """
+    locale = _showcase_locale()
     try:
         db_path = get_db_path()
         if not db_path.exists():
-            return _title_fail("not_found")
+            return _title_fail("not_found", locale)
         init_db(db_path)
         repo = VideoRepository(db_path)
         video = repo.get_by_path(req.file_path)
         if video is None:
-            return _title_fail("not_found")
+            return _title_fail("not_found", locale)
         config = load_config()
+        locale = _showcase_locale(config)
         configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
         if not any(is_path_under_dir(video.path, uri) for uri in configured_dir_uris):
-            return _title_fail("not_found")
-        return _apply_title_writeback(repo, video, req, config, path_mappings)
+            return _title_fail("not_found", locale)
+        return _apply_title_writeback(
+            repo, video, req, config, path_mappings, locale
+        )
     except ValueError:
-        return _title_fail("invalid_path")
+        return _title_fail("invalid_path", locale)
     except Exception as e:
         logger.error("[title-writeback] 未預期錯誤: %s", e)
-        return _title_fail("nfo_write_failed")
+        return _title_fail("nfo_write_failed", locale)
 
 
 @router.get("/source-status")

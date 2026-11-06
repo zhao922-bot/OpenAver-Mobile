@@ -14,11 +14,205 @@ AI Reviewer 指示：
 """
 
 import html
+import json
 from typing import List
 from core.gallery_scanner import VideoInfo
+from core.i18n import get_config_locale
 from core.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+_GALLERY_LABELS = {
+    "zh-CN": {
+        "search_placeholder": "搜索影片...",
+        "clear": "清除",
+        "search": "搜索",
+        "hotkeys": "快捷键: A 切换模式 | S 显示/隐藏信息 | ← / → 翻页 | ESC 关闭",
+        "load_more": "查看更多",
+        "search_prefix": "搜索",
+        "found": "找到",
+        "total_prefix": "共",
+        "video_unit": "部影片",
+        "table_title": "片名",
+        "table_actor": "演员",
+        "table_number": "番号",
+        "table_maker": "片商",
+        "table_date": "日期",
+        "table_genre": "类型",
+        "table_size": "大小",
+        "open": "打开",
+        "copy": "复制",
+        "copied": "已复制: ",
+        "actor_label": "演员：",
+        "maker_label": "片商：",
+        "date_label": "日期：",
+        "mode_detail": "详细",
+        "mode_image": "图片",
+        "mode_text": "文字",
+        "mode_suffix": "模式",
+        "sort_prefix": "排序: ",
+        "sort_path": "路径",
+        "sort_title": "片名",
+        "sort_actor": "演员",
+        "sort_num": "番号",
+        "sort_maker": "片商",
+        "sort_date": "日期",
+        "sort_size": "大小",
+        "sort_mdate": "修改",
+        "sort_random": "随机",
+        "ascending": "递增",
+        "descending": "递减",
+        "info": "信息",
+        "per_page": "每页 ",
+        "all": "全部",
+        "theme_light": "切换浅色",
+        "theme_dark": "切换深色",
+        "previous_page": "← 上一页",
+        "next_page": "下一页 →",
+    },
+    "zh-TW": {
+        "search_placeholder": "搜尋影片...",
+        "clear": "清除",
+        "search": "搜尋",
+        "hotkeys": "熱鍵: A 切換模式 | S 顯示/隱藏資訊 | ← / → 翻頁 | ESC 關閉",
+        "load_more": "查看更多",
+        "search_prefix": "搜尋",
+        "found": "找到",
+        "total_prefix": "共",
+        "video_unit": "部影片",
+        "table_title": "片名",
+        "table_actor": "演員",
+        "table_number": "番號",
+        "table_maker": "片商",
+        "table_date": "日期",
+        "table_genre": "類型",
+        "table_size": "大小",
+        "open": "開啟",
+        "copy": "複製",
+        "copied": "已複製: ",
+        "actor_label": "演員：",
+        "maker_label": "片商：",
+        "date_label": "日期：",
+        "mode_detail": "詳細",
+        "mode_image": "圖片",
+        "mode_text": "文字",
+        "mode_suffix": "模式",
+        "sort_prefix": "排序: ",
+        "sort_path": "路徑",
+        "sort_title": "片名",
+        "sort_actor": "演員",
+        "sort_num": "番號",
+        "sort_maker": "片商",
+        "sort_date": "日期",
+        "sort_size": "大小",
+        "sort_mdate": "修改",
+        "sort_random": "隨機",
+        "ascending": "遞增",
+        "descending": "遞減",
+        "info": "資訊",
+        "per_page": "每頁 ",
+        "all": "全部",
+        "theme_light": "切換淺色",
+        "theme_dark": "切換深色",
+        "previous_page": "← 上一頁",
+        "next_page": "下一頁 →",
+    },
+    "ja": {
+        "search_placeholder": "動画を検索...",
+        "clear": "クリア",
+        "search": "検索",
+        "hotkeys": "ショートカット: A 表示切替 | S 情報表示/非表示 | ← / → ページ移動 | ESC 閉じる",
+        "load_more": "さらに表示",
+        "search_prefix": "検索",
+        "found": "該当",
+        "total_prefix": "全",
+        "video_unit": "件",
+        "table_title": "タイトル",
+        "table_actor": "出演者",
+        "table_number": "品番",
+        "table_maker": "メーカー",
+        "table_date": "日付",
+        "table_genre": "ジャンル",
+        "table_size": "サイズ",
+        "open": "開く",
+        "copy": "コピー",
+        "copied": "コピーしました: ",
+        "actor_label": "出演者：",
+        "maker_label": "メーカー：",
+        "date_label": "日付：",
+        "mode_detail": "詳細",
+        "mode_image": "画像",
+        "mode_text": "テキスト",
+        "mode_suffix": "モード",
+        "sort_prefix": "並び替え: ",
+        "sort_path": "パス",
+        "sort_title": "タイトル",
+        "sort_actor": "出演者",
+        "sort_num": "品番",
+        "sort_maker": "メーカー",
+        "sort_date": "日付",
+        "sort_size": "サイズ",
+        "sort_mdate": "更新日",
+        "sort_random": "ランダム",
+        "ascending": "昇順",
+        "descending": "降順",
+        "info": "情報",
+        "per_page": "表示件数 ",
+        "all": "すべて",
+        "theme_light": "ライトに切り替え",
+        "theme_dark": "ダークに切り替え",
+        "previous_page": "← 前へ",
+        "next_page": "次へ →",
+    },
+    "en": {
+        "search_placeholder": "Search videos...",
+        "clear": "Clear",
+        "search": "Search",
+        "hotkeys": "Shortcuts: A switch mode | S show/hide info | ← / → pages | ESC close",
+        "load_more": "Load more",
+        "search_prefix": "Search",
+        "found": "found",
+        "total_prefix": "Total",
+        "video_unit": "videos",
+        "table_title": "Title",
+        "table_actor": "Actress",
+        "table_number": "ID",
+        "table_maker": "Maker",
+        "table_date": "Date",
+        "table_genre": "Genre",
+        "table_size": "Size",
+        "open": "Open",
+        "copy": "Copy",
+        "copied": "Copied: ",
+        "actor_label": "Actress: ",
+        "maker_label": "Maker: ",
+        "date_label": "Date: ",
+        "mode_detail": "Detail",
+        "mode_image": "Images",
+        "mode_text": "Text",
+        "mode_suffix": "mode",
+        "sort_prefix": "Sort: ",
+        "sort_path": "Path",
+        "sort_title": "Title",
+        "sort_actor": "Actress",
+        "sort_num": "ID",
+        "sort_maker": "Maker",
+        "sort_date": "Date",
+        "sort_size": "Size",
+        "sort_mdate": "Modified",
+        "sort_random": "Random",
+        "ascending": "Ascending",
+        "descending": "Descending",
+        "info": "Info",
+        "per_page": "Per page ",
+        "all": "All",
+        "theme_light": "Switch to light",
+        "theme_dark": "Switch to dark",
+        "previous_page": "← Previous",
+        "next_page": "Next →",
+    },
+}
 
 
 class HTMLGenerator:
@@ -41,7 +235,8 @@ class HTMLGenerator:
                  items_per_page: int = 90,
                  theme: str = "light",
                  click_action: str = "play",
-                 has_more: bool = False) -> None:
+                 has_more: bool = False,
+                 locale: str | None = None) -> None:
         """
         生成 HTML 檔案
         
@@ -77,6 +272,7 @@ class HTMLGenerator:
             )
 
         # 生成完整 HTML
+        locale = get_config_locale() if locale is None else locale
         html = self._generate_html(
             title=title,
             js_videos=js_videos,
@@ -86,7 +282,8 @@ class HTMLGenerator:
             user_items=items_per_page,
             theme=theme,
             click_action=click_action,
-            has_more=has_more
+            has_more=has_more,
+            locale=locale,
         )
 
         # 寫入檔案
@@ -98,13 +295,16 @@ class HTMLGenerator:
     def _generate_html(self, title: str, js_videos: List[str],
                        user_mode: int, user_order: int,
                        user_sort: str, user_items: int, theme: str,
-                       click_action: str = "play", has_more: bool = False) -> str:
+                       click_action: str = "play", has_more: bool = False,
+                       locale: str = "zh-CN") -> str:
         """生成 HTML 內容"""
 
         videos_js = '\n'.join([f'\t\tvideos[{i}] = {v};' for i, v in enumerate(js_videos)])
+        labels = _GALLERY_LABELS.get(locale, _GALLERY_LABELS["zh-CN"])
+        labels_json = json.dumps(labels, ensure_ascii=False).replace("</", "<\\/")
 
         return f'''<!DOCTYPE html>
-<html lang="zh-TW" data-theme="{theme}">
+<html lang="{html.escape(locale)}" data-theme="{theme}">
 <head>
 \t<meta charset="utf-8">
 \t<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -123,12 +323,12 @@ class HTMLGenerator:
 \t\t\t<div class="spotlight-search">
 \t\t\t\t<i class="bi bi-search search-icon-left"></i>
 \t\t\t\t<form name="form_search" onsubmit="goToLinkWithParameters(document.form_search.sw.value, 1); return false;">
-\t\t\t\t\t<input type="text" name="sw" placeholder="搜尋影片..." autocomplete="off" oninput="updateResetBtn()">
+\t\t\t\t\t<input type="text" name="sw" placeholder="{html.escape(labels["search_placeholder"], quote=True)}" autocomplete="off" oninput="updateResetBtn()">
 \t\t\t\t\t<div class="search-actions-right">
-\t\t\t\t\t\t<button type="button" class="reset-btn btn-icon d-none" onclick="resetSearch()" title="清除">
+\t\t\t\t\t\t<button type="button" class="reset-btn btn-icon d-none" onclick="resetSearch()" title="{html.escape(labels["clear"], quote=True)}">
 \t\t\t\t\t\t\t<i class="bi bi-x-lg"></i>
 \t\t\t\t\t\t</button>
-\t\t\t\t\t\t<button type="submit" class="btn-icon active" title="搜尋">
+\t\t\t\t\t\t<button type="submit" class="btn-icon active" title="{html.escape(labels["search"], quote=True)}">
 \t\t\t\t\t\t\t<i class="bi bi-arrow-right"></i>
 \t\t\t\t\t\t</button>
 \t\t\t\t\t</div>
@@ -150,7 +350,7 @@ class HTMLGenerator:
 \t<!-- Footer -->
 \t<footer class="footer">
 \t\t<div class="pagination" id="pagebar"></div>
-\t\t<div class="hotkey-hint">熱鍵: A 切換模式 | S 顯示/隱藏資訊 | ← / → 翻頁 | ESC 關閉</div>
+\t\t<div class="hotkey-hint">{html.escape(labels["hotkeys"])}</div>
 \t</footer>
 
 \t<!-- Lightbox Modal -->
@@ -168,7 +368,7 @@ class HTMLGenerator:
 \t<!-- Load More Section (postMessage mode only) -->
 \t<div id="loadMoreSection" class="load-more-section" style="display: none;">
 \t\t<button onclick="loadMore()" class="load-more-btn">
-\t\t\t<i class="bi bi-arrow-down-circle"></i> 查看更多
+\t\t\t<i class="bi bi-arrow-down-circle"></i> {html.escape(labels["load_more"])}
 \t\t</button>
 \t</div>
 
@@ -182,6 +382,7 @@ class HTMLGenerator:
 \t\tvar default_theme = "{theme}";
 \t\tvar click_action = "{click_action}";
 \t\tvar has_more = {str(has_more).lower()};
+\t\tvar galleryI18n = {labels_json};
 {self._get_javascript()}
 \t\t// Load More function (postMessage mode)
 \t\tfunction loadMore() {{
@@ -346,9 +547,9 @@ class HTMLGenerator:
 
 \t\t\t// 顯示總數與搜尋狀態
 \t\t\tif (search_words) {
-\t\t\t\ttotal.innerHTML = '搜尋 "<b>' + escapeHtml(search_words) + '</b>" - 找到 <b>' + filtered_videos.length + '</b> 部';
+\t\t\t\ttotal.innerHTML = galleryI18n.search_prefix + ' "<b>' + escapeHtml(search_words) + '</b>" - ' + galleryI18n.found + ' <b>' + filtered_videos.length + '</b> ' + galleryI18n.video_unit;
 \t\t\t} else {
-\t\t\t\ttotal.innerHTML = '共 <b>' + filtered_videos.length + '</b> 部影片';
+\t\t\t\ttotal.innerHTML = galleryI18n.total_prefix + ' <b>' + filtered_videos.length + '</b> ' + galleryI18n.video_unit;
 \t\t\t}
 
 \t\t\t// 渲染 Header 控制按鈕
@@ -369,7 +570,7 @@ class HTMLGenerator:
 \t\t\tif (current_mode == 0) {
 \t\t\t\t// 詳細模式
 \t\t\t\thtml = '<table class="detail-table"><thead><tr>';
-\t\t\t\thtml += '<th>#</th><th>片名</th><th>演員</th><th>番號</th><th>片商</th><th>日期</th><th>類型</th><th>大小</th>';
+\t\t\t\thtml += '<th>#</th><th>' + galleryI18n.table_title + '</th><th>' + galleryI18n.table_actor + '</th><th>' + galleryI18n.table_number + '</th><th>' + galleryI18n.table_maker + '</th><th>' + galleryI18n.table_date + '</th><th>' + galleryI18n.table_genre + '</th><th>' + galleryI18n.table_size + '</th>';
 \t\t\t\thtml += '</tr></thead><tbody>';
 \t\t\t\tfor (var i = start; i < end; i++) {
 \t\t\t\t\tvar v = filtered_videos[i];
@@ -397,8 +598,8 @@ class HTMLGenerator:
 \t\t\t\t\t\thtml += '<img loading="lazy" src="' + imgSrc + '" alt="" onerror="this.parentElement.classList.add(\\'no-img\\')"/>';
 \t\t\t\t\t// Hover 時滑出的按鈕區（在縮圖內部）
 \t\t\t\t\t\thtml += '<div class="card-actions">';
-\t\t\t\t\t\thtml += '<a class="action-btn" href="javascript:void(0);" onclick="event.stopPropagation(); playVideo(' + i + ')">開啟</a>';
-\t\t\t\t\t\thtml += '<a class="action-btn" href="javascript:void(0);" onclick="event.stopPropagation(); copyPath(\\'' + escapeHtml(v.path) + '\\')">複製</a>';
+\t\t\t\t\t\thtml += '<a class="action-btn" href="javascript:void(0);" onclick="event.stopPropagation(); playVideo(' + i + ')">' + galleryI18n.open + '</a>';
+\t\t\t\t\t\thtml += '<a class="action-btn" href="javascript:void(0);" onclick="event.stopPropagation(); copyPath(\\'' + escapeHtml(v.path) + '\\')">' + galleryI18n.copy + '</a>';
 \t\t\t\t\t\thtml += '</div>';
 \t\t\t\t\t\thtml += '</div>';
 \t\t\t\t\t// Footer - 預設：番號+女優，Hover：片名
@@ -418,10 +619,10 @@ class HTMLGenerator:
 \t\t\t\t\t\tif (info_visible) {
 \t\t\t\t\t\t\thtml += '<div class="card-info">';
 \t\t\t\t\t\t\thtml += '<div class="info-title">' + escapeHtml(stripNumPrefix(v.title)) + '</div>';
-\t\t\t\t\t\t\tif (v.actor) html += '<div class="info-row"><b>演員：</b>' + formatActor(v.actor) + '</div>';
+\t\t\t\t\t\t\tif (v.actor) html += '<div class="info-row"><b>' + galleryI18n.actor_label + '</b>' + formatActor(v.actor) + '</div>';
 \t\t\t\t\t\t\thtml += '<div class="info-row info-meta">';
-\t\t\t\t\t\t\tif (v.maker) html += '<span><b>片商：</b>' + formatMaker(v.maker) + '</span>';
-\t\t\t\t\t\t\tif (v.date) html += '<span><b>日期：</b>' + escapeHtml(v.date) + '</span>';
+\t\t\t\t\t\t\tif (v.maker) html += '<span><b>' + galleryI18n.maker_label + '</b>' + formatMaker(v.maker) + '</span>';
+\t\t\t\t\t\t\tif (v.date) html += '<span><b>' + galleryI18n.date_label + '</b>' + escapeHtml(v.date) + '</span>';
 \t\t\t\t\t\t\thtml += '</div>';
 \t\t\t\t\t\t\tif (combinedTags(v)) html += '<div class="info-tags">' + formatGenre(combinedTags(v)) + '</div>';
 \t\t\t\t\t\t\thtml += '</div>';
@@ -453,18 +654,18 @@ class HTMLGenerator:
 \t\tfunction renderControls() {
 \t\t\tvar html = '';
 \t\t\tvar modeIcons = ['☰', '▦', '≡'];
-\t\t\tvar modeNames = ['詳細', '圖片', '文字'];
-\t\t\tvar sortNames = {path:'路徑',title:'片名',actor:'演員',num:'番號',maker:'片商',date:'日期',size:'大小',mdate:'修改',random:'隨機'};
+\t\t\tvar modeNames = [galleryI18n.mode_detail, galleryI18n.mode_image, galleryI18n.mode_text];
+\t\t\tvar sortNames = {path:galleryI18n.sort_path,title:galleryI18n.sort_title,actor:galleryI18n.sort_actor,num:galleryI18n.sort_num,maker:galleryI18n.sort_maker,date:galleryI18n.sort_date,size:galleryI18n.sort_size,mdate:galleryI18n.sort_mdate,random:galleryI18n.sort_random};
 \t\t\tvar sorts = ['date','num','title','actor','maker','size','mdate','random'];
 
 \t\t\t// 排序順序
-\t\t\thtml += '<button class="ctrl-btn" onclick="switchOrder()" data-tooltip="' + (current_order==1?'遞減':'遞增') + '">';
+\t\t\thtml += '<button class="ctrl-btn" onclick="switchOrder()" data-tooltip="' + (current_order==1?galleryI18n.descending:galleryI18n.ascending) + '">';
 \t\t\thtml += current_order == 1 ? '↓' : '↑';
 \t\t\thtml += '</button>';
 
 \t\t\t// 排序欄位 (下拉選單)
 \t\t\thtml += '<div class="ctrl-dropdown">';
-\t\t\thtml += '<button class="ctrl-btn" data-tooltip="排序: ' + sortNames[current_sort] + '">⇅</button>';
+\t\t\thtml += '<button class="ctrl-btn" data-tooltip="' + galleryI18n.sort_prefix + sortNames[current_sort] + '">⇅</button>';
 \t\t\thtml += '<div class="ctrl-dropdown-menu">';
 \t\t\tfor (var i = 0; i < sorts.length; i++) {
 \t\t\t\tvar s = sorts[i];
@@ -474,7 +675,7 @@ class HTMLGenerator:
 
 \t\t\t// 顯示模式 (下拉選單)
 \t\t\thtml += '<div class="ctrl-dropdown">';
-\t\t\thtml += '<button class="ctrl-btn" data-tooltip="' + modeNames[current_mode] + '模式">' + modeIcons[current_mode] + '</button>';
+\t\t\thtml += '<button class="ctrl-btn" data-tooltip="' + modeNames[current_mode] + galleryI18n.mode_suffix + '">' + modeIcons[current_mode] + '</button>';
 \t\t\thtml += '<div class="ctrl-dropdown-menu">';
 \t\t\tfor (var i = 0; i < 3; i++) {
 \t\t\t\thtml += '<a href="javascript:void(0);" onclick="switchMode(' + i + ')"' + (current_mode==i?' class="active"':'') + '>' + modeIcons[i] + ' ' + modeNames[i] + '</a>';
@@ -483,21 +684,21 @@ class HTMLGenerator:
 
 \t\t\t// 影片資訊 (圖片模式)
 \t\t\tif (current_mode == 1) {
-\t\t\t\thtml += '<button class="ctrl-btn' + (info_visible?' active':'') + '" onclick="toggleInfo()" data-tooltip="資訊">👁</button>';
+\t\t\t\thtml += '<button class="ctrl-btn' + (info_visible?' active':'') + '" onclick="toggleInfo()" data-tooltip="' + galleryI18n.info + '">👁</button>';
 \t\t\t}
 
 \t\t\t// 每頁數量 (下拉選單)
 \t\t\thtml += '<div class="ctrl-dropdown">';
-\t\t\thtml += '<button class="ctrl-btn" data-tooltip="每頁 ' + (items_per_page||'全部') + '">#</button>';
+\t\t\thtml += '<button class="ctrl-btn" data-tooltip="' + galleryI18n.per_page + (items_per_page||galleryI18n.all) + '">#</button>';
 \t\t\thtml += '<div class="ctrl-dropdown-menu">';
-\t\t\tvar items = [[30,'30'],[45,'45'],[60,'60'],[90,'90'],[120,'120'],[0,'全部']];
+\t\t\tvar items = [[30,'30'],[45,'45'],[60,'60'],[90,'90'],[120,'120'],[0,galleryI18n.all]];
 \t\t\tfor (var i = 0; i < items.length; i++) {
 \t\t\t\thtml += '<a href="javascript:void(0);" onclick="switchItems(' + items[i][0] + ')"' + (items_per_page==items[i][0]?' class="active"':'') + '>' + items[i][1] + '</a>';
 \t\t\t}
 \t\t\thtml += '</div></div>';
 
 \t\t\t// 主題切換按鈕 (放在最後)
-\t\t\thtml += '<button class="ctrl-btn" onclick="toggleTheme()" data-tooltip="' + (current_theme=='dark'?'切換淺色':'切換深色') + '">';
+\t\t\thtml += '<button class="ctrl-btn" onclick="toggleTheme()" data-tooltip="' + (current_theme=='dark'?galleryI18n.theme_light:galleryI18n.theme_dark) + '">';
 \t\t\thtml += current_theme == 'dark' ? '☼' : '☾';
 \t\t\thtml += '</button>';
 
@@ -508,7 +709,7 @@ class HTMLGenerator:
 \t\t\tif (total_pages <= 1) return '';
 \t\t\tvar html = '';
 \t\t\tif (current_page > 1) {
-\t\t\t\thtml += '<a href="javascript:void(0);" onclick="goPage(' + (current_page-1) + ')">← 上一頁</a>';
+\t\t\t\thtml += '<a href="javascript:void(0);" onclick="goPage(' + (current_page-1) + ')">' + galleryI18n.previous_page + '</a>';
 \t\t\t}
 \t\t\thtml += '<select onchange="goPage(this.value)">';
 \t\t\tfor (var i = 1; i <= total_pages; i++) {
@@ -516,7 +717,7 @@ class HTMLGenerator:
 \t\t\t}
 \t\t\thtml += '</select>';
 \t\t\tif (current_page < total_pages) {
-\t\t\t\thtml += '<a href="javascript:void(0);" onclick="goPage(' + (current_page+1) + ')">下一頁 →</a>';
+\t\t\t\thtml += '<a href="javascript:void(0);" onclick="goPage(' + (current_page+1) + ')">' + galleryI18n.next_page + '</a>';
 \t\t\t}
 \t\t\treturn html;
 \t\t}
@@ -619,7 +820,7 @@ class HTMLGenerator:
 \t\t\tvar stripped = folder.replace(/^file:\\/\\/\\//, '');
 \t\t\tvar winPath = /^[A-Za-z]:/.test(stripped) ? stripped.replace(/\\//g, '\\\\') : stripped;
 \t\t\tnavigator.clipboard.writeText(winPath).then(function() {
-\t\t\t\tshowToast('已複製: ' + winPath);
+\t\t\t\tshowToast(galleryI18n.copied + winPath);
 \t\t\t});
 \t\t}
 
@@ -692,8 +893,8 @@ class HTMLGenerator:
 \t\t\tif (lbTags) html += '<div class="lb-tags">' + formatGenrePills(lbTags) + '</div>';
 \t\t\thtml += '<div class="lb-footer">';
 \t\t\thtml += '<div class="lb-actions">';
-\t\t\thtml += '<a class="lb-btn" href="javascript:void(0);" onclick="event.stopPropagation(); playVideo(' + idx + ')">開啟</a>';
-\t\t\thtml += '<a class="lb-btn" href="javascript:void(0);" onclick="event.stopPropagation(); copyPath(\\'' + escapeHtml(v.path) + '\\')">複製</a>';
+\t\t\thtml += '<a class="lb-btn" href="javascript:void(0);" onclick="event.stopPropagation(); playVideo(' + idx + ')">' + galleryI18n.open + '</a>';
+\t\t\thtml += '<a class="lb-btn" href="javascript:void(0);" onclick="event.stopPropagation(); copyPath(\\'' + escapeHtml(v.path) + '\\')">' + galleryI18n.copy + '</a>';
 \t\t\thtml += '</div>';
 \t\t\thtml += '<span class="lb-size">' + formatSize(v.size) + '</span>';
 \t\t\thtml += '</div>';

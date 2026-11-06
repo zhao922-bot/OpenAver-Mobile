@@ -67,6 +67,7 @@
     <string name="menu_not_connected">本地服务未运行</string>
     <string name="about_title">关于 OpenAver 移动版</string>
     <string name="about_message">内嵌 Android 构建 %1$s\n上游正式版 %2$s\n提交 %3$s\n\n本地数据：%4$s\n\nOpenAver 使用 MIT 授权。原桌面端专属集成无法在 Android 上运行。</string>
+    <string name="confirm_title">请确认</string>
     <string name="ok">确定</string>
     <string name="external_browser_missing">没有可用的浏览器。</string>
     <string name="choose_video_player">选择视频播放器</string>

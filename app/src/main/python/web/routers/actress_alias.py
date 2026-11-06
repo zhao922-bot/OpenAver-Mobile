@@ -23,11 +23,20 @@ from pydantic import BaseModel, field_validator
 from core.database import AliasRepository, init_db
 from core.scrapers.actress.orchestrator import get_actress_profile
 from core.logger import get_logger
+from core.i18n import get_config_locale, t as i18n_t
 from web.routers.actress import _flatten_aliases  # noqa: PLC2701 — alias 建議端點需要與 actress.py 回應組裝共用同一份「別名扁平化」邏輯，避免兩處各自維護導致格式漂移；_flatten_aliases 目前仍是 actress router 的內部 helper，尚未抽到共用模組
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/actress-aliases", tags=["actress-aliases"])
+
+
+def _alias_text(key: str, locale: str | None = None, **params) -> str:
+    return i18n_t(
+        f"runtime.api.{key}",
+        locale=locale or get_config_locale(),
+        **params,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +51,7 @@ class CreateAliasRequest(BaseModel):
     @classmethod
     def primary_name_not_empty(cls, v: str) -> str:
         if not v or not v.strip():
-            raise ValueError("primary_name 不可為空")
+            raise ValueError(_alias_text("name_required"))
         return v.strip()
 
     @field_validator("aliases")
@@ -58,7 +67,7 @@ class AddAliasRequest(BaseModel):
     @classmethod
     def alias_not_empty(cls, v: str) -> str:
         if not v or not v.strip():
-            raise ValueError("alias 不可為空")
+            raise ValueError(_alias_text("alias_required"))
         return v.strip()
 
 
@@ -69,7 +78,7 @@ class SearchOnlineRequest(BaseModel):
     @classmethod
     def name_not_empty(cls, v: str) -> str:
         if not v or not v.strip():
-            raise ValueError("name 不可為空")
+            raise ValueError(_alias_text("name_required"))
         return v
 
 
@@ -120,13 +129,17 @@ def search_alias_online(req: SearchOnlineRequest):
         200 + message 若查無此女優
         504 若 scraper 超時
     """
+    locale = get_config_locale()
     result = get_actress_profile(req.name)
 
     if result.timed_out:
         logger.warning("[actress_alias] search-online timeout：%s", req.name)
         return JSONResponse(
             status_code=504,
-            content={"error": "timeout", "message": "Scraper 超時"},
+            content={
+                "error": "timeout",
+                "message": _alias_text("timeout", locale),
+            },
         )
 
     if result.data is None:
@@ -137,7 +150,7 @@ def search_alias_online(req: SearchOnlineRequest):
                 "success": True,
                 "name": req.name,
                 "suggested_aliases": [],
-                "message": "查無此女優",
+                "message": _alias_text("not_found", locale),
             },
         )
 
@@ -165,10 +178,13 @@ def create_alias_group(req: CreateAliasRequest):
     repo = AliasRepository()
     try:
         record = repo.add(req.primary_name, req.aliases)
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
             status_code=400,
-            content={"success": False, "error": str(exc)},
+            content={
+                "success": False,
+                "error": _alias_text("alias_conflict"),
+            },
         )
     logger.info("[actress_alias] 新增 group：%s", req.primary_name)
     return JSONResponse(
@@ -240,11 +256,14 @@ def add_alias(name: str, req: AddAliasRequest):
     if record is None:
         return JSONResponse(status_code=404, content={"error": "not_found"})
 
-    ok, msg = repo.add_alias(name, req.alias)
+    ok, _msg = repo.add_alias(name, req.alias)
     if not ok:
         return JSONResponse(
             status_code=400,
-            content={"success": False, "error": msg},
+            content={
+                "success": False,
+                "error": _alias_text("alias_conflict"),
+            },
         )
 
     # re-read record

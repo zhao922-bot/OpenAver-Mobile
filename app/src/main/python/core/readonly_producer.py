@@ -43,6 +43,7 @@ from core.enrich_contract import (
 from core.focal import requires_face_detection
 from core.focal_trigger import maybe_submit_video_focal, schedule_focal_after_cover_write
 from core.gallery_scanner import IMAGE_EXTENSIONS, VideoScanner, fast_scan_directory
+from core.i18n import get_config_locale, t as i18n_t
 from core.logger import get_logger
 from core.nfo_read import (
     nfo_actor_names,
@@ -67,6 +68,15 @@ from core.scraper import search_jav, search_jav_single_source
 from core.video_extensions import get_video_extensions
 
 logger = get_logger(__name__)
+
+
+def _ui_locale(locale: Optional[str] = None) -> str:
+    if locale:
+        return locale
+    try:
+        return get_config_locale()
+    except Exception:
+        return "zh-CN"
 
 
 # ---------------------------------------------------------------------------
@@ -1036,6 +1046,7 @@ def enrich_one_readonly(
     after_produce: Optional[Callable[[], None]] = None,
     focal_before_cover_recheck: bool = False,
     preserve_title: bool = False,
+    locale: Optional[str] = None,
 ) -> EnrichResult:
     """單片/批次唯讀 enrich 共用的「產出核心」——薄搬移自
     `web/routers/scraper.py` 單片 enrich 端點（POST /enrich-single）的唯讀分支
@@ -1082,6 +1093,7 @@ def enrich_one_readonly(
     compute 呼叫、step 11 的 `if cover_written:` focal 區塊）本身的內容不因
     這個旗標而改變，只有先後順序被此旗標決定。
     """
+    locale = _ui_locale(locale)
     # step 1
     fs_path = uri_to_local_fs_path(file_path, path_mappings)
     # step 2
@@ -1103,7 +1115,14 @@ def enrich_one_readonly(
         # step 3
         repo = repo_factory()
         _readonly_stub_not_found(repo, canonical, number, fs_path)
-        return _readonly_enrich_failure("找不到可用的番號資料", "not_found")
+        return _readonly_enrich_failure(
+            i18n_t(
+                "runtime.api.search_not_found",
+                locale=locale,
+                number=number,
+            ),
+            "not_found",
+        )
     # step 4
     repo = repo_factory()
     existing = repo.get_by_path(canonical)

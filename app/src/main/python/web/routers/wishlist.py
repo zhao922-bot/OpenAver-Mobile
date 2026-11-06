@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from core import wishlist_cover_cache
 from core.database import VideoRepository, WishlistRepository, get_db_path as get_db_path, init_db
 from core.logger import get_logger
+from core.i18n import get_config_locale
 from core.scraper import normalize_number
 from core.wishlist_reconcile import reconcile_wishlist, format_wishlist_removed_message
 from web.routers.notifications import emit_notification as _emit_notif
@@ -123,10 +124,11 @@ def list_wishlist() -> list:
         _emit_notif("warn", "notif.wishlist_reconcile_failed", task_type="wishlist_reconcile")
         removed = []
     if removed:
+        locale = get_config_locale()
         _emit_notif(
             "info",
             "notif.wishlist_auto_removed",
-            message=format_wishlist_removed_message(removed),
+            message=format_wishlist_removed_message(removed, locale),
             task_type="wishlist_reconcile",
         )
     return WishlistRepository().list_all()

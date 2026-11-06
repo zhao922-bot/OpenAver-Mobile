@@ -67,6 +67,7 @@
     <string name="menu_not_connected">Local server not running</string>
     <string name="about_title">About OpenAver Mobile</string>
     <string name="about_message">Embedded Android build %1$s\nUpstream release %2$s\nCommit %3$s\n\nLocal data: %4$s\n\nOpenAver is MIT licensed. The original desktop-only integrations are unavailable on Android.</string>
+    <string name="confirm_title">Please confirm</string>
     <string name="ok">OK</string>
     <string name="external_browser_missing">No browser is available.</string>
     <string name="choose_video_player">Choose a video player</string>

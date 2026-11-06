@@ -18,10 +18,15 @@ from core.cloud_translate import TranslateError, failure_category
 from core.translate_service import create_translate_service
 from core.scrapers.utils import has_japanese
 from core.logger import get_logger
+from core.i18n import get_config_locale, t as i18n_t
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api", tags=["translate"])
+
+
+def _translate_text(locale: str, key: str, **params) -> str:
+    return i18n_t(f"runtime.translate.{key}", locale=locale, **params)
 
 
 class TranslateRequest(BaseModel):
@@ -66,7 +71,7 @@ def get_translate_service():
             if _translate_service is None:            # double-check under lock
                 config = load_config()
                 translate_config = config.get("translate", {})
-                locale = config.get("general", {}).get("locale", "zh-TW")
+                locale = config.get("general", {}).get("locale", "zh-CN")
                 _translate_service = create_translate_service(translate_config, locale)
     return _translate_service
 
@@ -88,9 +93,13 @@ async def translate_title(request: TranslateRequest) -> dict:
 
     config = await asyncio.to_thread(load_config)
     translate_config = config.get("translate", {})
+    locale = get_config_locale(config)
 
     if not translate_config.get("enabled", False):
-        return {"success": False, "error": "翻譯功能未啟用"}
+        return {
+            "success": False,
+            "error": _translate_text(locale, "disabled"),
+        }
 
     # === 新增：日文檢測，只對 translate 模式生效 ===
     if request.mode == "translate" and not request.force and not has_japanese(request.text):
@@ -113,7 +122,11 @@ async def translate_title(request: TranslateRequest) -> dict:
             result = await translate_service.translate_or_raise(request.text, context)
 
             if not result:
-                return {"success": False, "error": "翻譯結果為空", "reason": "other"}
+                return {
+                    "success": False,
+                    "error": _translate_text(locale, "empty_result"),
+                    "reason": "other",
+                }
 
             return {
                 "success": True,
@@ -122,14 +135,26 @@ async def translate_title(request: TranslateRequest) -> dict:
             }
 
         except TranslateError as e:
-            return {"success": False, "error": "翻譯結果為空", "reason": failure_category(e.kind)}
+            return {
+                "success": False,
+                "error": _translate_text(locale, "empty_result"),
+                "reason": failure_category(e.kind),
+            }
         except ValueError as e:
             # API Key 未設定等配置錯誤
             logger.exception("翻譯設定錯誤: %s", e)
-            return {"success": False, "error": "翻譯設定錯誤，請檢查 API Key 設定", "reason": "other"}
+            return {
+                "success": False,
+                "error": _translate_text(locale, "config_invalid"),
+                "reason": "other",
+            }
         except Exception as e:
             logger.exception("翻譯失敗: %s", e)
-            return {"success": False, "error": "翻譯失敗", "reason": "other"}
+            return {
+                "success": False,
+                "error": _translate_text(locale, "failed"),
+                "reason": "other",
+            }
 
     # === optimize 模式：使用 Ollama 清理標題 ===
     # 兼容嵌套結構和舊扁平結構
@@ -177,7 +202,10 @@ async def translate_title(request: TranslateRequest) -> dict:
             result = data.get("message", {}).get("content", "").strip()
 
             if not result:
-                return {"success": False, "error": "翻譯結果為空"}
+                return {
+                    "success": False,
+                    "error": _translate_text(locale, "empty_result"),
+                }
 
             # 清理輸出
             result = result.strip().strip('"').strip("'")
@@ -193,12 +221,21 @@ async def translate_title(request: TranslateRequest) -> dict:
             }
 
     except httpx.TimeoutException:
-        return {"success": False, "error": "Ollama 連線逾時"}
+        return {
+            "success": False,
+            "error": _translate_text(locale, "ollama_timeout"),
+        }
     except httpx.ConnectError:
-        return {"success": False, "error": "無法連線到 Ollama"}
+        return {
+            "success": False,
+            "error": _translate_text(locale, "ollama_unreachable"),
+        }
     except Exception as e:
         logger.exception("標題優化失敗: %s", e)
-        return {"success": False, "error": "標題優化失敗"}
+        return {
+            "success": False,
+            "error": _translate_text(locale, "optimize_failed"),
+        }
 
 
 @router.post("/translate-batch")
@@ -238,6 +275,7 @@ async def translate_batch(request: BatchTranslateRequest):
 
         # 獲取配置的批次大小（預留：可從 config 讀取默認值）
         config = await asyncio.to_thread(load_config)
+        locale = get_config_locale(config)
         default_batch_size = config.get("translate", {}).get("batch_size", 10)
 
         # 限制批次大小（防止超時），優先使用請求參數
@@ -283,6 +321,7 @@ async def translate_batch(request: BatchTranslateRequest):
 
     except Exception as e:
         logger.exception("批次翻譯失敗: %s", e)
+        locale = get_config_locale()
 
         # 返回錯誤響應（不拋出異常，避免前端報錯）
         return {
@@ -290,6 +329,6 @@ async def translate_batch(request: BatchTranslateRequest):
             "count": 0,
             "skipped": 0,
             "errors": list(range(len(request.titles))),
-            "error_message": "批次翻譯失敗"
+            "error_message": _translate_text(locale, "batch_failed")
         }
 

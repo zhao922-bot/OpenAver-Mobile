@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
 from core.database import get_connection, get_db_path
+from core.i18n import get_config_locale, t as i18n_t
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -86,7 +87,13 @@ def export_database() -> FileResponse:
     """Download a consistent database snapshot as a ZIP archive."""
     db_path = get_db_path()
     if not db_path.exists():
-        raise HTTPException(status_code=404, detail="資料庫不存在，請先產生列表")
+        raise HTTPException(
+            status_code=404,
+            detail=i18n_t(
+                "runtime.database.missing",
+                locale=get_config_locale(),
+            ),
+        )
 
     descriptor, temp_name = tempfile.mkstemp(
         prefix="openaver-db-export-",
@@ -99,7 +106,13 @@ def export_database() -> FileResponse:
     except Exception:
         _safe_unlink(str(zip_path))
         logger.exception("database export failed")
-        raise HTTPException(status_code=500, detail="資料庫匯出失敗") from None
+        raise HTTPException(
+            status_code=500,
+            detail=i18n_t(
+                "runtime.database.export_failed",
+                locale=get_config_locale(),
+            ),
+        ) from None
 
     filename = time.strftime(
         "openaver-database-%Y%m%d-%H%M%S.zip",

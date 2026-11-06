@@ -1019,17 +1019,18 @@
  
  from core.config import STEM_IMAGE_MODES
  from core.cover_attributes import effective_tags
-@@ -22,7 +25,9 @@
+@@ -22,7 +25,10 @@
      should_preserve_cover,
  )
  from core.focal_trigger import schedule_focal_after_cover_write
 +from core.image_codec import looks_like_image
++from core.i18n import get_config_locale, t as i18n_t
  from core.logger import get_logger
 +from core.media_io import copy_file, delete_file, ensure_directory
  from core.nfo_read import (
      nfo_actor_names,
      nfo_first_text,
-@@ -35,14 +40,34 @@
+@@ -35,14 +41,52 @@
  from core.nfo_stat import NFO_MTIME_FILL_MISSING, NFO_MTIME_REFRESH, nfo_mtime_or_none
  from core.nfo_title_format import resolve_preserved_title_for_write, resolve_title_body
  from core.nfo_updater import parse_nfo
@@ -1056,6 +1057,24 @@
  VALID_MODES = {"fill_missing", "db_to_sidecar", "refresh_full"}
 +
 +
++def _ui_locale(locale: Optional[str] = None) -> str:
++    """Return the active UI locale for user-visible EnrichResult errors."""
++    if locale:
++        return locale
++    try:
++        return get_config_locale()
++    except Exception:
++        return "zh-CN"
++
++
++def _api_text(locale: str, key: str, **params) -> str:
++    return i18n_t(f"runtime.api.{key}", locale=locale, **params)
++
++
++def _sample_text(locale: str, key: str, **params) -> str:
++    return i18n_t(f"runtime.samples.{key}", locale=locale, **params)
++
++
 +class SampleBackfillCancelled(Exception):
 +    """Raised when a cooperative sample-backfill cancellation is observed."""
 +
@@ -1066,7 +1085,7 @@
  
  
  _FILL_MISSING_REQUIRED = ["title", "actresses", "maker", "director", "series", "label", "tags", "release_date"]
-@@ -273,7 +298,7 @@
+@@ -273,7 +317,7 @@
          existing = repo.get_by_path(path_uri)
          user_tags = existing.user_tags if existing else []
  
@@ -1075,7 +1094,7 @@
          number=number,
          title=meta.get("title", ""),
          original_title=meta.get("original_title", ""),
-@@ -300,7 +325,6 @@
+@@ -300,7 +344,6 @@
          has_fanart=has_fanart,
          nfo_title_format=nfo_title_format,
      )
@@ -1083,7 +1102,7 @@
  
  
  def _write_cover(
-@@ -390,7 +414,9 @@
+@@ -390,7 +433,9 @@
              fanart_ok = certain
          else:
              try:
@@ -1094,7 +1113,7 @@
                  fanart_ok = True
              except shutil.SameFileError:
                  fanart_ok = True
-@@ -423,6 +449,34 @@
+@@ -423,6 +468,34 @@
      uris: List[str]
      downloaded: int
      skipped_existing: int
@@ -1129,7 +1148,7 @@
  
  
  def _write_extrafanart(
-@@ -431,13 +485,15 @@
+@@ -431,13 +504,15 @@
      write_extrafanart: bool,
      path_mappings: dict = None,
      preview_sample_images: List[str] = None,
@@ -1147,7 +1166,7 @@
  
      # CD-126-2：逐張配對用 index，**不用裸 zip()**——zip 在長度不等時會靜默截斷，
      # 等於少下載幾張圖。長度不等的正確語意是「那幾格沒有代理」，不是「少下載」。
-@@ -445,28 +501,111 @@
+@@ -445,28 +520,111 @@
      uris: List[str] = []
      downloaded = 0
      skipped_existing = 0
@@ -1266,7 +1285,86 @@
  
  
  def _preserve_nfo_only_fields(meta: dict, scraper_data: dict, fs_path: str) -> None:
-@@ -761,6 +900,7 @@
+@@ -547,7 +705,9 @@
+     scraper_data: Optional[dict] = None,
+     path_mappings: dict = None,
+     preserve_title: bool = False, nfo_title_format: str = '[{num}]{title}',
++    locale: Optional[str] = None,
+ ) -> EnrichResult:
++    locale = _ui_locale(locale)
+     _empty = EnrichResult(
+         success=False,
+         nfo_written=False,
+@@ -559,12 +719,12 @@
+     )
+ 
+     if not number:
+-        _empty.error = "缺少番號"
++        _empty.error = _api_text(locale, "number_not_recognized")
+         _empty.reason = "error"
+         return _empty
+ 
+     if mode not in VALID_MODES:
+-        _empty.error = f"不支援的 mode: {mode}（合法值：fill_missing, db_to_sidecar, refresh_full）"
++        _empty.error = _api_text(locale, "enrich_failed")
+         _empty.reason = "error"
+         return _empty
+ 
+@@ -575,7 +735,7 @@
+     fs_path_for_db = uri_to_fs_path(file_path)  # uri-no-reverse: DB key must stay in DB's stored namespace; disk I/O uses fs_path
+ 
+     if not os.path.exists(fs_path):
+-        _empty.error = "檔案不存在"
++        _empty.error = _sample_text(locale, "error_file_not_found")
+         _empty.reason = "error"
+         return _empty
+ 
+@@ -592,7 +752,7 @@
+                                       source=source or 'auto', javbus_lang=javbus_lang)
+         if not scraper_data:
+             repo.update_scrape_attempted_at(to_file_uri(fs_path_for_db), time.time())  # db-ns-ok: fs_path_for_db, DB round-trip value, no reverse mapping applied
+-            _empty.error = f"找不到 {number} 的資料"
++            _empty.error = _api_text(locale, "search_not_found", number=number)
+             _empty.reason = "not_found"
+             return _empty
+         meta = _scraper_to_meta(scraper_data)
+@@ -603,7 +763,7 @@
+         db_hits = repo.get_by_numbers([number])
+         videos = db_hits.get(number, [])
+         if not videos:
+-            _empty.error = f"DB 中找不到 {number} 的資料"
++            _empty.error = _api_text(locale, "search_not_found", number=number)
+             _empty.reason = "not_found"
+             return _empty
+         meta = _video_to_meta(_pick_row_for_path(videos, path_uri))
+@@ -661,7 +821,7 @@
+                 else:
+                     # missing 本來就有 title 以外的缺項：早退行為與今天完全一致
+                     repo.update_scrape_attempted_at(to_file_uri(fs_path_for_db), time.time())  # db-ns-ok: fs_path_for_db, DB round-trip value, no reverse mapping applied
+-                    _empty.error = f"找不到 {number} 的資料"
++                    _empty.error = _api_text(locale, "search_not_found", number=number)
+                     _empty.reason = "not_found"
+                     return _empty
+             else:
+@@ -726,7 +886,7 @@
+                 fs_path_for_db=fs_path_for_db, nfo_title_format=nfo_title_format,
+             )
+         except PermissionError:
+-            _empty.error = "NFO 寫入失敗，請確認目錄寫入權限"
++            _empty.error = _api_text(locale, "enrich_failed")
+             _empty.reason = "error"
+             return _empty
+     else:
+@@ -743,7 +903,7 @@
+                 fs_path_for_db=fs_path_for_db, nfo_title_format=nfo_title_format,
+             )
+         except PermissionError:
+-            _empty.error = "NFO 寫入失敗，請確認目錄寫入權限"
++            _empty.error = _api_text(locale, "enrich_failed")
+             _empty.reason = "error"
+             return _empty
+ 
+@@ -761,6 +921,7 @@
          write_extrafanart=write_extrafanart,
          path_mappings=path_mappings,
          preview_sample_images=meta.get("preview_sample_images", []),
@@ -1274,7 +1372,7 @@
      )
      extrafanart_written = extrafanart_res.downloaded
  
-@@ -940,13 +1080,19 @@
+@@ -940,14 +1101,22 @@
      repo.update_sample_images(path_uri, sample_images)
  
  
@@ -1288,6 +1386,7 @@
 -    不寫 NFO / cover / 其他欄位。
 +    related_db_paths: Optional[List[str]] = None,
 +    cancel_event: Optional[Event] = None,
++    locale: Optional[str] = None,
 +) -> tuple[EnrichResult, dict]:
 +    """只補抓劇照，並回傳足以區分「查無／無劇照／下載失敗／DB 失敗」的診斷。
 +
@@ -1296,9 +1395,11 @@
 +    sample list is stored on every member row. Paths are DB-key URIs (or values
 +    accepted by ``coerce_to_file_uri``); duplicate/current paths are ignored.
      """
++    locale = _ui_locale(locale)
      _empty = EnrichResult(
          success=False,
-@@ -957,6 +1103,21 @@
+         nfo_written=False,
+@@ -957,6 +1126,21 @@
          source_used="",
          error=None,
      )
@@ -1314,20 +1415,22 @@
 +    }
 +
 +    if cancel_event is not None and cancel_event.is_set():
-+        _empty.error = "劇照補齊已取消"
++        _empty.error = _sample_text(locale, "cancelled")
 +        diagnostics["error_code"] = "cancelled"
 +        return _empty, diagnostics
  
      try:
          fs_path = uri_to_local_fs_path(file_path, path_mappings)
-@@ -967,39 +1128,155 @@
+@@ -966,40 +1150,154 @@
+ 
      if not os.path.exists(fs_path):
          logger.warning("[fetch_samples_only] 檔案不存在: %s", fs_path)
-         _empty.error = "檔案不存在"
+-        _empty.error = "檔案不存在"
 -        return _empty
 -
 -    meta = search_jav(number,
 -                      source="auto", javbus_lang=None)
++        _empty.error = _sample_text(locale, "error_file_not_found")
 +        diagnostics["error_code"] = "file_not_found"
 +        return _empty, diagnostics
 +
@@ -1336,18 +1439,20 @@
 +        meta = search_jav(number, source="auto", javbus_lang=None)
 +        _raise_if_cancelled(cancel_event)
 +    except SampleBackfillCancelled:
-+        _empty.error = "劇照補齊已取消"
++        _empty.error = _sample_text(locale, "cancelled")
 +        diagnostics["error_code"] = "cancelled"
 +        return _empty, diagnostics
 +    except Exception as exc:
 +        logger.exception("[fetch_samples_only] 來源查詢失敗: %s", exc)
-+        _empty.error = f"劇照來源查詢失敗：{type(exc).__name__}"
++        _empty.error = _sample_text(
++            locale, "error_samples_search_failed", number=number
++        )
 +        diagnostics["error_code"] = "samples_search_failed"
 +        diagnostics["detail"] = f"{type(exc).__name__}: {exc}"
 +        return _empty, diagnostics
      if not meta:
          logger.warning("[fetch_samples_only] 找不到資料: %s", number)
-         _empty.error = f"找不到 {number} 的資料"
+-        _empty.error = f"找不到 {number} 的資料"
 -        return _empty
 -
 -    sample_images = meta.get("sample_images", [])
@@ -1355,6 +1460,9 @@
 -        fs_path, sample_images, write_extrafanart=True, path_mappings=path_mappings,
 -        preview_sample_images=meta.get("preview_sample_images", []),
 -    )
++        _empty.error = _sample_text(
++            locale, "error_samples_search_failed", number=number
++        )
 +        diagnostics["error_code"] = "samples_search_failed"
 +        return _empty, diagnostics
 +
@@ -1367,7 +1475,7 @@
 +    diagnostics["sample_urls_found"] = len(sample_images)
 +    if not sample_images:
 +        logger.warning("[fetch_samples_only] %s 的來源 %s 沒有劇照 URL", number, source_used)
-+        _empty.error = "沒有找到可下載的劇照"
++        _empty.error = _sample_text(locale, "error_no_sample_images")
 +        _empty.source_used = source_used
 +        diagnostics["error_code"] = "no_sample_images"
 +        return _empty, diagnostics
@@ -1382,7 +1490,7 @@
 +            cancel_event=cancel_event,
 +        )
 +    except SampleBackfillCancelled:
-+        _empty.error = "劇照補齊已取消"
++        _empty.error = _sample_text(locale, "cancelled")
 +        diagnostics["error_code"] = "cancelled"
 +        return _empty, diagnostics
 +    except Exception as exc:
@@ -1393,13 +1501,15 @@
 +
 +        logger.exception("[fetch_samples_only] 劇照寫入失敗: %s", exc)
 +        if isinstance(exc, AndroidStoragePermissionError):
-+            _empty.error = "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”"
++            _empty.error = _sample_text(
++                locale, "error_storage_permission_required"
++            )
 +            error_code = "storage_permission_required"
 +        elif isinstance(exc, AndroidStorageWriteError):
-+            _empty.error = "劇照寫入外置存儲失敗"
++            _empty.error = _sample_text(locale, "error_sample_write_failed")
 +            error_code = "sample_write_failed"
 +        else:
-+            _empty.error = "劇照寫入失敗"
++            _empty.error = _sample_text(locale, "error_sample_write_failed")
 +            error_code = "sample_write_failed"
 +        _empty.source_used = source_used
 +        diagnostics["error_code"] = error_code
@@ -1431,12 +1541,12 @@
 +                seen_uris.add(related_uri)
 +                repo.update_sample_images(related_uri, extrafanart_res.uris)
 +        except SampleBackfillCancelled:
-+            _empty.error = "劇照補齊已取消"
++            _empty.error = _sample_text(locale, "cancelled")
 +            diagnostics["error_code"] = "cancelled"
 +            return _empty, diagnostics
 +        except Exception as exc:
 +            logger.exception("[fetch_samples_only] DB 更新失敗: %s", exc)
-+            _empty.error = "劇照已下載，但資料庫更新失敗，請再試一次"
++            _empty.error = _sample_text(locale, "error_db_write_failed")
 +            _empty.source_used = source_used
 +            diagnostics["error_code"] = "db_write_failed"
 +            return _empty, diagnostics
@@ -1454,17 +1564,7 @@
 -        source_used=meta.get("source", ""),
 -        reason=None,
 +    if not extrafanart_res.uris:
-+        reasons = {}
-+        for item in extrafanart_res.errors:
-+            reason = item.get("reason", "download_failed")
-+            reasons[reason] = reasons.get(reason, 0) + 1
-+        summary = "、".join(
-+            f"{reason} × {count}" for reason, count in reasons.items()
-+        )
-+        _empty.error = (
-+            f"已找到 {len(sample_images)} 張劇照，但全部下載失敗"
-+            + (f"（{summary}）" if summary else "")
-+        )
++        _empty.error = _sample_text(locale, "error_sample_download_failed")
 +        _empty.source_used = source_used
 +        diagnostics["error_code"] = "sample_download_failed"
 +        return _empty, diagnostics
@@ -1486,12 +1586,14 @@
 +    file_path: str,
 +    number: str,
 +    path_mappings: dict = None,
++    locale: Optional[str] = None,
 +) -> EnrichResult:
 +    """兼容入口：只回既有 EnrichResult；路由改用 detailed 取得診斷。"""
 +    result, _diagnostics = fetch_samples_only_detailed(
 +        file_path=file_path,
 +        number=number,
 +        path_mappings=path_mappings,
++        locale=locale,
 +    )
 +    return result
  
@@ -1499,7 +1601,223 @@
  def resolve_nfo_cover_paths(file_path: str, path_mappings: dict = None, external_manager: str = "off") -> tuple:
 --- a/core/gallery_generator.py
 +++ b/core/gallery_generator.py
-@@ -70,6 +70,7 @@
+@@ -14,11 +14,205 @@
+ """
+ 
+ import html
++import json
+ from typing import List
+ from core.gallery_scanner import VideoInfo
++from core.i18n import get_config_locale
+ from core.logger import get_logger
+ 
+ logger = get_logger(__name__)
++
++
++_GALLERY_LABELS = {
++    "zh-CN": {
++        "search_placeholder": "搜索影片...",
++        "clear": "清除",
++        "search": "搜索",
++        "hotkeys": "快捷键: A 切换模式 | S 显示/隐藏信息 | ← / → 翻页 | ESC 关闭",
++        "load_more": "查看更多",
++        "search_prefix": "搜索",
++        "found": "找到",
++        "total_prefix": "共",
++        "video_unit": "部影片",
++        "table_title": "片名",
++        "table_actor": "演员",
++        "table_number": "番号",
++        "table_maker": "片商",
++        "table_date": "日期",
++        "table_genre": "类型",
++        "table_size": "大小",
++        "open": "打开",
++        "copy": "复制",
++        "copied": "已复制: ",
++        "actor_label": "演员：",
++        "maker_label": "片商：",
++        "date_label": "日期：",
++        "mode_detail": "详细",
++        "mode_image": "图片",
++        "mode_text": "文字",
++        "mode_suffix": "模式",
++        "sort_prefix": "排序: ",
++        "sort_path": "路径",
++        "sort_title": "片名",
++        "sort_actor": "演员",
++        "sort_num": "番号",
++        "sort_maker": "片商",
++        "sort_date": "日期",
++        "sort_size": "大小",
++        "sort_mdate": "修改",
++        "sort_random": "随机",
++        "ascending": "递增",
++        "descending": "递减",
++        "info": "信息",
++        "per_page": "每页 ",
++        "all": "全部",
++        "theme_light": "切换浅色",
++        "theme_dark": "切换深色",
++        "previous_page": "← 上一页",
++        "next_page": "下一页 →",
++    },
++    "zh-TW": {
++        "search_placeholder": "搜尋影片...",
++        "clear": "清除",
++        "search": "搜尋",
++        "hotkeys": "熱鍵: A 切換模式 | S 顯示/隱藏資訊 | ← / → 翻頁 | ESC 關閉",
++        "load_more": "查看更多",
++        "search_prefix": "搜尋",
++        "found": "找到",
++        "total_prefix": "共",
++        "video_unit": "部影片",
++        "table_title": "片名",
++        "table_actor": "演員",
++        "table_number": "番號",
++        "table_maker": "片商",
++        "table_date": "日期",
++        "table_genre": "類型",
++        "table_size": "大小",
++        "open": "開啟",
++        "copy": "複製",
++        "copied": "已複製: ",
++        "actor_label": "演員：",
++        "maker_label": "片商：",
++        "date_label": "日期：",
++        "mode_detail": "詳細",
++        "mode_image": "圖片",
++        "mode_text": "文字",
++        "mode_suffix": "模式",
++        "sort_prefix": "排序: ",
++        "sort_path": "路徑",
++        "sort_title": "片名",
++        "sort_actor": "演員",
++        "sort_num": "番號",
++        "sort_maker": "片商",
++        "sort_date": "日期",
++        "sort_size": "大小",
++        "sort_mdate": "修改",
++        "sort_random": "隨機",
++        "ascending": "遞增",
++        "descending": "遞減",
++        "info": "資訊",
++        "per_page": "每頁 ",
++        "all": "全部",
++        "theme_light": "切換淺色",
++        "theme_dark": "切換深色",
++        "previous_page": "← 上一頁",
++        "next_page": "下一頁 →",
++    },
++    "ja": {
++        "search_placeholder": "動画を検索...",
++        "clear": "クリア",
++        "search": "検索",
++        "hotkeys": "ショートカット: A 表示切替 | S 情報表示/非表示 | ← / → ページ移動 | ESC 閉じる",
++        "load_more": "さらに表示",
++        "search_prefix": "検索",
++        "found": "該当",
++        "total_prefix": "全",
++        "video_unit": "件",
++        "table_title": "タイトル",
++        "table_actor": "出演者",
++        "table_number": "品番",
++        "table_maker": "メーカー",
++        "table_date": "日付",
++        "table_genre": "ジャンル",
++        "table_size": "サイズ",
++        "open": "開く",
++        "copy": "コピー",
++        "copied": "コピーしました: ",
++        "actor_label": "出演者：",
++        "maker_label": "メーカー：",
++        "date_label": "日付：",
++        "mode_detail": "詳細",
++        "mode_image": "画像",
++        "mode_text": "テキスト",
++        "mode_suffix": "モード",
++        "sort_prefix": "並び替え: ",
++        "sort_path": "パス",
++        "sort_title": "タイトル",
++        "sort_actor": "出演者",
++        "sort_num": "品番",
++        "sort_maker": "メーカー",
++        "sort_date": "日付",
++        "sort_size": "サイズ",
++        "sort_mdate": "更新日",
++        "sort_random": "ランダム",
++        "ascending": "昇順",
++        "descending": "降順",
++        "info": "情報",
++        "per_page": "表示件数 ",
++        "all": "すべて",
++        "theme_light": "ライトに切り替え",
++        "theme_dark": "ダークに切り替え",
++        "previous_page": "← 前へ",
++        "next_page": "次へ →",
++    },
++    "en": {
++        "search_placeholder": "Search videos...",
++        "clear": "Clear",
++        "search": "Search",
++        "hotkeys": "Shortcuts: A switch mode | S show/hide info | ← / → pages | ESC close",
++        "load_more": "Load more",
++        "search_prefix": "Search",
++        "found": "found",
++        "total_prefix": "Total",
++        "video_unit": "videos",
++        "table_title": "Title",
++        "table_actor": "Actress",
++        "table_number": "ID",
++        "table_maker": "Maker",
++        "table_date": "Date",
++        "table_genre": "Genre",
++        "table_size": "Size",
++        "open": "Open",
++        "copy": "Copy",
++        "copied": "Copied: ",
++        "actor_label": "Actress: ",
++        "maker_label": "Maker: ",
++        "date_label": "Date: ",
++        "mode_detail": "Detail",
++        "mode_image": "Images",
++        "mode_text": "Text",
++        "mode_suffix": "mode",
++        "sort_prefix": "Sort: ",
++        "sort_path": "Path",
++        "sort_title": "Title",
++        "sort_actor": "Actress",
++        "sort_num": "ID",
++        "sort_maker": "Maker",
++        "sort_date": "Date",
++        "sort_size": "Size",
++        "sort_mdate": "Modified",
++        "sort_random": "Random",
++        "ascending": "Ascending",
++        "descending": "Descending",
++        "info": "Info",
++        "per_page": "Per page ",
++        "all": "All",
++        "theme_light": "Switch to light",
++        "theme_dark": "Switch to dark",
++        "previous_page": "← Previous",
++        "next_page": "Next →",
++    },
++}
+ 
+ 
+ class HTMLGenerator:
+@@ -41,7 +235,8 @@
+                  items_per_page: int = 90,
+                  theme: str = "light",
+                  click_action: str = "play",
+-                 has_more: bool = False) -> None:
++                 has_more: bool = False,
++                 locale: str | None = None) -> None:
+         """
+         生成 HTML 檔案
+         
+@@ -70,12 +265,14 @@
                  f'maker:"{self.escape_js_string(v.maker)}", '
                  f'date:"{self.escape_js_string(v.date)}", '
                  f'genre:"{self.escape_js_string(v.genre)}", '
@@ -1507,7 +1825,106 @@
                  f'size:{v.size}, '
                  f'mdate:{v.mtime}, '
                  f'img:"{self.escape_js_string(v.img)}" }}'
-@@ -379,7 +380,7 @@
+             )
+ 
+         # 生成完整 HTML
++        locale = get_config_locale() if locale is None else locale
+         html = self._generate_html(
+             title=title,
+             js_videos=js_videos,
+@@ -85,7 +282,8 @@
+             user_items=items_per_page,
+             theme=theme,
+             click_action=click_action,
+-            has_more=has_more
++            has_more=has_more,
++            locale=locale,
+         )
+ 
+         # 寫入檔案
+@@ -97,13 +295,16 @@
+     def _generate_html(self, title: str, js_videos: List[str],
+                        user_mode: int, user_order: int,
+                        user_sort: str, user_items: int, theme: str,
+-                       click_action: str = "play", has_more: bool = False) -> str:
++                       click_action: str = "play", has_more: bool = False,
++                       locale: str = "zh-CN") -> str:
+         """生成 HTML 內容"""
+ 
+         videos_js = '\n'.join([f'\t\tvideos[{i}] = {v};' for i, v in enumerate(js_videos)])
++        labels = _GALLERY_LABELS.get(locale, _GALLERY_LABELS["zh-CN"])
++        labels_json = json.dumps(labels, ensure_ascii=False).replace("</", "<\\/")
+ 
+         return f'''<!DOCTYPE html>
+-<html lang="zh-TW" data-theme="{theme}">
++<html lang="{html.escape(locale)}" data-theme="{theme}">
+ <head>
+ \t<meta charset="utf-8">
+ \t<meta name="viewport" content="width=device-width, initial-scale=1">
+@@ -122,12 +323,12 @@
+ \t\t\t<div class="spotlight-search">
+ \t\t\t\t<i class="bi bi-search search-icon-left"></i>
+ \t\t\t\t<form name="form_search" onsubmit="goToLinkWithParameters(document.form_search.sw.value, 1); return false;">
+-\t\t\t\t\t<input type="text" name="sw" placeholder="搜尋影片..." autocomplete="off" oninput="updateResetBtn()">
++\t\t\t\t\t<input type="text" name="sw" placeholder="{html.escape(labels["search_placeholder"], quote=True)}" autocomplete="off" oninput="updateResetBtn()">
+ \t\t\t\t\t<div class="search-actions-right">
+-\t\t\t\t\t\t<button type="button" class="reset-btn btn-icon d-none" onclick="resetSearch()" title="清除">
++\t\t\t\t\t\t<button type="button" class="reset-btn btn-icon d-none" onclick="resetSearch()" title="{html.escape(labels["clear"], quote=True)}">
+ \t\t\t\t\t\t\t<i class="bi bi-x-lg"></i>
+ \t\t\t\t\t\t</button>
+-\t\t\t\t\t\t<button type="submit" class="btn-icon active" title="搜尋">
++\t\t\t\t\t\t<button type="submit" class="btn-icon active" title="{html.escape(labels["search"], quote=True)}">
+ \t\t\t\t\t\t\t<i class="bi bi-arrow-right"></i>
+ \t\t\t\t\t\t</button>
+ \t\t\t\t\t</div>
+@@ -149,7 +350,7 @@
+ \t<!-- Footer -->
+ \t<footer class="footer">
+ \t\t<div class="pagination" id="pagebar"></div>
+-\t\t<div class="hotkey-hint">熱鍵: A 切換模式 | S 顯示/隱藏資訊 | ← / → 翻頁 | ESC 關閉</div>
++\t\t<div class="hotkey-hint">{html.escape(labels["hotkeys"])}</div>
+ \t</footer>
+ 
+ \t<!-- Lightbox Modal -->
+@@ -167,7 +368,7 @@
+ \t<!-- Load More Section (postMessage mode only) -->
+ \t<div id="loadMoreSection" class="load-more-section" style="display: none;">
+ \t\t<button onclick="loadMore()" class="load-more-btn">
+-\t\t\t<i class="bi bi-arrow-down-circle"></i> 查看更多
++\t\t\t<i class="bi bi-arrow-down-circle"></i> {html.escape(labels["load_more"])}
+ \t\t</button>
+ \t</div>
+ 
+@@ -181,6 +382,7 @@
+ \t\tvar default_theme = "{theme}";
+ \t\tvar click_action = "{click_action}";
+ \t\tvar has_more = {str(has_more).lower()};
++\t\tvar galleryI18n = {labels_json};
+ {self._get_javascript()}
+ \t\t// Load More function (postMessage mode)
+ \t\tfunction loadMore() {{
+@@ -345,9 +547,9 @@
+ 
+ \t\t\t// 顯示總數與搜尋狀態
+ \t\t\tif (search_words) {
+-\t\t\t\ttotal.innerHTML = '搜尋 "<b>' + escapeHtml(search_words) + '</b>" - 找到 <b>' + filtered_videos.length + '</b> 部';
++\t\t\t\ttotal.innerHTML = galleryI18n.search_prefix + ' "<b>' + escapeHtml(search_words) + '</b>" - ' + galleryI18n.found + ' <b>' + filtered_videos.length + '</b> ' + galleryI18n.video_unit;
+ \t\t\t} else {
+-\t\t\t\ttotal.innerHTML = '共 <b>' + filtered_videos.length + '</b> 部影片';
++\t\t\t\ttotal.innerHTML = galleryI18n.total_prefix + ' <b>' + filtered_videos.length + '</b> ' + galleryI18n.video_unit;
+ \t\t\t}
+ 
+ \t\t\t// 渲染 Header 控制按鈕
+@@ -368,7 +570,7 @@
+ \t\t\tif (current_mode == 0) {
+ \t\t\t\t// 詳細模式
+ \t\t\t\thtml = '<table class="detail-table"><thead><tr>';
+-\t\t\t\thtml += '<th>#</th><th>片名</th><th>演員</th><th>番號</th><th>片商</th><th>日期</th><th>類型</th><th>大小</th>';
++\t\t\t\thtml += '<th>#</th><th>' + galleryI18n.table_title + '</th><th>' + galleryI18n.table_actor + '</th><th>' + galleryI18n.table_number + '</th><th>' + galleryI18n.table_maker + '</th><th>' + galleryI18n.table_date + '</th><th>' + galleryI18n.table_genre + '</th><th>' + galleryI18n.table_size + '</th>';
+ \t\t\t\thtml += '</tr></thead><tbody>';
+ \t\t\t\tfor (var i = start; i < end; i++) {
+ \t\t\t\t\tvar v = filtered_videos[i];
+@@ -379,7 +581,7 @@
  \t\t\t\t\thtml += '<td>' + escapeHtml(v.num) + '</td>';
  \t\t\t\t\thtml += '<td>' + formatMaker(v.maker) + '</td>';
  \t\t\t\t\thtml += '<td>' + escapeHtml(v.date) + '</td>';
@@ -1516,7 +1933,7 @@
  \t\t\t\t\thtml += '<td>' + formatSize(v.size) + '</td>';
  \t\t\t\t\thtml += '</tr>';
  \t\t\t\t}
-@@ -389,7 +390,7 @@
+@@ -389,15 +591,15 @@
  \t\t\t\thtml = '<div class="grid">';
  \t\t\t\tfor (var i = start; i < end; i++) {
  \t\t\t\t\tvar v = filtered_videos[i];
@@ -1525,16 +1942,110 @@
  \t\t\t\t\thtml += '<div class="card">';
  \t\t\t\t\t// 圖片區（含按鈕）
  \t\t\t\t\thtml += '<div class="card-img" onclick="showLightbox(' + i + ')">';
-@@ -422,7 +423,7 @@
- \t\t\t\t\t\t\tif (v.maker) html += '<span><b>片商：</b>' + formatMaker(v.maker) + '</span>';
- \t\t\t\t\t\t\tif (v.date) html += '<span><b>日期：</b>' + escapeHtml(v.date) + '</span>';
+ \t\t\t\t\t\thtml += '<img loading="lazy" src="' + imgSrc + '" alt="" onerror="this.parentElement.classList.add(\\'no-img\\')"/>';
+ \t\t\t\t\t// Hover 時滑出的按鈕區（在縮圖內部）
+ \t\t\t\t\t\thtml += '<div class="card-actions">';
+-\t\t\t\t\t\thtml += '<a class="action-btn" href="javascript:void(0);" onclick="event.stopPropagation(); playVideo(' + i + ')">開啟</a>';
+-\t\t\t\t\t\thtml += '<a class="action-btn" href="javascript:void(0);" onclick="event.stopPropagation(); copyPath(\\'' + escapeHtml(v.path) + '\\')">複製</a>';
++\t\t\t\t\t\thtml += '<a class="action-btn" href="javascript:void(0);" onclick="event.stopPropagation(); playVideo(' + i + ')">' + galleryI18n.open + '</a>';
++\t\t\t\t\t\thtml += '<a class="action-btn" href="javascript:void(0);" onclick="event.stopPropagation(); copyPath(\\'' + escapeHtml(v.path) + '\\')">' + galleryI18n.copy + '</a>';
+ \t\t\t\t\t\thtml += '</div>';
+ \t\t\t\t\t\thtml += '</div>';
+ \t\t\t\t\t// Footer - 預設：番號+女優，Hover：片名
+@@ -417,12 +619,12 @@
+ \t\t\t\t\t\tif (info_visible) {
+ \t\t\t\t\t\t\thtml += '<div class="card-info">';
+ \t\t\t\t\t\t\thtml += '<div class="info-title">' + escapeHtml(stripNumPrefix(v.title)) + '</div>';
+-\t\t\t\t\t\t\tif (v.actor) html += '<div class="info-row"><b>演員：</b>' + formatActor(v.actor) + '</div>';
++\t\t\t\t\t\t\tif (v.actor) html += '<div class="info-row"><b>' + galleryI18n.actor_label + '</b>' + formatActor(v.actor) + '</div>';
+ \t\t\t\t\t\t\thtml += '<div class="info-row info-meta">';
+-\t\t\t\t\t\t\tif (v.maker) html += '<span><b>片商：</b>' + formatMaker(v.maker) + '</span>';
+-\t\t\t\t\t\t\tif (v.date) html += '<span><b>日期：</b>' + escapeHtml(v.date) + '</span>';
++\t\t\t\t\t\t\tif (v.maker) html += '<span><b>' + galleryI18n.maker_label + '</b>' + formatMaker(v.maker) + '</span>';
++\t\t\t\t\t\t\tif (v.date) html += '<span><b>' + galleryI18n.date_label + '</b>' + escapeHtml(v.date) + '</span>';
  \t\t\t\t\t\t\thtml += '</div>';
 -\t\t\t\t\t\t\tif (v.genre) html += '<div class="info-tags">' + formatGenre(v.genre) + '</div>';
 +\t\t\t\t\t\t\tif (combinedTags(v)) html += '<div class="info-tags">' + formatGenre(combinedTags(v)) + '</div>';
  \t\t\t\t\t\t\thtml += '</div>';
  \t\t\t\t\t\t}
  \t\t\t\t\t\thtml += '</div>';
-@@ -615,7 +616,7 @@
+@@ -452,18 +654,18 @@
+ \t\tfunction renderControls() {
+ \t\t\tvar html = '';
+ \t\t\tvar modeIcons = ['☰', '▦', '≡'];
+-\t\t\tvar modeNames = ['詳細', '圖片', '文字'];
+-\t\t\tvar sortNames = {path:'路徑',title:'片名',actor:'演員',num:'番號',maker:'片商',date:'日期',size:'大小',mdate:'修改',random:'隨機'};
++\t\t\tvar modeNames = [galleryI18n.mode_detail, galleryI18n.mode_image, galleryI18n.mode_text];
++\t\t\tvar sortNames = {path:galleryI18n.sort_path,title:galleryI18n.sort_title,actor:galleryI18n.sort_actor,num:galleryI18n.sort_num,maker:galleryI18n.sort_maker,date:galleryI18n.sort_date,size:galleryI18n.sort_size,mdate:galleryI18n.sort_mdate,random:galleryI18n.sort_random};
+ \t\t\tvar sorts = ['date','num','title','actor','maker','size','mdate','random'];
+ 
+ \t\t\t// 排序順序
+-\t\t\thtml += '<button class="ctrl-btn" onclick="switchOrder()" data-tooltip="' + (current_order==1?'遞減':'遞增') + '">';
++\t\t\thtml += '<button class="ctrl-btn" onclick="switchOrder()" data-tooltip="' + (current_order==1?galleryI18n.descending:galleryI18n.ascending) + '">';
+ \t\t\thtml += current_order == 1 ? '↓' : '↑';
+ \t\t\thtml += '</button>';
+ 
+ \t\t\t// 排序欄位 (下拉選單)
+ \t\t\thtml += '<div class="ctrl-dropdown">';
+-\t\t\thtml += '<button class="ctrl-btn" data-tooltip="排序: ' + sortNames[current_sort] + '">⇅</button>';
++\t\t\thtml += '<button class="ctrl-btn" data-tooltip="' + galleryI18n.sort_prefix + sortNames[current_sort] + '">⇅</button>';
+ \t\t\thtml += '<div class="ctrl-dropdown-menu">';
+ \t\t\tfor (var i = 0; i < sorts.length; i++) {
+ \t\t\t\tvar s = sorts[i];
+@@ -473,7 +675,7 @@
+ 
+ \t\t\t// 顯示模式 (下拉選單)
+ \t\t\thtml += '<div class="ctrl-dropdown">';
+-\t\t\thtml += '<button class="ctrl-btn" data-tooltip="' + modeNames[current_mode] + '模式">' + modeIcons[current_mode] + '</button>';
++\t\t\thtml += '<button class="ctrl-btn" data-tooltip="' + modeNames[current_mode] + galleryI18n.mode_suffix + '">' + modeIcons[current_mode] + '</button>';
+ \t\t\thtml += '<div class="ctrl-dropdown-menu">';
+ \t\t\tfor (var i = 0; i < 3; i++) {
+ \t\t\t\thtml += '<a href="javascript:void(0);" onclick="switchMode(' + i + ')"' + (current_mode==i?' class="active"':'') + '>' + modeIcons[i] + ' ' + modeNames[i] + '</a>';
+@@ -482,21 +684,21 @@
+ 
+ \t\t\t// 影片資訊 (圖片模式)
+ \t\t\tif (current_mode == 1) {
+-\t\t\t\thtml += '<button class="ctrl-btn' + (info_visible?' active':'') + '" onclick="toggleInfo()" data-tooltip="資訊">👁</button>';
++\t\t\t\thtml += '<button class="ctrl-btn' + (info_visible?' active':'') + '" onclick="toggleInfo()" data-tooltip="' + galleryI18n.info + '">👁</button>';
+ \t\t\t}
+ 
+ \t\t\t// 每頁數量 (下拉選單)
+ \t\t\thtml += '<div class="ctrl-dropdown">';
+-\t\t\thtml += '<button class="ctrl-btn" data-tooltip="每頁 ' + (items_per_page||'全部') + '">#</button>';
++\t\t\thtml += '<button class="ctrl-btn" data-tooltip="' + galleryI18n.per_page + (items_per_page||galleryI18n.all) + '">#</button>';
+ \t\t\thtml += '<div class="ctrl-dropdown-menu">';
+-\t\t\tvar items = [[30,'30'],[45,'45'],[60,'60'],[90,'90'],[120,'120'],[0,'全部']];
++\t\t\tvar items = [[30,'30'],[45,'45'],[60,'60'],[90,'90'],[120,'120'],[0,galleryI18n.all]];
+ \t\t\tfor (var i = 0; i < items.length; i++) {
+ \t\t\t\thtml += '<a href="javascript:void(0);" onclick="switchItems(' + items[i][0] + ')"' + (items_per_page==items[i][0]?' class="active"':'') + '>' + items[i][1] + '</a>';
+ \t\t\t}
+ \t\t\thtml += '</div></div>';
+ 
+ \t\t\t// 主題切換按鈕 (放在最後)
+-\t\t\thtml += '<button class="ctrl-btn" onclick="toggleTheme()" data-tooltip="' + (current_theme=='dark'?'切換淺色':'切換深色') + '">';
++\t\t\thtml += '<button class="ctrl-btn" onclick="toggleTheme()" data-tooltip="' + (current_theme=='dark'?galleryI18n.theme_light:galleryI18n.theme_dark) + '">';
+ \t\t\thtml += current_theme == 'dark' ? '☼' : '☾';
+ \t\t\thtml += '</button>';
+ 
+@@ -507,7 +709,7 @@
+ \t\t\tif (total_pages <= 1) return '';
+ \t\t\tvar html = '';
+ \t\t\tif (current_page > 1) {
+-\t\t\t\thtml += '<a href="javascript:void(0);" onclick="goPage(' + (current_page-1) + ')">← 上一頁</a>';
++\t\t\t\thtml += '<a href="javascript:void(0);" onclick="goPage(' + (current_page-1) + ')">' + galleryI18n.previous_page + '</a>';
+ \t\t\t}
+ \t\t\thtml += '<select onchange="goPage(this.value)">';
+ \t\t\tfor (var i = 1; i <= total_pages; i++) {
+@@ -515,7 +717,7 @@
+ \t\t\t}
+ \t\t\thtml += '</select>';
+ \t\t\tif (current_page < total_pages) {
+-\t\t\t\thtml += '<a href="javascript:void(0);" onclick="goPage(' + (current_page+1) + ')">下一頁 →</a>';
++\t\t\t\thtml += '<a href="javascript:void(0);" onclick="goPage(' + (current_page+1) + ')">' + galleryI18n.next_page + '</a>';
+ \t\t\t}
+ \t\t\treturn html;
+ \t\t}
+@@ -615,10 +817,10 @@
  \t\t\tvar lastSlash = path.lastIndexOf('/');
  \t\t\tif (lastSlash < 0) lastSlash = path.lastIndexOf('\\\\');
  \t\t\tvar folder = lastSlash >= 0 ? path.substring(0, lastSlash) : path;
@@ -1542,8 +2053,12 @@
 +\t\t\tvar stripped = folder.replace(/^file:\\/\\/\\//, '');
  \t\t\tvar winPath = /^[A-Za-z]:/.test(stripped) ? stripped.replace(/\\//g, '\\\\') : stripped;
  \t\t\tnavigator.clipboard.writeText(winPath).then(function() {
- \t\t\t\tshowToast('已複製: ' + winPath);
-@@ -627,6 +628,37 @@
+-\t\t\t\tshowToast('已複製: ' + winPath);
++\t\t\t\tshowToast(galleryI18n.copied + winPath);
+ \t\t\t});
+ \t\t}
+ 
+@@ -627,6 +829,37 @@
  \t\t\ttoast.textContent = msg;
  \t\t\ttoast.classList.add('show');
  \t\t\tsetTimeout(function() { toast.classList.remove('show'); }, 2500);
@@ -1581,7 +2096,7 @@
  \t\t}
  
  \t\t// Lightbox
-@@ -642,7 +674,7 @@
+@@ -642,7 +875,7 @@
  \t\t\tvar lightboxInfo = document.getElementById('lightbox-info');
  \t\t\t
  \t\t\tif (v.img) {
@@ -1590,7 +2105,7 @@
  \t\t\t\tlightboxImg.style.display = 'block';
  \t\t\t} else {
  \t\t\t\tlightboxImg.style.display = 'none';
-@@ -656,7 +688,8 @@
+@@ -656,11 +889,12 @@
  \t\t\tif (v.maker) html += '<span>' + formatMaker(v.maker) + '</span>';
  \t\t\tif (v.date) html += '<span>' + escapeHtml(v.date) + '</span>';
  \t\t\thtml += '</div>';
@@ -1599,7 +2114,13 @@
 +\t\t\tif (lbTags) html += '<div class="lb-tags">' + formatGenrePills(lbTags) + '</div>';
  \t\t\thtml += '<div class="lb-footer">';
  \t\t\thtml += '<div class="lb-actions">';
- \t\t\thtml += '<a class="lb-btn" href="javascript:void(0);" onclick="event.stopPropagation(); playVideo(' + idx + ')">開啟</a>';
+-\t\t\thtml += '<a class="lb-btn" href="javascript:void(0);" onclick="event.stopPropagation(); playVideo(' + idx + ')">開啟</a>';
+-\t\t\thtml += '<a class="lb-btn" href="javascript:void(0);" onclick="event.stopPropagation(); copyPath(\\'' + escapeHtml(v.path) + '\\')">複製</a>';
++\t\t\thtml += '<a class="lb-btn" href="javascript:void(0);" onclick="event.stopPropagation(); playVideo(' + idx + ')">' + galleryI18n.open + '</a>';
++\t\t\thtml += '<a class="lb-btn" href="javascript:void(0);" onclick="event.stopPropagation(); copyPath(\\'' + escapeHtml(v.path) + '\\')">' + galleryI18n.copy + '</a>';
+ \t\t\thtml += '</div>';
+ \t\t\thtml += '<span class="lb-size">' + formatSize(v.size) + '</span>';
+ \t\t\thtml += '</div>';
 --- a/core/gallery_scanner.py
 +++ b/core/gallery_scanner.py
 @@ -31,7 +31,7 @@

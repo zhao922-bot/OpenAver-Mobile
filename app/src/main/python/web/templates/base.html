@@ -704,7 +704,7 @@
                     @click.stop="toggleDrawer($refs.mobileBellBtn)"
                     type="button"
                     class="btn btn-ghost btn-sm relative"
-                    :aria-label="notifBell.drawerOpen ? (window.t ? window.t('notif.close') : '關閉通知') : (window.t ? window.t('notif.open') : '開啟通知')" {# cjk-exempt(關閉通知|開啟通知): window.t() fallback，已是 i18n 路徑 — TASK-103-T7 §B #}
+                    :aria-label="notifBell.drawerOpen ? (window.t ? window.t('notif.close') : {{ t('notif.close')|tojson }}) : (window.t ? window.t('notif.open') : {{ t('notif.open')|tojson }})"
                     aria-haspopup="true"
                     :aria-expanded="notifBell.drawerOpen.toString()">
                 <i :class="notifBell.unreadCount > 0 ? 'bi bi-bell-fill' : 'bi bi-bell'" class="text-xl"></i>
@@ -873,12 +873,12 @@
                         type="button"
                         class="nav-link nav-link--bell relative"
                         :class="{ 'is-open': notifBell.drawerOpen }"
-                        :title="notifBell.unreadCount > 0 ? ((window.t ? window.t('notif.title') : '通知') + ' (' + notifBell.unreadCount + ')') : (window.t ? window.t('notif.title') : '通知')" {# cjk-exempt(通知|通知): window.t() fallback，已是 i18n 路徑 — TASK-103-T7 §B #}
-                        :aria-label="notifBell.drawerOpen ? (window.t ? window.t('notif.close') : '關閉通知') : (window.t ? window.t('notif.open') : '開啟通知')" {# cjk-exempt(關閉通知|開啟通知): window.t() fallback，已是 i18n 路徑 — TASK-103-T7 §B #}
+                        :title="notifBell.unreadCount > 0 ? ((window.t ? window.t('notif.title') : {{ t('notif.title')|tojson }}) + ' (' + notifBell.unreadCount + ')') : (window.t ? window.t('notif.title') : {{ t('notif.title')|tojson }})"
+                        :aria-label="notifBell.drawerOpen ? (window.t ? window.t('notif.close') : {{ t('notif.close')|tojson }}) : (window.t ? window.t('notif.open') : {{ t('notif.open')|tojson }})"
                         aria-haspopup="dialog"
                         :aria-expanded="notifBell.drawerOpen.toString()">
                     <i :class="notifBell.unreadCount > 0 ? 'bi bi-bell-fill' : 'bi bi-bell'"></i>
-                    <span class="nav-text" x-text="window.t ? window.t('notif.title') : '通知'"></span> {# cjk-exempt(通知): window.t() fallback，已是 i18n 路徑 — TASK-103-T7 §B #}
+                    <span class="nav-text" x-text="window.t ? window.t('notif.title') : {{ t('notif.title')|tojson }}"></span>
                     <template x-if="notifBell.highestLevel">
                         <span class="nav-link__unread-dot"
                               :class="{
@@ -1053,17 +1053,17 @@
          class="w-80 bg-base-100 border border-base-300 rounded-xl shadow-lg notification-drawer"
          style="z-index: 1010; position: fixed;"
          role="dialog"
-         :aria-label="window.t ? window.t('notif.dialog_label') : '通知中心'"> {# cjk-exempt(通知中心): window.t() fallback，已是 i18n 路徑 — TASK-103-T7 §B #}
+         :aria-label="window.t ? window.t('notif.dialog_label') : {{ t('notif.dialog_label')|tojson }}">
         <div class="flex items-center justify-between px-4 py-2 border-b border-base-300">
-            <span class="font-semibold text-sm" x-text="window.t ? window.t('notif.title') : '通知'"></span> {# cjk-exempt(通知): window.t() fallback，已是 i18n 路徑 — TASK-103-T7 §B #}
+            <span class="font-semibold text-sm" x-text="window.t ? window.t('notif.title') : {{ t('notif.title')|tojson }}"></span>
             <button @click="clearNotifications()"
                     class="btn btn-ghost btn-xs text-base-content/60"
-                    x-text="window.t ? window.t('notif.clear_all') : '全部清空'"></button> {# cjk-exempt(全部清空): window.t() fallback，已是 i18n 路徑 — TASK-103-T7 §B #}
+                    x-text="window.t ? window.t('notif.clear_all') : {{ t('notif.clear_all')|tojson }}"></button>
         </div>
         <div class="max-h-80 overflow-y-auto">
             <template x-if="notifBell.items.length === 0">
                 <div class="px-4 py-6 text-center text-base-content/40 text-sm"
-                     x-text="window.t ? window.t('notif.empty') : '目前沒有通知'"></div> {# cjk-exempt(目前沒有通知): window.t() fallback，已是 i18n 路徑 — TASK-103-T7 §B #}
+                     x-text="window.t ? window.t('notif.empty') : {{ t('notif.empty')|tojson }}"></div>
             </template>
             <template x-for="item in notifBell.items" :key="item.id">
                 <div class="px-4 py-3 border-b border-base-200"

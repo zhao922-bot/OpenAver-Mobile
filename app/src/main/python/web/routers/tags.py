@@ -9,6 +9,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
 from core.database import get_connection, get_db_path, init_db
+from core.i18n import get_config_locale, t as i18n_t
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -71,6 +72,9 @@ def get_top_tags(
                 "items": [],
                 "total_unique_tags": 0,
                 "applied_min_count": min_count,
-                "error": "操作失敗",
+                "error": i18n_t(
+                    "runtime.api.operation_failed",
+                    locale=get_config_locale(),
+                ),
             },
         )

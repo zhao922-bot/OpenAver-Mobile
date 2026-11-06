@@ -43,6 +43,7 @@ from core.focal.subprocess_runner import run_detection
 from core.organizer import sanitize_filename
 from core.path_utils import to_file_uri as to_file_uri, uri_to_fs_path, uri_to_local_fs_path, coerce_to_file_uri
 from core.config import load_config
+from core.i18n import get_config_locale, t as i18n_t
 from core.scrapers.actress.orchestrator import (
     get_cached_profile,
     get_actress_profile,
@@ -55,6 +56,15 @@ from core.logger import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/actresses", tags=["actresses"])
+
+
+def _actress_text(key: str, locale: str | None = None, **params) -> str:
+    """Return an actress-API message in the active UI language."""
+    return i18n_t(
+        f"runtime.api.{key}",
+        locale=locale or get_config_locale(),
+        **params,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -132,24 +142,25 @@ _ACTRESS_SUBMIT_RESERVED = frozenset({
 })
 
 
-def _validate_actress_submit_fields(payload: dict) -> None:
+def _validate_actress_submit_fields(payload: dict, locale: str | None = None) -> None:
     """提交前逐欄驗證；任何一項錯誤都在 DB 寫入前擋回。"""
+    locale = locale or get_config_locale()
     for k, v in payload.items():
         if k in _ACTRESS_SUBMIT_RESERVED:
-            raise HTTPException(400, detail=f"{k} 為保留欄位，AI 不可透過此端點寫入")
+            raise HTTPException(400, detail=_actress_text("reserved_field", locale, field=k))
         if k == "photo":
             if v is not None:
                 if not isinstance(v, dict) or not isinstance(v.get("source"), str) or v["source"] not in CLOUD_SOURCES | {"local_crop"}:
-                    raise HTTPException(400, detail="照片來源不合法")
+                    raise HTTPException(400, detail=_actress_text("photo_source_invalid", locale))
                 if v["source"] in CLOUD_SOURCES:
                     url = v.get("url")
                     if not isinstance(url, str) or not url or not validate_photo_url(url, v["source"]):
-                        raise HTTPException(400, detail="照片來源網址不合法")
+                        raise HTTPException(400, detail=_actress_text("photo_url_invalid", locale))
                 elif not isinstance(v.get("video_path"), str) or not v["video_path"]:
-                    raise HTTPException(400, detail="照片影片路徑不合法")
+                    raise HTTPException(400, detail=_actress_text("photo_video_path_invalid", locale))
         elif k == "tags":
             if not isinstance(v, list) or not all(isinstance(item, str) for item in v):
-                raise HTTPException(400, detail="tags 型別錯誤，必須是字串列表")
+                raise HTTPException(400, detail=_actress_text("tags_type", locale))
         elif k == "height":
             if v != "":
                 # TASK-157-F4：\d+ 不限位數，4301+ 位數字字串會讓下面 int() 撞上
@@ -161,32 +172,32 @@ def _validate_actress_submit_fields(payload: dict) -> None:
                     (isinstance(v, int) and -999 <= v <= 999) or
                     (isinstance(v, str) and re.fullmatch(r"\d{1,3}(?:cm)?", v))
                 ):
-                    raise HTTPException(400, detail="height 格式錯誤")
+                    raise HTTPException(400, detail=_actress_text("height_format", locale))
                 height = int(str(v).removesuffix("cm"))
                 if not 100 <= height <= 220:
-                    raise HTTPException(400, detail="height 超出合理範圍")
+                    raise HTTPException(400, detail=_actress_text("height_range", locale))
         elif k in _ACTRESS_SUBMIT_MEASURES:
             if v is not None:
                 if isinstance(v, bool) or not isinstance(v, (int, str)):
-                    raise HTTPException(400, detail=f"{k} 型別錯誤")
+                    raise HTTPException(400, detail=_actress_text("field_type", locale, field=k))
                 number = _safe_int(v)
                 lower, upper = _ACTRESS_SUBMIT_MEASURES[k]
                 if number is None or not lower <= number <= upper:
-                    raise HTTPException(400, detail=f"{k} 超出合理範圍或格式錯誤")
+                    raise HTTPException(400, detail=_actress_text("field_range", locale, field=k))
         elif k in _ACTRESS_SUBMIT_STR_FIELDS:
             if not isinstance(v, str):
-                raise HTTPException(400, detail=f"{k} 型別錯誤，必須是字串")
+                raise HTTPException(400, detail=_actress_text("field_type_string", locale, field=k))
             if k == "birth" and v:
                 if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
-                    raise HTTPException(400, detail="birth 日期格式錯誤")
+                    raise HTTPException(400, detail=_actress_text("birth_format", locale))
                 try:
                     datetime.strptime(v, "%Y-%m-%d")
                 except ValueError:
-                    raise HTTPException(400, detail="birth 日期無效") from None
+                    raise HTTPException(400, detail=_actress_text("birth_invalid", locale)) from None
             if k == "cup" and v and not re.fullmatch(r"[A-Z]", v):
-                raise HTTPException(400, detail="cup 格式錯誤")
+                raise HTTPException(400, detail=_actress_text("cup_format", locale))
         else:
-            raise HTTPException(400, detail=f"包含未知欄位: {k}")
+            raise HTTPException(400, detail=_actress_text("unknown_field", locale, field=k))
 
 
 def _flatten_aliases(raw) -> list:
@@ -262,11 +273,15 @@ def add_favorite(req: FavoriteRequest):
     4. 組裝 Actress → DB save → 下載照片
     5. 回傳 200 with actress data
     """
+    locale = get_config_locale()
     name = req.name.strip()
     if not name:
         return JSONResponse(
             status_code=422,
-            content={"error": "invalid_name", "message": "name 不可為空"}
+            content={
+                "error": "invalid_name",
+                "message": _actress_text("name_required", locale),
+            }
         )
 
     init_db()
@@ -313,7 +328,10 @@ def add_favorite(req: FavoriteRequest):
             if result.timed_out:
                 return JSONResponse(
                     status_code=504,
-                    content={"error": "timeout", "message": "Scraper 超時"}
+                    content={
+                        "error": "timeout",
+                        "message": _actress_text("timeout", locale),
+                    }
                 )
             # TASK-122-T10：五來源全 miss、非超時 —— 片庫裡若有這位女優的片
             # （NFO 已掃描寫進 videos.actresses），改建一張只有名字的本地卡，
@@ -324,7 +342,10 @@ def add_favorite(req: FavoriteRequest):
             if not videos:
                 return JSONResponse(
                     status_code=404,
-                    content={"error": "not_found", "message": "查無此女優"}
+                    content={
+                        "error": "not_found",
+                        "message": _actress_text("not_found", locale),
+                    }
                 )
             local_crop_ok = _try_local_crop_photo(name, videos)
             profile = {
@@ -425,10 +446,14 @@ def add_favorite(req: FavoriteRequest):
 
 @router.post("/preview")
 def preview_actress(req: PreviewActressRequest):
+    locale = get_config_locale()
     try:
         name = req.name.strip()
         if not name:
-            return JSONResponse(status_code=422, content={"error": "女優名字不可為空"})
+            return JSONResponse(
+                status_code=422,
+                content={"error": _actress_text("name_required", locale)},
+            )
 
         preview = get_actress_profile_preview(name)
         repo = ActressRepository()
@@ -460,7 +485,10 @@ def preview_actress(req: PreviewActressRequest):
         raise
     except Exception:
         logger.exception("[actress] preview_actress 失敗 name=%s", req.name)
-        return JSONResponse(status_code=500, content={"error": "操作失敗"})
+        return JSONResponse(
+            status_code=500,
+            content={"error": _actress_text("operation_failed", locale)},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -493,20 +521,28 @@ def _favorited_primary_for_alias(repo: ActressRepository, name: str) -> Optional
     return None
 
 
-def _save_actress_submission(name: str, fields: dict):
+def _save_actress_submission(name: str, fields: dict, locale: str | None = None):
     """Run the submit DB read/write sequence in a worker thread."""
+    locale = locale or get_config_locale()
     init_db()
     repo = ActressRepository()
     primary_name = _favorited_primary_for_alias(repo, name)
     if primary_name:
         raise HTTPException(
-            400, detail=f"{name} 是 {primary_name} 的別名，請改用「{primary_name}」提交")
+            400,
+            detail=_actress_text(
+                "alias_conflict",
+                locale,
+                name=name,
+                primary_name=primary_name,
+            ),
+        )
 
     old_actress = repo.get_by_name(name)
     if old_actress is not None:
         if not repo.update_fields(name, fields):
             logger.error("[actress] AI 提交更新失敗 name=%s", name)
-            raise HTTPException(500, detail="操作失敗")
+            raise HTTPException(500, detail=_actress_text("operation_failed", locale))
     else:
         repo.save(Actress(name=name, **fields))
 
@@ -540,18 +576,19 @@ async def submit_actress(name: str, payload: dict):
     # 別名擋下／500 update_fields 回 False 都是本函式既有的正常控制流）；其餘
     # 例外一律 log 後回固定中文 JSON 500，body 形狀沿用 `{"detail": ...}`
     # （不是照片家族用的 `{"error": ...}`）。
+    locale = get_config_locale()
     try:
         name = name.strip()
         if not name:
-            raise HTTPException(400, detail="女優名字不可為空")
+            raise HTTPException(400, detail=_actress_text("name_required", locale))
 
-        _validate_actress_submit_fields(payload)
+        _validate_actress_submit_fields(payload, locale)
         photo_req = None
         if payload.get("photo") is not None:
             try:
                 photo_req = SetActressPhotoRequest.model_validate(payload["photo"])
             except ValidationError:
-                raise HTTPException(400, detail="照片欄位格式錯誤") from None
+                raise HTTPException(400, detail=_actress_text("photo_field_invalid", locale)) from None
         fields = {k: v for k, v in payload.items() if k != "photo"}
         if "height" in fields and fields["height"] != "":
             fields["height"] = f"{int(str(fields['height']).removesuffix('cm'))}cm"
@@ -561,7 +598,9 @@ async def submit_actress(name: str, payload: dict):
         fields["primary_text_source"] = "ai"
 
         try:
-            repo, old_actress, actress = await asyncio.to_thread(_save_actress_submission, name, fields)
+            repo, old_actress, actress = await asyncio.to_thread(
+                _save_actress_submission, name, fields, locale
+            )
         except HTTPException:
             raise
         except Exception:
@@ -570,7 +609,10 @@ async def submit_actress(name: str, payload: dict):
             # 會原樣逸出到這個 async route。同一種 body 形狀 `{"detail": ...}`，沿用
             # 同一函式內既有的 `raise HTTPException(500, detail="操作失敗")`（:477）。
             logger.exception("[actress] AI 提交寫入失敗 name=%s", name)
-            return JSONResponse(status_code=500, content={"detail": "操作失敗"})
+            return JSONResponse(
+                status_code=500,
+                content={"detail": _actress_text("operation_failed", locale)},
+            )
 
         # 🔴 PR #211 第三輪 v3（owner 拍板保守補償）：`rollback_safe` 只在
         # `_apply_photo_change` 五個「確定尚未觸碰任何照片檔」的 return 點為
@@ -578,18 +620,23 @@ async def submit_actress(name: str, payload: dict):
         # `_actress_to_response` 也在同一段外層防護內——此時文字已寫入成功，
         # 例外時只回固定中文 500，不做補償。
         if photo_req is not None:
-            _, err, rollback_safe = await _apply_photo_change(repo, actress, name, photo_req)
+            _, err, rollback_safe = await _apply_photo_change(
+                repo, actress, name, photo_req, locale
+            )
             if err:
                 if rollback_safe:
                     await asyncio.to_thread(_compensate_actress_submission, repo, name, old_actress, fields)
-                return _translate_submit_photo_err(err)
+                return _translate_submit_photo_err(err, locale)
             actress = await asyncio.to_thread(repo.get_by_name, name)
         return {"success": True, "actress": await asyncio.to_thread(_actress_to_response, actress)}
     except HTTPException:
         raise
     except Exception:
         logger.exception("[actress] AI 提交處理失敗 name=%s", name)
-        return JSONResponse(status_code=500, content={"detail": "操作失敗"})
+        return JSONResponse(
+            status_code=500,
+            content={"detail": _actress_text("operation_failed", locale)},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1104,8 +1151,8 @@ CLOUD_SOURCES = {"graphis", "gfriends", "wiki", "xcity"}
 # snake_case 錯誤字面（not_found/unknown_source/... ）是舊碼遺留，範圍外不動
 # （TASK-100a-T3 決策點：新增 code 就得守新規則，不因「既有端點還沒遷移」而
 # 再新增一條 snake_case 違規）。
-_SET_PHOTO_ERR_FAILED = "設定照片失敗，請稍後再試"
-_SET_PHOTO_ERR_INVALID_URL = "照片來源網址不合法"
+_SET_PHOTO_ERR_FAILED = "set_photo_failed"
+_SET_PHOTO_ERR_INVALID_URL = "photo_url_invalid"
 
 # P3-1（PR #211 review）：_apply_photo_change 是 set_actress_photo（UI 端點）與
 # submit_actress（AI-facing API 端點）共用的函式。set_actress_photo 沿用下列
@@ -1115,32 +1162,33 @@ _SET_PHOTO_ERR_INVALID_URL = "照片來源網址不合法"
 # 是 AI 呼叫的 API contract，AGENTS.md:81 要求新增／AI 呼叫路徑一律回固定中文，
 # 不可把內部 code 原樣透給呼叫端——故只在 submit_actress 收到 err 之後做轉譯，
 # 不動 _apply_photo_change 本體（set_actress_photo 既有測試仍斷言舊 code）。
-_SUBMIT_PHOTO_ERR_ZH = {
-    "unknown_source": "不支援的照片來源",
-    "url_required": "缺少照片網址",
-    "video_path_required": "缺少對應的影片路徑",
-    "video_or_cover_not_found": "找不到對應的影片或封面",
-    "crop_failed": "裁切照片失敗，請稍後再試",
-    "download_failed": "下載照片失敗，請稍後再試",
+_SUBMIT_PHOTO_ERR_KEYS = {
+    "unknown_source": "unsupported_photo_source",
+    "url_required": "url_required",
+    "video_path_required": "video_path_required",
+    "video_or_cover_not_found": "video_or_cover_not_found",
+    "crop_failed": "crop_failed",
+    "download_failed": "download_failed",
 }
 
 
-def _translate_submit_photo_err(err: JSONResponse) -> JSONResponse:
+def _translate_submit_photo_err(err: JSONResponse, locale: str | None = None) -> JSONResponse:
     """把 _apply_photo_change 回傳的舊 snake_case code 轉成固定中文，只給
     submit_actress 用（見上方模組層註解）。非上表涵蓋的 code（例如已經是固定
     中文的 _SET_PHOTO_ERR_FAILED／_SET_PHOTO_ERR_INVALID_URL）原樣放行，避免
     重複轉譯或誤改其他欄位。
     """
+    locale = locale or get_config_locale()
     body = json.loads(bytes(err.body))
-    zh = _SUBMIT_PHOTO_ERR_ZH.get(body.get("error"))
-    if zh is None:
+    key = _SUBMIT_PHOTO_ERR_KEYS.get(body.get("error"))
+    if key is None:
         return err
-    body["error"] = zh
+    body["error"] = _actress_text(key, locale)
     return JSONResponse(status_code=err.status_code, content=body)
 
 
 async def _apply_photo_change(repo: ActressRepository, actress: Actress, name: str,
-                              req: SetActressPhotoRequest):
+                              req: SetActressPhotoRequest, locale: str | None = None):
     """Return (URL, error, rollback_safe).
 
     v3（owner 拍板，PR #211 第三輪 followup2）：不追蹤「照片是否已安裝」，改追蹤
@@ -1155,6 +1203,9 @@ async def _apply_photo_change(repo: ActressRepository, actress: Actress, name: s
     其他非預期例外 log 後轉既有固定中文 JSON 500，rollback_safe=False（狀態不
     明，不補償）。
     """
+    locale = locale or get_config_locale()
+    set_photo_failed = _actress_text("set_photo_failed", locale)
+    invalid_url = _actress_text("photo_url_invalid", locale)
     try:
         if req.source not in CLOUD_SOURCES and req.source != "local_crop":
             return None, JSONResponse(status_code=400, content={"error": "unknown_source"}), True
@@ -1176,9 +1227,9 @@ async def _apply_photo_change(repo: ActressRepository, actress: Actress, name: s
             # 是舊碼 snake_case 就跟著新增一條違規——TASK-100a-T3 已裁決過同一件事）。
             if not validate_photo_url(req.url, req.source):
                 logger.warning("[actress] set_photo URL 不在白名單 source=%s", req.source)
-                return None, JSONResponse(status_code=400, content={"error": _SET_PHOTO_ERR_INVALID_URL}), True
+                return None, JSONResponse(status_code=400, content={"error": invalid_url}), True
             # 🔴 CD-4 pre-invalidate：cloud 分支插入點——download_actress_photo 之前。
-            err = await _pre_invalidate_focal(repo, name, ctx="set_photo", err_msg=_SET_PHOTO_ERR_FAILED)
+            err = await _pre_invalidate_focal(repo, name, ctx="set_photo", err_msg=set_photo_failed)
             if err:
                 return None, err, False
             ok = await asyncio.to_thread(download_actress_photo, name, req.url, req.source)
@@ -1214,7 +1265,7 @@ async def _apply_photo_change(repo: ActressRepository, actress: Actress, name: s
                 # （final3.txt：符合 owner 選擇的保守語義，不因它「其實也在寫入前」而放行）。
                 return None, JSONResponse(status_code=500, content={"error": "crop_failed"}), False
             # 🔴 CD-4 pre-invalidate：local_crop 分支插入點——crop 成功之後、寫入之前。
-            err = await _pre_invalidate_focal(repo, name, ctx="set_photo", err_msg=_SET_PHOTO_ERR_FAILED)
+            err = await _pre_invalidate_focal(repo, name, ctx="set_photo", err_msg=set_photo_failed)
             if err:
                 return None, err, False
             # glob 刪舊副檔名 + 寫入
@@ -1227,11 +1278,11 @@ async def _apply_photo_change(repo: ActressRepository, actress: Actress, name: s
                 await asyncio.to_thread(_write_actress_photo, name, crop_bytes)
             except Exception:
                 logger.exception("[actress] set_photo local_crop 寫檔失敗 name=%s", name)
-                return None, JSONResponse(status_code=500, content={"error": _SET_PHOTO_ERR_FAILED}), False
+                return None, JSONResponse(status_code=500, content={"error": set_photo_failed}), False
 
         # 更新 photo_source + 回傳（CD-7）——此時檔案已寫入，失敗一律 rollback_safe=False。
         err = await _persist_photo_source(
-            repo, actress, req.source, ctx="set_photo", err_msg=_SET_PHOTO_ERR_FAILED)
+            repo, actress, req.source, ctx="set_photo", err_msg=set_photo_failed)
         if err:
             return None, err, False
 
@@ -1240,7 +1291,7 @@ async def _apply_photo_change(repo: ActressRepository, actress: Actress, name: s
         # 可能回 None（GFRIENDS_DIR 綁定不一致／外部同時刪除）——不 guard 會 None.stat()
         # 拋 AttributeError（mirror T2 review finding）。
         photo_url, err = await _photo_url_with_fp_cache_bust(
-            name, ctx="set_photo", err_msg=_SET_PHOTO_ERR_FAILED)
+            name, ctx="set_photo", err_msg=set_photo_failed)
         if err:
             return None, err, False
         return photo_url, None, False
@@ -1248,7 +1299,7 @@ async def _apply_photo_change(repo: ActressRepository, actress: Actress, name: s
         raise
     except Exception:
         logger.exception("[actress] set_photo 未預期例外 name=%s", name)
-        return None, JSONResponse(status_code=500, content={"error": _SET_PHOTO_ERR_FAILED}), False
+        return None, JSONResponse(status_code=500, content={"error": set_photo_failed}), False
 
 
 @router.post("/{name}/photo")
@@ -1273,6 +1324,7 @@ async def set_actress_photo(name: str, req: SetActressPhotoRequest):
     photo_url；`auto_focal`/`crop_mode` 直接寫死（clear_focal 語意已知，不多一次
     DB round-trip），與 T2 上傳端點回應對稱（plan-100b CD-10 需要）。
     """
+    locale = get_config_locale()
     repo, actress = await asyncio.to_thread(_load_actress, name)
     # 🔴 PR #211 第三輪 v3：身分守衛擴及本端點（原本只有 submit_actress／
     # upload_actress_photo 擋，set_actress_photo 完全沒查）——在判斷「女優是否
@@ -1284,11 +1336,20 @@ async def set_actress_photo(name: str, req: SetActressPhotoRequest):
     primary_name = await asyncio.to_thread(_favorited_primary_for_alias, repo, name)
     if primary_name:
         return JSONResponse(status_code=400, content={
-            "error": f"{name} 是 {primary_name} 的別名，請改用「{primary_name}」提交"})
+            "error": _actress_text(
+                "alias_conflict",
+                locale,
+                name=name,
+                primary_name=primary_name,
+            )
+        })
     if actress is None:
-        return JSONResponse(status_code=404, content={"error": "not_found"})
+        return JSONResponse(
+            status_code=404,
+            content={"error": _actress_text("not_found", locale)},
+        )
 
-    photo_url, err, _ = await _apply_photo_change(repo, actress, name, req)
+    photo_url, err, _ = await _apply_photo_change(repo, actress, name, req, locale)
     if err:
         return err
     return JSONResponse(status_code=200, content={
@@ -1309,10 +1370,10 @@ _UPLOAD_MAX_PIXELS = 50_000_000
 _UPLOAD_FORMAT_TO_EXT = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "GIF": ".gif"}
 
 # CD-8：錯誤訊息一律固定中文，機械分流走 HTTP status（不用 snake_case error code）。
-_UPLOAD_ERR_TOO_LARGE = "圖片太大（檔案上限 10MB、尺寸上限 50M 像素）"
-_UPLOAD_ERR_UNSUPPORTED_FORMAT = "不支援的圖片格式"
-_UPLOAD_ERR_NOT_FOUND = "查無此女優"
-_UPLOAD_ERR_FAILED = "上傳照片失敗，請稍後再試"
+_UPLOAD_ERR_TOO_LARGE = "upload_too_large"
+_UPLOAD_ERR_UNSUPPORTED_FORMAT = "upload_unsupported_format"
+_UPLOAD_ERR_NOT_FOUND = "upload_not_found"
+_UPLOAD_ERR_FAILED = "upload_failed"
 
 # ruff B008：fastapi.File 不在 ruff 預設 immutable-calls 允許清單內（Query/Depends/Body/
 # Form 都在，File 不在）。用模組層級單例取代 inline File(...) 呼叫，避免逐一 noqa 或改動
@@ -1381,25 +1442,33 @@ async def upload_actress_photo(name: str, file: UploadFile = _UPLOAD_FILE_PARAM)
     HTTPException（別名擋下的 400）原樣放行；其他例外一律 log 後回既有固定
     中文 `_UPLOAD_ERR_FAILED`，不洩漏例外內容。
     """
+    locale = get_config_locale()
+    too_large = _actress_text(_UPLOAD_ERR_TOO_LARGE, locale)
+    unsupported_format = _actress_text(_UPLOAD_ERR_UNSUPPORTED_FORMAT, locale)
+    upload_not_found = _actress_text(_UPLOAD_ERR_NOT_FOUND, locale)
+    upload_failed = _actress_text(_UPLOAD_ERR_FAILED, locale)
     try:
         # 1. 大小（CD-10）：.size 可讀就先擋；.size 為 None（理論上真實 multipart 解析器
         # 恆設為非 None，此分支防禦不可信任的呼叫端）則讀出後用 len(data) 判斷。
         if file.size is not None and file.size > _UPLOAD_MAX_BYTES:
-            return JSONResponse(status_code=413, content={"error": _UPLOAD_ERR_TOO_LARGE})
+            return JSONResponse(status_code=413, content={"error": too_large})
         data = await file.read()
         if len(data) > _UPLOAD_MAX_BYTES:
-            return JSONResponse(status_code=413, content={"error": _UPLOAD_ERR_TOO_LARGE})
+            return JSONResponse(status_code=413, content={"error": too_large})
 
         # 2. Content-Type 白名單（複用 core.actress_photo.CONTENT_TYPE_MAP 的 key 集合，
         # 不重新定義一份）——粗篩，不需要讀 bytes 內容，故在 Image.open() 之前執行。
         if file.content_type not in CONTENT_TYPE_MAP:
-            return JSONResponse(status_code=415, content={"error": _UPLOAD_ERR_UNSUPPORTED_FORMAT})
+            return JSONResponse(status_code=415, content={"error": unsupported_format})
 
         # 3. 像素上限 + 真實格式（CD-9/CD-5）——PIL 解碼須過 asyncio.to_thread
         # （async-offload 守衛：Image.open/.verify() 是阻塞呼叫，不可裸跑在 event loop 上）。
         err_status, err_msg, ext = await asyncio.to_thread(_validate_uploaded_photo, data)
         if err_status is not None:
-            return JSONResponse(status_code=err_status, content={"error": err_msg})
+            return JSONResponse(
+                status_code=err_status,
+                content={"error": _actress_text(err_msg, locale)},
+            )
 
         # 4. 女優存在 + 別名擋下（CD-157 身分守衛，同 submit_actress 的判準，
         # PR #211 Codex P2-2）——必須在任何寫入之前執行，且不論 name 自己有沒有
@@ -1408,16 +1477,23 @@ async def upload_actress_photo(name: str, file: UploadFile = _UPLOAD_FILE_PARAM)
         primary_name = await asyncio.to_thread(_favorited_primary_for_alias, repo, name)
         if primary_name:
             raise HTTPException(
-                400, detail=f"{name} 是 {primary_name} 的別名，請改用「{primary_name}」提交")
+                400,
+                detail=_actress_text(
+                    "alias_conflict",
+                    locale,
+                    name=name,
+                    primary_name=primary_name,
+                ),
+            )
         if actress is None:
-            return JSONResponse(status_code=404, content={"error": _UPLOAD_ERR_NOT_FOUND})
+            return JSONResponse(status_code=404, content={"error": upload_not_found})
 
         # 🔴 CD-4 pre-invalidate：先清焦點，成功後才安裝新圖。失敗（含拋例外）一律視為
         # 失敗，函式在此直接 return，絕不執行 _write_actress_photo——此時女優已確認存在，
         # clear_focal 理論上不該回 False（唯一情境是驗證與寫入之間女優被刪除的 race，
         # spec §1.4 明示接受），不論哪種失敗原因行為必須一致：不寫檔、不動 DB 其他欄位，
         # 舊照片與舊焦點原封不動。
-        err = await _pre_invalidate_focal(repo, name, ctx="upload", err_msg=_UPLOAD_ERR_FAILED)
+        err = await _pre_invalidate_focal(repo, name, ctx="upload", err_msg=upload_failed)
         if err:
             return err
 
@@ -1425,17 +1501,17 @@ async def upload_actress_photo(name: str, file: UploadFile = _UPLOAD_FILE_PARAM)
             await asyncio.to_thread(_write_actress_photo, name, data, ext)
         except Exception:
             logger.exception("[actress] upload 寫檔失敗 name=%s", name)
-            return JSONResponse(status_code=500, content={"error": _UPLOAD_ERR_FAILED})
+            return JSONResponse(status_code=500, content={"error": upload_failed})
 
         # CD-7：photo_source 必須持久化；clear_focal 語意已知（''/'auto'），直接寫死，
         # 不多一次 DB round-trip 只為了讀已知的值。
         err = await _persist_photo_source(
-            repo, actress, "upload", ctx="upload", err_msg=_UPLOAD_ERR_FAILED)
+            repo, actress, "upload", ctx="upload", err_msg=upload_failed)
         if err:
             return err
 
         photo_url, err = await _photo_url_with_fp_cache_bust(
-            name, ctx="upload", err_msg=_UPLOAD_ERR_FAILED)
+            name, ctx="upload", err_msg=upload_failed)
         if err:
             return err
         return JSONResponse(status_code=200, content={
@@ -1448,7 +1524,7 @@ async def upload_actress_photo(name: str, file: UploadFile = _UPLOAD_FILE_PARAM)
         raise
     except Exception:
         logger.exception("[actress] upload_actress_photo 未預期例外 name=%s", name)
-        return JSONResponse(status_code=500, content={"error": _UPLOAD_ERR_FAILED})
+        return JSONResponse(status_code=500, content={"error": upload_failed})
 
 
 # ---------------------------------------------------------------------------
@@ -1471,11 +1547,11 @@ async def upload_actress_photo(name: str, file: UploadFile = _UPLOAD_FILE_PARAM)
 _FOCAL_DETECT_RATIO = 0.75
 _MANUAL_DETECT_TIMEOUT_S = 5.0  # D2/D9: 前景與背景共用同一個 5 秒定義（CD-152d-1），不是批次上限外的安全網
 
-_FOCAL_ERR_NOT_FOUND = _UPLOAD_ERR_NOT_FOUND  # "查無此女優"（複用既有常數，同語意）
-_FOCAL_ERR_NO_PHOTO = "找不到照片檔案"          # mirror showcase.py:264 的「找不到封面檔案」措辭家族
-_FOCAL_ERR_DETECT_FAILED = "偵測焦點失敗"        # 複用 showcase.py 字面
-_FOCAL_ERR_INVALID_FORMAT = "無效的焦點座標格式"  # 複用 showcase.py 字面
-_FOCAL_ERR_SAVE_FAILED = "存入手動焦點失敗"      # 複用 showcase.py 字面
+_FOCAL_ERR_NOT_FOUND = _UPLOAD_ERR_NOT_FOUND
+_FOCAL_ERR_NO_PHOTO = "focal_no_photo"
+_FOCAL_ERR_DETECT_FAILED = "focal_detect_failed"
+_FOCAL_ERR_INVALID_FORMAT = "focal_invalid"
+_FOCAL_ERR_SAVE_FAILED = "focal_save_failed"
 
 
 @router.post("/{name}/detect-focal")
@@ -1513,14 +1589,21 @@ async def detect_actress_focal(name: str):
     CD-13：不進 `web/routers/capabilities.py`（比照 showcase 的兩支 focal
     端點皆未揭露——同家族純預覽/寫入端點對 AI agent 用起來無明顯優勢）。
     """
+    locale = get_config_locale()
     try:
         _, actress = await asyncio.to_thread(_load_actress, name)
         if actress is None:
-            return JSONResponse(status_code=404, content={"success": False, "error": _FOCAL_ERR_NOT_FOUND})
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": _actress_text(_FOCAL_ERR_NOT_FOUND, locale)},
+            )
 
         photo_fs = await asyncio.to_thread(get_local_photo_path, name)
         if photo_fs is None:
-            return JSONResponse(status_code=400, content={"success": False, "error": _FOCAL_ERR_NO_PHOTO})
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": _actress_text(_FOCAL_ERR_NO_PHOTO, locale)},
+            )
 
         # 152d-T-D8：同 showcase，停用時不要進 run_detection 的全域鎖排隊。
         # 這支沒有預先載入的 config，而 is_disabled() 內部會讀檔 + 取鎖 ⇒ 必須 to_thread。
@@ -1559,7 +1642,10 @@ async def detect_actress_focal(name: str):
         )
     except Exception:
         logger.exception("[actress] 偵測焦點失敗 name=%s", name)
-        return JSONResponse(status_code=500, content={"success": False, "error": _FOCAL_ERR_DETECT_FAILED})
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": _actress_text(_FOCAL_ERR_DETECT_FAILED, locale)},
+        )
 
 
 @router.post("/{name}/focal")
@@ -1589,14 +1675,21 @@ async def set_actress_focal(name: str, req: SetActressFocalRequest):
     `async def` + `asyncio.to_thread`（同 detect-focal，理由見該端點 docstring）。
     CD-13：不進 capabilities（同 detect-focal）。
     """
+    locale = get_config_locale()
     parsed = parse_focal(req.focal)
     if parsed is None:
-        return JSONResponse(status_code=400, content={"success": False, "error": _FOCAL_ERR_INVALID_FORMAT})
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": _actress_text(_FOCAL_ERR_INVALID_FORMAT, locale)},
+        )
 
     try:
         repo, actress = await asyncio.to_thread(_load_actress, name)
         if actress is None:
-            return JSONResponse(status_code=404, content={"success": False, "error": _FOCAL_ERR_NOT_FOUND})
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": _actress_text(_FOCAL_ERR_NOT_FOUND, locale)},
+            )
 
         normalized = format_focal(parsed)
         written = await asyncio.to_thread(repo.update_manual_focal, name, normalized)
@@ -1604,11 +1697,17 @@ async def set_actress_focal(name: str, req: SetActressFocalRequest):
             # 理論不該發生（女優已確認存在）——唯一情境是驗證與寫入之間的 race，
             # spec §1.4 明示接受。無 compare token 可用，故視為一般失敗，非 409。
             logger.warning("[actress] update_manual_focal 回 False（race）name=%s", name)
-            return JSONResponse(status_code=500, content={"success": False, "error": _FOCAL_ERR_SAVE_FAILED})
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "error": _actress_text(_FOCAL_ERR_SAVE_FAILED, locale)},
+            )
         return JSONResponse(status_code=200, content={"success": True, "auto_focal": normalized})
     except Exception:
         logger.exception("[actress] 存入手動焦點失敗 name=%s", name)
-        return JSONResponse(status_code=500, content={"success": False, "error": _FOCAL_ERR_SAVE_FAILED})
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": _actress_text(_FOCAL_ERR_SAVE_FAILED, locale)},
+        )
 
 
 # ---------------------------------------------------------------------------

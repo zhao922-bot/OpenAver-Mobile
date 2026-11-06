@@ -1506,7 +1506,7 @@ export function libraryInsightsState() {
          */
         totalCountLabel() {
             const n = this.snapshot ? this.snapshot.logicalTitles : 0;
-            const nStr = Number(n).toLocaleString();
+            const nStr = Number(n).toLocaleString(window.__locale || document.documentElement.lang || 'zh-CN');
             return typeof window !== 'undefined' && typeof window.t === 'function'
                 ? window.t('insights.total_count', { n: nStr })
                 : 'insights.total_count';

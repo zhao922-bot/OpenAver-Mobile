@@ -23,10 +23,19 @@ from core.database import TagAliasRepository, init_db
 from core.logger import get_logger
 from core.similar import canonicalize as _canonicalize_module
 from core.similar.ranker_cache import SimilarRankerCache
+from core.i18n import get_config_locale, t as i18n_t
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/tag-aliases", tags=["tag-aliases"])
+
+
+def _tag_alias_text(key: str, locale: str | None = None, **params) -> str:
+    return i18n_t(
+        f"runtime.api.{key}",
+        locale=locale or get_config_locale(),
+        **params,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +50,7 @@ class CreateAliasRequest(BaseModel):
     @classmethod
     def primary_name_not_empty(cls, v: str) -> str:
         if not v or not v.strip():
-            raise ValueError("primary_name 不可為空")
+            raise ValueError(_tag_alias_text("name_required"))
         return v.strip()
 
     @field_validator("aliases")
@@ -57,7 +66,7 @@ class AddAliasRequest(BaseModel):
     @classmethod
     def alias_not_empty(cls, v: str) -> str:
         if not v or not v.strip():
-            raise ValueError("alias 不可為空")
+            raise ValueError(_tag_alias_text("alias_required"))
         return v.strip()
 
 
@@ -94,7 +103,10 @@ def list_aliases():
         )
     except Exception:
         logger.exception("[tag_alias] list_aliases 失敗")
-        return JSONResponse(status_code=500, content={"success": False, "error": "操作失敗"})
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": _tag_alias_text("operation_failed")},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -126,11 +138,14 @@ def create_alias_group(req: CreateAliasRequest):
     except ValueError:
         return JSONResponse(
             status_code=409,
-            content={"success": False, "error": "Tag 別名衝突（名字已屬其他組）"},
+            content={"success": False, "error": _tag_alias_text("tag_alias_conflict")},
         )
     except Exception:
         logger.exception("[tag_alias] create_alias_group 失敗")
-        return JSONResponse(status_code=500, content={"success": False, "error": "操作失敗"})
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": _tag_alias_text("operation_failed")},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +172,10 @@ def get_alias_group(name: str):
         )
     except Exception:
         logger.exception("[tag_alias] get_alias_group 失敗")
-        return JSONResponse(status_code=500, content={"success": False, "error": "操作失敗"})
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": _tag_alias_text("operation_failed")},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +203,10 @@ def delete_alias_group(name: str):
         return JSONResponse(status_code=200, content={"success": True})
     except Exception:
         logger.exception("[tag_alias] delete_alias_group 失敗")
-        return JSONResponse(status_code=500, content={"success": False, "error": "操作失敗"})
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": _tag_alias_text("operation_failed")},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +235,7 @@ def add_alias(name: str, req: AddAliasRequest):
         if not ok:
             return JSONResponse(
                 status_code=409,
-                content={"success": False, "error": "Tag 別名衝突（名字已屬其他組）"},
+                content={"success": False, "error": _tag_alias_text("tag_alias_conflict")},
             )
 
         # re-read record
@@ -231,7 +252,10 @@ def add_alias(name: str, req: AddAliasRequest):
         )
     except Exception:
         logger.exception("[tag_alias] add_alias 失敗")
-        return JSONResponse(status_code=500, content={"success": False, "error": "操作失敗"})
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": _tag_alias_text("operation_failed")},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -268,4 +292,7 @@ def remove_alias(name: str, alias: str):
         return JSONResponse(status_code=200, content={"success": True})
     except Exception:
         logger.exception("[tag_alias] remove_alias 失敗")
-        return JSONResponse(status_code=500, content={"success": False, "error": "操作失敗"})
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": _tag_alias_text("operation_failed")},
+        )

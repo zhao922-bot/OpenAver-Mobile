@@ -367,7 +367,7 @@ def video_player(
     locale = (config.get('general') or {}).get('locale') or ''
     allowed_langs = {"zh-TW", "zh-CN", "ja", "en"}
     # 本端點唯一的 locale 正規化點，lang 屬性與提示文字都吃它
-    html_lang = locale if isinstance(locale, str) and locale in allowed_langs else "zh-TW"
+    html_lang = locale if isinstance(locale, str) and locale in allowed_langs else "zh-CN"
     html_lang_safe = html_escape(html_lang)
     hint_text_network = html_escape(i18n_t('showcase.video.player_unavailable', locale=html_lang))
     hint_text_format = html_escape(i18n_t('showcase.video.player_unavailable_format', locale=html_lang))

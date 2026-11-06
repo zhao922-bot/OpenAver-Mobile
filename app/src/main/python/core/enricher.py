@@ -26,6 +26,7 @@ from core.enrich_contract import (
 )
 from core.focal_trigger import schedule_focal_after_cover_write
 from core.image_codec import looks_like_image
+from core.i18n import get_config_locale, t as i18n_t
 from core.logger import get_logger
 from core.media_io import copy_file, delete_file, ensure_directory
 from core.nfo_read import (
@@ -59,6 +60,24 @@ from core.scrapers.utils import check_subtitle
 logger = get_logger(__name__)
 
 VALID_MODES = {"fill_missing", "db_to_sidecar", "refresh_full"}
+
+
+def _ui_locale(locale: Optional[str] = None) -> str:
+    """Return the active UI locale for user-visible EnrichResult errors."""
+    if locale:
+        return locale
+    try:
+        return get_config_locale()
+    except Exception:
+        return "zh-CN"
+
+
+def _api_text(locale: str, key: str, **params) -> str:
+    return i18n_t(f"runtime.api.{key}", locale=locale, **params)
+
+
+def _sample_text(locale: str, key: str, **params) -> str:
+    return i18n_t(f"runtime.samples.{key}", locale=locale, **params)
 
 
 class SampleBackfillCancelled(Exception):
@@ -686,7 +705,9 @@ def enrich_single(  # ranker-invalidate-ok: (no literal SQL here; corpus writes 
     scraper_data: Optional[dict] = None,
     path_mappings: dict = None,
     preserve_title: bool = False, nfo_title_format: str = '[{num}]{title}',
+    locale: Optional[str] = None,
 ) -> EnrichResult:
+    locale = _ui_locale(locale)
     _empty = EnrichResult(
         success=False,
         nfo_written=False,
@@ -698,12 +719,12 @@ def enrich_single(  # ranker-invalidate-ok: (no literal SQL here; corpus writes 
     )
 
     if not number:
-        _empty.error = "缺少番號"
+        _empty.error = _api_text(locale, "number_not_recognized")
         _empty.reason = "error"
         return _empty
 
     if mode not in VALID_MODES:
-        _empty.error = f"不支援的 mode: {mode}（合法值：fill_missing, db_to_sidecar, refresh_full）"
+        _empty.error = _api_text(locale, "enrich_failed")
         _empty.reason = "error"
         return _empty
 
@@ -714,7 +735,7 @@ def enrich_single(  # ranker-invalidate-ok: (no literal SQL here; corpus writes 
     fs_path_for_db = uri_to_fs_path(file_path)  # uri-no-reverse: DB key must stay in DB's stored namespace; disk I/O uses fs_path
 
     if not os.path.exists(fs_path):
-        _empty.error = "檔案不存在"
+        _empty.error = _sample_text(locale, "error_file_not_found")
         _empty.reason = "error"
         return _empty
 
@@ -731,7 +752,7 @@ def enrich_single(  # ranker-invalidate-ok: (no literal SQL here; corpus writes 
                                       source=source or 'auto', javbus_lang=javbus_lang)
         if not scraper_data:
             repo.update_scrape_attempted_at(to_file_uri(fs_path_for_db), time.time())  # db-ns-ok: fs_path_for_db, DB round-trip value, no reverse mapping applied
-            _empty.error = f"找不到 {number} 的資料"
+            _empty.error = _api_text(locale, "search_not_found", number=number)
             _empty.reason = "not_found"
             return _empty
         meta = _scraper_to_meta(scraper_data)
@@ -742,7 +763,7 @@ def enrich_single(  # ranker-invalidate-ok: (no literal SQL here; corpus writes 
         db_hits = repo.get_by_numbers([number])
         videos = db_hits.get(number, [])
         if not videos:
-            _empty.error = f"DB 中找不到 {number} 的資料"
+            _empty.error = _api_text(locale, "search_not_found", number=number)
             _empty.reason = "not_found"
             return _empty
         meta = _video_to_meta(_pick_row_for_path(videos, path_uri))
@@ -800,7 +821,7 @@ def enrich_single(  # ranker-invalidate-ok: (no literal SQL here; corpus writes 
                 else:
                     # missing 本來就有 title 以外的缺項：早退行為與今天完全一致
                     repo.update_scrape_attempted_at(to_file_uri(fs_path_for_db), time.time())  # db-ns-ok: fs_path_for_db, DB round-trip value, no reverse mapping applied
-                    _empty.error = f"找不到 {number} 的資料"
+                    _empty.error = _api_text(locale, "search_not_found", number=number)
                     _empty.reason = "not_found"
                     return _empty
             else:
@@ -865,7 +886,7 @@ def enrich_single(  # ranker-invalidate-ok: (no literal SQL here; corpus writes 
                 fs_path_for_db=fs_path_for_db, nfo_title_format=nfo_title_format,
             )
         except PermissionError:
-            _empty.error = "NFO 寫入失敗，請確認目錄寫入權限"
+            _empty.error = _api_text(locale, "enrich_failed")
             _empty.reason = "error"
             return _empty
     else:
@@ -882,7 +903,7 @@ def enrich_single(  # ranker-invalidate-ok: (no literal SQL here; corpus writes 
                 fs_path_for_db=fs_path_for_db, nfo_title_format=nfo_title_format,
             )
         except PermissionError:
-            _empty.error = "NFO 寫入失敗，請確認目錄寫入權限"
+            _empty.error = _api_text(locale, "enrich_failed")
             _empty.reason = "error"
             return _empty
 
@@ -1086,6 +1107,7 @@ def fetch_samples_only_detailed(
     path_mappings: dict = None,
     related_db_paths: Optional[List[str]] = None,
     cancel_event: Optional[Event] = None,
+    locale: Optional[str] = None,
 ) -> tuple[EnrichResult, dict]:
     """只補抓劇照，並回傳足以區分「查無／無劇照／下載失敗／DB 失敗」的診斷。
 
@@ -1094,6 +1116,7 @@ def fetch_samples_only_detailed(
     sample list is stored on every member row. Paths are DB-key URIs (or values
     accepted by ``coerce_to_file_uri``); duplicate/current paths are ignored.
     """
+    locale = _ui_locale(locale)
     _empty = EnrichResult(
         success=False,
         nfo_written=False,
@@ -1115,7 +1138,7 @@ def fetch_samples_only_detailed(
     }
 
     if cancel_event is not None and cancel_event.is_set():
-        _empty.error = "劇照補齊已取消"
+        _empty.error = _sample_text(locale, "cancelled")
         diagnostics["error_code"] = "cancelled"
         return _empty, diagnostics
 
@@ -1127,7 +1150,7 @@ def fetch_samples_only_detailed(
 
     if not os.path.exists(fs_path):
         logger.warning("[fetch_samples_only] 檔案不存在: %s", fs_path)
-        _empty.error = "檔案不存在"
+        _empty.error = _sample_text(locale, "error_file_not_found")
         diagnostics["error_code"] = "file_not_found"
         return _empty, diagnostics
 
@@ -1136,18 +1159,22 @@ def fetch_samples_only_detailed(
         meta = search_jav(number, source="auto", javbus_lang=None)
         _raise_if_cancelled(cancel_event)
     except SampleBackfillCancelled:
-        _empty.error = "劇照補齊已取消"
+        _empty.error = _sample_text(locale, "cancelled")
         diagnostics["error_code"] = "cancelled"
         return _empty, diagnostics
     except Exception as exc:
         logger.exception("[fetch_samples_only] 來源查詢失敗: %s", exc)
-        _empty.error = f"劇照來源查詢失敗：{type(exc).__name__}"
+        _empty.error = _sample_text(
+            locale, "error_samples_search_failed", number=number
+        )
         diagnostics["error_code"] = "samples_search_failed"
         diagnostics["detail"] = f"{type(exc).__name__}: {exc}"
         return _empty, diagnostics
     if not meta:
         logger.warning("[fetch_samples_only] 找不到資料: %s", number)
-        _empty.error = f"找不到 {number} 的資料"
+        _empty.error = _sample_text(
+            locale, "error_samples_search_failed", number=number
+        )
         diagnostics["error_code"] = "samples_search_failed"
         return _empty, diagnostics
 
@@ -1160,7 +1187,7 @@ def fetch_samples_only_detailed(
     diagnostics["sample_urls_found"] = len(sample_images)
     if not sample_images:
         logger.warning("[fetch_samples_only] %s 的來源 %s 沒有劇照 URL", number, source_used)
-        _empty.error = "沒有找到可下載的劇照"
+        _empty.error = _sample_text(locale, "error_no_sample_images")
         _empty.source_used = source_used
         diagnostics["error_code"] = "no_sample_images"
         return _empty, diagnostics
@@ -1175,7 +1202,7 @@ def fetch_samples_only_detailed(
             cancel_event=cancel_event,
         )
     except SampleBackfillCancelled:
-        _empty.error = "劇照補齊已取消"
+        _empty.error = _sample_text(locale, "cancelled")
         diagnostics["error_code"] = "cancelled"
         return _empty, diagnostics
     except Exception as exc:
@@ -1186,13 +1213,15 @@ def fetch_samples_only_detailed(
 
         logger.exception("[fetch_samples_only] 劇照寫入失敗: %s", exc)
         if isinstance(exc, AndroidStoragePermissionError):
-            _empty.error = "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”"
+            _empty.error = _sample_text(
+                locale, "error_storage_permission_required"
+            )
             error_code = "storage_permission_required"
         elif isinstance(exc, AndroidStorageWriteError):
-            _empty.error = "劇照寫入外置存儲失敗"
+            _empty.error = _sample_text(locale, "error_sample_write_failed")
             error_code = "sample_write_failed"
         else:
-            _empty.error = "劇照寫入失敗"
+            _empty.error = _sample_text(locale, "error_sample_write_failed")
             error_code = "sample_write_failed"
         _empty.source_used = source_used
         diagnostics["error_code"] = error_code
@@ -1221,12 +1250,12 @@ def fetch_samples_only_detailed(
                 seen_uris.add(related_uri)
                 repo.update_sample_images(related_uri, extrafanart_res.uris)
         except SampleBackfillCancelled:
-            _empty.error = "劇照補齊已取消"
+            _empty.error = _sample_text(locale, "cancelled")
             diagnostics["error_code"] = "cancelled"
             return _empty, diagnostics
         except Exception as exc:
             logger.exception("[fetch_samples_only] DB 更新失敗: %s", exc)
-            _empty.error = "劇照已下載，但資料庫更新失敗，請再試一次"
+            _empty.error = _sample_text(locale, "error_db_write_failed")
             _empty.source_used = source_used
             diagnostics["error_code"] = "db_write_failed"
             return _empty, diagnostics
@@ -1237,17 +1266,7 @@ def fetch_samples_only_detailed(
         len(extrafanart_res.uris),
     )
     if not extrafanart_res.uris:
-        reasons = {}
-        for item in extrafanart_res.errors:
-            reason = item.get("reason", "download_failed")
-            reasons[reason] = reasons.get(reason, 0) + 1
-        summary = "、".join(
-            f"{reason} × {count}" for reason, count in reasons.items()
-        )
-        _empty.error = (
-            f"已找到 {len(sample_images)} 張劇照，但全部下載失敗"
-            + (f"（{summary}）" if summary else "")
-        )
+        _empty.error = _sample_text(locale, "error_sample_download_failed")
         _empty.source_used = source_used
         diagnostics["error_code"] = "sample_download_failed"
         return _empty, diagnostics
@@ -1269,12 +1288,14 @@ def fetch_samples_only(
     file_path: str,
     number: str,
     path_mappings: dict = None,
+    locale: Optional[str] = None,
 ) -> EnrichResult:
     """兼容入口：只回既有 EnrichResult；路由改用 detailed 取得診斷。"""
     result, _diagnostics = fetch_samples_only_detailed(
         file_path=file_path,
         number=number,
         path_mappings=path_mappings,
+        locale=locale,
     )
     return result
 

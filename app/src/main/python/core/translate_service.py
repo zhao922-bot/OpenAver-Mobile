@@ -105,7 +105,7 @@ class TranslateService(ABC):
 class OllamaTranslateService(TranslateService):
     """Ollama 翻譯服務實現"""
 
-    def __init__(self, config: Dict, target_language: str = "zh-TW"):
+    def __init__(self, config: Dict, target_language: str = "zh-CN"):
         """
         初始化 Ollama 服務
 
@@ -127,7 +127,7 @@ class OllamaTranslateService(TranslateService):
         if self.target_language == "ja":
             return title
 
-        lang_data = LANGUAGE_PROMPTS.get(self.target_language, LANGUAGE_PROMPTS["zh-TW"])
+        lang_data = LANGUAGE_PROMPTS.get(self.target_language, LANGUAGE_PROMPTS["zh-CN"])
         system_msg = lang_data["ollama_system"]
         example = lang_data["ollama_example"]
         prompt = f"""範例：{example}
@@ -236,7 +236,7 @@ class OllamaTranslateService(TranslateService):
 class GeminiTranslateService(TranslateService):
     """Google Gemini API 翻譯服務實現"""
 
-    def __init__(self, config: Dict, target_language: str = "zh-TW"):
+    def __init__(self, config: Dict, target_language: str = "zh-CN"):
         """
         初始化 Gemini 服務
 
@@ -310,7 +310,7 @@ class GeminiTranslateService(TranslateService):
 class OpenAICompatibleTranslateService(TranslateService):
     """OpenAI Compatible API 翻譯服務實現（支援 OpenAI、Perplexity、OpenRouter、本地 LLM 等）"""
 
-    def __init__(self, config: Dict, target_language: str = "zh-TW"):
+    def __init__(self, config: Dict, target_language: str = "zh-CN"):
         """
         初始化 OpenAI Compatible 服務
 
@@ -376,7 +376,7 @@ class OpenAICompatibleTranslateService(TranslateService):
 
 def build_cloud_translate_prompt(title: str, target_language: str) -> str:
     """組出與現行 Gemini／OpenAI 逐字相同的雲端翻譯 prompt。"""
-    lang_data = LANGUAGE_PROMPTS.get(target_language, LANGUAGE_PROMPTS["zh-TW"])
+    lang_data = LANGUAGE_PROMPTS.get(target_language, LANGUAGE_PROMPTS["zh-CN"])
     instruction = lang_data["gemini_instruction"]
     rules = lang_data["gemini_rules"]
     return f"""你是專業的影視資料庫管理員與翻譯引擎。這是既有日文文字的逐字翻譯任務，{instruction}。
@@ -392,7 +392,7 @@ def build_cloud_translate_prompt(title: str, target_language: str) -> str:
 class ClaudeTranslateService(TranslateService):
     """Anthropic Claude Messages API 翻譯服務"""
 
-    def __init__(self, config: Dict, target_language: str = "zh-TW"):
+    def __init__(self, config: Dict, target_language: str = "zh-CN"):
         """
         Args:
             config: Claude 配置字典
@@ -451,7 +451,7 @@ class ClaudeTranslateService(TranslateService):
         return results
 
 
-def create_translate_service(config: Dict, target_language: str = "zh-TW") -> TranslateService:
+def create_translate_service(config: Dict, target_language: str = "zh-CN") -> TranslateService:
     """
     創建翻譯服務實例（工廠函數）
 
@@ -464,7 +464,7 @@ def create_translate_service(config: Dict, target_language: str = "zh-TW") -> Tr
                 "claude": {...},
                 "openai": {...}
             }
-        target_language: 目標語言代碼（zh-TW / zh-CN / en / ja），預設 zh-TW
+        target_language: 目標語言代碼（zh-TW / zh-CN / en / ja），預設 zh-CN
 
     Returns:
         TranslateService 實例

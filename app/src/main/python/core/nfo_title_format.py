@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+from core.i18n import get_config_locale, t
 from core.organizer import _strip_num_prefixes
 
 
@@ -63,19 +64,20 @@ def build_display_title(
     return display_title, body
 
 
-def validate_nfo_title_format(template: str) -> Optional[str]:
+def validate_nfo_title_format(template: str, locale: str | None = None) -> Optional[str]:
     """回傳人類可讀錯誤原因；合法格式回傳 None。
 
     必須恰好各出現一次 `{num}` 與 `{title}`。
     """
+    locale = locale or get_config_locale()
     if template.count('{title}') != 1 or template.count('{num}') != 1:
         if template.count('{num}') == 0:
-            return '格式必須包含恰好一個 {num}'
+            return t('runtime.api.nfo_format_num_missing', locale=locale)
         if template.count('{title}') == 0:
-            return '格式必須包含恰好一個 {title}'
+            return t('runtime.api.nfo_format_title_missing', locale=locale)
         if template.count('{num}') != 1:
-            return '{num} 只能出現一次'
-        return '{title} 只能出現一次'
+            return t('runtime.api.nfo_format_num_once', locale=locale)
+        return t('runtime.api.nfo_format_title_once', locale=locale)
     return None
 
 

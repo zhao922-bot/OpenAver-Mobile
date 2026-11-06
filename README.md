@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r41-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r43-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r41-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r43-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r41`（versionCode `17057`）
+- 版本：`0.17.18-r43`（versionCode `17059`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -208,6 +208,11 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   剧照会同步写入全部分集记录；混有无关影片的文件夹仍会拒绝执行
 - r41：片库播放分集视频时可在 `cd1/cd2` 之间选择，网页播放器支持分段切换与
   自动续播，Android 端会先弹出原生分段选择框
+- r42：升级 Pydantic v2 与 `pydantic-core 2.41.5`，同步加固 Android 打包与运行
+  依赖
+- r43：简体中文、繁体中文、日语和英语四种界面语言统一使用各自语言包，包括
+  Android 原生菜单与离开确认；修复日期、扫描/翻译/补剧照日志、错误提示及扫描
+  日志缓存仍显示其他语言的问题
 
 ## 限制
 

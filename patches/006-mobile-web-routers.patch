@@ -58,7 +58,31 @@
      load_config,
      mutate_config,
      reset_config_file,
-@@ -85,7 +86,7 @@
+@@ -58,12 +59,23 @@
+ from core.translate_service import OllamaTranslateService
+ from core.cloud_translate import TranslateError
+ from core.platform_info import is_synology
++from core.i18n import get_config_locale, t as i18n_t
+ from core import cf_handoff
+ from core.proxy_policy import cf_window_proxy_restart_needed, current_settings
+ 
+ logger = get_logger(__name__)
+ 
+ router = APIRouter(prefix="/api", tags=["config"])
++
++
++def _config_text(key: str, locale: str | None = None, **params) -> str:
++    """Return a config-API message in the requested or current UI language."""
++    return i18n_t(
++        f"runtime.config.{key}",
++        locale=locale or get_config_locale(),
++        **params,
++    )
++
+ 
+ # 序列化「server_mode 切換交易」的單一鎖（Codex P2）：toggle（start/persist/stop）與
+ # reset（clear/stop）共用此鎖，避免併發 enable/disable/reset 交錯導致 config↔listener
+@@ -85,7 +97,7 @@
      ``resolved`` 是 response-only 頂層欄位（與 ``data`` 同層），前端不得把它
      寫進 ``config.gallery`` 再 PUT 回來。
      """
@@ -67,9 +91,284 @@
      gallery = data.get("gallery") or {}
      return {
          "success": True,
+@@ -103,6 +115,7 @@
+ @router.put("/config")
+ def update_config(config: AppConfig) -> dict:
+     """更新所有設定"""
++    response_locale = getattr(config.general, "locale", None)
+     # PR #93 P2-e：整份設定儲存納入 switch 互斥窗口（owner 拍板：互斥鎖）。否則另一分頁帶
+     # 「切模式前的舊 directories 快照」的整份存檔會與 purge 交錯、把剛被 purge 的離線來源
+     # 條目寫回 gallery.directories（DB 卡已刪）→ 殭屍條目。
+@@ -126,7 +139,7 @@
+         != load_config().get("scraper", {}).get("strm_path_mappings", {})
+     ):
+         return {"success": False, "reason": "generate_in_progress_strm_mapping",
+-                "error": "掃描／產生進行中，請完成後再修改媒體伺服器播放路徑映射。"}
++                "error": _config_text("save_in_progress_strm_mapping", response_locale)}
+     # 程式區守衛（TASK-153b-T3 / spec §5.1）：非空自訂值解析後落在 get_project_root()
+     # 之下 → 拒絕。更新時程式區會被整包換掉；要跟著資料根走請留空。
+     custom_output_dir = (config.gallery.output_dir or "").strip()
+@@ -135,16 +148,19 @@
+         return {
+             "success": False,
+             "reason": "gallery_output_in_program_area",
+-            "error": "輸出目錄不可設在程式安裝目錄內。請改選其他位置，或留空以跟隨資料根目錄。",
++            "error": _config_text("output_in_program_area", response_locale),
+         }
+-    title_fmt_error = validate_nfo_title_format(config.scraper.nfo_title_format)
++    title_fmt_error = validate_nfo_title_format(
++        config.scraper.nfo_title_format,
++        locale=response_locale,
++    )
+     if title_fmt_error:
+         return {"success": False, "reason": "nfo_title_format_invalid", "error": title_fmt_error}
+     save_token = object()  # 每 request 唯一身份 token（比照 generate 的 _active_tokens）
+     reason = try_begin_config_save(save_token)
+     if reason is not None:
+         return {"success": False, "reason": reason,
+-                "error": "設定切換中，請稍後再儲存。"}
++                "error": _config_text("config_save_in_progress", response_locale)}
+     try:
+         # Cap 守衛（CD-61-16，endpoint-level；非 model_validator）：
+         # 同時啟用且非 manual_only 的來源數不得超過 MAX_ENABLED_SOURCES。
+@@ -194,10 +210,10 @@
+ 
+             mutate_config(_write_preserving_server_owned)
+             _reset_translate_service()  # 重置翻譯服務，讓新配置生效
+-            return {"success": True, "message": "設定已儲存", "cf_window_proxy_restart_needed": cf_window_proxy_restart_needed() or cf_handoff.restart_needed_here(current_settings())}
++            return {"success": True, "message": _config_text("saved", response_locale), "cf_window_proxy_restart_needed": cf_window_proxy_restart_needed() or cf_handoff.restart_needed_here(current_settings())}
+         except Exception as e:
+             logger.error("儲存設定失敗: %s", e)
+-            return {"success": False, "error": "儲存設定失敗"}
++            return {"success": False, "error": _config_text("save_failed", response_locale)}
+     finally:
+         end_config_save(save_token)
+ 
+@@ -217,10 +233,10 @@
+             else:
+                 lan_listener.stop()
+         _reset_translate_service()  # 清除舊服務實例（與 server_mode 無關，鎖外）
+-        return {"success": True, "message": "已恢復預設設定"}
++        return {"success": True, "message": _config_text("reset_done")}
+     except Exception as e:
+         logger.error("恢復預設設定失敗: %s", e)
+-        return {"success": False, "error": "恢復預設設定失敗"}
++        return {"success": False, "error": _config_text("reset_failed")}
+ 
+ 
+ @router.get("/tutorial-status")
+@@ -264,25 +280,30 @@
+     註：保持同步 def —— body 內 mutate_config 走檔案 I/O，依 async-offload 守衛
+     （feature/71）須在 Starlette threadpool 執行，不可改 async def 卡 event loop。
+     """
++    response_locale = (
++        request.value
++        if field == "locale" and isinstance(request.value, str)
++        else get_config_locale()
++    )
+     allowed = {"sidebar_collapsed", "theme", "font_size", "locale", "server_mode", "auto_check_update"}
+     if field not in allowed:
+-        return {"success": False, "error": f"不允許更新欄位: {field}"}
++        return {"success": False, "error": _config_text("field_not_allowed", response_locale, field=field)}
+     try:
+         # server_mode 嚴格 bool 驗正（TASK-80a-T1）：StrictBool|StrictStr 已擋整數，
+         # 此處再擋字串 —— 關鍵安全性：字串 "false" 是 truthy，若存進 config 會讓
+         # middleware `bool(server_mode)` 誤判為開啟對外。非 bool 字串 → 400。
+         if field == "server_mode" and not isinstance(request.value, bool):
+-            raise HTTPException(status_code=400, detail="server_mode 必須為布林值")
++            raise HTTPException(status_code=400, detail=_config_text("server_mode_bool", response_locale))
+ 
+         # auto_check_update 布林語意欄位擋字串 truthy 反轉（Codex P2），比照 server_mode：
+         # 字串 "false" 是 truthy，若落盤 lifespan `not "false"`=False 會誤判 gate 通過、
+         # help data-attr 也誤算 true → 使用者關閉卻被當開啟。非 bool → 400。
+         if field == "auto_check_update" and not isinstance(request.value, bool):
+-            raise HTTPException(status_code=400, detail="auto_check_update 必須為布林值")
++            raise HTTPException(status_code=400, detail=_config_text("auto_check_update_bool", response_locale))
+ 
+         if field == "server_mode" and is_synology():
+             return {"success": False, "reason": "synology_fixed",
+-                    "error": "Synology 版伺服器模式為固定值，無法變更"}
++                    "error": _config_text("synology_fixed", response_locale)}
+ 
+         # server_mode 是主機決定，遠端連入的客人不得切換（spec「遠端自鎖不防護」的更乾淨版本）。
+         # 僅允許 loopback 來源切換；fail-closed：client None → 視為非 loopback → 拒絕。
+@@ -296,7 +317,7 @@
+                 )
+                 # reason 供前端對應專屬 i18n 訊息（remote_only），而非通用「請稍後再試」
+                 return {"success": False, "reason": "remote_forbidden",
+-                        "error": "server_mode 僅能在主機本機切換"}
++                        "error": _config_text("server_mode_local_only", response_locale)}
+ 
+         # server_mode 專屬分支：start/stop LAN listener，確保 runtime ≠ persisted 不分離。
+         # 整個交易在 _server_mode_toggle_lock 內序列化（Codex P2）：防併發 enable/disable
+@@ -311,7 +332,7 @@
+                         lan_port = lan_listener.start()
+                     except Exception as e:                    # noqa: BLE001
+                         logger.error("server_mode 啟用失敗: %s", e)
+-                        return {"success": False, "error": "無法啟動 LAN 伺服器"}
++                        return {"success": False, "error": _config_text("lan_start_failed", response_locale)}
+                     try:
+                         mutate_config(lambda cfg: cfg.setdefault("general", {}).update({"server_mode": True}))
+                     except Exception as e:                    # noqa: BLE001
+@@ -321,7 +342,7 @@
+                             lan_listener.stop()
+                         except Exception:                     # noqa: BLE001,S110 — rollback best-effort
+                             pass
+-                        return {"success": False, "error": "無法儲存伺服器模式設定"}
++                        return {"success": False, "error": _config_text("server_mode_save_failed", response_locale)}
+                     from web.lan_listener import get_lan_ip, is_public_exposure
+                     lan_ip = get_lan_ip()
+                     return {
+@@ -340,14 +361,14 @@
+                         mutate_config(lambda cfg: cfg.setdefault("general", {}).update({"server_mode": False}))
+                     except Exception as e:                    # noqa: BLE001
+                         logger.error("server_mode disable persist 失敗: %s", e)
+-                        return {"success": False, "error": "無法儲存伺服器模式設定"}
++                        return {"success": False, "error": _config_text("server_mode_save_failed", response_locale)}
+                     lan_listener.stop()
+                     return {"success": True, "lan_port": None}
+ 
+         # locale 驗證在 mutate 前（保留既有順序：驗證 → 寫入 → translate reset）
+         if field == "locale" and request.value not in ("zh-TW", "zh-CN", "ja", "en"):
+             logger.warning("嘗試設定不支援的語系: %s", request.value)
+-            return {"success": False, "error": "不支援的語系"}
++            return {"success": False, "error": _config_text("locale_unsupported", response_locale)}
+ 
+         def _mut(cfg):
+             cfg.setdefault("general", {})[field] = request.value
+@@ -360,7 +381,7 @@
+         raise
+     except Exception as e:
+         logger.error("更新設定欄位失敗: %s", e)
+-        return {"success": False, "error": "更新設定欄位失敗"}
++        return {"success": False, "error": _config_text("update_field_failed", response_locale)}
+ 
+ 
+ class FocalDeviceDisabledRequest(BaseModel):
+@@ -381,7 +402,7 @@
+         return {"success": True}
+     except Exception as e:
+         logger.error("更新 focal_device.disabled 失敗: %s", e)
+-        return {"success": False, "error": "操作失敗"}
++        return {"success": False, "error": _config_text("operation_failed")}
+ 
+ 
+ @router.get("/config/general/lan-port")
+@@ -440,14 +461,15 @@
+     #       成功佔住後必 end_switch()（finally 保證）。
+     reason = try_begin_switch()
+     if reason is not None:
++        locale = get_config_locale()
+         _switch_refuse_msg = {
+-            "generate_in_progress": "產生進行中，請稍後再切換模式。",
+-            "config_save_in_progress": "設定儲存中，請稍後再切換模式。",
++            "generate_in_progress": _config_text("switch_generate_in_progress", locale),
++            "config_save_in_progress": _config_text("switch_config_save_in_progress", locale),
+         }
+         return {
+             "success": False,
+             "reason": reason,
+-            "error": _switch_refuse_msg.get(reason, "另一個切換正在進行中，請稍後再試。"),
++            "error": _switch_refuse_msg.get(reason, _config_text("switch_busy", locale)),
+         }
+     try:
+         return _switch_external_manager_locked(request)
+@@ -523,7 +545,7 @@
+         mutate_config(_mutator)
+     except Exception as e:  # noqa: BLE001
+         logger.error("switch_external_manager config 落盤失敗（卡已刪、離線仍在 config，可自癒）: %s", e)
+-        return {"success": False, "error": "無法儲存媒體伺服器模式設定"}
++        return {"success": False, "error": _config_text("media_server_mode_save_failed")}
+ 
+     # Step 6：回傳（Step 5 = 零檔案系統刪除，全程未 rmtree/unlink/os.remove）
+     return {
+@@ -601,7 +623,7 @@
+     # 此處再擋獨立/直接呼叫，防禦縱深）。dry_run 也擋，讓前端 heads-up 階段就明確拒絕。
+     if is_generate_in_progress():
+         return {"success": False, "reason": "generate_in_progress",
+-                "error": "掃描／產生進行中，請完成後再改寫 .strm。"}
++                "error": _config_text("rewrite_in_progress")}
+     try:
+         cfg = load_config()
+         scraper_cfg = cfg.get('scraper', {})
+@@ -628,7 +650,7 @@
+         return {"success": True, "rewritten": rewritten}
+     except Exception as e:  # noqa: BLE001 — 端點層例外收斂為 success:False（比照 config.py 慣例）
+         logger.error("rewrite_strm 失敗: %s", e)
+-        return {"success": False, "error": "改寫 strm 失敗"}
++        return {"success": False, "error": _config_text("rewrite_failed")}
+ 
+ 
+ @router.get("/version")
+@@ -666,6 +688,7 @@
+ @router.get("/ollama/models")
+ async def get_ollama_models(url: str) -> dict:
+     """取得 Ollama 可用模型列表"""
++    locale = get_config_locale()
+     try:
+         # 確保 URL 格式正確
+         url = url.rstrip('/')
+@@ -680,12 +703,12 @@
+             return {"success": True, "models": models}
+ 
+     except httpx.TimeoutException:
+-        return {"success": False, "error": "連線逾時"}
++        return {"success": False, "error": _config_text("ollama_timeout", locale)}
+     except httpx.ConnectError:
+-        return {"success": False, "error": "無法連線到 Ollama"}
++        return {"success": False, "error": _config_text("ollama_unreachable", locale)}
+     except Exception as e:
+         logger.error("取得 Ollama 模型列表失敗: %s", e)
+-        return {"success": False, "error": "取得模型列表失敗"}
++        return {"success": False, "error": _config_text("ollama_models_failed", locale)}
+ 
+ 
+ class OllamaTestRequest(BaseModel):
+@@ -694,29 +717,34 @@
+ 
+ 
+ _OLLAMA_TEST_ERRORS = {
+-    "connection_timeout": "連線逾時",
+-    "connection_failed": "無法連線到 Ollama",
+-    "empty_response": "模型無回應",
++    "connection_timeout": "ollama_timeout",
++    "connection_failed": "ollama_unreachable",
++    "empty_response": "ollama_empty_response",
+ }
+ 
+ 
+ @router.post("/ollama/test")
+ async def test_ollama_model(request: OllamaTestRequest) -> dict:
+     """測試 Ollama 模型是否能正常回應（與搜尋頁真翻譯共用引擎請求）"""
++    locale = get_config_locale()
+     try:
+         url = request.url.rstrip('/')
+ 
+         config = await asyncio.to_thread(load_config)
+-        locale = config.get("general", {}).get("locale", "zh-TW")
++        locale = get_config_locale(config)
+         if locale == "ja":
+             return {"success": True, "result": "ja_skip"}
+ 
+         service = OllamaTranslateService({"url": url, "model": request.model}, locale)
+         result = await service.translate_or_raise("新人女優デビュー")
+-        return {"success": True, "result": f"回應：{result}"}
++        return {"success": True, "result": _config_text("ollama_response", locale, result=result)}
+ 
+     except TranslateError as e:
+-        return {"success": False, "error": _OLLAMA_TEST_ERRORS.get(e.kind, "測試模型失敗")}
++        key = _OLLAMA_TEST_ERRORS.get(e.kind)
++        return {
++            "success": False,
++            "error": _config_text(key, locale) if key else _config_text("ollama_test_failed", locale),
++        }
+     except Exception as e:
+         logger.error("測試 Ollama 模型失敗: %s", e)
+-        return {"success": False, "error": "測試模型失敗"}
++        return {"success": False, "error": _config_text("ollama_test_failed", locale)}
 --- /dev/null
 +++ b/web/routers/database_backup.py
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,127 @@
 +"""Consistent SQLite snapshot export for OpenAver Mobile."""
 +
 +from __future__ import annotations
@@ -88,6 +387,7 @@
 +from starlette.background import BackgroundTask
 +
 +from core.database import get_connection, get_db_path
++from core.i18n import get_config_locale, t as i18n_t
 +from core.logger import get_logger
 +
 +logger = get_logger(__name__)
@@ -158,7 +458,13 @@
 +    """Download a consistent database snapshot as a ZIP archive."""
 +    db_path = get_db_path()
 +    if not db_path.exists():
-+        raise HTTPException(status_code=404, detail="資料庫不存在，請先產生列表")
++        raise HTTPException(
++            status_code=404,
++            detail=i18n_t(
++                "runtime.database.missing",
++                locale=get_config_locale(),
++            ),
++        )
 +
 +    descriptor, temp_name = tempfile.mkstemp(
 +        prefix="openaver-db-export-",
@@ -171,7 +477,13 @@
 +    except Exception:
 +        _safe_unlink(str(zip_path))
 +        logger.exception("database export failed")
-+        raise HTTPException(status_code=500, detail="資料庫匯出失敗") from None
++        raise HTTPException(
++            status_code=500,
++            detail=i18n_t(
++                "runtime.database.export_failed",
++                locale=get_config_locale(),
++            ),
++        ) from None
 +
 +    filename = time.strftime(
 +        "openaver-database-%Y%m%d-%H%M%S.zip",
@@ -207,6 +519,15 @@
      """影片播放頁面 — 用 HTML5 <video> 標籤在新分頁播放"""
      from html import escape as html_escape
      from core.i18n import t as i18n_t
+@@ -364,7 +367,7 @@
+     locale = (config.get('general') or {}).get('locale') or ''
+     allowed_langs = {"zh-TW", "zh-CN", "ja", "en"}
+     # 本端點唯一的 locale 正規化點，lang 屬性與提示文字都吃它
+-    html_lang = locale if isinstance(locale, str) and locale in allowed_langs else "zh-TW"
++    html_lang = locale if isinstance(locale, str) and locale in allowed_langs else "zh-CN"
+     html_lang_safe = html_escape(html_lang)
+     hint_text_network = html_escape(i18n_t('showcase.video.player_unavailable', locale=html_lang))
+     hint_text_format = html_escape(i18n_t('showcase.video.player_unavailable_format', locale=html_lang))
 @@ -373,6 +376,7 @@
      path_mappings = gallery_config.get('path_mappings', {})
  
@@ -292,7 +613,7 @@
  from datetime import datetime
  from pathlib import Path
  from typing import Any, Callable, Dict, Generator, List, Optional
-@@ -32,25 +33,51 @@
+@@ -32,27 +33,54 @@
  from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
  from starlette.background import BackgroundTask
  
@@ -347,8 +668,11 @@
 +from core.source_config import get_manual_only_sources, validate_source_id
  from pydantic import BaseModel
  from core.logger import get_logger
++from core.i18n import get_config_locale, t as i18n_t
  from core.platform_info import DSM_PERMISSION_HINT, is_synology
-@@ -65,6 +92,14 @@
+ from core.proxy_policy import proxy_kwargs
+ from web.routers.notifications import emit_notification as _emit_notif
+@@ -65,11 +93,32 @@
  # T3(40c): Jellyfin check TTL 快取（60 秒）
  _jellyfin_cache_result: dict | None = None
  _jellyfin_cache_time: float = 0
@@ -363,11 +687,254 @@
  
  
  def _sse_event(data: dict) -> str:
-@@ -263,7 +298,272 @@
-     return f"  {directory}: {len(skipped_paths)} 個路徑讀取失敗，跳過刪除偵測以免誤刪（詳見 debug.log）"
+     """將 dict 編碼為 SSE 格式的單條 message。"""
+     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
++
++
++def _runtime_text(section: str, key: str, locale: str, **params) -> str:
++    """Translate a runtime/SSE message using the active UI locale."""
++    return i18n_t(f"runtime.{section}.{key}", locale=locale, **params)
++
++
++def _active_locale(config: dict | None = None) -> str:
++    """Best-effort UI locale lookup for runtime messages."""
++    try:
++        return get_config_locale(config)
++    except Exception:
++        return "zh-CN"
  
  
+ def _collect_long_paths(
+@@ -97,21 +146,36 @@
+ # TASK-88c-T2: readonly 來源分流 + SSE thread/queue 橋接 + 四數摘要
+ # ---------------------------------------------------------------------------
+ 
+-def _outcome_to_sse(o) -> dict:
++def _outcome_to_sse(o, locale: str) -> dict:
+     """把 ProduceOutcome 轉一條 SSE log 行 dict（純函式）。
+ 
+-    error 已是固定 "生成失敗"（producer 已 sanitize，:462）→ 直接轉發，
+-    不再塞 server-side 細節。failed → warn，其餘 info。
++    producer 的 error 是固定的內部哨兵；對外一律換成目前介面語言的
++    「生成失敗」，不轉發 server-side 細節。failed → warn，其餘 info。
+     """
+-    label = {
+-        "created": "✓ 生成",
+-        "skipped": "略過",
+-        "no_scrape": "刮不到",
+-        "failed": "✗ 失敗",
+-    }.get(o.status, o.status)
+-    msg = f"  {label}: {o.number or o.source_uri}"
+-    if o.status == "failed" and o.error:
+-        msg += f"（{o.error}）"
++    label_key = {
++        "created": "outcome_created",
++        "skipped": "outcome_skipped",
++        "no_scrape": "outcome_no_scrape",
++        "failed": "outcome_failed",
++    }.get(o.status)
++    label = (
++        _runtime_text("scanner", label_key, locale)
++        if label_key else o.status
++    )
++    msg = _runtime_text(
++        "scanner",
++        "outcome_line",
++        locale,
++        label=label,
++        item=o.number or o.source_uri,
++    )
++    if o.status == "failed":
++        msg += _runtime_text(
++            "scanner",
++            "outcome_error_suffix",
++            locale,
++            error=_runtime_text("scanner", "generate_failed", locale),
++        )
+     return {"type": "log", "level": "warn" if o.status == "failed" else "info", "message": msg}
+ 
+ 
+@@ -142,7 +206,7 @@
+         summary["partial"] += 1
+ 
+ 
+-def _yield_source_summary(result) -> Generator[str, None, None]:
++def _yield_source_summary(result, locale: str) -> Generator[str, None, None]:
+     """該來源小結（產生器）。
+ 
+     no_output_path → 「請先設定輸出夾」提示（Acceptance #11）。
+@@ -153,25 +217,39 @@
+     if result.aborted_reason == "no_output_path":
+         yield _sse_event({
+             "type": "log", "level": "warn",
+-            "message": f"  {result.source_path}: 請先設定輸出夾，已略過",
++            "message": _runtime_text(
++                "scanner", "readonly_output_missing", locale,
++                path=result.source_path,
++            ),
+         })
+     elif result.aborted_reason == "unreachable":
+         yield _sse_event({
+             "type": "log", "level": "warn",
+-            "message": f"  {result.source_path}: 來源無法連線，已略過",
++            "message": _runtime_text(
++                "scanner", "readonly_unreachable", locale,
++                path=result.source_path,
++            ),
+         })
+     elif not result.aborted_reason:
+         yield _sse_event({
+             "type": "log", "level": "info",
+-            "message": (
+-                f"  {result.source_path}: 新增 {result.created}／略過 {result.skipped}"
+-                f"／刮不到 {result.no_scrape}／失敗 {result.failed}"
++            "message": _runtime_text(
++                "scanner", "readonly_summary", locale,
++                path=result.source_path,
++                created=result.created,
++                skipped=result.skipped,
++                no_scrape=result.no_scrape,
++                failed=result.failed,
+             ),
+         })
+         if result.skipped_paths:
+             yield _sse_event({
+                 "type": "log", "level": "warn",
+-                "message": f"  {result.source_path}: {len(result.skipped_paths)} 個路徑讀取失敗，已略過刪除偵測",
++                "message": _runtime_text(
++                    "scanner", "readonly_partial", locale,
++                    path=result.source_path,
++                    count=len(result.skipped_paths),
++                ),
+             })
+ 
+ 
+@@ -188,6 +266,7 @@
+     q: "queue.Queue" = queue.Queue()  # 無界：worker 永不阻塞於 put，client 斷線 daemon 自然退出
+     _SENTINEL = object()
+     box: dict = {}
++    locale = get_config_locale(config)
+ 
+     def _work():
+         try:
+@@ -206,39 +285,58 @@
+ 
+     t = threading.Thread(target=_work, daemon=True)
+     t.start()
+-    yield _sse_event({"type": "log", "level": "info", "message": f"唯讀生成: {src.path}"})
++    yield _sse_event({
++        "type": "log",
++        "level": "info",
++        "message": _runtime_text(
++            "scanner", "readonly_start", locale, path=src.path
++        ),
++    })
+     while True:
+         item = q.get()
+         if item is _SENTINEL:
+             break
+-        yield _sse_event(_outcome_to_sse(item))
++        yield _sse_event(_outcome_to_sse(item, locale))
+     t.join()
+     if box.get('error'):
+         summary["source_errors"] += 1
+         yield _sse_event({
+             "type": "log", "level": "error",
+-            "message": f"  {src.path}: 生成失敗（來源無法存取或設定錯誤）",
++            "message": _runtime_text(
++                "scanner", "readonly_failed", locale, path=src.path
++            ),
+         })
+         return
+     result = box.get('result')
+     if result is not None:
+         _accumulate_readonly(summary, result)
+-        yield from _yield_source_summary(result)
+-
+-
+-def _permission_denied_warning(directory: str) -> str:
++        yield from _yield_source_summary(result, locale)
++
++
++def _permission_denied_warning(directory: str, locale: str) -> str:
+     """權限不足時共用的掃描警告（Synology 附 DSM 指引）。"""
+-    warning = f"  {directory}: 沒有權限讀取，跳過刪除偵測以免誤刪"
+     if is_synology():
+-        warning += f"；{DSM_PERMISSION_HINT}"
+-    return warning
++        return _runtime_text(
++            "scanner",
++            "permission_denied_dsm",
++            locale,
++            path=directory,
++            hint=DSM_PERMISSION_HINT,
++        )
++    return _runtime_text(
++        "scanner", "permission_denied", locale, path=directory
++    )
+ 
+ 
+ # Windows 網路類 winerror：BAD_NETPATH／NETNAME_DELETED／NETWORK_UNREACHABLE 類（67 刻意不列、3 走「不存在」）
+ _NETWORK_WINERRORS = frozenset({53, 64, 1222, 1231})
+ 
+ 
+-def _scan_root_skip_message(directory: str, normalized_dir: str) -> Optional[str]:
++def _scan_root_skip_message(
++    directory: str,
++    normalized_dir: str,
++    locale: str,
++) -> Optional[str]:
+     """根目錄不可存取時回傳警告；可存取時回傳 None。
+ 
+     白名單：只有明確的「不存在」才說資料夾不存在，其餘 OSError 一律「無法存取」（NAS 斷線不誤導成打錯字）。
+@@ -246,29 +344,340 @@
+     try:
+         os.stat(normalized_dir)
+     except PermissionError:
+-        return _permission_denied_warning(directory)
++        return _permission_denied_warning(directory, locale)
+     except OSError as exc:
+         if isinstance(exc, (FileNotFoundError, NotADirectoryError)) and getattr(exc, "winerror", None) not in _NETWORK_WINERRORS:
+-            return f"資料夾不存在: {directory}"
+-        return f"無法存取: {directory}"
++            return _runtime_text(
++                "scanner", "folder_missing", locale, path=directory
++            )
++        return _runtime_text(
++            "scanner", "path_unreachable", locale, path=directory
++        )
+     except ValueError:  # 與 os.path.exists 一致：畸形路徑也只跳過這個來源
+-        return f"資料夾不存在: {directory}"
++        return _runtime_text(
++            "scanner", "folder_missing", locale, path=directory
++        )
+     return None
+ 
+ 
+-def _skipped_scan_warning(directory: str, root: str, skipped_paths: dict[str, OSError]) -> str:
++def _skipped_scan_warning(
++    directory: str,
++    root: str,
++    skipped_paths: dict[str, OSError],
++    locale: str,
++) -> str:
+     """掃描有路徑被跳過時的 SSE 警告：根目錄本身沒權限 → 講「沒有權限」（Synology 附 DSM 指引）；其餘維持泛用句（159-T10a）"""
+     if isinstance(skipped_paths.get(root), PermissionError):
+-        return _permission_denied_warning(directory)
+-    return f"  {directory}: {len(skipped_paths)} 個路徑讀取失敗，跳過刪除偵測以免誤刪（詳見 debug.log）"
+-
+-
 -def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Generator[str, None, None]:  # noqa: C901 — avlist SSE 生成主流程；109 已判定為「列 backlog、現在別搬」（60–100 處測試 patch target 焊死該函式，拆分成本由測試面而非邏輯面決定）
++        return _permission_denied_warning(directory, locale)
++    return _runtime_text(
++        "scanner",
++        "paths_skipped",
++        locale,
++        path=directory,
++        count=len(skipped_paths),
++    )
++
++
 +def _empty_source_scan_stats() -> dict[str, Any]:
 +    return {
 +        "inserted": 0,
@@ -411,6 +978,7 @@
 +    existing_by_uri: dict,
 +    nfo_unchanged_paths: set[str],
 +    should_abort: Optional[Callable[[], bool]],
++    locale: str,
 +) -> Generator[str, None, tuple[list[Video], list[str], int, int]]:
 +    """Scan changed files and return videos plus per-source counters."""
 +    videos_to_upsert: list[Video] = []
@@ -452,7 +1020,9 @@
 +            yield _sse_event({
 +                "type": "log",
 +                "level": "warn",
-+                "message": f"  [{index}] 掃描發生錯誤，已跳過",
++                "message": _runtime_text(
++                    "scanner", "file_scan_failed", locale, index=index
++                ),
 +            })
 +            scan_error_count += 1
 +
@@ -501,7 +1071,8 @@
 +) -> Generator[str, None, dict[str, Any]]:
 +    """Scan one writable source while preserving SSE and cancellation semantics."""
 +    stats = _empty_source_scan_stats()
-+    skip_message = _scan_root_skip_message(directory, normalized_dir)
++    locale = get_config_locale(config)
++    skip_message = _scan_root_skip_message(directory, normalized_dir, locale)
 +    if skip_message is not None:
 +        yield _sse_event({"type": "log", "level": "warn", "message": skip_message})
 +        return stats
@@ -523,7 +1094,9 @@
 +            yield _sse_event({
 +                "type": "log",
 +                "level": "info",
-+                "message": f"{directory}: 沒有影片檔案",
++                "message": _runtime_text(
++                    "scanner", "no_videos", locale, path=directory
++                ),
 +            })
 +            return stats
 +
@@ -538,7 +1111,13 @@
 +        yield _sse_event({
 +            "type": "log",
 +            "level": "info",
-+            "message": f"{directory}: 找到 {len(all_files)} 個檔案",
++            "message": _runtime_text(
++                "scanner",
++                "files_found",
++                locale,
++                path=directory,
++                count=len(all_files),
++            ),
 +        })
 +
 +        db_index = repo.get_mtime_index()
@@ -554,7 +1133,9 @@
 +            yield _sse_event({
 +                "type": "log",
 +                "level": "warn",
-+                "message": _skipped_scan_warning(directory, normalized_dir, skipped_paths),
++                "message": _skipped_scan_warning(
++                    directory, normalized_dir, skipped_paths, locale
++                ),
 +            })
 +        else:
 +            normalized_dir_uri = to_file_uri(normalized_dir, path_mappings)
@@ -575,7 +1156,12 @@
 +                yield _sse_event({
 +                    "type": "log",
 +                    "level": "info",
-+                    "message": f"  清理 {deleted_count} 個已刪除檔案",
++                    "message": _runtime_text(
++                        "scanner",
++                        "deleted_cleaned",
++                        locale,
++                        count=deleted_count,
++                    ),
 +                })
 +
 +        cache_hits = len(all_files) - len(needs_scan)
@@ -595,6 +1181,7 @@
 +            existing_by_uri,
 +            nfo_unchanged_paths,
 +            should_abort,
++            locale,
 +        )
 +
 +        if videos_to_upsert:
@@ -617,9 +1204,14 @@
 +        yield _sse_event({
 +            "type": "log",
 +            "level": "info",
-+            "message": (
-+                f"{directory}: {len(all_files)} 部 "
-+                f"(快取: {cache_hits}, 新增/更新: {cache_misses})"
++            "message": _runtime_text(
++                "scanner",
++                "source_done",
++                locale,
++                path=directory,
++                count=len(all_files),
++                hits=cache_hits,
++                misses=cache_misses,
 +            ),
 +        })
 +    except Exception:
@@ -628,7 +1220,9 @@
 +        yield _sse_event({
 +            "type": "log",
 +            "level": "error",
-+            "message": "掃描發生錯誤，已跳過此資料夾",
++            "message": _runtime_text(
++                "scanner", "folder_scan_failed", locale
++            ),
 +        })
 +    return stats
 +
@@ -636,8 +1230,80 @@
 +def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Generator[str, None, None]:
      """產生影片列表（SSE 串流）- 使用 SQLite 儲存"""
  
++    locale = _active_locale()
      try:
-@@ -323,6 +623,7 @@
+         # 載入設定
+         config = load_config()
++        locale = _active_locale(config)
+         gallery_config = config.get('gallery', {})
+ 
+         directories = get_gallery_source_paths(gallery_config)
+@@ -287,7 +696,12 @@
+         default_theme = config.get('general', {}).get('theme', 'light')
+ 
+         if not directories:
+-            yield _sse_event({"type": "error", "message": "未設定掃描資料夾"})
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text(
++                    "scanner", "no_directories", locale
++                ),
++            })
+             return
+ 
+         # 53b-T3: 確認 directories 有值才 emit 掃描開始通知
+@@ -302,19 +716,46 @@
+         cache_path = output_path / output_filename.replace('.html', '_cache.json')
+         db_path = get_db_path()
+ 
+-        yield _sse_event({"type": "log", "level": "info", "message": f"輸出路徑: {html_path}"})
++        yield _sse_event({
++            "type": "log",
++            "level": "info",
++            "message": _runtime_text(
++                "scanner", "output_path", locale, path=html_path
++            ),
++        })
+ 
+         # 檢查是否需要遷移 JSON cache 到 SQLite
+         if cache_path.exists() and not db_path.exists():
+-            yield _sse_event({"type": "log", "level": "info", "message": "遷移 JSON cache 到 SQLite..."})
++            yield _sse_event({
++                "type": "log",
++                "level": "info",
++                "message": _runtime_text(
++                    "scanner", "migrating_cache", locale
++                ),
++            })
+             migrate_result = migrate_json_to_sqlite(cache_path, db_path, delete_on_success=True)
+-            yield _sse_event({"type": "log", "level": "info", "message": f"遷移完成: {migrate_result['migrated']} 筆"})
++            yield _sse_event({
++                "type": "log",
++                "level": "info",
++                "message": _runtime_text(
++                    "scanner",
++                    "cache_migrated",
++                    locale,
++                    count=migrate_result['migrated'],
++                ),
++            })
+ 
+         # 初始化資料庫
+         init_db(db_path)
+         repo = VideoRepository(db_path)
+ 
+-        yield _sse_event({"type": "log", "level": "info", "message": f"資料庫筆數: {repo.count()}"})
++        yield _sse_event({
++            "type": "log",
++            "level": "info",
++            "message": _runtime_text(
++                "scanner", "db_count", locale, count=repo.count()
++            ),
++        })
+ 
+         # 初始化掃描器
+         scanner = VideoScanner(path_mappings=path_mappings, nfo_title_format=config.get('scraper', {}).get('nfo_title_format', '[{num}]{title}'))
+@@ -323,6 +764,7 @@
          total_inserted = 0
          total_updated = 0
          total_deleted = 0
@@ -645,7 +1311,26 @@
          scan_error_count = 0
          session_added_paths = []  # 追蹤本次新增/變更的影片路徑
          long_paths: list[str] = []  # a5: Windows 長路徑收集（只在 win32 填充）
-@@ -378,152 +679,22 @@
+@@ -369,161 +811,39 @@
+                 normalized_dir = uri_to_fs_path(directory)  # uri-no-reverse: native config path (DirectoryConfig.path), no DB-mapped namespace
+             except ValueError:
+                 logger.exception("路徑轉換失敗: %s", directory)
+-                yield _sse_event({"type": "log", "level": "warn", "message": "路徑轉換失敗"})
++                yield _sse_event({
++                    "type": "log",
++                    "level": "warn",
++                    "message": _runtime_text(
++                        "scanner", "path_convert_failed", locale
++                    ),
++                })
+                 continue
+ 
+             yield _sse_event({
+                 "type": "progress",
+-                "status": f"掃描: {directory}",
++                "status": _runtime_text(
++                    "scanner", "scanning", locale, path=directory
++                ),
                  "current": idx,
                  "total": total_dirs + 1  # +1 for generating
              })
@@ -814,7 +1499,7 @@
  
          # TASK-90b-T4 / PR#90b Codex P1: 尾段每個外顯副作用（HTML 檔、完成通知、
          # done event）之前各自 fresh 查一次 should_abort()，而非迴圈結束時單次
-@@ -549,6 +720,22 @@
+@@ -549,6 +869,24 @@
          # 從 SQLite 取得影片，只保留當前設定資料夾底下的記錄
          all_db_videos = [v for v in repo.get_all()
                           if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
@@ -829,15 +1514,17 @@
 +            yield _sse_event({
 +                "type": "log",
 +                "level": "warn",
-+                "message": (
-+                    f"发现 {missing_nfo_count} 部影片没有 NFO；"
-+                    "翻译标题时会自动创建 NFO，也可以先到批量维护中补全"
++                "message": _runtime_text(
++                    "scanner",
++                    "missing_nfo",
++                    locale,
++                    count=missing_nfo_count,
 +                ),
 +            })
  
          # 轉換為 VideoInfo 格式供 HTMLGenerator 使用
          all_videos = []
-@@ -562,6 +749,7 @@
+@@ -562,6 +900,7 @@
                  maker=v.maker,
                  date=v.release_date,
                  genre=','.join(v.tags) if v.tags else '',
@@ -845,7 +1532,163 @@
                  size=v.size_bytes,
                  mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
                  img=v.cover_path
-@@ -754,6 +942,7 @@
+@@ -602,10 +941,21 @@
+                     yield _sse_event({
+                         "type": "log",
+                         "level": "warn",
+-                        "message": f"發現 {session_update['count']} 部新增影片資訊不全"
++                        "message": _runtime_text(
++                            "scanner",
++                            "new_videos_incomplete",
++                            locale,
++                            count=session_update['count'],
++                        ),
+                     })
+ 
+-        yield _sse_event({"type": "log", "level": "info", "message": f"資料庫總筆數: {repo.count()}"})
++        yield _sse_event({
++            "type": "log",
++            "level": "info",
++            "message": _runtime_text(
++                "scanner", "db_total", locale, count=repo.count()
++            ),
++        })
+ 
+         # TASK-90b-T4: abort 時跳過 orphan 清理（全庫 pass，非本次掃描範圍新增
+         # 的成本，abort 時執行拿不到「這次掃描結果更完整」的好處，純屬多做一次
+@@ -615,7 +965,16 @@
+             try:
+                 cleaned = _run_sample_images_cleanup_pass(repo, path_mappings)
+                 if cleaned > 0:
+-                    yield _sse_event({"type": "log", "level": "info", "message": f"清除 {cleaned} 筆孤兒劇照記錄"})
++                    yield _sse_event({
++                        "type": "log",
++                        "level": "info",
++                        "message": _runtime_text(
++                            "scanner",
++                            "orphan_samples_cleaned",
++                            locale,
++                            count=cleaned,
++                        ),
++                    })
+             except Exception as e:
+                 logger.warning("sample_images cleanup pass failed: %s: %s", type(e).__name__, e)
+                 # 失敗不中斷 scan 流程
+@@ -627,7 +986,9 @@
+             # 產生 HTML
+             yield _sse_event({
+                 "type": "progress",
+-                "status": "產生網頁...",
++                "status": _runtime_text(
++                    "scanner", "generating_html", locale
++                ),
+                 "current": total_dirs,
+                 "total": total_dirs + 1
+             })
+@@ -641,12 +1002,13 @@
+                 sort=default_sort,
+                 order=default_order,
+                 items_per_page=items_per_page,
+-                theme=default_theme
++                theme=default_theme,
++                locale=locale,
+             )
+ 
+             yield _sse_event({
+                 "type": "progress",
+-                "status": "完成",
++                "status": _runtime_text("scanner", "done", locale),
+                 "current": total_dirs + 1,
+                 "total": total_dirs + 1
+             })
+@@ -704,7 +1066,7 @@
+         if _wl_removed:
+             _emit_notif(
+                 "info", "notif.wishlist_auto_removed",
+-                message=format_wishlist_removed_message(_wl_removed),
++                message=format_wishlist_removed_message(_wl_removed, locale),
+                 task_type="wishlist_reconcile",
+             )
+ 
+@@ -723,26 +1085,69 @@
+                     or _readonly_no_output > 0 or _readonly_unreachable > 0 or _readonly_partial > 0):
+                 _err_parts = []
+                 if scan_error_count > 0:
+-                    _err_parts.append(f"{scan_error_count} 部失敗")
++                    _err_parts.append(_runtime_text(
++                        "notify",
++                        "scanner_failed_videos",
++                        locale,
++                        count=scan_error_count,
++                    ))
+                 if _source_errors > 0:
+-                    _err_parts.append(f"{_source_errors} 個來源失敗")
++                    _err_parts.append(_runtime_text(
++                        "notify",
++                        "scanner_failed_sources",
++                        locale,
++                        count=_source_errors,
++                    ))
+                 if _readonly_failed > 0:
+-                    _err_parts.append(f"{_readonly_failed} 部失敗")
++                    _err_parts.append(_runtime_text(
++                        "notify",
++                        "scanner_failed_videos",
++                        locale,
++                        count=_readonly_failed,
++                    ))
+                 if _readonly_no_output > 0:
+-                    _err_parts.append(f"{_readonly_no_output} 個來源未設輸出夾")
++                    _err_parts.append(_runtime_text(
++                        "notify",
++                        "scanner_no_output_sources",
++                        locale,
++                        count=_readonly_no_output,
++                    ))
+                 if _readonly_unreachable > 0:
+-                    _err_parts.append(f"{_readonly_unreachable} 個來源無法連線")
++                    _err_parts.append(_runtime_text(
++                        "notify",
++                        "scanner_unreachable_sources",
++                        locale,
++                        count=_readonly_unreachable,
++                    ))
+                 if _readonly_partial > 0:
+-                    _err_parts.append(f"{_readonly_partial} 個來源部分讀取失敗")
++                    _err_parts.append(_runtime_text(
++                        "notify",
++                        "scanner_partial_sources",
++                        locale,
++                        count=_readonly_partial,
++                    ))
+                 _emit_notif(
+                     "warn", "notif.scanner_done_with_errors",
+-                    message=f"完成 {len(all_videos)} 部，" + "、".join(_err_parts),
++                    message=_runtime_text(
++                        "notify",
++                        "scanner_done_with_errors",
++                        locale,
++                        count=len(all_videos),
++                        details=_runtime_text(
++                            "notify", "auto_part_join", locale
++                        ).join(_err_parts),
++                    ),
+                     task_type="scanner_generate",
+                 )
+             else:
+                 _emit_notif(
+                     "success", "notif.scanner_done",
+-                    message=f"完成 {len(all_videos)} 部",
++                    message=_runtime_text(
++                        "notify",
++                        "scanner_done",
++                        locale,
++                        count=len(all_videos),
++                    ),
+                     task_type="scanner_generate",
+                 )
+ 
+@@ -754,6 +1159,7 @@
                  "video_count": len(all_videos),
                  "output_path": str(html_path),
                  "session_update": session_update,
@@ -853,7 +1696,25 @@
                  "long_paths": long_paths,  # a5
                  "stats": {
                      "inserted": total_inserted,
-@@ -786,6 +975,55 @@
+@@ -772,10 +1178,15 @@
+         # 53b-T3: 掃描失敗通知（不洩漏 str(e) 到前端）
+         _emit_notif(
+             "error", "notif.scanner_failed",
+-            message="掃描中斷，請查閱日誌",
++            message=_runtime_text("scanner", "scan_interrupted", locale),
+             task_type="scanner_generate",
+         )
+-        yield _sse_event({"type": "error", "message": "產生影片列表失敗"})
++        yield _sse_event({
++            "type": "error",
++            "message": _runtime_text(
++                "scanner", "generate_failed", locale
++            ),
++        })
+ 
+ 
+ # TASK-90b-T2: 斷線偵測輪詢間隔（秒）。定案依據見 plan-90b.md CD-90b-5/6：
+@@ -786,6 +1197,66 @@
  # `request.is_disconnected()`，非搶 iterate_in_threadpool 的同一組 receive
  # channel（該輪詢與 StreamingResponse 內部行為互不干擾，spike 已驗證）。
  _DISCONNECT_POLL_INTERVAL_SEC = 0.5
@@ -866,8 +1727,19 @@
 +    """Wrap a synchronous SSE generator with explicit disconnect cancellation."""
 +    cancel_event = threading.Event()
 +    if not try_mark_generate_active(cancel_event):
++        try:
++            busy_locale = await asyncio.to_thread(
++                lambda: get_config_locale(load_config())
++            )
++        except Exception:
++            busy_locale = "zh-CN"
 +        return StreamingResponse(
-+            iter([_sse_event({"type": "error", "message": "已有生成任务正在运行"})]),
++            iter([_sse_event({
++                "type": "error",
++                "message": _runtime_text(
++                    "scanner", "busy", busy_locale
++                ),
++            })]),
 +            media_type="text/event-stream",
 +            headers={"Cache-Control": "no-cache"},
 +        )
@@ -909,7 +1781,46 @@
  
  
  @router.get("/generate")
-@@ -959,6 +1197,401 @@
+@@ -803,8 +1274,13 @@
+     # 反方向——若設定頁正在切換模式（purge 窗口中），回 False → 拒絕開始產生，避免背景
+     # producer 讀到舊唯讀來源、把剛被 purge 的卡 _upsert 補回（切模式後殭屍卡）。
+     if not try_mark_generate_active(cancel_event):
++        locale = await asyncio.to_thread(_active_locale)
++
+         async def _refuse_switching():
+-            yield f"data: {json.dumps({'type': 'error', 'message': '設定切換中，請稍後再產生列表。'})}\n\n"
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text("scanner", "config_switching", locale),
++            })
+         return StreamingResponse(
+             _refuse_switching(),
+             media_type="text/event-stream",
+@@ -887,7 +1363,10 @@
+         }
+     except Exception as e:
+         logger.error("取得統計資訊失敗: %s", e)
+-        return {"success": False, "error": "取得統計資訊失敗"}
++        return {
++            "success": False,
++            "error": _runtime_text("scanner", "stats_failed", _active_locale()),
++        }
+ 
+ 
+ @router.delete("/cache")
+@@ -910,7 +1389,10 @@
+         return {"success": True, "deleted": deleted}
+     except Exception as e:
+         logger.error("清除快取失敗: %s", e)
+-        return {"success": False, "error": "清除快取失敗"}
++        return {
++            "success": False,
++            "error": _runtime_text("scanner", "cache_clear_failed", _active_locale()),
++        }
+ 
+ 
+ def _build_nfo_update_cache(all_videos, config) -> tuple:
+@@ -959,6 +1441,511 @@
      return cache, skipped_readonly, path_mappings
  
  
@@ -917,17 +1828,27 @@
 +    source: str,
 +    config: dict,
 +    *,
-+    action: str,
++    action: str | None = None,
++    action_key: str | None = None,
++    locale: str | None = None,
 +) -> Optional[str]:
 +    """Return a user-facing error for sources that cannot run in a batch."""
++    locale = _active_locale(config) if locale is None else locale
++    if action_key:
++        action = _runtime_text("scanner", action_key, locale)
++    action = action or ""
 +    if source == "auto":
 +        return None
 +    if source.startswith("custom:"):
-+        return f"自定义来源不支持{action}，请改用单片重刮"
++        return _runtime_text(
++            "scanner", "batch_custom_unsupported", locale, action=action
++        )
 +    if not validate_source_id(source):
-+        return "未知来源"
++        return _runtime_text("scanner", "batch_unknown_source", locale)
 +    if source in {row.id for row in get_manual_only_sources()}:
-+        return f"该来源需要 Cloudflare 交互，不能用于{action}"
++        return _runtime_text(
++            "scanner", "batch_cloudflare_unsupported", locale, action=action
++        )
 +    source_row = next(
 +        (
 +            row
@@ -937,17 +1858,25 @@
 +        None,
 +    )
 +    if source_row and source_row.get("manual_only"):
-+        return f"该来源需要 Cloudflare 交互，不能用于{action}"
++        return _runtime_text(
++            "scanner", "batch_cloudflare_unsupported", locale, action=action
++        )
 +    if not source_row or not source_row.get("enabled"):
-+        return "该来源未启用，请先在设置中启用"
++        return _runtime_text("scanner", "batch_source_disabled", locale)
 +    return None
 +
 +
-+def _validate_batch_tag_source(source: str, config: dict) -> Optional[str]:
++def _validate_batch_tag_source(
++    source: str,
++    config: dict,
++    *,
++    locale: str | None = None,
++) -> Optional[str]:
 +    return _validate_batch_source(
 +        source,
 +        config,
-+        action="批量更换标签",
++        action_key="batch_action_tag",
++        locale=locale,
 +    )
 +
 +
@@ -1005,6 +1934,7 @@
 +    backup: bool = False,
 +) -> Generator[str, None, None]:
 +    """Preview or replace only ordinary NFO/DB tags from one selected source."""
++    locale = _active_locale()
 +    summary = {
 +        "mode": "preview" if dry_run else "update",
 +        "total": 0,
@@ -1022,14 +1952,20 @@
 +    }
 +    try:
 +        config = load_config()
-+        source_error = _validate_batch_tag_source(source, config)
++        locale = _active_locale(config)
++        source_error = _validate_batch_tag_source(source, config, locale=locale)
 +        if source_error:
 +            yield _sse_event({"type": "error", "message": source_error})
 +            return
 +
 +        db_path = get_db_path()
 +        if not db_path.exists():
-+            yield _sse_event({"type": "error", "message": "数据库不存在，请先生成列表"})
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text(
++                    "scanner", "db_missing", locale
++                ),
++            })
 +            return
 +
 +        repo = VideoRepository(db_path)
@@ -1041,7 +1977,9 @@
 +        if not videos:
 +            yield _sse_event({
 +                "type": "done",
-+                "message": "没有可更新标签的影片",
++                "message": _runtime_text(
++                    "scanner", "tag_source_none", locale
++                ),
 +                "summary": summary,
 +            })
 +            return
@@ -1065,9 +2003,11 @@
 +                "current": index,
 +                "total": len(videos),
 +                "number": video.number,
-+                "status": (
-+                    f"预览 {video.number} 的标签"
-+                    if dry_run else f"更新 {video.number} 的标签"
++                "status": _runtime_text(
++                    "scanner",
++                    "tag_preview" if dry_run else "tag_update",
++                    locale,
++                    number=video.number,
 +                ),
 +                "success": summary["success"],
 +                "failed": summary["failed"],
@@ -1099,7 +2039,13 @@
 +                yield _sse_event({
 +                    "type": "log",
 +                    "level": "error",
-+                    "message": f"{video.number}: 来源获取失败 ({exc})",
++                    "message": _runtime_text(
++                        "scanner",
++                        "tag_source_fetch_failed",
++                        locale,
++                        number=video.number,
++                        error=str(exc),
++                    ),
 +                })
 +                continue
 +
@@ -1108,12 +2054,22 @@
 +                summary["failed_items"].append({
 +                    "path": video.path,
 +                    "number": video.number,
-+                    "error": "所选来源没有结果",
++                    "error": _runtime_text(
++                        "scanner",
++                        "tag_source_no_result",
++                        locale,
++                        number=video.number,
++                    ),
 +                })
 +                yield _sse_event({
 +                    "type": "log",
 +                    "level": "warn",
-+                    "message": f"{video.number}: 所选来源没有结果",
++                    "message": _runtime_text(
++                        "scanner",
++                        "tag_source_no_result",
++                        locale,
++                        number=video.number,
++                    ),
 +                })
 +                continue
 +
@@ -1139,7 +2095,12 @@
 +                yield _sse_event({
 +                    "type": "log",
 +                    "level": "warn",
-+                    "message": f"{video.number}: 所选来源没有标签，保留原标签",
++                    "message": _runtime_text(
++                        "scanner",
++                        "tag_source_no_tags",
++                        locale,
++                        number=video.number,
++                    ),
 +                })
 +                continue
 +
@@ -1186,10 +2147,13 @@
 +                yield _sse_event({
 +                    "type": "log",
 +                    "level": "info",
-+                    "message": (
-+                        f"{video.number}: "
-+                        + (f"标签有变化，新增 {len(diff['added'])}，移除 {len(diff['removed'])}"
-+                           if changed else "标签无变化")
++                    "message": _runtime_text(
++                        "scanner",
++                        "tag_source_changed" if changed else "tag_source_unchanged",
++                        locale,
++                        number=video.number,
++                        added=len(diff['added']),
++                        removed=len(diff['removed']),
 +                    ),
 +                })
 +                continue
@@ -1204,12 +2168,24 @@
 +                    summary["failed_items"].append({
 +                        "path": video.path,
 +                        "number": video.number,
-+                        "error": f"NFO 备份失败: {exc}",
++                        "error": _runtime_text(
++                            "scanner",
++                            "tag_source_nfo_backup_failed",
++                            locale,
++                            number=video.number,
++                            error=str(exc),
++                        ),
 +                    })
 +                    yield _sse_event({
 +                        "type": "log",
 +                        "level": "error",
-+                        "message": f"{video.number}: NFO 备份失败，未写入",
++                        "message": _runtime_text(
++                            "scanner",
++                            "tag_source_nfo_backup_failed",
++                            locale,
++                            number=video.number,
++                            error=str(exc),
++                        ),
 +                    })
 +                    continue
 +
@@ -1218,12 +2194,22 @@
 +                summary["failed_items"].append({
 +                    "path": video.path,
 +                    "number": video.number,
-+                    "error": "NFO 标签写入失败",
++                    "error": _runtime_text(
++                        "scanner",
++                        "tag_source_nfo_failed",
++                        locale,
++                        number=video.number,
++                    ),
 +                })
 +                yield _sse_event({
 +                    "type": "log",
 +                    "level": "error",
-+                    "message": f"{video.number}: NFO 标签写入失败",
++                    "message": _runtime_text(
++                        "scanner",
++                        "tag_source_nfo_failed",
++                        locale,
++                        number=video.number,
++                    ),
 +                })
 +                continue
 +
@@ -1234,7 +2220,12 @@
 +                summary["failed_items"].append({
 +                    "path": video.path,
 +                    "number": video.number,
-+                    "error": "数据库标签更新失败",
++                    "error": _runtime_text(
++                        "scanner",
++                        "tag_source_db_failed",
++                        locale,
++                        number=video.number,
++                    ),
 +                })
 +                logger.warning(
 +                    "tag source update: database update failed for %s: %s",
@@ -1244,7 +2235,12 @@
 +                yield _sse_event({
 +                    "type": "log",
 +                    "level": "error",
-+                    "message": f"{video.number}: 数据库标签更新失败",
++                    "message": _runtime_text(
++                        "scanner",
++                        "tag_source_db_failed",
++                        locale,
++                        number=video.number,
++                    ),
 +                })
 +                continue
 +
@@ -1273,26 +2269,46 @@
 +            yield _sse_event({
 +                "type": "log",
 +                "level": "info",
-+                "message": (
-+                    f"{video.number}: 已更新 {len(merged_tags)} 个标签"
-+                    + ("（仅更新数据库，NFO 不存在）" if not nfo_path else "")
-+                    + ("" if db_changed else "（数据库值未变化）")
++                "message": _runtime_text(
++                    "scanner",
++                    (
++                        "tag_updated_db_only"
++                        if not nfo_path
++                        else "tag_updated_unchanged"
++                        if not db_changed
++                        else "tag_updated"
++                    ),
++                    locale,
++                    number=video.number,
++                    count=len(merged_tags),
 +                ),
 +            })
 +
 +        if summary["cancelled"]:
-+            message = "标签预览已取消" if dry_run else "标签更新已取消"
++            message = _runtime_text(
++                "scanner",
++                "tag_preview_cancelled" if dry_run else "tag_update_cancelled",
++                locale,
++            )
 +        elif dry_run:
-+            message = (
-+                f"标签预览完成：{summary['changed']} 部有变化，"
-+                f"{summary['unchanged']} 部无变化，失败 {summary['failed']}，"
-+                f"跳过 {summary['skipped']}"
++            message = _runtime_text(
++                "scanner",
++                "tag_preview_done",
++                locale,
++                changed=summary['changed'],
++                unchanged=summary['unchanged'],
++                failed=summary['failed'],
++                skipped=summary['skipped'],
 +            )
 +        else:
-+            message = (
-+                f"标签来源更新完成：成功 {summary['success']}，"
-+                f"失败 {summary['failed']}，跳过 {summary['skipped']}，"
-+                f"无 NFO {summary['no_nfo']}"
++            message = _runtime_text(
++                "scanner",
++                "tag_update_done",
++                locale,
++                success=summary['success'],
++                failed=summary['failed'],
++                skipped=summary['skipped'],
++                no_nfo=summary['no_nfo'],
 +            )
 +        yield _sse_event({
 +            "type": "done",
@@ -1302,7 +2318,12 @@
 +        })
 +    except Exception:
 +        logger.exception("批量更换标签来源失败: source=%s", source)
-+        yield _sse_event({"type": "error", "message": "批量更换标签来源失败"})
++        yield _sse_event({
++            "type": "error",
++            "message": _runtime_text(
++                "scanner", "tag_source_failed", locale
++            ),
++        })
 +    finally:
 +        if cancel_event is not None:
 +            mark_generate_done(cancel_event)
@@ -1311,7 +2332,7 @@
  @router.get("/update-check")
  def check_update():
      """檢查需要更新的影片數量（從 SQLite 讀取）"""
-@@ -975,11 +1608,12 @@
+@@ -975,11 +1962,12 @@
  
          stats = check_cache_needs_update(cache)
  
@@ -1325,10 +2346,19 @@
                  "details": {
                      "no_title": stats['no_title'],
                      "no_date": stats['no_date'],
-@@ -994,36 +1628,162 @@
-         return {"success": False, "error": "檢查更新數量失敗"}
- 
- 
+@@ -991,39 +1979,170 @@
+         }
+     except Exception as e:
+         logger.error("檢查更新數量失敗: %s", e)
+-        return {"success": False, "error": "檢查更新數量失敗"}
++        return {
++            "success": False,
++            "error": _runtime_text(
++                "scanner", "update_check_failed", _active_locale()
++            ),
++        }
++
++
 +def _video_has_nfo(video: Video, path_mappings: dict) -> bool:
 +    """Return whether a row has a usable NFO.
 +
@@ -1425,8 +2455,8 @@
 +            seen_groups.add(group_key)
 +        deduped.append(video)
 +    return deduped
-+
-+
+ 
+ 
  @router.get("/missing-check")
  def check_missing():
 -    """T10: 檢查 DB 中缺少 NFO 或封面的影片數量與清單"""
@@ -1499,7 +2529,7 @@
              if not has_nfo and not has_cover:
                  missing_both += 1
                  item["category"] = "both"
-@@ -1035,9 +1795,22 @@
+@@ -1035,9 +2154,22 @@
                  item["category"] = "cover"
              items.append(item)
  
@@ -1523,7 +2553,7 @@
          return {
              "success": True,
              "data": {
-@@ -1046,14 +1819,979 @@
+@@ -1046,75 +2178,1436 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
@@ -1540,12 +2570,74 @@
 -
 -
 -def generate_nfo_update() -> Generator[str, None, None]:
+-    """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
+-
 +        logger.error("檢查維護缺口失敗: %s", e)
-+        return {"success": False, "error": "檢查維護缺口失敗"}
++        return {
++            "success": False,
++            "error": _runtime_text(
++                "scanner", "missing_check_failed", _active_locale()
++            ),
++        }
 +
 +
 +_TITLE_BACKFILL_CONCURRENCY = 4
 +_SAMPLE_BACKFILL_CONCURRENCY = 3
++_TITLE_ERROR_KEYS = {
++    "not_found": "error_not_found",
++    "title_empty": "error_title_empty",
++    "no_nfo": "error_no_nfo",
++    "nfo_ambiguous": "error_nfo_ambiguous",
++    "nfo_unreadable": "error_nfo_unreadable",
++    "storage_permission_required": "error_storage_permission_required",
++    "nfo_write_failed": "error_nfo_write_failed",
++    "db_write_failed": "error_db_write_failed",
++    "invalid_path": "error_invalid_path",
++    "translate_failed": "translation_failed",
++    "write_failed": "write_failed",
++}
++_SAMPLE_ERROR_KEYS = {
++    "missing_number": "missing_number",
++    "internal_error": "error_internal",
++    "output_root_missing": "error_output_root_missing",
++    "samples_search_failed": "error_samples_search_failed",
++    "no_sample_images": "error_no_sample_images",
++    "db_write_failed": "error_db_write_failed",
++    "sample_download_failed": "error_sample_download_failed",
++    "storage_permission_required": "error_storage_permission_required",
++    "sample_write_failed": "error_sample_write_failed",
++    "multi_video_folder": "error_multi_video_folder",
++    "cancelled": "cancelled",
++}
++
++
++def _localized_title_error(
++    locale: str,
++    error_code: str,
++    fallback: str = "",
++) -> str:
++    key = _TITLE_ERROR_KEYS.get(error_code)
++    if key:
++        return _runtime_text("title", key, locale)
++    return fallback or _runtime_text("title", "write_failed", locale)
++
++
++def _localized_sample_error(
++    locale: str,
++    error_code: str,
++    fallback: str = "",
++    *,
++    number: str = "",
++) -> str:
++    key = _SAMPLE_ERROR_KEYS.get(error_code)
++    if key:
++        return _runtime_text(
++            "samples",
++            key,
++            locale,
++            number=number,
++        )
++    return fallback or _runtime_text("samples", "internal_error", locale)
 +
 +
 +def _iter_title_translations(
@@ -1614,20 +2706,38 @@
 +
 +def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
 +    """Translate and write back only rows that are still missing a translation."""
-+    try:
-+        db_path = get_db_path()
-+        if not db_path.exists():
-+            yield _sse_event({"type": "error", "message": "資料庫不存在，請先產生列表"})
++    locale = _active_locale()
+     try:
+         db_path = get_db_path()
+-
+         if not db_path.exists():
+-            yield _sse_event({"type": "error", "message": "資料庫不存在，請先產生列表"})
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text(
++                    "title", "db_missing", locale
++                ),
++            })
 +            return
 +
 +        config = load_config()
++        locale = _active_locale(config)
 +        translate_config = config.get("translate", {})
 +        if not translate_config.get("enabled", False):
-+            yield _sse_event({"type": "error", "message": "翻譯功能未啟用"})
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text(
++                    "title", "translate_disabled", locale
++                ),
++            })
 +            return
-+        locale = config.get("general", {}).get("locale", "zh-TW")
 +        if str(locale).lower().startswith("ja"):
-+            yield _sse_event({"type": "error", "message": "目前語言為日文，無需補齊翻譯標題"})
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text(
++                    "title", "japanese_no_backfill", locale
++                ),
++            })
 +            return
 +
 +        from web.routers.showcase import TitleWritebackRequest, _apply_title_writeback
@@ -1642,7 +2752,7 @@
 +        if total == 0:
 +            yield _sse_event({
 +                "type": "done",
-+                "message": "沒有待補翻譯的標題",
++                "message": _runtime_text("title", "none", locale),
 +                "cancelled": False,
 +                "summary": {
 +                    "success": 0,
@@ -1659,7 +2769,9 @@
 +            logger.exception("初始化批次標題翻譯服務失敗")
 +            yield _sse_event({
 +                "type": "error",
-+                "message": "翻譯功能設定無效，請檢查設定",
++                "message": _runtime_text(
++                    "title", "config_invalid", locale
++                ),
 +            })
 +            return
 +
@@ -1672,9 +2784,12 @@
 +        yield _sse_event({
 +            "type": "log",
 +            "level": "info",
-+            "message": (
-+                f"待補翻譯標題：{total} 部"
-+                f"（並行 {_TITLE_BACKFILL_CONCURRENCY} 路）"
++            "message": _runtime_text(
++                "title",
++                "start",
++                locale,
++                total=total,
++                concurrency=_TITLE_BACKFILL_CONCURRENCY,
 +            ),
 +        })
 +
@@ -1683,7 +2798,12 @@
 +            "current": 0,
 +            "total": total,
 +            "number": "",
-+            "status": f"正在並行翻譯標題（{_TITLE_BACKFILL_CONCURRENCY} 路）...",
++            "status": _runtime_text(
++                "title",
++                "status",
++                locale,
++                concurrency=_TITLE_BACKFILL_CONCURRENCY,
++            ),
 +            "success": success_count,
 +            "failed": failed_count,
 +            "skipped": skipped_count,
@@ -1716,13 +2836,19 @@
 +                result = {
 +                    "success": False,
 +                    "error": "translate_failed",
-+                    "message": "標題翻譯失敗",
++                    "message": _runtime_text(
++                        "title", "translation_failed", locale
++                    ),
 +                }
 +
 +            processed_count += 1
-+            status = (
-+                f"正在翻譯標題（{processed_count}/{total}，"
-+                f"並行 {_TITLE_BACKFILL_CONCURRENCY} 路）..."
++            status = _runtime_text(
++                "title",
++                "status_count",
++                locale,
++                current=processed_count,
++                total=total,
++                concurrency=_TITLE_BACKFILL_CONCURRENCY,
 +            )
 +            if result.get("success"):
 +                success_count += 1
@@ -1750,17 +2876,26 @@
 +                yield _sse_event({
 +                    "type": "log",
 +                    "level": "info",
-+                    "message": (
-+                        f"[{processed_count}/{total}] "
-+                        f"{number or video.path}："
-+                        f"{original_title} → {written_title}"
++                    "message": _runtime_text(
++                        "title",
++                        "log",
++                        locale,
++                        current=processed_count,
++                        total=total,
++                        item=number or video.path,
++                        original=original_title,
++                        translated=written_title,
 +                    ),
 +                })
 +                continue
 +
 +            failed_count += 1
 +            error_code = result.get("error") or "write_failed"
-+            error_message = result.get("message") or "標題寫回失敗"
++            error_message = _localized_title_error(
++                locale,
++                error_code,
++                str(result.get("message") or ""),
++            )
 +            failed_items.append({
 +                "path": video.path,
 +                "number": number,
@@ -1785,7 +2920,9 @@
 +        if cancel_event.is_set():
 +            yield _sse_event({
 +                "type": "done",
-+                "message": "標題補齊已取消",
++                "message": _runtime_text(
++                    "title", "cancelled", locale
++                ),
 +                "cancelled": True,
 +                "summary": {
 +                    "success": success_count,
@@ -1798,8 +2935,12 @@
 +
 +        yield _sse_event({
 +            "type": "done",
-+            "message": (
-+                f"標題補齊完成：成功 {success_count}，失敗 {failed_count}"
++            "message": _runtime_text(
++                "title",
++                "done",
++                locale,
++                success=success_count,
++                failed=failed_count,
 +            ),
 +            "cancelled": False,
 +            "summary": {
@@ -1811,15 +2952,35 @@
 +        })
 +    except Exception:
 +        logger.exception("批次補齊標題端點失敗")
-+        yield _sse_event({"type": "error", "message": "標題補齊失敗，請查閱日誌"})
++        yield _sse_event({
++            "type": "error",
++            "message": _runtime_text(
++                "title", "unexpected_error", locale
++            ),
++        })
 +
 +
 +def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
 +    """Fetch samples only for rows whose stored sample-image list is empty."""
++    locale = _active_locale()
 +    try:
++        try:
++            config = load_config()
++        except Exception:
++            logger.warning(
++                "批次補齊劇照：讀取設定失敗，使用預設 locale",
++                exc_info=True,
++            )
++            config = {}
++        locale = _active_locale(config)
 +        db_path = get_db_path()
 +        if not db_path.exists():
-+            yield _sse_event({"type": "error", "message": "資料庫不存在，請先產生列表"})
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text(
++                    "title", "db_missing", locale
++                ),
++            })
 +            return
 +
 +        from web.routers.scraper import (
@@ -1833,18 +2994,10 @@
 +            if _is_missing_sample_candidate(video)
 +        ]
 +        if len(candidates) > 1:
-+            try:
-+                path_mappings = (
-+                    load_config()
-+                    .get("gallery", {})
-+                    .get("path_mappings", {})
-+                )
-+            except Exception:
-+                logger.warning(
-+                    "批次補齊劇照：讀取路徑映射失敗，保留逐列候選",
-+                    exc_info=True,
-+                )
-+                path_mappings = {}
++            path_mappings = (
++                config.get("gallery", {})
++                .get("path_mappings", {})
++            )
 +            candidates = _dedupe_multipart_sample_candidates(
 +                repo,
 +                candidates,
@@ -1854,7 +3007,7 @@
 +        if total == 0:
 +            yield _sse_event({
 +                "type": "done",
-+                "message": "沒有缺失劇照的影片",
++                "message": _runtime_text("samples", "none", locale),
 +                "cancelled": False,
 +                "summary": {
 +                    "success": 0,
@@ -1873,9 +3026,12 @@
 +        yield _sse_event({
 +            "type": "log",
 +            "level": "info",
-+            "message": (
-+                f"開始補齊劇照：{total} 部"
-+                f"（並行 {_SAMPLE_BACKFILL_CONCURRENCY} 路）"
++            "message": _runtime_text(
++                "samples",
++                "start",
++                locale,
++                total=total,
++                concurrency=_SAMPLE_BACKFILL_CONCURRENCY,
 +            ),
 +        })
 +
@@ -1884,7 +3040,12 @@
 +            "current": 0,
 +            "total": total,
 +            "number": "",
-+            "status": f"正在並行補齊劇照（{_SAMPLE_BACKFILL_CONCURRENCY} 路）...",
++            "status": _runtime_text(
++                "samples",
++                "status",
++                locale,
++                concurrency=_SAMPLE_BACKFILL_CONCURRENCY,
++            ),
 +            "success": success_count,
 +            "failed": failed_count,
 +            "skipped": skipped_count,
@@ -1896,7 +3057,9 @@
 +                return "", {
 +                    "success": False,
 +                    "error_code": "missing_number",
-+                    "message": "無法識別番號，已跳過",
++                    "message": _runtime_text(
++                        "samples", "missing_number", locale
++                    ),
 +                }
 +
 +            try:
@@ -1912,13 +3075,17 @@
 +                result = {
 +                    "success": False,
 +                    "error_code": "internal_error",
-+                    "message": "劇照補齊處理失敗",
++                    "message": _runtime_text(
++                        "samples", "internal_error", locale
++                    ),
 +                }
 +            if not isinstance(result, dict):
 +                result = {
 +                    "success": False,
 +                    "error_code": "internal_error",
-+                    "message": "劇照補齊處理失敗",
++                    "message": _runtime_text(
++                        "samples", "internal_error", locale
++                    ),
 +                }
 +            return number, result
 +
@@ -1957,7 +3124,9 @@
 +                        result = {
 +                            "success": False,
 +                            "error_code": "internal_error",
-+                            "message": "劇照補齊處理失敗",
++                            "message": _runtime_text(
++                                "samples", "internal_error", locale
++                            ),
 +                        }
 +
 +                    if result.get("error_code") == "cancelled":
@@ -1965,9 +3134,13 @@
 +                        break
 +
 +                    processed_count += 1
-+                    status = (
-+                        f"正在補齊劇照（{processed_count}/{total}，"
-+                        f"並行 {_SAMPLE_BACKFILL_CONCURRENCY} 路）..."
++                    status = _runtime_text(
++                        "samples",
++                        "status_count",
++                        locale,
++                        current=processed_count,
++                        total=total,
++                        concurrency=_SAMPLE_BACKFILL_CONCURRENCY,
 +                    )
 +
 +                    if result.get("success"):
@@ -1998,16 +3171,27 @@
 +                        yield _sse_event({
 +                            "type": "log",
 +                            "level": "info",
-+                            "message": (
-+                                f"[{processed_count}/{total}] {number}："
-+                                f"下载 {downloaded} 张，已有 {skipped_existing} 张，"
-+                                f"共 {extrafanart_on_disk} 张"
++                            "message": _runtime_text(
++                                "samples",
++                                "result_log",
++                                locale,
++                                current=processed_count,
++                                total=total,
++                                number=number,
++                                downloaded=downloaded,
++                                existing=skipped_existing,
++                                total_images=extrafanart_on_disk,
 +                            ),
 +                        })
 +                        continue
 +
 +                    error_code = result.get("error_code") or "sample_fetch_failed"
-+                    error_message = result.get("message") or "劇照補齊失敗"
++                    error_message = _localized_sample_error(
++                        locale,
++                        error_code,
++                        str(result.get("message") or ""),
++                        number=number,
++                    )
 +                    if error_code == "missing_number":
 +                        skipped_count += 1
 +                        yield _sse_event({
@@ -2056,7 +3240,9 @@
 +        if cancelled:
 +            yield _sse_event({
 +                "type": "done",
-+                "message": "劇照補齊已取消",
++                "message": _runtime_text(
++                    "samples", "cancelled", locale
++                ),
 +                "cancelled": True,
 +                "summary": {
 +                    "success": success_count,
@@ -2069,9 +3255,13 @@
 +
 +        yield _sse_event({
 +            "type": "done",
-+            "message": (
-+                f"劇照補齊完成：成功 {success_count}，失敗 {failed_count}，"
-+                f"跳過 {skipped_count}"
++            "message": _runtime_text(
++                "samples",
++                "done",
++                locale,
++                success=success_count,
++                failed=failed_count,
++                skipped=skipped_count,
 +            ),
 +            "cancelled": False,
 +            "summary": {
@@ -2083,7 +3273,12 @@
 +        })
 +    except Exception:
 +        logger.exception("批次補齊劇照端點失敗")
-+        yield _sse_event({"type": "error", "message": "劇照補齊失敗，請查閱日誌"})
++        yield _sse_event({
++            "type": "error",
++            "message": _runtime_text(
++                "samples", "unexpected_error", locale
++            ),
++        })
 +
 +
 +@router.post("/backfill-titles")
@@ -2205,12 +3400,15 @@
 +) -> Generator[str, None, None]:
 +    """Fetch titles from one selected source, then preview file+folder renames."""
 +    failed_items: list[dict[str, Any]] = []
++    locale = _active_locale()
 +    try:
 +        config = load_config()
++        locale = _active_locale(config)
 +        source_error = _validate_batch_source(
 +            source,
 +            config,
-+            action="按来源统一命名",
++            action_key="batch_action_rename",
++            locale=locale,
 +        )
 +        if source_error:
 +            yield _sse_event({"type": "error", "message": source_error})
@@ -2218,7 +3416,10 @@
 +
 +        db_path = get_db_path()
 +        if not db_path.exists():
-+            yield _sse_event({"type": "error", "message": "数据库不存在，请先生成列表"})
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text("scanner", "db_missing", locale),
++            })
 +            return
 +
 +        videos, source_roots, mappings = _combined_rename_sources(config)
@@ -2227,7 +3428,9 @@
 +        if not videos:
 +            yield _sse_event({
 +                "type": "done",
-+                "message": "没有可统一命名的影片",
++                "message": _runtime_text(
++                    "scanner", "source_rename_none", locale
++                ),
 +                "plan": build_combined_rename_plan(
 +                    [],
 +                    source_id=source,
@@ -2260,7 +3463,12 @@
 +                "total": total,
 +                "number": video.number or "",
 +                "status": (
-+                    f"读取 {video.number or video.path} 的来源标题"
++                    _runtime_text(
++                        "scanner",
++                        "source_rename_reading_title",
++                        locale,
++                        item=video.number or video.path,
++                    )
 +                ),
 +                "failed": len(failed_items),
 +                "eta_seconds": eta_seconds,
@@ -2271,7 +3479,9 @@
 +                failed_items.append({
 +                    "path": video.path,
 +                    "number": "",
-+                    "error": "缺少番号",
++                    "error": _runtime_text(
++                        "scanner", "source_rename_missing_number", locale
++                    ),
 +                })
 +                continue
 +
@@ -2296,7 +3506,9 @@
 +                )
 +                if not stem:
 +                    raise ValueError(
-+                        "所选来源没有可用标题"
++                        _runtime_text(
++                            "scanner", "source_rename_no_title", locale
++                        )
 +                        if reason == "empty_title"
 +                        else reason
 +                    )
@@ -2304,7 +3516,13 @@
 +                yield _sse_event({
 +                    "type": "log",
 +                    "level": "info",
-+                    "message": f"{normalized_number}: 使用来源标题「{source_title}」",
++                    "message": _runtime_text(
++                        "scanner",
++                        "source_rename_title_used",
++                        locale,
++                        number=normalized_number,
++                        title=source_title,
++                    ),
 +                })
 +            except Exception as exc:
 +                failed_items.append({
@@ -2315,7 +3533,13 @@
 +                yield _sse_event({
 +                    "type": "log",
 +                    "level": "warn",
-+                    "message": f"{number}: 来源标题获取失败（{exc}）",
++                    "message": _runtime_text(
++                        "scanner",
++                        "source_rename_fetch_failed",
++                        locale,
++                        number=number,
++                        error=str(exc),
++                    ),
 +                })
 +
 +        eligible = [
@@ -2345,13 +3569,18 @@
 +        ):
 +            _remember_rename_plan(plan)
 +        if cancelled:
-+            message = "来源标题预览已取消"
++            message = _runtime_text(
++                "scanner", "source_rename_cancelled", locale
++            )
 +        else:
-+            message = (
-+                f"命名预览完成：{plan['summary']['rename_videos']} 个视频文件，"
-+                f"{plan['summary']['rename_folders']} 个文件夹，"
-+                f"失败 {plan['summary']['failed']}，"
-+                f"冲突 {plan['summary']['conflicts']}"
++            message = _runtime_text(
++                "scanner",
++                "source_rename_done",
++                locale,
++                videos=plan["summary"]["rename_videos"],
++                folders=plan["summary"]["rename_folders"],
++                failed=plan["summary"]["failed"],
++                conflicts=plan["summary"]["conflicts"],
 +            )
 +        yield _sse_event({
 +            "type": "done",
@@ -2361,7 +3590,12 @@
 +        })
 +    except Exception:
 +        logger.exception("按来源统一命名预览失败: source=%s", source)
-+        yield _sse_event({"type": "error", "message": "按来源统一命名预览失败"})
++        yield _sse_event({
++            "type": "error",
++            "message": _runtime_text(
++                "scanner", "source_rename_failed", locale
++            ),
++        })
 +    finally:
 +        if cancel_event is not None:
 +            mark_generate_done(cancel_event)
@@ -2374,7 +3608,12 @@
 +        return {"success": True, "data": _build_current_rename_plan(scope)}
 +    except Exception as exc:
 +        logger.exception("建立檔名正規化預覽失敗")
-+        return {"success": False, "error": str(exc)}
++        return {
++            "success": False,
++            "error": _runtime_text(
++                "scanner", "rename_preview_failed", _active_locale()
++            ),
++        }
 +
 +
 +@router.post("/rename-execute")
@@ -2506,10 +3745,65 @@
 +    selected_paths: Optional[list[str]] = None,
 +    backup: bool = False,
 +) -> Generator[str, None, None]:
-     """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
++    """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
++
++    locale = _active_locale()
++    try:
++        db_path = get_db_path()
++
++        if not db_path.exists():
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text(
++                    "scanner", "db_missing", locale
++                ),
++            })
+             return
  
-     try:
-@@ -1085,6 +2823,28 @@
+         repo = VideoRepository(db_path)
+         all_videos = repo.get_all()
+ 
+         if not all_videos:
+-            yield _sse_event({"type": "done", "message": "沒有影片資料", "updated": 0})
++            yield _sse_event({
++                "type": "done",
++                "message": _runtime_text(
++                    "scanner", "no_video_data", locale
++                ),
++                "updated": 0,
++            })
+             return
+ 
+-        cache, skipped_readonly, path_mappings = _build_nfo_update_cache(all_videos, load_config())
++        config = load_config()
++        locale = _active_locale(config)
++        cache, skipped_readonly, path_mappings = _build_nfo_update_cache(
++            all_videos, config
++        )
+         if skipped_readonly:
+             yield _sse_event({
+                 "type": "log",
+                 "level": "info",
+-                "message": f"略過 {skipped_readonly} 部唯讀來源影片（不寫回來源資料夾）"
++                "message": _runtime_text(
++                    "scanner",
++                    "readonly_videos_skipped",
++                    locale,
++                    count=skipped_readonly,
++                ),
+             })
+ 
+         # 檢查需要更新的影片
+         stats = check_cache_needs_update(cache)
+         if stats['need_update'] == 0:
+-            yield _sse_event({"type": "done", "message": "沒有需要更新的影片", "updated": 0})
++            yield _sse_event({
++                "type": "done",
++                "message": _runtime_text(
++                    "scanner", "nothing_to_update", locale
++                ),
++                "updated": 0,
++            })
              return
  
          paths_to_update = stats['paths']
@@ -2519,7 +3813,9 @@
 +        if not paths_to_update:
 +            yield _sse_event({
 +                "type": "done",
-+                "message": "没有需要重试的 NFO",
++                "message": _runtime_text(
++                    "scanner", "nfo_no_retry", locale
++                ),
 +                "updated": 0,
 +                "summary": {
 +                    "total": 0,
@@ -2538,7 +3834,13 @@
          yield _sse_event({
              "type": "log",
              "level": "info",
-@@ -1092,12 +2852,90 @@
+-            "message": f"執行 NFO 檢查 ({len(paths_to_update)} 部)..."
++            "message": _runtime_text(
++                "scanner",
++                "nfo_checking",
++                locale,
++                count=len(paths_to_update),
++            ),
          })
  
          # 執行更新（path_mappings 沿用 _build_nfo_update_cache 算好的那份，不重讀 config）
@@ -2574,6 +3876,7 @@
 +        if updated_paths:
 +            try:
 +                config = load_config()
++                locale = _active_locale(config)
 +                scanner = VideoScanner(
 +                    path_mappings=path_mappings,
 +                    nfo_title_format=config.get("scraper", {}).get(
@@ -2609,7 +3912,12 @@
 +                    yield _sse_event({
 +                        "type": "log",
 +                        "level": "info",
-+                        "message": f"已同步 {len(refreshed_rows)} 部影片的資料庫資料",
++                        "message": _runtime_text(
++                            "scanner",
++                            "nfo_rows_synced",
++                            locale,
++                            count=len(refreshed_rows),
++                        ),
 +                    })
 +            except Exception:
 +                logger.warning("NFO 更新後批次刷新資料庫失敗", exc_info=True)
@@ -2617,21 +3925,27 @@
          yield _sse_event({
              "type": "done",
 -            "message": "更新完成，建議重新產生網頁以更新資料庫",
-+            "message": (
-+                "NFO 更新已取消"
-+                if cancelled else
-+                (
-+                    f"NFO 更新完成：成功 {update_stats.get('success', 0)}，"
-+                    f"失败 {update_stats.get('failed', 0)}，"
-+                    f"跳过 {update_stats.get('skipped', 0)}"
-+                )
++            "message": _runtime_text(
++                "scanner",
++                "nfo_cancelled" if cancelled else "nfo_done",
++                locale,
++                success=update_stats.get('success', 0),
++                failed=update_stats.get('failed', 0),
++                skipped=update_stats.get('skipped', 0),
 +            ),
 +            "updated": update_stats.get("success", 0),
 +            "summary": update_stats,
          })
  
      except Exception as e:
-@@ -1106,15 +2944,62 @@
+         logger.error("NFO 更新失敗: %s", e)
+-        yield _sse_event({"type": "error", "message": "NFO 更新失敗"})
++        yield _sse_event({
++            "type": "error",
++            "message": _runtime_text(
++                "scanner", "nfo_failed", locale
++            ),
++        })
  
  
  @router.get("/update")
@@ -2702,7 +4016,55 @@
      )
  
  
-@@ -1211,7 +3096,9 @@
+@@ -1123,6 +3616,7 @@
+     """取得產生的 HTML 列表檔案（修改圖片路徑為 API 代理）"""
+     try:
+         config = load_config()
++        locale = _active_locale(config)
+         gallery_config = config.get('gallery', {})
+         output_dir = gallery_config.get('output_dir', '') or ''
+         output_filename = gallery_config.get('output_filename', 'gallery_output.html')
+@@ -1131,7 +3625,10 @@
+ 
+         if not html_path.exists():
+             return HTMLResponse(
+-                content="<html><body><h1>列表尚未產生</h1><p>請先到「列表生成」頁面產生列表。</p></body></html>",
++                content=(
++                    f"<html><body><h1>{_runtime_text('scanner', 'view_missing_title', locale)}</h1>"
++                    f"<p>{_runtime_text('scanner', 'view_missing_body', locale)}</p></body></html>"
++                ),
+                 status_code=404
+             )
+ 
+@@ -1161,8 +3658,12 @@
+         return HTMLResponse(content=content)
+     except Exception:
+         logger.exception("view_list 讀取失敗")
++        locale = _active_locale()
+         return HTMLResponse(
+-            content="<html><body><h1>錯誤</h1><p>列表載入失敗，請重試。</p></body></html>",
++            content=(
++                f"<html><body><h1>{_runtime_text('scanner', 'view_error_title', locale)}</h1>"
++                f"<p>{_runtime_text('scanner', 'view_error_body', locale)}</p></body></html>"
++            ),
+             status_code=500
+         )
+ 
+@@ -1182,7 +3683,12 @@
+         return {"success": True, "data": {"count": count}}
+     except Exception as e:
+         logger.error("查詢女優片數失敗: %s", e)
+-        return {"success": False, "error": "查詢女優片數失敗"}
++        return {
++            "success": False,
++            "error": _runtime_text(
++                "scanner", "actress_stats_failed", _active_locale()
++            ),
++        }
+ 
+ 
+ # === Jellyfin 圖片批次補齊 ===
+@@ -1211,10 +3717,13 @@
      return {'need_update': len(need_update), 'items': need_update}
  
  
@@ -2713,8 +4075,64 @@
      """SSE 串流：批次為影片產生 poster + fanart"""
      global _jellyfin_cache_result, _jellyfin_cache_time
  
-@@ -1252,7 +3139,13 @@
-         yield _sse_event({"type": "log", "level": "info", "message": f"需補齊 {total} 部影片的圖片..."})
++    locale = _active_locale()
+     try:
+         # Codex PR#123 P2：gate 必須排在 get_db_path() 之前——get_db_path() 內部會
+         # mkdir 建立 output/ 資料夾（core/database/connection.py:15-22），是有副作用
+@@ -1224,17 +3733,29 @@
+         # done + updated:0（off 時零寫入），且與 _check_jellyfin_needed() 的順序
+         # 不對稱。config 只讀一次，下面 path_mappings 沿用同一個 config。
+         config = load_config()
++        locale = _active_locale(config)
+         external_manager = config.get('scraper', {}).get('external_manager', 'off')
+         if external_manager not in STEM_IMAGE_MODES:
+             _jellyfin_cache_result = None
+             _jellyfin_cache_time = 0
+-            yield _sse_event({"type": "done", "message": "沒有需要補齊的影片", "updated": 0})
++            yield _sse_event({
++                "type": "done",
++                "message": _runtime_text(
++                    "scanner", "jellyfin_nothing", locale
++                ),
++                "updated": 0,
++            })
+             return
+ 
+         db_path = get_db_path()
+ 
+         if not db_path.exists():
+-            yield _sse_event({"type": "error", "message": "資料庫不存在，請先產生列表"})
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text(
++                    "scanner", "db_missing", locale
++                ),
++            })
+             return
+ 
+         repo = VideoRepository(db_path)
+@@ -1246,13 +3767,31 @@
+         if total == 0:
+             _jellyfin_cache_result = None
+             _jellyfin_cache_time = 0
+-            yield _sse_event({"type": "done", "message": "沒有需要補齊的影片", "updated": 0})
++            yield _sse_event({
++                "type": "done",
++                "message": _runtime_text(
++                    "scanner", "jellyfin_nothing", locale
++                ),
++                "updated": 0,
++            })
+             return
+ 
+-        yield _sse_event({"type": "log", "level": "info", "message": f"需補齊 {total} 部影片的圖片..."})
++        yield _sse_event({
++            "type": "log",
++            "level": "info",
++            "message": _runtime_text(
++                "scanner", "jellyfin_start", locale, count=total
++            ),
++        })
  
          completed = 0
 +        failed = 0
@@ -2727,7 +4145,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,6 +3154,7 @@
+@@ -1261,6 +3800,7 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -2735,34 +4153,78 @@
                  break
  
              cover = item['cover_path']
-@@ -1271,7 +3165,11 @@
+@@ -1271,7 +3811,16 @@
                  "type": "progress",
                  "current": i,
                  "total": total,
 -                "status": f"處理 {num}"
 +                "number": num,
-+                "status": f"處理 {num}",
++                "status": _runtime_text(
++                    "scanner",
++                    "jellyfin_processing",
++                    locale,
++                    number=num,
++                ),
 +                "success": completed,
 +                "failed": failed,
 +                "skipped": 0,
              })
  
              img_result = generate_jellyfin_images(
-@@ -1283,18 +3181,35 @@
+@@ -1279,27 +3828,82 @@
+             )
+ 
+             if not img_result['fanart']:
+-                yield _sse_event({"type": "log", "level": "warn", "message": f"{num} fanart 複製失敗"})
++                yield _sse_event({
++                    "type": "log",
++                    "level": "warn",
++                    "message": _runtime_text(
++                        "scanner",
++                        "jellyfin_fanart_failed",
++                        locale,
++                        number=num,
++                    ),
++                })
  
              if img_result['poster']:
-                 yield _sse_event({"type": "log", "level": "info", "message": f"✓ {num} poster + fanart"})
+-                yield _sse_event({"type": "log", "level": "info", "message": f"✓ {num} poster + fanart"})
++                yield _sse_event({
++                    "type": "log",
++                    "level": "info",
++                    "message": _runtime_text(
++                        "scanner",
++                        "jellyfin_poster_ok",
++                        locale,
++                        number=num,
++                    ),
++                })
 +                completed += 1
              else:
+-                yield _sse_event({"type": "log", "level": "warn", "message": f"{num} poster 裁切失敗"})
+-
+-            completed += 1
 +                failed += 1
 +                failed_items.append({
 +                    "path": item.get("path", ""),
 +                    "number": num,
-+                    "error": "poster 裁切失敗",
++                    "error": _runtime_text(
++                        "scanner",
++                        "jellyfin_poster_failed",
++                        locale,
++                        number=num,
++                    ),
 +                })
-                 yield _sse_event({"type": "log", "level": "warn", "message": f"{num} poster 裁切失敗"})
--
--            completed += 1
++                yield _sse_event({
++                    "type": "log",
++                    "level": "warn",
++                    "message": _runtime_text(
++                        "scanner",
++                        "jellyfin_poster_failed",
++                        locale,
++                        number=num,
++                    ),
++                })
  
          # T3(40c): 清空快取，讓下次 check 反映最新圖片狀態
          _jellyfin_cache_result = None
@@ -2770,10 +4232,11 @@
          yield _sse_event({
              "type": "done",
 -            "message": f"完成！已補齊 {completed} 部影片的圖片",
-+            "message": (
-+                "图片补全已取消"
-+                if cancelled else
-+                f"完成！已補齊 {completed} 部影片的圖片"
++            "message": _runtime_text(
++                "scanner",
++                "jellyfin_cancelled" if cancelled else "jellyfin_done",
++                locale,
++                count=completed,
 +            ),
              "updated": completed,
 +            "summary": {
@@ -2787,7 +4250,18 @@
          })
  
      except Exception as e:
-@@ -1359,15 +3274,11 @@
+         logger.error("產生 Jellyfin 圖片失敗: %s", e)
+-        yield _sse_event({"type": "error", "message": "產生圖片失敗"})
++        yield _sse_event({
++            "type": "error",
++            "message": _runtime_text(
++                "scanner", "jellyfin_failed", locale
++            ),
++        })
+ 
+ 
+ def _check_jellyfin_needed() -> dict | None:
+@@ -1359,15 +3963,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -2807,7 +4281,92 @@
      )
  
  
-@@ -1621,6 +3532,11 @@
+@@ -1463,26 +4063,49 @@
+     ```
+     """
+     numbers = [n.strip() for n in body.numbers if isinstance(n, str) and n.strip()]
++    config = load_config()
++    locale = _active_locale(config)
+ 
+     if not numbers:
+-        return JSONResponse(status_code=400, content={"success": False, "error": "numbers 不可為空"})
++        return JSONResponse(
++            status_code=400,
++            content={
++                "success": False,
++                "error": _runtime_text("scanner", "generate_ids_empty", locale),
++            },
++        )
+ 
+     if len(numbers) > 100:
+-        return JSONResponse(status_code=422, content={"success": False, "error": "最多支援 100 筆"})
++        return JSONResponse(
++            status_code=422,
++            content={
++                "success": False,
++                "error": _runtime_text("scanner", "generate_ids_limit", locale),
++            },
++        )
+ 
+     if body.mode not in _VALID_MODES:
+         return JSONResponse(status_code=422, content={
+             "success": False,
+-            "error": f"mode 必須是 {sorted(_VALID_MODES)} 之一"
++            "error": _runtime_text(
++                "scanner",
++                "generate_ids_mode",
++                locale,
++                values=", ".join(sorted(_VALID_MODES)),
++            ),
+         })
+ 
+     if body.sort not in _VALID_SORTS:
+         return JSONResponse(status_code=422, content={
+             "success": False,
+-            "error": f"sort 必須是 {sorted(_VALID_SORTS)} 之一"
++            "error": _runtime_text(
++                "scanner",
++                "generate_ids_sort",
++                locale,
++                values=", ".join(sorted(_VALID_SORTS)),
++            ),
+         })
+ 
+-    config = load_config()
+     gallery_config = config.get('gallery', {})
+     output_dir = gallery_config.get('output_dir', '') or ''
+     theme = config.get('general', {}).get('theme', 'light')
+@@ -1494,7 +4117,13 @@
+         db_results = repo.get_by_numbers(numbers)
+     except Exception as e:
+         logger.error('generate_from_ids: DB 查詢失敗: %s', e)
+-        return JSONResponse(status_code=500, content={"success": False, "error": "資料庫查詢失敗"})
++        return JSONResponse(
++            status_code=500,
++            content={
++                "success": False,
++                "error": _runtime_text("scanner", "generate_ids_db_failed", locale),
++            },
++        )
+ 
+     all_videos: List[VideoInfo] = []
+     missing: List[str] = []
+@@ -1577,7 +4206,13 @@
+         )
+     except Exception as e:
+         logger.error('generate_from_ids: HTML 產生失敗: %s', e)
+-        return JSONResponse(status_code=500, content={"success": False, "error": "HTML 產生失敗"})
++        return JSONResponse(
++            status_code=500,
++            content={
++                "success": False,
++                "error": _runtime_text("scanner", "generate_ids_html_failed", locale),
++            },
++        )
+ 
+     result = {
+         "success": True,
+@@ -1621,6 +4256,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:
@@ -2850,15 +4409,498 @@
  from core.scraper import (
      search_jav, search_jav_single_source, access_error_info,
      search_javlib_versions, fetch_javlib_by_detail_url, internal_nfo_carriers,
-@@ -40,6 +46,7 @@
+@@ -40,6 +46,8 @@
  from core.scrapers.javlibrary import JAVLIBRARY_ORIGIN
  from core.logger import get_logger
  from core.config import load_config, STEM_IMAGE_MODES
++from core.i18n import get_config_locale, t as i18n_t
 +from core.multipart_group import resolve_group
  from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
  from core.readonly_paths import resolve_owning_output_root
  from core.readonly_producer import (
-@@ -838,8 +845,73 @@
+@@ -53,6 +61,12 @@
+ from core.wishlist_reconcile import reconcile_wishlist, format_wishlist_removed_message
+ 
+ logger = get_logger(__name__)
++
++
++def _api_text(locale: str, key: str, **params) -> str:
++    """Return a scraper-API message in the active UI language."""
++    return i18n_t(f"runtime.api.{key}", locale=locale, **params)
++
+ 
+ # 互動 CF 的 site → origin 查表。值來自各 scraper 模組的公開常數（CD-118a-12）。
+ # 新增 manual_only CF 來源時必須同步這張表（F-1 parity 測試會擋漂移）。
+@@ -77,16 +91,17 @@
+     return "cf_needed"
+ 
+ 
+-def _readonly_cf_response(source, outcome: str) -> dict:
++def _readonly_cf_response(source, outcome: str, locale: str | None = None) -> dict:
+     """唯讀分支的 CF 回應：完整 EnrichResult 形狀 ＋ additive 旗標（F-0，不得回 partial dict）。"""
++    locale = locale or get_config_locale()
+     if outcome == "cf_unavailable":
+         return {
+-            **asdict(_readonly_enrich_failure("僅限桌面應用程式（standalone）可用", "error")),
++            **asdict(_readonly_enrich_failure(_api_text(locale, "desktop_only"), "error")),
+             "cf_unavailable": True,
+             "cf_source": source,
+         }
+     return {
+-        **asdict(_readonly_enrich_failure("需要通過驗證後才能繼續", "error")),
++        **asdict(_readonly_enrich_failure(_api_text(locale, "verification_required"), "error")),
+         "cf_needed": True,
+         "cf_source": source,
+     }
+@@ -122,19 +137,14 @@
+     metadata: Optional[dict] = None
+ 
+ 
+-# 唯讀來源 guard 的錯誤訊息（單一真理來源；sync helper 與 batch async loop 共用）。
+-_READONLY_SOURCE_ERROR_MSG = (
+-    "此來源路徑為唯讀（readonly），無法搬移或重新命名檔案。"
+-    "請改用掃描頁『產生』生成本地媒體庫，或確認你對此路徑有寫入權限。"
+-)
++# 唯讀來源 guard 的錯誤訊息 key（單一真理來源；sync helper 與 batch async loop 共用）。
++_READONLY_SOURCE_ERROR_MSG = "readonly_source_write_denied"
+ 
+ # P2 review round 3 (FIX#4)：readonly 來源 + mode='db_to_sidecar' 的拒絕訊息（單一
+ # 真理來源；enrich-single 與 batch 的 _do_readonly 共用）。db_to_sidecar 意指「把 DB
+ # 現有 metadata 寫回來源 sidecar NFO、不刮網」——唯讀來源零寫入牆下，來源 sidecar 本來
+ # 就不可寫；output_dir 的 NFO 又是產生流程自動管理，故此 mode 對唯讀來源無意義。
+-_READONLY_DB_TO_SIDECAR_ERROR_MSG = (
+-    "唯讀來源不支援 db_to_sidecar（產物 NFO 由產生流程自動管理，來源零寫入）"
+-)
++_READONLY_DB_TO_SIDECAR_ERROR_MSG = "readonly_db_to_sidecar_denied"
+ 
+ # P1 revert + reject (round-3 review 2026-07-21，owner-confirmed)：Codex PR#113
+ # round-3 threaded a write_nfo=false skip-NFO gate into the readonly produce
+@@ -146,9 +156,7 @@
+ # db_to_sidecar above (both are granular flags the holistic produce model
+ # doesn't support), instead of threading a skip flag down into
+ # _produce_one/_write_movie_assets.
+-_READONLY_NO_NFO_ERROR_MSG = (
+-    "唯讀來源產生一律含 NFO（holistic 產物），不支援 write_nfo=false"
+-)
++_READONLY_NO_NFO_ERROR_MSG = "readonly_no_nfo_denied"
+ 
+ 
+ def _readonly_source_error(file_path: str) -> Optional[dict]:
+@@ -171,13 +179,15 @@
+     路由（如 batch_enrich）須改為「入口一次載入 config → readonly_source_prefixes 算一次
+     → 逐項 is_path_readonly 純比對」，勿在 event loop 上裸呼叫本 helper（async-offload 守衛）。
+     """
+-    _gallery_config = load_config().get('gallery', {})
++    _config = load_config()
++    _locale = get_config_locale(_config)
++    _gallery_config = _config.get('gallery', {})
+     _path_mappings = _gallery_config.get('path_mappings', {})
+     _prefixes = readonly_source_prefixes(_gallery_config, _path_mappings)
+     _writable = writable_source_prefixes(_gallery_config, _path_mappings)
+     # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
+     if is_path_readonly(coerce_to_file_uri(file_path, _path_mappings), _prefixes, _writable):
+-        return {"success": False, "error": _READONLY_SOURCE_ERROR_MSG}
++        return {"success": False, "error": _api_text(_locale, _READONLY_SOURCE_ERROR_MSG)}
+     return None
+ 
+ 
+@@ -196,6 +206,8 @@
+     auto_organize_state.mark_manual_activity()
+     file_path = request.file_path
+     number = request.number
++    config = load_config()
++    locale = get_config_locale(config)
+ 
+     # U7 readonly guard：只依 file_path 判斷所屬來源是否唯讀（readonly）。
+     # 是 → 不搬檔、不刮削、不解析番號，回既有錯誤形狀 plain dict。
+@@ -212,11 +224,9 @@
+     if not number:
+         return {
+             "success": False,
+-            "error": "無法識別番號，請手動輸入"
++            "error": _api_text(locale, "number_not_recognized")
+         }
+ 
+-    # 載入設定
+-    config = load_config()
+     scraper_config = config.get('scraper', {})
+     path_mappings = config.get('gallery', {}).get('path_mappings', {})
+ 
+@@ -235,7 +245,7 @@
+         if not metadata:
+             return {
+                 "success": False,
+-                "error": f"找不到 {number} 的資料"
++                "error": _api_text(locale, "search_not_found", number=number)
+             }
+         metadata['number'] = number
+ 
+@@ -382,10 +392,11 @@
+     回傳成功 dict + success:True；not-found（None）→ 200 {success:False}。
+     不下載 cover（cover 是遠端 URL，原樣回前端，無 SSRF 面）。
+     """
++    locale = get_config_locale()
+     try:
+         if (request.source or '').startswith('custom:'):
+             from web.routers._custom_preview import preview_custom  # noqa: PLC2701 — 卡片指定的 web 內部底線模組（165-T7b）；lazy import 以免 import 時載入 core.custom_source*（AC-165-8）
+-            return preview_custom(request.source, request.number)
++            return preview_custom(request.source, request.number, locale)
+         if request.source == 'javlibrary':
+             versions = search_javlib_versions(request.number)  # Cf* 例外由外層 except 接
+             if not versions:
+@@ -410,27 +421,27 @@
+     except CfChallengeRequired:
+         outcome = _begin_solve_for_source(request.source)
+         if outcome is None:
+-            return {"success": False, "error": "預覽搜尋失敗，請查閱日誌"}
++            return {"success": False, "error": _api_text(locale, "preview_search_failed")}
+         if outcome == "cf_unavailable":
+             return {"success": False, "cf_unavailable": True}
+         return {"success": False, "cf_needed": True, "cf_source": request.source}
+     except CfTransportUnavailable:
+         return {"success": False, "cf_unavailable": True}
+     except (SourceBlocked, SourceUnreachable) as e:
+-        info = access_error_info(e, request.source)
++        info = access_error_info(e, request.source, locale=locale)
+         return {"success": False, "access_error": info["access_error"], "source": request.source}
+     except Exception:
+         logger.exception("rescrape_preview_endpoint 失敗")
+-        return {"success": False, "error": "預覽搜尋失敗，請查閱日誌"}
+-
+-
+-def _custom_candidate_scraper_data(request: "EnrichRequest"):
++        return {"success": False, "error": _api_text(locale, "preview_search_failed")}
++
++
++def _custom_candidate_scraper_data(request: "EnrichRequest", locale: str | None = None):
+     """custom:* 的 detail_url 預抓（確認選定那一版）；形狀同 _javlib_candidate_scraper_data。"""
+     from web.routers._custom_preview import custom_candidate_data  # noqa: PLC2701 — 卡片指定的 web 內部底線模組（165-T7b）；lazy import 以免 import 時載入 core.custom_source*（AC-165-8）
+-    return custom_candidate_data(request.source, request.detail_url, request.number)
+-
+-
+-def _javlib_candidate_scraper_data(request: "EnrichRequest"):
++    return custom_candidate_data(request.source, request.detail_url, request.number, locale)
++
++
++def _javlib_candidate_scraper_data(request: "EnrichRequest", locale: str | None = None):
+     """Fetch a javlibrary detail_url candidate for the readonly gear-rescrape
+     branch (TASK-104-T3). Reuses the exact SSRF guard + CfChallengeRequired/
+     CfTransportUnavailable handling as `enrich_single_endpoint`'s own (non-
+@@ -445,9 +456,10 @@
+     `scraper_data` is the `to_legacy_dict()` + `internal_nfo_carriers()` merge
+     and `error_response` is None.
+     """
++    locale = locale or get_config_locale()
+     if not _is_javlibrary_url(request.detail_url):
+         logger.warning("enrich_single: 拒絕非法 detail_url origin")
+-        return None, {"success": False, "error": "detail_url 來源不合法"}
++        return None, {"success": False, "error": _api_text(locale, "detail_url_invalid")}
+     try:
+         video = fetch_javlib_by_detail_url(request.detail_url, request.number)
+     except CfChallengeRequired:
+@@ -462,7 +474,7 @@
+     except CfTransportUnavailable:
+         return None, {"success": False, "cf_unavailable": True}
+     if video is None:
+-        return None, {"success": False, "error": "javlibrary 無法取得指定版本資料"}
++        return None, {"success": False, "error": _api_text(locale, "javlibrary_version_missing")}
+     # to_legacy_dict 省略 _summary/_rating 內部 carrier；補回以對齊既有 javlibrary
+     # 重刮的 NFO 輸出（search_jav 走 internal_nfo_carriers 注入同組，PR #89 Codex P2）
+     scraper_data = video.to_legacy_dict()
+@@ -488,8 +500,9 @@
+ METADATA_ALLOWED_FIELDS = METADATA_WHITELIST_STR | METADATA_WHITELIST_LIST_STR | {"duration", "_rating"}
+ 
+ 
+-def _validate_metadata_shape(metadata: dict) -> None:
++def _validate_metadata_shape(metadata: dict, locale: str | None = None) -> None:
+     """嚴格白名單驗證 metadata 欄位形狀與型別（CD-135-2 / CD-135-3 / CD-135-14）。"""
++    locale = locale or get_config_locale()
+     whitelist_str = METADATA_WHITELIST_STR
+     whitelist_list_str = METADATA_WHITELIST_LIST_STR
+     ignored_keys = METADATA_IGNORED_KEYS
+@@ -507,77 +520,99 @@
+             # test_cover_canonical_contract 整份契約表的前提（PR #167 Codex P2）。
+             if k == "source":
+                 if not isinstance(v, str):
+-                    raise HTTPException(400, detail="metadata.source 型別錯誤，必須是字串")
++                    raise HTTPException(400, detail=_api_text(locale, "metadata_source_type"))
+                 if v in ("db", "nfo"):
+                     raise HTTPException(
+                         400,
+-                        detail='metadata.source 不可為 "db" 或 "nfo"（後端保留值）；'
+-                               "請填實際來源代號（如 javdb／dmm／metatube:xxx）或省略此欄位",
++                        detail=_api_text(locale, "metadata_source_reserved"),
+                     )
+             continue
+         if k in whitelist_str:
+             if not isinstance(v, str):
+-                raise HTTPException(400, detail=f"metadata.{k} 型別錯誤，必須是字串")
++                raise HTTPException(400, detail=_api_text(locale, "metadata_field_type_string", field=k))
+             if k == "original_title" and v == "":
+-                raise HTTPException(400, detail="metadata.original_title 無法透過本入口清空")
++                raise HTTPException(400, detail=_api_text(locale, "metadata_original_title_clear"))
+         elif k in whitelist_list_str:
+             if not isinstance(v, list) or not all(isinstance(item, str) for item in v):
+-                raise HTTPException(400, detail=f"metadata.{k} 型別錯誤，必須是字串列表")
++                raise HTTPException(400, detail=_api_text(locale, "metadata_field_type_list", field=k))
+         elif k == "duration":
+             if v is not None and (not isinstance(v, int) or isinstance(v, bool)):
+-                raise HTTPException(400, detail="metadata.duration 型別錯誤，必須是整數或 null")
++                raise HTTPException(400, detail=_api_text(locale, "metadata_duration_type"))
+         elif k == "_rating":
+             if v is not None and (not isinstance(v, (int, float)) or isinstance(v, bool)):
+-                raise HTTPException(400, detail="metadata._rating 型別錯誤，必須是數字或 null")
++                raise HTTPException(400, detail=_api_text(locale, "metadata_rating_type"))
+         else:
+-            raise HTTPException(400, detail=f"metadata 包含未知欄位: {k}")
+-
+-
+-def _validate_enrich_request(request: EnrichRequest, owning, action: Optional[str], canonical: str) -> None:
++            raise HTTPException(400, detail=_api_text(locale, "metadata_unknown_field", field=k))
++
++
++def _validate_enrich_request(
++    request: EnrichRequest,
++    owning,
++    action: Optional[str],
++    canonical: str,
++    locale: str | None = None,
++) -> None:
+     """共用驗證階段：模式閘、互斥檢查、欄位型別驗證（CD-135-1 / CD-135-11 / CD-135-12）。"""
++    locale = locale or get_config_locale()
+     # 1a. 模式閘（CD-135-1）
+     if request.metadata is not None and request.mode != "refresh_full":
+-        raise HTTPException(400, detail="metadata 只在 mode=refresh_full 時合法")
++        raise HTTPException(400, detail=_api_text(locale, "metadata_refresh_only"))
+ 
+     # 1b. 唯讀路徑的 action 閘（CD-135-12 item 1b）
+     if request.metadata is not None and owning is not None and action != 'rescrape':
+-        raise HTTPException(400, detail="唯讀來源：metadata 只在 rescrape（重刮）意圖下生效，補完（ingest）不讀取預先取得的內容")
++        raise HTTPException(400, detail=_api_text(locale, "metadata_readonly_ingest"))
+ 
+     # 1c. 自訂來源 gate（在任何抓取之前；不放進 try 內避免被吞成 200）
+     if (request.source or '').startswith('custom:'):
+-        refused = refusal_for(request.source, request.number)
++        refused = refusal_for(request.source, request.number, locale)
+         if refused:
+             raise HTTPException(400, detail=refused[1])
+ 
+     # 2. 互斥檢查（CD-135-11）
+     if request.metadata is not None and request.detail_url and (request.source == "javlibrary" or (request.source or '').startswith('custom:')):
+-        raise HTTPException(400, detail="metadata 與 javlibrary／自訂來源明細網址（detail_url）不可同時提供")
++        raise HTTPException(400, detail=_api_text(locale, "metadata_detail_url_conflict"))
+ 
+     # 3. key／型別驗證
+     if request.metadata is not None:
+-        _validate_metadata_shape(request.metadata)
++        _validate_metadata_shape(request.metadata, locale)
+         if owning is not None and action == 'rescrape':
+             submitted_number = request.metadata.get('number')
+             if not submitted_number:
+-                raise HTTPException(400, detail="唯讀來源重刮：metadata 缺 number")
++                raise HTTPException(400, detail=_api_text(locale, "readonly_metadata_missing_number"))
+             if not isinstance(submitted_number, str):
+-                raise HTTPException(400, detail="唯讀來源重刮：metadata.number 型別錯誤，必須是字串")
++                raise HTTPException(400, detail=_api_text(locale, "readonly_metadata_number_type"))
+             if 'title' not in request.metadata:
+-                raise HTTPException(400, detail="唯讀來源重刮：metadata 缺 title")
++                raise HTTPException(400, detail=_api_text(locale, "readonly_metadata_missing_title"))
+             # 4. 番號守衛唯讀那一半（CD-135-7 點 2）：查 DB 用 canonical——執行本體
+             # （core/readonly_producer.py 的 enrich_one_readonly/resolve_ingest_plan）
+             # 自己查 DB 用的就是同一個 canonical key，守衛必須問同一筆記錄。
+             if not request.allow_number_change:
+                 existing = VideoRepository().get_by_path(canonical)
+                 if existing and existing.number and existing.number != submitted_number:
+-                    raise HTTPException(400, detail=f"番號不符：metadata 給 {submitted_number}，DB 既有 {existing.number}；如確定要改號請帶 allow_number_change=true")
++                    raise HTTPException(
++                        400,
++                        detail=_api_text(
++                            locale,
++                            "number_mismatch_metadata",
++                            submitted=submitted_number,
++                            existing=existing.number,
++                        ),
++                    )
+         else:
+             # DB 的 path 欄位寫入時不套 path_mappings（core/enricher.py:504 同構），
+             # 帶 path_mappings 會查到另一個命名空間、永遠對不上 → 守衛形同虛設。
+             # db-ns-ok: uri_to_fs_path(request.file_path) 是 DB round-trip 值，不做反向映射
+             existing = VideoRepository().get_by_path(to_file_uri(uri_to_fs_path(request.file_path)))
+             if existing and existing.number and existing.number != request.number and not request.allow_number_change:
+-                raise HTTPException(400, detail=f"番號不符：請求 {request.number}，DB 既有 {existing.number}；如確定要改號請帶 allow_number_change=true")
++                raise HTTPException(
++                    400,
++                    detail=_api_text(
++                        locale,
++                        "number_mismatch_request",
++                        requested=request.number,
++                        existing=existing.number,
++                    ),
++                )
+ 
+ 
+ def _clean_metadata_for_scraper_data(metadata: dict) -> dict:
+@@ -615,14 +650,21 @@
+         _emit_notif("warn", "notif.wishlist_reconcile_failed", task_type="wishlist_reconcile")
+         return
+     if _wl_removed:
++        locale = get_config_locale()
+         _emit_notif(
+             "info", "notif.wishlist_auto_removed",
+-            message=format_wishlist_removed_message(_wl_removed),
++            message=format_wishlist_removed_message(_wl_removed, locale),
+             task_type="wishlist_reconcile",
+         )
+ 
+ 
+-def _check_refresh_full_overwrite_guard(request, config, path_mappings, resolved_write_cover) -> None:
++def _check_refresh_full_overwrite_guard(
++    request,
++    config,
++    path_mappings,
++    resolved_write_cover,
++    locale: str | None = None,
++) -> None:
+     # CD-62-4 分裂陷阱智慧防呆：refresh_full + overwrite=false 時，若這組設定不會寫出任何
+     # sidecar（NFO/cover）卻仍 _db_upsert，就是純分裂。一個 sidecar「會寫」需 write 旗標開 + 檔案缺
+     # （此分支 overwrite 已為 false，既有檔不覆寫）。兩者皆不會寫 → 擋；任一會寫則放行（quick-enrich
+@@ -667,13 +709,14 @@
+         if not will_write_nfo and not will_write_cover and not will_write_external:
+             raise HTTPException(
+                 status_code=400,
+-                detail="refresh_full + overwrite_existing=false 在此設定下不會寫出任何 NFO/封面，只會更新 DB 造成與磁碟分裂；請開 overwrite_existing、確保 NFO/封面有實際寫入，或補劇照請改用 /api/scraper/fetch-samples",
++                detail=_api_text(locale or get_config_locale(), "refresh_no_sidecar"),
+             )
+ 
+ 
+ @router.post("/enrich-single")
+ def enrich_single_endpoint(request: EnrichRequest) -> dict:
+     config = load_config()
++    locale = get_config_locale(config)
+     # TASK-91-T3：讀取端 path_mappings，供 resolve_nfo_cover_paths / uri_to_local_fs_path /
+     # enrich_single 共用一次算好的同一組值（避免重複 .get() chain）。
+     path_mappings = config.get("gallery", {}).get("path_mappings", {})
+@@ -687,7 +730,7 @@
+     canonical = coerce_to_file_uri(request.file_path, path_mappings)  # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
+     owning = resolve_owning_output_root(canonical, config)
+     action = (request.readonly_action or ('rescrape' if request.metadata is not None else 'ingest')) if owning is not None else None
+-    _validate_enrich_request(request, owning, action, canonical)
++    _validate_enrich_request(request, owning, action, canonical, locale)
+     if owning is not None:
+         source, output_root, output_uri = owning
+         # Codex PR#113 one-pass alignment (2026-07-21): readonly branch now returns
+@@ -705,7 +748,7 @@
+         # EnrichResult rather than silently doing a full ingest/rescrape instead
+         # (this branch otherwise ignores request.mode entirely).
+         if request.mode == 'db_to_sidecar':
+-            return asdict(_readonly_enrich_failure(_READONLY_DB_TO_SIDECAR_ERROR_MSG, 'error'))
++            return asdict(_readonly_enrich_failure(_api_text(locale, _READONLY_DB_TO_SIDECAR_ERROR_MSG), 'error'))
+         # P1 revert + reject (round-3 review 2026-07-21): readonly produce is
+         # holistic (a library entry always has an NFO) — write_nfo=false is
+         # rejected the same way db_to_sidecar is above, rather than threading
+@@ -713,16 +756,16 @@
+         # _READONLY_NO_NFO_ERROR_MSG). The frontend never sends
+         # write_nfo=false, so this is zero UI impact.
+         if not request.write_nfo:
+-            return asdict(_readonly_enrich_failure(_READONLY_NO_NFO_ERROR_MSG, 'error'))
++            return asdict(_readonly_enrich_failure(_api_text(locale, _READONLY_NO_NFO_ERROR_MSG), 'error'))
+         if not output_root:
+-            return asdict(_readonly_enrich_failure("未設定媒體庫輸出路徑", "error"))
++            return asdict(_readonly_enrich_failure(_api_text(locale, "output_root_missing"), "error"))
+         try:
+             scraper_data = None
+             _cand_err = None
+             if action == 'rescrape' and request.source == 'javlibrary' and request.detail_url:
+-                scraper_data, _cand_err = _javlib_candidate_scraper_data(request)
++                scraper_data, _cand_err = _javlib_candidate_scraper_data(request, locale)
+             if action == 'rescrape' and (request.source or '').startswith('custom:') and request.detail_url:
+-                scraper_data, _cand_err = _custom_candidate_scraper_data(request)
++                scraper_data, _cand_err = _custom_candidate_scraper_data(request, locale)
+             if _cand_err:
+                 return _cand_err
+             if request.metadata is not None:
+@@ -745,6 +788,7 @@
+                 javbus_lang=request.javbus_lang, write_cover=resolved_write_cover,
+                 overwrite_existing=request.overwrite_existing, preserve_title=request.preserve_title,
+                 after_produce=lambda: thumbnail_cache.invalidate(canonical),
++                locale=locale,
+             )
+             if result.success:
+                 _reconcile_wishlist_after_write()
+@@ -753,15 +797,15 @@
+             # F-0：完整 EnrichResult 形狀 ＋ additive cf_needed/cf_source（不得回 partial dict）
+             outcome = _begin_solve_for_source(request.source)
+             if outcome is None:
+-                return asdict(_readonly_enrich_failure("enrich 處理失敗，請查閱日誌", "error"))
+-            return _readonly_cf_response(request.source, outcome)
++                return asdict(_readonly_enrich_failure(_api_text(locale, "enrich_failed"), "error"))
++            return _readonly_cf_response(request.source, outcome, locale)
+         except CfTransportUnavailable:
+-            return _readonly_cf_response(request.source, "cf_unavailable")
++            return _readonly_cf_response(request.source, "cf_unavailable", locale)
+         except Exception:
+             logger.exception("enrich_single_endpoint readonly 改道失敗")
+-            return asdict(_readonly_enrich_failure("enrich 處理失敗，請查閱日誌", "error"))
+-
+-    _check_refresh_full_overwrite_guard(request, config, path_mappings, resolved_write_cover)
++            return asdict(_readonly_enrich_failure(_api_text(locale, "enrich_failed"), "error"))
++
++    _check_refresh_full_overwrite_guard(request, config, path_mappings, resolved_write_cover, locale)
+ 
+     try:
+         scraper_data = None
+@@ -769,7 +813,7 @@
+             # SSRF guard：拒絕非 javlibrary origin 的 detail_url（不 fetch、不洩 URL）
+             if not _is_javlibrary_url(request.detail_url):
+                 logger.warning("enrich_single: 拒絕非法 detail_url origin")
+-                return {"success": False, "error": "detail_url 來源不合法"}
++                return {"success": False, "error": _api_text(locale, "detail_url_invalid")}
+             try:
+                 video = fetch_javlib_by_detail_url(request.detail_url, request.number)
+             except CfChallengeRequired:
+@@ -784,13 +828,13 @@
+             except CfTransportUnavailable:
+                 return {"success": False, "cf_unavailable": True}
+             if video is None:
+-                return {"success": False, "error": "javlibrary 無法取得指定版本資料"}
++                return {"success": False, "error": _api_text(locale, "javlibrary_version_missing")}
+             # to_legacy_dict 省略 _summary/_rating 內部 carrier；補回以對齊既有 javlibrary
+             # 重刮的 NFO 輸出（search_jav 走 internal_nfo_carriers 注入同組，PR #89 Codex P2）
+             scraper_data = video.to_legacy_dict()
+             scraper_data.update(internal_nfo_carriers(video))
+         if (request.source or '').startswith('custom:') and request.detail_url:
+-            scraper_data, _cand_err = _custom_candidate_scraper_data(request)
++            scraper_data, _cand_err = _custom_candidate_scraper_data(request, locale)
+             if _cand_err:
+                 return _cand_err
+         if request.metadata is not None:
+@@ -808,6 +852,7 @@
+             javbus_lang=request.javbus_lang,
+             scraper_data=scraper_data,
+             path_mappings=path_mappings, preserve_title=request.preserve_title,
++            locale=locale,
+         )
+         # feature/71 T8: 換封面成功 → 失效舊縮圖（下次進畫面時重生，CD-9 / spec 2.A.7）。
+         # request.file_path 已是 DB 的 file:/// URI（前端送 currentLightboxVideo.path /
+@@ -822,7 +867,7 @@
+     except CfChallengeRequired:
+         outcome = _begin_solve_for_source(request.source)
+         if outcome is None:
+-            return {"success": False, "error": "enrich 處理失敗，請查閱日誌"}
++            return {"success": False, "error": _api_text(locale, "enrich_failed")}
+         if outcome == "cf_unavailable":
+             return {"success": False, "cf_unavailable": True}
+         return {"success": False, "cf_needed": True, "cf_source": request.source}
+@@ -830,7 +875,7 @@
+         return {"success": False, "cf_unavailable": True}
+     except Exception:
+         logger.exception("enrich_single_endpoint 失敗")
+-        return {"success": False, "error": "enrich 處理失敗，請查閱日誌"}
++        return {"success": False, "error": _api_text(locale, "enrich_failed")}
+ 
+ 
+ class FetchSamplesRequest(BaseModel):
+@@ -838,9 +883,110 @@
      number: str
  
  
@@ -2871,6 +4913,38 @@
 +        **diagnostics,
 +    })
 +    return payload
++
++
++def _sample_text(locale: str, key: str, **params) -> str:
++    return i18n_t(f"runtime.samples.{key}", locale=locale, **params)
++
++
++_SAMPLE_ERROR_KEYS = {
++    "cancelled": "cancelled",
++    "file_not_found": "error_file_not_found",
++    "output_root_missing": "error_output_root_missing",
++    "samples_search_failed": "error_samples_search_failed",
++    "no_sample_images": "error_no_sample_images",
++    "db_write_failed": "error_db_write_failed",
++    "sample_download_failed": "error_sample_download_failed",
++    "storage_permission_required": "error_storage_permission_required",
++    "sample_write_failed": "error_sample_write_failed",
++    "multi_video_folder": "error_multi_video_folder",
++    "internal_error": "error_internal",
++}
++
++
++def _sample_error_message(
++    locale: str,
++    code: str,
++    fallback: str,
++    *,
++    number: str = "",
++) -> str:
++    key = _SAMPLE_ERROR_KEYS.get(code)
++    if key:
++        return _sample_text(locale, key, number=number)
++    return fallback or _sample_text(locale, "error_internal")
 +
 +
 +def _resolve_sample_multipart_group(
@@ -2926,13 +5000,18 @@
 +
 +
 +def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
++    locale = "zh-CN"
 +    if cancel_event is not None and cancel_event.is_set():
-+        return _samples_failure("cancelled", "劇照補齊已取消")
++        return _samples_failure(
++            "cancelled", _sample_text(locale, "cancelled")
++        )
 +
      config = load_config()
++    locale = get_config_locale(config)
      # TASK-91-T3：站台5 outer to_file_uri 補傳 path_mappings（inner uri_to_fs_path 維持不變，
      # 見 TASK-91-T3.md 站台5 inner/outer 分析結論）。
-@@ -853,93 +925,180 @@
+     path_mappings = config.get("gallery", {}).get("path_mappings", {})
+@@ -853,96 +999,214 @@
      owning = resolve_owning_output_root(canonical, config)
      if owning is not None:
          source, output_root, output_uri = owning
@@ -2942,10 +5021,15 @@
 -        # cover), fields_filled is always [] (no metadata merge happens).
          if not output_root:
 -            return asdict(_readonly_enrich_failure("未設定媒體庫輸出路徑", "error"))
-+            return _samples_failure("output_root_missing", "未設定媒體庫輸出路徑")
++            return _samples_failure(
++                "output_root_missing",
++                _sample_text(locale, "error_output_root_missing"),
++            )
          try:
 +            if cancel_event is not None and cancel_event.is_set():
-+                return _samples_failure("cancelled", "劇照補齊已取消")
++                return _samples_failure(
++                    "cancelled", _sample_text(locale, "cancelled")
++                )
              meta = search_jav(req.number, source="auto")
 -            # P2 review round 3 (FIX#2/FIX#3): mirror core.enricher.fetch_samples_only
 -            # field-for-field. That function NEVER sets `reason` (EnrichResult's
@@ -2958,7 +5042,9 @@
 -            # The old `not meta or not meta.get(...)` conflated both into one
 -            # success=True branch, silently swallowing total search failures.
 +            if cancel_event is not None and cancel_event.is_set():
-+                return _samples_failure("cancelled", "劇照補齊已取消")
++                return _samples_failure(
++                    "cancelled", _sample_text(locale, "cancelled")
++                )
              if not meta:
 -                return asdict(_readonly_enrich_failure(f"找不到 {req.number} 的資料"))
 -            if not meta.get("sample_images"):
@@ -2969,7 +5055,12 @@
 -                    reason=None,
 -                ))
 +                return _samples_failure(
-+                    "samples_search_failed", f"找不到 {req.number} 的資料",
++                    "samples_search_failed",
++                    _sample_text(
++                        locale,
++                        "error_samples_search_failed",
++                        number=req.number,
++                    ),
 +                    source="", sample_urls_found=0,
 +                )
 +            sample_images = [
@@ -2978,7 +5069,8 @@
 +            ]
 +            if not sample_images:
 +                return _samples_failure(
-+                    "no_sample_images", "没有找到可下载的剧照",
++                    "no_sample_images",
++                    _sample_text(locale, "error_no_sample_images"),
 +                    source=meta.get("source", ""), sample_urls_found=0,
 +                )
              fs_path = uri_to_local_fs_path(req.file_path, path_mappings)
@@ -3004,7 +5096,9 @@
 -            # sample_images, so this count and the DB state can never disagree.
 -            _, assets = _produce_one(
 +            if cancel_event is not None and cancel_event.is_set():
-+                return _samples_failure("cancelled", "劇照補齊已取消")
++                return _samples_failure(
++                    "cancelled", _sample_text(locale, "cancelled")
++                )
 +            movie_dir, assets = _produce_one(
                  repo, source, config.get("scraper", {}), file_info=file_info,
                  meta=meta, cover_strategy=('none',), assets_mode='samples_only',
@@ -3012,7 +5106,9 @@
                  allocated_this_run=set(), path_mappings=path_mappings,
              )
 +            if cancel_event is not None and cancel_event.is_set():
-+                return _samples_failure("cancelled", "劇照補齊已取消")
++                return _samples_failure(
++                    "cancelled", _sample_text(locale, "cancelled")
++                )
              written = len(assets.get('sample_fs', []))
 -            return asdict(enrich_success(
 +            extrafanart_dir = Path(movie_dir) / "extrafanart"
@@ -3040,13 +5136,14 @@
 +                    logger.exception("fetch_samples_endpoint 分集劇照 DB 更新失敗")
 +                    return _samples_failure(
 +                        "db_write_failed",
-+                        "劇照已下載，但資料庫更新失敗，請再試一次",
++                        _sample_text(locale, "error_db_write_failed"),
 +                        source=meta.get("source", ""),
 +                        sample_urls_found=len(sample_images),
 +                    )
 +            if on_disk == 0:
 +                return _samples_failure(
-+                    "sample_download_failed", "已找到劇照，但全部下載失敗",
++                    "sample_download_failed",
++                    _sample_text(locale, "error_sample_download_failed"),
 +                    source=meta.get("source", ""),
 +                    sample_urls_found=len(sample_images),
 +                    downloaded=written,
@@ -3073,7 +5170,9 @@
 +        except AndroidStoragePermissionError:
 +            return _samples_failure(
 +                "storage_permission_required",
-+                "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
++                _sample_text(
++                    locale, "error_storage_permission_required"
++                ),
 +                source="",
 +                sample_urls_found=0,
 +            )
@@ -3081,7 +5180,7 @@
 +            logger.exception("fetch_samples_endpoint readonly SAF 寫入失敗")
 +            return _samples_failure(
 +                "sample_write_failed",
-+                "劇照寫入外置存儲失敗",
++                _sample_text(locale, "error_sample_write_failed"),
 +                source="",
 +                sample_urls_found=0,
 +                detail=str(exc),
@@ -3094,7 +5193,8 @@
 -            # matches with reason=None too (FIX#2 field-for-field parity).
 -            return asdict(_readonly_enrich_failure("fetch_samples 處理失敗，請查閱日誌"))
 +            return _samples_failure(
-+                "internal_error", "fetch_samples 處理失敗，請查閱日誌"
++                "internal_error",
++                _sample_text(locale, "error_internal"),
 +            )
  
      # uri-no-reverse: comparison-only (DB LIKE prefix), inner kept bare per TASK-91-T3 inner/outer analysis
@@ -3113,10 +5213,7 @@
 +        if group is None:
 +            return _samples_failure(
 +                "multi_video_folder",
-+                (
-+                    "此資料夾有無關影片，補抓劇照會污染其他片；"
-+                    "只有同一作品的完整分集（例如 cd1/cd2）可以共用劇照"
-+                ),
++                _sample_text(locale, "error_multi_video_folder"),
 +                count=count,
 +            )
 +
@@ -3133,18 +5230,27 @@
              path_mappings=path_mappings,
 +            related_db_paths=related_db_paths,
 +            cancel_event=cancel_event,
++            locale=locale,
          )
 -        return asdict(result)
 +        payload = asdict(result)
 +        payload.update(diagnostics)
 +        if not result.success and result.error:
-+            payload["message"] = result.error
++            code = str(
++                diagnostics.get("error_code") or "internal_error"
++            )
++            payload["message"] = _sample_error_message(
++                locale,
++                code,
++                result.error,
++                number=req.number,
++            )
 +        return payload
      except Exception:
          logger.exception("fetch_samples_endpoint 失敗")
 -        return {"success": False, "error": "fetch_samples 處理失敗，請查閱日誌"}
 +        return _samples_failure(
-+            "internal_error", "fetch_samples 處理失敗，請查閱日誌"
++            "internal_error", _sample_text(locale, "error_internal")
 +        )
  
  
@@ -3153,11 +5259,20 @@
 +async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
      """批次 enrich — SSE streaming，最多 20 筆，按 file_path 去重"""
 -    if len(request.items) > 20:
-+    if len(batch.items) > 20:
-         raise HTTPException(status_code=422, detail="items 上限為 20 筆")
- 
+-        raise HTTPException(status_code=422, detail="items 上限為 20 筆")
+-
      config = await asyncio.to_thread(load_config)
-@@ -955,7 +1114,7 @@
++    locale = get_config_locale(config)
++
++    if len(batch.items) > 20:
++        raise HTTPException(
++            status_code=422,
++            detail=_api_text(locale, "batch_items_limit"),
++        )
+ 
+     # 90c-T1 唯讀 guard（async-safe）：config 已於上方 to_thread 載入，這裡從既載入的
+     # config 算一次唯讀前綴集（純比對、無 I/O），逐項用 is_path_readonly 純比對——不可在
+@@ -955,7 +1219,7 @@
      # 去重（按 file_path）
      seen_paths: set = set()
      deduped_items = []
@@ -3166,7 +5281,16 @@
          if item.file_path not in seen_paths:
              seen_paths.add(item.file_path)
              deduped_items.append(item)
-@@ -978,7 +1137,11 @@
+@@ -968,7 +1232,7 @@
+         # 53b-T3: 補完開始通知
+         _emit_notif(
+             "info", "notif.batch_enrich_started",
+-            message=f"共 {total} 部",
++            message=i18n_t("runtime.notify.batch_total", locale=locale, count=total),
+             task_type="batch_enrich",
+         )
+         # scraper cache：只對 refresh_full 生效（100% 需要 scraper data）
+@@ -978,7 +1242,11 @@
  
          try:
              for idx, item in enumerate(deduped_items, start=1):
@@ -3179,7 +5303,7 @@
                  _custom_refused = effective_source.startswith('custom:')
                  # 未知 / 非法 source guard：不靜默轉成無效 cache_key，退回 'auto'（最小驚訝）。
                  if not _custom_refused and effective_source != "auto" and not validate_source_id(effective_source):
-@@ -987,7 +1150,7 @@
+@@ -987,7 +1255,7 @@
                          effective_source, item.number,
                      )
                      effective_source = "auto"
@@ -3188,34 +5312,60 @@
  
                  # progress 事件
                  yield f"data: {json.dumps({'type': 'progress', 'current': idx, 'total': total, 'number': item.number})}\n\n"
-@@ -1015,14 +1178,14 @@
+@@ -995,7 +1263,7 @@
+                 if _custom_refused:
+                     # spec §8：自訂來源不參與批次補完（含已驗收已啟用者）；純字串判斷，不抓取不寫入
+                     failed_count += 1
+-                    yield f"data: {json.dumps({'type': 'result-item', 'number': item.number, 'file_path': item.file_path, 'success': False, 'error': '自訂來源不參與批次補完，請改用單片重刮', 'reason': 'error'})}\n\n"
++                    yield f"data: {json.dumps({'type': 'result-item', 'number': item.number, 'file_path': item.file_path, 'success': False, 'error': _api_text(locale, 'custom_batch_not_allowed'), 'reason': 'error'})}\n\n"
+                     continue
+ 
+                 # TASK-104-T3 (CD-104-5)：唯讀項不再拒絕，改道 output_dir（action 固定
+@@ -1015,21 +1283,21 @@
                          # comment) — placed before resolve_owning_output_root so it
                          # short-circuits regardless of output_dir configuration.
                          # BatchEnrichRequest has no per-item mode override, so this
 -                        # is checked once against the whole-batch `request.mode`.
 -                        if request.mode == 'db_to_sidecar':
+-                            return ('db_to_sidecar', _READONLY_DB_TO_SIDECAR_ERROR_MSG)
 +                        # is checked once against the whole-batch `batch.mode`.
 +                        if batch.mode == 'db_to_sidecar':
-                             return ('db_to_sidecar', _READONLY_DB_TO_SIDECAR_ERROR_MSG)
++                            return ('db_to_sidecar', _api_text(locale, _READONLY_DB_TO_SIDECAR_ERROR_MSG))
                          # P1 revert + reject (round-3 review 2026-07-21): same
                          # write_nfo=false rejection as enrich_single_endpoint's
                          # readonly branch (see _READONLY_NO_NFO_ERROR_MSG) — readonly
                          # produce is holistic, no per-item override exists.
 -                        if not request.write_nfo:
+-                            return ('no_nfo', _READONLY_NO_NFO_ERROR_MSG)
 +                        if not batch.write_nfo:
-                             return ('no_nfo', _READONLY_NO_NFO_ERROR_MSG)
++                            return ('no_nfo', _api_text(locale, _READONLY_NO_NFO_ERROR_MSG))
                          owning = resolve_owning_output_root(uri, config)
                          if owning is None:
-@@ -1054,7 +1217,7 @@
+                             return ('skip', None)  # 理論不達（上面 is_path_readonly 已判真）
+                         ro_source, out_root, out_uri = owning
+                         if not out_root:
+-                            return ('error', "未設定媒體庫輸出路徑")
++                            return ('error', _api_text(locale, "output_root_missing"))
+                         # TASK-109-T3: 產出核心（URI→FS 轉換到組 EnrichResult 為止）薄搬移進
+                         # core.readonly_producer.enrich_one_readonly；closure 只保留三個刻意
+                         # 缺口——reject guard + output_dir 解析（上方已做，C3）、javlib 預抓
+@@ -1054,12 +1322,13 @@
                                  number=itm.number, scraper_cfg=config.get("scraper", {}),
                                  path_mappings=_ro_mappings, action='ingest',
                                  scraper_data=None, scrape_source=es, javbus_lang=el,
 -                                write_cover=request.write_cover, overwrite_existing=request.overwrite_existing,
 +                                write_cover=batch.write_cover, overwrite_existing=batch.overwrite_existing,
                                  focal_before_cover_recheck=True,
++                                locale=locale,
                              )
                          except ReadonlyProduceError:
-@@ -1076,7 +1239,7 @@
+                             logger.exception("batch_enrich readonly item %s 失敗", itm.number)
+-                            return ('error', "生成失敗")
++                            return ('error', _api_text(locale, "generation_failed"))
+                         if not result.success:
+                             # 唯一可能回 success=False 的情況是 entry 內的 not-found 分支
+                             # （resolve_ingest_plan 找不到可用番號資料）；result.error 即
+@@ -1076,7 +1345,7 @@
                              # 其他 mode 維持 success（refresh_full 可能只更新 DB）。⚠️ 前端
                              # didEnrichSomething() 沒有這道 mode 閘，多出 refresh_full 呼叫端時兩邊一起補。
                              # 今天 fill_missing 零行為變化（readonly nfo_written=True 無條件）；縮圖失效仍掛 ok。
@@ -3224,7 +5374,25 @@
                                  success_count += 1
                              else:
                                  failed_count += 1
-@@ -1146,7 +1309,7 @@
+@@ -1119,7 +1388,7 @@
+                             reason = 'not_found' if status == 'no_scrape' else 'error'
+                             result_item = {
+                                 'type': 'result-item', 'number': item.number, 'file_path': item.file_path,
+-                                **asdict(_readonly_enrich_failure(payload or '生成失敗', reason)),
++                                **asdict(_readonly_enrich_failure(payload or _api_text(locale, "generation_failed"), reason)),
+                             }
+                             yield f"data: {json.dumps(result_item)}\n\n"
+                     except Exception:
+@@ -1136,7 +1405,7 @@
+                         failed_count += 1
+                         result_item = {
+                             'type': 'result-item', 'number': item.number, 'file_path': item.file_path,
+-                            **asdict(_readonly_enrich_failure("enrich 處理失敗，請查閱日誌", 'error')),
++                            **asdict(_readonly_enrich_failure(_api_text(locale, "enrich_failed"), 'error')),
+                         }
+                         yield f"data: {json.dumps(result_item)}\n\n"
+                     continue
+@@ -1146,7 +1415,7 @@
  
                      # scraper cache（只對 refresh_full pre-fetch）
                      cached_data = None
@@ -3233,7 +5401,7 @@
                          cache_key = (item.number.upper(), effective_source, effective_lang)
                          if cache_key not in scraper_cache:
                              _pf_ctx = contextvars.copy_context()
-@@ -1165,11 +1328,11 @@
+@@ -1165,16 +1434,17 @@
                          enrich_single,
                          file_path=item.file_path,
                          number=item.number,
@@ -3250,7 +5418,13 @@
                          external_manager=config.get("scraper", {}).get("external_manager", "off"), nfo_title_format=config.get("scraper", {}).get("nfo_title_format", '[{num}]{title}'),
                          source=effective_source if effective_source != "auto" else None,
                          javbus_lang=effective_lang,
-@@ -1182,7 +1345,7 @@
+                         scraper_data=cached_data,
+                         path_mappings=_ro_mappings,
++                        locale=locale,
+                     )
+                     result = await loop.run_in_executor(None, _en_ctx.run, _enrich)
+                     result_dict = asdict(result)
+@@ -1182,7 +1452,7 @@
                          # CD-147b-5／147b-T4：fill_missing 才套四項判準（與前端 didEnrichSomething
                          # 同步；⚠️ 前端沒有這道 mode 閘，多出 refresh_full 呼叫端時兩邊一起補）；
                          # 其他 mode 維持 result.success（refresh_full 可能只更新 DB）。縮圖失效仍掛之。
@@ -3259,6 +5433,47 @@
                              success_count += 1
                          else:
                              failed_count += 1
+@@ -1204,27 +1474,36 @@
+                 except Exception:
+                     logger.exception("batch_enrich item %s 失敗", item.number)
+                     failed_count += 1
+-                    yield f"data: {json.dumps({'type': 'result-item', 'number': item.number, 'file_path': item.file_path, 'success': False, 'error': 'enrich 處理失敗，請查閱日誌', 'reason': 'error'})}\n\n"
++                    yield f"data: {json.dumps({'type': 'result-item', 'number': item.number, 'file_path': item.file_path, 'success': False, 'error': _api_text(locale, 'enrich_failed'), 'reason': 'error'})}\n\n"
+ 
+             yield f"data: {json.dumps({'type': 'done', 'summary': {'total': total, 'success': success_count, 'failed': failed_count}})}\n\n"
+             # 53b-T3: 補完完成通知
+             if failed_count > 0:
+                 _emit_notif(
+                     "warn", "notif.batch_enrich_done_with_errors",
+-                    message=f"補完 {success_count} 部，{failed_count} 部失敗",
++                    message=i18n_t(
++                        "runtime.notify.batch_done_with_errors",
++                        locale=locale,
++                        success=success_count,
++                        failed=failed_count,
++                    ),
+                     task_type="batch_enrich",
+                 )
+             else:
+                 _emit_notif(
+                     "success", "notif.batch_enrich_done",
+-                    message=f"補完 {success_count} 部",
++                    message=i18n_t(
++                        "runtime.notify.batch_done",
++                        locale=locale,
++                        success=success_count,
++                    ),
+                     task_type="batch_enrich",
+                 )
+         except Exception:
+             logger.exception("[notif] batch_enrich 失敗")
+             _emit_notif(
+                 "error", "notif.batch_enrich_failed",
+-                message="批次補完中斷，請查閱日誌",
++                message=i18n_t("runtime.notify.batch_failed", locale=locale),
+                 task_type="batch_enrich",
+             )
+             raise
 --- a/web/routers/search.py
 +++ b/web/routers/search.py
 @@ -32,7 +32,9 @@
@@ -3272,7 +5487,322 @@
  from core.image_codec import (
      decode_image_payload,
      image_media_type,
-@@ -1173,7 +1175,17 @@
+@@ -51,6 +53,7 @@
+ from core.scrapers.javbus import JAVBUS_LIST_PAGE_SIZE
+ from core.auto_organize_state import mark_manual_activity, request_abort, get_status
+ from core.config import get_configured_gallery_dirs, load_config, mutate_config
++from core.i18n import get_config_locale, t as i18n_t
+ from core.favorite_scan import resolve_favorite_folder
+ from core.proxy_policy import proxy_kwargs
+ from web import auto_organize_scheduler
+@@ -67,6 +70,15 @@
+ router = APIRouter(prefix="/api", tags=["search"])
+ 
+ 
++def _search_text(key: str, locale: str | None = None, **params) -> str:
++    """Return a search-API message in the active UI language."""
++    return i18n_t(
++        f"runtime.search.{key}",
++        locale=locale or get_config_locale(),
++        **params,
++    )
++
++
+ # 168d：指定來源搜尋的 CF 錯誤句主詞。javlibrary 與舊版逐字相同（含站名後的空格）；其餘來源中性。
+ _CF_ERROR_SUBJECT = {"javlibrary": "JavLibrary ", "fc-javten": "FC2-javten "}
+ 
+@@ -78,7 +90,7 @@
+ 
+ # ── 173：片商最新作品（容量端點 ＋ stream／REST 的 maker 分支）──
+ 
+-_MAKER_PARAM_ERROR = "片商參數無效"
++_MAKER_PARAM_ERROR = "maker_invalid"
+ 
+ 
+ def _since_twelve_months_ago(today: datetime.date) -> str:
+@@ -203,10 +215,13 @@
+     return extras
+ 
+ 
+-def _search_maker_rest(maker_key, maker, spellings, offset, cursor=None) -> dict:
++def _search_maker_rest(maker_key, maker, spellings, offset, cursor=None, locale=None) -> dict:
+     error = _maker_param_error(maker_key, spellings, offset)
+     if error:
+-        return JSONResponse(status_code=400, content={"success": False, "error": error})
++        return JSONResponse(
++            status_code=400,
++            content={"success": False, "error": _search_text(error, locale)},
++        )
+     meta: dict = {}
+     result = _run_maker_search(maker_key, maker, spellings, offset, cursor=cursor, meta=meta)
+     extras = _maker_result_extras(maker_key, result.results, result)
+@@ -217,13 +232,23 @@
+             "actress_profile": None, **extras, **_cursor_fields(meta),
+         }
+     return {
+-        "success": False, "error": f"找不到 {maker or maker_key} 的資料", "data": [], "total": 0,
++        "success": False,
++        "error": _search_text(
++            "maker_no_results",
++            locale,
++            maker=maker or maker_key,
++        ),
++        "data": [],
++        "total": 0,
+         "mode": "maker", "has_more": False, "actress_profile": None, **extras,
+     }
+ 
+ 
+-def _cf_error_subject(source) -> str:
+-    return _CF_ERROR_SUBJECT.get(source, "此來源")
++def _cf_error_subject(source, locale=None) -> str:
++    return _CF_ERROR_SUBJECT.get(
++        source,
++        _search_text("cf_subject_generic", locale),
++    )
+ 
+ # 載入片商前綴對照表（啟動時一次性載入）
+ _MAKER_MAPPING = load_prefix_mapping()
+@@ -350,31 +375,40 @@
+     - **limit**: 每頁結果數（預設 20，最大 50）
+     - **offset**: 跳過前 N 個結果，用於載入更多
+     """
++    config = load_config()
++    locale = get_config_locale(config)
+     cursor = _cursor_arg(cursor)
+     if maker_key is not None:
+-        return _search_maker_rest(maker_key, maker, spellings, offset, cursor)
++        return _search_maker_rest(maker_key, maker, spellings, offset, cursor, locale)
+ 
+     q = (q or "").strip()
+     if not q or len(q) < 2:
+-        return {"success": False, "error": "請輸入有效的搜尋關鍵字", "data": [], "total": 0}
++        return {"success": False, "error": _search_text("invalid_query", locale), "data": [], "total": 0}
+ 
+     # 驗證 since 格式
+     if since is not None:
+         if not re.match(r'^\d{4}-\d{2}-\d{2}$', since):
+-            return JSONResponse(status_code=400, content={"success": False, "error": "since 參數格式錯誤，需為 YYYY-MM-DD"})
++            return JSONResponse(
++                status_code=400,
++                content={"success": False, "error": _search_text("invalid_since", locale)},
++            )
+ 
+     # 驗證 source 參數
+     if source is not None and not validate_source_id(source):
+-        return JSONResponse(status_code=400, content={"success": False, "error": f"未知來源: {source}"})
++        return JSONResponse(
++            status_code=400,
++            content={"success": False, "error": _search_text("unknown_source", locale, source=source)},
++        )
+ 
+     # source 只在 exact 模式生效（CD-135-9 / AC-13）；auto 語意上不是「指定了具體來源」
+     # （見 core/source_config.py:244 的特判），不受本檢查限制
+     if source is not None and source != "auto" and mode != "exact":
+-        return JSONResponse(status_code=400, content={"success": False, "error": "source 僅在 mode=exact 時生效，請改用 mode=exact 或移除 source"})
++        return JSONResponse(
++            status_code=400,
++            content={"success": False, "error": _search_text("source_exact_only", locale)},
++        )
+ 
+     # 讀取設定（無碼模式）
+-    from core.config import load_config
+-    config = load_config()
+     uncensored_mode = is_uncensored_mode_effective(config)
+ 
+     # discovery 僅在明確指定 actress/partial/prefix 模式時生效
+@@ -412,7 +446,11 @@
+                 logger.warning("search: CfChallengeRequired for source=%s q=%s", source, q)
+                 return {
+                     "success": False,
+-                    "error": f"{_cf_error_subject(source)}需要解決 CF 驗證（請使用桌面應用程式）",
++                    "error": _search_text(
++                        "cf_required",
++                        locale,
++                        source=_cf_error_subject(source, locale),
++                    ),
+                     "data": [],
+                     "total": 0,
+                     "mode": "exact",
+@@ -423,7 +461,11 @@
+                 logger.warning("search: CfTransportUnavailable for source=%s q=%s", source, q)
+                 return {
+                     "success": False,
+-                    "error": f"{_cf_error_subject(source)}僅限桌面應用程式（standalone）使用",
++                    "error": _search_text(
++                        "desktop_only",
++                        locale,
++                        source=_cf_error_subject(source, locale),
++                    ),
+                     "data": [],
+                     "total": 0,
+                     "mode": "exact",
+@@ -435,7 +477,7 @@
+                 logger.warning("search: parse_empty source=%s q=%s", source, q)
+                 return {
+                     "success": False,
+-                    "error": parse_empty_text(source),
++                    "error": parse_empty_text(source, locale),
+                     "custom_error": "parse_empty",
+                     "source": source,
+                     "data": [],
+@@ -445,7 +487,7 @@
+                     "actress_profile": None,
+                 }
+             except (SourceBlocked, SourceUnreachable) as e:
+-                info = access_error_info(e, source)
++                info = access_error_info(e, source, locale=locale)
+                 logger.warning("search: %s source=%s q=%s", info["access_error"], source, q)
+                 return {
+                     "success": False,
+@@ -509,7 +551,7 @@
+ 
+     base_response = {
+         "success": False,
+-        "error": f"找不到 {q} 的資料",
++        "error": _search_text("no_results", locale, query=q),
+         "data": [],
+         "total": 0,
+         "mode": detected_mode,
+@@ -721,10 +763,16 @@
+     ))
+ 
+     if not numbers:
+-        return JSONResponse(status_code=400, content={"success": False, "error": "numbers 不可為空"})
++        return JSONResponse(
++            status_code=400,
++            content={"success": False, "error": _search_text("batch_empty")},
++        )
+ 
+     if len(numbers) > 50:
+-        return JSONResponse(status_code=422, content={"success": False, "error": "最多支援 50 筆批量搜尋"})
++        return JSONResponse(
++            status_code=422,
++            content={"success": False, "error": _search_text("batch_limit")},
++        )
+ 
+     results = {}
+ 
+@@ -779,18 +827,19 @@
+     """
+     mark_manual_activity()
+     cursor = _cursor_arg(cursor)
++    config = await asyncio.to_thread(load_config)
++    locale = get_config_locale(config)
+     is_maker = maker_key is not None
+     q = (q or "").strip()
+     invalid = _maker_param_error(maker_key, spellings, offset) if is_maker else (
+-        None if len(q) >= 2 else "請輸入有效的搜尋關鍵字")
++        None if len(q) >= 2 else "invalid_query")
+     if invalid:
++        message = _search_text(invalid, locale)
+         async def error_gen():
+-            yield f"data: {json.dumps({'type': 'error', 'message': invalid})}\n\n"
++            yield f"data: {json.dumps({'type': 'error', 'message': message})}\n\n"
+         return StreamingResponse(error_gen(), media_type="text/event-stream")
+ 
+     # 讀取設定（無碼模式）
+-    from core.config import load_config
+-    config = await asyncio.to_thread(load_config)
+     uncensored_mode = is_uncensored_mode_effective(config)
+ 
+     status_queue = Queue()
+@@ -917,7 +966,7 @@
+ 
+             except Exception as e:
+                 logger.error("串流搜尋失敗: %s", e)
+-                yield f"data: {json.dumps({'type': 'error', 'message': '搜尋失敗', 'actress_profile': None})}\n\n"
++                yield f"data: {json.dumps({'type': 'error', 'message': _search_text('failed', locale), 'actress_profile': None})}\n\n"
+ 
+     return StreamingResponse(event_generator(), media_type="text/event-stream")
+ 
+@@ -925,24 +974,29 @@
+ @router.get("/search/sources")
+ async def get_sources() -> dict:
+     """取得可用的搜尋來源"""
++    locale = get_config_locale()
+     # 來源描述（保留向後相容）
+     source_descriptions = {
+-        "auto": "依優先順序自動選擇",
+-        "dmm": "日本官方（需 Proxy）",
+-        "javbus": "最常用的來源（封面無浮水印）",
+-        "jav321": "備用來源（封面完整）",
+-        "javdb": "資料完整（有片商）",
++        "auto": _search_text("source_auto", locale),
++        "dmm": _search_text("source_dmm", locale),
++        "javbus": _search_text("source_javbus", locale),
++        "jav321": _search_text("source_jav321", locale),
++        "javdb": _search_text("source_javdb", locale),
+         "d2pass": "1Pondo / Caribbeancom / 10musume",
+-        "heyzo": "HEYZO 專用",
+-        "fc2": "FC2 專用",
+-        "avsox": "無碼片源",
++        "heyzo": _search_text("source_heyzo", locale),
++        "fc2": _search_text("source_fc2", locale),
++        "avsox": _search_text("source_avsox", locale),
+     }
+ 
+     # ⟳ switch-source 可輪替來源（builtin non-manual，依 config 拖曳順序；D7 修正）
+     switchable_ids = get_switchable_source_ids_ordered()
+ 
+     # 動態生成 sources 列表
+-    sources = [{"id": "auto", "name": "自動", "description": source_descriptions["auto"]}]
++    sources = [{
++        "id": "auto",
++        "name": _search_text("source_name_auto", locale),
++        "description": source_descriptions["auto"],
++    }]
+     for source_id in switchable_ids:
+         sources.append({
+             "id": source_id,
+@@ -974,6 +1028,7 @@
+     from core.favorite_scan import list_favorite_video_files, resolve_favorite_folder
+ 
+     config = load_config()
++    locale = get_config_locale(config)
+     original_folder = config.get('search', {}).get('favorite_folder', '').strip()
+ 
+     # 處理資料夾路徑
+@@ -983,7 +1038,7 @@
+         logger.error("路徑轉換失敗: %s", e)
+         return {
+             "success": False,
+-            "error": "路徑轉換失敗，請檢查我的最愛資料夾設定",
++            "error": _search_text("favorite_path_invalid", locale),
+             "folder": original_folder
+         }
+ 
+@@ -994,7 +1049,11 @@
+     if not folder_path.exists():
+         return {
+             "success": False,
+-            "error": f"資料夾不存在：{original_folder or folder}",
++            "error": _search_text(
++                "favorite_missing",
++                locale,
++                path=original_folder or folder,
++            ),
+             "folder": original_folder or folder
+         }
+ 
+@@ -1004,14 +1063,14 @@
+     except PermissionError:
+         return {
+             "success": False,
+-            "error": "無權限讀取資料夾",
++            "error": _search_text("favorite_no_permission", locale),
+             "folder": folder
+         }
+ 
+     if len(files) == 0:
+         return {
+             "success": False,
+-            "error": "資料夾內無有效影片檔案",
++            "error": _search_text("favorite_no_videos", locale),
+             "folder": folder
+         }
+ 
+@@ -1173,7 +1232,17 @@
  
      Returns:
          {
@@ -3291,7 +5821,7 @@
              "ABW-001": { "exists": false }
          }
  
-@@ -1195,23 +1207,72 @@
+@@ -1195,23 +1264,72 @@
      init_db()  # 確保 DB 存在
      repo = VideoRepository()
      videos_by_number = repo.get_by_numbers(number_list)
@@ -3380,7 +5910,7 @@
  from core.database.version_tracker import (
      compute_db_fingerprint,
      compute_etag,
-@@ -33,9 +33,15 @@
+@@ -33,18 +33,36 @@
  from core.scrapers.utils import has_japanese
  from core.nfo_stat import nfo_mtime_or_none
  from core.nfo_title_format import build_display_title
@@ -3396,7 +5926,28 @@
  )
  from core.focal import device_state, format_focal, parse_focal
  from core.focal.subprocess_runner import run_detection
-@@ -73,6 +79,11 @@
+ from core import thumbnail_cache
+ from core.multipart_group import group_rows, resolve_group
++from core.i18n import get_config_locale, t as i18n_t
+ 
+ logger = get_logger(__name__)
+ 
+ router = APIRouter(prefix="/api/showcase", tags=["showcase"])
++
++
++def _showcase_locale(config: dict | None = None) -> str:
++    try:
++        return get_config_locale(config)
++    except Exception:
++        return "zh-CN"
++
++
++def _showcase_text(key: str, locale: str, **params) -> str:
++    return i18n_t(f"runtime.api.{key}", locale=locale, **params)
+ 
+ 
+ class DetectFocalRequest(BaseModel):
+@@ -73,6 +91,11 @@
  def _needs_translate(title, original_title, nfo_mtime) -> bool:
      """標題是假名、沒有原文、且有 NFO（nfo_mtime > 0）才算待翻譯（列表與寫回回應共用）。"""
      return bool((not original_title) and has_japanese(title or '') and (nfo_mtime or 0) > 0)
@@ -3408,7 +5959,7 @@
  
  
  def _serialize_video(v, path_mappings: dict, enabled: bool = False) -> dict:
-@@ -121,6 +132,7 @@
+@@ -121,6 +144,7 @@
          "has_cover": bool(v.cover_path),             # DB 初判（不做 IO）
          "has_nfo": (v.nfo_mtime or 0) > 0,          # 對齊 41a nfo_mtime 寫入契約，防禦 NULL
          "needs_translate": _needs_translate(v.title, v.original_title, v.nfo_mtime),  # 無條件輸出（FE-ALPINE-06）
@@ -3416,7 +5967,7 @@
          "auto_focal": v.auto_focal,                  # canonical "x,y" 4dp 字串或 ''（98b：前端 focalObjectPosition 消費）
          "crop_mode": v.crop_mode,                    # 'auto' | 'default'（98b：default 退 baseline 右裁）
      }
-@@ -132,9 +144,9 @@
+@@ -132,9 +156,9 @@
      以 `group.members[0]`（part-1，group_rows 已依 part_number 升冪排序）的
      `_serialize_video()` 結果為基底，只在**真的多段時**覆寫 `size`（各段 size_bytes 加總，`or 0`
      是必要防禦——`Video.from_row()` 對 DB NULL 不做防禦，size_bytes 可能是 None）
@@ -3429,7 +5980,7 @@
      """
      base = _serialize_video(group.members[0], path_mappings, enabled)
      # 單檔片不碰 size：`_serialize_video()` 原樣傳 `v.size_bytes`（DB NULL → None），
-@@ -143,7 +155,41 @@
+@@ -143,7 +167,41 @@
      if len(group.members) > 1:
          base['size'] = sum(m.size_bytes or 0 for m in group.members)
      base['part_tokens'] = group.part_tokens
@@ -3471,7 +6022,7 @@
  
  
  def _etag_matches(if_none_match: str, etag: str) -> bool:
-@@ -158,8 +204,20 @@
+@@ -158,8 +216,20 @@
  
  
  @router.get("/videos")
@@ -3493,7 +6044,7 @@
  
      帶 ETag（CD-145a-8/11/12）：涵蓋 DB 內部寫入 revision、DB/-wal 檔案指紋（涵蓋外部
      抽換或還原備份）、無機密設定投影（來源資料夾／path_mappings／縮圖開關）三項，
-@@ -186,18 +244,46 @@
+@@ -186,18 +256,46 @@
          configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
          thumb_enabled = config.get('thumbnail_cache_enabled', False)
  
@@ -3544,7 +6095,7 @@
                        if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
  
          # feature/122 CD-122-1：分組在序列化層收斂，前端拿到的 videos 陣列已是
-@@ -205,15 +291,32 @@
+@@ -205,23 +303,41 @@
          # 一個 member，_serialize_group() 輸出與改動前逐鍵逐值相同（AC-4）。
          groups = group_rows(all_videos, fs_path_of=lambda v: uri_to_local_fs_path(v.path, path_mappings))
  
@@ -3581,15 +6132,282 @@
          resp.headers["Cache-Control"] = "no-cache"
          return resp
  
-@@ -494,6 +597,7 @@
-     "no_nfo": "找不到 NFO",
-     "nfo_ambiguous": "輸出夾有多份 NFO，無法判斷要改哪一份",
-     "nfo_unreadable": "NFO 無法讀取或解析",
-+    "storage_permission_required": "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
-     "nfo_write_failed": "NFO 寫入失敗",
-     "db_write_failed": "資料庫寫入失敗（NFO 已更新，請再試一次）",
-     "invalid_path": "檔案路徑格式無效",
-@@ -541,7 +645,13 @@
+     except Exception as e:
+         logger.error("取得影片資料失敗: %s", e)
++        locale = _showcase_locale()
+         return JSONResponse({
+             "success": False,
+-            "error": "取得影片資料失敗",
++            "error": _showcase_text("video_data_load_failed", locale),
+             "videos": [],
+             "total": 0
+         }, status_code=500)
+@@ -230,23 +346,43 @@
+ @router.get("/video")
+ def get_video(path: str = Query(..., description="file:/// URI")):
+     """取得單筆影片資料（用於 T3 refreshVideoData enrich 後刷新卡片）"""
++    locale = _showcase_locale()
+     try:
+         db_path = get_db_path()
+         if not db_path.exists():
+-            return JSONResponse({"success": False, "error": "video not found"}, status_code=404)
++            return JSONResponse(
++                {
++                    "success": False,
++                    "error": _showcase_text("video_not_found", locale),
++                },
++                status_code=404,
++            )
+ 
+         init_db(db_path)
+         repo = VideoRepository(db_path)
+ 
+         config = load_config()
++        locale = _showcase_locale(config)
+         configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
+ 
+         if not any(is_path_under_dir(path, uri) for uri in configured_dir_uris):
+-            return JSONResponse({"success": False, "error": "video not found"}, status_code=404)
++            return JSONResponse(
++                {
++                    "success": False,
++                    "error": _showcase_text("video_not_found", locale),
++                },
++                status_code=404,
++            )
+ 
+         v = repo.get_by_path(path)
+         if v is None:
+-            return JSONResponse({"success": False, "error": "video not found"}, status_code=404)
++            return JSONResponse(
++                {
++                    "success": False,
++                    "error": _showcase_text("video_not_found", locale),
++                },
++                status_code=404,
++            )
+ 
+         thumb_enabled = config.get('thumbnail_cache_enabled', False)
+ 
+@@ -264,7 +400,15 @@
+ 
+     except Exception as e:
+         logger.error("取得單筆影片失敗: %s", e)
+-        return JSONResponse({"success": False, "error": "取得影片資料失敗"}, status_code=500)
++        return JSONResponse(
++            {
++                "success": False,
++                "error": _showcase_text(
++                    "video_data_load_failed", _showcase_locale()
++                ),
++            },
++            status_code=500,
++        )
+ 
+ 
+ @router.delete("/video")
+@@ -353,30 +497,58 @@
+     ⚠️ 停用狀態已於上方端點層短路，不會走到這裡，所以「關掉之後直接進手動」不受鎖排隊影響。
+     **不進 capabilities（不揭露）。**
+     """
++    locale = _showcase_locale()
+     try:
+         db_path = get_db_path()
+         if not db_path.exists():
+-            return JSONResponse({"success": False, "error": "找不到影片"}, status_code=404)
++            return JSONResponse(
++                {
++                    "success": False,
++                    "error": _showcase_text("video_not_found", locale),
++                },
++                status_code=404,
++            )
+ 
+         init_db(db_path)
+         repo = VideoRepository(db_path)
+ 
+         row = repo.get_by_path(req.path)
+         if row is None:
+-            return JSONResponse({"success": False, "error": "找不到影片"}, status_code=404)
++            return JSONResponse(
++                {
++                    "success": False,
++                    "error": _showcase_text("video_not_found", locale),
++                },
++                status_code=404,
++            )
+ 
+         config = load_config()
++        locale = _showcase_locale(config)
+         configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
+ 
+         in_scope = any(is_path_under_dir(row.path, uri) for uri in configured_dir_uris)
+         if not in_scope:
+-            return JSONResponse({"success": False, "error": "此影片不在收藏範圍，無法偵測焦點"}, status_code=403)
++            return JSONResponse(
++                {
++                    "success": False,
++                    "error": _showcase_text(
++                        "video_out_of_scope_detect", locale
++                    ),
++                },
++                status_code=403,
++            )
+ 
+         # ★ Codex P0：取 row.cover_path（非 body path）反解封面 fs
+         cover_fs = uri_to_local_fs_path(row.cover_path, path_mappings) if row.cover_path else ''
+         if not row.cover_path or not os.path.isfile(cover_fs):
+-            return JSONResponse({"success": False, "error": "找不到封面檔案",
+-                                 "cover_path": row.cover_path}, status_code=400)
++            return JSONResponse(
++                {
++                    "success": False,
++                    "error": _showcase_text("cover_not_found", locale),
++                    "cover_path": row.cover_path,
++                },
++                status_code=400,
++            )
+ 
+         # 152d-T-D8：停用時在這裡就回，不要進 run_detection ——
+         # pre_spawn_check 跑在全域 _slot_lock 裡面（subprocess_runner.py:298→309），
+@@ -430,7 +602,13 @@
+ 
+     except Exception as e:
+         logger.error("偵測焦點失敗: %s", e)
+-        return JSONResponse({"success": False, "error": "偵測焦點失敗"}, status_code=500)
++        return JSONResponse(
++            {
++                "success": False,
++                "error": _showcase_text("focal_detect_failed", locale),
++            },
++            status_code=500,
++        )
+ 
+ 
+ @router.post("/video/save-focal")
+@@ -451,58 +629,102 @@
+     rescrape 期間換了封面）→ 409，DB 不變，前端應提示使用者重新開啟裁切工具。
+     `def`（非 async）→ Starlette threadpool。**不進 capabilities（不揭露）。**
+     """
++    locale = _showcase_locale()
+     parsed = parse_focal(req.focal)
+     if parsed is None:
+-        return JSONResponse({"success": False, "error": "無效的焦點座標格式"}, status_code=400)
++        return JSONResponse(
++            {
++                "success": False,
++                "error": _showcase_text("focal_invalid", locale),
++            },
++            status_code=400,
++        )
+ 
+     try:
+         db_path = get_db_path()
+         if not db_path.exists():
+-            return JSONResponse({"success": False, "error": "找不到影片"}, status_code=404)
++            return JSONResponse(
++                {
++                    "success": False,
++                    "error": _showcase_text("video_not_found", locale),
++                },
++                status_code=404,
++            )
+ 
+         init_db(db_path)
+         repo = VideoRepository(db_path)
+ 
+         row = repo.get_by_path(req.path)
+         if row is None:
+-            return JSONResponse({"success": False, "error": "找不到影片"}, status_code=404)
++            return JSONResponse(
++                {
++                    "success": False,
++                    "error": _showcase_text("video_not_found", locale),
++                },
++                status_code=404,
++            )
+ 
+         config = load_config()
++        locale = _showcase_locale(config)
+         configured_dir_uris, _path_mappings = get_configured_gallery_dirs(config)
+ 
+         in_scope = any(is_path_under_dir(row.path, uri) for uri in configured_dir_uris)
+         if not in_scope:
+-            return JSONResponse({"success": False, "error": "此影片不在收藏範圍，無法存入焦點"}, status_code=403)
++            return JSONResponse(
++                {
++                    "success": False,
++                    "error": _showcase_text(
++                        "video_out_of_scope_save", locale
++                    ),
++                },
++                status_code=403,
++            )
+ 
+         normalized = format_focal(parsed)
+         written = repo.update_manual_focal(req.path, normalized, req.expected_cover_path)
+         if not written:
+             return JSONResponse(
+-                {"success": False, "error": "封面已變更，請重新開啟裁切工具再試一次"},
++                {
++                    "success": False,
++                    "error": _showcase_text("cover_changed", locale),
++                },
+                 status_code=409,
+             )
+         return JSONResponse({"success": True, "auto_focal": normalized})
+ 
+     except Exception as e:
+         logger.error("存入手動焦點失敗: %s", e)
+-        return JSONResponse({"success": False, "error": "存入手動焦點失敗"}, status_code=500)
+-
+-
+-_TITLE_ERROR_MESSAGES = {
+-    "not_found": "找不到影片",
+-    "title_empty": "標題不可為空",
+-    "no_nfo": "找不到 NFO",
+-    "nfo_ambiguous": "輸出夾有多份 NFO，無法判斷要改哪一份",
+-    "nfo_unreadable": "NFO 無法讀取或解析",
+-    "nfo_write_failed": "NFO 寫入失敗",
+-    "db_write_failed": "資料庫寫入失敗（NFO 已更新，請再試一次）",
+-    "invalid_path": "檔案路徑格式無效",
++        return JSONResponse(
++            {
++                "success": False,
++                "error": _showcase_text("focal_save_failed", locale),
++            },
++            status_code=500,
++        )
++
++
++_TITLE_ERROR_KEYS = {
++    "not_found": "error_not_found",
++    "title_empty": "error_title_empty",
++    "no_nfo": "error_no_nfo",
++    "nfo_ambiguous": "error_nfo_ambiguous",
++    "nfo_unreadable": "error_nfo_unreadable",
++    "storage_permission_required": "error_storage_permission_required",
++    "nfo_write_failed": "error_nfo_write_failed",
++    "db_write_failed": "error_db_write_failed",
++    "invalid_path": "error_invalid_path",
+ }
+ 
+ 
+-def _title_fail(code: str) -> dict:
++def _title_fail(code: str, locale: str | None = None) -> dict:
+     """寫回失敗一律 HTTP 200 ＋ {success:false, error:<code>, message}。"""
+-    return {"success": False, "error": code, "message": _TITLE_ERROR_MESSAGES[code]}
++    locale = locale or _showcase_locale()
++    key = _TITLE_ERROR_KEYS.get(code, "error_nfo_write_failed")
++    return {
++        "success": False,
++        "error": code,
++        "message": i18n_t(f"runtime.title.{key}", locale=locale),
++    }
+ 
+ 
+ def _new_original_title(req, video) -> str:
+@@ -541,7 +763,13 @@
      owning = resolve_owning_output_root(video.path, config)
      if owning is not None:
          return _locate_readonly_nfo(video, path_mappings, owning[2])
@@ -3604,7 +6422,7 @@
  
  
  def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: str) -> Optional[str]:
-@@ -556,10 +666,57 @@
+@@ -556,28 +784,108 @@
          return "no_nfo"
      except NfoParseError:
          return "nfo_unreadable"
@@ -3617,8 +6435,9 @@
          logger.error("[title-writeback] NFO 寫入失敗: %s", e)
          return "nfo_write_failed"
      return None
-+
-+
+ 
+ 
+-def _apply_title_writeback(repo, video, req, config: dict, path_mappings: dict) -> dict:
 +def _create_title_nfo(video, body: str, new_original: str, config: dict, path_mappings: dict):
 +    """Create the missing sidecar NFO and return ``(path, error)``."""
 +    owning = resolve_owning_output_root(video.path, config)
@@ -3659,25 +6478,42 @@
 +    if not created:
 +        return None, "nfo_write_failed"
 +    return str(nfo_path), None
- 
- 
- def _apply_title_writeback(repo, video, req, config: dict, path_mappings: dict) -> dict:
-@@ -574,6 +731,31 @@
++
++
++def _apply_title_writeback(
++    repo,
++    video,
++    req,
++    config: dict,
++    path_mappings: dict,
++    locale: str | None = None,
++) -> dict:
++    locale = locale or _showcase_locale(config)
+     fmt = config.get("scraper", {}).get("nfo_title_format", '[{num}]{title}')
+     _display, body = build_display_title(
+         video.number or '', strip_illegal_xml_chars(req.title).strip(), '',
+         video.actresses, video.maker, video.release_date, fmt,
+     )
+     if not body:
+-        return _title_fail("title_empty")
++        return _title_fail("title_empty", locale)
+     new_original = strip_illegal_xml_chars(_new_original_title(req, video))
  
      nfo_path, loc_err = _locate_title_nfo(video, config, path_mappings)
      if nfo_path is None:
+-        return _title_fail(loc_err)
 +        if loc_err == "no_nfo":
 +            nfo_path, create_err = _create_title_nfo(
 +                video, body, new_original, config, path_mappings
 +            )
 +            if create_err is not None:
-+                return _title_fail(create_err)
++                return _title_fail(create_err, locale)
 +            new_mtime = nfo_mtime_or_none(Path(nfo_path))
 +            if new_mtime is None:
 +                new_mtime = video.nfo_mtime
 +            written = repo.update_titles(video.path, body, new_original, new_mtime)
 +            if not written:
-+                return _title_fail("not_found")
++                return _title_fail("not_found", locale)
 +            return {
 +                "success": True,
 +                "title": body,
@@ -3691,20 +6527,84 @@
 +                "nfo_updated": True,
 +                "nfo_created": True,
 +            }
-         return _title_fail(loc_err)
++        return _title_fail(loc_err, locale)
      nfo_err = _write_title_nfo(nfo_path, video, body, new_original, fmt)
      if nfo_err is not None:
-@@ -592,6 +774,7 @@
-         return _title_fail("not_found")
+-        return _title_fail(nfo_err)
++        return _title_fail(nfo_err, locale)
+ 
+     # 取實際寫入那份 NFO 的 mtime；取不到沿用舊值（下次掃描最多多讀一次）
+     new_mtime = nfo_mtime_or_none(Path(nfo_path))
+@@ -587,11 +895,12 @@
+         written = repo.update_titles(video.path, body, new_original, new_mtime)
+     except Exception as e:
+         logger.error("[title-writeback] DB 寫入失敗: %s", e)
+-        return _title_fail("db_write_failed")
++        return _title_fail("db_write_failed", locale)
+     if not written:
+-        return _title_fail("not_found")
++        return _title_fail("not_found", locale)
      return {"success": True, "title": body, "original_title": new_original,
              "needs_translate": _needs_translate(body, new_original, new_mtime),
 +            "can_translate": _can_manual_translate(body, new_original, new_mtime),
              "nfo_updated": True}
  
  
+@@ -602,25 +911,29 @@
+     失敗一律 HTTP 200 ＋ {success:false, error:<code>}。`def`（非 async）→ threadpool。
+     端點內不呼叫翻譯；唯讀來源只改輸出夾那份 NFO，來源零寫入。
+     """
++    locale = _showcase_locale()
+     try:
+         db_path = get_db_path()
+         if not db_path.exists():
+-            return _title_fail("not_found")
++            return _title_fail("not_found", locale)
+         init_db(db_path)
+         repo = VideoRepository(db_path)
+         video = repo.get_by_path(req.file_path)
+         if video is None:
+-            return _title_fail("not_found")
++            return _title_fail("not_found", locale)
+         config = load_config()
++        locale = _showcase_locale(config)
+         configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
+         if not any(is_path_under_dir(video.path, uri) for uri in configured_dir_uris):
+-            return _title_fail("not_found")
+-        return _apply_title_writeback(repo, video, req, config, path_mappings)
++            return _title_fail("not_found", locale)
++        return _apply_title_writeback(
++            repo, video, req, config, path_mappings, locale
++        )
+     except ValueError:
+-        return _title_fail("invalid_path")
++        return _title_fail("invalid_path", locale)
+     except Exception as e:
+         logger.error("[title-writeback] 未預期錯誤: %s", e)
+-        return _title_fail("nfo_write_failed")
++        return _title_fail("nfo_write_failed", locale)
+ 
+ 
+ @router.get("/source-status")
 --- a/web/routers/translate.py
 +++ b/web/routers/translate.py
-@@ -29,6 +29,7 @@
+@@ -18,10 +18,15 @@
+ from core.translate_service import create_translate_service
+ from core.scrapers.utils import has_japanese
+ from core.logger import get_logger
++from core.i18n import get_config_locale, t as i18n_t
+ 
+ logger = get_logger(__name__)
+ 
+ router = APIRouter(prefix="/api", tags=["translate"])
++
++
++def _translate_text(locale: str, key: str, **params) -> str:
++    return i18n_t(f"runtime.translate.{key}", locale=locale, **params)
+ 
+ 
+ class TranslateRequest(BaseModel):
+@@ -29,6 +34,7 @@
      mode: str = "translate"  # "translate" (日文→中文) 或 "optimize" (清理中文)
      actors: Optional[List[str]] = None
      number: Optional[str] = None
@@ -3712,8 +6612,27 @@
  
  
  class BatchTranslateRequest(BaseModel):
-@@ -92,7 +93,7 @@
-         return {"success": False, "error": "翻譯功能未啟用"}
+@@ -65,7 +71,7 @@
+             if _translate_service is None:            # double-check under lock
+                 config = load_config()
+                 translate_config = config.get("translate", {})
+-                locale = config.get("general", {}).get("locale", "zh-TW")
++                locale = config.get("general", {}).get("locale", "zh-CN")
+                 _translate_service = create_translate_service(translate_config, locale)
+     return _translate_service
+ 
+@@ -87,12 +93,16 @@
+ 
+     config = await asyncio.to_thread(load_config)
+     translate_config = config.get("translate", {})
++    locale = get_config_locale(config)
+ 
+     if not translate_config.get("enabled", False):
+-        return {"success": False, "error": "翻譯功能未啟用"}
++        return {
++            "success": False,
++            "error": _translate_text(locale, "disabled"),
++        }
  
      # === 新增：日文檢測，只對 translate 模式生效 ===
 -    if request.mode == "translate" and not has_japanese(request.text):
@@ -3721,3 +6640,109 @@
          return {
              "skipped": True,
              "success": True,  # 新增：API 成功執行跳過邏輯
+@@ -112,7 +122,11 @@
+             result = await translate_service.translate_or_raise(request.text, context)
+ 
+             if not result:
+-                return {"success": False, "error": "翻譯結果為空", "reason": "other"}
++                return {
++                    "success": False,
++                    "error": _translate_text(locale, "empty_result"),
++                    "reason": "other",
++                }
+ 
+             return {
+                 "success": True,
+@@ -121,14 +135,26 @@
+             }
+ 
+         except TranslateError as e:
+-            return {"success": False, "error": "翻譯結果為空", "reason": failure_category(e.kind)}
++            return {
++                "success": False,
++                "error": _translate_text(locale, "empty_result"),
++                "reason": failure_category(e.kind),
++            }
+         except ValueError as e:
+             # API Key 未設定等配置錯誤
+             logger.exception("翻譯設定錯誤: %s", e)
+-            return {"success": False, "error": "翻譯設定錯誤，請檢查 API Key 設定", "reason": "other"}
++            return {
++                "success": False,
++                "error": _translate_text(locale, "config_invalid"),
++                "reason": "other",
++            }
+         except Exception as e:
+             logger.exception("翻譯失敗: %s", e)
+-            return {"success": False, "error": "翻譯失敗", "reason": "other"}
++            return {
++                "success": False,
++                "error": _translate_text(locale, "failed"),
++                "reason": "other",
++            }
+ 
+     # === optimize 模式：使用 Ollama 清理標題 ===
+     # 兼容嵌套結構和舊扁平結構
+@@ -176,7 +202,10 @@
+             result = data.get("message", {}).get("content", "").strip()
+ 
+             if not result:
+-                return {"success": False, "error": "翻譯結果為空"}
++                return {
++                    "success": False,
++                    "error": _translate_text(locale, "empty_result"),
++                }
+ 
+             # 清理輸出
+             result = result.strip().strip('"').strip("'")
+@@ -192,12 +221,21 @@
+             }
+ 
+     except httpx.TimeoutException:
+-        return {"success": False, "error": "Ollama 連線逾時"}
++        return {
++            "success": False,
++            "error": _translate_text(locale, "ollama_timeout"),
++        }
+     except httpx.ConnectError:
+-        return {"success": False, "error": "無法連線到 Ollama"}
++        return {
++            "success": False,
++            "error": _translate_text(locale, "ollama_unreachable"),
++        }
+     except Exception as e:
+         logger.exception("標題優化失敗: %s", e)
+-        return {"success": False, "error": "標題優化失敗"}
++        return {
++            "success": False,
++            "error": _translate_text(locale, "optimize_failed"),
++        }
+ 
+ 
+ @router.post("/translate-batch")
+@@ -237,6 +275,7 @@
+ 
+         # 獲取配置的批次大小（預留：可從 config 讀取默認值）
+         config = await asyncio.to_thread(load_config)
++        locale = get_config_locale(config)
+         default_batch_size = config.get("translate", {}).get("batch_size", 10)
+ 
+         # 限制批次大小（防止超時），優先使用請求參數
+@@ -282,6 +321,7 @@
+ 
+     except Exception as e:
+         logger.exception("批次翻譯失敗: %s", e)
++        locale = get_config_locale()
+ 
+         # 返回錯誤響應（不拋出異常，避免前端報錯）
+         return {
+@@ -289,6 +329,6 @@
+             "count": 0,
+             "skipped": 0,
+             "errors": list(range(len(request.titles))),
+-            "error_message": "批次翻譯失敗"
+-        }
+-
++            "error_message": _translate_text(locale, "batch_failed")
++        }
++

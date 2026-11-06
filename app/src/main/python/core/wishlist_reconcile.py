@@ -50,16 +50,25 @@ def reconcile_wishlist() -> list[str]:
     return owned_numbers
 
 
-def format_wishlist_removed_message(numbers: list[str]) -> str:
+def format_wishlist_removed_message(numbers: list[str], locale: str | None = None) -> str:
     """組裝對帳移除通知文案（CD-6／plan §六 141a-2）。
 
     句型：``{total} 部片已入庫，已從書籤移除：{前 5 個以「、」相連}``；
     剩餘數 > 0 時句尾接 ``，及其他 {rest} 部``。呼叫端保證 numbers 非空。
     """
+    from core.i18n import get_config_locale, t
+
+    locale = locale or get_config_locale()
     total = len(numbers)
     shown = numbers[:5]
     rest = total - len(shown)
-    msg = f"{total} 部片已入庫，已從書籤移除：{'、'.join(shown)}"
+    joined = t('runtime.notify.list_join', locale=locale).join(shown)
+    msg = t(
+        'runtime.notify.wishlist_removed',
+        locale=locale,
+        count=total,
+        items=joined,
+    )
     if rest > 0:
-        msg += f"，及其他 {rest} 部"
+        msg += t('runtime.notify.list_more', locale=locale, count=rest)
     return msg

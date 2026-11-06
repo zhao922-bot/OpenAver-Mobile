@@ -166,7 +166,7 @@ async def test_gemini_translate(request: TestTranslateRequest):
     if not key:
         return TestTranslateResponse(success=False, error="missing_key")
 
-    locale = config.get("general", {}).get("locale", "zh-TW")
+    locale = config.get("general", {}).get("locale", "zh-CN")
     if locale == "ja":
         return TestTranslateResponse(success=True, translation="ja_skip")
 

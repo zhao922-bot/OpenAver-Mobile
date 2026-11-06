@@ -46,6 +46,7 @@ from core.cf_transport import get_cf_transport, CfChallengeRequired, CfTransport
 from core.scrapers.javlibrary import JAVLIBRARY_ORIGIN
 from core.logger import get_logger
 from core.config import load_config, STEM_IMAGE_MODES
+from core.i18n import get_config_locale, t as i18n_t
 from core.multipart_group import resolve_group
 from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
 from core.readonly_paths import resolve_owning_output_root
@@ -60,6 +61,12 @@ from web.routers.notifications import emit_notification as _emit_notif
 from core.wishlist_reconcile import reconcile_wishlist, format_wishlist_removed_message
 
 logger = get_logger(__name__)
+
+
+def _api_text(locale: str, key: str, **params) -> str:
+    """Return a scraper-API message in the active UI language."""
+    return i18n_t(f"runtime.api.{key}", locale=locale, **params)
+
 
 # 互動 CF 的 site → origin 查表。值來自各 scraper 模組的公開常數（CD-118a-12）。
 # 新增 manual_only CF 來源時必須同步這張表（F-1 parity 測試會擋漂移）。
@@ -84,16 +91,17 @@ def _begin_solve_for_source(source: Optional[str]) -> Optional[str]:
     return "cf_needed"
 
 
-def _readonly_cf_response(source, outcome: str) -> dict:
+def _readonly_cf_response(source, outcome: str, locale: str | None = None) -> dict:
     """唯讀分支的 CF 回應：完整 EnrichResult 形狀 ＋ additive 旗標（F-0，不得回 partial dict）。"""
+    locale = locale or get_config_locale()
     if outcome == "cf_unavailable":
         return {
-            **asdict(_readonly_enrich_failure("僅限桌面應用程式（standalone）可用", "error")),
+            **asdict(_readonly_enrich_failure(_api_text(locale, "desktop_only"), "error")),
             "cf_unavailable": True,
             "cf_source": source,
         }
     return {
-        **asdict(_readonly_enrich_failure("需要通過驗證後才能繼續", "error")),
+        **asdict(_readonly_enrich_failure(_api_text(locale, "verification_required"), "error")),
         "cf_needed": True,
         "cf_source": source,
     }
@@ -129,19 +137,14 @@ class ScrapeRequest(BaseModel):
     metadata: Optional[dict] = None
 
 
-# 唯讀來源 guard 的錯誤訊息（單一真理來源；sync helper 與 batch async loop 共用）。
-_READONLY_SOURCE_ERROR_MSG = (
-    "此來源路徑為唯讀（readonly），無法搬移或重新命名檔案。"
-    "請改用掃描頁『產生』生成本地媒體庫，或確認你對此路徑有寫入權限。"
-)
+# 唯讀來源 guard 的錯誤訊息 key（單一真理來源；sync helper 與 batch async loop 共用）。
+_READONLY_SOURCE_ERROR_MSG = "readonly_source_write_denied"
 
 # P2 review round 3 (FIX#4)：readonly 來源 + mode='db_to_sidecar' 的拒絕訊息（單一
 # 真理來源；enrich-single 與 batch 的 _do_readonly 共用）。db_to_sidecar 意指「把 DB
 # 現有 metadata 寫回來源 sidecar NFO、不刮網」——唯讀來源零寫入牆下，來源 sidecar 本來
 # 就不可寫；output_dir 的 NFO 又是產生流程自動管理，故此 mode 對唯讀來源無意義。
-_READONLY_DB_TO_SIDECAR_ERROR_MSG = (
-    "唯讀來源不支援 db_to_sidecar（產物 NFO 由產生流程自動管理，來源零寫入）"
-)
+_READONLY_DB_TO_SIDECAR_ERROR_MSG = "readonly_db_to_sidecar_denied"
 
 # P1 revert + reject (round-3 review 2026-07-21，owner-confirmed)：Codex PR#113
 # round-3 threaded a write_nfo=false skip-NFO gate into the readonly produce
@@ -153,9 +156,7 @@ _READONLY_DB_TO_SIDECAR_ERROR_MSG = (
 # db_to_sidecar above (both are granular flags the holistic produce model
 # doesn't support), instead of threading a skip flag down into
 # _produce_one/_write_movie_assets.
-_READONLY_NO_NFO_ERROR_MSG = (
-    "唯讀來源產生一律含 NFO（holistic 產物），不支援 write_nfo=false"
-)
+_READONLY_NO_NFO_ERROR_MSG = "readonly_no_nfo_denied"
 
 
 def _readonly_source_error(file_path: str) -> Optional[dict]:
@@ -178,13 +179,15 @@ def _readonly_source_error(file_path: str) -> Optional[dict]:
     路由（如 batch_enrich）須改為「入口一次載入 config → readonly_source_prefixes 算一次
     → 逐項 is_path_readonly 純比對」，勿在 event loop 上裸呼叫本 helper（async-offload 守衛）。
     """
-    _gallery_config = load_config().get('gallery', {})
+    _config = load_config()
+    _locale = get_config_locale(_config)
+    _gallery_config = _config.get('gallery', {})
     _path_mappings = _gallery_config.get('path_mappings', {})
     _prefixes = readonly_source_prefixes(_gallery_config, _path_mappings)
     _writable = writable_source_prefixes(_gallery_config, _path_mappings)
     # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
     if is_path_readonly(coerce_to_file_uri(file_path, _path_mappings), _prefixes, _writable):
-        return {"success": False, "error": _READONLY_SOURCE_ERROR_MSG}
+        return {"success": False, "error": _api_text(_locale, _READONLY_SOURCE_ERROR_MSG)}
     return None
 
 
@@ -203,6 +206,8 @@ def scrape_single(request: ScrapeRequest) -> dict:
     auto_organize_state.mark_manual_activity()
     file_path = request.file_path
     number = request.number
+    config = load_config()
+    locale = get_config_locale(config)
 
     # U7 readonly guard：只依 file_path 判斷所屬來源是否唯讀（readonly）。
     # 是 → 不搬檔、不刮削、不解析番號，回既有錯誤形狀 plain dict。
@@ -219,11 +224,9 @@ def scrape_single(request: ScrapeRequest) -> dict:
     if not number:
         return {
             "success": False,
-            "error": "無法識別番號，請手動輸入"
+            "error": _api_text(locale, "number_not_recognized")
         }
 
-    # 載入設定
-    config = load_config()
     scraper_config = config.get('scraper', {})
     path_mappings = config.get('gallery', {}).get('path_mappings', {})
 
@@ -242,7 +245,7 @@ def scrape_single(request: ScrapeRequest) -> dict:
         if not metadata:
             return {
                 "success": False,
-                "error": f"找不到 {number} 的資料"
+                "error": _api_text(locale, "search_not_found", number=number)
             }
         metadata['number'] = number
 
@@ -389,10 +392,11 @@ def rescrape_preview_endpoint(request: RescrapePreviewRequest) -> dict:
     回傳成功 dict + success:True；not-found（None）→ 200 {success:False}。
     不下載 cover（cover 是遠端 URL，原樣回前端，無 SSRF 面）。
     """
+    locale = get_config_locale()
     try:
         if (request.source or '').startswith('custom:'):
             from web.routers._custom_preview import preview_custom  # noqa: PLC2701 — 卡片指定的 web 內部底線模組（165-T7b）；lazy import 以免 import 時載入 core.custom_source*（AC-165-8）
-            return preview_custom(request.source, request.number)
+            return preview_custom(request.source, request.number, locale)
         if request.source == 'javlibrary':
             versions = search_javlib_versions(request.number)  # Cf* 例外由外層 except 接
             if not versions:
@@ -417,27 +421,27 @@ def rescrape_preview_endpoint(request: RescrapePreviewRequest) -> dict:
     except CfChallengeRequired:
         outcome = _begin_solve_for_source(request.source)
         if outcome is None:
-            return {"success": False, "error": "預覽搜尋失敗，請查閱日誌"}
+            return {"success": False, "error": _api_text(locale, "preview_search_failed")}
         if outcome == "cf_unavailable":
             return {"success": False, "cf_unavailable": True}
         return {"success": False, "cf_needed": True, "cf_source": request.source}
     except CfTransportUnavailable:
         return {"success": False, "cf_unavailable": True}
     except (SourceBlocked, SourceUnreachable) as e:
-        info = access_error_info(e, request.source)
+        info = access_error_info(e, request.source, locale=locale)
         return {"success": False, "access_error": info["access_error"], "source": request.source}
     except Exception:
         logger.exception("rescrape_preview_endpoint 失敗")
-        return {"success": False, "error": "預覽搜尋失敗，請查閱日誌"}
+        return {"success": False, "error": _api_text(locale, "preview_search_failed")}
 
 
-def _custom_candidate_scraper_data(request: "EnrichRequest"):
+def _custom_candidate_scraper_data(request: "EnrichRequest", locale: str | None = None):
     """custom:* 的 detail_url 預抓（確認選定那一版）；形狀同 _javlib_candidate_scraper_data。"""
     from web.routers._custom_preview import custom_candidate_data  # noqa: PLC2701 — 卡片指定的 web 內部底線模組（165-T7b）；lazy import 以免 import 時載入 core.custom_source*（AC-165-8）
-    return custom_candidate_data(request.source, request.detail_url, request.number)
+    return custom_candidate_data(request.source, request.detail_url, request.number, locale)
 
 
-def _javlib_candidate_scraper_data(request: "EnrichRequest"):
+def _javlib_candidate_scraper_data(request: "EnrichRequest", locale: str | None = None):
     """Fetch a javlibrary detail_url candidate for the readonly gear-rescrape
     branch (TASK-104-T3). Reuses the exact SSRF guard + CfChallengeRequired/
     CfTransportUnavailable handling as `enrich_single_endpoint`'s own (non-
@@ -452,9 +456,10 @@ def _javlib_candidate_scraper_data(request: "EnrichRequest"):
     `scraper_data` is the `to_legacy_dict()` + `internal_nfo_carriers()` merge
     and `error_response` is None.
     """
+    locale = locale or get_config_locale()
     if not _is_javlibrary_url(request.detail_url):
         logger.warning("enrich_single: 拒絕非法 detail_url origin")
-        return None, {"success": False, "error": "detail_url 來源不合法"}
+        return None, {"success": False, "error": _api_text(locale, "detail_url_invalid")}
     try:
         video = fetch_javlib_by_detail_url(request.detail_url, request.number)
     except CfChallengeRequired:
@@ -469,7 +474,7 @@ def _javlib_candidate_scraper_data(request: "EnrichRequest"):
     except CfTransportUnavailable:
         return None, {"success": False, "cf_unavailable": True}
     if video is None:
-        return None, {"success": False, "error": "javlibrary 無法取得指定版本資料"}
+        return None, {"success": False, "error": _api_text(locale, "javlibrary_version_missing")}
     # to_legacy_dict 省略 _summary/_rating 內部 carrier；補回以對齊既有 javlibrary
     # 重刮的 NFO 輸出（search_jav 走 internal_nfo_carriers 注入同組，PR #89 Codex P2）
     scraper_data = video.to_legacy_dict()
@@ -495,8 +500,9 @@ METADATA_IGNORED_KEYS = {
 METADATA_ALLOWED_FIELDS = METADATA_WHITELIST_STR | METADATA_WHITELIST_LIST_STR | {"duration", "_rating"}
 
 
-def _validate_metadata_shape(metadata: dict) -> None:
+def _validate_metadata_shape(metadata: dict, locale: str | None = None) -> None:
     """嚴格白名單驗證 metadata 欄位形狀與型別（CD-135-2 / CD-135-3 / CD-135-14）。"""
+    locale = locale or get_config_locale()
     whitelist_str = METADATA_WHITELIST_STR
     whitelist_list_str = METADATA_WHITELIST_LIST_STR
     ignored_keys = METADATA_IGNORED_KEYS
@@ -514,77 +520,99 @@ def _validate_metadata_shape(metadata: dict) -> None:
             # test_cover_canonical_contract 整份契約表的前提（PR #167 Codex P2）。
             if k == "source":
                 if not isinstance(v, str):
-                    raise HTTPException(400, detail="metadata.source 型別錯誤，必須是字串")
+                    raise HTTPException(400, detail=_api_text(locale, "metadata_source_type"))
                 if v in ("db", "nfo"):
                     raise HTTPException(
                         400,
-                        detail='metadata.source 不可為 "db" 或 "nfo"（後端保留值）；'
-                               "請填實際來源代號（如 javdb／dmm／metatube:xxx）或省略此欄位",
+                        detail=_api_text(locale, "metadata_source_reserved"),
                     )
             continue
         if k in whitelist_str:
             if not isinstance(v, str):
-                raise HTTPException(400, detail=f"metadata.{k} 型別錯誤，必須是字串")
+                raise HTTPException(400, detail=_api_text(locale, "metadata_field_type_string", field=k))
             if k == "original_title" and v == "":
-                raise HTTPException(400, detail="metadata.original_title 無法透過本入口清空")
+                raise HTTPException(400, detail=_api_text(locale, "metadata_original_title_clear"))
         elif k in whitelist_list_str:
             if not isinstance(v, list) or not all(isinstance(item, str) for item in v):
-                raise HTTPException(400, detail=f"metadata.{k} 型別錯誤，必須是字串列表")
+                raise HTTPException(400, detail=_api_text(locale, "metadata_field_type_list", field=k))
         elif k == "duration":
             if v is not None and (not isinstance(v, int) or isinstance(v, bool)):
-                raise HTTPException(400, detail="metadata.duration 型別錯誤，必須是整數或 null")
+                raise HTTPException(400, detail=_api_text(locale, "metadata_duration_type"))
         elif k == "_rating":
             if v is not None and (not isinstance(v, (int, float)) or isinstance(v, bool)):
-                raise HTTPException(400, detail="metadata._rating 型別錯誤，必須是數字或 null")
+                raise HTTPException(400, detail=_api_text(locale, "metadata_rating_type"))
         else:
-            raise HTTPException(400, detail=f"metadata 包含未知欄位: {k}")
+            raise HTTPException(400, detail=_api_text(locale, "metadata_unknown_field", field=k))
 
 
-def _validate_enrich_request(request: EnrichRequest, owning, action: Optional[str], canonical: str) -> None:
+def _validate_enrich_request(
+    request: EnrichRequest,
+    owning,
+    action: Optional[str],
+    canonical: str,
+    locale: str | None = None,
+) -> None:
     """共用驗證階段：模式閘、互斥檢查、欄位型別驗證（CD-135-1 / CD-135-11 / CD-135-12）。"""
+    locale = locale or get_config_locale()
     # 1a. 模式閘（CD-135-1）
     if request.metadata is not None and request.mode != "refresh_full":
-        raise HTTPException(400, detail="metadata 只在 mode=refresh_full 時合法")
+        raise HTTPException(400, detail=_api_text(locale, "metadata_refresh_only"))
 
     # 1b. 唯讀路徑的 action 閘（CD-135-12 item 1b）
     if request.metadata is not None and owning is not None and action != 'rescrape':
-        raise HTTPException(400, detail="唯讀來源：metadata 只在 rescrape（重刮）意圖下生效，補完（ingest）不讀取預先取得的內容")
+        raise HTTPException(400, detail=_api_text(locale, "metadata_readonly_ingest"))
 
     # 1c. 自訂來源 gate（在任何抓取之前；不放進 try 內避免被吞成 200）
     if (request.source or '').startswith('custom:'):
-        refused = refusal_for(request.source, request.number)
+        refused = refusal_for(request.source, request.number, locale)
         if refused:
             raise HTTPException(400, detail=refused[1])
 
     # 2. 互斥檢查（CD-135-11）
     if request.metadata is not None and request.detail_url and (request.source == "javlibrary" or (request.source or '').startswith('custom:')):
-        raise HTTPException(400, detail="metadata 與 javlibrary／自訂來源明細網址（detail_url）不可同時提供")
+        raise HTTPException(400, detail=_api_text(locale, "metadata_detail_url_conflict"))
 
     # 3. key／型別驗證
     if request.metadata is not None:
-        _validate_metadata_shape(request.metadata)
+        _validate_metadata_shape(request.metadata, locale)
         if owning is not None and action == 'rescrape':
             submitted_number = request.metadata.get('number')
             if not submitted_number:
-                raise HTTPException(400, detail="唯讀來源重刮：metadata 缺 number")
+                raise HTTPException(400, detail=_api_text(locale, "readonly_metadata_missing_number"))
             if not isinstance(submitted_number, str):
-                raise HTTPException(400, detail="唯讀來源重刮：metadata.number 型別錯誤，必須是字串")
+                raise HTTPException(400, detail=_api_text(locale, "readonly_metadata_number_type"))
             if 'title' not in request.metadata:
-                raise HTTPException(400, detail="唯讀來源重刮：metadata 缺 title")
+                raise HTTPException(400, detail=_api_text(locale, "readonly_metadata_missing_title"))
             # 4. 番號守衛唯讀那一半（CD-135-7 點 2）：查 DB 用 canonical——執行本體
             # （core/readonly_producer.py 的 enrich_one_readonly/resolve_ingest_plan）
             # 自己查 DB 用的就是同一個 canonical key，守衛必須問同一筆記錄。
             if not request.allow_number_change:
                 existing = VideoRepository().get_by_path(canonical)
                 if existing and existing.number and existing.number != submitted_number:
-                    raise HTTPException(400, detail=f"番號不符：metadata 給 {submitted_number}，DB 既有 {existing.number}；如確定要改號請帶 allow_number_change=true")
+                    raise HTTPException(
+                        400,
+                        detail=_api_text(
+                            locale,
+                            "number_mismatch_metadata",
+                            submitted=submitted_number,
+                            existing=existing.number,
+                        ),
+                    )
         else:
             # DB 的 path 欄位寫入時不套 path_mappings（core/enricher.py:504 同構），
             # 帶 path_mappings 會查到另一個命名空間、永遠對不上 → 守衛形同虛設。
             # db-ns-ok: uri_to_fs_path(request.file_path) 是 DB round-trip 值，不做反向映射
             existing = VideoRepository().get_by_path(to_file_uri(uri_to_fs_path(request.file_path)))
             if existing and existing.number and existing.number != request.number and not request.allow_number_change:
-                raise HTTPException(400, detail=f"番號不符：請求 {request.number}，DB 既有 {existing.number}；如確定要改號請帶 allow_number_change=true")
+                raise HTTPException(
+                    400,
+                    detail=_api_text(
+                        locale,
+                        "number_mismatch_request",
+                        requested=request.number,
+                        existing=existing.number,
+                    ),
+                )
 
 
 def _clean_metadata_for_scraper_data(metadata: dict) -> dict:
@@ -622,14 +650,21 @@ def _reconcile_wishlist_after_write() -> None:
         _emit_notif("warn", "notif.wishlist_reconcile_failed", task_type="wishlist_reconcile")
         return
     if _wl_removed:
+        locale = get_config_locale()
         _emit_notif(
             "info", "notif.wishlist_auto_removed",
-            message=format_wishlist_removed_message(_wl_removed),
+            message=format_wishlist_removed_message(_wl_removed, locale),
             task_type="wishlist_reconcile",
         )
 
 
-def _check_refresh_full_overwrite_guard(request, config, path_mappings, resolved_write_cover) -> None:
+def _check_refresh_full_overwrite_guard(
+    request,
+    config,
+    path_mappings,
+    resolved_write_cover,
+    locale: str | None = None,
+) -> None:
     # CD-62-4 分裂陷阱智慧防呆：refresh_full + overwrite=false 時，若這組設定不會寫出任何
     # sidecar（NFO/cover）卻仍 _db_upsert，就是純分裂。一個 sidecar「會寫」需 write 旗標開 + 檔案缺
     # （此分支 overwrite 已為 false，既有檔不覆寫）。兩者皆不會寫 → 擋；任一會寫則放行（quick-enrich
@@ -674,13 +709,14 @@ def _check_refresh_full_overwrite_guard(request, config, path_mappings, resolved
         if not will_write_nfo and not will_write_cover and not will_write_external:
             raise HTTPException(
                 status_code=400,
-                detail="refresh_full + overwrite_existing=false 在此設定下不會寫出任何 NFO/封面，只會更新 DB 造成與磁碟分裂；請開 overwrite_existing、確保 NFO/封面有實際寫入，或補劇照請改用 /api/scraper/fetch-samples",
+                detail=_api_text(locale or get_config_locale(), "refresh_no_sidecar"),
             )
 
 
 @router.post("/enrich-single")
 def enrich_single_endpoint(request: EnrichRequest) -> dict:
     config = load_config()
+    locale = get_config_locale(config)
     # TASK-91-T3：讀取端 path_mappings，供 resolve_nfo_cover_paths / uri_to_local_fs_path /
     # enrich_single 共用一次算好的同一組值（避免重複 .get() chain）。
     path_mappings = config.get("gallery", {}).get("path_mappings", {})
@@ -694,7 +730,7 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
     canonical = coerce_to_file_uri(request.file_path, path_mappings)  # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
     owning = resolve_owning_output_root(canonical, config)
     action = (request.readonly_action or ('rescrape' if request.metadata is not None else 'ingest')) if owning is not None else None
-    _validate_enrich_request(request, owning, action, canonical)
+    _validate_enrich_request(request, owning, action, canonical, locale)
     if owning is not None:
         source, output_root, output_uri = owning
         # Codex PR#113 one-pass alignment (2026-07-21): readonly branch now returns
@@ -712,7 +748,7 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
         # EnrichResult rather than silently doing a full ingest/rescrape instead
         # (this branch otherwise ignores request.mode entirely).
         if request.mode == 'db_to_sidecar':
-            return asdict(_readonly_enrich_failure(_READONLY_DB_TO_SIDECAR_ERROR_MSG, 'error'))
+            return asdict(_readonly_enrich_failure(_api_text(locale, _READONLY_DB_TO_SIDECAR_ERROR_MSG), 'error'))
         # P1 revert + reject (round-3 review 2026-07-21): readonly produce is
         # holistic (a library entry always has an NFO) — write_nfo=false is
         # rejected the same way db_to_sidecar is above, rather than threading
@@ -720,16 +756,16 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
         # _READONLY_NO_NFO_ERROR_MSG). The frontend never sends
         # write_nfo=false, so this is zero UI impact.
         if not request.write_nfo:
-            return asdict(_readonly_enrich_failure(_READONLY_NO_NFO_ERROR_MSG, 'error'))
+            return asdict(_readonly_enrich_failure(_api_text(locale, _READONLY_NO_NFO_ERROR_MSG), 'error'))
         if not output_root:
-            return asdict(_readonly_enrich_failure("未設定媒體庫輸出路徑", "error"))
+            return asdict(_readonly_enrich_failure(_api_text(locale, "output_root_missing"), "error"))
         try:
             scraper_data = None
             _cand_err = None
             if action == 'rescrape' and request.source == 'javlibrary' and request.detail_url:
-                scraper_data, _cand_err = _javlib_candidate_scraper_data(request)
+                scraper_data, _cand_err = _javlib_candidate_scraper_data(request, locale)
             if action == 'rescrape' and (request.source or '').startswith('custom:') and request.detail_url:
-                scraper_data, _cand_err = _custom_candidate_scraper_data(request)
+                scraper_data, _cand_err = _custom_candidate_scraper_data(request, locale)
             if _cand_err:
                 return _cand_err
             if request.metadata is not None:
@@ -752,6 +788,7 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
                 javbus_lang=request.javbus_lang, write_cover=resolved_write_cover,
                 overwrite_existing=request.overwrite_existing, preserve_title=request.preserve_title,
                 after_produce=lambda: thumbnail_cache.invalidate(canonical),
+                locale=locale,
             )
             if result.success:
                 _reconcile_wishlist_after_write()
@@ -760,15 +797,15 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
             # F-0：完整 EnrichResult 形狀 ＋ additive cf_needed/cf_source（不得回 partial dict）
             outcome = _begin_solve_for_source(request.source)
             if outcome is None:
-                return asdict(_readonly_enrich_failure("enrich 處理失敗，請查閱日誌", "error"))
-            return _readonly_cf_response(request.source, outcome)
+                return asdict(_readonly_enrich_failure(_api_text(locale, "enrich_failed"), "error"))
+            return _readonly_cf_response(request.source, outcome, locale)
         except CfTransportUnavailable:
-            return _readonly_cf_response(request.source, "cf_unavailable")
+            return _readonly_cf_response(request.source, "cf_unavailable", locale)
         except Exception:
             logger.exception("enrich_single_endpoint readonly 改道失敗")
-            return asdict(_readonly_enrich_failure("enrich 處理失敗，請查閱日誌", "error"))
+            return asdict(_readonly_enrich_failure(_api_text(locale, "enrich_failed"), "error"))
 
-    _check_refresh_full_overwrite_guard(request, config, path_mappings, resolved_write_cover)
+    _check_refresh_full_overwrite_guard(request, config, path_mappings, resolved_write_cover, locale)
 
     try:
         scraper_data = None
@@ -776,7 +813,7 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
             # SSRF guard：拒絕非 javlibrary origin 的 detail_url（不 fetch、不洩 URL）
             if not _is_javlibrary_url(request.detail_url):
                 logger.warning("enrich_single: 拒絕非法 detail_url origin")
-                return {"success": False, "error": "detail_url 來源不合法"}
+                return {"success": False, "error": _api_text(locale, "detail_url_invalid")}
             try:
                 video = fetch_javlib_by_detail_url(request.detail_url, request.number)
             except CfChallengeRequired:
@@ -791,13 +828,13 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
             except CfTransportUnavailable:
                 return {"success": False, "cf_unavailable": True}
             if video is None:
-                return {"success": False, "error": "javlibrary 無法取得指定版本資料"}
+                return {"success": False, "error": _api_text(locale, "javlibrary_version_missing")}
             # to_legacy_dict 省略 _summary/_rating 內部 carrier；補回以對齊既有 javlibrary
             # 重刮的 NFO 輸出（search_jav 走 internal_nfo_carriers 注入同組，PR #89 Codex P2）
             scraper_data = video.to_legacy_dict()
             scraper_data.update(internal_nfo_carriers(video))
         if (request.source or '').startswith('custom:') and request.detail_url:
-            scraper_data, _cand_err = _custom_candidate_scraper_data(request)
+            scraper_data, _cand_err = _custom_candidate_scraper_data(request, locale)
             if _cand_err:
                 return _cand_err
         if request.metadata is not None:
@@ -815,6 +852,7 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
             javbus_lang=request.javbus_lang,
             scraper_data=scraper_data,
             path_mappings=path_mappings, preserve_title=request.preserve_title,
+            locale=locale,
         )
         # feature/71 T8: 換封面成功 → 失效舊縮圖（下次進畫面時重生，CD-9 / spec 2.A.7）。
         # request.file_path 已是 DB 的 file:/// URI（前端送 currentLightboxVideo.path /
@@ -829,7 +867,7 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
     except CfChallengeRequired:
         outcome = _begin_solve_for_source(request.source)
         if outcome is None:
-            return {"success": False, "error": "enrich 處理失敗，請查閱日誌"}
+            return {"success": False, "error": _api_text(locale, "enrich_failed")}
         if outcome == "cf_unavailable":
             return {"success": False, "cf_unavailable": True}
         return {"success": False, "cf_needed": True, "cf_source": request.source}
@@ -837,7 +875,7 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
         return {"success": False, "cf_unavailable": True}
     except Exception:
         logger.exception("enrich_single_endpoint 失敗")
-        return {"success": False, "error": "enrich 處理失敗，請查閱日誌"}
+        return {"success": False, "error": _api_text(locale, "enrich_failed")}
 
 
 class FetchSamplesRequest(BaseModel):
@@ -854,6 +892,38 @@ def _samples_failure(code: str, message: str, **diagnostics) -> dict:
         **diagnostics,
     })
     return payload
+
+
+def _sample_text(locale: str, key: str, **params) -> str:
+    return i18n_t(f"runtime.samples.{key}", locale=locale, **params)
+
+
+_SAMPLE_ERROR_KEYS = {
+    "cancelled": "cancelled",
+    "file_not_found": "error_file_not_found",
+    "output_root_missing": "error_output_root_missing",
+    "samples_search_failed": "error_samples_search_failed",
+    "no_sample_images": "error_no_sample_images",
+    "db_write_failed": "error_db_write_failed",
+    "sample_download_failed": "error_sample_download_failed",
+    "storage_permission_required": "error_storage_permission_required",
+    "sample_write_failed": "error_sample_write_failed",
+    "multi_video_folder": "error_multi_video_folder",
+    "internal_error": "error_internal",
+}
+
+
+def _sample_error_message(
+    locale: str,
+    code: str,
+    fallback: str,
+    *,
+    number: str = "",
+) -> str:
+    key = _SAMPLE_ERROR_KEYS.get(code)
+    if key:
+        return _sample_text(locale, key, number=number)
+    return fallback or _sample_text(locale, "error_internal")
 
 
 def _resolve_sample_multipart_group(
@@ -909,10 +979,14 @@ def fetch_samples_for_backfill(
 
 
 def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
+    locale = "zh-CN"
     if cancel_event is not None and cancel_event.is_set():
-        return _samples_failure("cancelled", "劇照補齊已取消")
+        return _samples_failure(
+            "cancelled", _sample_text(locale, "cancelled")
+        )
 
     config = load_config()
+    locale = get_config_locale(config)
     # TASK-91-T3：站台5 outer to_file_uri 補傳 path_mappings（inner uri_to_fs_path 維持不變，
     # 見 TASK-91-T3.md 站台5 inner/outer 分析結論）。
     path_mappings = config.get("gallery", {}).get("path_mappings", {})
@@ -926,16 +1000,28 @@ def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
     if owning is not None:
         source, output_root, output_uri = owning
         if not output_root:
-            return _samples_failure("output_root_missing", "未設定媒體庫輸出路徑")
+            return _samples_failure(
+                "output_root_missing",
+                _sample_text(locale, "error_output_root_missing"),
+            )
         try:
             if cancel_event is not None and cancel_event.is_set():
-                return _samples_failure("cancelled", "劇照補齊已取消")
+                return _samples_failure(
+                    "cancelled", _sample_text(locale, "cancelled")
+                )
             meta = search_jav(req.number, source="auto")
             if cancel_event is not None and cancel_event.is_set():
-                return _samples_failure("cancelled", "劇照補齊已取消")
+                return _samples_failure(
+                    "cancelled", _sample_text(locale, "cancelled")
+                )
             if not meta:
                 return _samples_failure(
-                    "samples_search_failed", f"找不到 {req.number} 的資料",
+                    "samples_search_failed",
+                    _sample_text(
+                        locale,
+                        "error_samples_search_failed",
+                        number=req.number,
+                    ),
                     source="", sample_urls_found=0,
                 )
             sample_images = [
@@ -944,7 +1030,8 @@ def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
             ]
             if not sample_images:
                 return _samples_failure(
-                    "no_sample_images", "没有找到可下载的剧照",
+                    "no_sample_images",
+                    _sample_text(locale, "error_no_sample_images"),
                     source=meta.get("source", ""), sample_urls_found=0,
                 )
             fs_path = uri_to_local_fs_path(req.file_path, path_mappings)
@@ -961,7 +1048,9 @@ def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
                 "mtime": existing.mtime if existing else os.path.getmtime(fs_path),
             }
             if cancel_event is not None and cancel_event.is_set():
-                return _samples_failure("cancelled", "劇照補齊已取消")
+                return _samples_failure(
+                    "cancelled", _sample_text(locale, "cancelled")
+                )
             movie_dir, assets = _produce_one(
                 repo, source, config.get("scraper", {}), file_info=file_info,
                 meta=meta, cover_strategy=('none',), assets_mode='samples_only',
@@ -969,7 +1058,9 @@ def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
                 allocated_this_run=set(), path_mappings=path_mappings,
             )
             if cancel_event is not None and cancel_event.is_set():
-                return _samples_failure("cancelled", "劇照補齊已取消")
+                return _samples_failure(
+                    "cancelled", _sample_text(locale, "cancelled")
+                )
             written = len(assets.get('sample_fs', []))
             extrafanart_dir = Path(movie_dir) / "extrafanart"
             try:
@@ -996,13 +1087,14 @@ def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
                     logger.exception("fetch_samples_endpoint 分集劇照 DB 更新失敗")
                     return _samples_failure(
                         "db_write_failed",
-                        "劇照已下載，但資料庫更新失敗，請再試一次",
+                        _sample_text(locale, "error_db_write_failed"),
                         source=meta.get("source", ""),
                         sample_urls_found=len(sample_images),
                     )
             if on_disk == 0:
                 return _samples_failure(
-                    "sample_download_failed", "已找到劇照，但全部下載失敗",
+                    "sample_download_failed",
+                    _sample_text(locale, "error_sample_download_failed"),
                     source=meta.get("source", ""),
                     sample_urls_found=len(sample_images),
                     downloaded=written,
@@ -1029,7 +1121,9 @@ def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
         except AndroidStoragePermissionError:
             return _samples_failure(
                 "storage_permission_required",
-                "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
+                _sample_text(
+                    locale, "error_storage_permission_required"
+                ),
                 source="",
                 sample_urls_found=0,
             )
@@ -1037,7 +1131,7 @@ def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
             logger.exception("fetch_samples_endpoint readonly SAF 寫入失敗")
             return _samples_failure(
                 "sample_write_failed",
-                "劇照寫入外置存儲失敗",
+                _sample_text(locale, "error_sample_write_failed"),
                 source="",
                 sample_urls_found=0,
                 detail=str(exc),
@@ -1045,7 +1139,8 @@ def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
         except Exception:
             logger.exception("fetch_samples_endpoint readonly 改道失敗")
             return _samples_failure(
-                "internal_error", "fetch_samples 處理失敗，請查閱日誌"
+                "internal_error",
+                _sample_text(locale, "error_internal"),
             )
 
     # uri-no-reverse: comparison-only (DB LIKE prefix), inner kept bare per TASK-91-T3 inner/outer analysis
@@ -1063,10 +1158,7 @@ def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
         if group is None:
             return _samples_failure(
                 "multi_video_folder",
-                (
-                    "此資料夾有無關影片，補抓劇照會污染其他片；"
-                    "只有同一作品的完整分集（例如 cd1/cd2）可以共用劇照"
-                ),
+                _sample_text(locale, "error_multi_video_folder"),
                 count=count,
             )
 
@@ -1082,26 +1174,39 @@ def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
             path_mappings=path_mappings,
             related_db_paths=related_db_paths,
             cancel_event=cancel_event,
+            locale=locale,
         )
         payload = asdict(result)
         payload.update(diagnostics)
         if not result.success and result.error:
-            payload["message"] = result.error
+            code = str(
+                diagnostics.get("error_code") or "internal_error"
+            )
+            payload["message"] = _sample_error_message(
+                locale,
+                code,
+                result.error,
+                number=req.number,
+            )
         return payload
     except Exception:
         logger.exception("fetch_samples_endpoint 失敗")
         return _samples_failure(
-            "internal_error", "fetch_samples 處理失敗，請查閱日誌"
+            "internal_error", _sample_text(locale, "error_internal")
         )
 
 
 @router.post("/batch-enrich")
 async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
     """批次 enrich — SSE streaming，最多 20 筆，按 file_path 去重"""
-    if len(batch.items) > 20:
-        raise HTTPException(status_code=422, detail="items 上限為 20 筆")
-
     config = await asyncio.to_thread(load_config)
+    locale = get_config_locale(config)
+
+    if len(batch.items) > 20:
+        raise HTTPException(
+            status_code=422,
+            detail=_api_text(locale, "batch_items_limit"),
+        )
 
     # 90c-T1 唯讀 guard（async-safe）：config 已於上方 to_thread 載入，這裡從既載入的
     # config 算一次唯讀前綴集（純比對、無 I/O），逐項用 is_path_readonly 純比對——不可在
@@ -1127,7 +1232,7 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
         # 53b-T3: 補完開始通知
         _emit_notif(
             "info", "notif.batch_enrich_started",
-            message=f"共 {total} 部",
+            message=i18n_t("runtime.notify.batch_total", locale=locale, count=total),
             task_type="batch_enrich",
         )
         # scraper cache：只對 refresh_full 生效（100% 需要 scraper data）
@@ -1158,7 +1263,7 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                 if _custom_refused:
                     # spec §8：自訂來源不參與批次補完（含已驗收已啟用者）；純字串判斷，不抓取不寫入
                     failed_count += 1
-                    yield f"data: {json.dumps({'type': 'result-item', 'number': item.number, 'file_path': item.file_path, 'success': False, 'error': '自訂來源不參與批次補完，請改用單片重刮', 'reason': 'error'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'result-item', 'number': item.number, 'file_path': item.file_path, 'success': False, 'error': _api_text(locale, 'custom_batch_not_allowed'), 'reason': 'error'})}\n\n"
                     continue
 
                 # TASK-104-T3 (CD-104-5)：唯讀項不再拒絕，改道 output_dir（action 固定
@@ -1180,19 +1285,19 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                         # BatchEnrichRequest has no per-item mode override, so this
                         # is checked once against the whole-batch `batch.mode`.
                         if batch.mode == 'db_to_sidecar':
-                            return ('db_to_sidecar', _READONLY_DB_TO_SIDECAR_ERROR_MSG)
+                            return ('db_to_sidecar', _api_text(locale, _READONLY_DB_TO_SIDECAR_ERROR_MSG))
                         # P1 revert + reject (round-3 review 2026-07-21): same
                         # write_nfo=false rejection as enrich_single_endpoint's
                         # readonly branch (see _READONLY_NO_NFO_ERROR_MSG) — readonly
                         # produce is holistic, no per-item override exists.
                         if not batch.write_nfo:
-                            return ('no_nfo', _READONLY_NO_NFO_ERROR_MSG)
+                            return ('no_nfo', _api_text(locale, _READONLY_NO_NFO_ERROR_MSG))
                         owning = resolve_owning_output_root(uri, config)
                         if owning is None:
                             return ('skip', None)  # 理論不達（上面 is_path_readonly 已判真）
                         ro_source, out_root, out_uri = owning
                         if not out_root:
-                            return ('error', "未設定媒體庫輸出路徑")
+                            return ('error', _api_text(locale, "output_root_missing"))
                         # TASK-109-T3: 產出核心（URI→FS 轉換到組 EnrichResult 為止）薄搬移進
                         # core.readonly_producer.enrich_one_readonly；closure 只保留三個刻意
                         # 缺口——reject guard + output_dir 解析（上方已做，C3）、javlib 預抓
@@ -1219,10 +1324,11 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                                 scraper_data=None, scrape_source=es, javbus_lang=el,
                                 write_cover=batch.write_cover, overwrite_existing=batch.overwrite_existing,
                                 focal_before_cover_recheck=True,
+                                locale=locale,
                             )
                         except ReadonlyProduceError:
                             logger.exception("batch_enrich readonly item %s 失敗", itm.number)
-                            return ('error', "生成失敗")
+                            return ('error', _api_text(locale, "generation_failed"))
                         if not result.success:
                             # 唯一可能回 success=False 的情況是 entry 內的 not-found 分支
                             # （resolve_ingest_plan 找不到可用番號資料）；result.error 即
@@ -1282,7 +1388,7 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                             reason = 'not_found' if status == 'no_scrape' else 'error'
                             result_item = {
                                 'type': 'result-item', 'number': item.number, 'file_path': item.file_path,
-                                **asdict(_readonly_enrich_failure(payload or '生成失敗', reason)),
+                                **asdict(_readonly_enrich_failure(payload or _api_text(locale, "generation_failed"), reason)),
                             }
                             yield f"data: {json.dumps(result_item)}\n\n"
                     except Exception:
@@ -1299,7 +1405,7 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                         failed_count += 1
                         result_item = {
                             'type': 'result-item', 'number': item.number, 'file_path': item.file_path,
-                            **asdict(_readonly_enrich_failure("enrich 處理失敗，請查閱日誌", 'error')),
+                            **asdict(_readonly_enrich_failure(_api_text(locale, "enrich_failed"), 'error')),
                         }
                         yield f"data: {json.dumps(result_item)}\n\n"
                     continue
@@ -1338,6 +1444,7 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                         javbus_lang=effective_lang,
                         scraper_data=cached_data,
                         path_mappings=_ro_mappings,
+                        locale=locale,
                     )
                     result = await loop.run_in_executor(None, _en_ctx.run, _enrich)
                     result_dict = asdict(result)
@@ -1367,27 +1474,36 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                 except Exception:
                     logger.exception("batch_enrich item %s 失敗", item.number)
                     failed_count += 1
-                    yield f"data: {json.dumps({'type': 'result-item', 'number': item.number, 'file_path': item.file_path, 'success': False, 'error': 'enrich 處理失敗，請查閱日誌', 'reason': 'error'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'result-item', 'number': item.number, 'file_path': item.file_path, 'success': False, 'error': _api_text(locale, 'enrich_failed'), 'reason': 'error'})}\n\n"
 
             yield f"data: {json.dumps({'type': 'done', 'summary': {'total': total, 'success': success_count, 'failed': failed_count}})}\n\n"
             # 53b-T3: 補完完成通知
             if failed_count > 0:
                 _emit_notif(
                     "warn", "notif.batch_enrich_done_with_errors",
-                    message=f"補完 {success_count} 部，{failed_count} 部失敗",
+                    message=i18n_t(
+                        "runtime.notify.batch_done_with_errors",
+                        locale=locale,
+                        success=success_count,
+                        failed=failed_count,
+                    ),
                     task_type="batch_enrich",
                 )
             else:
                 _emit_notif(
                     "success", "notif.batch_enrich_done",
-                    message=f"補完 {success_count} 部",
+                    message=i18n_t(
+                        "runtime.notify.batch_done",
+                        locale=locale,
+                        success=success_count,
+                    ),
                     task_type="batch_enrich",
                 )
         except Exception:
             logger.exception("[notif] batch_enrich 失敗")
             _emit_notif(
                 "error", "notif.batch_enrich_failed",
-                message="批次補完中斷，請查閱日誌",
+                message=i18n_t("runtime.notify.batch_failed", locale=locale),
                 task_type="batch_enrich",
             )
             raise

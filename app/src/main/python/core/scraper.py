@@ -67,7 +67,7 @@ def get_javbus_lang() -> str:
     """從 config 讀取 locale 並轉換為 JavBus lang code"""
     try:
         config = load_config()
-        locale = config.get('general', {}).get('locale', 'zh-TW')
+        locale = config.get('general', {}).get('locale', 'zh-CN')
         return _LOCALE_TO_JAVBUS.get(locale, "zh-tw")
     except Exception as e:
         logger.warning("[i18n] 讀取 locale config 失敗，使用預設語系: %s", e)
@@ -450,17 +450,34 @@ def search_jav_single_source(
     )
 
 
-def access_error_info(exc: Exception, source: str) -> Dict[str, str]:
+def source_display_name(source: str) -> str:
+    """Public wrapper for source labels used in localized runtime messages."""
+    return _source_display_name(source)
+
+
+def access_error_info(
+    exc: Exception,
+    source: str,
+    locale: str | None = None,
+) -> Dict[str, str]:
     """SourceBlocked／SourceUnreachable → {access_error, source, message}（兩個端點共用）。"""
+    from core.i18n import get_config_locale, t
+
+    locale = locale or get_config_locale()
     name = _source_display_name(source)
     if not isinstance(exc, SourceBlocked):
         return {
             "access_error": "unreachable", "source": source,
-            "message": f"{name} 連不到，請檢查網路或代理設定",
+            "message": t(
+                "runtime.source.unreachable", locale=locale, name=name
+            ),
         }
-    message = f"{name} 拒絕連線"
     if source_needs_jp_ip(source):
-        message += "。部分地區需要日本 IP，可在 Proxy 欄設定"
+        message = t(
+            "runtime.source.blocked_jp", locale=locale, name=name
+        )
+    else:
+        message = t("runtime.source.blocked", locale=locale, name=name)
     return {"access_error": "refused", "source": source, "message": message}
 
 

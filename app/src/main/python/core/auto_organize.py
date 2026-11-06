@@ -130,7 +130,7 @@ def run_one_round(
     # 「翻譯失敗不擋、不計 failed」同一個政策）。
     translate_service = None
     if translate_enabled:
-        locale = config.get('general', {}).get('locale', 'zh-TW')
+        locale = config.get('general', {}).get('locale', 'zh-CN')
         try:
             translate_service = create_translate_service(translate_config, locale)
         except Exception:

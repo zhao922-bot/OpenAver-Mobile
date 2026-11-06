@@ -1,12 +1,13 @@
 """自訂來源重刮預覽／確認共用：五結果映射與失敗分類（同一份，不得兩份）。"""
 from core.scraper import (
     access_error_info, fetch_custom_by_detail_url, internal_nfo_carriers,
-    search_custom_versions,
+    search_custom_versions, source_display_name,
 )
 from core.scrapers.errors import (
     CustomSourceRefused, SourceBlocked, SourceParseEmpty, SourceUnreachable,
 )
-from web.routers._custom_gate import REASON_TEXT, refusal_for # noqa: PLC2701 — 卡片指定的 web 內部底線模組（165-T7b），同 router 層共用 gate 句表，尚未升格為公開名
+from core.i18n import get_config_locale, t
+from web.routers._custom_gate import reason_text, refusal_for # noqa: PLC2701 — 卡片指定的 web 內部底線模組（165-T7b），同 router 層共用 gate 句表，尚未升格為公開名
 
 
 def classify_custom_failure(exc: Exception, source: str) -> dict:
@@ -20,21 +21,39 @@ def classify_custom_failure(exc: Exception, source: str) -> dict:
     return {"success": False, "access_error": "unreachable", "source": source}
 
 
-def parse_empty_text(source: str) -> str:
-    name = access_error_info(SourceUnreachable(), source)["message"].removesuffix(" 連不到，請檢查網路或代理設定")
-    return f"{name} 抓不到資料，站方可能改版了，請到設定頁重跑驗收"
+def parse_empty_text(source: str, locale: str | None = None) -> str:
+    locale = locale or get_config_locale()
+    return t(
+        "runtime.source.custom_parse_empty",
+        locale=locale,
+        name=source_display_name(source),
+    )
 
 
-def failure_text(exc: Exception, source: str) -> str:
+def failure_text(
+    exc: Exception,
+    source: str,
+    locale: str | None = None,
+) -> str:
+    locale = locale or get_config_locale()
     if isinstance(exc, CustomSourceRefused):
-        return REASON_TEXT.get(exc.reason, REASON_TEXT["not_loaded"])
+        return reason_text(exc.reason, locale)
     if isinstance(exc, SourceParseEmpty):
-        return parse_empty_text(source)
-    return access_error_info(exc if isinstance(exc, SourceBlocked) else SourceUnreachable(), source)["message"]
+        return parse_empty_text(source, locale)
+    return access_error_info(
+        exc if isinstance(exc, SourceBlocked) else SourceUnreachable(),
+        source,
+        locale=locale,
+    )["message"]
 
 
-def preview_custom(source: str, number: str) -> dict:
-    refused = refusal_for(source, number)
+def preview_custom(
+    source: str,
+    number: str,
+    locale: str | None = None,
+) -> dict:
+    locale = locale or get_config_locale()
+    refused = refusal_for(source, number, locale)
     if refused:
         return {"success": False, "custom_error": "refused", "custom_reason": refused[0], "error": refused[1]}
     from core.custom_source.service import call_bounded  # lazy：AC-165-8
@@ -49,15 +68,29 @@ def preview_custom(source: str, number: str) -> dict:
     return {"success": True, "candidates": versions}
 
 
-def custom_candidate_data(source: str, detail_url: str, number: str):
+def custom_candidate_data(
+    source: str,
+    detail_url: str,
+    number: str,
+    locale: str | None = None,
+):
     """確認用預抓：回 (scraper_data, error_response)，不 raise（形狀同 javlib 版）。"""
+    locale = locale or get_config_locale()
     from core.custom_source.service import call_bounded  # lazy：AC-165-8
     try:
         video = call_bounded(lambda: fetch_custom_by_detail_url(source, detail_url, number))
     except RuntimeError as exc:
-        return None, {**classify_custom_failure(exc, source), "error": failure_text(exc, source)}
+        return None, {
+            **classify_custom_failure(exc, source),
+            "error": failure_text(exc, source, locale),
+        }
     if video is None:
-        return None, {"success": False, "error": "自訂來源無法取得指定版本資料"}
+        return None, {
+            "success": False,
+            "error": t(
+                "runtime.api.custom_version_missing", locale=locale
+            ),
+        }
     data = video.to_legacy_dict()
     data.update(internal_nfo_carriers(video))
     return data, None

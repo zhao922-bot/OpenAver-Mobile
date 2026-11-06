@@ -51,6 +51,10 @@ const _fieldCallbacks = new Map();
 
 // ── 純函式（node:test 可測）──────────────────────────────────────────
 
+function uiLocale() {
+    return window.__locale || document.documentElement.lang || 'zh-CN';
+}
+
 export function resolveYearBarColorMode(sel) {
     return sel && sel.actress != null ? 'byMaker' : 'neutral';
 }
@@ -1058,7 +1062,7 @@ export function updateDonutChart(state) {
 
     const centerSub = tKey('insights.unit');
     const centerText =
-        (total || 0).toLocaleString('zh-Hant') + '\n{sub|' + centerSub + '}';
+        (total || 0).toLocaleString(uiLocale()) + '\n{sub|' + centerSub + '}';
 
     try {
         chart.dispatchAction({ type: 'hideTip' });
@@ -1152,7 +1156,7 @@ export function updateDonutChart(state) {
                     return (
                         escapeHtml(title) +
                         '<br/>' +
-                        (d.value || 0).toLocaleString('zh-Hant') +
+                        (d.value || 0).toLocaleString(uiLocale()) +
                         '（' +
                         p.percent +
                         '%）'
@@ -1278,7 +1282,7 @@ export function fieldBarTooltip(params) {
     const p = Array.isArray(params) ? params[0] : params;
     if (!p) return '';
     const name = p.name;
-    return escapeHtml(name) + ' ' + (p.value || 0).toLocaleString('zh-Hant') +
+    return escapeHtml(name) + ' ' + (p.value || 0).toLocaleString(uiLocale()) +
         '<br/>' + escapeHtml(tKey('insights.count_open_browse'));
 }
 
@@ -1424,7 +1428,7 @@ export function updateTagsChart(state) {
                 formatter: function (p) {
                     return tKey('insights.tags.tooltip', {
                         name: escapeHtml(p.name),
-                        count: (p.value || 0).toLocaleString('zh-Hant'),
+                        count: (p.value || 0).toLocaleString(uiLocale()),
                         pct: (p.data && p.data._pct) || '0%',
                     }) + '<br/>' + escapeHtml(tKey('insights.count_open_browse'));
                 },

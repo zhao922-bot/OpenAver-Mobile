@@ -133,7 +133,7 @@ def test_partial_scan_skips_deletion_detection(tmp_path, monkeypatch):
 
     assert repo.deleted_paths == []
     assert stats["deleted"] == 0
-    assert any("跳過刪除偵測" in event for event in events)
+    assert any("跳过删除检测" in event for event in events)
 
 
 def test_submit_focal_candidates_respects_abort(monkeypatch):

@@ -17,6 +17,12 @@ var _cleanedUp = false;
 // beforeunload：只做 save + 原生提示，不做 cleanup
 // （使用者可能按「留下」→ 頁面不卸載 → hooks 必須保持完整）
 window.addEventListener('beforeunload', function (e) {
+if (document.body && document.body.dataset.isAndroid === 'true') {
+    // The embedded Android shell asks for confirmation with localized native
+    // strings before reload/back/navigation. WebView's built-in beforeunload
+    // dialog mixes the device locale with the web UI locale.
+    return;
+}
 if (_handlers.onBeforeUnload) {
     try {
         var msg = _handlers.onBeforeUnload();
@@ -29,6 +35,16 @@ if (_handlers.onBeforeUnload) {
     }
 }
 });
+
+window.__openaverNativeLeaveMessage = function () {
+if (!_handlers.onBeforeUnload) return '';
+try {
+    return _handlers.onBeforeUnload() || '';
+} catch (err) {
+    console.error('[page-lifecycle] native leave guard error:', err);
+    return '';
+}
+};
 
 // pagehide：頁面確定要卸載了，best-effort cleanup
 // （新版 Chrome 以 Permissions-Policy 預設封鎖 'unload' → 改用 bfcache-safe 的 'pagehide'，

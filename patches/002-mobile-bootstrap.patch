@@ -191,10 +191,18 @@
  from web.auto_organize_scheduler import auto_organize_loop
  from fastapi.templating import Jinja2Templates
  
-@@ -36,6 +35,15 @@
+@@ -36,6 +35,23 @@
  setup_logging()
  
  logger = get_logger(__name__)
++
++
++def _app_text(key: str, locale: str | None = None, **params) -> str:
++    return i18n_t(
++        f"runtime.api.{key}",
++        locale=locale or get_config_locale(),
++        **params,
++    )
 +
 +
 +def _mark_mobile_startup(status: str) -> None:
@@ -207,7 +215,15 @@
  
  from core.config import load_config, mutate_config
  from core.data_layout import bootstrap_data_layout, consume_pending_bootstrap_result, consume_reset_access_auth_marker
-@@ -173,6 +181,7 @@
+@@ -51,6 +67,7 @@
+ from core import cf_handoff
+ from core.loopback import is_loopback_host
+ from core.cf_transport import register_cf_transport
++from core.i18n import get_config_locale, t as i18n_t
+ from web.shell_identity import cf_availability_here, shell_key
+ 
+ # 168d CD-168d-3／BE-LINT-09：sink 註冊放 module level（不放 lifespan）——所有進入點（含不啟動
+@@ -173,6 +190,7 @@
  async def lifespan(app: FastAPI):
      # ── startup ───────────────────────────────────────────────
      # 資料根定版必須在 init_db()／任何 request 之前（CD-B2）；失敗走固定 stderr + os._exit。
@@ -215,7 +231,7 @@
      try:
          bootstrap_data_layout()
      except Exception as e:
-@@ -184,7 +193,9 @@
+@@ -184,7 +202,9 @@
      # init_db() 必須在任何 request 前執行：執行 DROP COLUMN migration（v0.8.7：
      # 移除 legacy clip_embedding / clip_model_id），確保 Video.from_row cls(**data)
      # 不會因 legacy schema 欄位收到未知 keyword 而 500。CD-57b-8 contract。
@@ -225,7 +241,7 @@
      start_notification_persistence()
  
      _pending = consume_pending_bootstrap_result()
-@@ -198,6 +209,7 @@
+@@ -198,6 +218,7 @@
      # TASK-114a-T2: 認證閘門的 schema 就緒動作，與 init_db() 同一段落一起跑
      # （CD-114a-3：兩者刻意不合併成同一支函式，但啟動時機一致）。idempotent
      # CREATE TABLE IF NOT EXISTS + 首次 load_snapshot() 暖 cache。
@@ -233,7 +249,7 @@
      ensure_schema()
  
      try:
-@@ -225,16 +237,32 @@
+@@ -225,16 +246,32 @@
      # event loop 只持 weak ref，task 可能執行中途被 GC 回收）。
      app.state.auto_organize_task = asyncio.create_task(auto_organize_loop())
  
@@ -272,7 +288,7 @@
          try:
              _task = getattr(app.state, _task_name)
              _task.cancel()
-@@ -286,13 +314,15 @@
+@@ -286,13 +323,15 @@
  
  # 靜態檔案
  app.mount("/static", NoCacheStaticFiles(directory=STATIC_DIR), name="static")
@@ -289,7 +305,7 @@
  from web.routers import config as config_router
  from web.routers import scraper as scraper_router
  from web.routers import translate as translate_router
-@@ -337,6 +367,7 @@
+@@ -337,6 +376,7 @@
  # correct use-site binding (TASK-63e-1; function-local import would defeat patch).
  from web.routers.settings_metatube import startup_reconnect, _fire_probe  # noqa: E402, PLC2701 — 既有註解（TASK-63e-1）已明講：module-level import 是為了讓 patch("web.app._fire_probe") 打中呼叫端 binding，函式內 import 會讓 patch 失效；_fire_probe 是 metatube 重連探測的內部 primitive，尚未升格為公開 API
  app.include_router(search_router.router)
@@ -297,7 +313,44 @@
  app.include_router(config_router.router)
  app.include_router(scraper_router.router)
  app.include_router(translate_router.router)
-@@ -805,6 +836,7 @@
+@@ -375,9 +415,13 @@
+ 
+ @app.exception_handler(RequestValidationError)
+ async def validation_exception_handler(request: Request, exc: RequestValidationError):
++    locale = await asyncio.to_thread(get_config_locale)
+     return JSONResponse(
+         status_code=422,
+-        content={"error": "validation_error", "message": "請求格式錯誤，缺少必要欄位"}
++        content={
++            "error": "validation_error",
++            "message": _app_text("request_format_error", locale),
++        }
+     )
+ 
+ 
+@@ -720,7 +764,12 @@
+ def get_common_context(request: Request) -> dict:
+     """取得共用的模板 Context (包含設定)"""
+     from core.config import load_config, mutate_config
+-    from core.i18n import t as _t, get_merged_translations, detect_locale_from_accept_language
++    from core.i18n import (
++        t as _t,
++        get_merged_translations,
++        detect_locale_from_accept_language,
++        normalize_locale,
++    )
+     config = load_config()
+ 
+     # Font size mapping
+@@ -748,6 +797,7 @@
+             mutate_config(_persist_locale)
+         except Exception as e:
+             logger.warning("[i18n] 首次偵測語系寫入 config 失敗: %s", e)
++    locale = normalize_locale(locale)
+ 
+     merged_translations = get_merged_translations(locale)
+ 
+@@ -805,6 +855,7 @@
          "locale": locale,
          "merged_translations": merged_translations,
          "t": _t_bound,
@@ -305,7 +358,7 @@
          "is_windows_desktop": getattr(request.state, "shell_kind", None) == "windows",
          "is_mac_desktop": getattr(request.state, "shell_kind", None) == "mac",
          "is_desktop": getattr(request.state, "shell_kind", None) is not None,
-@@ -953,7 +985,8 @@
+@@ -953,7 +1004,8 @@
      if show_agent_auth:
          context["agent_token"] = snap.agent_token
  
@@ -315,6 +368,48 @@
  
  
  @app.get("/design-system")
+@@ -984,6 +1036,7 @@
+     import asyncio
+     import httpx
+ 
++    locale = await asyncio.to_thread(get_config_locale)
+     current_version = VERSION
+     github_api = self_update.GITHUB_LATEST_API
+ 
+@@ -1024,17 +1077,17 @@
+                 "download_url": download_url
+             }
+     except (httpx.TimeoutException, TimeoutError):
+-        return {"success": False, "error": "連線逾時"}
++        return {"success": False, "error": _app_text("update_timeout", locale)}
+     except Exception as e:
+         logger.error("檢查更新失敗: %s", e)
+-        return {"success": False, "error": "檢查更新失敗"}
++        return {"success": False, "error": _app_text("update_check_failed", locale)}
+ 
+ 
+ @app.get("/api/install-context")
+ async def get_install_context():
+     """取得安裝路徑資訊，供 Help 頁更新 modal 分流使用（僅 desktop App）。"""
+     if not (_is_windows_desktop() or _is_mac_desktop()):
+-        raise HTTPException(status_code=403, detail="此功能僅限桌面應用程式使用")
++        raise HTTPException(status_code=403, detail=_app_text("desktop_only"))
+     return {"is_default_path": self_update.is_default_install()}
+ 
+ 
+@@ -1079,10 +1132,10 @@
+             "trigger-update 拒絕：layer=%s client_host=%.64s origin=%.128s",
+             denied, str(client_host), str(origin),
+         )
+-        raise HTTPException(status_code=403, detail="此功能僅限桌面應用程式使用")
++        raise HTTPException(status_code=403, detail=_app_text("desktop_only"))
+     try:
+         self_update.launch_installer()
+     except Exception as e:
+         logger.error("trigger-update 啟動外部終端失敗: %s", e)
+-        raise HTTPException(status_code=500, detail="啟動更新失敗，請查看日誌") from e
++        raise HTTPException(status_code=500, detail=_app_text("update_start_failed")) from e
+     return {"success": True}
 --- a/web/compression.py
 +++ b/web/compression.py
 @@ -1,4 +1,39 @@

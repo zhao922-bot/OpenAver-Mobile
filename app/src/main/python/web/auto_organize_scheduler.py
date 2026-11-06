@@ -24,6 +24,7 @@ from core import auto_organize_state
 from core.auto_organize import run_one_round
 from core.config import AUTO_ORGANIZE_INTERVAL_HOURS, load_config
 from core.favorite_scan import resolve_favorite_folder
+from core.i18n import get_config_locale, t
 from core.logger import get_logger
 from core.wishlist_reconcile import format_wishlist_removed_message
 from web.routers.notifications import emit_notification
@@ -226,9 +227,12 @@ async def _run_round_body(trigger: str) -> None:
 
     wishlist_removed = result.get("wishlist_removed") or []
     if wishlist_removed:
+        locale = get_config_locale()
         emit_notification(
             "info", "notif.wishlist_auto_removed",
-            message=format_wishlist_removed_message(wishlist_removed),
+            message=format_wishlist_removed_message(
+                wishlist_removed, locale
+            ),
             task_type="wishlist_reconcile",
         )
 
@@ -263,7 +267,12 @@ def _emit_round_summary(result: dict) -> None:
                        task_type="auto_organize")
 
 
-def _format_summary_message(result: dict, *, aborted_after: int | None = None) -> str:
+def _format_summary_message(
+    result: dict,
+    *,
+    aborted_after: int | None = None,
+    locale: str | None = None,
+) -> str:
     """組裝摘要文案（spec §F5：新增/失敗/缺封面/略過各自 5 部內列出番號，其餘寫「及其他 N 部」）。
 
     title_key（notif.auto_organize_summary／notif.auto_organize_aborted）已經是
@@ -274,40 +283,81 @@ def _format_summary_message(result: dict, *, aborted_after: int | None = None) -
     cover_missing = result["cover_missing"]
     failed = result["failed"]
     duplicate_numbers = [item["number"] for item in result["skipped"]["duplicate"]]
+    locale = locale or get_config_locale()
 
     if aborted_after:
-        header = f"處理 {aborted_after} 部後因手動操作中止"
+        header = t(
+            "runtime.notify.auto_aborted",
+            locale=locale,
+            count=aborted_after,
+        )
     else:
-        parts = [f"新增 {len(added)} 部"]
+        parts = [
+            t("runtime.notify.auto_added", locale=locale, count=len(added))
+        ]
         if failed:
-            parts.append(f"失敗 {len(failed)} 部")
+            parts.append(
+                t("runtime.notify.auto_failed", locale=locale, count=len(failed))
+            )
         if cover_missing:
-            parts.append(f"缺封面 {len(cover_missing)} 部")
+            parts.append(
+                t(
+                    "runtime.notify.auto_cover_missing",
+                    locale=locale,
+                    count=len(cover_missing),
+                )
+            )
         if duplicate_numbers:
-            parts.append(f"略過 {len(duplicate_numbers)} 部")
-        header = "、".join(parts)
+            parts.append(
+                t(
+                    "runtime.notify.auto_skipped",
+                    locale=locale,
+                    count=len(duplicate_numbers),
+                )
+            )
+        header = t("runtime.notify.auto_part_join", locale=locale).join(parts)
 
     def _fmt(numbers: list) -> str:
         shown = numbers[:5]
         rest = len(numbers) - len(shown)
-        text = "、".join(shown)
+        text = t("runtime.notify.list_join", locale=locale).join(shown)
         if rest > 0:
-            text += f"，及其他 {rest} 部"
+            text += t("runtime.notify.auto_more", locale=locale, count=rest)
         return text
 
     detail = []
     if added:
-        detail.append(f"新增：{_fmt(added)}")
+        detail.append(
+            t("runtime.notify.auto_added_detail", locale=locale, items=_fmt(added))
+        )
     if failed:
-        detail.append(f"失敗：{_fmt(failed)}")
+        detail.append(
+            t("runtime.notify.auto_failed_detail", locale=locale, items=_fmt(failed))
+        )
     if cover_missing:
-        detail.append(f"缺封面：{_fmt(cover_missing)}")
+        detail.append(
+            t(
+                "runtime.notify.auto_cover_missing_detail",
+                locale=locale,
+                items=_fmt(cover_missing),
+            )
+        )
     if duplicate_numbers:
-        detail.append(f"目標已存在：{_fmt(duplicate_numbers)}")
+        detail.append(
+            t(
+                "runtime.notify.auto_duplicate_detail",
+                locale=locale,
+                items=_fmt(duplicate_numbers),
+            )
+        )
 
     message = header
     if detail:
-        message += "（" + "；".join(detail) + "）"
+        message += t(
+            "runtime.notify.auto_detail_wrap",
+            locale=locale,
+            details=t("runtime.notify.auto_detail_join", locale=locale).join(detail),
+        )
 
     logger.info("[auto_organize] %s", message)
     return message

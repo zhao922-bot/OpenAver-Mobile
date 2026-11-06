@@ -426,7 +426,11 @@ export function stateScan() {
                     },
                     onBeforeUnload: () => {
                         const guard = this.shouldWarnBeforeLeave();
-                        if (guard.shouldWarn) return guard.message;
+                        if (guard.shouldWarn) {
+                            return window.t('scanner.leave_warning.confirm', {
+                                message: guard.message,
+                            });
+                        }
                         return null;
                     },
                     cleanup: () => {
@@ -585,7 +589,8 @@ export function stateScan() {
 
                         if (stats.last_run) {
                             const lastRun = new Date(stats.last_run);
-                            const timeStr = lastRun.toLocaleString('zh-TW', {
+                            const locale = window.__locale || document.documentElement.lang || 'zh-CN';
+                            const timeStr = lastRun.toLocaleString(locale, {
                                 month: 'numeric',
                                 day: 'numeric',
                                 hour: '2-digit',
@@ -915,13 +920,30 @@ export function stateScan() {
 
             // 儲存到 localStorage
             localStorage.setItem('avlist_logs', this.logHtml);
+            localStorage.setItem('avlist_logs_locale', this._scannerLocale());
 
             this.logBatch = [];
             this.logTimer = null;
         },
 
+        _scannerLocale() {
+            return window.__locale || document.documentElement.lang || 'zh-CN';
+        },
+
+        _saveLastStatus(status) {
+            localStorage.setItem('avlist_last_status', status);
+            localStorage.setItem('avlist_logs_locale', this._scannerLocale());
+        },
+
         restoreLogs() {
             const savedLogs = localStorage.getItem('avlist_logs');
+            const savedLogsLocale = localStorage.getItem('avlist_logs_locale');
+            if (savedLogs && savedLogsLocale !== this._scannerLocale()) {
+                // Status and log HTML are localized snapshots. Never restore
+                // them after the user switches the UI language.
+                this.clearLogs();
+                return;
+            }
             const wasGenerating = localStorage.getItem('avlist_generating') === 'true';
 
             if (savedLogs) {
@@ -962,6 +984,7 @@ export function stateScan() {
 
         clearLogs() {
             localStorage.removeItem('avlist_logs');
+            localStorage.removeItem('avlist_logs_locale');
             localStorage.removeItem('avlist_generating');
             localStorage.removeItem('avlist_last_status');
             this.logHtml = '';
@@ -1023,7 +1046,11 @@ export function stateScan() {
         },
 
         confirmClearAll() {
-            const hasLogs = this.logEntries.length > 0 || localStorage.getItem('avlist_logs');
+            const hasLogs = this.logEntries.length > 0
+                || (
+                    localStorage.getItem('avlist_logs')
+                    && localStorage.getItem('avlist_logs_locale') === this._scannerLocale()
+                );
             if (!hasLogs) {
                 this.showToast(window.t('scanner.toast.no_logs'), 'info');
                 return;
@@ -1113,7 +1140,7 @@ export function stateScan() {
                 this.taskFailedItems = summary.failed_items;
             }
             localStorage.setItem('avlist_generating', 'false');
-            localStorage.setItem('avlist_last_status', this.progressStatus);
+            this._saveLastStatus(this.progressStatus);
         },
 
         cancelCurrentTask() {
@@ -1218,7 +1245,7 @@ export function stateScan() {
                         this.progressCurrent = data.current;
                         this.progressTotal = data.total;
                         this._applyTaskMetrics(data);
-                        localStorage.setItem('avlist_last_status', data.status);
+                        this._saveLastStatus(data.status);
                     } else if (data.type === 'log') {
                         this.addLog(data.level, data.message);
                     } else if (data.type === 'done') {
@@ -1234,7 +1261,7 @@ export function stateScan() {
                         );
 
                         localStorage.setItem('avlist_generating', 'false');
-                        localStorage.setItem('avlist_last_status', window.t('scanner.stats.status_done'));
+                        this._saveLastStatus(window.t('scanner.stats.status_done'));
                         localStorage.removeItem('avlist_state');  // 清除 viewer 狀態
 
                         // 處理 NFO 更新提示
@@ -1400,7 +1427,7 @@ export function stateScan() {
                         this.progressCurrent = data.current;
                         this.progressTotal = data.total;
                         this._applyTaskMetrics(data);
-                        localStorage.setItem('avlist_last_status', data.status);
+                        this._saveLastStatus(data.status);
                     } else if (data.type === 'log') {
                         this.addLog(data.level, data.message);
                     } else if (data.type === 'done') {
@@ -1414,7 +1441,7 @@ export function stateScan() {
                         );
 
                         localStorage.setItem('avlist_generating', 'false');
-                        localStorage.setItem('avlist_last_status', data.message || window.t('scanner.stats.status_done'));
+                        this._saveLastStatus(data.message || window.t('scanner.stats.status_done'));
 
                         const failed = data.summary?.failed || 0;
                         this.showToast(
@@ -1552,7 +1579,7 @@ export function stateScan() {
                     this.progressCurrent = data.current || 0;
                     this.progressTotal = data.total || this.progressTotal;
                     this._applyTaskMetrics(data);
-                    localStorage.setItem('avlist_last_status', this.progressStatus);
+                    this._saveLastStatus(this.progressStatus);
                 } else if (data.type === 'log') {
                     this.addLog(data.level || 'info', data.message || '');
                 } else if (data.type === 'done') {
@@ -1632,7 +1659,7 @@ export function stateScan() {
                     this.progressCurrent = data.current || 0;
                     this.progressTotal = data.total || this.statTotal;
                     this._applyTaskMetrics(data);
-                    localStorage.setItem('avlist_last_status', this.progressStatus);
+                    this._saveLastStatus(this.progressStatus);
                 } else if (data.type === 'log') {
                     this.addLog(data.level || 'info', data.message || '');
                 } else if (data.type === 'done') {
@@ -1707,7 +1734,7 @@ export function stateScan() {
                         this.progressCurrent = data.current;
                         this.progressTotal = data.total;
                         this._applyTaskMetrics(data);
-                        localStorage.setItem('avlist_last_status', data.status);
+                        this._saveLastStatus(data.status);
                     } else if (data.type === 'log') {
                         this.addLog(data.level, data.message);
                     } else if (data.type === 'done') {
@@ -1728,7 +1755,7 @@ export function stateScan() {
                         );
 
                         localStorage.setItem('avlist_generating', 'false');
-                        localStorage.setItem('avlist_last_status', data.message || window.t('scanner.stats.status_done'));
+                        this._saveLastStatus(data.message || window.t('scanner.stats.status_done'));
 
                         // T3(40c) Codex fix: update 完成後重設 jellyfin check 狀態，讓觸發列重新出現
                         this.jellyfinImageVisible = false;

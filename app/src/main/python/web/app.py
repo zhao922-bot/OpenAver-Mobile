@@ -37,6 +37,14 @@ setup_logging()
 logger = get_logger(__name__)
 
 
+def _app_text(key: str, locale: str | None = None, **params) -> str:
+    return i18n_t(
+        f"runtime.api.{key}",
+        locale=locale or get_config_locale(),
+        **params,
+    )
+
+
 def _mark_mobile_startup(status: str) -> None:
     try:
         from openaver_boot import set_startup_status
@@ -59,6 +67,7 @@ from core.desktop_env import desktop_kind
 from core import cf_handoff
 from core.loopback import is_loopback_host
 from core.cf_transport import register_cf_transport
+from core.i18n import get_config_locale, t as i18n_t
 from web.shell_identity import cf_availability_here, shell_key
 
 # 168d CD-168d-3／BE-LINT-09：sink 註冊放 module level（不放 lifespan）——所有進入點（含不啟動
@@ -406,9 +415,13 @@ app.include_router(custom_sources_router.router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    locale = await asyncio.to_thread(get_config_locale)
     return JSONResponse(
         status_code=422,
-        content={"error": "validation_error", "message": "請求格式錯誤，缺少必要欄位"}
+        content={
+            "error": "validation_error",
+            "message": _app_text("request_format_error", locale),
+        }
     )
 
 
@@ -751,7 +764,12 @@ def _is_mac_desktop() -> bool:
 def get_common_context(request: Request) -> dict:
     """取得共用的模板 Context (包含設定)"""
     from core.config import load_config, mutate_config
-    from core.i18n import t as _t, get_merged_translations, detect_locale_from_accept_language
+    from core.i18n import (
+        t as _t,
+        get_merged_translations,
+        detect_locale_from_accept_language,
+        normalize_locale,
+    )
     config = load_config()
 
     # Font size mapping
@@ -779,6 +797,7 @@ def get_common_context(request: Request) -> dict:
             mutate_config(_persist_locale)
         except Exception as e:
             logger.warning("[i18n] 首次偵測語系寫入 config 失敗: %s", e)
+    locale = normalize_locale(locale)
 
     merged_translations = get_merged_translations(locale)
 
@@ -1017,6 +1036,7 @@ async def check_update():
     import asyncio
     import httpx
 
+    locale = await asyncio.to_thread(get_config_locale)
     current_version = VERSION
     github_api = self_update.GITHUB_LATEST_API
 
@@ -1057,17 +1077,17 @@ async def check_update():
                 "download_url": download_url
             }
     except (httpx.TimeoutException, TimeoutError):
-        return {"success": False, "error": "連線逾時"}
+        return {"success": False, "error": _app_text("update_timeout", locale)}
     except Exception as e:
         logger.error("檢查更新失敗: %s", e)
-        return {"success": False, "error": "檢查更新失敗"}
+        return {"success": False, "error": _app_text("update_check_failed", locale)}
 
 
 @app.get("/api/install-context")
 async def get_install_context():
     """取得安裝路徑資訊，供 Help 頁更新 modal 分流使用（僅 desktop App）。"""
     if not (_is_windows_desktop() or _is_mac_desktop()):
-        raise HTTPException(status_code=403, detail="此功能僅限桌面應用程式使用")
+        raise HTTPException(status_code=403, detail=_app_text("desktop_only"))
     return {"is_default_path": self_update.is_default_install()}
 
 
@@ -1112,10 +1132,10 @@ async def trigger_update(request: Request):
             "trigger-update 拒絕：layer=%s client_host=%.64s origin=%.128s",
             denied, str(client_host), str(origin),
         )
-        raise HTTPException(status_code=403, detail="此功能僅限桌面應用程式使用")
+        raise HTTPException(status_code=403, detail=_app_text("desktop_only"))
     try:
         self_update.launch_installer()
     except Exception as e:
         logger.error("trigger-update 啟動外部終端失敗: %s", e)
-        raise HTTPException(status_code=500, detail="啟動更新失敗，請查看日誌") from e
+        raise HTTPException(status_code=500, detail=_app_text("update_start_failed")) from e
     return {"success": True}
