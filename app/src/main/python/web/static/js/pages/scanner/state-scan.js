@@ -1097,6 +1097,9 @@ export function stateScan() {
             this.taskTimer = setInterval(() => {
                 this.taskClockTick = Date.now();
             }, 1000);
+            if (window.__openaverTaskKeepAlive) {
+                window.__openaverTaskKeepAlive.start(kind);
+            }
         },
 
         _stopTaskTimer() {
@@ -1141,6 +1144,9 @@ export function stateScan() {
             }
             localStorage.setItem('avlist_generating', 'false');
             this._saveLastStatus(this.progressStatus);
+            if (window.__openaverTaskKeepAlive) {
+                window.__openaverTaskKeepAlive.stop();
+            }
         },
 
         cancelCurrentTask() {

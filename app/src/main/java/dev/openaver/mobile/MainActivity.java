@@ -878,7 +878,7 @@ public final class MainActivity extends Activity {
                         }
                         new AlertDialog.Builder(
                                 MainActivity.this,
-                                android.R.style.Theme_Material_Dialog_Alert
+                                R.style.Theme_OpenAverMobile_Dialog
                         )
                                 .setTitle(R.string.confirm_title)
                                 .setMessage(message)
@@ -1081,7 +1081,7 @@ public final class MainActivity extends Activity {
         );
         message += "\n\n" + getString(R.string.native_abi, nativeAbiSafe());
 
-        new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+        new AlertDialog.Builder(this, R.style.Theme_OpenAverMobile_Dialog)
                 .setTitle(R.string.about_title)
                 .setMessage(message)
                 .setPositiveButton(R.string.ok, null)
@@ -1118,6 +1118,15 @@ public final class MainActivity extends Activity {
                     uri.getQueryParameter("parts"),
                     this::openBuiltInPlayer
             );
+            return true;
+        }
+        if ("openaver-task".equals(scheme)) {
+            String action = uri.getHost();
+            if ("start".equals(action)) {
+                TaskKeepAliveService.start(this, uri.getQueryParameter("label"));
+            } else if ("stop".equals(action)) {
+                TaskKeepAliveService.stop(this);
+            }
             return true;
         }
         if ("http".equals(scheme) || "https".equals(scheme)
@@ -1368,7 +1377,7 @@ public final class MainActivity extends Activity {
         if (cfTransport != null) {
             cfTransport.onPause();
         }
-        if (webView != null) {
+        if (webView != null && !TaskKeepAliveService.isRunning()) {
             webView.onPause();
         }
         CookieManager.getInstance().flush();
@@ -1392,6 +1401,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        TaskKeepAliveService.stop(this);
         if (menuHandleController != null) {
             menuHandleController.destroy();
         }
@@ -1540,7 +1550,7 @@ public final class MainActivity extends Activity {
                                    final JsResult result) {
             new AlertDialog.Builder(
                     MainActivity.this,
-                    android.R.style.Theme_Material_Dialog_Alert
+                    R.style.Theme_OpenAverMobile_Dialog
             )
                     .setTitle(R.string.confirm_title)
                     .setMessage(message)

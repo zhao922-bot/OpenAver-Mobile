@@ -82,6 +82,9 @@
     <string name="download_failed">Download could not start.</string>
     <string name="file_chooser_title">Choose a file</string>
     <string name="exit_hint">Press back again to exit.</string>
+    <string name="task_keepalive_channel">OpenAver tasks</string>
+    <string name="task_keepalive_title">OpenAver is working</string>
+    <string name="task_keepalive_message">This notification disappears automatically when the task finishes.</string>
     <string name="native_abi">Native ABI: %1$s</string>
     <string name="cancel">Cancel</string>
 </resources>

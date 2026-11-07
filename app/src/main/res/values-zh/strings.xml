@@ -82,6 +82,9 @@
     <string name="download_failed">无法开始下载。</string>
     <string name="file_chooser_title">选择文件</string>
     <string name="exit_hint">再按一次返回键退出。</string>
+    <string name="task_keepalive_channel">OpenAver 任务</string>
+    <string name="task_keepalive_title">OpenAver 正在处理任务</string>
+    <string name="task_keepalive_message">任务完成后此通知会自动消失。</string>
     <string name="native_abi">原生架构：%1$s</string>
     <string name="cancel">取消</string>
 </resources>

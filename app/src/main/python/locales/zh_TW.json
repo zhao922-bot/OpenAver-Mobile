@@ -761,6 +761,12 @@
       "database_backup_label": "資料庫備份",
       "database_backup_hint": "匯出收藏、標籤、別名、評分和封面裁切資料；不包含影片與媒體檔案。",
       "database_backup_action": "匯出資料庫",
+      "database_restore_label": "恢復資料庫",
+      "database_restore_hint": "匯入先前匯出的備份檔，將覆寫目前收藏、標籤、別名與評分資料",
+      "database_restore_action": "匯入備份",
+      "database_restore_confirm": "匯入會覆寫目前資料庫，且無法復原。確定要繼續嗎？",
+      "database_restore_done": "資料庫已恢復，頁面即將重新整理",
+      "database_restore_failed": "恢復失敗",
       "reset_label": "重置所有設定",
       "reset_hint": "刪除所有自訂設定，恢復預設值",
       "close_action_label": "關閉視窗時",
@@ -2443,7 +2449,16 @@
     },
     "database": {
       "missing": "資料庫不存在，請先產生列表",
-      "export_failed": "資料庫匯出失敗"
+      "export_failed": "資料庫匯出失敗",
+      "import_too_large": "備份檔超過 256 MB，無法匯入",
+      "import_invalid_zip": "備份 ZIP 格式無效或包含不安全的檔案",
+      "import_invalid_manifest": "備份清單無效或與資料庫檔案不一致",
+      "import_version_unsupported": "目前 App 不支援此備份版本",
+      "import_hash_mismatch": "資料庫校驗失敗，備份檔可能已損壞",
+      "import_integrity_failed": "資料庫完整性檢查失敗",
+      "import_missing_tables": "備份缺少 OpenAver 所需的資料表",
+      "import_task_running": "有任務正在執行，請先停止任務再匯入資料庫",
+      "import_failed": "資料庫恢復失敗"
     },
     "api": {
       "video_data_load_failed": "取得影片資料失敗",

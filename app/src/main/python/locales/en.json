@@ -758,6 +758,12 @@
       "database_backup_label": "Database Backup",
       "database_backup_hint": "Exports favorites, tags, aliases, ratings and cover crop data as a ZIP. Videos and media files are not included.",
       "database_backup_action": "Export database",
+      "database_restore_label": "Restore Database",
+      "database_restore_hint": "Import a previously exported backup. This overwrites current favorites, tags, aliases, and ratings.",
+      "database_restore_action": "Import backup",
+      "database_restore_confirm": "Importing will overwrite the current database and cannot be undone. Continue?",
+      "database_restore_done": "Database restored. Reloading the page.",
+      "database_restore_failed": "Restore failed",
       "reset_label": "Reset All Settings",
       "reset_hint": "Delete all custom settings and restore defaults",
       "close_action_label": "When closing the window",
@@ -2443,7 +2449,16 @@
     },
     "database": {
       "missing": "Database not found; generate the list first",
-      "export_failed": "Database export failed"
+      "export_failed": "Database export failed",
+      "import_too_large": "The backup exceeds 256 MB and cannot be imported",
+      "import_invalid_zip": "The backup ZIP is invalid or contains unsafe files",
+      "import_invalid_manifest": "The backup manifest is invalid or does not match the database file",
+      "import_version_unsupported": "This backup version is not supported by the current app",
+      "import_hash_mismatch": "Database verification failed; the backup may be corrupted",
+      "import_integrity_failed": "Database integrity check failed",
+      "import_missing_tables": "The backup is missing data tables required by OpenAver",
+      "import_task_running": "A task is running. Stop it before importing a database",
+      "import_failed": "Database restore failed"
     },
     "api": {
       "video_data_load_failed": "Failed to load video data",

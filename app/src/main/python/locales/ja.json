@@ -758,6 +758,12 @@
       "database_backup_label": "データベースバックアップ",
       "database_backup_hint": "お気に入り、タグ、別名、評価、カバー切り抜き情報をZIPで書き出します。動画やメディアファイルは含まれません。",
       "database_backup_action": "データベースを書き出す",
+      "database_restore_label": "データベースを復元",
+      "database_restore_hint": "以前エクスポートしたバックアップを読み込みます。現在のお気に入り、タグ、別名、評価データは上書きされます。",
+      "database_restore_action": "バックアップを読み込む",
+      "database_restore_confirm": "読み込むと現在のデータベースが上書きされ、元に戻せません。続行しますか？",
+      "database_restore_done": "データベースを復元しました。ページを再読み込みします。",
+      "database_restore_failed": "復元に失敗しました",
       "reset_label": "すべての設定をリセット",
       "reset_hint": "すべてのカスタム設定を削除してデフォルトに戻す",
       "close_action_label": "ウィンドウを閉じるとき",
@@ -2443,7 +2449,16 @@
     },
     "database": {
       "missing": "データベースがありません。先にリストを生成してください",
-      "export_failed": "データベースのエクスポートに失敗しました"
+      "export_failed": "データベースのエクスポートに失敗しました",
+      "import_too_large": "バックアップが 256 MB を超えているため読み込めません",
+      "import_invalid_zip": "バックアップ ZIP が無効か、安全でないファイルが含まれています",
+      "import_invalid_manifest": "バックアップのマニフェストが無効、またはデータベースと一致しません",
+      "import_version_unsupported": "このバックアップのバージョンは現在のアプリではサポートされていません",
+      "import_hash_mismatch": "データベースの検証に失敗しました。バックアップが破損している可能性があります",
+      "import_integrity_failed": "データベースの整合性チェックに失敗しました",
+      "import_missing_tables": "バックアップに OpenAver が必要とするデータテーブルがありません",
+      "import_task_running": "タスクが実行中です。停止してからデータベースを読み込んでください",
+      "import_failed": "データベースの復元に失敗しました"
     },
     "api": {
       "video_data_load_failed": "動画データの取得に失敗しました",

@@ -49,6 +49,98 @@ def test_single_video_offers_builtin_player_choice():
     assert "fallback.open(part.path, part.number);" in player
 
 
+def test_native_dialogs_use_the_open_aver_theme():
+    activity = (
+        ROOT
+        / "app/src/main/java/dev/openaver/mobile/MainActivity.java"
+    ).read_text(encoding="utf-8")
+    player = (
+        ROOT
+        / "app/src/main/java/dev/openaver/mobile/ExternalPlayer.java"
+    ).read_text(encoding="utf-8")
+    themes = (
+        ROOT
+        / "app/src/main/res/values/themes.xml"
+    ).read_text(encoding="utf-8")
+
+    assert "Theme.OpenAverMobile.Dialog" in themes
+    assert activity.count("R.style.Theme_OpenAverMobile_Dialog") == 3
+    assert player.count("R.style.Theme_OpenAverMobile_Dialog") == 3
+    assert "android.R.style.Theme_Material_Dialog_Alert" not in activity
+    assert "android.R.style.Theme_Material_Dialog_Alert" not in player
+
+
+def test_android_tasks_use_foreground_keepalive_and_do_not_pause_webview():
+    service = (
+        ROOT
+        / "app/src/main/java/dev/openaver/mobile/TaskKeepAliveService.java"
+    ).read_text(encoding="utf-8")
+    activity = (
+        ROOT
+        / "app/src/main/java/dev/openaver/mobile/MainActivity.java"
+    ).read_text(encoding="utf-8")
+    manifest = (
+        ROOT
+        / "app/src/main/AndroidManifest.xml"
+    ).read_text(encoding="utf-8")
+    keepalive = (
+        ROOT
+        / "app/src/main/python/web/static/js/shared/task-keepalive.js"
+    ).read_text(encoding="utf-8")
+    scanner = (
+        ROOT
+        / "app/src/main/python/web/static/js/pages/scanner/state-scan.js"
+    ).read_text(encoding="utf-8")
+    base = (
+        ROOT
+        / "app/src/main/python/web/templates/base.html"
+    ).read_text(encoding="utf-8")
+
+    assert service.index("startForeground(NOTIFICATION_ID, buildNotification());") < (
+        service.index("running = true;")
+    )
+    assert "return START_NOT_STICKY;" in service
+    assert "running = false;" in service
+    assert "TaskKeepAliveService.isRunning()" in activity
+    assert "if (webView != null && !TaskKeepAliveService.isRunning())" in activity
+    assert '"openaver-task".equals(scheme)' in activity
+    assert 'android.permission.FOREGROUND_SERVICE' in manifest
+    assert 'android.permission.POST_NOTIFICATIONS' in manifest
+    assert 'android:name=".TaskKeepAliveService"' in manifest
+    assert 'android:foregroundServiceType="dataSync"' in manifest
+    assert "window.__openaverTaskKeepAlive" in keepalive
+    assert service.index("createNotificationChannel(context);") < (
+        service.index("startNow(context, label);")
+    )
+    assert "requestPermissions(" not in service
+    assert "openaver-task://start" in keepalive
+    assert "window.__openaverTaskKeepAlive.start(kind)" in scanner
+    assert "window.__openaverTaskKeepAlive.stop()" in scanner
+    assert "/static/js/shared/task-keepalive.js" in base
+
+
+def test_database_restore_is_available_in_android_settings():
+    settings = (
+        ROOT
+        / "app/src/main/python/web/templates/settings.html"
+    ).read_text(encoding="utf-8")
+    main = (
+        ROOT
+        / "app/src/main/python/web/static/js/pages/settings/main.js"
+    ).read_text(encoding="utf-8")
+    state = (
+        ROOT
+        / "app/src/main/python/web/static/js/pages/settings/state-database.js"
+    ).read_text(encoding="utf-8")
+
+    assert "settings.system.database_restore_label" in settings
+    assert 'accept=".zip,application/zip"' in settings
+    assert "restoreDatabase($event)" in settings
+    assert "stateDatabase()" in main
+    assert "fetch('/api/database/import'" in state
+    assert "window.confirm" in state
+
+
 def test_mobile_scanner_hides_redundant_page_header():
     css = (
         ROOT
@@ -260,3 +352,14 @@ def test_lightweight_motion_pages_share_runtime_without_heavy_plugins():
     assert "/static/vendor/gsap/CustomBounce.min.js" in plugin_block
     assert "/static/vendor/gsap/DrawSVGPlugin.min.js" in plugin_block
     assert "{% if uses_gsap %}\n    <!-- Motion Adapter" in base
+
+
+def test_alpine_i18n_fallbacks_escape_json_for_double_quoted_attributes():
+    base = (
+        ROOT
+        / "app/src/main/python/web/templates/base.html"
+    ).read_text(encoding="utf-8")
+
+    for line in base.splitlines():
+        if "window.t ? window.t(" in line and "|tojson" in line:
+            assert "|tojson|forceescape" in line

@@ -82,6 +82,9 @@
     <string name="download_failed">ダウンロードを開始できませんでした。</string>
     <string name="file_chooser_title">ファイルを選択</string>
     <string name="exit_hint">もう一度戻るを押すと終了します。</string>
+    <string name="task_keepalive_channel">OpenAver のタスク</string>
+    <string name="task_keepalive_title">OpenAver がタスクを処理中です</string>
+    <string name="task_keepalive_message">タスクが完了すると、この通知は自動的に消えます。</string>
     <string name="native_abi">ネイティブ ABI：%1$s</string>
     <string name="cancel">キャンセル</string>
 </resources>

@@ -48,7 +48,7 @@ final class ExternalPlayer {
             }
             AlertDialog.Builder builder = new AlertDialog.Builder(
                     activity,
-                    android.R.style.Theme_Material_Dialog_Alert
+                    R.style.Theme_OpenAverMobile_Dialog
             )
                     .setTitle(R.string.choose_video_part)
                     .setItems(labels, (dialog, which) ->
@@ -89,7 +89,7 @@ final class ExternalPlayer {
                 activity.getString(R.string.play_with_external_player),
                 activity.getString(R.string.play_in_builtin_player),
         };
-        new AlertDialog.Builder(activity, android.R.style.Theme_Material_Dialog_Alert)
+        new AlertDialog.Builder(activity, R.style.Theme_OpenAverMobile_Dialog)
                 .setTitle(R.string.choose_video_player)
                 .setItems(choices, (dialog, which) -> {
                     if (which == 0) {
@@ -128,7 +128,7 @@ final class ExternalPlayer {
                     ? activity.getString(R.string.video_part_number, part.number)
                     : part.label;
         }
-        new AlertDialog.Builder(activity, android.R.style.Theme_Material_Dialog_Alert)
+        new AlertDialog.Builder(activity, R.style.Theme_OpenAverMobile_Dialog)
                 .setTitle(R.string.choose_video_part)
                 .setItems(labels, (dialog, which) -> {
                     VideoPartParser.Part part = parts.get(which);

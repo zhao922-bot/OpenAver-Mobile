@@ -18,6 +18,8 @@ from urllib.parse import unquote, urlsplit
 
 import requests
 from pydantic import BaseModel, field_validator
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from core.desktop_env import desktop_kind
 from core.loopback import is_loopback_host
@@ -120,13 +122,33 @@ class _ProxiedSession(requests.Session):
         return super().request(method, url, **kwargs)
 
 
+_RETRY = Retry(
+    total=2,
+    connect=2,
+    read=1,
+    status=2,
+    backoff_factor=0.5,
+    status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset({"GET", "HEAD"}),
+    raise_on_status=False,
+    respect_retry_after_header=True,
+)
+
+
+def _mount_retry(session: requests.Session) -> requests.Session:
+    adapter = HTTPAdapter(max_retries=_RETRY)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
 def new_session(
     source_id: Optional[str], *, settings: Optional[ProxySettings] = None
 ) -> requests.Session:
     kwargs = proxy_kwargs('source_query', source_id=source_id, settings=settings)
     if not kwargs:
-        return requests.Session()
-    return _ProxiedSession(kwargs['proxies'])
+        return _mount_retry(requests.Session())
+    return _mount_retry(_ProxiedSession(kwargs['proxies']))
 
 
 # ---------------------------------------------------------------------------
