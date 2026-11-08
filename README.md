@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r47-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r48-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r47-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r48-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r47`（versionCode `17063`）
+- 版本：`0.17.18-r48`（versionCode `17064`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -221,6 +221,9 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   任务因单个异常响应长时间卡住；补充数据库导入回滚测试与本地化依赖硬失败检查
 - r47：数据库导入前检查可用存储空间，空间不足时明确提示所需容量；清理任务保活
   通知中未使用的内部参数，并完成最后一个 web menu 对话框的主题复核
+- r48：迁移 pydantic v1 弃用写法，改用 v2 的 `ConfigDict` 与
+  `field_validator`；保持默认值校验和旧环境兼容，清除全部 4 条弃用警告，
+  不改变现有刮削、数据库和播放行为
 
 ## 限制
 
