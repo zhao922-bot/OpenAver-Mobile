@@ -57,7 +57,7 @@ r47 沿用 r46 计划中明确留到下一批的三项收尾任务，不增加�
 
 检查 `dialog_web_menu.xml` 后确认：
 
-- 7 个 `TextView` 均显式设置 `textColor`；
+- 8 个 `TextView` 均显式设置 `textColor`；
 - “取消”按钮使用 `Widget.OpenAver.GhostButton`，文字颜色由样式指定；
 - 背景由 `bg_sheet` 和透明窗口背景负责；
 - 平台主题不会再决定可见文字颜色。

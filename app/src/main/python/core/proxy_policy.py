@@ -17,7 +17,7 @@ from typing import Literal, Optional
 from urllib.parse import unquote, urlsplit
 
 import requests
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -30,8 +30,7 @@ _ALL_SCOPE_CONNS = frozenset({'source_query', 'image', 'actress'})
 
 
 class ProxySettings(BaseModel):
-    class Config:
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
     url: str = ''
     scope: Literal['dmm', 'all'] = 'dmm'

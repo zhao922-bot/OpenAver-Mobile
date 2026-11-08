@@ -63,28 +63,16 @@
  
 --- a/core/proxy_policy.py
 +++ b/core/proxy_policy.py
-@@ -17,7 +17,9 @@
- from urllib.parse import unquote, urlsplit
+@@ -18,6 +18,8 @@
  
  import requests
--from pydantic import BaseModel, ConfigDict, field_validator
-+from pydantic import BaseModel, field_validator
+ from pydantic import BaseModel, ConfigDict, field_validator
 +from requests.adapters import HTTPAdapter
 +from urllib3.util.retry import Retry
  
  from core.desktop_env import desktop_kind
  from core.loopback import is_loopback_host
-@@ -28,7 +30,8 @@
- 
- 
- class ProxySettings(BaseModel):
--    model_config = ConfigDict(frozen=True)
-+    class Config:
-+        frozen = True
- 
-     url: str = ''
-     scope: Literal['dmm', 'all'] = 'dmm'
-@@ -119,13 +122,36 @@
+@@ -119,13 +121,36 @@
          return super().request(method, url, **kwargs)
  
  
@@ -272,34 +260,6 @@
  
      def search_via_api(self, number: str) -> Optional[Video]:
          """走 App 資料介面。呼叫端必須傳入已正規化的番號。
---- a/core/scrapers/models.py
-+++ b/core/scrapers/models.py
-@@ -1,20 +1,22 @@
- """Scraper 資料模型"""
- from typing import Optional
--from pydantic import BaseModel, ConfigDict, Field
-+from pydantic import BaseModel, Field
- 
- from core.proxy_policy import ProxySettings
- 
- 
- class Actress(BaseModel):
-     """女優資訊"""
--    model_config = ConfigDict(frozen=True)
-+    class Config:
-+        frozen = True
- 
-     name: str = Field(..., min_length=1, description="女優名稱")
- 
- 
- class Video(BaseModel):
-     """影片資訊"""
--    model_config = ConfigDict(frozen=True)
-+    class Config:
-+        frozen = True
- 
-     number: str = Field(..., description="番號（如 SONE-205）")
-     title: str = Field(default="", description="影片標題")
 --- a/core/scrapers/utils.py
 +++ b/core/scrapers/utils.py
 @@ -121,6 +121,7 @@

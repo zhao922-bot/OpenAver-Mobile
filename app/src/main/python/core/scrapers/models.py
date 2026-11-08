@@ -1,22 +1,20 @@
 """Scraper 資料模型"""
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from core.proxy_policy import ProxySettings
 
 
 class Actress(BaseModel):
     """女優資訊"""
-    class Config:
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
     name: str = Field(..., min_length=1, description="女優名稱")
 
 
 class Video(BaseModel):
     """影片資訊"""
-    class Config:
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
     number: str = Field(..., description="番號（如 SONE-205）")
     title: str = Field(default="", description="影片標題")

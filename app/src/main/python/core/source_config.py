@@ -9,7 +9,8 @@ get_builtin_sources 預設清單、validate_source_id 啟動 validator，作為
 - 僅 import core/scrapers/utils.py 的純常數（無 circular import 風險）。
 - Logger 一律 from core.logger import get_logger（CLAUDE.md Logger 規則）。
 """
-from pydantic import BaseModel, Field, validator
+import pydantic
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from core.logger import get_logger
 from core.scrapers.utils import (
@@ -36,6 +37,12 @@ class SourceConfig(BaseModel):
     `available` 為 RUNTIME-ONLY 軸，**不**列入 schema（OQ-8）。
     """
 
+    if int(pydantic.VERSION.split(".", 1)[0]) >= 2:
+        model_config = ConfigDict(validate_default=True)
+    else:
+        class Config:
+            validate_all = True
+
     id: str
     type: str  # 'builtin' / 'metatube' / ...
     display_name_key: str | None = None
@@ -47,7 +54,8 @@ class SourceConfig(BaseModel):
     manual_only: bool = False  # B1 day-one schema（預留 B4 javlibrary）；B1 全 False
     requires_proxy: bool = False  # 需要日本 IP（DMM=True，metatube 全 False）
 
-    @validator('requires_proxy', always=True)
+    @field_validator('requires_proxy')
+    @classmethod
     def _derive_requires_proxy(cls, value, values) -> bool:
         """Builtin sources always derive requires_proxy from PROXY_SOURCES.
 
@@ -56,8 +64,9 @@ class SourceConfig(BaseModel):
         builtins correctly reflect True.  Non-builtin types (metatube, etc.) are
         left unchanged — they keep whatever value was passed (default False).
         """
-        if values.get('type') == 'builtin':
-            return values.get('id') in PROXY_SOURCES
+        data = getattr(values, 'data', values)
+        if data.get('type') == 'builtin':
+            return data.get('id') in PROXY_SOURCES
         return value
 
     @property
@@ -98,8 +107,8 @@ class SourceConfig(BaseModel):
         return data
 
     def model_dump(self, *args, **kwargs):
-        # Pydantic v2 does not route model_dump() through the legacy dict()
-        # override. Keep the computed contract identical on both versions.
+        # is_censored is a computed property, so Pydantic does not include it
+        # in serialization automatically.
         data = super().model_dump(*args, **kwargs)
         data['is_censored'] = self.is_censored
         return data
@@ -161,7 +170,7 @@ def get_manual_only_sources() -> list[SourceConfig]:
             config={},
             is_beta=True,
             manual_only=True,
-            # requires_proxy 由 _derive_requires_proxy model_validator 自動推為 False
+            # requires_proxy 由 _derive_requires_proxy field_validator 自動推為 False
             # （javlibrary 不在 PROXY_SOURCES）
         ),
         SourceConfig(
@@ -178,7 +187,7 @@ def get_manual_only_sources() -> list[SourceConfig]:
             # web/static/js/shared/state-rescrape.js 的 isJlUnavailable()（膠囊灰化 + 桌面版提示）。
             is_beta=True,
             manual_only=True,
-            # requires_proxy 由 _derive_requires_proxy model_validator 自動推為 False
+            # requires_proxy 由 _derive_requires_proxy field_validator 自動推為 False
             # （fc-javten 不在 PROXY_SOURCES）
         ),
     ]

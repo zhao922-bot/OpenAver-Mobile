@@ -111,6 +111,7 @@ def test_source_config_model_dump_includes_is_censored():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         assert source.dict()["is_censored"] is True
+    assert source.requires_proxy is True
     assert source.model_dump()["is_censored"] is True
 
 
