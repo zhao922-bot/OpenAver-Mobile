@@ -368,7 +368,7 @@
 +        return {"success": False, "error": _config_text("ollama_test_failed", locale)}
 --- /dev/null
 +++ b/web/routers/database_backup.py
-@@ -0,0 +1,389 @@
+@@ -0,0 +1,406 @@
 +"""Consistent SQLite snapshot export for OpenAver Mobile."""
 +
 +from __future__ import annotations
@@ -431,11 +431,25 @@
 +        logger.warning("database file cleanup failed: %s", path, exc_info=True)
 +
 +
-+def _import_error(status_code: int, message_key: str) -> HTTPException:
++def _import_error(status_code: int, message_key: str, **params) -> HTTPException:
 +    return HTTPException(
 +        status_code=status_code,
-+        detail=i18n_t(message_key, locale=get_config_locale()),
++        detail=i18n_t(message_key, locale=get_config_locale(), **params),
 +    )
++
++
++def _require_free_space(directory: Path, required: int) -> None:
++    """Fail early instead of misreporting a mid-write ENOSPC as a bad ZIP."""
++    try:
++        free = shutil.disk_usage(str(directory)).free
++    except OSError:
++        return
++    if free < required:
++        raise _import_error(
++            507,
++            "runtime.database.import_no_space",
++            size=max(1, required // (1024 * 1024)),
++        )
 +
 +
 +def _safe_zip_name(raw_name: str) -> str:
@@ -477,6 +491,9 @@
 +
 +            if set(selected) != _ALLOWED_BACKUP_FILES:
 +                raise _import_error(422, "runtime.database.import_invalid_zip")
++
++            # Reserve space for both extracted files and the live-db snapshot.
++            _require_free_space(dest_dir, declared_total * 2)
 +
 +            written_total = 0
 +            for name in _ALLOWED_BACKUP_FILES:

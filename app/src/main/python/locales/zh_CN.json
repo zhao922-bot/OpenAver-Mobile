@@ -2458,6 +2458,7 @@
       "import_integrity_failed": "数据库完整性检查失败",
       "import_missing_tables": "备份缺少 OpenAver 所需的数据表",
       "import_task_running": "有任务正在运行，请先停止任务再导入数据库",
+      "import_no_space": "存储空间不足，导入需要约 {size} MB 空闲空间",
       "import_failed": "数据库恢复失败"
     },
     "api": {

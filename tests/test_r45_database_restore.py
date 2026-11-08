@@ -4,6 +4,7 @@ import io
 import json
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -198,3 +199,26 @@ def test_database_import_creates_missing_live_database(tmp_path, monkeypatch):
     assert result["ok"] is True
     assert result["backup"] is None
     assert VideoRepository(live_db).get_by_path("file:///library/source.mp4") is not None
+
+
+def test_database_import_rejects_when_disk_is_full(tmp_path, monkeypatch):
+    source_db = tmp_path / "source.db"
+    live_db = tmp_path / "openaver.db"
+    backup_zip = tmp_path / "backup.zip"
+    _initialize_database(source_db, "file:///library/source.mp4")
+    _initialize_database(live_db, "file:///library/live.mp4")
+    _make_backup(source_db, backup_zip)
+    _patch_live_database(monkeypatch, live_db)
+    monkeypatch.setattr(
+        database_backup.shutil,
+        "disk_usage",
+        lambda _path: SimpleNamespace(total=1, used=1, free=1024),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        database_backup.import_database(_upload(backup_zip))
+
+    assert error.value.status_code == 507
+    assert "1 MB" in error.value.detail
+    assert VideoRepository(live_db).get_by_path("file:///library/live.mp4") is not None
+    assert VideoRepository(live_db).get_by_path("file:///library/source.mp4") is None

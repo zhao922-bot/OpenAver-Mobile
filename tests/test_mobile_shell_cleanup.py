@@ -110,11 +110,13 @@ def test_android_tasks_use_foreground_keepalive_and_do_not_pause_webview():
     assert 'android:foregroundServiceType="dataSync"' in manifest
     assert "window.__openaverTaskKeepAlive" in keepalive
     assert service.index("createNotificationChannel(context);") < (
-        service.index("startNow(context, label);")
+        service.index("startNow(context);")
     )
+    assert "EXTRA_LABEL" not in service
+    assert 'getQueryParameter("label")' not in activity
     assert "requestPermissions(" not in service
     assert "openaver-task://start" in keepalive
-    assert "window.__openaverTaskKeepAlive.start(kind)" in scanner
+    assert "window.__openaverTaskKeepAlive.start()" in scanner
     assert "window.__openaverTaskKeepAlive.stop()" in scanner
     assert "/static/js/shared/task-keepalive.js" in base
 

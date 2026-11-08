@@ -31,8 +31,8 @@ android {
         applicationId "dev.openaver.mobile"
         minSdk 29
         targetSdk 29
-        versionCode 17062
-        versionName "0.17.18-r46"
+        versionCode 17063
+        versionName "0.17.18-r47"
 
         buildConfigField "String", "OPENAVER_RELEASE", "\"${openaverRelease}\""
         buildConfigField "String", "OPENAVER_COMMIT", "\"${openaverCommit}\""

@@ -19,7 +19,6 @@ public final class TaskKeepAliveService extends Service {
     private static final String TAG = "OpenAverTaskKeepAlive";
     private static final String CHANNEL_ID = "openaver_task";
     private static final int NOTIFICATION_ID = 17061;
-    private static final String EXTRA_LABEL = "label";
     private static final String PREFS_NAME = "openaver_mobile";
     private static final String PREF_UI_LOCALE = "ui_locale";
     private static final String DEFAULT_UI_LOCALE = "zh-CN";
@@ -42,14 +41,13 @@ public final class TaskKeepAliveService extends Service {
         return running;
     }
 
-    static void start(Context context, String label) {
+    static void start(Context context) {
         createNotificationChannel(context);
-        startNow(context, label);
+        startNow(context);
     }
 
-    private static void startNow(Context context, String label) {
+    private static void startNow(Context context) {
         Intent intent = new Intent(context, TaskKeepAliveService.class);
-        intent.putExtra(EXTRA_LABEL, label);
         try {
             context.startForegroundService(intent);
         } catch (RuntimeException error) {

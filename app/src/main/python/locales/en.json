@@ -2458,6 +2458,7 @@
       "import_integrity_failed": "Database integrity check failed",
       "import_missing_tables": "The backup is missing data tables required by OpenAver",
       "import_task_running": "A task is running. Stop it before importing a database",
+      "import_no_space": "Not enough storage space; importing needs about {size} MB free",
       "import_failed": "Database restore failed"
     },
     "api": {

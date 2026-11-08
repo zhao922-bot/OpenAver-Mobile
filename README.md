@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r46-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r47-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r46-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r47-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r46`（versionCode `17062`）
+- 版本：`0.17.18-r47`（versionCode `17063`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -219,6 +219,8 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   失败时回滚；长任务使用前台服务，切换到后台后仍继续执行并显示完成通知
 - r46：网络重试尊重服务端 `Retry-After`，但最长只等待 15 秒，避免刮削或批量
   任务因单个异常响应长时间卡住；补充数据库导入回滚测试与本地化依赖硬失败检查
+- r47：数据库导入前检查可用存储空间，空间不足时明确提示所需容量；清理任务保活
+  通知中未使用的内部参数，并完成最后一个 web menu 对话框的主题复核
 
 ## 限制
 

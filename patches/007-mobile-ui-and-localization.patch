@@ -1648,7 +1648,7 @@
      },
      "costar": {
        "count_label": "{n} videos"
-@@ -1976,5 +2287,377 @@
+@@ -1976,5 +2287,378 @@
        "saved": "Mapping table saved",
        "save_failed": "Failed to save the mapping table"
      }
@@ -1823,6 +1823,7 @@
 +      "import_integrity_failed": "Database integrity check failed",
 +      "import_missing_tables": "The backup is missing data tables required by OpenAver",
 +      "import_task_running": "A task is running. Stop it before importing a database",
++      "import_no_space": "Not enough storage space; importing needs about {size} MB free",
 +      "import_failed": "Database restore failed"
 +    },
 +    "api": {
@@ -2471,7 +2472,7 @@
      },
      "costar": {
        "count_label": "{n} 本"
-@@ -1976,5 +2287,377 @@
+@@ -1976,5 +2287,378 @@
        "saved": "パス対応表を保存しました",
        "save_failed": "パス対応表の保存に失敗しました"
      }
@@ -2646,6 +2647,7 @@
 +      "import_integrity_failed": "データベースの整合性チェックに失敗しました",
 +      "import_missing_tables": "バックアップに OpenAver が必要とするデータテーブルがありません",
 +      "import_task_running": "タスクが実行中です。停止してからデータベースを読み込んでください",
++      "import_no_space": "空き容量が不足しています。インポートには約 {size} MB の空きが必要です",
 +      "import_failed": "データベースの復元に失敗しました"
 +    },
 +    "api": {
@@ -3303,7 +3305,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1976,5 +2287,377 @@
+@@ -1976,5 +2287,378 @@
        "saved": "对照表已保存",
        "save_failed": "对照表保存失败"
      }
@@ -3478,6 +3480,7 @@
 +      "import_integrity_failed": "数据库完整性检查失败",
 +      "import_missing_tables": "备份缺少 OpenAver 所需的数据表",
 +      "import_task_running": "有任务正在运行，请先停止任务再导入数据库",
++      "import_no_space": "存储空间不足，导入需要约 {size} MB 空闲空间",
 +      "import_failed": "数据库恢复失败"
 +    },
 +    "api": {
@@ -4453,7 +4456,7 @@
        "slow": "這個位置回應太慢或連不到，請確認路徑後再測一次",
        "no_sample": "這個來源裡沒有可測試的影片",
        "loading": "正在讀取伺服器的掃描來源…",
-@@ -1976,5 +2287,377 @@
+@@ -1976,5 +2287,378 @@
        "saved": "對照表已儲存",
        "save_failed": "對照表儲存失敗"
      }
@@ -4628,6 +4631,7 @@
 +      "import_integrity_failed": "資料庫完整性檢查失敗",
 +      "import_missing_tables": "備份缺少 OpenAver 所需的資料表",
 +      "import_task_running": "有任務正在執行，請先停止任務再匯入資料庫",
++      "import_no_space": "儲存空間不足，匯入需要約 {size} MB 可用空間",
 +      "import_failed": "資料庫恢復失敗"
 +    },
 +    "api": {
@@ -12862,7 +12866,7 @@
 +                this.taskClockTick = Date.now();
 +            }, 1000);
 +            if (window.__openaverTaskKeepAlive) {
-+                window.__openaverTaskKeepAlive.start(kind);
++                window.__openaverTaskKeepAlive.start();
 +            }
 +        },
 +
@@ -16065,10 +16069,10 @@
 +}
 +
 +window.__openaverTaskKeepAlive = {
-+    start(label) {
++    start() {
 +        if (active) return;
 +        active = true;
-+        notify('openaver-task://start?label=' + encodeURIComponent(label || ''));
++        notify('openaver-task://start');
 +    },
 +
 +    stop() {

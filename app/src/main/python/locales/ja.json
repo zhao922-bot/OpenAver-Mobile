@@ -2458,6 +2458,7 @@
       "import_integrity_failed": "データベースの整合性チェックに失敗しました",
       "import_missing_tables": "バックアップに OpenAver が必要とするデータテーブルがありません",
       "import_task_running": "タスクが実行中です。停止してからデータベースを読み込んでください",
+      "import_no_space": "空き容量が不足しています。インポートには約 {size} MB の空きが必要です",
       "import_failed": "データベースの復元に失敗しました"
     },
     "api": {

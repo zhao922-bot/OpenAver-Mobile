@@ -1123,7 +1123,7 @@ public final class MainActivity extends Activity {
         if ("openaver-task".equals(scheme)) {
             String action = uri.getHost();
             if ("start".equals(action)) {
-                TaskKeepAliveService.start(this, uri.getQueryParameter("label"));
+                TaskKeepAliveService.start(this);
             } else if ("stop".equals(action)) {
                 TaskKeepAliveService.stop(this);
             }

@@ -1098,7 +1098,7 @@ export function stateScan() {
                 this.taskClockTick = Date.now();
             }, 1000);
             if (window.__openaverTaskKeepAlive) {
-                window.__openaverTaskKeepAlive.start(kind);
+                window.__openaverTaskKeepAlive.start();
             }
         },
 

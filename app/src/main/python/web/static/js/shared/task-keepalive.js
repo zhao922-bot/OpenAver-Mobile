@@ -7,10 +7,10 @@ function notify(schemeUrl) {
 }
 
 window.__openaverTaskKeepAlive = {
-    start(label) {
+    start() {
         if (active) return;
         active = true;
-        notify('openaver-task://start?label=' + encodeURIComponent(label || ''));
+        notify('openaver-task://start');
     },
 
     stop() {

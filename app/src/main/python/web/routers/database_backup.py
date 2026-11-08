@@ -60,11 +60,25 @@ def _safe_unlink(path: str) -> None:
         logger.warning("database file cleanup failed: %s", path, exc_info=True)
 
 
-def _import_error(status_code: int, message_key: str) -> HTTPException:
+def _import_error(status_code: int, message_key: str, **params) -> HTTPException:
     return HTTPException(
         status_code=status_code,
-        detail=i18n_t(message_key, locale=get_config_locale()),
+        detail=i18n_t(message_key, locale=get_config_locale(), **params),
     )
+
+
+def _require_free_space(directory: Path, required: int) -> None:
+    """Fail early instead of misreporting a mid-write ENOSPC as a bad ZIP."""
+    try:
+        free = shutil.disk_usage(str(directory)).free
+    except OSError:
+        return
+    if free < required:
+        raise _import_error(
+            507,
+            "runtime.database.import_no_space",
+            size=max(1, required // (1024 * 1024)),
+        )
 
 
 def _safe_zip_name(raw_name: str) -> str:
@@ -106,6 +120,9 @@ def _extract_backup(zip_path: Path, dest_dir: Path) -> tuple[Path, dict]:
 
             if set(selected) != _ALLOWED_BACKUP_FILES:
                 raise _import_error(422, "runtime.database.import_invalid_zip")
+
+            # Reserve space for both extracted files and the live-db snapshot.
+            _require_free_space(dest_dir, declared_total * 2)
 
             written_total = 0
             for name in _ALLOWED_BACKUP_FILES:
