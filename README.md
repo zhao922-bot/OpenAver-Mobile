@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r44-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r46-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r44-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r46-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r44`（versionCode `17060`）
+- 版本：`0.17.18-r46`（versionCode `17062`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -215,6 +215,10 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   日志缓存仍显示其他语言的问题
 - r44：普通视频播放时同样提供外部播放器与内置播放器选择；分段视频继续支持
   分段选择和内置播放器播放
+- r45：设置页支持数据库备份导出与导入，导入前校验格式、哈希、完整性和必需表，
+  失败时回滚；长任务使用前台服务，切换到后台后仍继续执行并显示完成通知
+- r46：网络重试尊重服务端 `Retry-After`，但最长只等待 15 秒，避免刮削或批量
+  任务因单个异常响应长时间卡住；补充数据库导入回滚测试与本地化依赖硬失败检查
 
 ## 限制
 

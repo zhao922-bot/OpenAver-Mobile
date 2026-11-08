@@ -122,6 +122,8 @@ class _ProxiedSession(requests.Session):
         return super().request(method, url, **kwargs)
 
 
+_RETRY_AFTER_MAX = 15
+
 _RETRY = Retry(
     total=2,
     connect=2,
@@ -132,6 +134,7 @@ _RETRY = Retry(
     allowed_methods=frozenset({"GET", "HEAD"}),
     raise_on_status=False,
     respect_retry_after_header=True,
+    retry_after_max=_RETRY_AFTER_MAX,
 )
 
 

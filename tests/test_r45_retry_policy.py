@@ -10,7 +10,7 @@ class _Server(ThreadingHTTPServer):
     daemon_threads = True
 
 
-def _serve(responses: list[int]):
+def _serve(responses: list[int], retry_after: str):
     class Handler(BaseHTTPRequestHandler):
         request_count = 0
 
@@ -20,7 +20,7 @@ def _serve(responses: list[int]):
             status = responses[index]
             self.send_response(status)
             self.send_header("Content-Length", "0")
-            self.send_header("Retry-After", "0")
+            self.send_header("Retry-After", retry_after)
             self.end_headers()
 
         def log_message(self, format, *args):
@@ -32,8 +32,8 @@ def _serve(responses: list[int]):
     return server, thread, Handler
 
 
-def _get(responses: list[int]):
-    server, thread, handler = _serve(responses)
+def _get(responses: list[int], *, retry_after: str = "0"):
+    server, thread, handler = _serve(responses, retry_after)
     try:
         session = new_session(None, settings=ProxySettings())
         session.trust_env = False
@@ -67,3 +67,14 @@ def test_retry_policy_honors_retry_after_and_recovers():
 
     assert status == 200
     assert requests == 2
+
+
+def test_retry_policy_caps_retry_after(monkeypatch):
+    sleeps: list[int] = []
+    monkeypatch.setattr("urllib3.util.retry.time.sleep", sleeps.append)
+
+    status, requests = _get([429, 200], retry_after="3600")
+
+    assert status == 200
+    assert requests == 2
+    assert sleeps == [15]

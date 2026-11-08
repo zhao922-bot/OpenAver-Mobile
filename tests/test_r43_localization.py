@@ -7,6 +7,11 @@ from pathlib import Path
 
 import pytest
 
+try:
+    import opencc
+except ImportError:  # pragma: no cover
+    opencc = None
+
 from core.gallery_generator import HTMLGenerator, _GALLERY_LABELS
 from core.gallery_scanner import VideoInfo
 from core.enricher import enrich_single, fetch_samples_only_detailed
@@ -79,7 +84,10 @@ def test_locale_fallback_is_simplified_chinese():
 
 
 def test_simplified_chinese_contains_no_traditional_characters():
-    opencc = pytest.importorskip("opencc")
+    assert opencc is not None, (
+        "opencc 未安装，这条守门测试无法执行。"
+        "请运行 pip install -r requirements-test.txt"
+    )
     converter = opencc.OpenCC("t2s")
     messages = _load_locales()["zh_CN"]
     changed = {
@@ -91,7 +99,10 @@ def test_simplified_chinese_contains_no_traditional_characters():
 
 
 def test_traditional_chinese_contains_no_simplified_characters():
-    opencc = pytest.importorskip("opencc")
+    assert opencc is not None, (
+        "opencc 未安装，这条守门测试无法执行。"
+        "请运行 pip install -r requirements-test.txt"
+    )
     converter = opencc.OpenCC("s2t")
     messages = _load_locales()["zh_TW"]
     # These characters are valid in Traditional Chinese but are also the

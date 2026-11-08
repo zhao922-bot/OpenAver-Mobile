@@ -84,10 +84,12 @@
  
      url: str = ''
      scope: Literal['dmm', 'all'] = 'dmm'
-@@ -119,13 +122,33 @@
+@@ -119,13 +122,36 @@
          return super().request(method, url, **kwargs)
  
  
++_RETRY_AFTER_MAX = 15
++
 +_RETRY = Retry(
 +    total=2,
 +    connect=2,
@@ -98,6 +100,7 @@
 +    allowed_methods=frozenset({"GET", "HEAD"}),
 +    raise_on_status=False,
 +    respect_retry_after_header=True,
++    retry_after_max=_RETRY_AFTER_MAX,
 +)
 +
 +

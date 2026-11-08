@@ -134,3 +134,67 @@ def test_database_import_rejects_active_task(tmp_path, monkeypatch):
         database_backup.import_database(_upload(upload_path))
 
     assert error.value.status_code == 409
+
+
+def test_database_import_rolls_back_when_init_fails(tmp_path, monkeypatch):
+    source_db = tmp_path / "source.db"
+    live_db = tmp_path / "openaver.db"
+    backup_zip = tmp_path / "backup.zip"
+    _initialize_database(source_db, "file:///library/source.mp4")
+    _initialize_database(live_db, "file:///library/live.mp4")
+    _make_backup(source_db, backup_zip)
+    _patch_live_database(monkeypatch, live_db)
+
+    real_init_db = database_backup.init_db
+    calls = {"count": 0}
+
+    def flaky_init_db(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("simulated init failure")
+        return real_init_db(*args, **kwargs)
+
+    monkeypatch.setattr(database_backup, "init_db", flaky_init_db)
+
+    with pytest.raises(HTTPException) as error:
+        database_backup.import_database(_upload(backup_zip))
+
+    assert error.value.status_code == 500
+    assert calls["count"] == 2
+    repo = VideoRepository(live_db)
+    assert repo.get_by_path("file:///library/live.mp4") is not None
+    assert repo.get_by_path("file:///library/source.mp4") is None
+
+
+def test_database_import_prunes_old_backups(tmp_path, monkeypatch):
+    live_db = tmp_path / "openaver.db"
+    _initialize_database(live_db, "file:///library/live.mp4")
+    for index in range(4):
+        (
+            tmp_path / f"openaver.db.bak-2026010{index}-000000-{index}"
+        ).write_bytes(b"old")
+
+    source_db = tmp_path / "source.db"
+    backup_zip = tmp_path / "backup.zip"
+    _initialize_database(source_db, "file:///library/source.mp4")
+    _make_backup(source_db, backup_zip)
+    _patch_live_database(monkeypatch, live_db)
+
+    database_backup.import_database(_upload(backup_zip))
+
+    assert len(list(tmp_path.glob("openaver.db.bak-*"))) == 3
+
+
+def test_database_import_creates_missing_live_database(tmp_path, monkeypatch):
+    source_db = tmp_path / "source.db"
+    live_db = tmp_path / "openaver.db"
+    backup_zip = tmp_path / "backup.zip"
+    _initialize_database(source_db, "file:///library/source.mp4")
+    _make_backup(source_db, backup_zip)
+    _patch_live_database(monkeypatch, live_db)
+
+    result = database_backup.import_database(_upload(backup_zip))
+
+    assert result["ok"] is True
+    assert result["backup"] is None
+    assert VideoRepository(live_db).get_by_path("file:///library/source.mp4") is not None
