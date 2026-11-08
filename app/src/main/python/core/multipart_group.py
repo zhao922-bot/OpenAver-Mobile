@@ -36,6 +36,9 @@ import re
 
 from core.multipart_tokens import detect_multipart_token, strip_part_token
 from core.path_utils import to_file_uri, uri_to_fs_path, uri_to_local_fs_path
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 T = TypeVar('T')  # 呼叫端的 row 型別（Video ORM 物件、或任意帶 path 的物件）
 
@@ -155,6 +158,75 @@ def group_rows(rows: List[T], fs_path_of: Callable[[T], str]) -> List['VideoGrou
             part_tokens=[t for _, t, _ in order_pairs],
         ))
     return groups
+
+
+def logical_video_groups(
+    rows: List[T],
+    path_mappings: dict,
+) -> List['VideoGroup[T]']:
+    """Group DB rows with the standard URI-to-filesystem mapping.
+
+    This is the user-facing counting boundary.  A complete multipart release
+    yields one group; an incomplete or duplicate-number bucket still yields
+    one group per physical row, matching :func:`group_rows`.
+    """
+    return group_rows(
+        rows,
+        fs_path_of=lambda row: uri_to_local_fs_path(
+            row.path, path_mappings
+        ),
+    )
+
+
+def logical_video_count(rows: List[T], path_mappings: dict) -> int:
+    """Return the number of logical videos represented by ``rows``."""
+    return len(logical_video_groups(rows, path_mappings))
+
+
+def resolve_logical_video_groups(
+    repo,
+    rows: List[T],
+    path_mappings: dict,
+) -> List['VideoGroup[T]']:
+    """Resolve one complete logical group for every distinct supplied row.
+
+    Candidate queries are often filtered (for example, only untranslated
+    titles).  Resolving against the complete folder prevents a lone ``cd2``
+    candidate from being surfaced as a separate video.  The first supplied
+    row determines group order.  Repeated members of the same group are
+    collapsed to one result.
+
+    Group resolution failure is fail-safe: each supplied row is returned as a
+    singleton so the caller can retain its previous physical-row behaviour.
+    """
+    rows = list(rows)
+    if not rows:
+        return []
+    try:
+        groups_by_path = resolve_groups_bulk(
+            repo,
+            [row.path for row in rows],
+            path_mappings,
+        )
+    except Exception:
+        logger.warning(
+            "multipart logical-group resolution failed; using singleton rows",
+            exc_info=True,
+        )
+        groups_by_path = {}
+
+    seen = set()
+    result: List[VideoGroup[T]] = []
+    for row in rows:
+        group = groups_by_path.get(row.path)
+        if group is None or len(group.members) < 2:
+            group = VideoGroup(members=[row], part_tokens=[])
+        group_key = tuple(member.path for member in group.members)
+        if group_key in seen:
+            continue
+        seen.add(group_key)
+        result.append(group)
+    return result
 
 
 def resolve_group_for_path(

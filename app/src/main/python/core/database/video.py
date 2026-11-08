@@ -808,6 +808,53 @@ class VideoRepository:
                 path_changed = True
 
             for update in normalized:
+                if not update.get("title_update"):
+                    continue
+                new_uri = str(update.get("db_new_uri") or "")
+                old_title = str(update.get("title_old") or "")
+                old_original_title = str(
+                    update.get("original_title_old") or ""
+                )
+                new_title = str(update.get("title_new") or "")
+                new_original_title = str(
+                    update.get("original_title_new") or ""
+                )
+                if update.get("nfo_mtime_update"):
+                    cursor.execute(
+                        "UPDATE videos SET title = ?, original_title = ?, "
+                        "nfo_mtime = ?, updated_at = CURRENT_TIMESTAMP "
+                        "WHERE path = ? "
+                        "AND COALESCE(title, '') = ? "
+                        "AND COALESCE(original_title, '') = ?",
+                        (
+                            new_title,
+                            new_original_title,
+                            float(update.get("nfo_mtime_new") or 0),
+                            new_uri,
+                            old_title,
+                            old_original_title,
+                        ),
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE videos SET title = ?, original_title = ?, "
+                        "updated_at = CURRENT_TIMESTAMP "
+                        "WHERE path = ? "
+                        "AND COALESCE(title, '') = ? "
+                        "AND COALESCE(original_title, '') = ?",
+                        (
+                            new_title,
+                            new_original_title,
+                            new_uri,
+                            old_title,
+                            old_original_title,
+                        ),
+                    )
+                if cursor.rowcount != 1:
+                    conn.rollback()
+                    return False
+
+            for update in normalized:
                 new_uri = str(update.get("db_new_uri") or "")
                 old_cover = str(update.get("cover_path_old") or "")
                 new_cover = str(update.get("cover_path_new") or "")
@@ -1099,11 +1146,12 @@ class VideoRepository:
             conn.close()
 
     def get_untranslated_title_candidates(self) -> List[Video]:
-        """Return rows that can enter the missing-title backfill.
+        """Return all titled rows that can be checked by the target-language policy.
 
-        Japanese detection stays in the router so this repository method remains
-        a storage query, not a scraper-language policy.  Filtering in SQL still
-        avoids materialising every unrelated library row.
+        Language detection stays in the router so this repository method remains
+        a storage query. It intentionally does not require an empty
+        ``original_title`` because changing the UI language must be able to
+        retranslate a previously translated title.
         """
         conn = self._get_connection()
         try:
@@ -1112,7 +1160,6 @@ class VideoRepository:
                 """
                 SELECT * FROM videos
                 WHERE TRIM(COALESCE(title, '')) != ''
-                  AND TRIM(COALESCE(original_title, '')) = ''
                 ORDER BY id
                 """
             )

@@ -9,6 +9,10 @@ from typing import List
 
 from .actress import ActressRepository
 from .alias import AliasRepository
+from .video import VideoRepository
+from core.config import load_config
+from core.multipart_group import group_rows
+from core.path_utils import uri_to_local_fs_path
 
 
 def get_library_actresses() -> List[dict]:
@@ -21,7 +25,9 @@ def get_library_actresses() -> List[dict]:
       - name → (primary_name, names[]) 由 AliasRepository().get_all() 建一次 lookup dict
         （primary_name 與每個 alias 都指向同一組 (primary_name, [primary_name]+aliases)）；
         lookup miss 時 group_key = name 本身，names = [name]。
-      - video_count = 該 group 的 set(rowid) 長度（Python 側 DISTINCT，CD-117-2）。
+      - video_count = 該 group 涵蓋的**邏輯影片組**數量：先在整個片庫套
+        `group_rows()`，再把同一個 alias group 命中的 cd1/cd2 rowid 映射到
+        同一個邏輯組。這是 UI 口徑；內部仍保留全部 DB rows。
       - is_favorite：`favorite_names = {a.name for a in ActressRepository().get_all()}`
         建一次集合，判定 `any(n in favorite_names for n in names)`——讀 `actresses` 表同一欄，
         不查 alias 表是否存在該 group（迴圈內不得逐一呼叫 exists()，Opus 裁決 ②）。
@@ -50,10 +56,25 @@ def get_library_actresses() -> List[dict]:
     排除 0 片（AC-2.7）天然成立：group 只可能由 pairs（有片子的名字）建立，不
     outer join 收藏表。
 
-    整支函式全程只開 3 次連線（pairs 一次、alias get_all() 一次、favorites get_all()
-    一次），與 group 數無關——迴圈內是純 Python 記憶體分組，不開任何 DB 連線。
+    整支函式只開固定次數連線（pairs／videos／alias／favorites 各一次），
+    與 group 數無關——迴圈內是純 Python 記憶體分組，不開任何 DB 連線。
     """
     pairs = ActressRepository().get_video_actress_pairs()
+    videos = VideoRepository().get_all()
+    path_mappings = (
+        load_config().get("gallery", {}).get("path_mappings", {})
+    )
+    logical_groups = group_rows(
+        videos,
+        fs_path_of=lambda video: uri_to_local_fs_path(
+            video.path, path_mappings
+        ),
+    )
+    logical_group_by_rowid = {
+        video.id: group_index
+        for group_index, group in enumerate(logical_groups)
+        for video in group.members
+    }
 
     # name -> (primary_name, names_list)；names_list 對同一 group 內每個名字共用同一物件
     lookup: dict = {}
@@ -64,14 +85,16 @@ def get_library_actresses() -> List[dict]:
 
     favorite_names = {a.name for a in ActressRepository().get_all()}
 
-    groups: dict = {}  # primary_name -> {"names": list, "rowids": set}
+    groups: dict = {}  # primary_name -> {"names": list, "logical_ids": set}
     for rowid, name in pairs:
         primary_name, names_list = lookup.get(name, (name, [name]))
         group = groups.get(primary_name)
         if group is None:
-            group = {"names": names_list, "rowids": set()}
+            group = {"names": names_list, "logical_ids": set()}
             groups[primary_name] = group
-        group["rowids"].add(rowid)
+        group["logical_ids"].add(
+            logical_group_by_rowid.get(rowid, f"rowid:{rowid}")
+        )
 
     result = []
     for primary_name, group in groups.items():
@@ -85,7 +108,7 @@ def get_library_actresses() -> List[dict]:
             {
                 "primary_name": display_name,
                 "names": names_list,
-                "video_count": len(group["rowids"]),
+                "video_count": len(group["logical_ids"]),
                 "is_favorite": any(n in favorite_names for n in names_list),
             }
         )

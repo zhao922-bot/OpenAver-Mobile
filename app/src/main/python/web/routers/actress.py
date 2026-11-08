@@ -43,6 +43,7 @@ from core.focal.subprocess_runner import run_detection
 from core.organizer import sanitize_filename
 from core.path_utils import to_file_uri as to_file_uri, uri_to_fs_path, uri_to_local_fs_path, coerce_to_file_uri
 from core.config import load_config
+from core.multipart_group import resolve_logical_video_groups
 from core.i18n import get_config_locale, t as i18n_t
 from core.scrapers.actress.orchestrator import (
     get_cached_profile,
@@ -423,7 +424,9 @@ def add_favorite(req: FavoriteRequest):
     )
 
     alias_repo = AliasRepository()
-    video_count = repo.count_videos_for_actress_names(alias_repo.resolve(actress.name))
+    video_count = _count_logical_actress_videos(
+        alias_repo.resolve(actress.name)
+    )
     # covered_names（TASK-117-T1）：sync 後完整 DB group ∪ 使用者這次點的 name——不得
     # 寫回 actress_aliases 表，聯集只存在於這次 HTTP 回應（CD-117-9）。
     sync_primary = sync_result["primary_name"]
@@ -682,7 +685,9 @@ def list_actresses():
     actresses = repo.get_all()
     result = []
     for actress in actresses:
-        video_count = repo.count_videos_for_actress_names(alias_repo.resolve(actress.name))
+        video_count = _count_logical_actress_videos(
+            alias_repo.resolve(actress.name)
+        )
         result.append(_actress_to_response(actress, video_count))
     return JSONResponse(
         status_code=200,
@@ -922,6 +927,26 @@ def _get_actress_videos(name: str) -> list:
     """
     names = list(AliasRepository().resolve(name))
     return VideoRepository().get_videos_by_actress_names(names)
+
+
+def _count_logical_actress_videos(names) -> int:
+    """Count complete multipart groups, not physical video files.
+
+    Actress filtering returns the rows that actually carry her name; resolving
+    each candidate against its folder folds ``cd1``/``cd2`` into one work.
+    """
+    repo = VideoRepository()
+    rows = repo.get_videos_by_actress_names(list(names))
+    if not rows:
+        return 0
+    path_mappings = (
+        load_config().get("gallery", {}).get("path_mappings", {})
+    )
+    return len(resolve_logical_video_groups(
+        repo,
+        rows,
+        path_mappings,
+    ))
 
 
 def _try_local_crop_photo(name: str, videos: list) -> bool:

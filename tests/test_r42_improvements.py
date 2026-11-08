@@ -38,7 +38,7 @@ def test_local_status_serializes_real_multipart_playback(tmp_path):
     )
 
     assert payload["exists"] is True
-    assert payload["count"] == 2
+    assert payload["count"] == 1
     assert payload["playback"]["path"] == cd1.path
     assert payload["playback"]["paths"] == [cd1.path, cd2.path]
     assert payload["playback"]["part_tokens"] == ["cd1", "cd2"]

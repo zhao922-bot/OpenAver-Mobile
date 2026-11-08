@@ -190,6 +190,10 @@ export function stateBatch() {
             return this.renamePlan?.summary?.rename_folders || 0;
         },
 
+        get renameTitleValue() {
+            return this.renamePlan?.summary?.updated_titles || 0;
+        },
+
         get renameFailedValue() {
             return this.renamePlan?.summary?.failed || 0;
         },
@@ -197,7 +201,8 @@ export function stateBatch() {
         get renameHasChanges() {
             return this.renamePrimaryValue > 0
                 || this.renameSecondaryValue > 0
-                || this.renameFolderValue > 0;
+                || this.renameFolderValue > 0
+                || this.renameTitleValue > 0;
         },
 
         get renamePageSize() {
@@ -364,6 +369,7 @@ export function stateBatch() {
                         videos: result.updated_videos || 0,
                         files: result.renamed_files || 0,
                         folders: result.renamed_folders || 0,
+                        titles: result.updated_titles || 0,
                     });
                     this.showToast(message, 'success', 5000);
                     await this.loadStats();
@@ -396,6 +402,9 @@ export function stateBatch() {
                     ? `${window.t('scanner.rename.folder_create_prefix')}${item.new_name}`
                     : `${item.old_name} -> ${item.new_name}`);
                 for (const video of (item.videos || [])) {
+                    if (video.title_update) {
+                        lines.push(`  ${video.title_old || ''} -> ${video.title_new || ''}`);
+                    }
                     if (video.old_name !== video.new_name) {
                         lines.push(`  ${video.old_name} -> ${video.new_name}`);
                     }

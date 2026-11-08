@@ -73,10 +73,17 @@ from web.routers.gallery_media import safe_realpath
 from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
 from core.generate_state import try_mark_generate_active, mark_generate_done
 from core import thumbnail_cache
-from core.multipart_group import resolve_groups_bulk
+from core.multipart_group import (
+    group_rows,
+    logical_video_count,
+    logical_video_groups,
+    resolve_groups_bulk,
+    resolve_logical_video_groups,
+)
 from core.scraper import get_javbus_lang, search_jav, smart_search
 from core.source_settings import is_uncensored_mode_effective
-from core.scrapers.utils import check_subtitle, extract_number, has_japanese
+from core.scrapers.utils import check_subtitle, extract_number
+from core.title_language import title_needs_translation
 from core.source_config import get_manual_only_sources, validate_source_id
 from pydantic import BaseModel
 from core.logger import get_logger
@@ -422,12 +429,13 @@ def _scan_changed_files(
     nfo_unchanged_paths: set[str],
     should_abort: Optional[Callable[[], bool]],
     locale: str,
-) -> Generator[str, None, tuple[list[Video], list[str], int, int]]:
+) -> Generator[str, None, tuple[list[Video], list[str], int, int, list[str]]]:
     """Scan changed files and return videos plus per-source counters."""
     videos_to_upsert: list[Video] = []
     session_added_paths: list[str] = []
     cache_misses = 0
     scan_error_count = 0
+    scan_error_paths: list[str] = []
 
     for index, file_info in enumerate(needs_scan, 1):
         # TASK-90b-T4: 逐檔中止檢查（每檔處理之前）。單一資料夾內
@@ -460,6 +468,7 @@ def _scan_changed_files(
             cache_misses += 1
         except Exception:
             logger.exception("掃描檔案失敗: %s", file_info.get('path', ''))
+            scan_error_paths.append(file_info['path'])
             yield _sse_event({
                 "type": "log",
                 "level": "warn",
@@ -469,7 +478,13 @@ def _scan_changed_files(
             })
             scan_error_count += 1
 
-    return videos_to_upsert, session_added_paths, cache_misses, scan_error_count
+    return (
+        videos_to_upsert,
+        session_added_paths,
+        cache_misses,
+        scan_error_count,
+        scan_error_paths,
+    )
 
 
 def _submit_focal_candidates(
@@ -618,6 +633,7 @@ def _scan_regular_source(
             session_added_paths,
             cache_misses,
             scan_errors,
+            scan_error_paths,
         ) = yield from _scan_changed_files(
             needs_scan,
             scanner,
@@ -639,8 +655,38 @@ def _scan_regular_source(
             should_abort,
         )
 
+        if scan_error_paths:
+            failed_paths = set(scan_error_paths)
+            scan_errors = len({
+                index
+                for index, group in enumerate(group_rows(
+                    all_files,
+                    fs_path_of=lambda file_info: file_info["path"],
+                ))
+                if any(
+                    member["path"] in failed_paths
+                    for member in group.members
+                )
+            })
+
         stats["scan_errors"] = scan_errors
         stats["session_added_paths"] = session_added_paths
+        try:
+            current_rows = repo.get_all()
+            current_logical_count = len(
+                _logical_groups_for_paths(
+                    current_rows,
+                    current_paths,
+                    path_mappings,
+                )
+            )
+        except Exception:
+            logger.warning(
+                "掃描來源後計算邏輯影片數失敗，退回檔案數：%s",
+                directory,
+                exc_info=True,
+            )
+            current_logical_count = len(all_files)
         logger.info(
             f"[Gallery] {directory}: {len(all_files)} 個檔案，快取命中 {cache_hits}"
         )
@@ -652,7 +698,7 @@ def _scan_regular_source(
                 "source_done",
                 locale,
                 path=directory,
-                count=len(all_files),
+                count=current_logical_count,
                 hits=cache_hits,
                 misses=cache_misses,
             ),
@@ -753,7 +799,10 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
             "type": "log",
             "level": "info",
             "message": _runtime_text(
-                "scanner", "db_count", locale, count=repo.count()
+                "scanner",
+                "db_count",
+                locale,
+                count=logical_video_count(repo.get_all(), path_mappings),
             ),
         })
 
@@ -873,8 +922,16 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
         # The generated page can render without an NFO, but title writeback and
         # later metadata maintenance need one. Surface this before the user
         # discovers it while translating a title.
+        all_db_groups = logical_video_groups(
+            all_db_videos, path_mappings
+        )
         missing_nfo_count = sum(
-            1 for v in all_db_videos if not _video_has_nfo(v, path_mappings)
+            1
+            for group in all_db_groups
+            if any(
+                not _video_has_nfo(video, path_mappings)
+                for video in group.members
+            )
         )
         if missing_nfo_count > 0:
             yield _sse_event({
@@ -890,7 +947,8 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
 
         # 轉換為 VideoInfo 格式供 HTMLGenerator 使用
         all_videos = []
-        for v in all_db_videos:
+        for group in all_db_groups:
+            v = group.members[0]
             info = VideoInfo(
                 path=v.path,
                 title=v.title,
@@ -932,10 +990,34 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
                     }
             if session_cache:
                 session_stats = check_cache_needs_update(session_cache)
+                session_update_paths = set(session_stats["paths"])
+                session_groups = _logical_groups_for_paths(
+                    all_db_videos,
+                    session_update_paths,
+                    path_mappings,
+                )
+                session_items_by_path = {
+                    item.get("path"): item
+                    for item in session_stats.get("items", [])
+                    if item.get("path")
+                }
+                grouped_session_items = []
+                for _group, member_paths in session_groups:
+                    member_items = [
+                        session_items_by_path[path]
+                        for path in member_paths
+                        if path in session_items_by_path
+                    ]
+                    if member_items:
+                        grouped_session_items.append({
+                            **member_items[0],
+                            "member_paths": member_paths,
+                        })
                 session_update = {
-                    "count": session_stats['need_update'],
-                    "paths": session_stats['paths'],
-                    "items": session_stats['items'],
+                    "count": len(session_groups),
+                    "paths": [item["path"] for item in grouped_session_items],
+                    "items": grouped_session_items,
+                    "physical_paths": session_stats["paths"],
                 }
                 if session_update['count'] > 0:
                     yield _sse_event({
@@ -953,7 +1035,10 @@ def generate_avlist(should_abort: Optional[Callable[[], bool]] = None) -> Genera
             "type": "log",
             "level": "info",
             "message": _runtime_text(
-                "scanner", "db_total", locale, count=repo.count()
+                "scanner",
+                "db_total",
+                locale,
+                count=logical_video_count(repo.get_all(), path_mappings),
             ),
         })
 
@@ -1350,7 +1435,11 @@ def get_stats():
             return {"success": True, "data": {"total": 0, "last_run": None, "last_added": None}}
 
         repo = VideoRepository(db_path)
-        total = repo.count()
+        config = load_config()
+        path_mappings = (
+            config.get("gallery", {}).get("path_mappings", {})
+        )
+        total = logical_video_count(repo.get_all(), path_mappings)
 
         return {
             "success": True,
@@ -1376,9 +1465,21 @@ def clear_cache():  # ranker-invalidate-ok: (DELETE FROM videos only in docstrin
         db_path = get_db_path()
 
         if not db_path.exists():
-            return {"success": True, "deleted": 0}
+            return {
+                "success": True,
+                "deleted": 0,
+                "physical_deleted": 0,
+            }
 
         repo = VideoRepository(db_path)
+        config = load_config()
+        path_mappings = (
+            config.get("gallery", {}).get("path_mappings", {})
+        )
+        logical_deleted = logical_video_count(
+            repo.get_all(),
+            path_mappings,
+        )
         deleted = repo.clear_all()
         # feature/71 T8: 清空整個縮圖快取目錄（CD-11 / spec 2.A.9）
         thumbnail_cache.clear_all()
@@ -1386,7 +1487,11 @@ def clear_cache():  # ranker-invalidate-ok: (DELETE FROM videos only in docstrin
         global _jellyfin_cache_result, _jellyfin_cache_time
         _jellyfin_cache_result = None
         _jellyfin_cache_time = 0
-        return {"success": True, "deleted": deleted}
+        return {
+            "success": True,
+            "deleted": logical_deleted,
+            "physical_deleted": deleted,
+        }
     except Exception as e:
         logger.error("清除快取失敗: %s", e)
         return {
@@ -1439,6 +1544,206 @@ def _build_nfo_update_cache(all_videos, config) -> tuple:
             }
         }
     return cache, skipped_readonly, path_mappings
+
+
+def _logical_groups_for_paths(rows, included_paths, path_mappings) -> list:
+    """Return complete logical groups touched by ``included_paths``.
+
+    ``rows`` must be the complete row set so a filtered maintenance query
+    (for example, only a ``cd2`` row) can still be resolved back to its
+    ``cd1``/``cd2`` group.  The returned path lists contain only the rows that
+    actually need work; other group members are retained as context by the
+    group object.
+    """
+    wanted = set(included_paths)
+    result = []
+    for group in logical_video_groups(rows, path_mappings):
+        member_paths = [
+            member.path
+            for member in group.members
+            if member.path in wanted
+        ]
+        if member_paths:
+            result.append((group, member_paths))
+    return result
+
+
+def _grouped_nfo_stats(all_videos, stats, path_mappings) -> dict:
+    """Convert physical NFO-update rows to one display item per video group."""
+    physical_by_path = {
+        item["path"]: item
+        for item in stats.get("items", [])
+        if item.get("path")
+    }
+    logical_items = []
+    for group, member_paths in _logical_groups_for_paths(
+        all_videos,
+        stats.get("paths", []),
+        path_mappings,
+    ):
+        member_items = [
+            physical_by_path[path]
+            for path in member_paths
+            if path in physical_by_path
+        ]
+        if not member_items:
+            continue
+        representative = member_items[0]
+        missing = sorted({
+            field
+            for item in member_items
+            for field in item.get("missing", [])
+        })
+        logical_items.append({
+            **representative,
+            "missing": missing,
+            "member_paths": member_paths,
+        })
+
+    details = {
+        field: sum(
+            1
+            for item in logical_items
+            if field in item.get("missing", [])
+        )
+        for field in ("title", "date", "actor", "genre", "maker")
+    }
+    return {
+        "need_update": len(logical_items),
+        "paths": [item["path"] for item in logical_items],
+        "physical_paths": list(stats.get("paths", [])),
+        "items": logical_items,
+        "details": {
+            "no_title": details["title"],
+            "no_date": details["date"],
+            "no_actor": details["actor"],
+            "no_genre": details["genre"],
+            "no_maker": details["maker"],
+        },
+    }
+
+
+def _logical_nfo_summary(update_stats, groups) -> dict:
+    """Aggregate physical update results into logical video counts."""
+    total = len(groups)
+    failed_paths = {
+        str(item.get("path") or "")
+        for item in update_stats.get("failed_items", [])
+        if item.get("path")
+    }
+    updated_paths = {
+        str(path)
+        for path in update_stats.get("updated_paths", [])
+        if path
+    }
+    success = 0
+    failed = 0
+    skipped = 0
+    logical_failed_items = []
+    failed_physical_count = len(update_stats.get("failed_items", []))
+    for _group, member_paths in groups:
+        member_failed_items = [
+            item
+            for item in update_stats.get("failed_items", [])
+            if item.get("path") in member_paths
+        ]
+        if any(path in failed_paths for path in member_paths):
+            failed += 1
+            representative = dict(member_failed_items[0])
+            representative["member_paths"] = member_paths
+            logical_failed_items.append(representative)
+        elif any(path in updated_paths for path in member_paths):
+            success += 1
+        else:
+            skipped += 1
+    return {
+        **update_stats,
+        "total": total,
+        "success": success,
+        "failed": failed,
+        "skipped": skipped,
+        "failed_items": logical_failed_items,
+        "physical_failed_items": failed_physical_count,
+    }
+
+
+def _normalize_tag_source_summary(summary: dict, groups: list) -> dict:
+    """Collapse physical tag-source results into logical-video results."""
+    path_to_group = {}
+    group_members = {
+        index: member_paths
+        for index, (_group, member_paths) in enumerate(groups)
+    }
+    for index, member_paths in group_members.items():
+        for path in member_paths:
+            path_to_group[path] = index
+
+    items_by_group = {}
+    for item in summary.get("items", []):
+        group_index = path_to_group.get(item.get("path"))
+        if group_index is not None:
+            items_by_group.setdefault(group_index, []).append(item)
+
+    failed_by_group = {}
+    for item in summary.get("failed_items", []):
+        group_index = path_to_group.get(item.get("path"))
+        if group_index is not None:
+            failed_by_group.setdefault(group_index, []).append(item)
+
+    logical_items = []
+    failed_items = []
+    changed_numbers = []
+    success_count = 0
+    changed_count = 0
+    unchanged_count = 0
+    skipped_count = 0
+    no_nfo_count = 0
+    for group_index in range(len(groups)):
+        member_paths = group_members[group_index]
+        failed_members = failed_by_group.get(group_index, [])
+        member_items = items_by_group.get(group_index, [])
+        if failed_members:
+            representative = {
+                **failed_members[0],
+                "member_paths": member_paths,
+            }
+            failed_items.append(representative)
+            continue
+        if not member_items:
+            continue
+
+        representative = {
+            **member_items[0],
+            "member_paths": member_paths,
+        }
+        if any(item.get("status") == "changed" for item in member_items):
+            representative["status"] = "changed"
+            changed_count += 1
+            if representative.get("number"):
+                changed_numbers.append(representative["number"])
+        elif any(item.get("status") == "unchanged" for item in member_items):
+            representative["status"] = "unchanged"
+            unchanged_count += 1
+        else:
+            skipped_count += 1
+        success_count += 1
+        if any(not item.get("nfo_path") for item in member_items):
+            no_nfo_count += 1
+        logical_items.append(representative)
+
+    summary.update({
+        "total": len(groups),
+        "success": success_count,
+        "changed": changed_count,
+        "unchanged": unchanged_count,
+        "skipped": skipped_count,
+        "failed": len(failed_items),
+        "no_nfo": no_nfo_count,
+        "items": logical_items,
+        "failed_items": failed_items,
+        "changed_numbers": list(dict.fromkeys(changed_numbers)),
+    })
+    return summary
 
 
 def _validate_batch_source(
@@ -1586,11 +1891,24 @@ def generate_tag_source_update(
             return
 
         repo = VideoRepository(db_path)
+        all_videos = repo.get_all()
         videos = [
-            video for video in repo.get_all()
+            video for video in all_videos
             if video.number and (not numbers or video.number in numbers)
         ]
-        summary["total"] = len(videos)
+        gallery_config = config.get("gallery", {})
+        path_mappings = gallery_config.get("path_mappings", {})
+        logical_groups = _logical_groups_for_paths(
+            all_videos,
+            [video.path for video in videos],
+            path_mappings,
+        )
+        path_to_group = {
+            path: index
+            for index, (_group, member_paths) in enumerate(logical_groups)
+            for path in member_paths
+        }
+        summary["total"] = len(logical_groups)
         if not videos:
             yield _sse_event({
                 "type": "done",
@@ -1601,12 +1919,11 @@ def generate_tag_source_update(
             })
             return
 
-        gallery_config = config.get("gallery", {})
-        path_mappings = gallery_config.get("path_mappings", {})
         readonly_prefixes = readonly_source_prefixes(gallery_config, path_mappings)
         writable_prefixes = writable_source_prefixes(gallery_config, path_mappings)
         javbus_lang = get_javbus_lang()
         started_at = time.monotonic()
+        seen_group_progress = set()
 
         for index, video in enumerate(videos, start=1):
             if cancel_event is not None and cancel_event.is_set():
@@ -1615,23 +1932,26 @@ def generate_tag_source_update(
 
             elapsed = max(time.monotonic() - started_at, 0.001)
             eta_seconds = round((elapsed / max(index - 1, 1)) * max(len(videos) - index + 1, 0))
-            yield _sse_event({
-                "type": "progress",
-                "current": index,
-                "total": len(videos),
-                "number": video.number,
-                "status": _runtime_text(
-                    "scanner",
-                    "tag_preview" if dry_run else "tag_update",
-                    locale,
-                    number=video.number,
-                ),
-                "success": summary["success"],
-                "failed": summary["failed"],
-                "skipped": summary["skipped"],
-                "changed": summary["changed"],
-                "eta_seconds": eta_seconds,
-            })
+            group_index = path_to_group.get(video.path)
+            if group_index not in seen_group_progress:
+                seen_group_progress.add(group_index)
+                yield _sse_event({
+                    "type": "progress",
+                    "current": len(seen_group_progress),
+                    "total": len(logical_groups),
+                    "number": video.number,
+                    "status": _runtime_text(
+                        "scanner",
+                        "tag_preview" if dry_run else "tag_update",
+                        locale,
+                        number=video.number,
+                    ),
+                    "success": summary["success"],
+                    "failed": summary["failed"],
+                    "skipped": summary["skipped"],
+                    "changed": summary["changed"],
+                    "eta_seconds": eta_seconds,
+                })
 
             try:
                 metadata = search_jav(
@@ -1901,6 +2221,8 @@ def generate_tag_source_update(
                 ),
             })
 
+        _normalize_tag_source_summary(summary, logical_groups)
+
         if summary["cancelled"]:
             message = _runtime_text(
                 "scanner",
@@ -1958,24 +2280,22 @@ def check_update():
         repo = VideoRepository(db_path)
         all_videos = repo.get_all()
 
-        cache, _skipped_readonly, _path_mappings = _build_nfo_update_cache(all_videos, load_config())
+        config = load_config()
+        cache, _skipped_readonly, path_mappings = _build_nfo_update_cache(
+            all_videos,
+            config,
+        )
 
         stats = check_cache_needs_update(cache)
+        grouped = _grouped_nfo_stats(
+            all_videos,
+            stats,
+            path_mappings,
+        )
 
         return {
             "success": True,
-            "data": {
-                "need_update": stats['need_update'],
-                "paths": stats['paths'],
-                "items": stats['items'],
-                "details": {
-                    "no_title": stats['no_title'],
-                    "no_date": stats['no_date'],
-                    "no_actor": stats['no_actor'],
-                    "no_genre": stats['no_genre'],
-                    "no_maker": stats['no_maker'],
-                }
-            }
+            "data": grouped,
         }
     except Exception as e:
         logger.error("檢查更新數量失敗: %s", e)
@@ -2023,13 +2343,15 @@ def _candidate_number(video: Video) -> str:
     return extract_number(filename) or extract_number(video.title or "") or ""
 
 
-def _is_untranslated_title_candidate(video: Video) -> bool:
-    """Only rows with a non-empty Japanese title and no saved original title."""
+def _is_untranslated_title_candidate(
+    video: Video,
+    locale: str | None = None,
+) -> bool:
+    """Return whether a title is not in the active UI language."""
     title = (video.title or "").strip()
     return bool(
         title
-        and not (video.original_title or "").strip()
-        and has_japanese(title)
+        and title_needs_translation(title, locale or _active_locale())
     )
 
 
@@ -2109,64 +2431,115 @@ def check_missing():
 
         repo = VideoRepository(db_path)
         all_videos = repo.get_all()
-        path_mappings = load_config().get("gallery", {}).get("path_mappings", {})
+        config = load_config()
+        path_mappings = config.get("gallery", {}).get("path_mappings", {})
+        locale = _active_locale(config)
 
         missing_both = 0
         missing_nfo = 0
         missing_cover = 0
         items = []
         untranslated_title_items = []
-        missing_sample_candidates = []
+        missing_sample_items = []
 
-        for v in all_videos:
-            number = _candidate_number(v)
-            if _is_untranslated_title_candidate(v):
+        for group in logical_video_groups(all_videos, path_mappings):
+            members = group.members
+            untranslated_members = [
+                video
+                for video in members
+                if _is_untranslated_title_candidate(video, locale)
+            ]
+            if untranslated_members:
+                title_candidate = untranslated_members[0]
                 untranslated_title_items.append({
-                    "file_path": v.path,
-                    "number": number,
-                    "title": v.title,
+                    "file_path": title_candidate.path,
+                    "number": _candidate_number(title_candidate),
+                    "title": title_candidate.title,
+                    "member_paths": [
+                        video.path for video in untranslated_members
+                    ],
                 })
-            if _is_missing_sample_candidate(v):
-                missing_sample_candidates.append(v)
 
-            has_nfo = _video_has_nfo(v, path_mappings)
-            has_cover = False
-            if v.cover_path:
-                try:
-                    has_cover = os.path.isfile(
-                        uri_to_local_fs_path(v.cover_path, path_mappings)
-                    )
-                except Exception:
-                    has_cover = False
-            if has_nfo and has_cover:
+            sample_missing_members = [
+                video
+                for video in members
+                if _is_missing_sample_candidate(video)
+            ]
+            if sample_missing_members:
+                sample_candidate = next(
+                    (
+                        video
+                        for video in sample_missing_members
+                        if _candidate_number(video)
+                    ),
+                    sample_missing_members[0],
+                )
+                missing_sample_items.append({
+                    "file_path": sample_candidate.path,
+                    "number": _candidate_number(sample_candidate),
+                    "title": sample_candidate.title,
+                    "member_paths": [
+                        video.path for video in sample_missing_members
+                    ],
+                })
+
+            nfo_missing_members = []
+            cover_missing_members = []
+            for video in members:
+                if not _video_has_nfo(video, path_mappings):
+                    nfo_missing_members.append(video)
+                has_cover = False
+                if video.cover_path:
+                    try:
+                        has_cover = os.path.isfile(
+                            uri_to_local_fs_path(
+                                video.cover_path, path_mappings
+                            )
+                        )
+                    except Exception:
+                        has_cover = False
+                if not has_cover:
+                    cover_missing_members.append(video)
+
+            if not nfo_missing_members and not cover_missing_members:
                 continue
-            if not number:  # Cannot enrich a row without a recoverable number.
+
+            repair_by_path = {
+                video.path: video
+                for video in [
+                    *nfo_missing_members,
+                    *cover_missing_members,
+                ]
+            }
+            repair_members = list(repair_by_path.values())
+            candidate = next(
+                (
+                    video
+                    for video in repair_members
+                    if _candidate_number(video)
+                ),
+                None,
+            )
+            if candidate is None:
                 continue
-            item = {"file_path": v.path, "number": number}
-            if not has_nfo and not has_cover:
+            number = _candidate_number(candidate)
+            item = {
+                "file_path": candidate.path,
+                "number": number,
+                "member_paths": [
+                    video.path for video in repair_members
+                ],
+            }
+            if nfo_missing_members and cover_missing_members:
                 missing_both += 1
                 item["category"] = "both"
-            elif not has_nfo:
+            elif nfo_missing_members:
                 missing_nfo += 1
                 item["category"] = "nfo"
             else:
                 missing_cover += 1
                 item["category"] = "cover"
             items.append(item)
-
-        missing_sample_candidates = _dedupe_multipart_sample_candidates(
-            repo,
-            missing_sample_candidates,
-            path_mappings,
-        )
-        missing_sample_items = [
-            {
-                "file_path": v.path,
-                "number": _candidate_number(v),
-                "title": v.title,
-            }
-            for v in missing_sample_candidates
-        ]
         total_missing = missing_both + missing_nfo + missing_cover
 
         # Return complete lists; the frontend owns confirmation/display policy.
@@ -2318,7 +2691,7 @@ def _iter_title_translations(
 
 
 def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
-    """Translate and write back only rows that are still missing a translation."""
+    """Translate every title that is not in the active UI language."""
     locale = _active_locale()
     try:
         db_path = get_db_path()
@@ -2342,23 +2715,34 @@ def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, N
                 ),
             })
             return
-        if str(locale).lower().startswith("ja"):
-            yield _sse_event({
-                "type": "error",
-                "message": _runtime_text(
-                    "title", "japanese_no_backfill", locale
-                ),
-            })
-            return
-
         from web.routers.showcase import TitleWritebackRequest, _apply_title_writeback
         from web.routers.translate import get_translate_service
 
         repo = VideoRepository(db_path)
-        candidates = [
+        path_mappings = config.get("gallery", {}).get("path_mappings", {})
+        candidate_rows = [
             video for video in repo.get_untranslated_title_candidates()
-            if _is_untranslated_title_candidate(video)
+            if _is_untranslated_title_candidate(video, locale)
         ]
+        candidates = []
+        group_by_candidate_path = {}
+        for group in resolve_logical_video_groups(
+            repo,
+            candidate_rows,
+            path_mappings,
+        ):
+            candidate = next(
+                (
+                    member
+                    for member in group.members
+                    if _is_untranslated_title_candidate(member, locale)
+                ),
+                None,
+            )
+            if candidate is None:
+                continue
+            candidates.append(candidate)
+            group_by_candidate_path[candidate.path] = group
         total = len(candidates)
         if total == 0:
             yield _sse_event({
@@ -2386,7 +2770,6 @@ def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, N
             })
             return
 
-        path_mappings = config.get("gallery", {}).get("path_mappings", {})
         success_count = 0
         failed_count = 0
         skipped_count = 0
@@ -2427,21 +2810,42 @@ def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, N
             cancel_event,
         ):
             number = _candidate_number(video)
+            group = group_by_candidate_path.get(video.path)
+            group_members = (
+                group.members if group is not None else [video]
+            )
             try:
                 if translation_error is not None:
                     raise translation_error
                 if not translated:
                     raise ValueError("empty translation")
-                result = _apply_title_writeback(
-                    repo,
-                    video,
-                    TitleWritebackRequest(
-                        file_path=video.path,
-                        title=translated,
-                    ),
-                    config,
-                    path_mappings,
-                )
+                member_results = []
+                result = None
+                for member in group_members:
+                    member_result = _apply_title_writeback(
+                        repo,
+                        member,
+                        TitleWritebackRequest(
+                            file_path=member.path,
+                            title=translated,
+                        ),
+                        config,
+                        path_mappings,
+                    )
+                    member_results.append((member, member_result))
+                    if not member_result.get("success"):
+                        result = dict(member_result)
+                        result["failed_member_path"] = member.path
+                        break
+                if result is None:
+                    result = next(
+                        (
+                            member_result
+                            for member, member_result in member_results
+                            if member.path == video.path
+                        ),
+                        member_results[0][1],
+                    )
             except Exception:
                 logger.exception("批次補齊標題失敗: %s", video.path)
                 result = {
@@ -2477,6 +2881,10 @@ def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, N
                     "skipped": False,
                     "title": written_title,
                     "original_title": original_title,
+                    "member_paths": [
+                        member.path for member in group_members
+                    ],
+                    "updated_member_count": len(group_members),
                     "current": processed_count,
                     "total": total,
                     "status": status,
@@ -2894,7 +3302,7 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
 
 @router.post("/backfill-titles")
 async def backfill_titles(request: Request):
-    """SSE: fill only untranslated Japanese titles."""
+    """SSE: translate all titles that differ from the active UI language."""
     return await _cancelable_sse_response(request, _title_backfill_generator)
 
 
@@ -3035,7 +3443,8 @@ def generate_source_rename_preview(
 
         videos, source_roots, mappings = _combined_rename_sources(config)
         videos = [video for video in videos if video.path]
-        total = len(videos)
+        video_groups = logical_video_groups(videos, mappings)
+        total = len(video_groups)
         if not videos:
             yield _sse_event({
                 "type": "done",
@@ -3055,103 +3464,149 @@ def generate_source_rename_preview(
 
         javbus_lang = get_javbus_lang()
         title_cache: dict[str, Optional[str]] = {}
+        title_errors: dict[str, str] = {}
         stem_overrides: dict[str, str] = {}
+        logged_title_numbers: set[str] = set()
+        failed_group_indices: set[int] = set()
         started_at = time.monotonic()
         cancelled = False
 
-        for index, video in enumerate(videos, start=1):
+        for group_index, group in enumerate(video_groups, start=1):
             if cancel_event is not None and cancel_event.is_set():
                 cancelled = True
                 break
             elapsed = max(time.monotonic() - started_at, 0.001)
             eta_seconds = round(
-                (elapsed / max(index - 1, 1))
-                * max(total - index + 1, 0)
+                (elapsed / max(group_index - 1, 1))
+                * max(total - group_index + 1, 0)
+            )
+            representative = next(
+                (
+                    video
+                    for video in group.members
+                    if str(video.number or "").strip()
+                ),
+                group.members[0],
             )
             yield _sse_event({
                 "type": "progress",
-                "current": index,
+                "current": group_index,
                 "total": total,
-                "number": video.number or "",
+                "number": representative.number or "",
                 "status": (
                     _runtime_text(
                         "scanner",
                         "source_rename_reading_title",
                         locale,
-                        item=video.number or video.path,
+                        item=representative.number or representative.path,
                     )
                 ),
-                "failed": len(failed_items),
+                "failed": len(failed_group_indices),
                 "eta_seconds": eta_seconds,
             })
 
-            number = str(video.number or "").strip()
-            if not number:
-                failed_items.append({
-                    "path": video.path,
-                    "number": "",
-                    "error": _runtime_text(
-                        "scanner", "source_rename_missing_number", locale
-                    ),
-                })
-                continue
+            group_overrides: dict[str, str] = {}
+            group_failures: list[dict[str, str]] = []
+            group_cancelled = False
+            for video in group.members:
+                if cancel_event is not None and cancel_event.is_set():
+                    cancelled = True
+                    group_cancelled = True
+                    break
 
-            try:
-                if number not in title_cache:
-                    metadata = search_jav(
-                        number,
-                        source=source,
-                        javbus_lang=javbus_lang,
-                        surface_access_errors=True,
-                    )
-                    title_cache[number] = (
-                        str(metadata.get("title") or "")
-                        if metadata
-                        else None
-                    )
-                source_title = title_cache[number]
-                stem, normalized_number, reason = canonicalize_source_stem(
-                    number,
-                    source_title,
-                    part_token=multipart_token(Path(video.path).stem),
-                )
-                if not stem:
-                    raise ValueError(
-                        _runtime_text(
-                            "scanner", "source_rename_no_title", locale
+                number = str(video.number or "").strip()
+                if not number:
+                    group_failures.append({
+                        "path": video.path,
+                        "number": "",
+                        "error": _runtime_text(
+                            "scanner",
+                            "source_rename_missing_number",
+                            locale,
+                        ),
+                    })
+                    continue
+
+                try:
+                    if number not in title_cache:
+                        if number in title_errors:
+                            raise RuntimeError(title_errors[number])
+                        try:
+                            metadata = search_jav(
+                                number,
+                                source=source,
+                                javbus_lang=javbus_lang,
+                                surface_access_errors=True,
+                            )
+                        except Exception as exc:
+                            title_errors[number] = str(exc)
+                            raise
+                        title_cache[number] = (
+                            str(metadata.get("title") or "")
+                            if metadata
+                            else None
                         )
-                        if reason == "empty_title"
-                        else reason
+                    source_title = title_cache[number]
+                    stem, normalized_number, reason = (
+                        canonicalize_source_stem(
+                            number,
+                            source_title,
+                            part_token=multipart_token(
+                                Path(video.path).stem
+                            ),
+                        )
                     )
-                stem_overrides[video.path] = stem
-                yield _sse_event({
-                    "type": "log",
-                    "level": "info",
-                    "message": _runtime_text(
-                        "scanner",
-                        "source_rename_title_used",
-                        locale,
-                        number=normalized_number,
-                        title=source_title,
-                    ),
-                })
-            except Exception as exc:
-                failed_items.append({
-                    "path": video.path,
-                    "number": number,
-                    "error": str(exc),
-                })
-                yield _sse_event({
-                    "type": "log",
-                    "level": "warn",
-                    "message": _runtime_text(
-                        "scanner",
-                        "source_rename_fetch_failed",
-                        locale,
-                        number=number,
-                        error=str(exc),
-                    ),
-                })
+                    if not stem:
+                        raise ValueError(
+                            _runtime_text(
+                                "scanner",
+                                "source_rename_no_title",
+                                locale,
+                            )
+                            if reason == "empty_title"
+                            else reason
+                        )
+                    group_overrides[video.path] = stem
+                    if number not in logged_title_numbers:
+                        logged_title_numbers.add(number)
+                        yield _sse_event({
+                            "type": "log",
+                            "level": "info",
+                            "message": _runtime_text(
+                                "scanner",
+                                "source_rename_title_used",
+                                locale,
+                                number=normalized_number,
+                                title=source_title,
+                            ),
+                        })
+                except Exception as exc:
+                    group_failures.append({
+                        "path": video.path,
+                        "number": number,
+                        "error": str(exc),
+                    })
+                    yield _sse_event({
+                        "type": "log",
+                        "level": "warn",
+                        "message": _runtime_text(
+                            "scanner",
+                            "source_rename_fetch_failed",
+                            locale,
+                            number=number,
+                            error=str(exc),
+                        ),
+                    })
+
+            if group_cancelled:
+                break
+            if group_failures:
+                # Source-title fetch/rename is all-or-nothing per logical video,
+                # so a failed part cannot leave the remaining parts half-renamed.
+                failed_group_indices.add(group_index - 1)
+                failed_items.extend(group_failures)
+                continue
+            stem_overrides.update(group_overrides)
 
         eligible = [
             video for video in videos
@@ -3169,6 +3624,8 @@ def generate_source_rename_preview(
         plan["cancelled"] = cancelled
         plan["summary"]["cancelled"] = cancelled
         summary = plan["summary"]
+        summary["failed"] = len(failed_group_indices)
+        summary["physical_failed_items"] = len(failed_items)
         if (
             not cancelled
             and plan.get("plan_id")
@@ -3176,6 +3633,7 @@ def generate_source_rename_preview(
                 summary["rename_videos"]
                 or summary["rename_files"]
                 or summary["rename_folders"]
+                or summary["updated_titles"]
             )
         ):
             _remember_rename_plan(plan)
@@ -3190,6 +3648,7 @@ def generate_source_rename_preview(
                 locale,
                 videos=plan["summary"]["rename_videos"],
                 folders=plan["summary"]["rename_folders"],
+                titles=plan["summary"]["updated_titles"],
                 failed=plan["summary"]["failed"],
                 conflicts=plan["summary"]["conflicts"],
             )
@@ -3413,11 +3872,20 @@ def generate_nfo_update(
             })
             return
 
-        paths_to_update = stats['paths']
-        if selected_paths:
-            selected = set(selected_paths)
-            paths_to_update = [path for path in paths_to_update if path in selected]
-        if not paths_to_update:
+        paths_to_update = list(stats["paths"])
+        selected = set(selected_paths or [])
+        groups = _logical_groups_for_paths(
+            all_videos,
+            paths_to_update,
+            path_mappings,
+        )
+        if selected:
+            groups = [
+                (group, member_paths)
+                for group, member_paths in groups
+                if selected.intersection(member_paths)
+            ]
+        if not groups:
             yield _sse_event({
                 "type": "done",
                 "message": _runtime_text(
@@ -3438,6 +3906,26 @@ def generate_nfo_update(
             })
             return
 
+        # Feed every physical NFO through the updater, but expose one
+        # progress row per logical video.  A multipart release must not look
+        # like two different works in the scanner UI.
+        grouped_paths = [
+            path
+            for _group, member_paths in groups
+            for path in member_paths
+        ]
+        group_index_by_path = {
+            path: index
+            for index, (_group, member_paths) in enumerate(groups)
+            for path in member_paths
+        }
+        group_index_by_position = {
+            index: group_index_by_path[path]
+            for index, path in enumerate(grouped_paths)
+        }
+        seen_group_progress = set()
+        logical_total = len(groups)
+
         yield _sse_event({
             "type": "log",
             "level": "info",
@@ -3445,14 +3933,14 @@ def generate_nfo_update(
                 "scanner",
                 "nfo_checking",
                 locale,
-                count=len(paths_to_update),
+                count=logical_total,
             ),
         })
 
         # 執行更新（path_mappings 沿用 _build_nfo_update_cache 算好的那份，不重讀 config）
         update_generator = update_videos_generator(
             cache,
-            paths_to_update,
+            grouped_paths,
             path_mappings,
             should_abort=cancel_event.is_set if cancel_event is not None else None,
             backup=backup,
@@ -3464,10 +3952,25 @@ def generate_nfo_update(
             except StopIteration as stop:
                 update_stats = stop.value
                 break
+            if isinstance(msg, dict) and msg.get("type") == "progress":
+                path = msg.get("path")
+                group_index = group_index_by_path.get(path)
+                if group_index is None:
+                    group_index = group_index_by_position.get(
+                        max(int(msg.get("current", 1)) - 1, 0)
+                    )
+                if group_index is None or group_index in seen_group_progress:
+                    continue
+                seen_group_progress.add(group_index)
+                msg = {
+                    **msg,
+                    "current": group_index + 1,
+                    "total": logical_total,
+                }
             yield _sse_event(msg)
 
         update_stats = update_stats or {
-            "total": len(paths_to_update),
+            "total": logical_total,
             "success": 0,
             "failed": 0,
             "skipped": 0,
@@ -3477,6 +3980,7 @@ def generate_nfo_update(
             "failed_items": [],
             "updated_paths": [],
         }
+        update_stats = _logical_nfo_summary(update_stats, groups)
         updated_paths = list(update_stats.get("updated_paths") or [])
         if updated_paths:
             try:
@@ -3521,7 +4025,7 @@ def generate_nfo_update(
                             "scanner",
                             "nfo_rows_synced",
                             locale,
-                            count=len(refreshed_rows),
+                            count=len(groups),
                         ),
                     })
             except Exception:
@@ -3678,7 +4182,15 @@ def get_actress_stats(name: str = Query(..., description="女優名稱")):
             return {"success": True, "data": {"count": 0}}
 
         repo = VideoRepository(db_path)
-        count = repo.count_by_actress(name)
+        config = load_config()
+        path_mappings = (
+            config.get("gallery", {}).get("path_mappings", {})
+        )
+        count = len(resolve_logical_video_groups(
+            repo,
+            repo.get_videos_by_actress(name),
+            path_mappings,
+        ))
 
         return {"success": True, "data": {"count": count}}
     except Exception as e:
@@ -3697,23 +4209,33 @@ def check_jellyfin_images_needed(repo: VideoRepository, path_mappings: dict = No
     """檢查 DB 中有多少影片缺少 poster/fanart"""
     videos = repo.get_all()
     need_update = []
-    for v in videos:
-        if not v.cover_path:
-            continue
-        cover_fs = uri_to_local_fs_path(v.cover_path, path_mappings)
-        if not os.path.exists(cover_fs):
-            continue
-        base_stem = cover_base_stem(cover_fs)
-        poster = base_stem + '-poster.jpg'
-        fanart = base_stem + '-fanart.jpg'
-        if not os.path.exists(poster) or not os.path.exists(fanart):
-            need_update.append({
-                'cover_path': cover_fs,
-                'base_stem': base_stem,
-                'number': v.number or '',
-                'maker': v.maker or '',
-                'path': v.path,
-            })
+    for group in logical_video_groups(videos, path_mappings):
+        group_items = []
+        for video in group.members:
+            if not video.cover_path:
+                continue
+            cover_fs = uri_to_local_fs_path(video.cover_path, path_mappings)
+            if not os.path.exists(cover_fs):
+                continue
+            base_stem = cover_base_stem(cover_fs)
+            poster = base_stem + '-poster.jpg'
+            fanart = base_stem + '-fanart.jpg'
+            if not os.path.exists(poster) or not os.path.exists(fanart):
+                group_items.append({
+                    'cover_path': cover_fs,
+                    'base_stem': base_stem,
+                    'number': video.number or '',
+                    'maker': video.maker or '',
+                    'path': video.path,
+                })
+        if group_items:
+            item = dict(group_items[0])
+            item["member_items"] = group_items
+            item["member_paths"] = [
+                group_item["path"]
+                for group_item in group_items
+            ]
+            need_update.append(item)
     return {'need_update': len(need_update), 'items': need_update}
 
 
@@ -3803,9 +4325,8 @@ def generate_jellyfin_images_stream(
                 cancelled = True
                 break
 
-            cover = item['cover_path']
+            member_items = item.get("member_items") or [item]
             num = item['number']
-            stem = item['base_stem']
 
             yield _sse_event({
                 "type": "progress",
@@ -3823,56 +4344,76 @@ def generate_jellyfin_images_stream(
                 "skipped": 0,
             })
 
-            img_result = generate_jellyfin_images(
-                cover, stem, number=item['number'], maker=item['maker']
-            )
+            group_ok = True
+            group_failed_items = []
+            for member_item in member_items:
+                member_num = member_item["number"]
+                img_result = generate_jellyfin_images(
+                    member_item["cover_path"],
+                    member_item["base_stem"],
+                    number=member_num,
+                    maker=member_item["maker"],
+                )
 
-            if not img_result['fanart']:
-                yield _sse_event({
-                    "type": "log",
-                    "level": "warn",
-                    "message": _runtime_text(
-                        "scanner",
-                        "jellyfin_fanart_failed",
-                        locale,
-                        number=num,
-                    ),
-                })
+                if not img_result['fanart']:
+                    yield _sse_event({
+                        "type": "log",
+                        "level": "warn",
+                        "message": _runtime_text(
+                            "scanner",
+                            "jellyfin_fanart_failed",
+                            locale,
+                            number=member_num,
+                        ),
+                    })
 
-            if img_result['poster']:
-                yield _sse_event({
-                    "type": "log",
-                    "level": "info",
-                    "message": _runtime_text(
-                        "scanner",
-                        "jellyfin_poster_ok",
-                        locale,
-                        number=num,
-                    ),
-                })
+                if img_result['poster']:
+                    yield _sse_event({
+                        "type": "log",
+                        "level": "info",
+                        "message": _runtime_text(
+                            "scanner",
+                            "jellyfin_poster_ok",
+                            locale,
+                            number=member_num,
+                        ),
+                    })
+                else:
+                    group_ok = False
+                    group_failed_items.append({
+                        "path": member_item.get("path", ""),
+                        "number": member_num,
+                        "error": _runtime_text(
+                            "scanner",
+                            "jellyfin_poster_failed",
+                            locale,
+                            number=member_num,
+                        ),
+                    })
+                    yield _sse_event({
+                        "type": "log",
+                        "level": "warn",
+                        "message": _runtime_text(
+                            "scanner",
+                            "jellyfin_poster_failed",
+                            locale,
+                            number=member_num,
+                        ),
+                    })
+
+            if group_ok:
                 completed += 1
             else:
                 failed += 1
-                failed_items.append({
-                    "path": item.get("path", ""),
-                    "number": num,
-                    "error": _runtime_text(
-                        "scanner",
-                        "jellyfin_poster_failed",
-                        locale,
-                        number=num,
-                    ),
-                })
-                yield _sse_event({
-                    "type": "log",
-                    "level": "warn",
-                    "message": _runtime_text(
-                        "scanner",
-                        "jellyfin_poster_failed",
-                        locale,
-                        number=num,
-                    ),
-                })
+                representative = dict(group_failed_items[0])
+                representative["member_paths"] = [
+                    member_item.get("path", "")
+                    for member_item in member_items
+                ]
+                representative["physical_failed_items"] = (
+                    len(group_failed_items)
+                )
+                failed_items.append(representative)
 
         # T3(40c): 清空快取，讓下次 check 反映最新圖片狀態
         _jellyfin_cache_result = None

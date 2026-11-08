@@ -30,7 +30,7 @@ from core.path_utils import (
 from core.logger import get_logger
 from core.platform_info import DSM_PERMISSION_HINT, is_synology
 from core.config import load_config, get_gallery_source_paths, get_configured_gallery_dirs
-from core.scrapers.utils import has_japanese
+from core.title_language import title_needs_translation
 from core.nfo_stat import nfo_mtime_or_none
 from core.nfo_title_format import build_display_title
 from core.nfo_utils import find_sidecar_nfos
@@ -88,17 +88,41 @@ class TitleWritebackRequest(BaseModel):
     original_title: Optional[str] = None
 
 
-def _needs_translate(title, original_title, nfo_mtime) -> bool:
-    """標題是假名、沒有原文、且有 NFO（nfo_mtime > 0）才算待翻譯（列表與寫回回應共用）。"""
-    return bool((not original_title) and has_japanese(title or '') and (nfo_mtime or 0) > 0)
+def _needs_translate(
+    title,
+    _original_title,
+    nfo_mtime,
+    locale: str | None = None,
+) -> bool:
+    """Whether a titled row needs translation into the active UI language."""
+    return bool(
+        (nfo_mtime or 0) > 0
+        and title_needs_translation(
+            title or "",
+            locale or _showcase_locale(),
+        )
+    )
 
 
-def _can_manual_translate(title, original_title, _nfo_mtime) -> bool:
-    """Lightbox 手動翻譯入口：只要目前有標題且尚未保存原文即可。"""
-    return bool(not original_title and (title or '').strip())
+def _can_manual_translate(
+    title,
+    _original_title,
+    _nfo_mtime,
+    locale: str | None = None,
+) -> bool:
+    """Lightbox translation is available whenever the title is not on-target."""
+    return title_needs_translation(
+        title or "",
+        locale or _showcase_locale(),
+    )
 
 
-def _serialize_video(v, path_mappings: dict, enabled: bool = False) -> dict:
+def _serialize_video(
+    v,
+    path_mappings: dict,
+    enabled: bool = False,
+    locale: str | None = None,
+) -> dict:
     """將 Video ORM 物件序列化為前端 JSON dict（列表端點與單筆端點共用）。
 
     feature/71 T4：thumbnail_cache_enabled 開關決定 cover_url 走 thumb / image 分支。
@@ -143,14 +167,19 @@ def _serialize_video(v, path_mappings: dict, enabled: bool = False) -> dict:
         "user_rating": v.user_rating or 0,            # 精選標記（spec-123）；無條件輸出，未精選為 0（FE-ALPINE-06）
         "has_cover": bool(v.cover_path),             # DB 初判（不做 IO）
         "has_nfo": (v.nfo_mtime or 0) > 0,          # 對齊 41a nfo_mtime 寫入契約，防禦 NULL
-        "needs_translate": _needs_translate(v.title, v.original_title, v.nfo_mtime),  # 無條件輸出（FE-ALPINE-06）
-        "can_translate": _can_manual_translate(v.title, v.original_title, v.nfo_mtime),
+        "needs_translate": _needs_translate(v.title, v.original_title, v.nfo_mtime, locale),
+        "can_translate": _can_manual_translate(v.title, v.original_title, v.nfo_mtime, locale),
         "auto_focal": v.auto_focal,                  # canonical "x,y" 4dp 字串或 ''（98b：前端 focalObjectPosition 消費）
         "crop_mode": v.crop_mode,                    # 'auto' | 'default'（98b：default 退 baseline 右裁）
     }
 
 
-def _serialize_group(group, path_mappings: dict, enabled: bool = False) -> dict:
+def _serialize_group(
+    group,
+    path_mappings: dict,
+    enabled: bool = False,
+    locale: str | None = None,
+) -> dict:
     """將 VideoGroup 序列化為前端 JSON dict（feature/122，CD-122-4）。
 
     以 `group.members[0]`（part-1，group_rows 已依 part_number 升冪排序）的
@@ -160,7 +189,7 @@ def _serialize_group(group, path_mappings: dict, enabled: bool = False) -> dict:
     不做欄位級 merge。單檔片：members==[v]、part_tokens/part_paths==[]，輸出與
     `_serialize_video(v, ...)` 相同，只多這兩個新鍵（AC-4）。
     """
-    base = _serialize_video(group.members[0], path_mappings, enabled)
+    base = _serialize_video(group.members[0], path_mappings, enabled, locale)
     # 單檔片不碰 size：`_serialize_video()` 原樣傳 `v.size_bytes`（DB NULL → None），
     # 套 `or 0` 會把 None 變 0，違反 AC-4「單檔片逐位元組不變」的字面契約。
     # 只有真的多段時才加總，`or 0` 的 NULL 防禦留在那條路上（T2 review P3）。
@@ -252,6 +281,7 @@ def get_videos(
 
         # 只取「當前設定資料夾」底下的記錄（DB 保留全部當 cache）
         config = load_config()
+        locale = _showcase_locale(config)
         gallery_config = config.get('gallery', {})
         configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
         thumb_enabled = config.get('thumbnail_cache_enabled', False)
@@ -313,7 +343,7 @@ def get_videos(
             groups = groups[start:start + per_page]
 
         videos_json = [
-            _serialize_group(g, path_mappings, thumb_enabled)
+            _serialize_group(g, path_mappings, thumb_enabled, locale)
             for g in groups
         ]
 
@@ -393,10 +423,10 @@ def get_video(path: str = Query(..., description="file:/// URI")):
         group = resolve_group(repo, path, path_mappings, folder_source_uri=v.path)
         if group is None:
             return JSONResponse({"success": True,
-                                 "video": _serialize_video(v, path_mappings, thumb_enabled)})
+                                 "video": _serialize_video(v, path_mappings, thumb_enabled, locale)})
 
         return JSONResponse({"success": True,
-                             "video": _serialize_group(group, path_mappings, thumb_enabled)})
+                             "video": _serialize_group(group, path_mappings, thumb_enabled, locale)})
 
     except Exception as e:
         logger.error("取得單筆影片失敗: %s", e)

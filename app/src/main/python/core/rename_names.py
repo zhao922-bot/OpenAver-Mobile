@@ -126,6 +126,18 @@ def canonicalize_source_stem(
     )
 
 
+def source_title_body(stem: str, number: str | None) -> str:
+    """Return the title body from a canonical source-derived file stem."""
+    if not stem or not number:
+        return ""
+    normalized = normalize_number_impl(str(number))
+    canonical = _strip_multipart_token(stem)
+    match = _number_pattern(normalized).match(canonical)
+    if match:
+        canonical = canonical[match.end():]
+    return canonical.lstrip(LEADING_SEPARATORS).strip(" .-_")
+
+
 def _sidecar_matches(old_stem: str, name: str) -> bool:
     if not name.startswith(old_stem):
         return False

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from core.database import Video, VideoRepository, connection
 from core.path_utils import to_file_uri
+from core.title_language import title_needs_translation
 from core.rename_normalizer import (
     build_combined_rename_plan,
     build_folder_rename_plan,
@@ -26,6 +28,9 @@ class FakeRepo:
         self.paths: set[str] = set()
         self.cover_updates: list[tuple[str, str, str]] = []
         self.sample_updates: list[tuple[str, list[str]]] = []
+        self.title_updates: list[
+            tuple[str, str, str, float]
+        ] = []
         self.repath_calls: list[tuple[str, str]] = []
 
     def repath_path_only(self, old_uri: str, new_uri: str) -> bool:
@@ -44,6 +49,18 @@ class FakeRepo:
 
     def update_sample_images(self, path: str, sample_images: list[str]) -> bool:
         self.sample_updates.append((path, sample_images))
+        return True
+
+    def update_titles(
+        self,
+        path: str,
+        title: str,
+        original_title: str,
+        nfo_mtime: float,
+    ) -> bool:
+        self.title_updates.append(
+            (path, title, original_title, nfo_mtime)
+        )
         return True
 
 
@@ -513,6 +530,10 @@ def test_combined_plan_renames_files_and_folder_from_source_title(tmp_path):
     poster = folder / "ABC123 舊名稱-poster.jpg"
     for path in (video, nfo, cover, poster, sample):
         path.write_bytes(path.name.encode("utf-8"))
+    nfo.write_text(
+        "<movie><title>舊標題</title><originaltitle>舊標題</originaltitle></movie>",
+        encoding="utf-8",
+    )
 
     old_uri = to_file_uri(str(video))
     old_cover_uri = to_file_uri(str(cover))
@@ -631,6 +652,228 @@ def test_combined_execute_uses_repository_batch_for_metadata_updates(tmp_path):
     assert repo.get_by_path(old_uri) is None
 
 
+def test_combined_title_only_sync_updates_database_and_nfo(tmp_path):
+    source = tmp_path / "library"
+    folder = source / "ABC-123 新しいタイトル"
+    folder.mkdir(parents=True)
+    video = folder / "ABC-123 新しいタイトル.mp4"
+    nfo = folder / "ABC-123 新しいタイトル.nfo"
+    video.write_bytes(b"video")
+    nfo.write_text(
+        "<movie><num>ABC-123</num><title>舊的繁體標題</title>"
+        "<originaltitle></originaltitle></movie>",
+        encoding="utf-8",
+    )
+
+    old_uri = to_file_uri(str(video))
+    db_path = tmp_path / "openaver.db"
+    connection._clear_db_init_cache()
+    connection.init_db(db_path)
+    repo = VideoRepository(db_path)
+    repo.upsert(Video(
+        path=old_uri,
+        number="ABC-123",
+        title="舊的繁體標題",
+        original_title="",
+        nfo_mtime=nfo.stat().st_mtime,
+    ))
+
+    plan = build_combined_rename_plan(
+        repo.get_all(),
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 新しいタイトル"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+    item = plan["items"][0]
+
+    assert item["status"] == "ready"
+    assert item["folder_action"] == "none"
+    assert item["videos"][0]["operations"] == []
+    assert item["videos"][0]["title_old"] == "舊的繁體標題"
+    assert item["videos"][0]["title_new"] == "新しいタイトル"
+    assert plan["summary"]["rename_videos"] == 0
+    assert plan["summary"]["rename_files"] == 0
+    assert plan["summary"]["rename_folders"] == 0
+    assert plan["summary"]["updated_titles"] == 1
+
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+    )
+
+    renamed = repo.get_by_path(old_uri)
+    assert result["success"] is True
+    assert result["updated_titles"] == 1
+    assert result["rewritten_nfos"] == 1
+    assert renamed is not None
+    assert renamed.title == "新しいタイトル"
+    assert renamed.original_title == ""
+    assert title_needs_translation(renamed.title, "zh-CN") is True
+    assert renamed.nfo_mtime == nfo.stat().st_mtime
+
+    root = ET.parse(nfo).getroot()
+    assert root.findtext("title") == "[ABC-123]新しいタイトル"
+    assert (root.findtext("originaltitle") or "") == ""
+
+
+def test_combined_title_sync_creates_title_only_nfo_when_missing(tmp_path):
+    source = tmp_path / "library"
+    folder = source / "ABC-123 新しいタイトル"
+    folder.mkdir(parents=True)
+    video = folder / "ABC-123 新しいタイトル.mp4"
+    video.write_bytes(b"video")
+
+    old_uri = to_file_uri(str(video))
+    db_path = tmp_path / "openaver.db"
+    connection._clear_db_init_cache()
+    connection.init_db(db_path)
+    repo = VideoRepository(db_path)
+    repo.upsert(Video(
+        path=old_uri,
+        number="ABC-123",
+        title="新しいタイトル",
+        original_title="",
+    ))
+
+    plan = build_combined_rename_plan(
+        repo.get_all(),
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 新しいタイトル"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+    planned_video = plan["items"][0]["videos"][0]
+    nfo = folder / "ABC-123 新しいタイトル.nfo"
+
+    assert planned_video["nfo_path_old"] == ""
+    assert planned_video["nfo_path_new"] == str(nfo)
+    assert planned_video["nfo_create"] is True
+    assert planned_video["title_update"] is True
+    assert validate_combined_rename_plan(plan) is True
+
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+    )
+
+    renamed = repo.get_by_path(old_uri)
+    assert result["success"] is True
+    assert result["created_nfos"] == 1
+    assert result["rewritten_nfos"] == 0
+    assert renamed is not None
+    assert renamed.title == "新しいタイトル"
+    assert renamed.original_title == ""
+    assert renamed.nfo_mtime == nfo.stat().st_mtime
+    assert nfo.is_file()
+
+    root = ET.parse(nfo).getroot()
+    assert root.findtext("num") == "ABC-123"
+    assert root.findtext("title") == "[ABC-123]新しいタイトル"
+    assert (root.findtext("originaltitle") or "") == ""
+    assert root.find("plot") is None
+    assert root.find("studio") is None
+    assert root.find("actor") is None
+    assert root.find("poster") is None
+    assert root.find("release") is None
+
+
+def test_combined_created_nfo_is_removed_when_database_update_fails(
+    tmp_path,
+):
+    source = tmp_path / "library"
+    folder = source / "ABC-123 新しいタイトル"
+    folder.mkdir(parents=True)
+    video = folder / "ABC-123 新しいタイトル.mp4"
+    video.write_bytes(b"video")
+    old_uri = to_file_uri(str(video))
+
+    plan = build_combined_rename_plan(
+        [Video(
+            path=old_uri,
+            number="ABC-123",
+            title="旧标题",
+        )],
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 新しいタイトル"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+    nfo = folder / "ABC-123 新しいタイトル.nfo"
+
+    class FailingBatchRepo(FakeRepo):
+        def apply_rename_batch(self, _updates):
+            return False
+
+    repo = FailingBatchRepo()
+    repo.paths.add(old_uri)
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+    )
+
+    assert result["success"] is False
+    assert result["rollback_ok"] is True
+    assert not nfo.exists()
+    assert video.is_file()
+    assert repo.paths == {old_uri}
+
+
+def test_combined_title_sync_restores_nfo_when_database_update_fails(
+    tmp_path,
+):
+    source = tmp_path / "library"
+    folder = source / "ABC-123 新しいタイトル"
+    folder.mkdir(parents=True)
+    video = folder / "ABC-123 新しいタイトル.mp4"
+    nfo = folder / "ABC-123 新しいタイトル.nfo"
+    video.write_bytes(b"video")
+    original_nfo = (
+        "<movie><num>ABC-123</num><title>舊的繁體標題</title>"
+        "<originaltitle></originaltitle></movie>"
+    ).encode("utf-8")
+    nfo.write_bytes(original_nfo)
+
+    old_uri = to_file_uri(str(video))
+    plan = build_combined_rename_plan(
+        [Video(
+            path=old_uri,
+            number="ABC-123",
+            title="舊的繁體標題",
+            original_title="",
+        )],
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 新しいタイトル"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+
+    class FailingBatchRepo(FakeRepo):
+        def apply_rename_batch(self, updates):
+            return False
+
+    repo = FailingBatchRepo()
+    repo.paths.add(old_uri)
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+    )
+
+    assert result["success"] is False
+    assert result["rollback_ok"] is True
+    assert nfo.read_bytes() == original_nfo
+    assert video.is_file()
+    assert repo.paths == {old_uri}
+
+
 def test_combined_plan_validation_detects_changed_source_size(tmp_path):
     source = tmp_path / "library"
     folder = source / "ABC123 舊名稱"
@@ -661,6 +904,10 @@ def test_combined_plan_creates_folder_for_root_video_and_moves_sidecars(tmp_path
     unrelated = source / "aes.key"
     for path in (video, nfo, cover, unrelated):
         path.write_bytes(path.name.encode("utf-8"))
+    nfo.write_text(
+        "<movie><title>旧标题</title><originaltitle>旧标题</originaltitle></movie>",
+        encoding="utf-8",
+    )
 
     old_uri = to_file_uri(str(video))
     old_cover_uri = to_file_uri(str(cover))
@@ -793,6 +1040,9 @@ def test_combined_plan_keeps_root_multipart_together_and_preserves_tokens(tmp_pa
 
     assert plan["summary"]["conflicts"] == 0
     assert plan["summary"]["rename_folders"] == 1
+    assert plan["summary"]["rename_videos"] == 1
+    assert plan["summary"]["logical_videos"] == 1
+    assert plan["summary"]["updated_titles"] == 1
     assert len(plan["items"]) == 1
     item = plan["items"][0]
     assert item["folder_action"] == "create"
@@ -815,6 +1065,10 @@ def test_combined_plan_keeps_root_multipart_together_and_preserves_tokens(tmp_pa
     assert result["success"] is True
     assert result["created_folders"] == 1
     assert result["moved_files"] == 2
+    assert result["updated_videos"] == 1
+    assert result["updated_titles"] == 1
+    assert result["physical_updated_videos"] == 2
+    assert result["physical_updated_titles"] == 2
     assert (new_folder / "SSIS-414 小宵こなん10変化-cd1.mp4").is_file()
     assert (new_folder / "SSIS-414 小宵こなん10変化-cd2.mp4").is_file()
 
@@ -956,6 +1210,7 @@ def test_rename_locales_cover_preview_and_execution_states():
         "modal_title",
         "folder_modal_title",
         "summary_videos",
+        "summary_titles",
         "summary_folders",
         "summary_files",
         "summary_conflicts",

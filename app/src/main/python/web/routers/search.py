@@ -1325,7 +1325,7 @@ def _serialize_local_status(videos: List[Video], path_mappings: dict) -> dict:
     )
     return {
         "exists": True,
-        "count": len(videos),
+        "count": len(group_payloads),
         "paths": [video.path for video in videos],
         "playback": playback,
         "groups": group_payloads,

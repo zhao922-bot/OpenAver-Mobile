@@ -892,7 +892,7 @@
  from datetime import datetime
  from pathlib import Path
  from typing import Any, Callable, Dict, Generator, List, Optional
-@@ -32,27 +33,54 @@
+@@ -32,27 +33,61 @@
  from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
  from starlette.background import BackgroundTask
  
@@ -940,10 +940,17 @@
  from core.generate_state import try_mark_generate_active, mark_generate_done
  from core import thumbnail_cache
 -from core.scraper import smart_search
-+from core.multipart_group import resolve_groups_bulk
++from core.multipart_group import (
++    group_rows,
++    logical_video_count,
++    logical_video_groups,
++    resolve_groups_bulk,
++    resolve_logical_video_groups,
++)
 +from core.scraper import get_javbus_lang, search_jav, smart_search
  from core.source_settings import is_uncensored_mode_effective
-+from core.scrapers.utils import check_subtitle, extract_number, has_japanese
++from core.scrapers.utils import check_subtitle, extract_number
++from core.title_language import title_needs_translation
 +from core.source_config import get_manual_only_sources, validate_source_id
  from pydantic import BaseModel
  from core.logger import get_logger
@@ -951,7 +958,7 @@
  from core.platform_info import DSM_PERMISSION_HINT, is_synology
  from core.proxy_policy import proxy_kwargs
  from web.routers.notifications import emit_notification as _emit_notif
-@@ -65,11 +93,32 @@
+@@ -65,11 +100,32 @@
  # T3(40c): Jellyfin check TTL 快取（60 秒）
  _jellyfin_cache_result: dict | None = None
  _jellyfin_cache_time: float = 0
@@ -984,7 +991,7 @@
  
  
  def _collect_long_paths(
-@@ -97,21 +146,36 @@
+@@ -97,21 +153,36 @@
  # TASK-88c-T2: readonly 來源分流 + SSE thread/queue 橋接 + 四數摘要
  # ---------------------------------------------------------------------------
  
@@ -1033,7 +1040,7 @@
      return {"type": "log", "level": "warn" if o.status == "failed" else "info", "message": msg}
  
  
-@@ -142,7 +206,7 @@
+@@ -142,7 +213,7 @@
          summary["partial"] += 1
  
  
@@ -1042,7 +1049,7 @@
      """該來源小結（產生器）。
  
      no_output_path → 「請先設定輸出夾」提示（Acceptance #11）。
-@@ -153,25 +217,39 @@
+@@ -153,25 +224,39 @@
      if result.aborted_reason == "no_output_path":
          yield _sse_event({
              "type": "log", "level": "warn",
@@ -1088,7 +1095,7 @@
              })
  
  
-@@ -188,6 +266,7 @@
+@@ -188,6 +273,7 @@
      q: "queue.Queue" = queue.Queue()  # 無界：worker 永不阻塞於 put，client 斷線 daemon 自然退出
      _SENTINEL = object()
      box: dict = {}
@@ -1096,7 +1103,7 @@
  
      def _work():
          try:
-@@ -206,39 +285,58 @@
+@@ -206,39 +292,58 @@
  
      t = threading.Thread(target=_work, daemon=True)
      t.start()
@@ -1166,7 +1173,7 @@
      """根目錄不可存取時回傳警告；可存取時回傳 None。
  
      白名單：只有明確的「不存在」才說資料夾不存在，其餘 OSError 一律「無法存取」（NAS 斷線不誤導成打錯字）。
-@@ -246,29 +344,340 @@
+@@ -246,29 +351,379 @@
      try:
          os.stat(normalized_dir)
      except PermissionError:
@@ -1258,12 +1265,13 @@
 +    nfo_unchanged_paths: set[str],
 +    should_abort: Optional[Callable[[], bool]],
 +    locale: str,
-+) -> Generator[str, None, tuple[list[Video], list[str], int, int]]:
++) -> Generator[str, None, tuple[list[Video], list[str], int, int, list[str]]]:
 +    """Scan changed files and return videos plus per-source counters."""
 +    videos_to_upsert: list[Video] = []
 +    session_added_paths: list[str] = []
 +    cache_misses = 0
 +    scan_error_count = 0
++    scan_error_paths: list[str] = []
 +
 +    for index, file_info in enumerate(needs_scan, 1):
 +        # TASK-90b-T4: 逐檔中止檢查（每檔處理之前）。單一資料夾內
@@ -1296,6 +1304,7 @@
 +            cache_misses += 1
 +        except Exception:
 +            logger.exception("掃描檔案失敗: %s", file_info.get('path', ''))
++            scan_error_paths.append(file_info['path'])
 +            yield _sse_event({
 +                "type": "log",
 +                "level": "warn",
@@ -1305,7 +1314,13 @@
 +            })
 +            scan_error_count += 1
 +
-+    return videos_to_upsert, session_added_paths, cache_misses, scan_error_count
++    return (
++        videos_to_upsert,
++        session_added_paths,
++        cache_misses,
++        scan_error_count,
++        scan_error_paths,
++    )
 +
 +
 +def _submit_focal_candidates(
@@ -1454,6 +1469,7 @@
 +            session_added_paths,
 +            cache_misses,
 +            scan_errors,
++            scan_error_paths,
 +        ) = yield from _scan_changed_files(
 +            needs_scan,
 +            scanner,
@@ -1475,8 +1491,38 @@
 +            should_abort,
 +        )
 +
++        if scan_error_paths:
++            failed_paths = set(scan_error_paths)
++            scan_errors = len({
++                index
++                for index, group in enumerate(group_rows(
++                    all_files,
++                    fs_path_of=lambda file_info: file_info["path"],
++                ))
++                if any(
++                    member["path"] in failed_paths
++                    for member in group.members
++                )
++            })
++
 +        stats["scan_errors"] = scan_errors
 +        stats["session_added_paths"] = session_added_paths
++        try:
++            current_rows = repo.get_all()
++            current_logical_count = len(
++                _logical_groups_for_paths(
++                    current_rows,
++                    current_paths,
++                    path_mappings,
++                )
++            )
++        except Exception:
++            logger.warning(
++                "掃描來源後計算邏輯影片數失敗，退回檔案數：%s",
++                directory,
++                exc_info=True,
++            )
++            current_logical_count = len(all_files)
 +        logger.info(
 +            f"[Gallery] {directory}: {len(all_files)} 個檔案，快取命中 {cache_hits}"
 +        )
@@ -1488,7 +1534,7 @@
 +                "source_done",
 +                locale,
 +                path=directory,
-+                count=len(all_files),
++                count=current_logical_count,
 +                hits=cache_hits,
 +                misses=cache_misses,
 +            ),
@@ -1517,7 +1563,7 @@
          gallery_config = config.get('gallery', {})
  
          directories = get_gallery_source_paths(gallery_config)
-@@ -287,7 +696,12 @@
+@@ -287,7 +742,12 @@
          default_theme = config.get('general', {}).get('theme', 'light')
  
          if not directories:
@@ -1531,7 +1577,7 @@
              return
  
          # 53b-T3: 確認 directories 有值才 emit 掃描開始通知
-@@ -302,19 +716,46 @@
+@@ -302,19 +762,49 @@
          cache_path = output_path / output_filename.replace('.html', '_cache.json')
          db_path = get_db_path()
  
@@ -1576,13 +1622,16 @@
 +            "type": "log",
 +            "level": "info",
 +            "message": _runtime_text(
-+                "scanner", "db_count", locale, count=repo.count()
++                "scanner",
++                "db_count",
++                locale,
++                count=logical_video_count(repo.get_all(), path_mappings),
 +            ),
 +        })
  
          # 初始化掃描器
          scanner = VideoScanner(path_mappings=path_mappings, nfo_title_format=config.get('scraper', {}).get('nfo_title_format', '[{num}]{title}'))
-@@ -323,6 +764,7 @@
+@@ -323,6 +813,7 @@
          total_inserted = 0
          total_updated = 0
          total_deleted = 0
@@ -1590,7 +1639,7 @@
          scan_error_count = 0
          session_added_paths = []  # 追蹤本次新增/變更的影片路徑
          long_paths: list[str] = []  # a5: Windows 長路徑收集（只在 win32 填充）
-@@ -369,161 +811,39 @@
+@@ -369,161 +860,39 @@
                  normalized_dir = uri_to_fs_path(directory)  # uri-no-reverse: native config path (DirectoryConfig.path), no DB-mapped namespace
              except ValueError:
                  logger.exception("路徑轉換失敗: %s", directory)
@@ -1778,16 +1827,23 @@
  
          # TASK-90b-T4 / PR#90b Codex P1: 尾段每個外顯副作用（HTML 檔、完成通知、
          # done event）之前各自 fresh 查一次 should_abort()，而非迴圈結束時單次
-@@ -549,6 +869,24 @@
-         # 從 SQLite 取得影片，只保留當前設定資料夾底下的記錄
+@@ -550,9 +919,36 @@
          all_db_videos = [v for v in repo.get_all()
                           if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
-+
+ 
 +        # The generated page can render without an NFO, but title writeback and
 +        # later metadata maintenance need one. Surface this before the user
 +        # discovers it while translating a title.
++        all_db_groups = logical_video_groups(
++            all_db_videos, path_mappings
++        )
 +        missing_nfo_count = sum(
-+            1 for v in all_db_videos if not _video_has_nfo(v, path_mappings)
++            1
++            for group in all_db_groups
++            if any(
++                not _video_has_nfo(video, path_mappings)
++                for video in group.members
++            )
 +        )
 +        if missing_nfo_count > 0:
 +            yield _sse_event({
@@ -1800,10 +1856,16 @@
 +                    count=missing_nfo_count,
 +                ),
 +            })
- 
++
          # 轉換為 VideoInfo 格式供 HTMLGenerator 使用
          all_videos = []
-@@ -562,6 +900,7 @@
+-        for v in all_db_videos:
++        for group in all_db_groups:
++            v = group.members[0]
+             info = VideoInfo(
+                 path=v.path,
+                 title=v.title,
+@@ -562,6 +958,7 @@
                  maker=v.maker,
                  date=v.release_date,
                  genre=','.join(v.tags) if v.tags else '',
@@ -1811,7 +1873,43 @@
                  size=v.size_bytes,
                  mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
                  img=v.cover_path
-@@ -602,10 +941,21 @@
+@@ -593,19 +990,57 @@
+                     }
+             if session_cache:
+                 session_stats = check_cache_needs_update(session_cache)
++                session_update_paths = set(session_stats["paths"])
++                session_groups = _logical_groups_for_paths(
++                    all_db_videos,
++                    session_update_paths,
++                    path_mappings,
++                )
++                session_items_by_path = {
++                    item.get("path"): item
++                    for item in session_stats.get("items", [])
++                    if item.get("path")
++                }
++                grouped_session_items = []
++                for _group, member_paths in session_groups:
++                    member_items = [
++                        session_items_by_path[path]
++                        for path in member_paths
++                        if path in session_items_by_path
++                    ]
++                    if member_items:
++                        grouped_session_items.append({
++                            **member_items[0],
++                            "member_paths": member_paths,
++                        })
+                 session_update = {
+-                    "count": session_stats['need_update'],
+-                    "paths": session_stats['paths'],
+-                    "items": session_stats['items'],
++                    "count": len(session_groups),
++                    "paths": [item["path"] for item in grouped_session_items],
++                    "items": grouped_session_items,
++                    "physical_paths": session_stats["paths"],
+                 }
+                 if session_update['count'] > 0:
                      yield _sse_event({
                          "type": "log",
                          "level": "warn",
@@ -1829,13 +1927,16 @@
 +            "type": "log",
 +            "level": "info",
 +            "message": _runtime_text(
-+                "scanner", "db_total", locale, count=repo.count()
++                "scanner",
++                "db_total",
++                locale,
++                count=logical_video_count(repo.get_all(), path_mappings),
 +            ),
 +        })
  
          # TASK-90b-T4: abort 時跳過 orphan 清理（全庫 pass，非本次掃描範圍新增
          # 的成本，abort 時執行拿不到「這次掃描結果更完整」的好處，純屬多做一次
-@@ -615,7 +965,16 @@
+@@ -615,7 +1050,16 @@
              try:
                  cleaned = _run_sample_images_cleanup_pass(repo, path_mappings)
                  if cleaned > 0:
@@ -1853,7 +1954,7 @@
              except Exception as e:
                  logger.warning("sample_images cleanup pass failed: %s: %s", type(e).__name__, e)
                  # 失敗不中斷 scan 流程
-@@ -627,7 +986,9 @@
+@@ -627,7 +1071,9 @@
              # 產生 HTML
              yield _sse_event({
                  "type": "progress",
@@ -1864,7 +1965,7 @@
                  "current": total_dirs,
                  "total": total_dirs + 1
              })
-@@ -641,12 +1002,13 @@
+@@ -641,12 +1087,13 @@
                  sort=default_sort,
                  order=default_order,
                  items_per_page=items_per_page,
@@ -1880,7 +1981,7 @@
                  "current": total_dirs + 1,
                  "total": total_dirs + 1
              })
-@@ -704,7 +1066,7 @@
+@@ -704,7 +1151,7 @@
          if _wl_removed:
              _emit_notif(
                  "info", "notif.wishlist_auto_removed",
@@ -1889,7 +1990,7 @@
                  task_type="wishlist_reconcile",
              )
  
-@@ -723,26 +1085,69 @@
+@@ -723,26 +1170,69 @@
                      or _readonly_no_output > 0 or _readonly_unreachable > 0 or _readonly_partial > 0):
                  _err_parts = []
                  if scan_error_count > 0:
@@ -1967,7 +2068,7 @@
                      task_type="scanner_generate",
                  )
  
-@@ -754,6 +1159,7 @@
+@@ -754,6 +1244,7 @@
                  "video_count": len(all_videos),
                  "output_path": str(html_path),
                  "session_update": session_update,
@@ -1975,7 +2076,7 @@
                  "long_paths": long_paths,  # a5
                  "stats": {
                      "inserted": total_inserted,
-@@ -772,10 +1178,15 @@
+@@ -772,10 +1263,15 @@
          # 53b-T3: 掃描失敗通知（不洩漏 str(e) 到前端）
          _emit_notif(
              "error", "notif.scanner_failed",
@@ -1993,7 +2094,7 @@
  
  
  # TASK-90b-T2: 斷線偵測輪詢間隔（秒）。定案依據見 plan-90b.md CD-90b-5/6：
-@@ -786,6 +1197,66 @@
+@@ -786,6 +1282,66 @@
  # `request.is_disconnected()`，非搶 iterate_in_threadpool 的同一組 receive
  # channel（該輪詢與 StreamingResponse 內部行為互不干擾，spike 已驗證）。
  _DISCONNECT_POLL_INTERVAL_SEC = 0.5
@@ -2060,7 +2161,7 @@
  
  
  @router.get("/generate")
-@@ -803,8 +1274,13 @@
+@@ -803,8 +1359,13 @@
      # 反方向——若設定頁正在切換模式（purge 窗口中），回 False → 拒絕開始產生，避免背景
      # producer 讀到舊唯讀來源、把剛被 purge 的卡 _upsert 補回（切模式後殭屍卡）。
      if not try_mark_generate_active(cancel_event):
@@ -2075,7 +2176,20 @@
          return StreamingResponse(
              _refuse_switching(),
              media_type="text/event-stream",
-@@ -887,7 +1363,10 @@
+@@ -874,7 +1435,11 @@
+             return {"success": True, "data": {"total": 0, "last_run": None, "last_added": None}}
+ 
+         repo = VideoRepository(db_path)
+-        total = repo.count()
++        config = load_config()
++        path_mappings = (
++            config.get("gallery", {}).get("path_mappings", {})
++        )
++        total = logical_video_count(repo.get_all(), path_mappings)
+ 
+         return {
+             "success": True,
+@@ -887,7 +1452,10 @@
          }
      except Exception as e:
          logger.error("取得統計資訊失敗: %s", e)
@@ -2087,8 +2201,39 @@
  
  
  @router.delete("/cache")
-@@ -910,7 +1389,10 @@
-         return {"success": True, "deleted": deleted}
+@@ -897,9 +1465,21 @@
+         db_path = get_db_path()
+ 
+         if not db_path.exists():
+-            return {"success": True, "deleted": 0}
++            return {
++                "success": True,
++                "deleted": 0,
++                "physical_deleted": 0,
++            }
+ 
+         repo = VideoRepository(db_path)
++        config = load_config()
++        path_mappings = (
++            config.get("gallery", {}).get("path_mappings", {})
++        )
++        logical_deleted = logical_video_count(
++            repo.get_all(),
++            path_mappings,
++        )
+         deleted = repo.clear_all()
+         # feature/71 T8: 清空整個縮圖快取目錄（CD-11 / spec 2.A.9）
+         thumbnail_cache.clear_all()
+@@ -907,10 +1487,17 @@
+         global _jellyfin_cache_result, _jellyfin_cache_time
+         _jellyfin_cache_result = None
+         _jellyfin_cache_time = 0
+-        return {"success": True, "deleted": deleted}
++        return {
++            "success": True,
++            "deleted": logical_deleted,
++            "physical_deleted": deleted,
++        }
      except Exception as e:
          logger.error("清除快取失敗: %s", e)
 -        return {"success": False, "error": "清除快取失敗"}
@@ -2099,10 +2244,210 @@
  
  
  def _build_nfo_update_cache(all_videos, config) -> tuple:
-@@ -959,6 +1441,511 @@
+@@ -959,6 +1546,728 @@
      return cache, skipped_readonly, path_mappings
  
  
++def _logical_groups_for_paths(rows, included_paths, path_mappings) -> list:
++    """Return complete logical groups touched by ``included_paths``.
++
++    ``rows`` must be the complete row set so a filtered maintenance query
++    (for example, only a ``cd2`` row) can still be resolved back to its
++    ``cd1``/``cd2`` group.  The returned path lists contain only the rows that
++    actually need work; other group members are retained as context by the
++    group object.
++    """
++    wanted = set(included_paths)
++    result = []
++    for group in logical_video_groups(rows, path_mappings):
++        member_paths = [
++            member.path
++            for member in group.members
++            if member.path in wanted
++        ]
++        if member_paths:
++            result.append((group, member_paths))
++    return result
++
++
++def _grouped_nfo_stats(all_videos, stats, path_mappings) -> dict:
++    """Convert physical NFO-update rows to one display item per video group."""
++    physical_by_path = {
++        item["path"]: item
++        for item in stats.get("items", [])
++        if item.get("path")
++    }
++    logical_items = []
++    for group, member_paths in _logical_groups_for_paths(
++        all_videos,
++        stats.get("paths", []),
++        path_mappings,
++    ):
++        member_items = [
++            physical_by_path[path]
++            for path in member_paths
++            if path in physical_by_path
++        ]
++        if not member_items:
++            continue
++        representative = member_items[0]
++        missing = sorted({
++            field
++            for item in member_items
++            for field in item.get("missing", [])
++        })
++        logical_items.append({
++            **representative,
++            "missing": missing,
++            "member_paths": member_paths,
++        })
++
++    details = {
++        field: sum(
++            1
++            for item in logical_items
++            if field in item.get("missing", [])
++        )
++        for field in ("title", "date", "actor", "genre", "maker")
++    }
++    return {
++        "need_update": len(logical_items),
++        "paths": [item["path"] for item in logical_items],
++        "physical_paths": list(stats.get("paths", [])),
++        "items": logical_items,
++        "details": {
++            "no_title": details["title"],
++            "no_date": details["date"],
++            "no_actor": details["actor"],
++            "no_genre": details["genre"],
++            "no_maker": details["maker"],
++        },
++    }
++
++
++def _logical_nfo_summary(update_stats, groups) -> dict:
++    """Aggregate physical update results into logical video counts."""
++    total = len(groups)
++    failed_paths = {
++        str(item.get("path") or "")
++        for item in update_stats.get("failed_items", [])
++        if item.get("path")
++    }
++    updated_paths = {
++        str(path)
++        for path in update_stats.get("updated_paths", [])
++        if path
++    }
++    success = 0
++    failed = 0
++    skipped = 0
++    logical_failed_items = []
++    failed_physical_count = len(update_stats.get("failed_items", []))
++    for _group, member_paths in groups:
++        member_failed_items = [
++            item
++            for item in update_stats.get("failed_items", [])
++            if item.get("path") in member_paths
++        ]
++        if any(path in failed_paths for path in member_paths):
++            failed += 1
++            representative = dict(member_failed_items[0])
++            representative["member_paths"] = member_paths
++            logical_failed_items.append(representative)
++        elif any(path in updated_paths for path in member_paths):
++            success += 1
++        else:
++            skipped += 1
++    return {
++        **update_stats,
++        "total": total,
++        "success": success,
++        "failed": failed,
++        "skipped": skipped,
++        "failed_items": logical_failed_items,
++        "physical_failed_items": failed_physical_count,
++    }
++
++
++def _normalize_tag_source_summary(summary: dict, groups: list) -> dict:
++    """Collapse physical tag-source results into logical-video results."""
++    path_to_group = {}
++    group_members = {
++        index: member_paths
++        for index, (_group, member_paths) in enumerate(groups)
++    }
++    for index, member_paths in group_members.items():
++        for path in member_paths:
++            path_to_group[path] = index
++
++    items_by_group = {}
++    for item in summary.get("items", []):
++        group_index = path_to_group.get(item.get("path"))
++        if group_index is not None:
++            items_by_group.setdefault(group_index, []).append(item)
++
++    failed_by_group = {}
++    for item in summary.get("failed_items", []):
++        group_index = path_to_group.get(item.get("path"))
++        if group_index is not None:
++            failed_by_group.setdefault(group_index, []).append(item)
++
++    logical_items = []
++    failed_items = []
++    changed_numbers = []
++    success_count = 0
++    changed_count = 0
++    unchanged_count = 0
++    skipped_count = 0
++    no_nfo_count = 0
++    for group_index in range(len(groups)):
++        member_paths = group_members[group_index]
++        failed_members = failed_by_group.get(group_index, [])
++        member_items = items_by_group.get(group_index, [])
++        if failed_members:
++            representative = {
++                **failed_members[0],
++                "member_paths": member_paths,
++            }
++            failed_items.append(representative)
++            continue
++        if not member_items:
++            continue
++
++        representative = {
++            **member_items[0],
++            "member_paths": member_paths,
++        }
++        if any(item.get("status") == "changed" for item in member_items):
++            representative["status"] = "changed"
++            changed_count += 1
++            if representative.get("number"):
++                changed_numbers.append(representative["number"])
++        elif any(item.get("status") == "unchanged" for item in member_items):
++            representative["status"] = "unchanged"
++            unchanged_count += 1
++        else:
++            skipped_count += 1
++        success_count += 1
++        if any(not item.get("nfo_path") for item in member_items):
++            no_nfo_count += 1
++        logical_items.append(representative)
++
++    summary.update({
++        "total": len(groups),
++        "success": success_count,
++        "changed": changed_count,
++        "unchanged": unchanged_count,
++        "skipped": skipped_count,
++        "failed": len(failed_items),
++        "no_nfo": no_nfo_count,
++        "items": logical_items,
++        "failed_items": failed_items,
++        "changed_numbers": list(dict.fromkeys(changed_numbers)),
++    })
++    return summary
++
++
 +def _validate_batch_source(
 +    source: str,
 +    config: dict,
@@ -2248,11 +2593,24 @@
 +            return
 +
 +        repo = VideoRepository(db_path)
++        all_videos = repo.get_all()
 +        videos = [
-+            video for video in repo.get_all()
++            video for video in all_videos
 +            if video.number and (not numbers or video.number in numbers)
 +        ]
-+        summary["total"] = len(videos)
++        gallery_config = config.get("gallery", {})
++        path_mappings = gallery_config.get("path_mappings", {})
++        logical_groups = _logical_groups_for_paths(
++            all_videos,
++            [video.path for video in videos],
++            path_mappings,
++        )
++        path_to_group = {
++            path: index
++            for index, (_group, member_paths) in enumerate(logical_groups)
++            for path in member_paths
++        }
++        summary["total"] = len(logical_groups)
 +        if not videos:
 +            yield _sse_event({
 +                "type": "done",
@@ -2263,12 +2621,11 @@
 +            })
 +            return
 +
-+        gallery_config = config.get("gallery", {})
-+        path_mappings = gallery_config.get("path_mappings", {})
 +        readonly_prefixes = readonly_source_prefixes(gallery_config, path_mappings)
 +        writable_prefixes = writable_source_prefixes(gallery_config, path_mappings)
 +        javbus_lang = get_javbus_lang()
 +        started_at = time.monotonic()
++        seen_group_progress = set()
 +
 +        for index, video in enumerate(videos, start=1):
 +            if cancel_event is not None and cancel_event.is_set():
@@ -2277,23 +2634,26 @@
 +
 +            elapsed = max(time.monotonic() - started_at, 0.001)
 +            eta_seconds = round((elapsed / max(index - 1, 1)) * max(len(videos) - index + 1, 0))
-+            yield _sse_event({
-+                "type": "progress",
-+                "current": index,
-+                "total": len(videos),
-+                "number": video.number,
-+                "status": _runtime_text(
-+                    "scanner",
-+                    "tag_preview" if dry_run else "tag_update",
-+                    locale,
-+                    number=video.number,
-+                ),
-+                "success": summary["success"],
-+                "failed": summary["failed"],
-+                "skipped": summary["skipped"],
-+                "changed": summary["changed"],
-+                "eta_seconds": eta_seconds,
-+            })
++            group_index = path_to_group.get(video.path)
++            if group_index not in seen_group_progress:
++                seen_group_progress.add(group_index)
++                yield _sse_event({
++                    "type": "progress",
++                    "current": len(seen_group_progress),
++                    "total": len(logical_groups),
++                    "number": video.number,
++                    "status": _runtime_text(
++                        "scanner",
++                        "tag_preview" if dry_run else "tag_update",
++                        locale,
++                        number=video.number,
++                    ),
++                    "success": summary["success"],
++                    "failed": summary["failed"],
++                    "skipped": summary["skipped"],
++                    "changed": summary["changed"],
++                    "eta_seconds": eta_seconds,
++                })
 +
 +            try:
 +                metadata = search_jav(
@@ -2563,6 +2923,8 @@
 +                ),
 +            })
 +
++        _normalize_tag_source_summary(summary, logical_groups)
++
 +        if summary["cancelled"]:
 +            message = _runtime_text(
 +                "scanner",
@@ -2611,21 +2973,39 @@
  @router.get("/update-check")
  def check_update():
      """檢查需要更新的影片數量（從 SQLite 讀取）"""
-@@ -975,11 +1962,12 @@
+@@ -971,73 +2280,269 @@
+         repo = VideoRepository(db_path)
+         all_videos = repo.get_all()
+ 
+-        cache, _skipped_readonly, _path_mappings = _build_nfo_update_cache(all_videos, load_config())
++        config = load_config()
++        cache, _skipped_readonly, path_mappings = _build_nfo_update_cache(
++            all_videos,
++            config,
++        )
  
          stats = check_cache_needs_update(cache)
- 
+-
 -        # 不要返回 paths 列表（太大）
++        grouped = _grouped_nfo_stats(
++            all_videos,
++            stats,
++            path_mappings,
++        )
++
          return {
              "success": True,
-             "data": {
-                 "need_update": stats['need_update'],
-+                "paths": stats['paths'],
-+                "items": stats['items'],
-                 "details": {
-                     "no_title": stats['no_title'],
-                     "no_date": stats['no_date'],
-@@ -991,39 +1979,170 @@
+-            "data": {
+-                "need_update": stats['need_update'],
+-                "details": {
+-                    "no_title": stats['no_title'],
+-                    "no_date": stats['no_date'],
+-                    "no_actor": stats['no_actor'],
+-                    "no_genre": stats['no_genre'],
+-                    "no_maker": stats['no_maker'],
+-                }
+-            }
++            "data": grouped,
          }
      except Exception as e:
          logger.error("檢查更新數量失敗: %s", e)
@@ -2674,13 +3054,15 @@
 +    return extract_number(filename) or extract_number(video.title or "") or ""
 +
 +
-+def _is_untranslated_title_candidate(video: Video) -> bool:
-+    """Only rows with a non-empty Japanese title and no saved original title."""
++def _is_untranslated_title_candidate(
++    video: Video,
++    locale: str | None = None,
++) -> bool:
++    """Return whether a title is not in the active UI language."""
 +    title = (video.title or "").strip()
 +    return bool(
 +        title
-+        and not (video.original_title or "").strip()
-+        and has_japanese(title)
++        and title_needs_translation(title, locale or _active_locale())
 +    )
 +
 +
@@ -2763,68 +3145,129 @@
  
          repo = VideoRepository(db_path)
          all_videos = repo.get_all()
-+        path_mappings = load_config().get("gallery", {}).get("path_mappings", {})
++        config = load_config()
++        path_mappings = config.get("gallery", {}).get("path_mappings", {})
++        locale = _active_locale(config)
  
          missing_both = 0
          missing_nfo = 0
          missing_cover = 0
          items = []
-+        untranslated_title_items = []
-+        missing_sample_candidates = []
- 
-         for v in all_videos:
+-
+-        for v in all_videos:
 -            has_nfo = (v.nfo_mtime or 0) > 0
 -            has_cover = bool(v.cover_path)
 -            produced = bool(v.output_dir)
 -            tried = (v.scrape_attempted_at or 0) > 0
 -            if produced or tried:
--                continue
-+            number = _candidate_number(v)
-+            if _is_untranslated_title_candidate(v):
-+                untranslated_title_items.append({
-+                    "file_path": v.path,
-+                    "number": number,
-+                    "title": v.title,
-+                })
-+            if _is_missing_sample_candidate(v):
-+                missing_sample_candidates.append(v)
++        untranslated_title_items = []
++        missing_sample_items = []
 +
-+            has_nfo = _video_has_nfo(v, path_mappings)
-+            has_cover = False
-+            if v.cover_path:
-+                try:
-+                    has_cover = os.path.isfile(
-+                        uri_to_local_fs_path(v.cover_path, path_mappings)
-+                    )
-+                except Exception:
-+                    has_cover = False
-             if has_nfo and has_cover:
++        for group in logical_video_groups(all_videos, path_mappings):
++            members = group.members
++            untranslated_members = [
++                video
++                for video in members
++                if _is_untranslated_title_candidate(video, locale)
++            ]
++            if untranslated_members:
++                title_candidate = untranslated_members[0]
++                untranslated_title_items.append({
++                    "file_path": title_candidate.path,
++                    "number": _candidate_number(title_candidate),
++                    "title": title_candidate.title,
++                    "member_paths": [
++                        video.path for video in untranslated_members
++                    ],
++                })
++
++            sample_missing_members = [
++                video
++                for video in members
++                if _is_missing_sample_candidate(video)
++            ]
++            if sample_missing_members:
++                sample_candidate = next(
++                    (
++                        video
++                        for video in sample_missing_members
++                        if _candidate_number(video)
++                    ),
++                    sample_missing_members[0],
++                )
++                missing_sample_items.append({
++                    "file_path": sample_candidate.path,
++                    "number": _candidate_number(sample_candidate),
++                    "title": sample_candidate.title,
++                    "member_paths": [
++                        video.path for video in sample_missing_members
++                    ],
++                })
++
++            nfo_missing_members = []
++            cover_missing_members = []
++            for video in members:
++                if not _video_has_nfo(video, path_mappings):
++                    nfo_missing_members.append(video)
++                has_cover = False
++                if video.cover_path:
++                    try:
++                        has_cover = os.path.isfile(
++                            uri_to_local_fs_path(
++                                video.cover_path, path_mappings
++                            )
++                        )
++                    except Exception:
++                        has_cover = False
++                if not has_cover:
++                    cover_missing_members.append(video)
++
++            if not nfo_missing_members and not cover_missing_members:
+                 continue
+-            if has_nfo and has_cover:
++
++            repair_by_path = {
++                video.path: video
++                for video in [
++                    *nfo_missing_members,
++                    *cover_missing_members,
++                ]
++            }
++            repair_members = list(repair_by_path.values())
++            candidate = next(
++                (
++                    video
++                    for video in repair_members
++                    if _candidate_number(video)
++                ),
++                None,
++            )
++            if candidate is None:
                  continue
 -            if not v.number:  # skip videos without number (cannot enrich)
-+            if not number:  # Cannot enrich a row without a recoverable number.
-                 continue
+-                continue
 -            item = {"file_path": v.path, "number": v.number}
-+            item = {"file_path": v.path, "number": number}
-             if not has_nfo and not has_cover:
+-            if not has_nfo and not has_cover:
++            number = _candidate_number(candidate)
++            item = {
++                "file_path": candidate.path,
++                "number": number,
++                "member_paths": [
++                    video.path for video in repair_members
++                ],
++            }
++            if nfo_missing_members and cover_missing_members:
                  missing_both += 1
                  item["category"] = "both"
-@@ -1035,9 +2154,22 @@
+-            elif not has_nfo:
++            elif nfo_missing_members:
+                 missing_nfo += 1
+                 item["category"] = "nfo"
+             else:
+                 missing_cover += 1
                  item["category"] = "cover"
              items.append(item)
- 
-+        missing_sample_candidates = _dedupe_multipart_sample_candidates(
-+            repo,
-+            missing_sample_candidates,
-+            path_mappings,
-+        )
-+        missing_sample_items = [
-+            {
-+                "file_path": v.path,
-+                "number": _candidate_number(v),
-+                "title": v.title,
-+            }
-+            for v in missing_sample_candidates
-+        ]
+-
          total_missing = missing_both + missing_nfo + missing_cover
  
 -        # 永遠回傳完整 items 清單；大批量的 confirm gate 由前端處理
@@ -2832,7 +3275,7 @@
          return {
              "success": True,
              "data": {
-@@ -1046,75 +2178,1436 @@
+@@ -1046,75 +2551,1567 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
@@ -2984,7 +3427,7 @@
 +
 +
 +def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
-+    """Translate and write back only rows that are still missing a translation."""
++    """Translate every title that is not in the active UI language."""
 +    locale = _active_locale()
      try:
          db_path = get_db_path()
@@ -3010,23 +3453,34 @@
 +                ),
 +            })
 +            return
-+        if str(locale).lower().startswith("ja"):
-+            yield _sse_event({
-+                "type": "error",
-+                "message": _runtime_text(
-+                    "title", "japanese_no_backfill", locale
-+                ),
-+            })
-+            return
-+
 +        from web.routers.showcase import TitleWritebackRequest, _apply_title_writeback
 +        from web.routers.translate import get_translate_service
 +
 +        repo = VideoRepository(db_path)
-+        candidates = [
++        path_mappings = config.get("gallery", {}).get("path_mappings", {})
++        candidate_rows = [
 +            video for video in repo.get_untranslated_title_candidates()
-+            if _is_untranslated_title_candidate(video)
++            if _is_untranslated_title_candidate(video, locale)
 +        ]
++        candidates = []
++        group_by_candidate_path = {}
++        for group in resolve_logical_video_groups(
++            repo,
++            candidate_rows,
++            path_mappings,
++        ):
++            candidate = next(
++                (
++                    member
++                    for member in group.members
++                    if _is_untranslated_title_candidate(member, locale)
++                ),
++                None,
++            )
++            if candidate is None:
++                continue
++            candidates.append(candidate)
++            group_by_candidate_path[candidate.path] = group
 +        total = len(candidates)
 +        if total == 0:
 +            yield _sse_event({
@@ -3054,7 +3508,6 @@
 +            })
 +            return
 +
-+        path_mappings = config.get("gallery", {}).get("path_mappings", {})
 +        success_count = 0
 +        failed_count = 0
 +        skipped_count = 0
@@ -3095,21 +3548,42 @@
 +            cancel_event,
 +        ):
 +            number = _candidate_number(video)
++            group = group_by_candidate_path.get(video.path)
++            group_members = (
++                group.members if group is not None else [video]
++            )
 +            try:
 +                if translation_error is not None:
 +                    raise translation_error
 +                if not translated:
 +                    raise ValueError("empty translation")
-+                result = _apply_title_writeback(
-+                    repo,
-+                    video,
-+                    TitleWritebackRequest(
-+                        file_path=video.path,
-+                        title=translated,
-+                    ),
-+                    config,
-+                    path_mappings,
-+                )
++                member_results = []
++                result = None
++                for member in group_members:
++                    member_result = _apply_title_writeback(
++                        repo,
++                        member,
++                        TitleWritebackRequest(
++                            file_path=member.path,
++                            title=translated,
++                        ),
++                        config,
++                        path_mappings,
++                    )
++                    member_results.append((member, member_result))
++                    if not member_result.get("success"):
++                        result = dict(member_result)
++                        result["failed_member_path"] = member.path
++                        break
++                if result is None:
++                    result = next(
++                        (
++                            member_result
++                            for member, member_result in member_results
++                            if member.path == video.path
++                        ),
++                        member_results[0][1],
++                    )
 +            except Exception:
 +                logger.exception("批次補齊標題失敗: %s", video.path)
 +                result = {
@@ -3145,6 +3619,10 @@
 +                    "skipped": False,
 +                    "title": written_title,
 +                    "original_title": original_title,
++                    "member_paths": [
++                        member.path for member in group_members
++                    ],
++                    "updated_member_count": len(group_members),
 +                    "current": processed_count,
 +                    "total": total,
 +                    "status": status,
@@ -3562,7 +4040,7 @@
 +
 +@router.post("/backfill-titles")
 +async def backfill_titles(request: Request):
-+    """SSE: fill only untranslated Japanese titles."""
++    """SSE: translate all titles that differ from the active UI language."""
 +    return await _cancelable_sse_response(request, _title_backfill_generator)
 +
 +
@@ -3703,7 +4181,8 @@
 +
 +        videos, source_roots, mappings = _combined_rename_sources(config)
 +        videos = [video for video in videos if video.path]
-+        total = len(videos)
++        video_groups = logical_video_groups(videos, mappings)
++        total = len(video_groups)
 +        if not videos:
 +            yield _sse_event({
 +                "type": "done",
@@ -3723,103 +4202,149 @@
 +
 +        javbus_lang = get_javbus_lang()
 +        title_cache: dict[str, Optional[str]] = {}
++        title_errors: dict[str, str] = {}
 +        stem_overrides: dict[str, str] = {}
++        logged_title_numbers: set[str] = set()
++        failed_group_indices: set[int] = set()
 +        started_at = time.monotonic()
 +        cancelled = False
 +
-+        for index, video in enumerate(videos, start=1):
++        for group_index, group in enumerate(video_groups, start=1):
 +            if cancel_event is not None and cancel_event.is_set():
 +                cancelled = True
 +                break
 +            elapsed = max(time.monotonic() - started_at, 0.001)
 +            eta_seconds = round(
-+                (elapsed / max(index - 1, 1))
-+                * max(total - index + 1, 0)
++                (elapsed / max(group_index - 1, 1))
++                * max(total - group_index + 1, 0)
++            )
++            representative = next(
++                (
++                    video
++                    for video in group.members
++                    if str(video.number or "").strip()
++                ),
++                group.members[0],
 +            )
 +            yield _sse_event({
 +                "type": "progress",
-+                "current": index,
++                "current": group_index,
 +                "total": total,
-+                "number": video.number or "",
++                "number": representative.number or "",
 +                "status": (
 +                    _runtime_text(
 +                        "scanner",
 +                        "source_rename_reading_title",
 +                        locale,
-+                        item=video.number or video.path,
++                        item=representative.number or representative.path,
 +                    )
 +                ),
-+                "failed": len(failed_items),
++                "failed": len(failed_group_indices),
 +                "eta_seconds": eta_seconds,
 +            })
 +
-+            number = str(video.number or "").strip()
-+            if not number:
-+                failed_items.append({
-+                    "path": video.path,
-+                    "number": "",
-+                    "error": _runtime_text(
-+                        "scanner", "source_rename_missing_number", locale
-+                    ),
-+                })
-+                continue
++            group_overrides: dict[str, str] = {}
++            group_failures: list[dict[str, str]] = []
++            group_cancelled = False
++            for video in group.members:
++                if cancel_event is not None and cancel_event.is_set():
++                    cancelled = True
++                    group_cancelled = True
++                    break
 +
-+            try:
-+                if number not in title_cache:
-+                    metadata = search_jav(
-+                        number,
-+                        source=source,
-+                        javbus_lang=javbus_lang,
-+                        surface_access_errors=True,
-+                    )
-+                    title_cache[number] = (
-+                        str(metadata.get("title") or "")
-+                        if metadata
-+                        else None
-+                    )
-+                source_title = title_cache[number]
-+                stem, normalized_number, reason = canonicalize_source_stem(
-+                    number,
-+                    source_title,
-+                    part_token=multipart_token(Path(video.path).stem),
-+                )
-+                if not stem:
-+                    raise ValueError(
-+                        _runtime_text(
-+                            "scanner", "source_rename_no_title", locale
++                number = str(video.number or "").strip()
++                if not number:
++                    group_failures.append({
++                        "path": video.path,
++                        "number": "",
++                        "error": _runtime_text(
++                            "scanner",
++                            "source_rename_missing_number",
++                            locale,
++                        ),
++                    })
++                    continue
++
++                try:
++                    if number not in title_cache:
++                        if number in title_errors:
++                            raise RuntimeError(title_errors[number])
++                        try:
++                            metadata = search_jav(
++                                number,
++                                source=source,
++                                javbus_lang=javbus_lang,
++                                surface_access_errors=True,
++                            )
++                        except Exception as exc:
++                            title_errors[number] = str(exc)
++                            raise
++                        title_cache[number] = (
++                            str(metadata.get("title") or "")
++                            if metadata
++                            else None
 +                        )
-+                        if reason == "empty_title"
-+                        else reason
++                    source_title = title_cache[number]
++                    stem, normalized_number, reason = (
++                        canonicalize_source_stem(
++                            number,
++                            source_title,
++                            part_token=multipart_token(
++                                Path(video.path).stem
++                            ),
++                        )
 +                    )
-+                stem_overrides[video.path] = stem
-+                yield _sse_event({
-+                    "type": "log",
-+                    "level": "info",
-+                    "message": _runtime_text(
-+                        "scanner",
-+                        "source_rename_title_used",
-+                        locale,
-+                        number=normalized_number,
-+                        title=source_title,
-+                    ),
-+                })
-+            except Exception as exc:
-+                failed_items.append({
-+                    "path": video.path,
-+                    "number": number,
-+                    "error": str(exc),
-+                })
-+                yield _sse_event({
-+                    "type": "log",
-+                    "level": "warn",
-+                    "message": _runtime_text(
-+                        "scanner",
-+                        "source_rename_fetch_failed",
-+                        locale,
-+                        number=number,
-+                        error=str(exc),
-+                    ),
-+                })
++                    if not stem:
++                        raise ValueError(
++                            _runtime_text(
++                                "scanner",
++                                "source_rename_no_title",
++                                locale,
++                            )
++                            if reason == "empty_title"
++                            else reason
++                        )
++                    group_overrides[video.path] = stem
++                    if number not in logged_title_numbers:
++                        logged_title_numbers.add(number)
++                        yield _sse_event({
++                            "type": "log",
++                            "level": "info",
++                            "message": _runtime_text(
++                                "scanner",
++                                "source_rename_title_used",
++                                locale,
++                                number=normalized_number,
++                                title=source_title,
++                            ),
++                        })
++                except Exception as exc:
++                    group_failures.append({
++                        "path": video.path,
++                        "number": number,
++                        "error": str(exc),
++                    })
++                    yield _sse_event({
++                        "type": "log",
++                        "level": "warn",
++                        "message": _runtime_text(
++                            "scanner",
++                            "source_rename_fetch_failed",
++                            locale,
++                            number=number,
++                            error=str(exc),
++                        ),
++                    })
++
++            if group_cancelled:
++                break
++            if group_failures:
++                # Source-title fetch/rename is all-or-nothing per logical video,
++                # so a failed part cannot leave the remaining parts half-renamed.
++                failed_group_indices.add(group_index - 1)
++                failed_items.extend(group_failures)
++                continue
++            stem_overrides.update(group_overrides)
 +
 +        eligible = [
 +            video for video in videos
@@ -3837,6 +4362,8 @@
 +        plan["cancelled"] = cancelled
 +        plan["summary"]["cancelled"] = cancelled
 +        summary = plan["summary"]
++        summary["failed"] = len(failed_group_indices)
++        summary["physical_failed_items"] = len(failed_items)
 +        if (
 +            not cancelled
 +            and plan.get("plan_id")
@@ -3844,6 +4371,7 @@
 +                summary["rename_videos"]
 +                or summary["rename_files"]
 +                or summary["rename_folders"]
++                or summary["updated_titles"]
 +            )
 +        ):
 +            _remember_rename_plan(plan)
@@ -3858,6 +4386,7 @@
 +                locale,
 +                videos=plan["summary"]["rename_videos"],
 +                folders=plan["summary"]["rename_folders"],
++                titles=plan["summary"]["updated_titles"],
 +                failed=plan["summary"]["failed"],
 +                conflicts=plan["summary"]["conflicts"],
 +            )
@@ -4085,11 +4614,21 @@
 +            })
              return
  
-         paths_to_update = stats['paths']
-+        if selected_paths:
-+            selected = set(selected_paths)
-+            paths_to_update = [path for path in paths_to_update if path in selected]
-+        if not paths_to_update:
+-        paths_to_update = stats['paths']
++        paths_to_update = list(stats["paths"])
++        selected = set(selected_paths or [])
++        groups = _logical_groups_for_paths(
++            all_videos,
++            paths_to_update,
++            path_mappings,
++        )
++        if selected:
++            groups = [
++                (group, member_paths)
++                for group, member_paths in groups
++                if selected.intersection(member_paths)
++            ]
++        if not groups:
 +            yield _sse_event({
 +                "type": "done",
 +                "message": _runtime_text(
@@ -4110,6 +4649,26 @@
 +            })
 +            return
 +
++        # Feed every physical NFO through the updater, but expose one
++        # progress row per logical video.  A multipart release must not look
++        # like two different works in the scanner UI.
++        grouped_paths = [
++            path
++            for _group, member_paths in groups
++            for path in member_paths
++        ]
++        group_index_by_path = {
++            path: index
++            for index, (_group, member_paths) in enumerate(groups)
++            for path in member_paths
++        }
++        group_index_by_position = {
++            index: group_index_by_path[path]
++            for index, path in enumerate(grouped_paths)
++        }
++        seen_group_progress = set()
++        logical_total = len(groups)
++
          yield _sse_event({
              "type": "log",
              "level": "info",
@@ -4118,7 +4677,7 @@
 +                "scanner",
 +                "nfo_checking",
 +                locale,
-+                count=len(paths_to_update),
++                count=logical_total,
 +            ),
          })
  
@@ -4126,7 +4685,7 @@
 -        for msg in update_videos_generator(cache, paths_to_update, path_mappings):
 +        update_generator = update_videos_generator(
 +            cache,
-+            paths_to_update,
++            grouped_paths,
 +            path_mappings,
 +            should_abort=cancel_event.is_set if cancel_event is not None else None,
 +            backup=backup,
@@ -4138,10 +4697,25 @@
 +            except StopIteration as stop:
 +                update_stats = stop.value
 +                break
++            if isinstance(msg, dict) and msg.get("type") == "progress":
++                path = msg.get("path")
++                group_index = group_index_by_path.get(path)
++                if group_index is None:
++                    group_index = group_index_by_position.get(
++                        max(int(msg.get("current", 1)) - 1, 0)
++                    )
++                if group_index is None or group_index in seen_group_progress:
++                    continue
++                seen_group_progress.add(group_index)
++                msg = {
++                    **msg,
++                    "current": group_index + 1,
++                    "total": logical_total,
++                }
              yield _sse_event(msg)
  
 +        update_stats = update_stats or {
-+            "total": len(paths_to_update),
++            "total": logical_total,
 +            "success": 0,
 +            "failed": 0,
 +            "skipped": 0,
@@ -4151,6 +4725,7 @@
 +            "failed_items": [],
 +            "updated_paths": [],
 +        }
++        update_stats = _logical_nfo_summary(update_stats, groups)
 +        updated_paths = list(update_stats.get("updated_paths") or [])
 +        if updated_paths:
 +            try:
@@ -4195,7 +4770,7 @@
 +                            "scanner",
 +                            "nfo_rows_synced",
 +                            locale,
-+                            count=len(refreshed_rows),
++                            count=len(groups),
 +                        ),
 +                    })
 +            except Exception:
@@ -4295,7 +4870,7 @@
      )
  
  
-@@ -1123,6 +3616,7 @@
+@@ -1123,6 +4120,7 @@
      """取得產生的 HTML 列表檔案（修改圖片路徑為 API 代理）"""
      try:
          config = load_config()
@@ -4303,7 +4878,7 @@
          gallery_config = config.get('gallery', {})
          output_dir = gallery_config.get('output_dir', '') or ''
          output_filename = gallery_config.get('output_filename', 'gallery_output.html')
-@@ -1131,7 +3625,10 @@
+@@ -1131,7 +4129,10 @@
  
          if not html_path.exists():
              return HTMLResponse(
@@ -4315,7 +4890,7 @@
                  status_code=404
              )
  
-@@ -1161,8 +3658,12 @@
+@@ -1161,8 +4162,12 @@
          return HTMLResponse(content=content)
      except Exception:
          logger.exception("view_list 讀取失敗")
@@ -4329,7 +4904,21 @@
              status_code=500
          )
  
-@@ -1182,7 +3683,12 @@
+@@ -1177,12 +4182,25 @@
+             return {"success": True, "data": {"count": 0}}
+ 
+         repo = VideoRepository(db_path)
+-        count = repo.count_by_actress(name)
++        config = load_config()
++        path_mappings = (
++            config.get("gallery", {}).get("path_mappings", {})
++        )
++        count = len(resolve_logical_video_groups(
++            repo,
++            repo.get_videos_by_actress(name),
++            path_mappings,
++        ))
+ 
          return {"success": True, "data": {"count": count}}
      except Exception as e:
          logger.error("查詢女優片數失敗: %s", e)
@@ -4343,7 +4932,54 @@
  
  
  # === Jellyfin 圖片批次補齊 ===
-@@ -1211,10 +3717,13 @@
+@@ -1191,30 +4209,43 @@
+     """檢查 DB 中有多少影片缺少 poster/fanart"""
+     videos = repo.get_all()
+     need_update = []
+-    for v in videos:
+-        if not v.cover_path:
+-            continue
+-        cover_fs = uri_to_local_fs_path(v.cover_path, path_mappings)
+-        if not os.path.exists(cover_fs):
+-            continue
+-        base_stem = cover_base_stem(cover_fs)
+-        poster = base_stem + '-poster.jpg'
+-        fanart = base_stem + '-fanart.jpg'
+-        if not os.path.exists(poster) or not os.path.exists(fanart):
+-            need_update.append({
+-                'cover_path': cover_fs,
+-                'base_stem': base_stem,
+-                'number': v.number or '',
+-                'maker': v.maker or '',
+-                'path': v.path,
+-            })
++    for group in logical_video_groups(videos, path_mappings):
++        group_items = []
++        for video in group.members:
++            if not video.cover_path:
++                continue
++            cover_fs = uri_to_local_fs_path(video.cover_path, path_mappings)
++            if not os.path.exists(cover_fs):
++                continue
++            base_stem = cover_base_stem(cover_fs)
++            poster = base_stem + '-poster.jpg'
++            fanart = base_stem + '-fanart.jpg'
++            if not os.path.exists(poster) or not os.path.exists(fanart):
++                group_items.append({
++                    'cover_path': cover_fs,
++                    'base_stem': base_stem,
++                    'number': video.number or '',
++                    'maker': video.maker or '',
++                    'path': video.path,
++                })
++        if group_items:
++            item = dict(group_items[0])
++            item["member_items"] = group_items
++            item["member_paths"] = [
++                group_item["path"]
++                for group_item in group_items
++            ]
++            need_update.append(item)
      return {'need_update': len(need_update), 'items': need_update}
  
  
@@ -4358,7 +4994,7 @@
      try:
          # Codex PR#123 P2：gate 必須排在 get_db_path() 之前——get_db_path() 內部會
          # mkdir 建立 output/ 資料夾（core/database/connection.py:15-22），是有副作用
-@@ -1224,17 +3733,29 @@
+@@ -1224,17 +4255,29 @@
          # done + updated:0（off 時零寫入），且與 _check_jellyfin_needed() 的順序
          # 不對稱。config 只讀一次，下面 path_mappings 沿用同一個 config。
          config = load_config()
@@ -4390,7 +5026,7 @@
              return
  
          repo = VideoRepository(db_path)
-@@ -1246,13 +3767,31 @@
+@@ -1246,13 +4289,31 @@
          if total == 0:
              _jellyfin_cache_result = None
              _jellyfin_cache_time = 0
@@ -4424,15 +5060,19 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,6 +3800,7 @@
+@@ -1261,45 +4322,129 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
 +                cancelled = True
                  break
  
-             cover = item['cover_path']
-@@ -1271,7 +3811,16 @@
+-            cover = item['cover_path']
++            member_items = item.get("member_items") or [item]
+             num = item['number']
+-            stem = item['base_stem']
+ 
+             yield _sse_event({
                  "type": "progress",
                  "current": i,
                  "total": total,
@@ -4449,61 +5089,88 @@
 +                "skipped": 0,
              })
  
-             img_result = generate_jellyfin_images(
-@@ -1279,27 +3828,82 @@
-             )
- 
-             if not img_result['fanart']:
+-            img_result = generate_jellyfin_images(
+-                cover, stem, number=item['number'], maker=item['maker']
+-            )
+-
+-            if not img_result['fanart']:
 -                yield _sse_event({"type": "log", "level": "warn", "message": f"{num} fanart 複製失敗"})
-+                yield _sse_event({
-+                    "type": "log",
-+                    "level": "warn",
-+                    "message": _runtime_text(
-+                        "scanner",
-+                        "jellyfin_fanart_failed",
-+                        locale,
-+                        number=num,
-+                    ),
-+                })
- 
-             if img_result['poster']:
+-
+-            if img_result['poster']:
 -                yield _sse_event({"type": "log", "level": "info", "message": f"✓ {num} poster + fanart"})
-+                yield _sse_event({
-+                    "type": "log",
-+                    "level": "info",
-+                    "message": _runtime_text(
-+                        "scanner",
-+                        "jellyfin_poster_ok",
-+                        locale,
-+                        number=num,
-+                    ),
-+                })
++            group_ok = True
++            group_failed_items = []
++            for member_item in member_items:
++                member_num = member_item["number"]
++                img_result = generate_jellyfin_images(
++                    member_item["cover_path"],
++                    member_item["base_stem"],
++                    number=member_num,
++                    maker=member_item["maker"],
++                )
++
++                if not img_result['fanart']:
++                    yield _sse_event({
++                        "type": "log",
++                        "level": "warn",
++                        "message": _runtime_text(
++                            "scanner",
++                            "jellyfin_fanart_failed",
++                            locale,
++                            number=member_num,
++                        ),
++                    })
++
++                if img_result['poster']:
++                    yield _sse_event({
++                        "type": "log",
++                        "level": "info",
++                        "message": _runtime_text(
++                            "scanner",
++                            "jellyfin_poster_ok",
++                            locale,
++                            number=member_num,
++                        ),
++                    })
++                else:
++                    group_ok = False
++                    group_failed_items.append({
++                        "path": member_item.get("path", ""),
++                        "number": member_num,
++                        "error": _runtime_text(
++                            "scanner",
++                            "jellyfin_poster_failed",
++                            locale,
++                            number=member_num,
++                        ),
++                    })
++                    yield _sse_event({
++                        "type": "log",
++                        "level": "warn",
++                        "message": _runtime_text(
++                            "scanner",
++                            "jellyfin_poster_failed",
++                            locale,
++                            number=member_num,
++                        ),
++                    })
++
++            if group_ok:
 +                completed += 1
              else:
 -                yield _sse_event({"type": "log", "level": "warn", "message": f"{num} poster 裁切失敗"})
 -
 -            completed += 1
 +                failed += 1
-+                failed_items.append({
-+                    "path": item.get("path", ""),
-+                    "number": num,
-+                    "error": _runtime_text(
-+                        "scanner",
-+                        "jellyfin_poster_failed",
-+                        locale,
-+                        number=num,
-+                    ),
-+                })
-+                yield _sse_event({
-+                    "type": "log",
-+                    "level": "warn",
-+                    "message": _runtime_text(
-+                        "scanner",
-+                        "jellyfin_poster_failed",
-+                        locale,
-+                        number=num,
-+                    ),
-+                })
++                representative = dict(group_failed_items[0])
++                representative["member_paths"] = [
++                    member_item.get("path", "")
++                    for member_item in member_items
++                ]
++                representative["physical_failed_items"] = (
++                    len(group_failed_items)
++                )
++                failed_items.append(representative)
  
          # T3(40c): 清空快取，讓下次 check 反映最新圖片狀態
          _jellyfin_cache_result = None
@@ -4540,7 +5207,7 @@
  
  
  def _check_jellyfin_needed() -> dict | None:
-@@ -1359,15 +3963,11 @@
+@@ -1359,15 +4504,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -4560,7 +5227,7 @@
      )
  
  
-@@ -1463,26 +4063,49 @@
+@@ -1463,26 +4604,49 @@
      ```
      """
      numbers = [n.strip() for n in body.numbers if isinstance(n, str) and n.strip()]
@@ -4615,7 +5282,7 @@
      gallery_config = config.get('gallery', {})
      output_dir = gallery_config.get('output_dir', '') or ''
      theme = config.get('general', {}).get('theme', 'light')
-@@ -1494,7 +4117,13 @@
+@@ -1494,7 +4658,13 @@
          db_results = repo.get_by_numbers(numbers)
      except Exception as e:
          logger.error('generate_from_ids: DB 查詢失敗: %s', e)
@@ -4630,7 +5297,7 @@
  
      all_videos: List[VideoInfo] = []
      missing: List[str] = []
-@@ -1577,7 +4206,13 @@
+@@ -1577,7 +4747,13 @@
          )
      except Exception as e:
          logger.error('generate_from_ids: HTML 產生失敗: %s', e)
@@ -4645,7 +5312,7 @@
  
      result = {
          "success": True,
-@@ -1621,6 +4256,11 @@
+@@ -1621,6 +4797,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:
@@ -4814,7 +5481,17 @@
              }
          metadata['number'] = number
  
-@@ -382,10 +392,11 @@
+@@ -355,6 +365,9 @@
+     number: str
+     source: Optional[str] = None       # per-item override（優先於 batch default）
+     javbus_lang: Optional[str] = None  # per-item override
++    # check_missing collapses a complete cd1/cd2 work to one UI item.  The
++    # hidden member paths let that one item still repair every physical row.
++    member_paths: Optional[List[str]] = None
+ 
+ 
+ class BatchEnrichRequest(BaseModel):
+@@ -382,10 +395,11 @@
      回傳成功 dict + success:True；not-found（None）→ 200 {success:False}。
      不下載 cover（cover 是遠端 URL，原樣回前端，無 SSRF 面）。
      """
@@ -4827,7 +5504,7 @@
          if request.source == 'javlibrary':
              versions = search_javlib_versions(request.number)  # Cf* 例外由外層 except 接
              if not versions:
-@@ -410,27 +421,27 @@
+@@ -410,27 +424,27 @@
      except CfChallengeRequired:
          outcome = _begin_solve_for_source(request.source)
          if outcome is None:
@@ -4865,7 +5542,7 @@
      """Fetch a javlibrary detail_url candidate for the readonly gear-rescrape
      branch (TASK-104-T3). Reuses the exact SSRF guard + CfChallengeRequired/
      CfTransportUnavailable handling as `enrich_single_endpoint`'s own (non-
-@@ -445,9 +456,10 @@
+@@ -445,9 +459,10 @@
      `scraper_data` is the `to_legacy_dict()` + `internal_nfo_carriers()` merge
      and `error_response` is None.
      """
@@ -4877,7 +5554,7 @@
      try:
          video = fetch_javlib_by_detail_url(request.detail_url, request.number)
      except CfChallengeRequired:
-@@ -462,7 +474,7 @@
+@@ -462,7 +477,7 @@
      except CfTransportUnavailable:
          return None, {"success": False, "cf_unavailable": True}
      if video is None:
@@ -4886,7 +5563,7 @@
      # to_legacy_dict 省略 _summary/_rating 內部 carrier；補回以對齊既有 javlibrary
      # 重刮的 NFO 輸出（search_jav 走 internal_nfo_carriers 注入同組，PR #89 Codex P2）
      scraper_data = video.to_legacy_dict()
-@@ -488,8 +500,9 @@
+@@ -488,8 +503,9 @@
  METADATA_ALLOWED_FIELDS = METADATA_WHITELIST_STR | METADATA_WHITELIST_LIST_STR | {"duration", "_rating"}
  
  
@@ -4897,7 +5574,7 @@
      whitelist_str = METADATA_WHITELIST_STR
      whitelist_list_str = METADATA_WHITELIST_LIST_STR
      ignored_keys = METADATA_IGNORED_KEYS
-@@ -507,77 +520,99 @@
+@@ -507,77 +523,99 @@
              # test_cover_canonical_contract 整份契約表的前提（PR #167 Codex P2）。
              if k == "source":
                  if not isinstance(v, str):
@@ -5019,7 +5696,7 @@
  
  
  def _clean_metadata_for_scraper_data(metadata: dict) -> dict:
-@@ -615,14 +650,21 @@
+@@ -615,14 +653,21 @@
          _emit_notif("warn", "notif.wishlist_reconcile_failed", task_type="wishlist_reconcile")
          return
      if _wl_removed:
@@ -5043,7 +5720,7 @@
      # CD-62-4 分裂陷阱智慧防呆：refresh_full + overwrite=false 時，若這組設定不會寫出任何
      # sidecar（NFO/cover）卻仍 _db_upsert，就是純分裂。一個 sidecar「會寫」需 write 旗標開 + 檔案缺
      # （此分支 overwrite 已為 false，既有檔不覆寫）。兩者皆不會寫 → 擋；任一會寫則放行（quick-enrich
-@@ -667,13 +709,14 @@
+@@ -667,13 +712,14 @@
          if not will_write_nfo and not will_write_cover and not will_write_external:
              raise HTTPException(
                  status_code=400,
@@ -5059,7 +5736,7 @@
      # TASK-91-T3：讀取端 path_mappings，供 resolve_nfo_cover_paths / uri_to_local_fs_path /
      # enrich_single 共用一次算好的同一組值（避免重複 .get() chain）。
      path_mappings = config.get("gallery", {}).get("path_mappings", {})
-@@ -687,7 +730,7 @@
+@@ -687,7 +733,7 @@
      canonical = coerce_to_file_uri(request.file_path, path_mappings)  # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
      owning = resolve_owning_output_root(canonical, config)
      action = (request.readonly_action or ('rescrape' if request.metadata is not None else 'ingest')) if owning is not None else None
@@ -5068,7 +5745,7 @@
      if owning is not None:
          source, output_root, output_uri = owning
          # Codex PR#113 one-pass alignment (2026-07-21): readonly branch now returns
-@@ -705,7 +748,7 @@
+@@ -705,7 +751,7 @@
          # EnrichResult rather than silently doing a full ingest/rescrape instead
          # (this branch otherwise ignores request.mode entirely).
          if request.mode == 'db_to_sidecar':
@@ -5077,7 +5754,7 @@
          # P1 revert + reject (round-3 review 2026-07-21): readonly produce is
          # holistic (a library entry always has an NFO) — write_nfo=false is
          # rejected the same way db_to_sidecar is above, rather than threading
-@@ -713,16 +756,16 @@
+@@ -713,16 +759,16 @@
          # _READONLY_NO_NFO_ERROR_MSG). The frontend never sends
          # write_nfo=false, so this is zero UI impact.
          if not request.write_nfo:
@@ -5098,7 +5775,7 @@
              if _cand_err:
                  return _cand_err
              if request.metadata is not None:
-@@ -745,6 +788,7 @@
+@@ -745,6 +791,7 @@
                  javbus_lang=request.javbus_lang, write_cover=resolved_write_cover,
                  overwrite_existing=request.overwrite_existing, preserve_title=request.preserve_title,
                  after_produce=lambda: thumbnail_cache.invalidate(canonical),
@@ -5106,7 +5783,7 @@
              )
              if result.success:
                  _reconcile_wishlist_after_write()
-@@ -753,15 +797,15 @@
+@@ -753,15 +800,15 @@
              # F-0：完整 EnrichResult 形狀 ＋ additive cf_needed/cf_source（不得回 partial dict）
              outcome = _begin_solve_for_source(request.source)
              if outcome is None:
@@ -5128,7 +5805,7 @@
  
      try:
          scraper_data = None
-@@ -769,7 +813,7 @@
+@@ -769,7 +816,7 @@
              # SSRF guard：拒絕非 javlibrary origin 的 detail_url（不 fetch、不洩 URL）
              if not _is_javlibrary_url(request.detail_url):
                  logger.warning("enrich_single: 拒絕非法 detail_url origin")
@@ -5137,7 +5814,7 @@
              try:
                  video = fetch_javlib_by_detail_url(request.detail_url, request.number)
              except CfChallengeRequired:
-@@ -784,13 +828,13 @@
+@@ -784,13 +831,13 @@
              except CfTransportUnavailable:
                  return {"success": False, "cf_unavailable": True}
              if video is None:
@@ -5153,7 +5830,7 @@
              if _cand_err:
                  return _cand_err
          if request.metadata is not None:
-@@ -808,6 +852,7 @@
+@@ -808,6 +855,7 @@
              javbus_lang=request.javbus_lang,
              scraper_data=scraper_data,
              path_mappings=path_mappings, preserve_title=request.preserve_title,
@@ -5161,7 +5838,7 @@
          )
          # feature/71 T8: 換封面成功 → 失效舊縮圖（下次進畫面時重生，CD-9 / spec 2.A.7）。
          # request.file_path 已是 DB 的 file:/// URI（前端送 currentLightboxVideo.path /
-@@ -822,7 +867,7 @@
+@@ -822,7 +870,7 @@
      except CfChallengeRequired:
          outcome = _begin_solve_for_source(request.source)
          if outcome is None:
@@ -5170,7 +5847,7 @@
          if outcome == "cf_unavailable":
              return {"success": False, "cf_unavailable": True}
          return {"success": False, "cf_needed": True, "cf_source": request.source}
-@@ -830,7 +875,7 @@
+@@ -830,7 +878,7 @@
          return {"success": False, "cf_unavailable": True}
      except Exception:
          logger.exception("enrich_single_endpoint 失敗")
@@ -5179,7 +5856,7 @@
  
  
  class FetchSamplesRequest(BaseModel):
-@@ -838,9 +883,110 @@
+@@ -838,9 +886,110 @@
      number: str
  
  
@@ -5290,7 +5967,7 @@
      # TASK-91-T3：站台5 outer to_file_uri 補傳 path_mappings（inner uri_to_fs_path 維持不變，
      # 見 TASK-91-T3.md 站台5 inner/outer 分析結論）。
      path_mappings = config.get("gallery", {}).get("path_mappings", {})
-@@ -853,96 +999,214 @@
+@@ -853,96 +1002,214 @@
      owning = resolve_owning_output_root(canonical, config)
      if owning is not None:
          source, output_root, output_uri = owning
@@ -5551,7 +6228,7 @@
  
      # 90c-T1 唯讀 guard（async-safe）：config 已於上方 to_thread 載入，這裡從既載入的
      # config 算一次唯讀前綴集（純比對、無 I/O），逐項用 is_path_readonly 純比對——不可在
-@@ -955,7 +1219,7 @@
+@@ -955,7 +1222,7 @@
      # 去重（按 file_path）
      seen_paths: set = set()
      deduped_items = []
@@ -5560,7 +6237,7 @@
          if item.file_path not in seen_paths:
              seen_paths.add(item.file_path)
              deduped_items.append(item)
-@@ -968,7 +1232,7 @@
+@@ -968,7 +1235,7 @@
          # 53b-T3: 補完開始通知
          _emit_notif(
              "info", "notif.batch_enrich_started",
@@ -5569,7 +6246,7 @@
              task_type="batch_enrich",
          )
          # scraper cache：只對 refresh_full 生效（100% 需要 scraper data）
-@@ -978,7 +1242,11 @@
+@@ -978,7 +1245,11 @@
  
          try:
              for idx, item in enumerate(deduped_items, start=1):
@@ -5582,7 +6259,7 @@
                  _custom_refused = effective_source.startswith('custom:')
                  # 未知 / 非法 source guard：不靜默轉成無效 cache_key，退回 'auto'（最小驚訝）。
                  if not _custom_refused and effective_source != "auto" and not validate_source_id(effective_source):
-@@ -987,7 +1255,7 @@
+@@ -987,7 +1258,7 @@
                          effective_source, item.number,
                      )
                      effective_source = "auto"
@@ -5591,7 +6268,7 @@
  
                  # progress 事件
                  yield f"data: {json.dumps({'type': 'progress', 'current': idx, 'total': total, 'number': item.number})}\n\n"
-@@ -995,7 +1263,7 @@
+@@ -995,7 +1266,7 @@
                  if _custom_refused:
                      # spec §8：自訂來源不參與批次補完（含已驗收已啟用者）；純字串判斷，不抓取不寫入
                      failed_count += 1
@@ -5600,7 +6277,20 @@
                      continue
  
                  # TASK-104-T3 (CD-104-5)：唯讀項不再拒絕，改道 output_dir（action 固定
-@@ -1015,21 +1283,21 @@
+@@ -1007,29 +1278,40 @@
+                 # item/canonical 用預設參數綁定，避免 for-loop 變數 late-binding
+                 # （同既有 :559 lambda 慣例）。
+                 # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
++                group_file_paths = list(dict.fromkeys([
++                    item.file_path,
++                    *(item.member_paths or []),
++                ]))
+                 canonical = coerce_to_file_uri(item.file_path, _ro_mappings)
+                 if is_path_readonly(canonical, _ro_prefixes, _ro_writable):
+-                    def _do_readonly(itm=item, uri=canonical, es=effective_source, el=effective_lang):
++                    def _do_readonly(itm=item, paths=group_file_paths, es=effective_source, el=effective_lang):
+                         # P2 review round 3 (FIX#4): same db_to_sidecar rejection as
+                         # enrich_single_endpoint's readonly branch (see that branch's
                          # comment) — placed before resolve_owning_output_root so it
                          # short-circuits regardless of output_dir configuration.
                          # BatchEnrichRequest has no per-item mode override, so this
@@ -5616,35 +6306,91 @@
                          # produce is holistic, no per-item override exists.
 -                        if not request.write_nfo:
 -                            return ('no_nfo', _READONLY_NO_NFO_ERROR_MSG)
+-                        owning = resolve_owning_output_root(uri, config)
+-                        if owning is None:
+-                            return ('skip', None)  # 理論不達（上面 is_path_readonly 已判真）
+-                        ro_source, out_root, out_uri = owning
+-                        if not out_root:
+-                            return ('error', "未設定媒體庫輸出路徑")
 +                        if not batch.write_nfo:
 +                            return ('no_nfo', _api_text(locale, _READONLY_NO_NFO_ERROR_MSG))
-                         owning = resolve_owning_output_root(uri, config)
-                         if owning is None:
-                             return ('skip', None)  # 理論不達（上面 is_path_readonly 已判真）
-                         ro_source, out_root, out_uri = owning
-                         if not out_root:
--                            return ('error', "未設定媒體庫輸出路徑")
-+                            return ('error', _api_text(locale, "output_root_missing"))
++                        group_results = []
++                        for group_file_path in paths:
++                            group_uri = coerce_to_file_uri(
++                                group_file_path, _ro_mappings
++                            )
++                            owning = resolve_owning_output_root(
++                                group_uri, config
++                            )
++                            if owning is None:
++                                return ('skip', None)  # 理論不達（上面 is_path_readonly 已判真）
++                            ro_source, out_root, out_uri = owning
++                            if not out_root:
++                                return ('error', _api_text(locale, "output_root_missing"))
                          # TASK-109-T3: 產出核心（URI→FS 轉換到組 EnrichResult 為止）薄搬移進
                          # core.readonly_producer.enrich_one_readonly；closure 只保留三個刻意
                          # 缺口——reject guard + output_dir 解析（上方已做，C3）、javlib 預抓
-@@ -1054,12 +1322,13 @@
-                                 number=itm.number, scraper_cfg=config.get("scraper", {}),
-                                 path_mappings=_ro_mappings, action='ingest',
-                                 scraper_data=None, scrape_source=es, javbus_lang=el,
+@@ -1047,25 +1329,40 @@
+                         # （scraper.py:899-938，改前 main 67ebb620），與單片相反（單片
+                         # compute 先，見 entry docstring 該參數段）。不傳＝預設 False 會悄悄
+                         # 套用單片順序，翻轉這條既有行為——顯式傳 True 找回來。
+-                        try:
+-                            result = enrich_one_readonly(
+-                                repo_factory=VideoRepository, ro_source=ro_source, output_root=out_root,
+-                                output_uri=out_uri, canonical=uri, file_path=itm.file_path,
+-                                number=itm.number, scraper_cfg=config.get("scraper", {}),
+-                                path_mappings=_ro_mappings, action='ingest',
+-                                scraper_data=None, scrape_source=es, javbus_lang=el,
 -                                write_cover=request.write_cover, overwrite_existing=request.overwrite_existing,
-+                                write_cover=batch.write_cover, overwrite_existing=batch.overwrite_existing,
-                                 focal_before_cover_recheck=True,
-+                                locale=locale,
-                             )
-                         except ReadonlyProduceError:
-                             logger.exception("batch_enrich readonly item %s 失敗", itm.number)
+-                                focal_before_cover_recheck=True,
+-                            )
+-                        except ReadonlyProduceError:
+-                            logger.exception("batch_enrich readonly item %s 失敗", itm.number)
 -                            return ('error', "生成失敗")
-+                            return ('error', _api_text(locale, "generation_failed"))
-                         if not result.success:
-                             # 唯一可能回 success=False 的情況是 entry 內的 not-found 分支
-                             # （resolve_ingest_plan 找不到可用番號資料）；result.error 即
-@@ -1076,7 +1345,7 @@
+-                        if not result.success:
+-                            # 唯一可能回 success=False 的情況是 entry 內的 not-found 分支
+-                            # （resolve_ingest_plan 找不到可用番號資料）；result.error 即
+-                            # entry 回的 "找不到可用的番號資料"，與改前 :792 逐字相同。
+-                            return ('no_scrape', result.error)
+-                        return ('ok', result)
++                            try:
++                                result = enrich_one_readonly(
++                                    repo_factory=VideoRepository, ro_source=ro_source, output_root=out_root,
++                                    output_uri=out_uri, canonical=group_uri, file_path=group_file_path,
++                                    number=itm.number, scraper_cfg=config.get("scraper", {}),
++                                    path_mappings=_ro_mappings, action='ingest',
++                                    scraper_data=None, scrape_source=es, javbus_lang=el,
++                                    write_cover=batch.write_cover, overwrite_existing=batch.overwrite_existing,
++                                    focal_before_cover_recheck=True,
++                                    locale=locale,
++                                )
++                            except ReadonlyProduceError:
++                                logger.exception("batch_enrich readonly item %s 失敗", itm.number)
++                                return ('error', _api_text(locale, "generation_failed"))
++                            if not result.success:
++                                # 唯一可能回 success=False 的情況是 entry 內的 not-found 分支
++                                # （resolve_ingest_plan 找不到可用番號資料）；result.error 即
++                                # entry 回的 "找不到可用的番號資料"，與改前 :792 逐字相同。
++                                return ('no_scrape', result.error)
++                            group_results.append(result)
++                        # One logical item may have updated several physical NFOs.
++                        # Prefer a result that actually changed something so
++                        # fill_missing's success gate remains accurate.
++                        return (
++                            'ok',
++                            next(
++                                (
++                                    result
++                                    for result in group_results
++                                    if did_enrich_something(result)
++                                ),
++                                group_results[0],
++                            ),
++                        )
+ 
+                     try:
+                         loop = asyncio.get_running_loop()
+@@ -1076,7 +1373,7 @@
                              # 其他 mode 維持 success（refresh_full 可能只更新 DB）。⚠️ 前端
                              # didEnrichSomething() 沒有這道 mode 閘，多出 refresh_full 呼叫端時兩邊一起補。
                              # 今天 fill_missing 零行為變化（readonly nfo_written=True 無條件）；縮圖失效仍掛 ok。
@@ -5653,7 +6399,31 @@
                                  success_count += 1
                              else:
                                  failed_count += 1
-@@ -1119,7 +1388,7 @@
+@@ -1084,13 +1381,16 @@
+                             # OSError）——失敗不可讓外層 except 捕獲，否則同一成功項會
+                             # success+failed 雙記、done 匯總 success+failed > total（誤報
+                             # 成失敗）。故各自 try/except 吞掉，不影響主結果。
+-                            try:
+-                                thumbnail_cache.invalidate(canonical)
+-                            except Exception:
+-                                logger.warning(
+-                                    "batch_enrich item %s 縮圖失效失敗（不影響結果）",
+-                                    item.number, exc_info=True,
+-                                )
++                            for group_file_path in group_file_paths:
++                                try:
++                                    thumbnail_cache.invalidate(
++                                        coerce_to_file_uri(group_file_path)
++                                    )
++                                except Exception:
++                                    logger.warning(
++                                        "batch_enrich item %s 縮圖失效失敗（不影響結果）",
++                                        item.number, exc_info=True,
++                                    )
+                             # feature/109 T3: closure 呼叫的共用入口
+                             # `enrich_one_readonly` 已回傳完整的 `EnrichResult`（payload
+                             # 本身），不再需要在此手動重建 enrich_success(...)——直接
+@@ -1119,7 +1419,7 @@
                              reason = 'not_found' if status == 'no_scrape' else 'error'
                              result_item = {
                                  'type': 'result-item', 'number': item.number, 'file_path': item.file_path,
@@ -5662,7 +6432,7 @@
                              }
                              yield f"data: {json.dumps(result_item)}\n\n"
                      except Exception:
-@@ -1136,7 +1405,7 @@
+@@ -1136,7 +1436,7 @@
                          failed_count += 1
                          result_item = {
                              'type': 'result-item', 'number': item.number, 'file_path': item.file_path,
@@ -5671,7 +6441,7 @@
                          }
                          yield f"data: {json.dumps(result_item)}\n\n"
                      continue
-@@ -1146,7 +1415,7 @@
+@@ -1146,7 +1446,7 @@
  
                      # scraper cache（只對 refresh_full pre-fetch）
                      cached_data = None
@@ -5680,30 +6450,68 @@
                          cache_key = (item.number.upper(), effective_source, effective_lang)
                          if cache_key not in scraper_cache:
                              _pf_ctx = contextvars.copy_context()
-@@ -1165,16 +1434,17 @@
-                         enrich_single,
-                         file_path=item.file_path,
-                         number=item.number,
+@@ -1160,29 +1460,52 @@
+                             scraper_cache[cache_key] = fetched if fetched else {}
+                         cached_data = scraper_cache[cache_key]
+ 
+-                    _en_ctx = contextvars.copy_context()
+-                    _enrich = functools.partial(
+-                        enrich_single,
+-                        file_path=item.file_path,
+-                        number=item.number,
 -                        mode=request.mode,
 -                        write_nfo=request.write_nfo,
 -                        write_cover=request.write_cover,
 -                        write_extrafanart=request.write_extrafanart,
 -                        overwrite_existing=request.overwrite_existing,
-+                        mode=batch.mode,
-+                        write_nfo=batch.write_nfo,
-+                        write_cover=batch.write_cover,
-+                        write_extrafanart=batch.write_extrafanart,
-+                        overwrite_existing=batch.overwrite_existing,
-                         external_manager=config.get("scraper", {}).get("external_manager", "off"), nfo_title_format=config.get("scraper", {}).get("nfo_title_format", '[{num}]{title}'),
-                         source=effective_source if effective_source != "auto" else None,
-                         javbus_lang=effective_lang,
-                         scraper_data=cached_data,
-                         path_mappings=_ro_mappings,
-+                        locale=locale,
+-                        external_manager=config.get("scraper", {}).get("external_manager", "off"), nfo_title_format=config.get("scraper", {}).get("nfo_title_format", '[{num}]{title}'),
+-                        source=effective_source if effective_source != "auto" else None,
+-                        javbus_lang=effective_lang,
+-                        scraper_data=cached_data,
+-                        path_mappings=_ro_mappings,
++                    group_results = []
++                    for group_file_path in group_file_paths:
++                        _en_ctx = contextvars.copy_context()
++                        _enrich = functools.partial(
++                            enrich_single,
++                            file_path=group_file_path,
++                            number=item.number,
++                            mode=batch.mode,
++                            write_nfo=batch.write_nfo,
++                            write_cover=batch.write_cover,
++                            write_extrafanart=batch.write_extrafanart,
++                            overwrite_existing=batch.overwrite_existing,
++                            external_manager=config.get("scraper", {}).get("external_manager", "off"), nfo_title_format=config.get("scraper", {}).get("nfo_title_format", '[{num}]{title}'),
++                            source=effective_source if effective_source != "auto" else None,
++                            javbus_lang=effective_lang,
++                            scraper_data=cached_data,
++                            path_mappings=_ro_mappings,
++                            locale=locale,
++                        )
++                        member_result = await loop.run_in_executor(
++                            None, _en_ctx.run, _enrich
++                        )
++                        group_results.append(member_result)
++                        if not member_result.success:
++                            break
++                    result = next(
++                        (
++                            member_result
++                            for member_result in group_results
++                            if not member_result.success
++                        ),
++                        next(
++                            (
++                                member_result
++                                for member_result in group_results
++                                if did_enrich_something(member_result)
++                            ),
++                            group_results[0],
++                        ),
                      )
-                     result = await loop.run_in_executor(None, _en_ctx.run, _enrich)
+-                    result = await loop.run_in_executor(None, _en_ctx.run, _enrich)
                      result_dict = asdict(result)
-@@ -1182,7 +1452,7 @@
+                     if result.success:
                          # CD-147b-5／147b-T4：fill_missing 才套四項判準（與前端 didEnrichSomething
                          # 同步；⚠️ 前端沒有這道 mode 閘，多出 refresh_full 呼叫端時兩邊一起補）；
                          # 其他 mode 維持 result.success（refresh_full 可能只更新 DB）。縮圖失效仍掛之。
@@ -5712,7 +6520,28 @@
                              success_count += 1
                          else:
                              failed_count += 1
-@@ -1204,27 +1474,36 @@
+@@ -1191,40 +1514,50 @@
+                         # （同 enrich-single，PR #60 Codex P2）。
+                         # PR#114 P2: unlink 可拋 OSError → best-effort try/except 吞掉，避免被
+                         # 外層 except 捕獲導致同一成功項 success+failed 雙記 + 誤報失敗。
+-                        try:
+-                            thumbnail_cache.invalidate(coerce_to_file_uri(item.file_path))  # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
+-                        except Exception:
+-                            logger.warning(
+-                                "batch_enrich item %s 縮圖失效失敗（不影響結果）",
+-                                item.number, exc_info=True,
+-                            )
++                        for group_file_path in group_file_paths:
++                            try:
++                                thumbnail_cache.invalidate(coerce_to_file_uri(group_file_path))  # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
++                            except Exception:
++                                logger.warning(
++                                    "batch_enrich item %s 縮圖失效失敗（不影響結果）",
++                                    item.number, exc_info=True,
++                                )
+                     else:
+                         failed_count += 1
+                     yield f"data: {json.dumps({'type': 'result-item', 'number': item.number, 'file_path': item.file_path, **result_dict})}\n\n"
                  except Exception:
                      logger.exception("batch_enrich item %s 失敗", item.number)
                      failed_count += 1
@@ -6170,7 +6999,7 @@
 +    )
 +    return {
 +        "exists": True,
-+        "count": len(videos),
++        "count": len(group_payloads),
 +        "paths": [video.path for video in videos],
 +        "playback": playback,
 +        "groups": group_payloads,
@@ -6189,8 +7018,12 @@
  from core.database.version_tracker import (
      compute_db_fingerprint,
      compute_etag,
-@@ -33,18 +33,36 @@
- from core.scrapers.utils import has_japanese
+@@ -30,21 +30,39 @@
+ from core.logger import get_logger
+ from core.platform_info import DSM_PERMISSION_HINT, is_synology
+ from core.config import load_config, get_gallery_source_paths, get_configured_gallery_dirs
+-from core.scrapers.utils import has_japanese
++from core.title_language import title_needs_translation
  from core.nfo_stat import nfo_mtime_or_none
  from core.nfo_title_format import build_display_title
 +from core.nfo_utils import find_sidecar_nfos
@@ -6226,27 +7059,75 @@
  
  
  class DetectFocalRequest(BaseModel):
-@@ -73,6 +91,11 @@
- def _needs_translate(title, original_title, nfo_mtime) -> bool:
-     """標題是假名、沒有原文、且有 NFO（nfo_mtime > 0）才算待翻譯（列表與寫回回應共用）。"""
-     return bool((not original_title) and has_japanese(title or '') and (nfo_mtime or 0) > 0)
-+
-+
-+def _can_manual_translate(title, original_title, _nfo_mtime) -> bool:
-+    """Lightbox 手動翻譯入口：只要目前有標題且尚未保存原文即可。"""
-+    return bool(not original_title and (title or '').strip())
+@@ -70,12 +88,41 @@
+     original_title: Optional[str] = None
  
  
- def _serialize_video(v, path_mappings: dict, enabled: bool = False) -> dict:
-@@ -121,6 +144,7 @@
+-def _needs_translate(title, original_title, nfo_mtime) -> bool:
+-    """標題是假名、沒有原文、且有 NFO（nfo_mtime > 0）才算待翻譯（列表與寫回回應共用）。"""
+-    return bool((not original_title) and has_japanese(title or '') and (nfo_mtime or 0) > 0)
+-
+-
+-def _serialize_video(v, path_mappings: dict, enabled: bool = False) -> dict:
++def _needs_translate(
++    title,
++    _original_title,
++    nfo_mtime,
++    locale: str | None = None,
++) -> bool:
++    """Whether a titled row needs translation into the active UI language."""
++    return bool(
++        (nfo_mtime or 0) > 0
++        and title_needs_translation(
++            title or "",
++            locale or _showcase_locale(),
++        )
++    )
++
++
++def _can_manual_translate(
++    title,
++    _original_title,
++    _nfo_mtime,
++    locale: str | None = None,
++) -> bool:
++    """Lightbox translation is available whenever the title is not on-target."""
++    return title_needs_translation(
++        title or "",
++        locale or _showcase_locale(),
++    )
++
++
++def _serialize_video(
++    v,
++    path_mappings: dict,
++    enabled: bool = False,
++    locale: str | None = None,
++) -> dict:
+     """將 Video ORM 物件序列化為前端 JSON dict（列表端點與單筆端點共用）。
+ 
+     feature/71 T4：thumbnail_cache_enabled 開關決定 cover_url 走 thumb / image 分支。
+@@ -120,30 +167,70 @@
+         "user_rating": v.user_rating or 0,            # 精選標記（spec-123）；無條件輸出，未精選為 0（FE-ALPINE-06）
          "has_cover": bool(v.cover_path),             # DB 初判（不做 IO）
          "has_nfo": (v.nfo_mtime or 0) > 0,          # 對齊 41a nfo_mtime 寫入契約，防禦 NULL
-         "needs_translate": _needs_translate(v.title, v.original_title, v.nfo_mtime),  # 無條件輸出（FE-ALPINE-06）
-+        "can_translate": _can_manual_translate(v.title, v.original_title, v.nfo_mtime),
+-        "needs_translate": _needs_translate(v.title, v.original_title, v.nfo_mtime),  # 無條件輸出（FE-ALPINE-06）
++        "needs_translate": _needs_translate(v.title, v.original_title, v.nfo_mtime, locale),
++        "can_translate": _can_manual_translate(v.title, v.original_title, v.nfo_mtime, locale),
          "auto_focal": v.auto_focal,                  # canonical "x,y" 4dp 字串或 ''（98b：前端 focalObjectPosition 消費）
          "crop_mode": v.crop_mode,                    # 'auto' | 'default'（98b：default 退 baseline 右裁）
      }
-@@ -132,9 +156,9 @@
+ 
+ 
+-def _serialize_group(group, path_mappings: dict, enabled: bool = False) -> dict:
++def _serialize_group(
++    group,
++    path_mappings: dict,
++    enabled: bool = False,
++    locale: str | None = None,
++) -> dict:
+     """將 VideoGroup 序列化為前端 JSON dict（feature/122，CD-122-4）。
+ 
      以 `group.members[0]`（part-1，group_rows 已依 part_number 升冪排序）的
      `_serialize_video()` 結果為基底，只在**真的多段時**覆寫 `size`（各段 size_bytes 加總，`or 0`
      是必要防禦——`Video.from_row()` 對 DB NULL 不做防禦，size_bytes 可能是 None）
@@ -6257,9 +7138,11 @@
 +    不做欄位級 merge。單檔片：members==[v]、part_tokens/part_paths==[]，輸出與
 +    `_serialize_video(v, ...)` 相同，只多這兩個新鍵（AC-4）。
      """
-     base = _serialize_video(group.members[0], path_mappings, enabled)
+-    base = _serialize_video(group.members[0], path_mappings, enabled)
++    base = _serialize_video(group.members[0], path_mappings, enabled, locale)
      # 單檔片不碰 size：`_serialize_video()` 原樣傳 `v.size_bytes`（DB NULL → None），
-@@ -143,7 +167,41 @@
+     # 套 `or 0` 會把 None 變 0，違反 AC-4「單檔片逐位元組不變」的字面契約。
+     # 只有真的多段時才加總，`or 0` 的 NULL 防禦留在那條路上（T2 review P3）。
      if len(group.members) > 1:
          base['size'] = sum(m.size_bytes or 0 for m in group.members)
      base['part_tokens'] = group.part_tokens
@@ -6301,7 +7184,7 @@
  
  
  def _etag_matches(if_none_match: str, etag: str) -> bool:
-@@ -158,8 +216,20 @@
+@@ -158,8 +245,20 @@
  
  
  @router.get("/videos")
@@ -6323,10 +7206,15 @@
  
      帶 ETag（CD-145a-8/11/12）：涵蓋 DB 內部寫入 revision、DB/-wal 檔案指紋（涵蓋外部
      抽換或還原備份）、無機密設定投影（來源資料夾／path_mappings／縮圖開關）三項，
-@@ -186,18 +256,46 @@
+@@ -182,22 +281,51 @@
+ 
+         # 只取「當前設定資料夾」底下的記錄（DB 保留全部當 cache）
+         config = load_config()
++        locale = _showcase_locale(config)
+         gallery_config = config.get('gallery', {})
          configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
          thumb_enabled = config.get('thumbnail_cache_enabled', False)
- 
++
 +        requested_sort = sort if sort in {
 +            'title', 'actor', 'num', 'maker', 'date', 'size', 'mdate', 'random'
 +        } else 'date'
@@ -6343,7 +7231,7 @@
 +            # an old name must include rows indexed under every current name
 +            # in the same alias group.
 +            actress_names = sorted(AliasRepository(db_path).resolve(actress_name))
-+
+ 
          projection = {
              "directories": sorted(get_gallery_source_paths(gallery_config)),
              "path_mappings": path_mappings,
@@ -6374,7 +7262,7 @@
                        if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
  
          # feature/122 CD-122-1：分組在序列化層收斂，前端拿到的 videos 陣列已是
-@@ -205,23 +303,41 @@
+@@ -205,23 +333,41 @@
          # 一個 member，_serialize_group() 輸出與改動前逐鍵逐值相同（AC-4）。
          groups = group_rows(all_videos, fs_path_of=lambda v: uri_to_local_fs_path(v.path, path_mappings))
  
@@ -6390,7 +7278,7 @@
 +            groups = groups[start:start + per_page]
 +
 +        videos_json = [
-+            _serialize_group(g, path_mappings, thumb_enabled)
++            _serialize_group(g, path_mappings, thumb_enabled, locale)
 +            for g in groups
 +        ]
  
@@ -6421,7 +7309,7 @@
              "videos": [],
              "total": 0
          }, status_code=500)
-@@ -230,23 +346,43 @@
+@@ -230,23 +376,43 @@
  @router.get("/video")
  def get_video(path: str = Query(..., description="file:/// URI")):
      """取得單筆影片資料（用於 T3 refreshVideoData enrich 後刷新卡片）"""
@@ -6468,7 +7356,16 @@
  
          thumb_enabled = config.get('thumbnail_cache_enabled', False)
  
-@@ -264,7 +400,15 @@
+@@ -257,14 +423,22 @@
+         group = resolve_group(repo, path, path_mappings, folder_source_uri=v.path)
+         if group is None:
+             return JSONResponse({"success": True,
+-                                 "video": _serialize_video(v, path_mappings, thumb_enabled)})
++                                 "video": _serialize_video(v, path_mappings, thumb_enabled, locale)})
+ 
+         return JSONResponse({"success": True,
+-                             "video": _serialize_group(group, path_mappings, thumb_enabled)})
++                             "video": _serialize_group(group, path_mappings, thumb_enabled, locale)})
  
      except Exception as e:
          logger.error("取得單筆影片失敗: %s", e)
@@ -6485,7 +7382,7 @@
  
  
  @router.delete("/video")
-@@ -353,30 +497,58 @@
+@@ -353,30 +527,58 @@
      ⚠️ 停用狀態已於上方端點層短路，不會走到這裡，所以「關掉之後直接進手動」不受鎖排隊影響。
      **不進 capabilities（不揭露）。**
      """
@@ -6549,7 +7446,7 @@
  
          # 152d-T-D8：停用時在這裡就回，不要進 run_detection ——
          # pre_spawn_check 跑在全域 _slot_lock 裡面（subprocess_runner.py:298→309），
-@@ -430,7 +602,13 @@
+@@ -430,7 +632,13 @@
  
      except Exception as e:
          logger.error("偵測焦點失敗: %s", e)
@@ -6564,7 +7461,7 @@
  
  
  @router.post("/video/save-focal")
-@@ -451,58 +629,102 @@
+@@ -451,58 +659,102 @@
      rescrape 期間換了封面）→ 409，DB 不變，前端應提示使用者重新開啟裁切工具。
      `def`（非 async）→ Starlette threadpool。**不進 capabilities（不揭露）。**
      """
@@ -6686,7 +7583,7 @@
  
  
  def _new_original_title(req, video) -> str:
-@@ -541,7 +763,13 @@
+@@ -541,7 +793,13 @@
      owning = resolve_owning_output_root(video.path, config)
      if owning is not None:
          return _locate_readonly_nfo(video, path_mappings, owning[2])
@@ -6701,7 +7598,7 @@
  
  
  def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: str) -> Optional[str]:
-@@ -556,28 +784,108 @@
+@@ -556,28 +814,108 @@
          return "no_nfo"
      except NfoParseError:
          return "nfo_unreadable"
@@ -6814,7 +7711,7 @@
  
      # 取實際寫入那份 NFO 的 mtime；取不到沿用舊值（下次掃描最多多讀一次）
      new_mtime = nfo_mtime_or_none(Path(nfo_path))
-@@ -587,11 +895,12 @@
+@@ -587,11 +925,12 @@
          written = repo.update_titles(video.path, body, new_original, new_mtime)
      except Exception as e:
          logger.error("[title-writeback] DB 寫入失敗: %s", e)
@@ -6829,7 +7726,7 @@
              "nfo_updated": True}
  
  
-@@ -602,25 +911,29 @@
+@@ -602,25 +941,29 @@
      失敗一律 HTTP 200 ＋ {success:false, error:<code>}。`def`（非 async）→ threadpool。
      端點內不呼叫翻譯；唯讀來源只改輸出夾那份 NFO，來源零寫入。
      """
@@ -6867,11 +7764,14 @@
  @router.get("/source-status")
 --- a/web/routers/translate.py
 +++ b/web/routers/translate.py
-@@ -18,10 +18,15 @@
+@@ -16,12 +16,17 @@
+ from core.config import load_config
+ from core.cloud_translate import TranslateError, failure_category
  from core.translate_service import create_translate_service
- from core.scrapers.utils import has_japanese
+-from core.scrapers.utils import has_japanese
  from core.logger import get_logger
 +from core.i18n import get_config_locale, t as i18n_t
++from core.title_language import title_needs_translation
  
  logger = get_logger(__name__)
  
@@ -6900,7 +7800,7 @@
                  _translate_service = create_translate_service(translate_config, locale)
      return _translate_service
  
-@@ -87,12 +93,16 @@
+@@ -87,16 +93,23 @@
  
      config = await asyncio.to_thread(load_config)
      translate_config = config.get("translate", {})
@@ -6908,18 +7808,29 @@
  
      if not translate_config.get("enabled", False):
 -        return {"success": False, "error": "翻譯功能未啟用"}
+-
+-    # === 新增：日文檢測，只對 translate 模式生效 ===
+-    if request.mode == "translate" and not has_japanese(request.text):
 +        return {
 +            "success": False,
 +            "error": _translate_text(locale, "disabled"),
 +        }
- 
-     # === 新增：日文檢測，只對 translate 模式生效 ===
--    if request.mode == "translate" and not has_japanese(request.text):
-+    if request.mode == "translate" and not request.force and not has_japanese(request.text):
++
++    if (
++        request.mode == "translate"
++        and not request.force
++        and not title_needs_translation(request.text, locale)
++    ):
          return {
              "skipped": True,
-             "success": True,  # 新增：API 成功執行跳過邏輯
-@@ -112,7 +122,11 @@
+-            "success": True,  # 新增：API 成功執行跳過邏輯
+-            "reason": "no_japanese",
++            "success": True,
++            "reason": "already_target_language",
+             "original": request.text
+         }
+ 
+@@ -112,7 +125,11 @@
              result = await translate_service.translate_or_raise(request.text, context)
  
              if not result:
@@ -6932,7 +7843,7 @@
  
              return {
                  "success": True,
-@@ -121,14 +135,26 @@
+@@ -121,14 +138,26 @@
              }
  
          except TranslateError as e:
@@ -6962,7 +7873,7 @@
  
      # === optimize 模式：使用 Ollama 清理標題 ===
      # 兼容嵌套結構和舊扁平結構
-@@ -176,7 +202,10 @@
+@@ -176,7 +205,10 @@
              result = data.get("message", {}).get("content", "").strip()
  
              if not result:
@@ -6974,7 +7885,7 @@
  
              # 清理輸出
              result = result.strip().strip('"').strip("'")
-@@ -192,12 +221,21 @@
+@@ -192,12 +224,21 @@
              }
  
      except httpx.TimeoutException:
@@ -6999,7 +7910,7 @@
  
  
  @router.post("/translate-batch")
-@@ -237,6 +275,7 @@
+@@ -237,41 +278,43 @@
  
          # 獲取配置的批次大小（預留：可從 config 讀取默認值）
          config = await asyncio.to_thread(load_config)
@@ -7007,7 +7918,56 @@
          default_batch_size = config.get("translate", {}).get("batch_size", 10)
  
          # 限制批次大小（防止超時），優先使用請求參數
-@@ -282,6 +321,7 @@
+         batch_size = min(request.batch_size or default_batch_size, 20)
+ 
+-        # 過濾出包含日文的標題
+-        japanese_indices = []
+-        japanese_titles = []
++        translate_indices = []
++        translate_titles = []
+         for i, title in enumerate(request.titles):
+-            if has_japanese(title):
+-                japanese_indices.append(i)
+-                japanese_titles.append(title)
++            if title_needs_translation(title, locale):
++                translate_indices.append(i)
++                translate_titles.append(title)
+ 
+         # 初始化結果列表（預設為原文）
+         results = list(request.titles)
+ 
+-        # 只翻譯日文標題
++        # Only translate titles outside the active UI language.
+         success_indices = []  # 新增：追蹤成功的索引
+-        if japanese_titles:
++        if translate_titles:
+             translations = []
+-            for i in range(0, len(japanese_titles), batch_size):
+-                batch = japanese_titles[i:i+batch_size]
++            for i in range(0, len(translate_titles), batch_size):
++                batch = translate_titles[i:i+batch_size]
+                 batch_results = await translate_service.translate_batch(batch)
+                 translations.extend(batch_results)
+ 
+             # 將翻譯結果放回對應位置，同時追蹤成功的
+-            for idx, trans in zip(japanese_indices, translations, strict=False):  # lengths may differ if translate_batch returns fewer items than input
++            for idx, trans in zip(translate_indices, translations, strict=False):  # lengths may differ if translate_batch returns fewer items than input
+                 if trans:  # trans 非空表示翻譯成功
+                     results[idx] = trans
+                     success_indices.append(idx)  # 記錄成功的索引
+ 
+         # 統計 - 修正邏輯
+         success_count = len(success_indices)  # 基於成功執行，而非結果差異
+-        skipped_count = len(request.titles) - len(japanese_indices)
+-        error_indices = [i for i in japanese_indices if i not in success_indices]  # 失敗 = 日文但未成功翻譯
++        skipped_count = len(request.titles) - len(translate_indices)
++        error_indices = [
++            i for i in translate_indices if i not in success_indices
++        ]
+ 
+         return {
+             "translations": results,
+@@ -282,6 +325,7 @@
  
      except Exception as e:
          logger.exception("批次翻譯失敗: %s", e)
@@ -7015,7 +7975,7 @@
  
          # 返回錯誤響應（不拋出異常，避免前端報錯）
          return {
-@@ -289,6 +329,6 @@
+@@ -289,6 +333,6 @@
              "count": 0,
              "skipped": 0,
              "errors": list(range(len(request.titles))),

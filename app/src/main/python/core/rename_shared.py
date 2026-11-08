@@ -128,10 +128,15 @@ def _apply_rename_updates(
     completed_db: list[tuple[str, str]],
     completed_covers: list[tuple[str, str, str]],
     completed_samples: list[tuple[str, list[str], list[str]]],
+    completed_titles: list[
+        tuple[str, str, str, float, str]
+    ] | None = None,
 ) -> None:
     """Apply collected DB updates, preferring one repository transaction."""
     if not updates:
         return
+    if completed_titles is None:
+        completed_titles = []
 
     batch_apply = getattr(repo, "apply_rename_batch", None)
     if callable(batch_apply):
@@ -150,6 +155,14 @@ def _apply_rename_updates(
             new_samples = list(update.get("sample_images_new") or [])
             if update.get("samples_update", old_samples != new_samples):
                 completed_samples.append((new_uri, old_samples, new_samples))
+            if update.get("title_update"):
+                completed_titles.append((
+                    new_uri,
+                    str(update.get("title_old") or ""),
+                    str(update.get("original_title_old") or ""),
+                    float(update.get("nfo_mtime_old") or 0),
+                    str(update.get("nfo_path_new") or ""),
+                ))
         return
 
     for update in updates:
@@ -177,3 +190,27 @@ def _apply_rename_updates(
             if not repo.update_sample_images(new_uri, new_samples):
                 raise RuntimeError("database_samples_update_failed")
             completed_samples.append((new_uri, old_samples, new_samples))
+
+        if update.get("title_update"):
+            update_titles = getattr(repo, "update_titles", None)
+            if not callable(update_titles):
+                raise RuntimeError("database_title_update_unsupported")
+            new_nfo_mtime = (
+                float(update.get("nfo_mtime_new") or 0)
+                if update.get("nfo_mtime_update")
+                else float(update.get("nfo_mtime_old") or 0)
+            )
+            if not update_titles(
+                new_uri,
+                str(update.get("title_new") or ""),
+                str(update.get("original_title_new") or ""),
+                new_nfo_mtime,
+            ):
+                raise RuntimeError("database_title_update_failed")
+            completed_titles.append((
+                new_uri,
+                str(update.get("title_old") or ""),
+                str(update.get("original_title_old") or ""),
+                float(update.get("nfo_mtime_old") or 0),
+                str(update.get("nfo_path_new") or ""),
+            ))

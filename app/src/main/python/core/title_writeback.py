@@ -91,3 +91,55 @@ def rewrite_nfo_titles(
     ) as fh:
         fh.write(out)
     return out
+
+
+def create_title_only_nfo(
+    nfo_path,
+    *,
+    number,
+    title_body,
+    original_title,
+    actors,
+    maker,
+    date,
+    nfo_title_format,
+) -> bytes:
+    """Create a minimal sidecar with title-related fields only.
+
+    This is used by the combined rename flow when a video has no NFO yet.
+    It intentionally does not emit the full metadata set produced by
+    ``generate_nfo``: only the number needed to resolve the display title,
+    the title, the original title, and the title-preservation record (when a
+    custom title format is configured).
+    """
+    path = Path(nfo_path)
+    if path.exists():
+        raise FileExistsError(str(nfo_path))
+
+    number = _strip_illegal_xml_chars(number)
+    title_body = _strip_illegal_xml_chars(title_body)
+    original_title = _strip_illegal_xml_chars(original_title)
+    maker = _strip_illegal_xml_chars(maker)
+    date = _strip_illegal_xml_chars(date)
+    actors = [_strip_illegal_xml_chars(a) for a in (actors or [])]
+
+    display_title, body = build_display_title(
+        number, title_body, original_title, actors, maker, date, nfo_title_format,
+    )
+
+    root = ET.Element("movie")
+    if number:
+        ET.SubElement(root, "num").text = number
+    ET.SubElement(root, "title").text = display_title
+    ET.SubElement(root, "originaltitle").text = original_title
+    if nfo_title_format != _DEFAULT_FORMAT:
+        record = ET.SubElement(root, "openaver_title_record")
+        ET.SubElement(record, "written").text = display_title
+        ET.SubElement(record, "body").text = body
+
+    out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    with atomic_write(
+        path, mode="wb", suffix=".nfo.tmp", mobile_fallback=True
+    ) as fh:
+        fh.write(out)
+    return out

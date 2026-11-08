@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r48-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r49-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r48-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r49-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r48`（versionCode `17064`）
+- 版本：`0.17.18-r49`（versionCode `17065`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -224,6 +224,9 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r48：迁移 pydantic v1 弃用写法，改用 v2 的 `ConfigDict` 与
   `field_validator`；保持默认值校验和旧环境兼容，清除全部 4 条弃用警告，
   不改变现有刮削、数据库和播放行为
+- r49：完整分段视频在片库、扫描统计、女优、缺失检查、补翻译和补剧照等界面
+  统一按 1 部计算；统一命名在缺少 NFO 时生成只含标题信息的最小 NFO，
+  并继续同步数据库标题、原始标题和 NFO 标题
 
 ## 限制
 

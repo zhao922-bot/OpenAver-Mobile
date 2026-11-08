@@ -43,6 +43,7 @@
         "core/android_storage.py",
         "core/atomic_write.py",
         "core/database/actress.py",
+        "core/database/actress_library.py",
         "core/database/connection.py",
         "core/database/video.py",
         "core/database/version_tracker.py",
@@ -65,6 +66,8 @@
         "core/rename_shared.py",
         "core/source_config.py",
         "core/thumbnail_cache.py",
+        "core/title_language.py",
+        "core/title_language_data.py",
         "core/title_writeback.py"
       ]
     },

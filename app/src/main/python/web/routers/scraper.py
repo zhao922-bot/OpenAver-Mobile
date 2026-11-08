@@ -365,6 +365,9 @@ class BatchEnrichItem(BaseModel):
     number: str
     source: Optional[str] = None       # per-item override（優先於 batch default）
     javbus_lang: Optional[str] = None  # per-item override
+    # check_missing collapses a complete cd1/cd2 work to one UI item.  The
+    # hidden member paths let that one item still repair every physical row.
+    member_paths: Optional[List[str]] = None
 
 
 class BatchEnrichRequest(BaseModel):
@@ -1275,9 +1278,13 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                 # item/canonical 用預設參數綁定，避免 for-loop 變數 late-binding
                 # （同既有 :559 lambda 慣例）。
                 # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
+                group_file_paths = list(dict.fromkeys([
+                    item.file_path,
+                    *(item.member_paths or []),
+                ]))
                 canonical = coerce_to_file_uri(item.file_path, _ro_mappings)
                 if is_path_readonly(canonical, _ro_prefixes, _ro_writable):
-                    def _do_readonly(itm=item, uri=canonical, es=effective_source, el=effective_lang):
+                    def _do_readonly(itm=item, paths=group_file_paths, es=effective_source, el=effective_lang):
                         # P2 review round 3 (FIX#4): same db_to_sidecar rejection as
                         # enrich_single_endpoint's readonly branch (see that branch's
                         # comment) — placed before resolve_owning_output_root so it
@@ -1292,12 +1299,19 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                         # produce is holistic, no per-item override exists.
                         if not batch.write_nfo:
                             return ('no_nfo', _api_text(locale, _READONLY_NO_NFO_ERROR_MSG))
-                        owning = resolve_owning_output_root(uri, config)
-                        if owning is None:
-                            return ('skip', None)  # 理論不達（上面 is_path_readonly 已判真）
-                        ro_source, out_root, out_uri = owning
-                        if not out_root:
-                            return ('error', _api_text(locale, "output_root_missing"))
+                        group_results = []
+                        for group_file_path in paths:
+                            group_uri = coerce_to_file_uri(
+                                group_file_path, _ro_mappings
+                            )
+                            owning = resolve_owning_output_root(
+                                group_uri, config
+                            )
+                            if owning is None:
+                                return ('skip', None)  # 理論不達（上面 is_path_readonly 已判真）
+                            ro_source, out_root, out_uri = owning
+                            if not out_root:
+                                return ('error', _api_text(locale, "output_root_missing"))
                         # TASK-109-T3: 產出核心（URI→FS 轉換到組 EnrichResult 為止）薄搬移進
                         # core.readonly_producer.enrich_one_readonly；closure 只保留三個刻意
                         # 缺口——reject guard + output_dir 解析（上方已做，C3）、javlib 預抓
@@ -1315,26 +1329,40 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                         # （scraper.py:899-938，改前 main 67ebb620），與單片相反（單片
                         # compute 先，見 entry docstring 該參數段）。不傳＝預設 False 會悄悄
                         # 套用單片順序，翻轉這條既有行為——顯式傳 True 找回來。
-                        try:
-                            result = enrich_one_readonly(
-                                repo_factory=VideoRepository, ro_source=ro_source, output_root=out_root,
-                                output_uri=out_uri, canonical=uri, file_path=itm.file_path,
-                                number=itm.number, scraper_cfg=config.get("scraper", {}),
-                                path_mappings=_ro_mappings, action='ingest',
-                                scraper_data=None, scrape_source=es, javbus_lang=el,
-                                write_cover=batch.write_cover, overwrite_existing=batch.overwrite_existing,
-                                focal_before_cover_recheck=True,
-                                locale=locale,
-                            )
-                        except ReadonlyProduceError:
-                            logger.exception("batch_enrich readonly item %s 失敗", itm.number)
-                            return ('error', _api_text(locale, "generation_failed"))
-                        if not result.success:
-                            # 唯一可能回 success=False 的情況是 entry 內的 not-found 分支
-                            # （resolve_ingest_plan 找不到可用番號資料）；result.error 即
-                            # entry 回的 "找不到可用的番號資料"，與改前 :792 逐字相同。
-                            return ('no_scrape', result.error)
-                        return ('ok', result)
+                            try:
+                                result = enrich_one_readonly(
+                                    repo_factory=VideoRepository, ro_source=ro_source, output_root=out_root,
+                                    output_uri=out_uri, canonical=group_uri, file_path=group_file_path,
+                                    number=itm.number, scraper_cfg=config.get("scraper", {}),
+                                    path_mappings=_ro_mappings, action='ingest',
+                                    scraper_data=None, scrape_source=es, javbus_lang=el,
+                                    write_cover=batch.write_cover, overwrite_existing=batch.overwrite_existing,
+                                    focal_before_cover_recheck=True,
+                                    locale=locale,
+                                )
+                            except ReadonlyProduceError:
+                                logger.exception("batch_enrich readonly item %s 失敗", itm.number)
+                                return ('error', _api_text(locale, "generation_failed"))
+                            if not result.success:
+                                # 唯一可能回 success=False 的情況是 entry 內的 not-found 分支
+                                # （resolve_ingest_plan 找不到可用番號資料）；result.error 即
+                                # entry 回的 "找不到可用的番號資料"，與改前 :792 逐字相同。
+                                return ('no_scrape', result.error)
+                            group_results.append(result)
+                        # One logical item may have updated several physical NFOs.
+                        # Prefer a result that actually changed something so
+                        # fill_missing's success gate remains accurate.
+                        return (
+                            'ok',
+                            next(
+                                (
+                                    result
+                                    for result in group_results
+                                    if did_enrich_something(result)
+                                ),
+                                group_results[0],
+                            ),
+                        )
 
                     try:
                         loop = asyncio.get_running_loop()
@@ -1353,13 +1381,16 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                             # OSError）——失敗不可讓外層 except 捕獲，否則同一成功項會
                             # success+failed 雙記、done 匯總 success+failed > total（誤報
                             # 成失敗）。故各自 try/except 吞掉，不影響主結果。
-                            try:
-                                thumbnail_cache.invalidate(canonical)
-                            except Exception:
-                                logger.warning(
-                                    "batch_enrich item %s 縮圖失效失敗（不影響結果）",
-                                    item.number, exc_info=True,
-                                )
+                            for group_file_path in group_file_paths:
+                                try:
+                                    thumbnail_cache.invalidate(
+                                        coerce_to_file_uri(group_file_path)
+                                    )
+                                except Exception:
+                                    logger.warning(
+                                        "batch_enrich item %s 縮圖失效失敗（不影響結果）",
+                                        item.number, exc_info=True,
+                                    )
                             # feature/109 T3: closure 呼叫的共用入口
                             # `enrich_one_readonly` 已回傳完整的 `EnrichResult`（payload
                             # 本身），不再需要在此手動重建 enrich_success(...)——直接
@@ -1429,24 +1460,46 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                             scraper_cache[cache_key] = fetched if fetched else {}
                         cached_data = scraper_cache[cache_key]
 
-                    _en_ctx = contextvars.copy_context()
-                    _enrich = functools.partial(
-                        enrich_single,
-                        file_path=item.file_path,
-                        number=item.number,
-                        mode=batch.mode,
-                        write_nfo=batch.write_nfo,
-                        write_cover=batch.write_cover,
-                        write_extrafanart=batch.write_extrafanart,
-                        overwrite_existing=batch.overwrite_existing,
-                        external_manager=config.get("scraper", {}).get("external_manager", "off"), nfo_title_format=config.get("scraper", {}).get("nfo_title_format", '[{num}]{title}'),
-                        source=effective_source if effective_source != "auto" else None,
-                        javbus_lang=effective_lang,
-                        scraper_data=cached_data,
-                        path_mappings=_ro_mappings,
-                        locale=locale,
+                    group_results = []
+                    for group_file_path in group_file_paths:
+                        _en_ctx = contextvars.copy_context()
+                        _enrich = functools.partial(
+                            enrich_single,
+                            file_path=group_file_path,
+                            number=item.number,
+                            mode=batch.mode,
+                            write_nfo=batch.write_nfo,
+                            write_cover=batch.write_cover,
+                            write_extrafanart=batch.write_extrafanart,
+                            overwrite_existing=batch.overwrite_existing,
+                            external_manager=config.get("scraper", {}).get("external_manager", "off"), nfo_title_format=config.get("scraper", {}).get("nfo_title_format", '[{num}]{title}'),
+                            source=effective_source if effective_source != "auto" else None,
+                            javbus_lang=effective_lang,
+                            scraper_data=cached_data,
+                            path_mappings=_ro_mappings,
+                            locale=locale,
+                        )
+                        member_result = await loop.run_in_executor(
+                            None, _en_ctx.run, _enrich
+                        )
+                        group_results.append(member_result)
+                        if not member_result.success:
+                            break
+                    result = next(
+                        (
+                            member_result
+                            for member_result in group_results
+                            if not member_result.success
+                        ),
+                        next(
+                            (
+                                member_result
+                                for member_result in group_results
+                                if did_enrich_something(member_result)
+                            ),
+                            group_results[0],
+                        ),
                     )
-                    result = await loop.run_in_executor(None, _en_ctx.run, _enrich)
                     result_dict = asdict(result)
                     if result.success:
                         # CD-147b-5／147b-T4：fill_missing 才套四項判準（與前端 didEnrichSomething
@@ -1461,13 +1514,14 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                         # （同 enrich-single，PR #60 Codex P2）。
                         # PR#114 P2: unlink 可拋 OSError → best-effort try/except 吞掉，避免被
                         # 外層 except 捕獲導致同一成功項 success+failed 雙記 + 誤報失敗。
-                        try:
-                            thumbnail_cache.invalidate(coerce_to_file_uri(item.file_path))  # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
-                        except Exception:
-                            logger.warning(
-                                "batch_enrich item %s 縮圖失效失敗（不影響結果）",
-                                item.number, exc_info=True,
-                            )
+                        for group_file_path in group_file_paths:
+                            try:
+                                thumbnail_cache.invalidate(coerce_to_file_uri(group_file_path))  # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
+                            except Exception:
+                                logger.warning(
+                                    "batch_enrich item %s 縮圖失效失敗（不影響結果）",
+                                    item.number, exc_info=True,
+                                )
                     else:
                         failed_count += 1
                     yield f"data: {json.dumps({'type': 'result-item', 'number': item.number, 'file_path': item.file_path, **result_dict})}\n\n"

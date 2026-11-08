@@ -19,6 +19,7 @@ from core.cover_attributes import effective_tags
 from core.focal import requires_face_detection
 from core.focal_trigger import maybe_submit_video_focal
 from core.logger import get_logger
+from core.multipart_group import logical_video_count
 from core.maker_mapping import load_name_mapping, load_prefix_mapping
 from core.nfo_read import (
     nfo_actor_names,
@@ -814,7 +815,7 @@ class VideoScanner:
             'inserted': inserted,
             'updated': updated,
             'deleted': deleted_count,
-            'total': repo.count()
+            'total': logical_video_count(repo.get_all(), self.path_mappings)
         }
 
     def scan_directory(self, directory: str, recursive: bool = True,

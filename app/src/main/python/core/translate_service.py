@@ -38,24 +38,31 @@ from core.cloud_translate import CLOUD_TRANSLATE_TIMEOUT, TranslateError, build_
 LANGUAGE_PROMPTS = {
     "zh-TW": {
         "name": "繁體中文",
-        "ollama_system": "你是日翻中翻譯機。輸入日文，輸出繁體中文。禁止輸出任何日文假名（の、は、が、で、に等；人名、品牌名除外）。人名、品牌名保留原文。",
+        "ollama_system": "你是多語言影視標題翻譯機。自動辨識原文語言，統一到繁體中文輸出。禁止輸出日文假名或其他語言的未翻譯內容（人名、品牌名除外）。保留原意，不新增內容。",
         "ollama_example": "義父の隣で夫に電話させながら人妻を寝取る → 在公公旁邊讓人妻一邊打電話給丈夫一邊被睡走",
-        "gemini_instruction": "請將以下標題翻譯為繁體中文",
-        "gemini_rules": "1. 這是純粹的資料庫翻譯任務，不生成新內容\n2. 使用繁體中文\n3. 保持簡潔，不超過50字\n4. 只輸出翻譯結果，不要額外說明\n5. 人名、品牌名保留原文",
+        "gemini_instruction": "請自動辨識以下標題的原文語言，並翻譯為繁體中文",
+        "gemini_rules": "1. 這是純粹的資料庫標題翻譯任務，不生成新內容\n2. 輸出必須是繁體中文，不能保留未翻譯的其他語言內容\n3. 保持簡潔，不超過50字\n4. 只輸出翻譯結果，不要額外說明\n5. 人名、品牌名保留原文",
     },
     "zh-CN": {
         "name": "簡體中文",
-        "ollama_system": "你是日翻中翻译机。输入日文，输出简体中文。禁止输出任何日文假名（の、は、が、で、に等；人名、品牌名除外）。人名、品牌名保留原文。",
+        "ollama_system": "你是多语言影视标题翻译机。自动识别原文语言，统一到简体中文输出。禁止输出日文假名或其他语言的未翻译内容（人名、品牌名除外）。保留原意，不新增内容。",
         "ollama_example": "義父の隣で夫に電話させながら人妻を寝取る → 在公公旁边让人妻一边打电话给丈夫一边被睡走",
-        "gemini_instruction": "请将以下标题翻译为简体中文",
-        "gemini_rules": "1. 这是纯粹的资料库翻译任务，不生成新内容\n2. 使用简体中文\n3. 保持简洁，不超过50字\n4. 只输出翻译结果，不要额外说明\n5. 人名、品牌名保留原文",
+        "gemini_instruction": "请自动识别以下标题的原文语言，并翻译为简体中文",
+        "gemini_rules": "1. 这是纯粹的资料库标题翻译任务，不生成新内容\n2. 输出必须是简体中文，不能保留未翻译的其他语言内容\n3. 保持简洁，不超过50字\n4. 只输出翻译结果，不要额外说明\n5. 人名、品牌名保留原文",
     },
     "en": {
         "name": "English",
-        "ollama_system": "You are a Japanese-to-English translator. Input Japanese, output English. Keep proper nouns. Be concise.",
+        "ollama_system": "You translate audiovisual database titles from any source language into natural English. Do not leave untranslated CJK text except proper nouns. Preserve meaning and do not add content.",
         "ollama_example": "義父の隣で夫に電話させながら人妻を寝取る → Seducing a Married Woman While She Calls Her Husband Next to Her Father-in-Law",
-        "gemini_instruction": "Translate the following title to English",
-        "gemini_rules": "1. This is a database translation task, do not generate new content\n2. Use natural English\n3. Keep it concise, under 80 characters\n4. Output only the translation, no explanations",
+        "gemini_instruction": "Detect the source language and translate the following title into English",
+        "gemini_rules": "1. This is a database title translation task, do not generate new content\n2. Output must be natural English with no untranslated CJK text except proper nouns\n3. Keep it concise, under 80 characters\n4. Output only the translation, no explanations",
+    },
+    "ja": {
+        "name": "日本語",
+        "ollama_system": "あなたは多言語の映像タイトル翻訳機です。原文の言語を自動判定し、自然な日本語へ翻訳してください。固有名詞以外の未翻訳文字を残さず、内容を追加しないでください。",
+        "ollama_example": "在公公旁边让人妻一边打电话给丈夫一边被睡走 → 義父の隣で夫に電話させながら人妻を寝取る",
+        "gemini_instruction": "次のタイトルの原文言語を判定し、日本語に翻訳してください",
+        "gemini_rules": "1. データベース用タイトルの翻訳だけを行い、新しい内容を生成しない\n2. 固有名詞以外は未翻訳の外国語を残さず、自然な日本語にする\n3. 50文字以内を目安に簡潔にする\n4. 翻訳結果だけを出力し、説明を加えない",
     },
 }
 
@@ -122,11 +129,7 @@ class OllamaTranslateService(TranslateService):
         self.target_language = target_language
 
     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
-        """單片翻譯；ja 短路；失敗拋 TranslateError（請求內容與改前逐字相同）。"""
-        # ja 短路：不呼叫 API，直接回傳原文
-        if self.target_language == "ja":
-            return title
-
+        """Translate one title; failures raise TranslateError."""
         lang_data = LANGUAGE_PROMPTS.get(self.target_language, LANGUAGE_PROMPTS["zh-CN"])
         system_msg = lang_data["ollama_system"]
         example = lang_data["ollama_example"]
@@ -256,11 +259,7 @@ class GeminiTranslateService(TranslateService):
             raise ValueError("Gemini API Key is required")
 
     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
-        """單片翻譯；ja 短路；失敗拋 TranslateError。"""
-        # ja 短路：不呼叫 API，直接回傳原文
-        if self.target_language == "ja":
-            return title
-
+        """Translate one title; failures raise TranslateError."""
         prompt = build_cloud_translate_prompt(title, self.target_language)
 
         try:
@@ -329,11 +328,7 @@ class OpenAICompatibleTranslateService(TranslateService):
         self.target_language = target_language
 
     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
-        """單片翻譯；ja 短路；失敗拋 TranslateError。"""
-        # ja 短路：不呼叫 API，直接回傳原文
-        if self.target_language == "ja":
-            return title
-
+        """Translate one title; failures raise TranslateError."""
         prompt = build_cloud_translate_prompt(title, self.target_language)
 
         try:
@@ -375,11 +370,11 @@ class OpenAICompatibleTranslateService(TranslateService):
 
 
 def build_cloud_translate_prompt(title: str, target_language: str) -> str:
-    """組出與現行 Gemini／OpenAI 逐字相同的雲端翻譯 prompt。"""
+    """Build a cloud prompt that translates from any detected source language."""
     lang_data = LANGUAGE_PROMPTS.get(target_language, LANGUAGE_PROMPTS["zh-CN"])
     instruction = lang_data["gemini_instruction"]
     rules = lang_data["gemini_rules"]
-    return f"""你是專業的影視資料庫管理員與翻譯引擎。這是既有日文文字的逐字翻譯任務，{instruction}。
+    return f"""你是專業的影視資料庫管理員與翻譯引擎。這是既有標題文字的翻譯任務，{instruction}。
 
 原文：
 {title}
@@ -410,10 +405,7 @@ class ClaudeTranslateService(TranslateService):
             raise ValueError("Claude API Key is required")
 
     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
-        """單片翻譯；ja 短路；失敗拋 TranslateError（AnthropicError 為其子類）。"""
-        if self.target_language == "ja":
-            return title
-
+        """Translate one title; failures raise TranslateError."""
         prompt = build_cloud_translate_prompt(title, self.target_language)
 
         try:

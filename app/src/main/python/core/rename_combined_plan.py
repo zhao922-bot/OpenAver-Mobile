@@ -9,6 +9,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from core.atomic_write import atomic_write
+from core.media_io import delete_file
+from core.multipart_group import group_rows
 from core.path_utils import to_file_uri, uri_to_fs_path
 from core.rename_file_plan import build_rename_plan
 from core.rename_names import (
@@ -16,6 +19,7 @@ from core.rename_names import (
     _path_key,
     _strip_multipart_token,
     multipart_token,
+    source_title_body,
 )
 from core.rename_shared import (
     _apply_rename_updates,
@@ -31,6 +35,29 @@ from core.rename_shared import (
     _write_manifest,
 )
 from core.scrapers.utils import extract_number, normalize_number_impl
+
+
+def _rewrite_nfo_titles(nfo_path, **kwargs) -> bytes:
+    # Keep the heavier NFO/organizer imports out of module initialization.
+    from core.title_writeback import rewrite_nfo_titles
+
+    return rewrite_nfo_titles(nfo_path, **kwargs)
+
+
+def _create_nfo_titles(nfo_path, **kwargs) -> bytes:
+    # Keep the heavier NFO/organizer imports out of module initialization.
+    from core.title_writeback import create_title_only_nfo
+
+    return create_title_only_nfo(nfo_path, **kwargs)
+
+
+def _nfo_title_format(config: dict | None) -> str:
+    scraper_config = (config or {}).get("scraper", {})
+    return str(
+        scraper_config.get("nfo_title_format", "[{num}]{title}")
+        if isinstance(scraper_config, dict)
+        else "[{num}]{title}"
+    )
 
 
 def _combined_plan_id(items: list[dict[str, Any]], source_id: str) -> str:
@@ -63,6 +90,18 @@ def _combined_plan_id(items: list[dict[str, Any]], source_id: str) -> str:
                         }
                         for operation in video["operations"]
                     ],
+                    "title_old": video.get("title_old", ""),
+                    "title_new": video.get("title_new", ""),
+                    "original_title_old": video.get(
+                        "original_title_old", ""
+                    ),
+                    "original_title_new": video.get(
+                        "original_title_new", ""
+                    ),
+                    "title_update": bool(video.get("title_update")),
+                    "number": video.get("number"),
+                    "nfo_path_old": video.get("nfo_path_old", ""),
+                    "nfo_path_new": video.get("nfo_path_new", ""),
                 }
                 for video in item["videos"]
             ],
@@ -170,6 +209,7 @@ def _build_combined_item(
     roots: list[Path],
     stem_overrides: dict[str, str],
     path_mappings: dict | None,
+    nfo_title_format: str,
 ) -> dict[str, Any]:
     """Build one folder-level item from its source files."""
     folder = Path(file_items[0]["old_video_path"]).parent
@@ -202,8 +242,13 @@ def _build_combined_item(
         folder_action = "create"
         new_folder = folder / fitted_folder_stem
     elif _is_direct_child(folder, roots) and fitted_folder_stem:
-        folder_action = "rename"
-        new_folder = folder.with_name(fitted_folder_stem)
+        candidate_folder = folder.with_name(fitted_folder_stem)
+        if candidate_folder == folder:
+            folder_action = "none"
+            new_folder = folder
+        else:
+            folder_action = "rename"
+            new_folder = candidate_folder
     else:
         folder_action = "none"
         new_folder = folder
@@ -225,6 +270,40 @@ def _build_combined_item(
 
     for file_item, row in zip(file_items, rows, strict=True):
         final_video = new_folder / Path(file_item["new_video_path"]).name
+        source_stem = (
+            stem_overrides.get(file_item["db_old_uri"])
+            or primary_override
+        )
+        title_new = source_title_body(
+            source_stem,
+            file_item.get("number") or primary.get("number"),
+        )
+        title_old = str(getattr(row, "title", "") or "")
+        original_title_old = str(
+            getattr(row, "original_title", "") or ""
+        )
+        nfo_path_old = ""
+        nfo_path_new = ""
+        for associated in file_item.get("associated_files", []):
+            old_path = Path(associated["old_path"])
+            if old_path.suffix.lower() != ".nfo":
+                continue
+            nfo_path_old = str(old_path)
+            nfo_path_new = str(
+                new_folder / Path(associated["new_path"]).name
+            )
+            break
+        nfo_create = bool(title_new and not nfo_path_old)
+        if nfo_create:
+            nfo_path_new = str(final_video.with_suffix(".nfo"))
+        title_update = bool(
+            title_new
+            and (
+                title_old != title_new
+                or original_title_old != ""
+                or nfo_create
+            )
+        )
         cover_new = file_item.get("cover_path_new") or ""
         if cover_new and new_folder != folder:
             cover_new = _rebase_path(
@@ -267,6 +346,23 @@ def _build_combined_item(
             "sample_images_old": samples_old,
             "sample_images_new": samples_new,
             "operations": file_item.get("operations") or [],
+            "title_old": title_old,
+            "title_new": title_new,
+            "original_title_old": original_title_old,
+            "original_title_new": "",
+            "title_update": title_update,
+            "nfo_path_old": nfo_path_old,
+            "nfo_path_new": nfo_path_new,
+            "nfo_create": nfo_create,
+            "nfo_title_format": nfo_title_format,
+            "actresses": list(getattr(row, "actresses", None) or []),
+            "maker": str(getattr(row, "maker", "") or ""),
+            "release_date": str(
+                getattr(row, "release_date", "") or ""
+            ),
+            "nfo_mtime_old": float(
+                getattr(row, "nfo_mtime", 0) or 0
+            ),
             "status": file_item["status"],
             "reason": file_item["reason"],
             "conflicts": list(file_item.get("conflicts") or []),
@@ -279,6 +375,10 @@ def _build_combined_item(
         video["operations"]
         for video in item["videos"]
     )
+    has_title_changes = any(
+        video["title_update"]
+        for video in item["videos"]
+    )
     if "conflict" in file_states:
         item["status"] = "conflict"
         item["reason"] = "file_conflict"
@@ -288,7 +388,7 @@ def _build_combined_item(
     elif "skipped" in file_states:
         item["status"] = "skipped"
         item["reason"] = "skipped"
-    elif folder_changed or has_file_changes:
+    elif folder_changed or has_file_changes or has_title_changes:
         item["status"] = "ready"
         item["reason"] = "source_title"
     return item
@@ -303,6 +403,7 @@ def _mark_combined_conflicts(items: list[dict[str, Any]]) -> None:
     folder_targets: dict[str, list[dict[str, Any]]] = {}
     video_targets: dict[str, list[dict[str, Any]]] = {}
     move_targets: dict[str, list[dict[str, Any]]] = {}
+    nfo_targets: dict[str, list[dict[str, Any]]] = {}
     for item in items:
         if item.get("folder_action") != "none":
             folder_targets.setdefault(
@@ -314,6 +415,11 @@ def _mark_combined_conflicts(items: list[dict[str, Any]]) -> None:
                 _path_key(video["new_video_path"]),
                 [],
             ).append(video)
+            if video.get("nfo_create") and video.get("nfo_path_new"):
+                nfo_targets.setdefault(
+                    _path_key(video["nfo_path_new"]),
+                    [],
+                ).append(video)
         for move in item.get("move_files", []):
             move_targets.setdefault(
                 _path_key(move["new_path"]),
@@ -353,6 +459,16 @@ def _mark_combined_conflicts(items: list[dict[str, Any]]) -> None:
                 item["conflicts"].append(
                     f"duplicate_video_target:{video['new_name']}"
                 )
+            if video.get("nfo_create") and video.get("nfo_path_new"):
+                nfo_target = Path(video["nfo_path_new"])
+                if nfo_target.exists():
+                    item["conflicts"].append(
+                        f"nfo_target_exists:{nfo_target.name}"
+                    )
+                if len(nfo_targets.get(_path_key(str(nfo_target)), [])) > 1:
+                    item["conflicts"].append(
+                        f"duplicate_nfo_target:{nfo_target.name}"
+                    )
         if item["conflicts"]:
             item["status"] = "conflict"
             item["reason"] = sorted(set(item["conflicts"]))[0]
@@ -373,14 +489,32 @@ def _combined_plan_summary(
         for item in ready
         for video in item["videos"]
     ]
+    renamed_videos = [
+        video
+        for video in ready_videos
+        if video["old_name"] != video["new_name"]
+    ]
+    title_videos = [
+        video
+        for video in ready_videos
+        if video.get("title_update")
+    ]
+
+    def logical_count(videos: list[dict[str, Any]]) -> int:
+        return len(group_rows(
+            videos,
+            fs_path_of=lambda video: video["old_video_path"],
+        ))
+
+    ready_logical_videos = logical_count(ready_videos)
+    renamed_logical_videos = logical_count(renamed_videos)
+    title_logical_videos = logical_count(title_videos)
     return {
-        "total": len(ready_videos) + len(failed_items),
+        # User-facing "video" fields count complete multipart groups once.
+        # Explicit physical/file fields remain available for execution details.
+        "total": ready_logical_videos + len(failed_items),
         "groups": len(items),
-        "rename_videos": sum(
-            1
-            for video in ready_videos
-            if video["old_name"] != video["new_name"]
-        ),
+        "rename_videos": renamed_logical_videos,
         "rename_files": sum(
             len(video["operations"])
             for video in ready_videos
@@ -390,6 +524,9 @@ def _combined_plan_summary(
             for item in ready
             if item.get("folder_action") != "none"
         ),
+        "updated_titles": title_logical_videos,
+        "logical_videos": ready_logical_videos,
+        "physical_ready_videos": len(ready_videos),
         "updated_videos": len(ready_videos),
         "conflicts": len(conflicts),
         "failed": len(failed_items),
@@ -422,6 +559,7 @@ def build_combined_rename_plan(
     )
     roots = [Path(uri_to_fs_path(str(root))) for root in source_roots if root]
     groups = _group_file_plan_items(file_plan, roots)
+    title_format = _nfo_title_format(config)
     items = [
         _build_combined_item(
             file_items,
@@ -429,6 +567,7 @@ def build_combined_rename_plan(
             roots,
             stem_overrides,
             path_mappings,
+            title_format,
         )
         for file_items in groups
     ]
@@ -455,6 +594,9 @@ def execute_combined_rename_plan(
     folder_create_fn: Callable[[str], None] = _create_directory,
     file_move_fn: Callable[[str, str], None] = _move_file,
     folder_delete_fn: Callable[[str], None] = _delete_directory,
+    nfo_rewrite_fn: Callable[..., bytes] = _rewrite_nfo_titles,
+    nfo_create_fn: Callable[..., bytes] = _create_nfo_titles,
+    nfo_delete_fn: Callable[[str], None] = delete_file,
 ) -> dict[str, Any]:
     """Apply a combined file/folder plan and roll everything back on failure."""
     if plan.get("summary", {}).get("conflicts", 0):
@@ -473,6 +615,9 @@ def execute_combined_rename_plan(
     completed_db: list[tuple[str, str]] = []
     completed_covers: list[tuple[str, str, str]] = []
     completed_samples: list[tuple[str, list[str], list[str]]] = []
+    completed_titles: list[tuple[str, str, str, float, str]] = []
+    completed_nfo: list[tuple[str, bytes]] = []
+    created_nfo: list[str] = []
     db_updates: list[dict[str, Any]] = []
 
     try:
@@ -529,23 +674,146 @@ def execute_combined_rename_plan(
                 )
 
             for video in item["videos"]:
-                db_updates.append({
+                update = {
                     "db_old_uri": video["db_old_uri"],
                     "db_new_uri": video["db_new_uri"],
                     "cover_path_old": video["cover_path_old"],
                     "cover_path_new": video["cover_path_new"],
                     "sample_images_old": video["sample_images_old"],
                     "sample_images_new": video["sample_images_new"],
-                })
+                    "title_old": video.get("title_old", ""),
+                    "title_new": video.get("title_new", ""),
+                    "original_title_old": video.get(
+                        "original_title_old", ""
+                    ),
+                    "original_title_new": video.get(
+                        "original_title_new", ""
+                    ),
+                    "title_update": bool(video.get("title_update")),
+                    "number": video.get("number"),
+                    "new_video_path": video.get("new_video_path", ""),
+                    "nfo_path_old": video.get("nfo_path_old", ""),
+                    "nfo_path_new": video.get("nfo_path_new", ""),
+                    "nfo_create": bool(video.get("nfo_create")),
+                    "nfo_title_format": video.get(
+                        "nfo_title_format",
+                        "[{num}]{title}",
+                    ),
+                    "actresses": list(video.get("actresses") or []),
+                    "maker": video.get("maker", ""),
+                    "release_date": video.get("release_date", ""),
+                }
+                db_updates.append(update)
+
+        for update in db_updates:
+            if not update.get("title_update"):
+                continue
+            nfo_path = str(update.get("nfo_path_new") or "")
+            if not nfo_path:
+                new_video_path = str(update.get("new_video_path") or "")
+                if not new_video_path:
+                    continue
+                nfo_path = str(Path(new_video_path).with_suffix(".nfo"))
+                update["nfo_path_new"] = nfo_path
+                update["nfo_create"] = True
+            path = Path(nfo_path)
+            nfo_kwargs = {
+                "number": str(update.get("number") or ""),
+                "title_body": update.get("title_new", ""),
+                "original_title": update.get("original_title_new", ""),
+                "actors": update.get("actresses") or [],
+                "maker": update.get("maker", ""),
+                "date": update.get("release_date", ""),
+                "nfo_title_format": update.get(
+                    "nfo_title_format",
+                    "[{num}]{title}",
+                ),
+            }
+            if path.exists():
+                if update.get("nfo_create"):
+                    raise RuntimeError(f"nfo_target_exists:{nfo_path}")
+                if not path.is_file():
+                    raise RuntimeError(
+                        f"nfo_missing_after_rename:{nfo_path}"
+                    )
+                original_bytes = path.read_bytes()
+                completed_nfo.append((nfo_path, original_bytes))
+                try:
+                    nfo_rewrite_fn(nfo_path, **nfo_kwargs)
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"nfo_title_write_failed:{nfo_path}:{exc}"
+                    ) from exc
+            else:
+                if not update.get("nfo_create"):
+                    raise RuntimeError(
+                        f"nfo_missing_after_rename:{nfo_path}"
+                    )
+                # Track before writing so a partial failed write is still
+                # removed during rollback.
+                created_nfo.append(nfo_path)
+                try:
+                    nfo_create_fn(nfo_path, **nfo_kwargs)
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"nfo_title_create_failed:{nfo_path}:{exc}"
+                    ) from exc
+            update["nfo_mtime_new"] = float(path.stat().st_mtime)
+            update["nfo_mtime_update"] = True
+
         _apply_rename_updates(
             repo,
             db_updates,
             completed_db,
             completed_covers,
             completed_samples,
+            completed_titles,
         )
     except Exception as exc:
         rollback_errors: list[str] = []
+        restored_nfo_mtimes: dict[str, float] = {}
+        for nfo_path in reversed(created_nfo):
+            try:
+                nfo_delete_fn(nfo_path)
+            except Exception as rollback_exc:
+                rollback_errors.append(
+                    f"nfo_create:{nfo_path}:{rollback_exc}"
+                )
+        for nfo_path, original_bytes in reversed(completed_nfo):
+            try:
+                with atomic_write(
+                    nfo_path,
+                    mode="wb",
+                    suffix=".nfo.rollback.tmp",
+                    mobile_fallback=True,
+                ) as handle:
+                    handle.write(original_bytes)
+                restored_nfo_mtimes[nfo_path] = float(
+                    Path(nfo_path).stat().st_mtime
+                )
+            except Exception as rollback_exc:
+                rollback_errors.append(
+                    f"nfo:{nfo_path}:{rollback_exc}"
+                )
+        for (
+            db_path,
+            old_title,
+            old_original_title,
+            old_nfo_mtime,
+            nfo_path,
+        ) in reversed(completed_titles):
+            try:
+                if not repo.update_titles(
+                    db_path,
+                    old_title,
+                    old_original_title,
+                    restored_nfo_mtimes.get(nfo_path, old_nfo_mtime),
+                ):
+                    rollback_errors.append(f"title:{db_path}")
+            except Exception as rollback_exc:
+                rollback_errors.append(
+                    f"title:{db_path}:{rollback_exc}"
+                )
         for db_path, old_samples, new_samples in reversed(completed_samples):
             try:
                 if not repo.update_sample_images(db_path, old_samples):
@@ -618,7 +886,30 @@ def execute_combined_rename_plan(
         "renamed_folders": len(completed_folders) + len(completed_creates),
         "created_folders": len(completed_creates),
         "moved_files": len(completed_moves),
-        "updated_videos": len(completed_db),
+        # These values feed user-visible completion summaries. A complete
+        # multipart release is one video even when several rows were written.
+        "updated_videos": plan["summary"].get("logical_videos", 0),
+        "updated_titles": plan["summary"].get("updated_titles", 0),
+        "physical_updated_videos": sum(
+            1
+            for update in db_updates
+            if (
+                update["db_old_uri"] != update["db_new_uri"]
+                or update.get("title_update")
+                or update.get(
+                    "cover_update",
+                    update["cover_path_old"] != update["cover_path_new"],
+                )
+                or update.get(
+                    "samples_update",
+                    update["sample_images_old"]
+                    != update["sample_images_new"],
+                )
+            )
+        ),
+        "physical_updated_titles": len(completed_titles),
+        "rewritten_nfos": len(completed_nfo),
+        "created_nfos": len(created_nfo),
         "manifest_path": str(manifest),
     }
 
@@ -645,6 +936,20 @@ def validate_combined_rename_plan(plan: dict[str, Any]) -> bool:
     try:
         for item in items:
             for video in item.get("videos", []):
+                if not Path(video["old_video_path"]).is_file():
+                    return False
+                if (
+                    video.get("title_update")
+                    and video.get("nfo_path_old")
+                    and not Path(video["nfo_path_old"]).is_file()
+                ):
+                    return False
+                if (
+                    video.get("nfo_create")
+                    and video.get("nfo_path_new")
+                    and Path(video["nfo_path_new"]).exists()
+                ):
+                    return False
                 for operation in video.get("operations", []):
                     source = Path(operation["old_path"])
                     target = Path(operation["new_path"])

@@ -56,8 +56,11 @@ def test_apply_rename_batch_updates_path_cover_and_samples_in_one_connection(
     repo = VideoRepository(db_path)
     repo.upsert(Video(
         path="file:///old/video.mp4",
+        title="舊標題",
+        original_title="舊原文",
         cover_path="file:///old/video.jpg",
         sample_images=["file:///old/sample.jpg"],
+        nfo_mtime=1,
     ))
 
     calls = 0
@@ -77,6 +80,13 @@ def test_apply_rename_batch_updates_path_cover_and_samples_in_one_connection(
         "cover_path_new": "file:///new/video.jpg",
         "sample_images_old": ["file:///old/sample.jpg"],
         "sample_images_new": ["file:///new/sample.jpg"],
+        "title_old": "舊標題",
+        "title_new": "新しいタイトル",
+        "original_title_old": "舊原文",
+        "original_title_new": "",
+        "title_update": True,
+        "nfo_mtime_update": True,
+        "nfo_mtime_new": 42.5,
     }]) is True
     assert calls == 1
 
@@ -84,6 +94,9 @@ def test_apply_rename_batch_updates_path_cover_and_samples_in_one_connection(
     assert renamed is not None
     assert renamed.cover_path == "file:///new/video.jpg"
     assert renamed.sample_images == ["file:///new/sample.jpg"]
+    assert renamed.title == "新しいタイトル"
+    assert renamed.original_title == ""
+    assert renamed.nfo_mtime == 42.5
     assert repo.get_by_path("file:///old/video.mp4") is None
 
 

@@ -292,6 +292,87 @@
          finally:
              conn.close()
  
+--- a/core/database/actress_library.py
++++ b/core/database/actress_library.py
+@@ -9,6 +9,10 @@
+ 
+ from .actress import ActressRepository
+ from .alias import AliasRepository
++from .video import VideoRepository
++from core.config import load_config
++from core.multipart_group import group_rows
++from core.path_utils import uri_to_local_fs_path
+ 
+ 
+ def get_library_actresses() -> List[dict]:
+@@ -21,7 +25,9 @@
+       - name → (primary_name, names[]) 由 AliasRepository().get_all() 建一次 lookup dict
+         （primary_name 與每個 alias 都指向同一組 (primary_name, [primary_name]+aliases)）；
+         lookup miss 時 group_key = name 本身，names = [name]。
+-      - video_count = 該 group 的 set(rowid) 長度（Python 側 DISTINCT，CD-117-2）。
++      - video_count = 該 group 涵蓋的**邏輯影片組**數量：先在整個片庫套
++        `group_rows()`，再把同一個 alias group 命中的 cd1/cd2 rowid 映射到
++        同一個邏輯組。這是 UI 口徑；內部仍保留全部 DB rows。
+       - is_favorite：`favorite_names = {a.name for a in ActressRepository().get_all()}`
+         建一次集合，判定 `any(n in favorite_names for n in names)`——讀 `actresses` 表同一欄，
+         不查 alias 表是否存在該 group（迴圈內不得逐一呼叫 exists()，Opus 裁決 ②）。
+@@ -50,10 +56,25 @@
+     排除 0 片（AC-2.7）天然成立：group 只可能由 pairs（有片子的名字）建立，不
+     outer join 收藏表。
+ 
+-    整支函式全程只開 3 次連線（pairs 一次、alias get_all() 一次、favorites get_all()
+-    一次），與 group 數無關——迴圈內是純 Python 記憶體分組，不開任何 DB 連線。
++    整支函式只開固定次數連線（pairs／videos／alias／favorites 各一次），
++    與 group 數無關——迴圈內是純 Python 記憶體分組，不開任何 DB 連線。
+     """
+     pairs = ActressRepository().get_video_actress_pairs()
++    videos = VideoRepository().get_all()
++    path_mappings = (
++        load_config().get("gallery", {}).get("path_mappings", {})
++    )
++    logical_groups = group_rows(
++        videos,
++        fs_path_of=lambda video: uri_to_local_fs_path(
++            video.path, path_mappings
++        ),
++    )
++    logical_group_by_rowid = {
++        video.id: group_index
++        for group_index, group in enumerate(logical_groups)
++        for video in group.members
++    }
+ 
+     # name -> (primary_name, names_list)；names_list 對同一 group 內每個名字共用同一物件
+     lookup: dict = {}
+@@ -64,14 +85,16 @@
+ 
+     favorite_names = {a.name for a in ActressRepository().get_all()}
+ 
+-    groups: dict = {}  # primary_name -> {"names": list, "rowids": set}
++    groups: dict = {}  # primary_name -> {"names": list, "logical_ids": set}
+     for rowid, name in pairs:
+         primary_name, names_list = lookup.get(name, (name, [name]))
+         group = groups.get(primary_name)
+         if group is None:
+-            group = {"names": names_list, "rowids": set()}
++            group = {"names": names_list, "logical_ids": set()}
+             groups[primary_name] = group
+-        group["rowids"].add(rowid)
++        group["logical_ids"].add(
++            logical_group_by_rowid.get(rowid, f"rowid:{rowid}")
++        )
+ 
+     result = []
+     for primary_name, group in groups.items():
+@@ -85,7 +108,7 @@
+             {
+                 "primary_name": display_name,
+                 "names": names_list,
+-                "video_count": len(group["rowids"]),
++                "video_count": len(group["logical_ids"]),
+                 "is_favorite": any(n in favorite_names for n in names_list),
+             }
+         )
 --- a/core/database/connection.py
 +++ b/core/database/connection.py
 @@ -4,6 +4,7 @@
@@ -547,7 +628,7 @@
          return self._columns_cache
  
      def upsert(self, video: Video) -> int:
-@@ -626,6 +740,131 @@
+@@ -626,6 +740,178 @@
  
          return rowcount > 0
  
@@ -619,6 +700,53 @@
 +                path_changed = True
 +
 +            for update in normalized:
++                if not update.get("title_update"):
++                    continue
++                new_uri = str(update.get("db_new_uri") or "")
++                old_title = str(update.get("title_old") or "")
++                old_original_title = str(
++                    update.get("original_title_old") or ""
++                )
++                new_title = str(update.get("title_new") or "")
++                new_original_title = str(
++                    update.get("original_title_new") or ""
++                )
++                if update.get("nfo_mtime_update"):
++                    cursor.execute(
++                        "UPDATE videos SET title = ?, original_title = ?, "
++                        "nfo_mtime = ?, updated_at = CURRENT_TIMESTAMP "
++                        "WHERE path = ? "
++                        "AND COALESCE(title, '') = ? "
++                        "AND COALESCE(original_title, '') = ?",
++                        (
++                            new_title,
++                            new_original_title,
++                            float(update.get("nfo_mtime_new") or 0),
++                            new_uri,
++                            old_title,
++                            old_original_title,
++                        ),
++                    )
++                else:
++                    cursor.execute(
++                        "UPDATE videos SET title = ?, original_title = ?, "
++                        "updated_at = CURRENT_TIMESTAMP "
++                        "WHERE path = ? "
++                        "AND COALESCE(title, '') = ? "
++                        "AND COALESCE(original_title, '') = ?",
++                        (
++                            new_title,
++                            new_original_title,
++                            new_uri,
++                            old_title,
++                            old_original_title,
++                        ),
++                    )
++                if cursor.rowcount != 1:
++                    conn.rollback()
++                    return False
++
++            for update in normalized:
 +                new_uri = str(update.get("db_new_uri") or "")
 +                old_cover = str(update.get("cover_path_old") or "")
 +                new_cover = str(update.get("cover_path_new") or "")
@@ -679,7 +807,7 @@
      def upsert_batch(self, videos: List[Video]) -> tuple:
          """批次新增或更新
  
-@@ -726,8 +965,30 @@
+@@ -726,8 +1012,30 @@
              cursor.execute("SELECT * FROM videos WHERE path = ?", (path,))
              row = cursor.fetchone()
              if row:
@@ -711,7 +839,7 @@
          finally:
              conn.close()
  
-@@ -832,7 +1093,122 @@
+@@ -832,7 +1140,122 @@
          try:
              cursor.execute("SELECT * FROM videos ORDER BY id")
              rows = cursor.fetchall()
@@ -722,11 +850,12 @@
 +            conn.close()
 +
 +    def get_untranslated_title_candidates(self) -> List[Video]:
-+        """Return rows that can enter the missing-title backfill.
++        """Return all titled rows that can be checked by the target-language policy.
 +
-+        Japanese detection stays in the router so this repository method remains
-+        a storage query, not a scraper-language policy.  Filtering in SQL still
-+        avoids materialising every unrelated library row.
++        Language detection stays in the router so this repository method remains
++        a storage query. It intentionally does not require an empty
++        ``original_title`` because changing the UI language must be able to
++        retranslate a previously translated title.
 +        """
 +        conn = self._get_connection()
 +        try:
@@ -735,7 +864,6 @@
 +                """
 +                SELECT * FROM videos
 +                WHERE TRIM(COALESCE(title, '')) != ''
-+                  AND TRIM(COALESCE(original_title, '')) = ''
 +                ORDER BY id
 +                """
 +            )
@@ -835,7 +963,7 @@
          finally:
              conn.close()
  
-@@ -850,8 +1226,8 @@
+@@ -850,8 +1273,8 @@
          finally:
              conn.close()
  
@@ -846,7 +974,7 @@
  
          sample_count（TASK-118b-T9）：合法 JSON list → 實際張數。空字串／NULL／
          損毀 JSON／非 list 的合法 JSON 這四種壞值一律回傳哨兵值
-@@ -859,15 +1235,45 @@
+@@ -859,15 +1282,45 @@
          裁決④：壞資料要 fail-safe 成「需要重掃」，不得讓單筆壞資料中止整個
          SELECT／整次掃描）。真實檔案系統算出來的張數恆為 >= 0，-1 必定與任何
          真實張數不相等，呼叫端的比對式因此自然觸發重掃，不需要額外的例外分支。
@@ -899,7 +1027,7 @@
                  sample_count = _SAMPLE_COUNT_UNKNOWN
                  if sample_images_raw:
                      try:
-@@ -876,7 +1282,22 @@
+@@ -876,7 +1329,22 @@
                              sample_count = len(parsed)
                      except (json.JSONDecodeError, TypeError):
                          pass
@@ -923,7 +1051,7 @@
              return result
          finally:
              conn.close()
-@@ -885,7 +1306,7 @@
+@@ -885,7 +1353,7 @@
          """取得 {path: scrape_attempted_at} 索引，供 T3 `_should_skip` 冷啟動判斷用（TASK-89b-T1）。
  
          Additive read-only method。回傳的是 {path: int}——**不是** get_mtime_index() 的
@@ -932,7 +1060,7 @@
          含 scrape_attempted_at == 0 的 row（不過濾）——呼叫端用 `.get(path, 0) > 0`
          統一判斷「從未試過」（key 不存在或值為 0 皆視為未試過）。
          """
-@@ -988,7 +1409,7 @@
+@@ -988,7 +1456,7 @@
              cursor.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
              row = cursor.fetchone()
              if row:
@@ -941,7 +1069,7 @@
              return None
          finally:
              conn.close()
-@@ -1008,7 +1429,7 @@
+@@ -1008,7 +1476,7 @@
              )
              row = cursor.fetchone()
              if row:
@@ -950,7 +1078,7 @@
              return None
          finally:
              conn.close()
-@@ -1044,8 +1465,9 @@
+@@ -1044,8 +1512,9 @@
  
              # 建立結果字典（使用原始輸入的 key）
              result = {}
@@ -961,7 +1089,7 @@
                  if video.number:
                      # 找到原始輸入的 key
                      original_key = upper_to_original.get(video.number.upper())
-@@ -1109,7 +1531,8 @@
+@@ -1109,7 +1578,8 @@
                  (actress_name,)
              )
              rows = cursor.fetchall()
@@ -971,7 +1099,7 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress json_each failed for %r (returning [])",
-@@ -1146,7 +1569,8 @@
+@@ -1146,7 +1616,8 @@
                  tuple(names)
              )
              rows = cursor.fetchall()
@@ -981,7 +1109,7 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress_names json_each failed for %d names (returning [])",
-@@ -1566,7 +1990,7 @@
+@@ -1566,7 +2037,7 @@
                  """,
                  (escaped + '%', escaped + '%/%'),
              )
@@ -2123,7 +2251,15 @@
  \t\t\thtml += '</div>';
 --- a/core/gallery_scanner.py
 +++ b/core/gallery_scanner.py
-@@ -31,7 +31,7 @@
+@@ -19,6 +19,7 @@
+ from core.focal import requires_face_detection
+ from core.focal_trigger import maybe_submit_video_focal
+ from core.logger import get_logger
++from core.multipart_group import logical_video_count
+ from core.maker_mapping import load_name_mapping, load_prefix_mapping
+ from core.nfo_read import (
+     nfo_actor_names,
+@@ -31,7 +32,7 @@
  )
  from core.nfo_stat import NFO_MTIME_REFRESH, nfo_mtime_or_none
  from core.nfo_title_format import resolve_title_body
@@ -2132,7 +2268,7 @@
  from core.path_utils import normalize_path, to_file_uri, uri_to_fs_path, uri_to_local_fs_path
  from core.scrapers.utils import FC2_TOKEN_PATTERN, normalize_number_impl
  from core.video_extensions import DEFAULT_VIDEO_EXTENSIONS, ZERO_SIZE_EXTENSIONS
-@@ -98,6 +98,37 @@
+@@ -98,6 +99,37 @@
          return cls(**{k: v for k, v in d.items() if k in known})
  
  
@@ -2170,7 +2306,7 @@
  # 支援的影片副檔名（from core.video_extensions Single Source of Truth）
  VIDEO_EXTENSIONS = set(DEFAULT_VIDEO_EXTENSIONS)
  
-@@ -122,6 +153,7 @@
+@@ -122,6 +154,7 @@
      extensions: set,
      min_size_bytes: int = 0,
      on_skip: Optional[Callable[[str, Exception], None]] = None,
@@ -2178,7 +2314,7 @@
  ) -> List[dict]:
      """快速掃描目錄，一次取得所有檔案資訊
  
-@@ -137,6 +169,7 @@
+@@ -137,6 +170,7 @@
              用於讓呼叫端捕捉「因長路徑/權限而無法存取」的檔案，因為這類 entry
              根本不會進入回傳 results，僅透過 callback 讓呼叫端知道它們存在。
              callback 本身拋的例外會被吞掉，不影響掃描進度。
@@ -2186,7 +2322,7 @@
      """
      logger.debug(f"[FastScan] 掃描目錄: {directory}")
      results = []
-@@ -189,7 +222,8 @@
+@@ -189,7 +223,8 @@
                          if entry.is_dir(follow_symlinks=False):
                              if is_nas_system_dir_name(entry.name):
                                  continue
@@ -2196,7 +2332,7 @@
                          elif entry.is_file(follow_symlinks=False):
                              ext = os.path.splitext(entry.name)[1].lower()
                              stem = os.path.splitext(entry.name)[0]
-@@ -246,31 +280,32 @@
+@@ -246,31 +281,32 @@
      # 番號識別正則表達式 (從 galleryHtml.cs 移植)
      NUM_PATTERNS = [
          # FC2-PPV
@@ -2237,7 +2373,7 @@
           lambda m: f"HEYZO-{m.group(3)}"),
      ]
  
-@@ -576,10 +611,11 @@
+@@ -576,10 +612,11 @@
          except OSError:
              pass
  
@@ -2252,7 +2388,7 @@
              logger.debug(f"[Scan]   nfo_exists: {t_nfo_check - t_start:.2f}s")
              nfo_info = self.parse_nfo(str(nfo_path))
              t_parse = time.time()
-@@ -684,7 +720,7 @@
+@@ -684,7 +721,7 @@
  
          # 步驟 2: 從 SQLite 取得現有 mtime 索引
          # 注意：資料庫中的 path 是 file:/// 格式
@@ -2261,7 +2397,7 @@
  
          # 建立 file:/// 路徑到原始路徑的映射，以及原始路徑到 mtime 的映射
          # scan_file 會產生 file:/// 格式的路徑（使用 core.path_utils.to_file_uri）
-@@ -692,6 +728,7 @@
+@@ -692,6 +729,7 @@
          # 步驟 3: 比對決定需要處理的檔案
          needs_scan = []
          current_file_uris = set()
@@ -2269,7 +2405,7 @@
  
          for file_info in file_infos:
              fs_path = file_info['path']
-@@ -699,19 +736,14 @@
+@@ -699,19 +737,14 @@
              current_file_uris.add(file_uri)
  
              db_entry = db_index.get(file_uri)
@@ -2296,7 +2432,7 @@
  
          # 步驟 4: 清理已刪除的檔案（比對 file:/// 格式的路徑）
          deleted_paths = set(db_index.keys()) - current_file_uris
-@@ -722,6 +754,11 @@
+@@ -722,6 +755,11 @@
          # 步驟 5: 掃描並寫入
          videos_to_upsert = []
          total_needs_scan = len(needs_scan)
@@ -2308,7 +2444,7 @@
  
          for i, file_info in enumerate(needs_scan, 1):
              video_name = os.path.basename(file_info['path'])
-@@ -735,6 +772,12 @@
+@@ -735,6 +773,12 @@
              try:
                  video_info = self.scan_file(file_info['path'], None)
                  video = Video.from_video_info(video_info)
@@ -2321,7 +2457,16 @@
                  video.mtime = file_info['mtime']
                  video.nfo_mtime = file_info.get('nfo_mtime', 0)
                  videos_to_upsert.append(video)
-@@ -808,7 +851,12 @@
+@@ -771,7 +815,7 @@
+             'inserted': inserted,
+             'updated': updated,
+             'deleted': deleted_count,
+-            'total': repo.count()
++            'total': logical_video_count(repo.get_all(), self.path_mappings)
+         }
+ 
+     def scan_directory(self, directory: str, recursive: bool = True,
+@@ -808,7 +852,12 @@
          # 使用 fast_scan_directory 一次取得所有檔案資訊
          # 這大幅減少對 NAS 的系統呼叫次數
          logger.info("[*] 快速掃描目錄中...")
@@ -2444,16 +2589,19 @@
  用它們判斷「哪些 DB 列屬於同一組」，兩件事故意不合併，見 CD-122-2）＋ `os.path`
  （Zone 1 字串運算，同 `core/cover_layout.py` 先例：呼叫端已把 file:// URI 轉成 fs
  path 才傳進來，不在此模組碰 URI，不違反 `path_utils.py` 的跨 Zone 轉換禁止清單）。
-@@ -34,7 +34,7 @@
+@@ -34,15 +34,18 @@
  import os
  import re
  
 -from core.organizer import _detect_multipart_token, _strip_part_token
 +from core.multipart_tokens import detect_multipart_token, strip_part_token
  from core.path_utils import to_file_uri, uri_to_fs_path, uri_to_local_fs_path
++from core.logger import get_logger
++
++logger = get_logger(__name__)
  
  T = TypeVar('T')  # 呼叫端的 row 型別（Video ORM 物件、或任意帶 path 的物件）
-@@ -42,7 +42,7 @@
+ 
  
  def normalize_stem_key(stem: str) -> str:
      """CD-122-3：剝 token 後的 stem 正規化比對鍵（去空白 + lower）。"""
@@ -2462,7 +2610,7 @@
      return re.sub(r'\s+', '', stripped).lower()
  
  
-@@ -61,10 +61,10 @@
+@@ -61,10 +64,10 @@
      """(token 字面, 段號) 一次解析。
  
      `part_token()` / `part_number()` 是它的兩個單欄位包裝，保留給只要一半的呼叫端；
@@ -2475,6 +2623,82 @@
      if match:
          return match[0], match[1]
      return None, 1  # 單檔片（無 token）視為 part 1
+@@ -157,6 +160,75 @@
+     return groups
+ 
+ 
++def logical_video_groups(
++    rows: List[T],
++    path_mappings: dict,
++) -> List['VideoGroup[T]']:
++    """Group DB rows with the standard URI-to-filesystem mapping.
++
++    This is the user-facing counting boundary.  A complete multipart release
++    yields one group; an incomplete or duplicate-number bucket still yields
++    one group per physical row, matching :func:`group_rows`.
++    """
++    return group_rows(
++        rows,
++        fs_path_of=lambda row: uri_to_local_fs_path(
++            row.path, path_mappings
++        ),
++    )
++
++
++def logical_video_count(rows: List[T], path_mappings: dict) -> int:
++    """Return the number of logical videos represented by ``rows``."""
++    return len(logical_video_groups(rows, path_mappings))
++
++
++def resolve_logical_video_groups(
++    repo,
++    rows: List[T],
++    path_mappings: dict,
++) -> List['VideoGroup[T]']:
++    """Resolve one complete logical group for every distinct supplied row.
++
++    Candidate queries are often filtered (for example, only untranslated
++    titles).  Resolving against the complete folder prevents a lone ``cd2``
++    candidate from being surfaced as a separate video.  The first supplied
++    row determines group order.  Repeated members of the same group are
++    collapsed to one result.
++
++    Group resolution failure is fail-safe: each supplied row is returned as a
++    singleton so the caller can retain its previous physical-row behaviour.
++    """
++    rows = list(rows)
++    if not rows:
++        return []
++    try:
++        groups_by_path = resolve_groups_bulk(
++            repo,
++            [row.path for row in rows],
++            path_mappings,
++        )
++    except Exception:
++        logger.warning(
++            "multipart logical-group resolution failed; using singleton rows",
++            exc_info=True,
++        )
++        groups_by_path = {}
++
++    seen = set()
++    result: List[VideoGroup[T]] = []
++    for row in rows:
++        group = groups_by_path.get(row.path)
++        if group is None or len(group.members) < 2:
++            group = VideoGroup(members=[row], part_tokens=[])
++        group_key = tuple(member.path for member in group.members)
++        if group_key in seen:
++            continue
++        seen.add(group_key)
++        result.append(group)
++    return result
++
++
+ def resolve_group_for_path(
+     target_uri: str,
+     candidates: List[T],
 --- /dev/null
 +++ b/core/multipart_tokens.py
 @@ -0,0 +1,64 @@
@@ -3706,7 +3930,7 @@
              dest = str(ef_dir / f'fanart{i}.jpg')
 --- /dev/null
 +++ b/core/rename_combined_plan.py
-@@ -0,0 +1,681 @@
+@@ -0,0 +1,986 @@
 +"""Combined filename/folder rename planning, execution, and validation."""
 +
 +from __future__ import annotations
@@ -3718,6 +3942,9 @@
 +from pathlib import Path
 +from typing import Any, Callable
 +
++from core.atomic_write import atomic_write
++from core.media_io import delete_file
++from core.multipart_group import group_rows
 +from core.path_utils import to_file_uri, uri_to_fs_path
 +from core.rename_file_plan import build_rename_plan
 +from core.rename_names import (
@@ -3725,6 +3952,7 @@
 +    _path_key,
 +    _strip_multipart_token,
 +    multipart_token,
++    source_title_body,
 +)
 +from core.rename_shared import (
 +    _apply_rename_updates,
@@ -3740,6 +3968,29 @@
 +    _write_manifest,
 +)
 +from core.scrapers.utils import extract_number, normalize_number_impl
++
++
++def _rewrite_nfo_titles(nfo_path, **kwargs) -> bytes:
++    # Keep the heavier NFO/organizer imports out of module initialization.
++    from core.title_writeback import rewrite_nfo_titles
++
++    return rewrite_nfo_titles(nfo_path, **kwargs)
++
++
++def _create_nfo_titles(nfo_path, **kwargs) -> bytes:
++    # Keep the heavier NFO/organizer imports out of module initialization.
++    from core.title_writeback import create_title_only_nfo
++
++    return create_title_only_nfo(nfo_path, **kwargs)
++
++
++def _nfo_title_format(config: dict | None) -> str:
++    scraper_config = (config or {}).get("scraper", {})
++    return str(
++        scraper_config.get("nfo_title_format", "[{num}]{title}")
++        if isinstance(scraper_config, dict)
++        else "[{num}]{title}"
++    )
 +
 +
 +def _combined_plan_id(items: list[dict[str, Any]], source_id: str) -> str:
@@ -3772,6 +4023,18 @@
 +                        }
 +                        for operation in video["operations"]
 +                    ],
++                    "title_old": video.get("title_old", ""),
++                    "title_new": video.get("title_new", ""),
++                    "original_title_old": video.get(
++                        "original_title_old", ""
++                    ),
++                    "original_title_new": video.get(
++                        "original_title_new", ""
++                    ),
++                    "title_update": bool(video.get("title_update")),
++                    "number": video.get("number"),
++                    "nfo_path_old": video.get("nfo_path_old", ""),
++                    "nfo_path_new": video.get("nfo_path_new", ""),
 +                }
 +                for video in item["videos"]
 +            ],
@@ -3879,6 +4142,7 @@
 +    roots: list[Path],
 +    stem_overrides: dict[str, str],
 +    path_mappings: dict | None,
++    nfo_title_format: str,
 +) -> dict[str, Any]:
 +    """Build one folder-level item from its source files."""
 +    folder = Path(file_items[0]["old_video_path"]).parent
@@ -3911,8 +4175,13 @@
 +        folder_action = "create"
 +        new_folder = folder / fitted_folder_stem
 +    elif _is_direct_child(folder, roots) and fitted_folder_stem:
-+        folder_action = "rename"
-+        new_folder = folder.with_name(fitted_folder_stem)
++        candidate_folder = folder.with_name(fitted_folder_stem)
++        if candidate_folder == folder:
++            folder_action = "none"
++            new_folder = folder
++        else:
++            folder_action = "rename"
++            new_folder = candidate_folder
 +    else:
 +        folder_action = "none"
 +        new_folder = folder
@@ -3934,6 +4203,40 @@
 +
 +    for file_item, row in zip(file_items, rows, strict=True):
 +        final_video = new_folder / Path(file_item["new_video_path"]).name
++        source_stem = (
++            stem_overrides.get(file_item["db_old_uri"])
++            or primary_override
++        )
++        title_new = source_title_body(
++            source_stem,
++            file_item.get("number") or primary.get("number"),
++        )
++        title_old = str(getattr(row, "title", "") or "")
++        original_title_old = str(
++            getattr(row, "original_title", "") or ""
++        )
++        nfo_path_old = ""
++        nfo_path_new = ""
++        for associated in file_item.get("associated_files", []):
++            old_path = Path(associated["old_path"])
++            if old_path.suffix.lower() != ".nfo":
++                continue
++            nfo_path_old = str(old_path)
++            nfo_path_new = str(
++                new_folder / Path(associated["new_path"]).name
++            )
++            break
++        nfo_create = bool(title_new and not nfo_path_old)
++        if nfo_create:
++            nfo_path_new = str(final_video.with_suffix(".nfo"))
++        title_update = bool(
++            title_new
++            and (
++                title_old != title_new
++                or original_title_old != ""
++                or nfo_create
++            )
++        )
 +        cover_new = file_item.get("cover_path_new") or ""
 +        if cover_new and new_folder != folder:
 +            cover_new = _rebase_path(
@@ -3976,6 +4279,23 @@
 +            "sample_images_old": samples_old,
 +            "sample_images_new": samples_new,
 +            "operations": file_item.get("operations") or [],
++            "title_old": title_old,
++            "title_new": title_new,
++            "original_title_old": original_title_old,
++            "original_title_new": "",
++            "title_update": title_update,
++            "nfo_path_old": nfo_path_old,
++            "nfo_path_new": nfo_path_new,
++            "nfo_create": nfo_create,
++            "nfo_title_format": nfo_title_format,
++            "actresses": list(getattr(row, "actresses", None) or []),
++            "maker": str(getattr(row, "maker", "") or ""),
++            "release_date": str(
++                getattr(row, "release_date", "") or ""
++            ),
++            "nfo_mtime_old": float(
++                getattr(row, "nfo_mtime", 0) or 0
++            ),
 +            "status": file_item["status"],
 +            "reason": file_item["reason"],
 +            "conflicts": list(file_item.get("conflicts") or []),
@@ -3988,6 +4308,10 @@
 +        video["operations"]
 +        for video in item["videos"]
 +    )
++    has_title_changes = any(
++        video["title_update"]
++        for video in item["videos"]
++    )
 +    if "conflict" in file_states:
 +        item["status"] = "conflict"
 +        item["reason"] = "file_conflict"
@@ -3997,7 +4321,7 @@
 +    elif "skipped" in file_states:
 +        item["status"] = "skipped"
 +        item["reason"] = "skipped"
-+    elif folder_changed or has_file_changes:
++    elif folder_changed or has_file_changes or has_title_changes:
 +        item["status"] = "ready"
 +        item["reason"] = "source_title"
 +    return item
@@ -4012,6 +4336,7 @@
 +    folder_targets: dict[str, list[dict[str, Any]]] = {}
 +    video_targets: dict[str, list[dict[str, Any]]] = {}
 +    move_targets: dict[str, list[dict[str, Any]]] = {}
++    nfo_targets: dict[str, list[dict[str, Any]]] = {}
 +    for item in items:
 +        if item.get("folder_action") != "none":
 +            folder_targets.setdefault(
@@ -4023,6 +4348,11 @@
 +                _path_key(video["new_video_path"]),
 +                [],
 +            ).append(video)
++            if video.get("nfo_create") and video.get("nfo_path_new"):
++                nfo_targets.setdefault(
++                    _path_key(video["nfo_path_new"]),
++                    [],
++                ).append(video)
 +        for move in item.get("move_files", []):
 +            move_targets.setdefault(
 +                _path_key(move["new_path"]),
@@ -4062,6 +4392,16 @@
 +                item["conflicts"].append(
 +                    f"duplicate_video_target:{video['new_name']}"
 +                )
++            if video.get("nfo_create") and video.get("nfo_path_new"):
++                nfo_target = Path(video["nfo_path_new"])
++                if nfo_target.exists():
++                    item["conflicts"].append(
++                        f"nfo_target_exists:{nfo_target.name}"
++                    )
++                if len(nfo_targets.get(_path_key(str(nfo_target)), [])) > 1:
++                    item["conflicts"].append(
++                        f"duplicate_nfo_target:{nfo_target.name}"
++                    )
 +        if item["conflicts"]:
 +            item["status"] = "conflict"
 +            item["reason"] = sorted(set(item["conflicts"]))[0]
@@ -4082,14 +4422,32 @@
 +        for item in ready
 +        for video in item["videos"]
 +    ]
++    renamed_videos = [
++        video
++        for video in ready_videos
++        if video["old_name"] != video["new_name"]
++    ]
++    title_videos = [
++        video
++        for video in ready_videos
++        if video.get("title_update")
++    ]
++
++    def logical_count(videos: list[dict[str, Any]]) -> int:
++        return len(group_rows(
++            videos,
++            fs_path_of=lambda video: video["old_video_path"],
++        ))
++
++    ready_logical_videos = logical_count(ready_videos)
++    renamed_logical_videos = logical_count(renamed_videos)
++    title_logical_videos = logical_count(title_videos)
 +    return {
-+        "total": len(ready_videos) + len(failed_items),
++        # User-facing "video" fields count complete multipart groups once.
++        # Explicit physical/file fields remain available for execution details.
++        "total": ready_logical_videos + len(failed_items),
 +        "groups": len(items),
-+        "rename_videos": sum(
-+            1
-+            for video in ready_videos
-+            if video["old_name"] != video["new_name"]
-+        ),
++        "rename_videos": renamed_logical_videos,
 +        "rename_files": sum(
 +            len(video["operations"])
 +            for video in ready_videos
@@ -4099,6 +4457,9 @@
 +            for item in ready
 +            if item.get("folder_action") != "none"
 +        ),
++        "updated_titles": title_logical_videos,
++        "logical_videos": ready_logical_videos,
++        "physical_ready_videos": len(ready_videos),
 +        "updated_videos": len(ready_videos),
 +        "conflicts": len(conflicts),
 +        "failed": len(failed_items),
@@ -4131,6 +4492,7 @@
 +    )
 +    roots = [Path(uri_to_fs_path(str(root))) for root in source_roots if root]
 +    groups = _group_file_plan_items(file_plan, roots)
++    title_format = _nfo_title_format(config)
 +    items = [
 +        _build_combined_item(
 +            file_items,
@@ -4138,6 +4500,7 @@
 +            roots,
 +            stem_overrides,
 +            path_mappings,
++            title_format,
 +        )
 +        for file_items in groups
 +    ]
@@ -4164,6 +4527,9 @@
 +    folder_create_fn: Callable[[str], None] = _create_directory,
 +    file_move_fn: Callable[[str, str], None] = _move_file,
 +    folder_delete_fn: Callable[[str], None] = _delete_directory,
++    nfo_rewrite_fn: Callable[..., bytes] = _rewrite_nfo_titles,
++    nfo_create_fn: Callable[..., bytes] = _create_nfo_titles,
++    nfo_delete_fn: Callable[[str], None] = delete_file,
 +) -> dict[str, Any]:
 +    """Apply a combined file/folder plan and roll everything back on failure."""
 +    if plan.get("summary", {}).get("conflicts", 0):
@@ -4182,6 +4548,9 @@
 +    completed_db: list[tuple[str, str]] = []
 +    completed_covers: list[tuple[str, str, str]] = []
 +    completed_samples: list[tuple[str, list[str], list[str]]] = []
++    completed_titles: list[tuple[str, str, str, float, str]] = []
++    completed_nfo: list[tuple[str, bytes]] = []
++    created_nfo: list[str] = []
 +    db_updates: list[dict[str, Any]] = []
 +
 +    try:
@@ -4238,23 +4607,146 @@
 +                )
 +
 +            for video in item["videos"]:
-+                db_updates.append({
++                update = {
 +                    "db_old_uri": video["db_old_uri"],
 +                    "db_new_uri": video["db_new_uri"],
 +                    "cover_path_old": video["cover_path_old"],
 +                    "cover_path_new": video["cover_path_new"],
 +                    "sample_images_old": video["sample_images_old"],
 +                    "sample_images_new": video["sample_images_new"],
-+                })
++                    "title_old": video.get("title_old", ""),
++                    "title_new": video.get("title_new", ""),
++                    "original_title_old": video.get(
++                        "original_title_old", ""
++                    ),
++                    "original_title_new": video.get(
++                        "original_title_new", ""
++                    ),
++                    "title_update": bool(video.get("title_update")),
++                    "number": video.get("number"),
++                    "new_video_path": video.get("new_video_path", ""),
++                    "nfo_path_old": video.get("nfo_path_old", ""),
++                    "nfo_path_new": video.get("nfo_path_new", ""),
++                    "nfo_create": bool(video.get("nfo_create")),
++                    "nfo_title_format": video.get(
++                        "nfo_title_format",
++                        "[{num}]{title}",
++                    ),
++                    "actresses": list(video.get("actresses") or []),
++                    "maker": video.get("maker", ""),
++                    "release_date": video.get("release_date", ""),
++                }
++                db_updates.append(update)
++
++        for update in db_updates:
++            if not update.get("title_update"):
++                continue
++            nfo_path = str(update.get("nfo_path_new") or "")
++            if not nfo_path:
++                new_video_path = str(update.get("new_video_path") or "")
++                if not new_video_path:
++                    continue
++                nfo_path = str(Path(new_video_path).with_suffix(".nfo"))
++                update["nfo_path_new"] = nfo_path
++                update["nfo_create"] = True
++            path = Path(nfo_path)
++            nfo_kwargs = {
++                "number": str(update.get("number") or ""),
++                "title_body": update.get("title_new", ""),
++                "original_title": update.get("original_title_new", ""),
++                "actors": update.get("actresses") or [],
++                "maker": update.get("maker", ""),
++                "date": update.get("release_date", ""),
++                "nfo_title_format": update.get(
++                    "nfo_title_format",
++                    "[{num}]{title}",
++                ),
++            }
++            if path.exists():
++                if update.get("nfo_create"):
++                    raise RuntimeError(f"nfo_target_exists:{nfo_path}")
++                if not path.is_file():
++                    raise RuntimeError(
++                        f"nfo_missing_after_rename:{nfo_path}"
++                    )
++                original_bytes = path.read_bytes()
++                completed_nfo.append((nfo_path, original_bytes))
++                try:
++                    nfo_rewrite_fn(nfo_path, **nfo_kwargs)
++                except Exception as exc:
++                    raise RuntimeError(
++                        f"nfo_title_write_failed:{nfo_path}:{exc}"
++                    ) from exc
++            else:
++                if not update.get("nfo_create"):
++                    raise RuntimeError(
++                        f"nfo_missing_after_rename:{nfo_path}"
++                    )
++                # Track before writing so a partial failed write is still
++                # removed during rollback.
++                created_nfo.append(nfo_path)
++                try:
++                    nfo_create_fn(nfo_path, **nfo_kwargs)
++                except Exception as exc:
++                    raise RuntimeError(
++                        f"nfo_title_create_failed:{nfo_path}:{exc}"
++                    ) from exc
++            update["nfo_mtime_new"] = float(path.stat().st_mtime)
++            update["nfo_mtime_update"] = True
++
 +        _apply_rename_updates(
 +            repo,
 +            db_updates,
 +            completed_db,
 +            completed_covers,
 +            completed_samples,
++            completed_titles,
 +        )
 +    except Exception as exc:
 +        rollback_errors: list[str] = []
++        restored_nfo_mtimes: dict[str, float] = {}
++        for nfo_path in reversed(created_nfo):
++            try:
++                nfo_delete_fn(nfo_path)
++            except Exception as rollback_exc:
++                rollback_errors.append(
++                    f"nfo_create:{nfo_path}:{rollback_exc}"
++                )
++        for nfo_path, original_bytes in reversed(completed_nfo):
++            try:
++                with atomic_write(
++                    nfo_path,
++                    mode="wb",
++                    suffix=".nfo.rollback.tmp",
++                    mobile_fallback=True,
++                ) as handle:
++                    handle.write(original_bytes)
++                restored_nfo_mtimes[nfo_path] = float(
++                    Path(nfo_path).stat().st_mtime
++                )
++            except Exception as rollback_exc:
++                rollback_errors.append(
++                    f"nfo:{nfo_path}:{rollback_exc}"
++                )
++        for (
++            db_path,
++            old_title,
++            old_original_title,
++            old_nfo_mtime,
++            nfo_path,
++        ) in reversed(completed_titles):
++            try:
++                if not repo.update_titles(
++                    db_path,
++                    old_title,
++                    old_original_title,
++                    restored_nfo_mtimes.get(nfo_path, old_nfo_mtime),
++                ):
++                    rollback_errors.append(f"title:{db_path}")
++            except Exception as rollback_exc:
++                rollback_errors.append(
++                    f"title:{db_path}:{rollback_exc}"
++                )
 +        for db_path, old_samples, new_samples in reversed(completed_samples):
 +            try:
 +                if not repo.update_sample_images(db_path, old_samples):
@@ -4327,7 +4819,30 @@
 +        "renamed_folders": len(completed_folders) + len(completed_creates),
 +        "created_folders": len(completed_creates),
 +        "moved_files": len(completed_moves),
-+        "updated_videos": len(completed_db),
++        # These values feed user-visible completion summaries. A complete
++        # multipart release is one video even when several rows were written.
++        "updated_videos": plan["summary"].get("logical_videos", 0),
++        "updated_titles": plan["summary"].get("updated_titles", 0),
++        "physical_updated_videos": sum(
++            1
++            for update in db_updates
++            if (
++                update["db_old_uri"] != update["db_new_uri"]
++                or update.get("title_update")
++                or update.get(
++                    "cover_update",
++                    update["cover_path_old"] != update["cover_path_new"],
++                )
++                or update.get(
++                    "samples_update",
++                    update["sample_images_old"]
++                    != update["sample_images_new"],
++                )
++            )
++        ),
++        "physical_updated_titles": len(completed_titles),
++        "rewritten_nfos": len(completed_nfo),
++        "created_nfos": len(created_nfo),
 +        "manifest_path": str(manifest),
 +    }
 +
@@ -4354,6 +4869,20 @@
 +    try:
 +        for item in items:
 +            for video in item.get("videos", []):
++                if not Path(video["old_video_path"]).is_file():
++                    return False
++                if (
++                    video.get("title_update")
++                    and video.get("nfo_path_old")
++                    and not Path(video["nfo_path_old"]).is_file()
++                ):
++                    return False
++                if (
++                    video.get("nfo_create")
++                    and video.get("nfo_path_new")
++                    and Path(video["nfo_path_new"]).exists()
++                ):
++                    return False
 +                for operation in video.get("operations", []):
 +                    source = Path(operation["old_path"])
 +                    target = Path(operation["new_path"])
@@ -5372,7 +5901,7 @@
 +    }
 --- /dev/null
 +++ b/core/rename_names.py
-@@ -0,0 +1,260 @@
+@@ -0,0 +1,272 @@
 +"""Filename normalization primitives shared by rename planning."""
 +
 +from __future__ import annotations
@@ -5499,6 +6028,18 @@
 +        normalized,
 +        "source_title",
 +    )
++
++
++def source_title_body(stem: str, number: str | None) -> str:
++    """Return the title body from a canonical source-derived file stem."""
++    if not stem or not number:
++        return ""
++    normalized = normalize_number_impl(str(number))
++    canonical = _strip_multipart_token(stem)
++    match = _number_pattern(normalized).match(canonical)
++    if match:
++        canonical = canonical[match.end():]
++    return canonical.lstrip(LEADING_SEPARATORS).strip(" .-_")
 +
 +
 +def _sidecar_matches(old_stem: str, name: str) -> bool:
@@ -5683,7 +6224,7 @@
 +)
 --- /dev/null
 +++ b/core/rename_shared.py
-@@ -0,0 +1,179 @@
+@@ -0,0 +1,216 @@
 +"""Shared filesystem helpers for rename plan execution."""
 +
 +from __future__ import annotations
@@ -5814,10 +6355,15 @@
 +    completed_db: list[tuple[str, str]],
 +    completed_covers: list[tuple[str, str, str]],
 +    completed_samples: list[tuple[str, list[str], list[str]]],
++    completed_titles: list[
++        tuple[str, str, str, float, str]
++    ] | None = None,
 +) -> None:
 +    """Apply collected DB updates, preferring one repository transaction."""
 +    if not updates:
 +        return
++    if completed_titles is None:
++        completed_titles = []
 +
 +    batch_apply = getattr(repo, "apply_rename_batch", None)
 +    if callable(batch_apply):
@@ -5836,6 +6382,14 @@
 +            new_samples = list(update.get("sample_images_new") or [])
 +            if update.get("samples_update", old_samples != new_samples):
 +                completed_samples.append((new_uri, old_samples, new_samples))
++            if update.get("title_update"):
++                completed_titles.append((
++                    new_uri,
++                    str(update.get("title_old") or ""),
++                    str(update.get("original_title_old") or ""),
++                    float(update.get("nfo_mtime_old") or 0),
++                    str(update.get("nfo_path_new") or ""),
++                ))
 +        return
 +
 +    for update in updates:
@@ -5863,6 +6417,30 @@
 +            if not repo.update_sample_images(new_uri, new_samples):
 +                raise RuntimeError("database_samples_update_failed")
 +            completed_samples.append((new_uri, old_samples, new_samples))
++
++        if update.get("title_update"):
++            update_titles = getattr(repo, "update_titles", None)
++            if not callable(update_titles):
++                raise RuntimeError("database_title_update_unsupported")
++            new_nfo_mtime = (
++                float(update.get("nfo_mtime_new") or 0)
++                if update.get("nfo_mtime_update")
++                else float(update.get("nfo_mtime_old") or 0)
++            )
++            if not update_titles(
++                new_uri,
++                str(update.get("title_new") or ""),
++                str(update.get("original_title_new") or ""),
++                new_nfo_mtime,
++            ):
++                raise RuntimeError("database_title_update_failed")
++            completed_titles.append((
++                new_uri,
++                str(update.get("title_old") or ""),
++                str(update.get("original_title_old") or ""),
++                float(update.get("nfo_mtime_old") or 0),
++                str(update.get("nfo_path_new") or ""),
++            ))
 --- a/core/source_config.py
 +++ b/core/source_config.py
 @@ -9,7 +9,8 @@
@@ -6008,6 +6586,107 @@
              return True
          except Exception as e:
              logger.warning("thumbnail generate failed: cover=%s err=%s", cover_fs_path, e)
+--- /dev/null
++++ b/core/title_language.py
+@@ -0,0 +1,81 @@
++"""Target-language checks for library title translation."""
++
++from __future__ import annotations
++
++from core.i18n import normalize_locale
++from core.title_language_data import (
++    SIMPLIFIED_ONLY_CHARS,
++    TRADITIONAL_ONLY_CHARS,
++)
++
++
++def _is_han(character: str) -> bool:
++    code = ord(character)
++    return (
++        0x3400 <= code <= 0x4DBF
++        or 0x4E00 <= code <= 0x9FFF
++        or 0xF900 <= code <= 0xFAFF
++        or 0x20000 <= code <= 0x2FA1F
++    )
++
++
++def _is_kana(character: str) -> bool:
++    code = ord(character)
++    return 0x3040 <= code <= 0x30FF or 0x31F0 <= code <= 0x31FF
++
++
++def _has_latin_letter(text: str) -> bool:
++    return any(
++        "A" <= character <= "Z"
++        or "a" <= character <= "z"
++        or 0x00C0 <= ord(character) <= 0x024F
++        for character in text
++    )
++
++
++def _has_han(text: str) -> bool:
++    return any(_is_han(character) for character in text)
++
++
++def _has_kana(text: str) -> bool:
++    return any(_is_kana(character) for character in text)
++
++
++def title_matches_target_language(title: str, locale: str | None) -> bool:
++    """Return whether *title* is already written in the active UI language.
++
++    Han-only titles are treated as Chinese when they contain no character that
++    OpenCC maps exclusively in the other Chinese script. Japanese titles are
++    identified by kana, while English titles must contain Latin text and no
++    CJK script. Ambiguous punctuation and number fragments never qualify.
++    """
++    text = str(title or "").strip()
++    if not text:
++        return False
++    target = normalize_locale(locale)
++    has_han = _has_han(text)
++    has_kana = _has_kana(text)
++
++    if target == "en":
++        return _has_latin_letter(text) and not has_han and not has_kana
++    if target == "ja":
++        return has_kana
++    if has_kana or not has_han:
++        return False
++    if target == "zh-CN":
++        return not any(
++            character in TRADITIONAL_ONLY_CHARS
++            for character in text
++        )
++    if target == "zh-TW":
++        return not any(
++            character in SIMPLIFIED_ONLY_CHARS
++            for character in text
++        )
++    return False
++
++
++def title_needs_translation(title: str, locale: str | None) -> bool:
++    """Return whether the title is not in the active target language."""
++    text = str(title or "").strip()
++    return bool(text and not title_matches_target_language(text, locale))
+--- /dev/null
++++ b/core/title_language_data.py
+@@ -0,0 +1,14 @@
++"""Generated high-confidence OpenCC 1.4.2 script markers.
++
++A character is listed only when OpenCC has no identity candidate for it.
++This intentionally avoids ambiguous context-dependent mappings such as
++乾/干 and keeps binary-size and false-positive risk low.
++"""
++
++TRADITIONAL_ONLY_CHARS = frozenset(
++    '㑮㑯㑳㑶㒓㓄㓨㔋㖮㗲㗿㘉㘓㘔㘚㛝㜄㜏㜐㜗㜢㜷㞞㟺㠏㠣㢗㢝㥮㦎㦛㦞㨻㩋㩜㩳㩵㪎㯤㰙㵗㵾㶆㷍㷿㸇㹽㺏㺜㻶㿖㿗㿧䀉䀹䁪䁻䂎䃮䅐䅳䆉䉑䉙䉬䉲䉶䊭䊷䊺䋃䋔䋙䋚䋦䋹䋻䋼䋿䌈䌋䌖䌝䌟䌥䌰䍤䍦䍽䎙䎱䓣䕤䕳䖅䗅䗿䙔䙡䙱䚩䛄䛳䜀䜖䝭䝻䝼䞈䞋䞓䟃䟆䟐䠆䠱䡐䡩䡵䢨䤤䥄䥇䥑䥕䥗䥩䥯䥱䦘䦛䦟䦯䦳䧢䪊䪏䪗䪘䪴䪾䫀䫂䫟䫴䫶䫻䫾䬓䬘䬝䬞䬧䭀䭃䭑䭔䭿䮄䮝䮞䮠䮫䮰䮳䮾䯀䯤䰾䱀䱁䱙䱧䱬䱰䱷䱸䱽䲁䲅䲖䲘䲰䳜䳢䳤䳧䳫䴉䴋䴬䴱䴴䴽䵳䵴䶕䶲丟並亂亙亞佇佈佔併來侖侶侷俁係俓俔俠俥俬倀倆倈倉個們倖倫倲偉偑側偵偽傌傑傖傘備傢傭傯傳傴債傷傾僂僅僉僑僕僞僤僥僨僱價儀儁儂億儈儉儎儐儔儕儘償儣優儭儲儷儸儺儻儼兇兌兒兗內兩冊冑冪凈凍凙凜凱別刪剄則剎剗剛剝剮剴創剷剾劃劇劉劊劌劍劏劑劚勁勑動務勛勝勞勢勣勩勱勳勵勸勻匭匯匱區協卹卻卽厙厠厤厭厲厴參叄叢吒吳吶呂咼員哯唄唓唸問啓啞啟啢喎喚喪喫喬單喲嗆嗇嗊嗎嗚嗩嗰嗶嗹嘆嘍嘓嘔嘖嘗嘜嘩嘪嘮嘯嘰嘳嘵嘸嘺嘽噁噅噓噚噝噞噠噥噦噯噲噴噸噹嚀嚇嚌嚐嚕嚙嚛嚥嚦嚧嚨嚮嚲嚳嚴嚶嚽囀囁囂囃囅囈囉囌囑囒囪圇國圍園圓圖團圞垻埡埨埬埰執堅堊堖堚堝堯報場塊塋塏塒塗塚塢塤塵塸塹塿墊墜墠墮墰墲墳墶墻墾壇壈壋壎壓壗壘壙壚壜壞壟壠壢壣壩壪壯壺壼壽夠夢夾奐奧奩奪奬奮奼妝姍姦娙娛婁婡婦婭媈媧媯媰媼媽嫋嫗嫵嫺嫻嫿嬀嬃嬇嬈嬋嬌嬙嬡嬣嬤嬦嬪嬰嬸嬻孃孄孆孇孋孌孎孫學孻孾孿宮寀寠寢實寧審寫寬寵寶將專尋對導尷屆屍屓屜屢層屨屩屬岡峯峴島峽崍崑崗崙崢崬嵐嵗嵼嵽嵾嶁嶄嶇嶈嶔嶗嶘嶠嶢嶧嶨嶮嶸嶹嶺嶼嶽巊巋巒巔巖巗巘巰巹帥師帳帶幀幃幓幗幘幝幟幣幩幫幬幹幾庫廁廂廄廈廎廕廚廝廞廟廠廡廢廣廧廩廬廳弒弔弳張強彃彄彆彈彌彎彔彙彠彥彫彲彿後徑從徠復徹徿恆恥悅悞悵悶悽惡惱惲惻愛愜愨愴愷愻愾慄態慍慘慚慟慣慤慪慫慮慳慶慺慼慾憂憊憐憑憒憖憚憢憤憫憮憲憶憸憹懀懇應懌懍懎懞懟懣懤懨懲懶懷懸懺懼懾戀戇戔戧戩戰戱戲戶拋挩挱挾捨捫捱捲掃掄掆掗掙掚掛採揀揚換揮揯損搖搗搵搶摋摐摑摜摟摯摳摶摺摻撈撊撏撐撓撝撟撣撥撧撫撲撳撻撾撿擁擄擇擊擋擓擔據擟擠擣擫擬擯擰擱擲擴擷擺擻擼擽擾攄攆攋攏攔攖攙攛攜攝攢攣攤攪攬敎敓敗敘敵數斂斃斅斆斕斬斷斸旂旣昇時晉晛晝暈暉暐暘暢暫曄曆曇曉曊曏曖曠曥曨曬書會朥朧朮東枴柵柺査桱桿梔梖梘梜條梟梲棄棊棖棗棟棡棧棲棶椏椲楇楊楓楨業極榘榦榪榮榲榿構槍槓槤槧槨槫槮槳槶槼樁樂樅樑樓標樞樠樢樣樤樧樫樳樸樹樺樿橈橋機橢橫橯檁檉檔檜檟檢檣檭檮檯檳檵檸檻櫃櫅櫍櫓櫚櫛櫝櫞櫟櫠櫥櫧櫨櫪櫫櫬櫱櫳櫸櫻欄欅欇權欍欏欐欑欒欓欖欘欞欽歎歐歟歡歲歷歸歿殘殞殢殤殨殫殭殮殯殰殲殺殻殼毀毆毊毿氂氈氌氣氫氬氭氳氾汎汙決沒沖況泝洩洶浹浿涇涗涼淒淚淥淨淩淪淵淶淺渙減渢渦測渾湊湋湞湧湯溈準溝溡溫溮溳溼滄滅滌滎滙滬滯滲滷滸滻滾滿漁漊漍漚漢漣漬漲漵漸漿潁潑潔潕潙潚潛潣潤潯潰潷潿澀澅澆澇澐澗澠澤澦澩澫澬澮澱澾濁濃濄濆濕濘濚濛濜濟濤濧濫濰濱濺濼濾濿瀂瀃瀅瀆瀇瀉瀋瀏瀕瀘瀝瀟瀠瀦瀧瀨瀰瀲瀾灃灄灍灑灒灕灘灙灝灡灣灤灧灩災為烏烴無煇煉煒煙煢煥煩煬煱熂熅熉熌熒熓熗熚熡熰熱熲熾燀燁燈燉燒燖燙燜營燦燬燭燴燶燻燼燾爃爄爇爍爐爖爛爥爧爭爲爺爾牀牆牘牽犖犛犞犢犧狀狹狽猌猙猶猻獁獃獄獅獊獎獨獩獪獫獮獰獱獲獵獷獸獺獻獼玀玁珼現琱琺琿瑋瑒瑣瑤瑩瑪瑲瑻瑽璉璊璕璗璝璡璣璦璫璯環璵璸璼璽璾璿瓄瓅瓊瓏瓔瓕瓚瓛甌甕產産甦甯畝畢畫異畵當畼疇疊痙痠痮痾瘂瘋瘍瘓瘞瘡瘧瘮瘱瘲瘺瘻療癆癇癉癐癒癘癟癡癢癤癥癧癩癬癭癮癰癱癲發皁皚皟皰皸皺盃盜盞盡監盤盧盨盪眝眞眥眾睍睏睜睞瞘瞜瞞瞤瞶瞼矇矉矑矓矚矯硃硜硤硨硯碕碙碩碭碸確碼碽磑磚磠磣磧磯磽磾礄礆礎礐礒礙礦礪礫礬礮礱祕祿禍禎禕禡禦禪禮禰禱禿秈稅稈稏稜稟種稱穀穇穌積穎穠穡穢穩穫穭窩窪窮窯窵窶窺竄竅竇竈竊竚竪竱競筆筍筧筴箇箋箏節範築篋篔篘篠篢篤篩篳篸簀簂簍簑簞簡簢簣簫簹簽簾籃籅籋籌籔籙籛籜籟籠籤籩籪籬籮籲粵糉糝糞糧糰糲糴糶糹糺糾紀紂紃約紅紆紇紈紉紋納紐紓純紕紖紗紘紙級紛紜紝紞紟紡紬紮細紱紲紳紵紹紺紼紿絀絁終絃組絅絆絍絎結絕絙絛絝絞絡絢絥給絧絨絪絰統絲絳絶絹絺綀綁綃綄綆綇綈綉綋綌綎綏綐綑經綖綜綝綞綟綠綡綢綣綧綪綫綬維綯綰綱網綳綴綵綸綹綺綻綽綾綿緄緇緊緋緍緑緒緓緔緗緘緙線緝緞緟締緡緣緤緦編緩緬緮緯緰緱緲練緶緷緸緹緻緼縈縉縊縋縍縎縐縑縕縗縛縝縞縟縣縧縫縬縭縮縯縰縱縲縳縴縵縶縷縸縹縺總績繂繃繅繆繈繏繐繒繓織繕繚繞繟繡繢繨繩繪繫繬繭繮繯繰繳繶繷繸繹繻繼繽繾繿纁纆纇纈纊續纍纏纓纔纕纖纗纘纚纜缽罃罈罌罎罰罵罷羅羆羈羋羣羥羨義羵羶習翫翬翹翽耬耮聖聞聯聰聲聳聵聶職聹聻聽聾肅脅脈脛脣脥脩脫脹腎腖腡腦腪腫腳腸膃膕膚膞膠膢膩膹膽膾膿臉臍臏臗臘臚臟臠臢臥臨臺與興舉舊舘艙艣艤艦艫艱艷芻苧茲荊莊莖莢莧菕華菴菸萇萊萬萴萵葉葒葝葤葦葯葷蒍蒐蒓蒔蒕蒞蒭蒼蓀蓆蓋蓧蓮蓯蓴蓽蔄蔔蔘蔞蔣蔥蔦蔭蔯蔿蕁蕆蕎蕒蕓蕕蕘蕝蕢蕩蕪蕭蕳蕷蕽薀薆薈薊薌薑薔薘薟薦薩薳薴薵薺藍藎藝藥藪藭藴藶藷藹藺蘀蘄蘆蘇蘊蘋蘚蘞蘟蘢蘭蘺蘿虆虉處虛虜號虧虯蛺蛻蜆蝀蝕蝟蝦蝨蝸螄螞螢螮螻螿蟂蟄蟈蟎蟘蟜蟣蟬蟯蟲蟳蟶蟻蠀蠁蠅蠆蠍蠐蠑蠔蠙蠟蠣蠦蠨蠱蠶蠻蠾衆衊術衕衚衛衝袞裊裏補裝裡製複褌褘褲褳褸褻襀襇襉襏襓襖襗襘襝襠襤襪襬襯襰襲襴襵覈見覎規覓視覘覛覡覥覦親覬覯覲覷覹覺覼覽覿觀觴觶觸訁訂訃計訊訌討訏訐訑訒訓訕訖託記訛訜訝訞訟訢訣訥訨訩訪設許訴訶診註証詀詁詆詊詎詐詑詒詓詔評詖詗詘詛詝詞詠詡詢詣試詩詪詫詬詭詮詰話該詳詵詷詼詿誂誄誅誆誇誋誌認誑誒誕誘誚語誠誡誣誤誥誦誨說誫説誰課誳誴誶誷誹誺誼誾調諂諄談諉請諍諏諑諒諓論諗諛諜諝諞諟諡諢諣諤諥諦諧諫諭諮諯諰諱諲諳諴諶諷諸諺諼諾謀謁謂謄謅謆謉謊謎謏謐謔謖謗謙謚講謝謠謡謨謫謬謭謯謱謳謸謹謾譁譂譅譆證譊譎譏譑譓譖識譙譚譜譞譟譨譫譭譯議譴護譸譽譾讀讅變讋讌讎讒讓讕讖讚讜讞豈豎豐豔豬豵豶貓貗貙貝貞貟負財貢貧貨販貪貫責貯貰貲貳貴貶買貸貺費貼貽貿賀賁賂賃賄賅資賈賊賑賒賓賕賙賚賜賝賞賟賠賡賢賣賤賦賧質賫賬賭賰賴賵賺賻購賽賾贃贄贅贇贈贉贊贋贍贏贐贑贓贔贖贗贚贛贜赬趕趙趨趲跡踐踰踴蹌蹔蹕蹟蹠蹣蹤蹳蹺蹻躂躉躊躋躍躎躑躒躓躕躘躚躝躡躥躦躪軀軉車軋軌軍軏軑軒軔軕軗軛軜軝軟軤軨軫軬軲軷軸軹軺軻軼軾軿較輄輅輇輈載輊輋輒輓輔輕輖輗輛輜輝輞輟輢輥輦輨輩輪輬輮輯輳輶輷輸輻輼輾輿轀轂轄轅轆轇轉轊轍轎轐轔轗轟轠轡轢轣轤辦辭辮辯農迴逕這連週進遊運過達違遙遜遞遠遡適遱遲遷選遺遼邁還邇邊邏邐郟郵鄆鄉鄒鄔鄖鄟鄧鄩鄭鄰鄲鄳鄴鄶鄺酇酈醃醖醜醞醟醣醫醬醱醲醶釀釁釃釅釋釐釒釓釔釕釗釘釙釚針釟釣釤釦釧釨釩釲釳釴釵釷釹釺釾釿鈀鈁鈃鈄鈅鈆鈇鈈鈉鈋鈍鈎鈐鈑鈒鈔鈕鈖鈗鈛鈞鈠鈡鈣鈥鈦鈧鈮鈯鈰鈲鈳鈴鈷鈸鈹鈺鈽鈾鈿鉀鉁鉅鉆鉈鉉鉊鉋鉍鉑鉔鉕鉗鉚鉛鉝鉞鉠鉢鉤鉥鉦鉧鉬鉭鉮鉳鉶鉷鉸鉺鉻鉽鉾鉿銀銁銂銃銅銈銊銍銏銑銓銖銘銚銛銜銠銣銥銦銨銩銪銫銬銱銳銶銷銹銻銼鋁鋂鋃鋅鋇鋉鋌鋏鋐鋒鋗鋙鋝鋟鋠鋣鋤鋥鋦鋨鋩鋪鋭鋮鋯鋰鋱鋶鋸鋹鋼錀錁錂錄錆錇錈錏錐錒錕錘錙錚錛錜錝錞錟錠錡錢錤錥錦錨錩錫錮錯録錳錶錸錼錽鍀鍁鍃鍄鍅鍆鍇鍈鍉鍊鍋鍍鍒鍔鍘鍚鍛鍠鍤鍥鍩鍬鍭鍮鍰鍵鍶鍺鍼鍾鎂鎄鎇鎈鎊鎌鎍鎓鎔鎖鎘鎙鎚鎛鎝鎞鎡鎢鎣鎦鎧鎩鎪鎬鎭鎮鎯鎰鎲鎳鎵鎶鎷鎸鎿鏃鏆鏇鏈鏉鏌鏍鏏鏐鏑鏗鏘鏚鏜鏝鏞鏟鏡鏢鏤鏥鏦鏨鏰鏵鏷鏹鏺鏻鏽鏾鐃鐄鐇鐈鐋鐍鐎鐏鐐鐒鐓鐔鐘鐙鐝鐠鐥鐦鐧鐨鐩鐪鐫鐮鐯鐲鐳鐵鐶鐸鐺鐼鐽鐿鑀鑄鑉鑊鑌鑑鑒鑔鑕鑞鑠鑣鑥鑪鑭鑰鑱鑲鑴鑷鑹鑼鑽鑾鑿钁钂長門閂閃閆閈閉開閌閍閎閏閐閑閒間閔閗閘閝閞閡閣閤閥閨閩閫閬閭閱閲閵閶閹閻閼閽閾閿闃闆闇闈闉闊闋闌闍闐闑闒闓闔闕闖關闞闠闡闢闤闥陘陝陞陣陰陳陸陽隉隊階隑隕際隤隨險隮隯隱隴隸隻雋雖雙雛雜雞離難雲電霑霢霣霧霼霽靂靄靆靈靉靚靜靝靦靧靨鞏鞝鞦鞽鞾韁韃韆韉韋韌韍韓韙韚韛韜韝韞韠韻響頁頂頃項順頇須頊頌頍頎頏預頑頒頓頔頗領頜頠頡頤頦頫頭頮頰頲頴頵頷頸頹頻頽顂顃顅顆題額顎顏顒顓顔顗願顙顛類顢顣顥顧顫顬顯顰顱顳顴風颭颮颯颰颱颳颶颷颸颺颻颼颾飀飄飆飈飋飛飠飢飣飥飦飩飪飫飭飯飱飲飴飵飶飼飽飾飿餃餄餅餈餉養餌餎餏餑餒餓餔餕餖餗餘餚餛餜餞餡餦餧館餪餫餬餭餱餳餵餶餷餸餺餼餾餿饁饃饅饈饉饊饋饌饑饒饗饘饜饞饟饠饢馬馭馮馯馱馳馴馹馼駁駃駉駊駎駐駑駒駓駔駕駘駙駚駛駝駞駟駡駢駤駧駩駪駫駭駰駱駶駸駻駼駿騁騂騃騄騅騉騊騌騍騎騏騑騔騖騙騚騜騝騞騟騠騤騧騪騫騭騮騰騱騴騵騶騷騸騻騼騾驀驁驂驃驄驅驊驋驌驍驎驏驓驕驗驙驚驛驟驢驤驥驦驨驪驫骯髏髒體髕髖髮鬆鬍鬖鬚鬠鬢鬥鬧鬨鬩鬮鬱鬹魎魘魚魛魟魢魥魦魨魯魴魵魷魺魽鮀鮁鮃鮄鮅鮆鮈鮊鮋鮍鮎鮐鮑鮒鮓鮚鮜鮝鮞鮟鮠鮡鮣鮤鮦鮪鮫鮭鮮鮯鮰鮳鮵鮶鮸鮺鮿鯀鯁鯄鯆鯇鯉鯊鯒鯔鯕鯖鯗鯛鯝鯞鯡鯢鯤鯧鯨鯪鯫鯬鯰鯱鯴鯶鯷鯻鯽鯾鯿鰁鰂鰃鰆鰈鰉鰊鰋鰌鰍鰏鰐鰑鰒鰓鰕鰛鰜鰟鰠鰣鰤鰥鰦鰧鰨鰩鰫鰭鰮鰱鰲鰳鰵鰶鰷鰹鰺鰻鰼鰽鰾鱀鱂鱄鱅鱆鱇鱈鱉鱊鱒鱔鱖鱗鱘鱚鱝鱟鱠鱢鱣鱤鱧鱨鱭鱮鱯鱲鱷鱸鱺鳥鳧鳩鳬鳲鳳鳴鳶鳷鳼鳽鳾鴀鴃鴅鴆鴇鴉鴐鴒鴔鴕鴗鴛鴜鴝鴞鴟鴣鴥鴦鴨鴮鴯鴰鴲鴳鴴鴷鴻鴽鴿鵁鵂鵃鵊鵏鵐鵑鵒鵓鵚鵜鵝鵟鵠鵡鵧鵩鵪鵫鵬鵮鵯鵰鵲鵷鵾鶄鶇鶉鶊鶌鶒鶓鶖鶗鶘鶚鶠鶡鶥鶦鶩鶪鶬鶭鶯鶰鶱鶲鶴鶹鶺鶻鶼鶿鷀鷁鷂鷄鷅鷉鷊鷐鷓鷔鷖鷗鷙鷚鷟鷣鷤鷥鷦鷨鷩鷫鷭鷯鷲鷳鷴鷷鷸鷹鷺鷽鷿鸂鸇鸊鸋鸌鸏鸑鸕鸗鸘鸚鸛鸝鸞鹵鹹鹺鹼鹽麗麥麨麩麪麫麬麯麲麳麴麵麷麼黃黌點黨黲黴黶黷黽黿鼂鼉鼕鼴齊齋齎齏齒齔齕齗齘齙齜齟齠齡齣齦齧齩齪齬齭齮齯齰齲齴齶齷齼齾龍龎龐龑龓龔龕龜龭龯鿁鿓𠁞𠌥𠏢𠐊𠗣𠞆𠠎𠬙𠽃𠿕𡂡𡃄𡃕𡃤𡄔𡄣𡅏𡅯𡑍𡑭𡓁𡓾𡔖𡞵𡟫𡠹𡢃𡮉𡮣𡳳𡸗𡹬𡻕𡽗𡾱𡿖𢍰𢠼𢣐𢣚𢣭𢤩𢤱𢤿𢯷𢶒𢶫𢷮𢹿𢺳𣈶𣋋𣍐𣙎𣜬𣝕𣞻𣠩𣠲𣯩𣯴𣯶𣽏𣾷𣿉𤁣𤄷𤅶𤑳𤑹𤒎𤒻𤓌𤓎𤓩𤘀𤛮𤛱𤜆𤠮𤢟𤢻𤩂𤪺𤫩𤬅𤳷𤳸𤷃𤸫𤺔𥊝𥌃𥏝𥕥𥖅𥖲𥗇𥗽𥜐𥜰𥞵𥢢𥢶𥢷𥨐𥪂𥯤𥴨𥴼𥵃𥵊𥶽𥸠𥻦𥼽𥽖𥾯𥿊𦀖𦂅𦃄𦃩𦅇𦅈𦆲𦒀𦔖𦘧𦟼𦠅𦡝𦢈𦣎𦧺𦪙𦪽𦱌𦾟𧎈𧒯𧔥𧕟𧜗𧜵𧝞𧞫𧟀𧡴𧢄𧦝𧦧𧩕𧩙𧩼𧫝𧬤𧭈𧭹𧳟𧵳𧶔𧶧𧷎𧸘𧹈𧽯𨂐𨄣𨅍𨆪𨇁𨇞𨇤𨇰𨇽𨈊𨈌𨊰𨊸𨊻𨋢𨌈𨍰𨎌𨎮𨏠𨏥𨞺𨟊𨢿𨣈𨣞𨣧𨤻𨥛𨥟𨦫𨧀𨧜𨧰𨧱𨨏𨨛𨨢𨩰𨪕𨫒𨬖𨭆𨭎𨭖𨭸𨮂𨮳𨯅𨯟𨰃𨰋𨰥𨰲𨲳𨳑𨳕𨴗𨴹𨵩𨵸𨶀𨶏𨶮𨶲𨷲𨼳𨽏𩀨𩅙𩎖𩎢𩏂𩏠𩏪𩏷𩑔𩒎𩓣𩓥𩔑𩔳𩖰𩗀𩗓𩗴𩘀𩘝𩘹𩘺𩙈𩚛𩚥𩚩𩚵𩛆𩛌𩛡𩛩𩜇𩜦𩜵𩝔𩝽𩞄𩞦𩞯𩟐𩟗𩠴𩡣𩡺𩢡𩢴𩢸𩢾𩣏𩣑𩣫𩣵𩣺𩤊𩤙𩤲𩤸𩥄𩥇𩥉𩥑𩦠𩧆𩭙𩯁𩯳𩰀𩰹𩳤𩴵𩵦𩵩𩵹𩶁𩶘𩶰𩶱𩷰𩸃𩸄𩸡𩸦𩻗𩻬𩻮𩼶𩽇𩿅𩿤𩿪𪀖𪀦𪀾𪁈𪁖𪂆𪃍𪃏𪃒𪃧𪄆𪄕𪅂𪆷𪇳𪈼𪉸𪋿𪌭𪍠𪓰𪔵𪘀𪘯𪙏𪟖𪷓𫒡𫜦'
++)
++
++SIMPLIFIED_ONLY_CHARS = frozenset(
++    '㐷㐽㑇㑈㑔㑩㓆㓥㓰㔉㖊㖞㘎㚯㛀㛟㛠㛣㛤㛿㟆㟜㟥㡎㤘㤽㥪㧏㧐㧑㧟㧰㨫㭎㭏㭣㭤㭴㱩㱮㲿㳔㳕㳠㳡㳢㳽㴋㶉㶶㶽㺍㻅㻏㻘䀥䁖䂵䃅䅉䅟䅪䇲䉤䌶䌷䌸䌹䌺䌻䌼䌽䌾䌿䍀䍁䍠䎬䏝䑽䓓䓕䓖䓨䗖䘛䘞䙊䙌䙓䜣䜤䜥䜧䜩䝙䞌䞍䞎䞐䟢䢀䢁䢂䥺䥽䥾䥿䦀䦁䦂䦃䦅䦆䦶䦷䩄䭪䯃䯄䯅䲝䲞䲟䲠䲡䲢䲣䴓䴔䴕䴖䴗䴘䴙䶮与专业丛东丝丢两严丧个临为丽举么义乌乐乔习乡书买乱争亏亚产亩亲亵亸亿仅从仑仓仪们众优会伛伞伟传伡伣伤伥伦伧伪伫体佥侠侣侥侦侧侨侩侪侬侭俣俦俨俩俪俫俭债倾偬偻偾偿傤傥傧储傩儿兑兖兰关兴兹养兽冁内冈册写军农冯冲决况冻净凄凉减凑凛凤凫凭凯击凿刍刘则刚创删别刬刭刹刽刾刿剀剂剐剑剥剧劝办务劢动励劲劳势勋勚匀匦匮区医华协单卖卢卤卧卫却卺厅历厉压厌厍厐厕厢厣厦厨厩厮县叁参叆叇双发变叙叠号叹叽吓吕吗吨听启吴呐呒呓呕呖呗员呙呛呜咏咙咛咝咤响哑哒哓哔哕哗哙哜哝哟唛唝唠唡唢唤啧啬啭啮啯啰啴啸喷喽喾嗫嗳嘘嘤嘱噜嚣团园囱围囵国图圆圣圹场坏块坚坛坜坝坞坟坠垄垅垆垒垦垩垫垭垯垱垲垴埘埙埚堑堕塆墙壮声壳壶壸处备复够头夹夺奁奂奋奖奥妆妇妈妩妪妫姗姹娄娅娆娇娈娱娲娴婳婴婵婶媪媭嫒嫔嫱嬷孙学孪宁宝实宠审宪宫宽宾寝对寻导寿将尔尘尝尧尴尽层屃屉届属屡屦屿岁岂岖岗岘岚岛岭岽岿峃峄峡峣峤峥峦峰崂崃崄崭嵘嵚嵝巅巩巯币帅师帏帐帜带帧帮帱帻帼幂并庄庆床庐庑库应庙庞废庼廪开异弃弑张弥弪弯弹强归当录彟彦彨彻径徕忆忏忧忾怀态怂怃怄怅怆怜总怼怿恋恒恳恶恸恹恺恻恼恽悦悫悬悭悮悯惊惧惨惩惫惬惭惮惯愠愤愦慑慭懑懒懔戆戋戏戗战戬戯户扑执扩扪扫扬扰抚抛抟抠抡抢护报担拟拢拣拥拦拧拨择挚挛挜挝挞挟挠挡挢挣挤挥挦捝捞损捡换捣掳掴掷掸掺掼揽揾揿搀搁搂搄搅携摄摅摆摇摈摊撄撑撵撷撸撺擜擞攒敌敚敛敩数斋斓斩断无旧时旷旸昙昵昼昽显晋晒晓晔晕晖暂暅暧术机杀杂权条来杨杩构枞枢枣枥枧枨枪枫枭柠柽栀栅标栈栉栊栋栌栎栏树栖样栾桠桡桢档桤桥桦桧桨桩桪梦梼梾梿检棁棂椁椝椟椠椢椤椫椭椮楼榄榅榇榈榉榝槚槛槟槠横樯樱橥橱橹橼檩欢欤欧歼殁殇残殒殓殚殡殴毁毂毕毙毡毵毶氇气氢氩氲汇汉汤汹沄沟没沣沤沥沦沧沨沩沪泞泪泶泷泸泺泻泼泽泾洁洒洼浃浅浆浇浈浉浊测浍济浏浐浑浒浓浔浕涚涛涝涞涟涠涡涢涣涤润涧涨涩渊渌渍渎渐渑渔渖渗温湾湿溁溃溅溆溇滗滚滞滟滠满滢滤滥滦滨滩滪潆潇潋潍潜潴澛澜濑濒灏灭灯灵灶灾灿炀炉炖炜炝点炼炽烁烂烃烛烟烦烧烨烩烫烬热焕焖焘煴爱爷牍牦牵牺犊状犷犸犹狈狝狞独狭狮狯狰狱狲猃猎猕猡猪猫猬献獭玑玙玚玛玮环现玱玺珐珑珰珲琎琏琐琼瑶瑷瑸璎瓒瓮瓯电画畅畴疖疗疟疠疡疬疭疮疯疱疴痈痉痒痖痨痪痫痴瘅瘆瘗瘘瘪瘫瘾瘿癞癣癫皑皱皲盏盐监盖盗盘眍眦眬睁睐睑瞆瞒瞩矫矶矾矿砀码砖砗砚砜砺砻砾础硁硕硖硗硙硚硵硷碍碛碜碱礼祃祎祢祯祷祸禀禄禅离秃秆秘积称秽秾稆税稣稳穑穞穷窃窍窎窑窜窝窥窦窭竖竞笃笋笔笕笺笼笾筚筛筜筝筹筼签筿简箓箦箧箨箩箪箫篑篓篮篯篱簖籁籴类籼粜粝粤粪粮粽糁糇糍紧絷緼縆纟纠纡红纣纤纥约级纨纩纪纫纬纭纮纯纰纱纲纳纴纵纶纷纸纹纺纻纼纽纾线绀绁绂练组绅细织终绉绊绋绌绍绎经绐绑绒结绔绕绖绗绘给绚绛络绝绞统绠绡绢绣绤绥绦继绨绩绪绫绬续绮绯绰绱绲绳维绵绶绷绸绹绺绻综绽绾绿缀缁缂缃缄缅缆缇缈缉缊缋缌缍缎缏缐缑缒缓缔缕编缗缘缙缚缛缜缝缞缟缠缡缢缣缤缥缦缧缨缩缪缫缬缭缮缯缰缱缲缳缴缵罂网罗罚罢罴羁羟羡群翘翙翚耢耧耸耻聂聋职聍联聩聪肃肠肤肮肴肾肿胀胁胆胧胨胪胫胶脉脍脏脐脑脓脔脚脱脶脸腘腭腻腼腽腾膑臜舆舣舰舱舻艰艳艺节芈芗芜芦苁苇苈苋苌苍苎苏苧茎茏茑茔茕茧荆荙荚荛荜荝荞荟荠荡荣荤荥荦荧荨荩荪荫荬荭荮药莅莱莲莳莴莶获莸莹莺莼萚萝萤营萦萧萨葱蒀蒇蒉蒋蒌蒏蓝蓟蓠蓣蓥蓦蔂蔷蔹蔺蔼蕰蕲蕴薮藓藴蘖虏虑虚虬虮虱虽虾虿蚀蚁蚂蚃蚕蚬蛊蛎蛏蛮蛰蛱蛲蛳蛴蜕蜗蝇蝈蝉蝼蝾螀螨蟏衅衔补衬衮袄袅袆袜袭袯装裆裈裢裣裤裥褛褴襕见观觃规觅视觇览觉觊觋觌觍觎觏觐觑觞触觯訚詟誉誊讠计订讣认讥讦讧讨让讪讫讬训议讯记讱讲讳讴讵讶讷许讹论讻讼讽设访诀证诂诃评诅识诇诈诉诊诋诌词诎诏诐译诒诓诔试诖诗诘诙诚诛诜话诞诟诠诡询诣诤该详诧诨诩诪诫诬语诮误诰诱诲诳说诵诶请诸诹诺读诼诽课诿谀谁谂调谄谅谆谇谈谉谊谋谌谍谎谏谐谑谒谓谔谕谖谗谘谙谚谛谜谝谞谟谠谡谢谣谤谥谦谧谨谩谪谫谬谭谮谯谰谱谲谳谴谵谶豮贝贞负贠贡财责贤败账货质贩贪贫贬购贮贯贰贱贲贳贴贵贶贷贸费贺贻贼贽贾贿赀赁赂赃资赅赆赇赈赉赊赋赌赍赎赏赐赑赒赓赔赕赖赗赘赙赚赛赜赝赞赟赠赡赢赣赪赵赶趋趱趸跃跄跞践跶跷跸跹跻踌踪踬踯蹑蹒蹰蹿躏躜躯輼车轧轨轩轪轫转轭轮软轰轱轲轳轴轵轶轷轸轹轺轻轼载轾轿辀辁辂较辄辅辆辇辈辉辊辋辌辍辎辏辐辑辒输辔辕辖辗辘辙辚辞辩辫边辽达迁过迈运还这进远违连迟迩迳迹选逊递逦逻遗遥邓邝邬邮邹邺邻郏郐郑郓郦郧郸酂酝酦酱酽酾酿醖释鉴銮錾钅钆钇针钉钊钋钌钍钎钏钐钑钒钓钔钕钖钗钘钙钚钛钜钝钞钟钠钡钢钣钤钥钦钧钨钩钪钫钬钭钮钯钰钱钲钳钴钵钶钷钸钹钺钻钼钽钾钿铀铁铂铃铄铅铆铇铈铉铊铋铌铍铎铏铐铑铒铓铔铕铖铗铘铙铚铛铜铝铞铟铠铡铢铣铤铥铦铧铨铩铪铫铬铭铮铯铰铱铲铳铴铵银铷铸铹铺铻铼铽链铿销锁锂锃锄锅锆锇锈锉锊锋锌锍锎锏锐锑锒锓锔锕锖锗锘错锚锛锜锝锞锟锠锡锢锣锤锥锦锧锨锩锪锫锬锭键锯锰锱锲锳锴锵锶锷锸锹锺锻锼锽锾锿镀镁镂镃镄镅镆镇镈镉镊镋镌镍镎镏镐镑镒镓镔镕镖镗镘镙镚镛镜镝镞镟镠镡镢镣镤镥镦镧镨镩镪镫镬镭镮镯镰镱镲镳镴镵镶长门闩闪闫闬闭问闯闰闱闲闳间闵闶闷闸闹闺闻闼闽闾闿阀阁阂阃阄阅阆阇阈阉阊阋阌阍阎阏阐阑阒阓阔阕阖阗阘阙阚阛队阳阴阵阶际陆陇陈陉陕陦陧陨险随隐隶隽难雇雏雠雳雾霁霉霡霭靓靔静靥鞑鞒鞯鞲韦韧韨韩韪韫韬韵页顶顷顸项顺须顼顽顾顿颀颁颂颃预颅领颇颈颉颊颋颌颍颎颏颐频颒颓颔颕颖颗题颙颚颛颜额颞颟颠颡颢颣颤颥颦颧风飏飐飑飒飓飔飕飖飗飘飙飚飞飨餍饣饤饥饦饧饨饩饪饫饬饭饮饯饰饱饲饳饴饵饶饷饸饹饺饻饼饽饾饿馀馁馂馃馄馅馆馇馈馉馊馋馌馍馎馏馐馑馒馓馔馕马驭驮驯驰驱驲驳驴驵驶驷驸驹驺驻驼驽驾驿骀骁骂骃骄骅骆骇骈骉骊骋验骍骎骏骐骑骒骓骔骕骖骗骘骙骚骛骜骝骞骟骠骡骢骣骤骥骦骧髅髋髌鬓鬶魇魉鱼鱽鱾鱿鲀鲁鲂鲃鲄鲅鲆鲇鲈鲉鲊鲋鲌鲍鲎鲏鲐鲑鲒鲓鲔鲕鲖鲗鲘鲙鲚鲛鲜鲝鲞鲟鲠鲡鲢鲣鲤鲥鲦鲧鲨鲩鲪鲫鲬鲭鲮鲯鲰鲱鲲鲳鲴鲵鲶鲷鲸鲹鲺鲻鲼鲽鲾鲿鳀鳁鳂鳃鳄鳅鳆鳇鳈鳉鳊鳋鳌鳍鳎鳏鳐鳑鳒鳓鳔鳕鳖鳗鳘鳙鳚鳛鳜鳝鳞鳟鳠鳡鳢鳣鳤鸟鸠鸡鸢鸣鸤鸥鸦鸧鸨鸩鸪鸫鸬鸭鸮鸯鸰鸱鸲鸳鸴鸵鸶鸷鸸鸹鸺鸻鸼鸽鸾鸿鹀鹁鹂鹃鹄鹅鹆鹇鹈鹉鹊鹋鹌鹍鹎鹏鹐鹑鹒鹓鹔鹕鹖鹗鹘鹙鹚鹛鹜鹝鹞鹟鹠鹡鹢鹣鹤鹥鹦鹧鹨鹩鹪鹫鹬鹭鹮鹯鹰鹱鹲鹳鹴鹾麦麸麹麺麽黄黉黡黩黪黾鼋鼌鼍鼹齐齑齿龀龁龂龃龄龅龆龇龈龉龊龋龌龙龚龛龟鿎鿏鿒鿔𠀾𠆲𠆿𠇹𠉂𠉗𠋆𠚳𠛅𠛆𠛾𠡠𠮶𠯟𠯠𠰱𠰷𠱞𠲥𠴛𠴢𠵸𠵾𡋀𡋗𡋤𡍣𡒄𡝠𡞋𡞱𡠟𡥧𡭜𡭬𡳃𡳒𡶴𡸃𡺃𡺄𢋈𢗓𢘙𢘝𢘞𢙏𢙐𢙑𢙒𢙓𢛯𢠁𢢐𢧐𢫊𢫞𢫬𢬍𢬦𢭏𢽾𣃁𣆐𣈣𣍨𣍯𣍰𣎑𣏢𣐕𣐤𣑶𣒌𣓿𣔌𣗊𣗋𣗙𣘐𣘓𣘴𣘷𣚚𣞎𣨼𣭤𣯣𣱝𣲗𣲘𣳆𣶩𣶫𣶭𣷷𣸣𣺼𣺽𣽷𤆡𤆢𤇃𤇄𤇭𤇹𤈶𤈷𤊀𤊰𤋏𤎺𤎻𤙯𤝢𤞃𤞤𤠋𤦀𤩽𤳄𤶊𤶧𤻊𤽯𤾀𤿲𥁢𥅘𥅴𥅿𥆧𥇢𥎝𥐟𥐯𥐰𥐻𥞦𥧂𥩟𥩺𥫣𥬀𥬞𥬠𥭉𥮋𥮜𥮾𥱔𥹥𥺅𥺇𦈈𦈉𦈋𦈌𦈎𦈏𦈐𦈑𦈒𦈓𦈔𦈕𦈖𦈗𦈘𦈙𦈚𦈛𦈜𦈝𦈞𦈟𦈠𦈡𦍠𦛨𦝼𦟗𦨩𦰏𦰴𦶟𦶻𦻕𧉐𧉞𧌥𧏖𧏗𧑏𧒭𧜭𧝝𧝧𧮪𧳕𧹑𧹒𧹓𧹔𧹕𧹖𧹗𧿈𨀁𨀱𨁴𨂺𨄄𨅛𨅫𨅬𨉗𨐅𨐆𨐇𨐈𨐉𨐊𨑹𨟳𨠨𨡙𨡺𨤰𨰾𨰿𨱀𨱁𨱂𨱃𨱄𨱅𨱆𨱇𨱈𨱉𨱊𨱋𨱌𨱍𨱎𨱏𨱐𨱑𨱒𨱓𨱔𨱕𨱖𨷿𨸀𨸁𨸂𨸃𨸄𨸅𨸆𨸇𨸉𨸊𨸋𨸌𨸎𨸘𨸟𩏼𩏽𩏾𩏿𩐀𩓋𩖕𩖖𩖗𩙥𩙦𩙧𩙨𩙩𩙪𩙫𩙬𩙭𩙮𩙯𩙰𩟿𩠀𩠁𩠂𩠃𩠅𩠆𩠇𩠈𩠉𩠊𩠋𩠌𩠎𩠏𩠠𩡖𩧦𩧨𩧩𩧪𩧫𩧬𩧭𩧮𩧯𩧰𩧱𩧲𩧳𩧴𩧵𩧶𩧸𩧺𩧻𩧼𩧿𩨀𩨁𩨂𩨃𩨄𩨅𩨆𩨇𩨈𩨉𩨊𩨋𩨌𩨍𩨎𩨏𩨐𩩈𩬣𩬤𩭹𩯒𩰰𩲒𩴌𩽹𩽺𩽻𩽼𩽽𩽾𩽿𩾁𩾂𩾃𩾄𩾅𩾆𩾇𩾈𩾊𩾋𩾌𩾎𪉂𪉃𪉄𪉅𪉆𪉈𪉉𪉊𪉋𪉌𪉍𪉎𪉏𪉐𪉑𪉒𪉔𪉕𪎈𪎉𪎊𪎋𪎌𪑅𪔭𪚏𪚐𪜎𪞝𪟎𪟝𪠀𪠟𪠡𪠳𪠵𪠸𪠺𪠽𪡀𪡃𪡋𪡏𪡛𪡞𪡺𪢌𪢐𪢒𪢕𪢖𪢠𪢮𪢸𪣆𪣒𪣻𪤄𪤚𪥠𪥫𪥰𪥿𪧀𪧘𪨊𪨗𪨧𪨩𪨶𪨷𪨹𪩇𪩎𪩘𪩛𪩷𪩸𪪏𪪑𪪞𪪴𪪼𪫌𪫡𪫷𪫺𪬚𪬯𪭝𪭢𪭧𪭯𪭵𪭾𪮃𪮋𪮖𪮳𪮶𪯋𪰶𪱥𪱷𪲎𪲔𪲛𪲮𪳍𪳗𪴙𪵑𪵣𪵱𪶄𪶒𪶮𪷍𪷽𪸕𪸩𪹀𪹠𪹳𪹹𪺣𪺪𪺭𪺷𪺸𪺻𪺽𪻐𪻨𪻲𪻺𪼋𪼴𪽈𪽝𪽪𪽭𪽮𪽴𪽷𪾔𪾢𪾣𪾦𪾸𪿊𪿞𪿫𪿵𫀌𫀓𫀨𫀬𫀮𫁂𫁟𫁡𫁱𫁲𫁳𫁷𫁺𫂃𫂆𫂈𫂖𫂿𫃗𫄙𫄚𫄛𫄜𫄝𫄞𫄟𫄠𫄡𫄢𫄣𫄤𫄥𫄦𫄧𫄨𫄩𫄪𫄫𫄬𫄭𫄮𫄯𫄰𫄱𫄲𫄳𫄴𫄵𫄶𫄷𫄸𫄹𫅅𫅗𫅥𫅭𫅼𫆏𫆝𫆫𫇘𫇛𫇪𫇭𫇴𫇽𫈉𫈎𫈟𫈵𫉁𫉄𫊪𫊮𫊸𫊹𫊻𫋇𫋌𫋲𫋷𫋹𫋻𫌀𫌇𫌋𫌨𫌪𫌫𫌬𫌭𫌯𫍐𫍙𫍚𫍛𫍜𫍝𫍞𫍟𫍠𫍡𫍢𫍣𫍤𫍥𫍦𫍧𫍨𫍩𫍪𫍫𫍬𫍭𫍮𫍯𫍰𫍱𫍲𫍳𫍴𫍵𫍶𫍷𫍸𫍹𫍺𫍻𫍼𫍽𫍾𫍿𫎆𫎌𫎦𫎧𫎨𫎩𫎪𫎫𫎬𫎭𫎱𫎳𫎸𫎺𫏃𫏆𫏋𫏌𫏐𫏑𫏕𫏞𫏨𫐄𫐅𫐆𫐇𫐈𫐉𫐊𫐋𫐌𫐍𫐎𫐏𫐐𫐑𫐒𫐓𫐔𫐕𫐖𫐗𫐘𫐙𫐷𫑘𫑡𫑷𫓥𫓦𫓧𫓨𫓩𫓪𫓫𫓬𫓭𫓮𫓯𫓰𫓱𫓲𫓳𫓴𫓵𫓶𫓷𫓸𫓹𫓺𫓻𫓼𫓽𫓾𫓿𫔀𫔁𫔂𫔃𫔄𫔅𫔆𫔇𫔈𫔉𫔊𫔋𫔌𫔍𫔎𫔏𫔐𫔑𫔒𫔓𫔔𫔕𫔖𫔭𫔮𫔯𫔰𫔲𫔴𫔵𫔶𫔽𫕚𫕥𫕨𫖃𫖅𫖇𫖑𫖒𫖓𫖔𫖕𫖖𫖪𫖫𫖬𫖭𫖮𫖯𫖰𫖱𫖲𫖳𫖴𫖵𫖶𫖷𫖸𫖹𫖺𫗇𫗈𫗉𫗊𫗋𫗚𫗞𫗟𫗠𫗡𫗢𫗣𫗤𫗥𫗦𫗧𫗨𫗩𫗪𫗫𫗬𫗭𫗮𫗯𫗰𫗱𫗳𫗴𫗵𫘛𫘜𫘝𫘞𫘟𫘠𫘡𫘣𫘤𫘥𫘦𫘧𫘨𫘩𫘪𫘫𫘬𫘭𫘮𫘯𫘰𫘱𫘽𫙂𫚈𫚉𫚊𫚋𫚌𫚍𫚎𫚏𫚐𫚑𫚒𫚓𫚔𫚕𫚖𫚗𫚘𫚙𫚚𫚛𫚜𫚝𫚞𫚟𫚠𫚡𫚢𫚣𫚤𫚥𫚦𫚧𫚨𫚩𫚪𫚫𫚬𫚭𫛚𫛛𫛜𫛝𫛞𫛟𫛠𫛡𫛢𫛣𫛤𫛥𫛦𫛧𫛨𫛩𫛪𫛫𫛬𫛭𫛮𫛯𫛰𫛱𫛲𫛳𫛴𫛵𫛶𫛷𫛸𫛹𫛺𫛻𫛼𫛽𫛾𫜀𫜁𫜂𫜃𫜄𫜅𫜊𫜑𫜒𫜓𫜔𫜕𫜙𫜟𫜨𫜩𫜪𫜫𫜬𫜭𫜮𫜯𫜰𫜲𫜳𫝈𫝋𫝦𫝧𫝨𫝩𫝪𫝫𫝬𫝭𫝮𫝵𫞅𫞗𫞚𫞛𫞝𫞠𫞡𫞢𫞣𫞥𫞦𫞧𫞨𫞩𫞷𫟃𫟄𫟅𫟆𫟇𫟑𫟕𫟞𫟟𫟠𫟡𫟢𫟤𫟥𫟦𫟫𫟬𫟲𫟳𫟴𫟵𫟶𫟷𫟸𫟹𫟺𫟻𫟼𫟽𫟾𫟿𫠀𫠁𫠂𫠅𫠆𫠇𫠈𫠊𫠋𫠌𫠏𫠐𫠑𫠒𫠖𫠜𫢸𫧃𫧮𫫇𫬐𫭟𫭢𫭼𫮃𫰛𫵷𫶇𫷷𫸩𬀩𬀪𬂩𬃊𬇕𬇙𬇹𬉼𬊈𬊤𬍛𬍡𬍤𬒈𬒗𬕂𬘓𬘘𬘡𬘩𬘫𬘬𬘭𬘯𬙂𬙊𬙋𬜬𬜯𬞟𬟁𬟽𬣙𬣞𬣡𬣳𬤇𬤊𬤝𬨂𬨎𬩽𬪩𬬩𬬭𬬮𬬱𬬸𬬹𬬻𬬿𬭁𬭊𬭎𬭚𬭛𬭤𬭩𬭬𬭭𬭯𬭳𬭶𬭸𬭼𬮱𬮿𬯀𬯎𬱖𬱟𬳵𬳶𬳽𬳿𬴂𬴃𬴊𬶋𬶍𬶏𬶐𬶟𬶠𬶨𬶭𬶮𬷕𬸘𬸚𬸣𬸦𬸪𬸯𬹼𬺈𬺓𰬸𰰨𰶎𰾄𰾭𱊜'
++)
 --- a/core/title_writeback.py
 +++ b/core/title_writeback.py
 @@ -9,6 +9,7 @@
@@ -6018,7 +6697,7 @@
  from core.nfo_read import nfo_first_text
  from core.nfo_title_format import build_display_title
  from core.nfo_updater import set_element_text
-@@ -83,5 +84,10 @@
+@@ -83,5 +84,62 @@
          ET.SubElement(rec, "body").text = body
  
      out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
@@ -6030,3 +6709,55 @@
 +    ) as fh:
 +        fh.write(out)
      return out
++
++
++def create_title_only_nfo(
++    nfo_path,
++    *,
++    number,
++    title_body,
++    original_title,
++    actors,
++    maker,
++    date,
++    nfo_title_format,
++) -> bytes:
++    """Create a minimal sidecar with title-related fields only.
++
++    This is used by the combined rename flow when a video has no NFO yet.
++    It intentionally does not emit the full metadata set produced by
++    ``generate_nfo``: only the number needed to resolve the display title,
++    the title, the original title, and the title-preservation record (when a
++    custom title format is configured).
++    """
++    path = Path(nfo_path)
++    if path.exists():
++        raise FileExistsError(str(nfo_path))
++
++    number = _strip_illegal_xml_chars(number)
++    title_body = _strip_illegal_xml_chars(title_body)
++    original_title = _strip_illegal_xml_chars(original_title)
++    maker = _strip_illegal_xml_chars(maker)
++    date = _strip_illegal_xml_chars(date)
++    actors = [_strip_illegal_xml_chars(a) for a in (actors or [])]
++
++    display_title, body = build_display_title(
++        number, title_body, original_title, actors, maker, date, nfo_title_format,
++    )
++
++    root = ET.Element("movie")
++    if number:
++        ET.SubElement(root, "num").text = number
++    ET.SubElement(root, "title").text = display_title
++    ET.SubElement(root, "originaltitle").text = original_title
++    if nfo_title_format != _DEFAULT_FORMAT:
++        record = ET.SubElement(root, "openaver_title_record")
++        ET.SubElement(record, "written").text = display_title
++        ET.SubElement(record, "body").text = body
++
++    out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
++    with atomic_write(
++        path, mode="wb", suffix=".nfo.tmp", mobile_fallback=True
++    ) as fh:
++        fh.write(out)
++    return out

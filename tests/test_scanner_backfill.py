@@ -22,18 +22,26 @@ def _drain_events(generator):
         events.append(json.loads(raw[6:].strip()))
 
 
-def test_title_backfill_candidate_requires_japanese_and_no_saved_original():
+def test_title_backfill_candidate_follows_active_target_language():
     assert scanner_router._is_untranslated_title_candidate(  # noqa: SLF001
-        Video(path="file:///a.mp4", title="これは未翻訳です", original_title="")
+        Video(path="file:///a.mp4", title="これは未翻訳です"),
+        "zh-CN",
     ) is True
     assert scanner_router._is_untranslated_title_candidate(  # noqa: SLF001
-        Video(path="file:///b.mp4", title="これは処理済みです", original_title="已翻译")
+        Video(path="file:///b.mp4", title="这是已翻译"),
+        "zh-CN",
     ) is False
     assert scanner_router._is_untranslated_title_candidate(  # noqa: SLF001
-        Video(path="file:///c.mp4", title="English title", original_title="")
-    ) is False
+        Video(path="file:///c.mp4", title="這是繁體標題"),
+        "zh-CN",
+    ) is True
     assert scanner_router._is_untranslated_title_candidate(  # noqa: SLF001
-        Video(path="file:///d.mp4", title="", original_title="")
+        Video(path="file:///d.mp4", title="English title"),
+        "zh-CN",
+    ) is True
+    assert scanner_router._is_untranslated_title_candidate(  # noqa: SLF001
+        Video(path="file:///e.mp4", title=""),
+        "zh-CN",
     ) is False
 
 
@@ -77,7 +85,7 @@ def test_repository_backfill_queries_filter_at_storage_boundary(tmp_path):
 
     assert [
         video.path for video in repo.get_untranslated_title_candidates()
-    ] == ["file:///A.mp4", "file:///C.mp4"]
+    ] == ["file:///A.mp4", "file:///B.mp4", "file:///C.mp4"]
     assert [
         video.path for video in repo.get_missing_sample_candidates()
     ] == ["file:///A.mp4", "file:///C.mp4"]
@@ -146,8 +154,8 @@ def test_title_backfill_generator_processes_only_missing_candidates(
         Video(
             path="file:///ABC-203.mp4",
             number="ABC-203",
-            title="これは処理済みです",
-            original_title="已翻译",
+            title="这是已翻译的标题",
+            original_title="前一次保存的原文",
         ),
         Video(
             path="file:///ABC-204.mp4",
@@ -166,8 +174,10 @@ def test_title_backfill_generator_processes_only_missing_candidates(
 
     class FakeService:
         async def translate_or_raise(self, title, context):
-            assert title == "これは未翻訳です"
-            return "这是未翻译"
+            return {
+                "これは未翻訳です": "这是未翻译",
+                "English title": "英文标题",
+            }[title]
 
     def fake_writeback(_repo, video, req, _config, _path_mappings):
         translated_paths.append(video.path)
@@ -201,7 +211,10 @@ def test_title_backfill_generator_processes_only_missing_candidates(
         scanner_router._title_backfill_generator(threading.Event())  # noqa: SLF001
     )
 
-    assert translated_paths == ["file:///ABC-202.mp4"]
+    assert translated_paths == [
+        "file:///ABC-202.mp4",
+        "file:///ABC-204.mp4",
+    ]
     translation_logs = [
         event for event in events
         if event.get("type") == "log"
@@ -210,7 +223,7 @@ def test_title_backfill_generator_processes_only_missing_candidates(
     assert len(translation_logs) == 1
     done = events[-1]
     assert done["type"] == "done"
-    assert done["summary"]["success"] == 1
+    assert done["summary"]["success"] == 2
     assert done["summary"]["failed"] == 0
 
 

@@ -1,14 +1,58 @@
 --- a/core/auto_organize.py
 +++ b/core/auto_organize.py
-@@ -130,7 +130,7 @@
+@@ -13,11 +13,12 @@
+ from core.db_inflow import try_inflow_upsert
+ from core.favorite_scan import detect_nfo, list_favorite_video_files, resolve_favorite_folder
+ from core.logger import get_logger
+-from core.organizer import extract_chinese_title, organize_file
++from core.organizer import organize_file
+ from core.path_utils import coerce_to_file_uri
+ from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
+ from core.scraper import smart_search, search_jav, is_number_format
+-from core.scrapers.utils import extract_number, has_japanese
++from core.scrapers.utils import extract_number
++from core.title_language import title_needs_translation
+ from core.source_settings import is_uncensored_mode_effective
+ from core.translate_service import create_translate_service
+ from core.wishlist_reconcile import reconcile_wishlist
+@@ -112,15 +113,12 @@
+     scraper_config = config.get('scraper', {})
+     translate_config = config.get('translate', {})
+     translate_enabled = translate_config.get('enabled', False)
++    locale = config.get('general', {}).get('locale', 'zh-CN')
+     # locale 一定要傳（Codex PR #181 P1）：`create_translate_service` 的 target_language
+     # 預設是 "zh-TW"，少傳這一個參數 ⇒ **不論使用者把介面語言設成什麼，一律翻成繁中**，
+     # 而這裡的翻譯結果會蓋掉標題、進**檔名／資料夾名／NFO <title>**（core/organizer.py:1092、
+     # :1211、:1336），是無人值守的批次寫入。手動那條路（web/routers/translate.py:65-68）
+     # 本來就有傳，只有這條新路徑漏了。
+-    # 對日文使用者尤其致命：三個 provider 的 translate_single 都有
+-    # `if self.target_language == "ja": return title` 這條**專門保護日文使用者的短路**，
+-    # 但服務永遠是用 "zh-TW" 建出來的 ⇒ 那條短路從來打不到，日文標題全被翻成繁中。
+-    #
+     # 建構本身也要保護（Codex PR #181 第二條）：provider=gemini 而 API key 是空字串時
+     # `GeminiTranslateService.__init__` 直接拋 ValueError（設定頁存得出這個狀態——
+     # 沒有跨欄位驗證，「切到 Gemini、還沒貼 key 就存檔」是很平常的順序）。
+@@ -130,7 +128,6 @@
      # 「翻譯失敗不擋、不計 failed」同一個政策）。
      translate_service = None
      if translate_enabled:
 -        locale = config.get('general', {}).get('locale', 'zh-TW')
-+        locale = config.get('general', {}).get('locale', 'zh-CN')
          try:
              translate_service = create_translate_service(translate_config, locale)
          except Exception:
+@@ -185,8 +182,10 @@
+ 
+         metadata = dict(results[0])  # CD-144-5：原樣，不加不減（不覆蓋 number）
+ 
+-        chinese_title = extract_chinese_title(filename, number, metadata.get('actors'))
+-        if not chinese_title and translate_service is not None and has_japanese(metadata.get('title', '')):
++        if (
++            translate_service is not None
++            and title_needs_translation(metadata.get('title', ''), locale)
++        ):
+             try:
+                 translated = asyncio.run(translate_service.translate_single(metadata['title']))
+             except Exception:
 --- a/core/config.py
 +++ b/core/config.py
 @@ -8,6 +8,7 @@
@@ -1100,7 +1144,48 @@
  
 --- a/core/translate_service.py
 +++ b/core/translate_service.py
-@@ -105,7 +105,7 @@
+@@ -38,24 +38,31 @@
+ LANGUAGE_PROMPTS = {
+     "zh-TW": {
+         "name": "繁體中文",
+-        "ollama_system": "你是日翻中翻譯機。輸入日文，輸出繁體中文。禁止輸出任何日文假名（の、は、が、で、に等；人名、品牌名除外）。人名、品牌名保留原文。",
++        "ollama_system": "你是多語言影視標題翻譯機。自動辨識原文語言，統一到繁體中文輸出。禁止輸出日文假名或其他語言的未翻譯內容（人名、品牌名除外）。保留原意，不新增內容。",
+         "ollama_example": "義父の隣で夫に電話させながら人妻を寝取る → 在公公旁邊讓人妻一邊打電話給丈夫一邊被睡走",
+-        "gemini_instruction": "請將以下標題翻譯為繁體中文",
+-        "gemini_rules": "1. 這是純粹的資料庫翻譯任務，不生成新內容\n2. 使用繁體中文\n3. 保持簡潔，不超過50字\n4. 只輸出翻譯結果，不要額外說明\n5. 人名、品牌名保留原文",
++        "gemini_instruction": "請自動辨識以下標題的原文語言，並翻譯為繁體中文",
++        "gemini_rules": "1. 這是純粹的資料庫標題翻譯任務，不生成新內容\n2. 輸出必須是繁體中文，不能保留未翻譯的其他語言內容\n3. 保持簡潔，不超過50字\n4. 只輸出翻譯結果，不要額外說明\n5. 人名、品牌名保留原文",
+     },
+     "zh-CN": {
+         "name": "簡體中文",
+-        "ollama_system": "你是日翻中翻译机。输入日文，输出简体中文。禁止输出任何日文假名（の、は、が、で、に等；人名、品牌名除外）。人名、品牌名保留原文。",
++        "ollama_system": "你是多语言影视标题翻译机。自动识别原文语言，统一到简体中文输出。禁止输出日文假名或其他语言的未翻译内容（人名、品牌名除外）。保留原意，不新增内容。",
+         "ollama_example": "義父の隣で夫に電話させながら人妻を寝取る → 在公公旁边让人妻一边打电话给丈夫一边被睡走",
+-        "gemini_instruction": "请将以下标题翻译为简体中文",
+-        "gemini_rules": "1. 这是纯粹的资料库翻译任务，不生成新内容\n2. 使用简体中文\n3. 保持简洁，不超过50字\n4. 只输出翻译结果，不要额外说明\n5. 人名、品牌名保留原文",
++        "gemini_instruction": "请自动识别以下标题的原文语言，并翻译为简体中文",
++        "gemini_rules": "1. 这是纯粹的资料库标题翻译任务，不生成新内容\n2. 输出必须是简体中文，不能保留未翻译的其他语言内容\n3. 保持简洁，不超过50字\n4. 只输出翻译结果，不要额外说明\n5. 人名、品牌名保留原文",
+     },
+     "en": {
+         "name": "English",
+-        "ollama_system": "You are a Japanese-to-English translator. Input Japanese, output English. Keep proper nouns. Be concise.",
++        "ollama_system": "You translate audiovisual database titles from any source language into natural English. Do not leave untranslated CJK text except proper nouns. Preserve meaning and do not add content.",
+         "ollama_example": "義父の隣で夫に電話させながら人妻を寝取る → Seducing a Married Woman While She Calls Her Husband Next to Her Father-in-Law",
+-        "gemini_instruction": "Translate the following title to English",
+-        "gemini_rules": "1. This is a database translation task, do not generate new content\n2. Use natural English\n3. Keep it concise, under 80 characters\n4. Output only the translation, no explanations",
++        "gemini_instruction": "Detect the source language and translate the following title into English",
++        "gemini_rules": "1. This is a database title translation task, do not generate new content\n2. Output must be natural English with no untranslated CJK text except proper nouns\n3. Keep it concise, under 80 characters\n4. Output only the translation, no explanations",
++    },
++    "ja": {
++        "name": "日本語",
++        "ollama_system": "あなたは多言語の映像タイトル翻訳機です。原文の言語を自動判定し、自然な日本語へ翻訳してください。固有名詞以外の未翻訳文字を残さず、内容を追加しないでください。",
++        "ollama_example": "在公公旁边让人妻一边打电话给丈夫一边被睡走 → 義父の隣で夫に電話させながら人妻を寝取る",
++        "gemini_instruction": "次のタイトルの原文言語を判定し、日本語に翻訳してください",
++        "gemini_rules": "1. データベース用タイトルの翻訳だけを行い、新しい内容を生成しない\n2. 固有名詞以外は未翻訳の外国語を残さず、自然な日本語にする\n3. 50文字以内を目安に簡潔にする\n4. 翻訳結果だけを出力し、説明を加えない",
+     },
+ }
+ 
+@@ -105,7 +112,7 @@
  class OllamaTranslateService(TranslateService):
      """Ollama 翻譯服務實現"""
  
@@ -1109,16 +1194,22 @@
          """
          初始化 Ollama 服務
  
-@@ -127,7 +127,7 @@
-         if self.target_language == "ja":
-             return title
+@@ -122,12 +129,8 @@
+         self.target_language = target_language
  
+     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
+-        """單片翻譯；ja 短路；失敗拋 TranslateError（請求內容與改前逐字相同）。"""
+-        # ja 短路：不呼叫 API，直接回傳原文
+-        if self.target_language == "ja":
+-            return title
+-
 -        lang_data = LANGUAGE_PROMPTS.get(self.target_language, LANGUAGE_PROMPTS["zh-TW"])
++        """Translate one title; failures raise TranslateError."""
 +        lang_data = LANGUAGE_PROMPTS.get(self.target_language, LANGUAGE_PROMPTS["zh-CN"])
          system_msg = lang_data["ollama_system"]
          example = lang_data["ollama_example"]
          prompt = f"""範例：{example}
-@@ -236,7 +236,7 @@
+@@ -236,7 +239,7 @@
  class GeminiTranslateService(TranslateService):
      """Google Gemini API 翻譯服務實現"""
  
@@ -1127,7 +1218,20 @@
          """
          初始化 Gemini 服務
  
-@@ -310,7 +310,7 @@
+@@ -256,11 +259,7 @@
+             raise ValueError("Gemini API Key is required")
+ 
+     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
+-        """單片翻譯；ja 短路；失敗拋 TranslateError。"""
+-        # ja 短路：不呼叫 API，直接回傳原文
+-        if self.target_language == "ja":
+-            return title
+-
++        """Translate one title; failures raise TranslateError."""
+         prompt = build_cloud_translate_prompt(title, self.target_language)
+ 
+         try:
+@@ -310,7 +309,7 @@
  class OpenAICompatibleTranslateService(TranslateService):
      """OpenAI Compatible API 翻譯服務實現（支援 OpenAI、Perplexity、OpenRouter、本地 LLM 等）"""
  
@@ -1136,16 +1240,35 @@
          """
          初始化 OpenAI Compatible 服務
  
-@@ -376,7 +376,7 @@
+@@ -329,11 +328,7 @@
+         self.target_language = target_language
+ 
+     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
+-        """單片翻譯；ja 短路；失敗拋 TranslateError。"""
+-        # ja 短路：不呼叫 API，直接回傳原文
+-        if self.target_language == "ja":
+-            return title
+-
++        """Translate one title; failures raise TranslateError."""
+         prompt = build_cloud_translate_prompt(title, self.target_language)
+ 
+         try:
+@@ -375,11 +370,11 @@
+ 
  
  def build_cloud_translate_prompt(title: str, target_language: str) -> str:
-     """組出與現行 Gemini／OpenAI 逐字相同的雲端翻譯 prompt。"""
+-    """組出與現行 Gemini／OpenAI 逐字相同的雲端翻譯 prompt。"""
 -    lang_data = LANGUAGE_PROMPTS.get(target_language, LANGUAGE_PROMPTS["zh-TW"])
++    """Build a cloud prompt that translates from any detected source language."""
 +    lang_data = LANGUAGE_PROMPTS.get(target_language, LANGUAGE_PROMPTS["zh-CN"])
      instruction = lang_data["gemini_instruction"]
      rules = lang_data["gemini_rules"]
-     return f"""你是專業的影視資料庫管理員與翻譯引擎。這是既有日文文字的逐字翻譯任務，{instruction}。
-@@ -392,7 +392,7 @@
+-    return f"""你是專業的影視資料庫管理員與翻譯引擎。這是既有日文文字的逐字翻譯任務，{instruction}。
++    return f"""你是專業的影視資料庫管理員與翻譯引擎。這是既有標題文字的翻譯任務，{instruction}。
+ 
+ 原文：
+ {title}
+@@ -392,7 +387,7 @@
  class ClaudeTranslateService(TranslateService):
      """Anthropic Claude Messages API 翻譯服務"""
  
@@ -1154,7 +1277,19 @@
          """
          Args:
              config: Claude 配置字典
-@@ -451,7 +451,7 @@
+@@ -410,10 +405,7 @@
+             raise ValueError("Claude API Key is required")
+ 
+     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
+-        """單片翻譯；ja 短路；失敗拋 TranslateError（AnthropicError 為其子類）。"""
+-        if self.target_language == "ja":
+-            return title
+-
++        """Translate one title; failures raise TranslateError."""
+         prompt = build_cloud_translate_prompt(title, self.target_language)
+ 
+         try:
+@@ -451,7 +443,7 @@
          return results
  
  
@@ -1163,7 +1298,7 @@
      """
      創建翻譯服務實例（工廠函數）
  
-@@ -464,7 +464,7 @@
+@@ -464,7 +456,7 @@
                  "claude": {...},
                  "openai": {...}
              }
@@ -1274,6 +1409,24 @@
        "tag": "Tag name",
        "actors": "Actor names (separate with 、, or ,)"
      },
+@@ -197,7 +245,7 @@
+       "network_error": "Network error, please retry",
+       "no_translation_needed": "No translation needed for this title",
+       "translate_failed_generic": "Translation failed",
+-      "no_japanese_title": "No Japanese title to translate",
++      "no_japanese_title": "No titles need translation",
+       "number_not_recognized": "Could not recognize the ID from the filename",
+       "number_parse_unavailable": "Cannot connect; please enter the ID manually",
+       "path_inaccessible": "Cannot access this file path (permission denied or not mounted)"
+@@ -293,7 +341,7 @@
+     },
+     "filelist": {
+       "search_all_title": "Search all files not yet searched",
+-      "translate_all_title": "Translate all Japanese titles",
++      "translate_all_title": "Translate all titles outside the current language",
+       "scrape_all_title": "Organize all searched files (rename + folder + NFO)",
+       "scrape_all": "Batch Organize",
+       "processing_prefix": "Processing",
 @@ -707,6 +755,15 @@
        "player_label": "Video Player",
        "player_placeholder": "Leave blank for system default",
@@ -1313,7 +1466,7 @@
        "locale_switch_confirm": "You have unsaved changes that will be lost when switching language. Continue?"
      },
      "reset_modal": {
-@@ -801,6 +865,61 @@
+@@ -801,6 +865,62 @@
      }
    },
    "scanner": {
@@ -1326,11 +1479,11 @@
 +      "source_preview_btn": "Preview unified rename",
 +      "source_previewing": "Fetching source titles...",
 +      "source_modal_title": "Unified filename and folder preview",
-+      "source_modal_intro": "Video files, NFO, covers, poster, fanart, subtitles, and each direct-child movie folder are renamed from the selected source title. Root-level videos get a matching folder automatically. extrafanart and other unrelated files stay unchanged.",
++      "source_modal_intro": "The selected source title is synchronized to the database and NFO title. Video files, NFO, covers, poster, fanart, subtitles, and each direct-child movie folder are renamed from that source title. Root-level videos get a matching folder automatically. extrafanart and other unrelated files stay unchanged.",
 +      "source_used": "Title source: {source}",
 +      "source_failed": "{count} videos could not get a title from this source and will stay unchanged",
 +      "source_execute_btn": "Execute unified rename",
-+      "source_execute_success": "Unified rename complete: {videos} videos, {files} files, {folders} folders",
++      "source_execute_success": "Unified rename complete: {videos} videos, {titles} titles, {files} files, {folders} folders",
 +      "preview_done": "Unified rename preview complete",
 +      "plan_expired": "The rename preview expired. Please preview again.",
 +      "folder_row_title": "Normalize video folders",
@@ -1344,12 +1497,13 @@
 +      "modal_title": "Filename normalization preview",
 +      "folder_modal_title": "Folder normalization preview",
 +      "summary_videos": "Videos to rename",
++      "summary_titles": "Titles to synchronize",
 +      "summary_folders": "Folders to process",
 +      "summary_files": "Files including sidecars",
 +      "summary_conflicts": "Conflicts",
 +      "modal_intro": "Only video filenames and sidecars in the same folder are changed: NFO, cover, poster, fanart, and subtitles. Overlong names share a safe limit and end with ..., while folders, extrafanart, and other videos stay unchanged.",
 +      "folder_modal_intro": "Only direct-child movie folder names under each scan root are changed, together with database paths. Videos, NFO, cover, and still-image files inside keep their filenames.",
-+      "modal_note": "The preview is checked again before execution and stops if files changed. Any failure rolls files and database paths back automatically and saves a rename manifest.",
++      "modal_note": "The preview is checked again before execution and stops if files changed. Any failure rolls files, NFO titles, and database records back automatically and saves a rename manifest.",
 +      "related_files": "Also handles {count} sidecar files",
 +      "folder_create_prefix": "Create folder: ",
 +      "folder_related_videos": "Updates {count} video paths",
@@ -1375,7 +1529,7 @@
      "page_title": "Scanner",
      "toast": {
        "folder_already_added": "This folder is already in the list",
-@@ -824,11 +943,14 @@
+@@ -824,11 +944,14 @@
        "no_output_count": "{count} without output folder set",
        "done_with_warnings": "Completed {count}, but {parts}; see log for details",
        "generate_success": "Generated list of {count} videos",
@@ -1390,7 +1544,7 @@
        "path_copied": "Copied: {path}",
        "browse_dir_fallback": "Your browser can’t read the path of dropped files, so the folder picker has been opened for you"
      },
-@@ -868,13 +990,84 @@
+@@ -868,13 +991,84 @@
        "clear_display_title": "Clear display (restored on reload)",
        "clear_all_title": "Clear all (including history)"
      },
@@ -1475,18 +1629,18 @@
        "jellyfin_prefix": "Jellyfin cover format missing:",
        "jellyfin_suffix": " videos",
        "jellyfin_update_title": "Generate Jellyfin poster + fanart",
-@@ -928,6 +1121,29 @@
+@@ -928,6 +1122,29 @@
        "missing_enrich_confirm_body_suffix": " minutes. Continue?",
        "missing_enrich_confirm_cancel": "Cancel",
        "missing_enrich_confirm_confirm": "Confirm",
 +      "title_backfill_prefix": "Untranslated titles:",
 +      "title_backfill_suffix": "videos",
-+      "title_backfill_drilldown_note": "Only videos with a Japanese title and no saved original title are included.",
++      "title_backfill_drilldown_note": "Only titles that differ from the current app language are included; titles already in the target language are skipped.",
 +      "title_backfill_idle": "Fill missing titles",
 +      "title_backfill_loading": "Filling titles...",
 +      "title_backfill_preparing": "Preparing title translation...",
 +      "title_backfill_disabled": "Translation disabled",
-+      "title_backfill_hint": "Translate only Japanese titles that do not yet have a saved original title",
++      "title_backfill_hint": "Translate according to the current app language: Simplified Chinese, Traditional Chinese, English, or Japanese",
 +      "title_backfill_toast_success": "Title backfill complete: {success} succeeded",
 +      "title_backfill_toast_mixed": "Title backfill complete: {success} succeeded, {failed} failed",
 +      "title_backfill_error": "Title backfill failed. Please try again later",
@@ -1505,7 +1659,7 @@
        "log_interrupted": "⚠ Generation interrupted (left the page)",
        "status_preparing": "Preparing...",
        "status_done_count": "Done! {count} videos",
-@@ -1291,6 +1507,7 @@
+@@ -1291,6 +1508,7 @@
        "tag_nfo_write_blocked": "Tag saved, but there's no permission to write the NFO",
        "translate_tooltip": "Translate title",
        "translate_done": "Title translated",
@@ -1513,7 +1667,7 @@
        "translate_undo": "Undo",
        "translate_skipped": "Nothing in the title needs translating",
        "translate_undone": "Title restored",
-@@ -1410,10 +1627,90 @@
+@@ -1410,10 +1628,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -1604,7 +1758,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1845,6 +2142,12 @@
+@@ -1845,6 +2143,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -1617,7 +1771,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2163,11 @@
+@@ -1860,7 +2164,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -1630,7 +1784,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2185,15 @@
+@@ -1878,11 +2186,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -1648,7 +1802,7 @@
      },
      "costar": {
        "count_label": "{n} videos"
-@@ -1976,5 +2287,378 @@
+@@ -1976,5 +2288,378 @@
        "saved": "Mapping table saved",
        "save_failed": "Failed to save the mapping table"
      }
@@ -1682,8 +1836,8 @@
 +      "output_path": "Output path: {path}",
 +      "migrating_cache": "Migrating JSON cache to SQLite...",
 +      "cache_migrated": "Migration complete: {count} records",
-+      "db_count": "Database records: {count}",
-+      "db_total": "Total database records: {count}",
++      "db_count": "Videos in library: {count}",
++      "db_total": "Total videos in library: {count}",
 +      "path_convert_failed": "Path conversion failed",
 +      "scanning": "Scanning: {path}",
 +      "missing_nfo": "{count} videos have no NFO. Translating a title creates one automatically; you can also fill them in Batch Maintenance.",
@@ -1750,7 +1904,7 @@
 +      "source_rename_title_used": "{number}: using source title \"{title}\"",
 +      "source_rename_fetch_failed": "{number}: failed to fetch the source title ({error})",
 +      "source_rename_cancelled": "Source-title preview cancelled",
-+      "source_rename_done": "Rename preview complete: {videos} video files, {folders} folders, {failed} failed, {conflicts} conflicts",
++      "source_rename_done": "Rename preview complete: {videos} videos, {titles} titles, {folders} folders, {failed} failed, {conflicts} conflicts",
 +      "source_rename_failed": "Failed to preview renaming by source",
 +      "rename_preview_failed": "Failed to build the filename-normalization preview",
 +      "view_missing_title": "List not generated yet",
@@ -2098,6 +2252,24 @@
        "tag": "タグ名",
        "actors": "女優名（、，, で複数区切り可）"
      },
+@@ -197,7 +245,7 @@
+       "network_error": "ネットワークエラーです。再試行してください",
+       "no_translation_needed": "この作品は翻訳不要です",
+       "translate_failed_generic": "翻訳に失敗しました",
+-      "no_japanese_title": "翻訳が必要な日本語タイトルがありません",
++      "no_japanese_title": "翻訳が必要なタイトルがありません",
+       "number_not_recognized": "ファイル名から品番を認識できません",
+       "number_parse_unavailable": "接続できません。品番を手動で入力してください",
+       "path_inaccessible": "このファイルパスにアクセスできません（権限不足または未マウント）"
+@@ -293,7 +341,7 @@
+     },
+     "filelist": {
+       "search_all_title": "未検索のファイルをすべて一括検索",
+-      "translate_all_title": "すべての日本語タイトルを翻訳",
++      "translate_all_title": "現在の表示言語以外のタイトルをすべて翻訳",
+       "scrape_all_title": "検索済みのファイルをすべて整理（リネーム + フォルダ作成 + NFO）",
+       "scrape_all": "一括整理",
+       "processing_prefix": "処理中",
 @@ -707,6 +755,15 @@
        "player_label": "動画プレイヤー",
        "player_placeholder": "空欄 = システムデフォルトを使用",
@@ -2137,7 +2309,7 @@
        "locale_switch_confirm": "保存していない変更があります。言語を切り替えると失われます。続行しますか？"
      },
      "reset_modal": {
-@@ -801,6 +865,61 @@
+@@ -801,6 +865,62 @@
      }
    },
    "scanner": {
@@ -2150,11 +2322,11 @@
 +      "source_preview_btn": "統一名前をプレビュー",
 +      "source_previewing": "取得元のタイトルを読み込み中...",
 +      "source_modal_title": "ファイル・フォルダー統一名プレビュー",
-+      "source_modal_intro": "選択した取得元のタイトルから、動画、NFO、カバー、poster、fanart、字幕、各スキャンルート直下の動画フォルダー名を統一します。ルート直下の動画には対応するフォルダーを自動作成して移動します。extrafanart とその他の無関係なファイルは変更しません。",
++      "source_modal_intro": "選択した取得元のタイトルをデータベースと NFO のタイトルへ同期し、動画、NFO、カバー、poster、fanart、字幕、各スキャンルート直下の動画フォルダー名を統一します。ルート直下の動画には対応するフォルダーを自動作成して移動します。extrafanart とその他の無関係なファイルは変更しません。",
 +      "source_used": "タイトル取得元：{source}",
 +      "source_failed": "{count} 件はこの取得元からタイトルを取得できないため、変更しません",
 +      "source_execute_btn": "統一名前変更を実行",
-+      "source_execute_success": "統一名前変更完了：動画 {videos} 件、ファイル {files} 件、フォルダー {folders} 件",
++      "source_execute_success": "統一名前変更完了：動画 {videos} 件、タイトル {titles} 件、ファイル {files} 件、フォルダー {folders} 件",
 +      "preview_done": "統一名前のプレビューが完了しました",
 +      "plan_expired": "プレビューの有効期限が切れました。もう一度プレビューしてください。",
 +      "folder_row_title": "動画フォルダー名を統一",
@@ -2168,12 +2340,13 @@
 +      "modal_title": "ファイル名正規化プレビュー",
 +      "folder_modal_title": "フォルダー名正規化プレビュー",
 +      "summary_videos": "名前を変更する動画",
++      "summary_titles": "同期するタイトル",
 +      "summary_folders": "処理するフォルダー",
 +      "summary_files": "サイドカーファイルを含む",
 +      "summary_conflicts": "競合",
 +      "modal_intro": "同じフォルダー内の動画名と、NFO、カバー、poster、fanart、字幕だけを変更します。長すぎる名前は共通の安全な長さに揃えて ... を付け、フォルダー、extrafanart、他の動画は変更しません。",
 +      "folder_modal_intro": "各スキャンルート直下の動画フォルダー名とデータベースパスだけを変更します。フォルダー内の動画、NFO、カバー、サンプル画像のファイル名は変更しません。",
-+      "modal_note": "実行前にプレビューを再確認し、ファイルが変わっていれば停止します。途中で失敗した場合はファイルとデータベースのパスを自動で元に戻し、名前変更マニフェストを保存します。",
++      "modal_note": "実行前にプレビューを再確認し、ファイルが変わっていれば停止します。途中で失敗した場合はファイル、NFO タイトル、データベース記録を自動で元に戻し、名前変更マニフェストを保存します。",
 +      "related_files": "サイドカーファイル {count} 件も処理",
 +      "folder_create_prefix": "フォルダーを作成：",
 +      "folder_related_videos": "動画パス {count} 件を更新",
@@ -2199,7 +2372,7 @@
      "page_title": "リスト生成",
      "toast": {
        "folder_already_added": "このフォルダはすでにリストにあります",
-@@ -824,11 +943,14 @@
+@@ -824,11 +944,14 @@
        "no_output_count": "{count} 件が出力フォルダ未設定",
        "done_with_warnings": "{count} 本完了、ただし {parts}。詳細はログを参照",
        "generate_success": "{count} 本の動画リストを生成しました",
@@ -2214,7 +2387,7 @@
        "path_copied": "コピーしました: {path}",
        "browse_dir_fallback": "ブラウザではドロップしたファイルのパスを直接読み取れないため、フォルダ選択画面を開きました"
      },
-@@ -868,13 +990,84 @@
+@@ -868,13 +991,84 @@
        "clear_display_title": "画面をクリア（リロード後に復元）",
        "clear_all_title": "すべてクリア（履歴含む）"
      },
@@ -2299,18 +2472,18 @@
        "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
        "jellyfin_suffix": "本",
        "jellyfin_update_title": "Jellyfin poster + fanart を補完",
-@@ -928,6 +1121,29 @@
+@@ -928,6 +1122,29 @@
        "missing_enrich_confirm_body_suffix": " 分です。続行しますか？",
        "missing_enrich_confirm_cancel": "キャンセル",
        "missing_enrich_confirm_confirm": "補完を確認",
 +      "title_backfill_prefix": "未翻訳タイトル:",
 +      "title_backfill_suffix": "本",
-+      "title_backfill_drilldown_note": "日本語の仮名を含み、元タイトルが未保存の動画だけを対象にします。",
++      "title_backfill_drilldown_note": "現在の表示言語と異なるタイトルの動画だけを対象にし、すでに対象言語のタイトルは除外します。",
 +      "title_backfill_idle": "タイトルを一括補完",
 +      "title_backfill_loading": "タイトル補完中...",
 +      "title_backfill_preparing": "タイトル翻訳を準備中...",
 +      "title_backfill_disabled": "翻訳が無効です",
-+      "title_backfill_hint": "元タイトルが未保存の日本語タイトルだけを翻訳し、処理済み動画は再翻訳しません",
++      "title_backfill_hint": "現在の表示言語に合わせて補翻訳します（日本語表示なら日本語、その他の言語も同様）",
 +      "title_backfill_toast_success": "タイトル補完完了：{success} 本成功",
 +      "title_backfill_toast_mixed": "タイトル補完完了：{success} 本成功、{failed} 本失敗",
 +      "title_backfill_error": "タイトル補完に失敗しました。後でもう一度お試しください",
@@ -2329,7 +2502,7 @@
        "log_interrupted": "⚠ 生成が中断されました（ページを離れました）",
        "status_preparing": "準備中...",
        "status_done_count": "完了！{count} 本の動画",
-@@ -1291,6 +1507,7 @@
+@@ -1291,6 +1508,7 @@
        "tag_nfo_write_blocked": "タグは保存されましたが、NFO への書き込み権限がありません",
        "translate_tooltip": "タイトルを翻訳",
        "translate_done": "タイトルを翻訳しました",
@@ -2337,7 +2510,7 @@
        "translate_undo": "元に戻す",
        "translate_skipped": "翻訳が必要な内容はありません",
        "translate_undone": "タイトルを元に戻しました",
-@@ -1410,10 +1627,90 @@
+@@ -1410,10 +1628,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -2428,7 +2601,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1845,6 +2142,12 @@
+@@ -1845,6 +2143,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -2441,7 +2614,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2163,11 @@
+@@ -1860,7 +2164,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -2454,7 +2627,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2185,15 @@
+@@ -1878,11 +2186,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -2472,7 +2645,7 @@
      },
      "costar": {
        "count_label": "{n} 本"
-@@ -1976,5 +2287,378 @@
+@@ -1976,5 +2288,378 @@
        "saved": "パス対応表を保存しました",
        "save_failed": "パス対応表の保存に失敗しました"
      }
@@ -2506,8 +2679,8 @@
 +      "output_path": "出力パス：{path}",
 +      "migrating_cache": "JSON キャッシュを SQLite に移行しています...",
 +      "cache_migrated": "移行完了：{count} 件",
-+      "db_count": "データベース件数：{count}",
-+      "db_total": "データベース総件数：{count}",
++      "db_count": "ライブラリの作品数：{count}",
++      "db_total": "ライブラリの総作品数：{count}",
 +      "path_convert_failed": "パスの変換に失敗しました",
 +      "scanning": "スキャン中：{path}",
 +      "missing_nfo": "{count} 本の動画に NFO がありません。タイトル翻訳時に自動作成できます。バッチメンテナンスから補完することもできます。",
@@ -2574,7 +2747,7 @@
 +      "source_rename_title_used": "{number}：ソースタイトル「{title}」を使用",
 +      "source_rename_fetch_failed": "{number}：ソースタイトルの取得に失敗しました（{error}）",
 +      "source_rename_cancelled": "ソースタイトルのプレビューをキャンセルしました",
-+      "source_rename_done": "命名プレビュー完了：動画ファイル {videos} 件、フォルダー {folders} 件、失敗 {failed}、競合 {conflicts}",
++      "source_rename_done": "命名プレビュー完了：動画 {videos} 本、タイトル {titles} 件、フォルダー {folders} 件、失敗 {failed}、競合 {conflicts}",
 +      "source_rename_failed": "ソース名による統一命名のプレビューに失敗しました",
 +      "rename_preview_failed": "ファイル名正規化プレビューの作成に失敗しました",
 +      "view_missing_title": "リストはまだ生成されていません",
@@ -2922,6 +3095,24 @@
        "tag": "标签名称",
        "actors": "演员名称（可用、，,分隔多人）"
      },
+@@ -197,7 +245,7 @@
+       "network_error": "网络错误，请重试",
+       "no_translation_needed": "当前影片无需翻译",
+       "translate_failed_generic": "翻译失败",
+-      "no_japanese_title": "无需翻译的日文标题",
++      "no_japanese_title": "没有需要翻译的标题",
+       "number_not_recognized": "无法从文件名识别番号",
+       "number_parse_unavailable": "无法连接，请手动输入番号",
+       "path_inaccessible": "无法访问此文件路径（权限不足或未挂载）"
+@@ -293,7 +341,7 @@
+     },
+     "filelist": {
+       "search_all_title": "搜索所有尚未搜索的文件",
+-      "translate_all_title": "翻译所有日文标题",
++      "translate_all_title": "翻译所有非当前语言的标题",
+       "scrape_all_title": "整理所有已搜索的文件（重命名 + 建文件夹 + NFO）",
+       "scrape_all": "批量整理",
+       "processing_prefix": "处理中",
 @@ -707,6 +755,15 @@
        "player_label": "视频播放器",
        "player_placeholder": "留空使用系统默认",
@@ -2961,7 +3152,7 @@
        "locale_switch_confirm": "您有未保存的更改，切换语言后将丢失。确定继续？"
      },
      "reset_modal": {
-@@ -801,6 +865,61 @@
+@@ -801,6 +865,62 @@
      }
    },
    "scanner": {
@@ -2974,11 +3165,11 @@
 +      "source_preview_btn": "预览统一命名",
 +      "source_previewing": "正在读取来源标题...",
 +      "source_modal_title": "文件名与文件夹统一命名预览",
-+      "source_modal_intro": "将按所选来源的标题，同步重命名视频、NFO、封面、poster、fanart、字幕，以及扫描目录下一层的影片文件夹；扫描根目录中的视频会自动建立对应文件夹并移入。extrafanart 和其他无关文件保持不动。",
++      "source_modal_intro": "将按所选来源的标题，同步数据库标题与 NFO 标题，并重命名视频、NFO、封面、poster、fanart、字幕，以及扫描目录下一层的影片文件夹；扫描根目录中的视频会自动建立对应文件夹并移入。extrafanart 和其他无关文件保持不动。",
 +      "source_used": "标题来源：{source}",
 +      "source_failed": "有 {count} 部影片无法从该来源取得标题，将保持原名",
 +      "source_execute_btn": "确认执行统一命名",
-+      "source_execute_success": "统一命名完成：{videos} 部视频，{files} 个文件，{folders} 个文件夹",
++      "source_execute_success": "统一命名完成：{videos} 部视频，{titles} 个标题，{files} 个文件，{folders} 个文件夹",
 +      "preview_done": "统一命名预览完成",
 +      "plan_expired": "预览已过期，请重新预览",
 +      "folder_row_title": "统一文件夹格式",
@@ -2992,12 +3183,13 @@
 +      "modal_title": "文件名规范化预览",
 +      "folder_modal_title": "文件夹规范化预览",
 +      "summary_videos": "需要改名的视频",
++      "summary_titles": "需要同步的标题",
 +      "summary_folders": "需要处理的文件夹",
 +      "summary_files": "包含侧车文件",
 +      "summary_conflicts": "冲突项",
 +      "modal_intro": "只会修改视频文件名和同目录下的 NFO、封面、poster、fanart、字幕；超长名称会共用安全长度并以 ... 结尾，文件夹、extrafanart 和其他视频保持不动。",
 +      "folder_modal_intro": "只修改扫描目录下一层的影片文件夹名称，并同步数据库路径；文件夹内的视频、NFO、封面和剧照文件保持原名。",
-+      "modal_note": "执行前会再次核对预览结果；若文件发生变化会停止。任何一步失败都会自动回滚文件和数据库路径，并保存重命名清单。",
++      "modal_note": "执行前会再次核对预览结果；若文件发生变化会停止。任何一步失败都会自动回滚文件、NFO 标题和数据库记录，并保存重命名清单。",
 +      "related_files": "同时处理 {count} 个侧车文件",
 +      "folder_create_prefix": "新建文件夹：",
 +      "folder_related_videos": "同步更新 {count} 个视频路径",
@@ -3023,7 +3215,7 @@
      "page_title": "列表生成",
      "toast": {
        "folder_already_added": "此文件夹已在列表中",
-@@ -824,11 +943,14 @@
+@@ -824,11 +944,14 @@
        "no_output_count": "{count} 个未设输出文件夹",
        "done_with_warnings": "完成 {count} 部，但 {parts}，详细见日志",
        "generate_success": "成功生成 {count} 部视频列表",
@@ -3038,7 +3230,7 @@
        "path_copied": "已复制: {path}",
        "browse_dir_fallback": "浏览器无法直接读取拖放文件的路径，已为您打开文件夹选择器"
      },
-@@ -868,13 +990,84 @@
+@@ -868,13 +991,84 @@
        "clear_display_title": "清除画面（刷新后恢复）",
        "clear_all_title": "清除全部（包含历史）"
      },
@@ -3123,18 +3315,18 @@
        "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
-@@ -928,6 +1121,29 @@
+@@ -928,6 +1122,29 @@
        "missing_enrich_confirm_body_suffix": " 分钟，是否继续？",
        "missing_enrich_confirm_cancel": "取消",
        "missing_enrich_confirm_confirm": "确认补全",
 +      "title_backfill_prefix": "未翻译标题:",
 +      "title_backfill_suffix": "部",
-+      "title_backfill_drilldown_note": "只处理含日文假名、且尚未保存原文标题的视频。",
++      "title_backfill_drilldown_note": "只处理标题与当前软件语言不一致的视频；已经是目标语言的标题会跳过。",
 +      "title_backfill_idle": "一键补齐标题",
 +      "title_backfill_loading": "补齐标题中...",
 +      "title_backfill_preparing": "准备翻译标题...",
 +      "title_backfill_disabled": "翻译未启用",
-+      "title_backfill_hint": "只翻译尚未保存原文标题的日文标题，不重新翻译已处理视频",
++      "title_backfill_hint": "按当前软件语言补翻译：简中选择简体中文，繁中选择繁体中文，英文与日文同理",
 +      "title_backfill_toast_success": "标题补齐完成！{success} 部成功",
 +      "title_backfill_toast_mixed": "标题补齐完成！{success} 部成功，{failed} 部失败",
 +      "title_backfill_error": "标题补齐失败，请稍后重试",
@@ -3153,7 +3345,7 @@
        "log_interrupted": "⚠ 生成被中断（离开页面）",
        "status_preparing": "准备中...",
        "status_done_count": "完成！{count} 部视频",
-@@ -1044,7 +1260,7 @@
+@@ -1044,7 +1261,7 @@
        "generating": "生成正在进行中，离开将会中断操作！",
        "image_check": "图片检查进行中，离开将会中断！",
        "folder_dirty": "您有未保存的文件夹变更",
@@ -3162,7 +3354,7 @@
      }
    },
    "scraper": {
-@@ -1291,6 +1507,7 @@
+@@ -1291,6 +1508,7 @@
        "tag_nfo_write_blocked": "标签已保存，但没有权限写入 NFO",
        "translate_tooltip": "翻译标题",
        "translate_done": "已翻译标题",
@@ -3170,7 +3362,7 @@
        "translate_undo": "复原",
        "translate_skipped": "标题没有需要翻译的内容",
        "translate_undone": "已复原标题",
-@@ -1410,10 +1627,90 @@
+@@ -1410,10 +1628,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -3261,7 +3453,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1845,6 +2142,12 @@
+@@ -1845,6 +2143,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -3274,7 +3466,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2163,11 @@
+@@ -1860,7 +2164,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -3287,7 +3479,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2185,15 @@
+@@ -1878,11 +2186,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -3305,7 +3497,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1976,5 +2287,378 @@
+@@ -1976,5 +2288,378 @@
        "saved": "对照表已保存",
        "save_failed": "对照表保存失败"
      }
@@ -3339,8 +3531,8 @@
 +      "output_path": "输出路径：{path}",
 +      "migrating_cache": "正在迁移 JSON 缓存到 SQLite...",
 +      "cache_migrated": "迁移完成：{count} 条",
-+      "db_count": "数据库条数：{count}",
-+      "db_total": "数据库总条数：{count}",
++      "db_count": "片库作品数：{count}",
++      "db_total": "片库总作品数：{count}",
 +      "path_convert_failed": "路径转换失败",
 +      "scanning": "扫描：{path}",
 +      "missing_nfo": "发现 {count} 部视频没有 NFO；翻译标题时会自动创建 NFO，也可以先到批量维护中补全",
@@ -3407,7 +3599,7 @@
 +      "source_rename_title_used": "{number}：使用来源标题「{title}」",
 +      "source_rename_fetch_failed": "{number}：来源标题获取失败（{error}）",
 +      "source_rename_cancelled": "来源标题预览已取消",
-+      "source_rename_done": "命名预览完成：{videos} 个视频文件，{folders} 个文件夹，失败 {failed}，冲突 {conflicts}",
++      "source_rename_done": "命名预览完成：{videos} 部视频，{titles} 个标题，{folders} 个文件夹，失败 {failed}，冲突 {conflicts}",
 +      "source_rename_failed": "按来源统一命名预览失败",
 +      "rename_preview_failed": "建立文件名规范化预览失败",
 +      "view_missing_title": "列表尚未生成",
@@ -3806,6 +3998,24 @@
        "tag": "標籤名稱",
        "actors": "演員名稱（可用、，,分隔多人）"
      },
+@@ -197,7 +245,7 @@
+       "network_error": "網路錯誤，請重試",
+       "no_translation_needed": "當前片無需翻譯",
+       "translate_failed_generic": "翻譯失敗",
+-      "no_japanese_title": "無需翻譯的日文標題",
++      "no_japanese_title": "沒有需要翻譯的標題",
+       "number_not_recognized": "無法從檔名識別番號",
+       "number_parse_unavailable": "無法連線，請手動輸入番號",
+       "path_inaccessible": "無法存取此檔案路徑（權限不足或未掛載）"
+@@ -293,7 +341,7 @@
+     },
+     "filelist": {
+       "search_all_title": "搜尋所有尚未搜尋的檔案",
+-      "translate_all_title": "翻譯所有日文標題",
++      "translate_all_title": "翻譯所有非目前語言的標題",
+       "scrape_all_title": "整理所有已搜尋的檔案（重命名 + 建資料夾 + NFO）",
+       "scrape_all": "批次整理",
+       "processing_prefix": "處理中",
 @@ -353,7 +401,7 @@
        "body": "目標檔案已存在，繼續會覆蓋原有檔案：",
        "explanation": "這通常發生在同一部影片有多個版本（CD1/CD2、part1/pt1、dvd1/disc1、4K、UC）時。",
@@ -3900,7 +4110,7 @@
        "locale_switch_confirm": "您有未儲存的變更，切換語系後將遺失。確定繼續？"
      },
      "reset_modal": {
-@@ -801,6 +865,61 @@
+@@ -801,6 +865,62 @@
      }
    },
    "scanner": {
@@ -3913,11 +4123,11 @@
 +      "source_preview_btn": "預覽統一命名",
 +      "source_previewing": "正在讀取來源標題...",
 +      "source_modal_title": "檔名與資料夾統一命名預覽",
-+      "source_modal_intro": "將依所選來源的標題，同步重新命名影片、NFO、封面、poster、fanart、字幕，以及掃描目錄下一層的影片資料夾；掃描根目錄中的影片會自動建立對應資料夾並移入。extrafanart 和其他無關檔案保持不動。",
++      "source_modal_intro": "將依所選來源的標題，同步資料庫標題與 NFO 標題，並重新命名影片、NFO、封面、poster、fanart、字幕，以及掃描目錄下一層的影片資料夾；掃描根目錄中的影片會自動建立對應資料夾並移入。extrafanart 和其他無關檔案保持不動。",
 +      "source_used": "標題來源：{source}",
 +      "source_failed": "有 {count} 部影片無法從該來源取得標題，將保持原名",
 +      "source_execute_btn": "確認執行統一命名",
-+      "source_execute_success": "統一命名完成：{videos} 部影片，{files} 個檔案，{folders} 個資料夾",
++      "source_execute_success": "統一命名完成：{videos} 部影片，{titles} 個標題，{files} 個檔案，{folders} 個資料夾",
 +      "preview_done": "統一命名預覽完成",
 +      "plan_expired": "預覽已過期，請重新預覽",
 +      "folder_row_title": "統一資料夾格式",
@@ -3931,12 +4141,13 @@
 +      "modal_title": "檔名正規化預覽",
 +      "folder_modal_title": "資料夾正規化預覽",
 +      "summary_videos": "需要改名的影片",
++      "summary_titles": "需要同步的標題",
 +      "summary_folders": "需要處理的資料夾",
 +      "summary_files": "包含側車檔案",
 +      "summary_conflicts": "衝突項目",
 +      "modal_intro": "只會修改影片檔名和同目錄下的 NFO、封面、poster、fanart、字幕；超長名稱會共用安全長度並以 ... 結尾，資料夾、extrafanart 和其他影片保持不動。",
 +      "folder_modal_intro": "只修改掃描目錄下一層的影片資料夾名稱，並同步資料庫路徑；資料夾內的影片、NFO、封面和劇照檔案保持原名。",
-+      "modal_note": "執行前會再次核對預覽結果；若檔案發生變化會停止。任何一步失敗都會自動回滾檔案和資料庫路徑，並保存重新命名清單。",
++      "modal_note": "執行前會再次核對預覽結果；若檔案發生變化會停止。任何一步失敗都會自動回滾檔案、NFO 標題和資料庫記錄，並保存重新命名清單。",
 +      "related_files": "同時處理 {count} 個側車檔案",
 +      "folder_create_prefix": "新建資料夾：",
 +      "folder_related_videos": "同步更新 {count} 個影片路徑",
@@ -3962,7 +4173,7 @@
      "page_title": "列表生成",
      "toast": {
        "folder_already_added": "此資料夾已在列表中",
-@@ -824,11 +943,14 @@
+@@ -824,11 +944,14 @@
        "no_output_count": "{count} 個未設輸出夾",
        "done_with_warnings": "完成 {count} 部，但 {parts}，詳細見日誌",
        "generate_success": "成功產生 {count} 部影片列表",
@@ -3977,7 +4188,7 @@
        "path_copied": "已複製: {path}",
        "browse_dir_fallback": "瀏覽器無法直接讀取拖放檔案的路徑，已為您開啟資料夾選擇器"
      },
-@@ -850,11 +972,11 @@
+@@ -850,11 +973,11 @@
        "remove_title": "移除",
        "readonly_label": "唯讀",
        "output_path_label": "輸出到",
@@ -3991,7 +4202,7 @@
        "cross_machine_settings_link": "設定路徑替換"
      },
      "terminal": {
-@@ -868,13 +990,84 @@
+@@ -868,13 +991,84 @@
        "clear_display_title": "清除畫面（重整後恢復）",
        "clear_all_title": "清除全部（包含歷史）"
      },
@@ -4076,18 +4287,18 @@
        "jellyfin_prefix": "外部媒體管理器封面缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "補齊 poster + fanart",
-@@ -928,6 +1121,29 @@
+@@ -928,6 +1122,29 @@
        "missing_enrich_confirm_body_suffix": " 分鐘，是否繼續？",
        "missing_enrich_confirm_cancel": "取消",
        "missing_enrich_confirm_confirm": "確認補完",
 +      "title_backfill_prefix": "未翻譯標題:",
 +      "title_backfill_suffix": "部",
-+      "title_backfill_drilldown_note": "只處理含日文假名、且尚未保存原文標題的影片。",
++      "title_backfill_drilldown_note": "只處理標題與目前軟體語言不一致的影片；已經是目標語言的標題會跳過。",
 +      "title_backfill_idle": "一鍵補齊標題",
 +      "title_backfill_loading": "補齊標題中...",
 +      "title_backfill_preparing": "準備翻譯標題...",
 +      "title_backfill_disabled": "翻譯未啟用",
-+      "title_backfill_hint": "只翻譯尚未保存原文標題的日文標題，不重新翻譯已處理影片",
++      "title_backfill_hint": "依目前軟體語言補翻譯：簡中選擇簡體中文，繁中選擇繁體中文，英文與日文同理",
 +      "title_backfill_toast_success": "標題補齊完成！{success} 部成功",
 +      "title_backfill_toast_mixed": "標題補齊完成！{success} 部成功，{failed} 部失敗",
 +      "title_backfill_error": "標題補齊失敗，請稍後重試",
@@ -4106,7 +4317,7 @@
        "log_interrupted": "⚠ 生成被中斷（離開頁面）",
        "status_preparing": "準備中...",
        "status_done_count": "完成！{count} 部影片",
-@@ -1030,7 +1246,7 @@
+@@ -1030,7 +1247,7 @@
        "confirm": "確認設為唯讀",
        "intro": "唯讀來源代表 OpenAver 不會改動這個資料夾裡的任何檔案（不搬移、不改名、不寫入 NFO 或封面），改為在輸出夾另外生成一份本地媒體庫（每片一資料夾：NFO＋封面）供 OpenAver 自己瀏覽與播放。適合塞滿影片的唯讀網盤、NAS 分享、SMB 掛載等不可寫入的位置。若你只是本機一般收藏、資料夾可正常寫入，就不需要勾這個。",
        "output_hint_offline": "目前為預設模式，產物會自動落在 App 內建的固定本地夾，不需要另外指定輸出夾。",
@@ -4115,7 +4326,7 @@
        "nas_hint": "想餵給 NAS 上的 Emby／Jellyfin／Kodi？預設模式只生成 OpenAver 自己瀏覽用的本地庫、不會產生 .strm 捷徑檔。若你要讓媒體伺服器掃這批片，請先到「設定」把模式切到 Emby·Jellyfin·Kodi 模式。"
      },
      "clear_cache_modal": {
-@@ -1044,7 +1260,7 @@
+@@ -1044,7 +1261,7 @@
        "generating": "生成正在進行中，離開將會中斷操作！",
        "image_check": "圖片檢查進行中，離開將會中斷！",
        "folder_dirty": "您有未儲存的資料夾變更",
@@ -4124,7 +4335,7 @@
      }
    },
    "scraper": {
-@@ -1123,7 +1339,7 @@
+@@ -1123,7 +1340,7 @@
        "fail": "重新刮削失敗，請稍後再試。",
        "jl_desktop_only": "僅限桌面應用程式（standalone）可用",
        "cf_window_restart": "這個來源的驗證視窗沒有啟動成功，請重新啟動 OpenAver 再試。若重啟仍不行，到「連線」頁看原因",
@@ -4133,7 +4344,7 @@
        "cf_window_preparing": "驗證視窗正在準備，請幾秒後再試",
        "jl_cf_solving": "Cloudflare 驗證中……通過後將自動繼續",
        "versions_found": "找到 {count} 部同番號作品",
-@@ -1291,6 +1507,7 @@
+@@ -1291,6 +1508,7 @@
        "tag_nfo_write_blocked": "標籤已存，但沒有權限寫入 NFO",
        "translate_tooltip": "翻譯標題",
        "translate_done": "已翻譯標題",
@@ -4141,7 +4352,7 @@
        "translate_undo": "復原",
        "translate_skipped": "標題沒有需要翻譯的內容",
        "translate_undone": "已復原標題",
-@@ -1302,7 +1519,7 @@
+@@ -1302,7 +1520,7 @@
        "mask_toggle": "封面裁切預覽",
        "mask_detect_failed": "焦點偵測失敗，請稍後再試",
        "mask_focal_too_slow_auto_disabled": "這張封面找臉花了超過 5 秒，已經先幫你關掉自動對焦。想調整位置直接拖就可以，隨時能到設定開回來。",
@@ -4150,7 +4361,7 @@
        "mask_focal_too_slow_hint": "找臉花了超過 5 秒。先用拖的會快一些——不想每次都等，可以到「設定 → 刮削行為 → 進階刮削設定」關掉自動對焦。",
        "mask_save_failed": "裁切設定儲存失敗，請稍後再試",
        "mask_cover_changed": "封面已變更，請重新開啟裁切工具再試一次",
-@@ -1410,12 +1627,92 @@
+@@ -1410,12 +1628,92 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -4244,7 +4455,7 @@
        "copy_curl": "複製指令",
        "page_title": "使用說明",
        "subtitle": "JAV 影片元數據管理工具",
-@@ -1426,8 +1723,8 @@
+@@ -1426,8 +1724,8 @@
        "update_available_prefix": "新版本",
        "update_available_suffix": "可用",
        "up_to_date": "已是最新版本",
@@ -4255,7 +4466,7 @@
        "client_update_available_suffix": "可用",
        "auto_check_toggle": "啟動時檢查更新",
        "auto_check_save_failed": "設定儲存失敗，請稍後再試",
-@@ -1587,9 +1884,9 @@
+@@ -1587,9 +1885,9 @@
        "jellyfin_canonical": "選了媒體管理器模式後<strong>不再另外產生同名封面</strong>——那張圖會被 Jellyfin／Emby 優先讀取，造成封面牆出現橫式圖。既有的片維持原本的封面位置（以免清掉你已調整過的對焦），要修正請自行刪掉該片的同名封面後重新產生。",
        "jellyfin_showcase": "掃描完成後可至 <code>/showcase</code> 頁面瀏覽生成結果",
        "h6_strm_deploy": "唯讀來源 + 讓 Emby／Jellyfin／Kodi 掃到片（跨機器部署）",
@@ -4268,7 +4479,7 @@
        "strm_deploy_step4": "之後改了映射規則，既有的 <code>.strm</code> 會自動一次改寫，不用重建整個媒體庫。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎麼在 Emby/Jellyfin 合併？",
        "multiversion_intro": "多版本合併是 Emby 與 Jellyfin 共同支援的原生功能（同一套「資料夾名 - 標籤」規則），不是哪一家獨有。把同一片各版本放進以番號命名的資料夾，檔名都以資料夾名開頭加「 - 標籤」：",
-@@ -1736,26 +2033,26 @@
+@@ -1736,26 +2034,26 @@
      "server_mode": {
        "title": "伺服器模式 — 讓手機/平板連進來",
        "h6_what": "這是什麼",
@@ -4302,7 +4513,7 @@
        "h6_recover": "不小心按了「取消 / 拒絕」怎麼救回",
        "recover_win_intro": "Windows 救回步驟：",
        "recover_win_1": "按 <code>Win + R</code>，輸入 <code>wf.msc</code> 後 Enter，開啟「Windows Defender 防火牆 進階安全性」。",
-@@ -1800,9 +2097,9 @@
+@@ -1800,9 +2098,9 @@
      "update_modal": {
        "trigger_btn": "更新",
        "title": "即將開啟安裝視窗",
@@ -4315,7 +4526,7 @@
        "case_a_body": "安裝程式開啟後，請依畫面提示先關閉 OpenAver，再繼續更新。",
        "case_b_body": "您目前不是安裝在預設位置。\n安裝程式會先把新版本安裝到預設目錄，安裝期間不需要先關閉目前的 OpenAver。\n\n安裝完成後，請依序操作：\n1. 關閉 OpenAver\n2. 刪除舊安裝目錄中的 python 資料夾\n3. 將新版本的所有檔案複製覆蓋回原本的安裝位置\n\nOpenAver 不需要重新安裝或重新設定，直接覆蓋檔案即可使用。",
        "cancel_btn": "取消",
-@@ -1850,6 +2147,12 @@
+@@ -1850,6 +2148,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -4328,7 +4539,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1861,11 +2164,15 @@
+@@ -1861,11 +2165,15 @@
        "series": "系列",
        "deep_dive": "深入：女優與片商",
        "gantt": "主要片商年表",
@@ -4346,7 +4557,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2190,15 @@
+@@ -1883,11 +2191,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -4364,7 +4575,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1896,7 +2207,7 @@
+@@ -1896,7 +2208,7 @@
    },
    "connect": {
      "nobridge": "請在桌面版開啟",
@@ -4373,7 +4584,7 @@
      "status_connected": "已連線 {host}",
      "status_down": "連不到 {host}",
      "version_line": "版本 {version}（{kind}）",
-@@ -1906,63 +2217,63 @@
+@@ -1906,63 +2218,63 @@
      "kind_windows": "Windows 桌面版",
      "kind_mac": "Mac 桌面版",
      "last_ok": "上次成功連線：{time}",
@@ -4456,7 +4667,7 @@
        "slow": "這個位置回應太慢或連不到，請確認路徑後再測一次",
        "no_sample": "這個來源裡沒有可測試的影片",
        "loading": "正在讀取伺服器的掃描來源…",
-@@ -1976,5 +2287,378 @@
+@@ -1976,5 +2288,378 @@
        "saved": "對照表已儲存",
        "save_failed": "對照表儲存失敗"
      }
@@ -4490,8 +4701,8 @@
 +      "output_path": "輸出路徑：{path}",
 +      "migrating_cache": "遷移 JSON cache 到 SQLite...",
 +      "cache_migrated": "遷移完成：{count} 筆",
-+      "db_count": "資料庫筆數：{count}",
-+      "db_total": "資料庫總筆數：{count}",
++      "db_count": "片庫作品數：{count}",
++      "db_total": "片庫總作品數：{count}",
 +      "path_convert_failed": "路徑轉換失敗",
 +      "scanning": "掃描：{path}",
 +      "missing_nfo": "發現 {count} 部影片沒有 NFO；翻譯標題時會自動建立 NFO，也可以先到批次維護中補全",
@@ -4558,7 +4769,7 @@
 +      "source_rename_title_used": "{number}：使用來源標題「{title}」",
 +      "source_rename_fetch_failed": "{number}：來源標題取得失敗（{error}）",
 +      "source_rename_cancelled": "來源標題預覽已取消",
-+      "source_rename_done": "命名預覽完成：{videos} 個影片檔，{folders} 個資料夾，失敗 {failed}，衝突 {conflicts}",
++      "source_rename_done": "命名預覽完成：{videos} 部影片，{titles} 個標題，{folders} 個資料夾，失敗 {failed}，衝突 {conflicts}",
 +      "source_rename_failed": "依來源統一命名預覽失敗",
 +      "rename_preview_failed": "建立檔名正規化預覽失敗",
 +      "view_missing_title": "列表尚未產生",
@@ -5177,15 +5388,16 @@
          # 首次設定與已登入者改密碼共用：set_auth 撤銷了所有票，重發一張讓呼叫端不被登出。
 --- a/web/routers/actress.py
 +++ b/web/routers/actress.py
-@@ -43,6 +43,7 @@
+@@ -43,6 +43,8 @@
  from core.organizer import sanitize_filename
  from core.path_utils import to_file_uri as to_file_uri, uri_to_fs_path, uri_to_local_fs_path, coerce_to_file_uri
  from core.config import load_config
++from core.multipart_group import resolve_logical_video_groups
 +from core.i18n import get_config_locale, t as i18n_t
  from core.scrapers.actress.orchestrator import (
      get_cached_profile,
      get_actress_profile,
-@@ -55,6 +56,15 @@
+@@ -55,6 +57,15 @@
  logger = get_logger(__name__)
  
  router = APIRouter(prefix="/api/actresses", tags=["actresses"])
@@ -5201,7 +5413,7 @@
  
  
  # ---------------------------------------------------------------------------
-@@ -132,24 +142,25 @@
+@@ -132,24 +143,25 @@
  })
  
  
@@ -5233,7 +5445,7 @@
          elif k == "height":
              if v != "":
                  # TASK-157-F4：\d+ 不限位數，4301+ 位數字字串會讓下面 int() 撞上
-@@ -161,32 +172,32 @@
+@@ -161,32 +173,32 @@
                      (isinstance(v, int) and -999 <= v <= 999) or
                      (isinstance(v, str) and re.fullmatch(r"\d{1,3}(?:cm)?", v))
                  ):
@@ -5275,7 +5487,7 @@
  
  
  def _flatten_aliases(raw) -> list:
-@@ -262,11 +273,15 @@
+@@ -262,11 +274,15 @@
      4. 組裝 Actress → DB save → 下載照片
      5. 回傳 200 with actress data
      """
@@ -5292,7 +5504,7 @@
          )
  
      init_db()
-@@ -313,7 +328,10 @@
+@@ -313,7 +329,10 @@
              if result.timed_out:
                  return JSONResponse(
                      status_code=504,
@@ -5304,7 +5516,7 @@
                  )
              # TASK-122-T10：五來源全 miss、非超時 —— 片庫裡若有這位女優的片
              # （NFO 已掃描寫進 videos.actresses），改建一張只有名字的本地卡，
-@@ -324,7 +342,10 @@
+@@ -324,7 +343,10 @@
              if not videos:
                  return JSONResponse(
                      status_code=404,
@@ -5316,7 +5528,18 @@
                  )
              local_crop_ok = _try_local_crop_photo(name, videos)
              profile = {
-@@ -425,10 +446,14 @@
+@@ -402,7 +424,9 @@
+     )
+ 
+     alias_repo = AliasRepository()
+-    video_count = repo.count_videos_for_actress_names(alias_repo.resolve(actress.name))
++    video_count = _count_logical_actress_videos(
++        alias_repo.resolve(actress.name)
++    )
+     # covered_names（TASK-117-T1）：sync 後完整 DB group ∪ 使用者這次點的 name——不得
+     # 寫回 actress_aliases 表，聯集只存在於這次 HTTP 回應（CD-117-9）。
+     sync_primary = sync_result["primary_name"]
+@@ -425,10 +449,14 @@
  
  @router.post("/preview")
  def preview_actress(req: PreviewActressRequest):
@@ -5332,7 +5555,7 @@
  
          preview = get_actress_profile_preview(name)
          repo = ActressRepository()
-@@ -460,7 +485,10 @@
+@@ -460,7 +488,10 @@
          raise
      except Exception:
          logger.exception("[actress] preview_actress 失敗 name=%s", req.name)
@@ -5344,7 +5567,7 @@
  
  
  # ---------------------------------------------------------------------------
-@@ -493,20 +521,28 @@
+@@ -493,20 +524,28 @@
      return None
  
  
@@ -5376,7 +5599,7 @@
      else:
          repo.save(Actress(name=name, **fields))
  
-@@ -540,18 +576,19 @@
+@@ -540,18 +579,19 @@
      # 別名擋下／500 update_fields 回 False 都是本函式既有的正常控制流）；其餘
      # 例外一律 log 後回固定中文 JSON 500，body 形狀沿用 `{"detail": ...}`
      # （不是照片家族用的 `{"error": ...}`）。
@@ -5400,7 +5623,7 @@
          fields = {k: v for k, v in payload.items() if k != "photo"}
          if "height" in fields and fields["height"] != "":
              fields["height"] = f"{int(str(fields['height']).removesuffix('cm'))}cm"
-@@ -561,7 +598,9 @@
+@@ -561,7 +601,9 @@
          fields["primary_text_source"] = "ai"
  
          try:
@@ -5411,7 +5634,7 @@
          except HTTPException:
              raise
          except Exception:
-@@ -570,7 +609,10 @@
+@@ -570,7 +612,10 @@
              # 會原樣逸出到這個 async route。同一種 body 形狀 `{"detail": ...}`，沿用
              # 同一函式內既有的 `raise HTTPException(500, detail="操作失敗")`（:477）。
              logger.exception("[actress] AI 提交寫入失敗 name=%s", name)
@@ -5423,7 +5646,7 @@
  
          # 🔴 PR #211 第三輪 v3（owner 拍板保守補償）：`rollback_safe` 只在
          # `_apply_photo_change` 五個「確定尚未觸碰任何照片檔」的 return 點為
-@@ -578,18 +620,23 @@
+@@ -578,18 +623,23 @@
          # `_actress_to_response` 也在同一段外層防護內——此時文字已寫入成功，
          # 例外時只回固定中文 500，不做補償。
          if photo_req is not None:
@@ -5450,7 +5673,45 @@
  
  
  # ---------------------------------------------------------------------------
-@@ -1104,8 +1151,8 @@
+@@ -635,7 +685,9 @@
+     actresses = repo.get_all()
+     result = []
+     for actress in actresses:
+-        video_count = repo.count_videos_for_actress_names(alias_repo.resolve(actress.name))
++        video_count = _count_logical_actress_videos(
++            alias_repo.resolve(actress.name)
++        )
+         result.append(_actress_to_response(actress, video_count))
+     return JSONResponse(
+         status_code=200,
+@@ -875,6 +927,26 @@
+     """
+     names = list(AliasRepository().resolve(name))
+     return VideoRepository().get_videos_by_actress_names(names)
++
++
++def _count_logical_actress_videos(names) -> int:
++    """Count complete multipart groups, not physical video files.
++
++    Actress filtering returns the rows that actually carry her name; resolving
++    each candidate against its folder folds ``cd1``/``cd2`` into one work.
++    """
++    repo = VideoRepository()
++    rows = repo.get_videos_by_actress_names(list(names))
++    if not rows:
++        return 0
++    path_mappings = (
++        load_config().get("gallery", {}).get("path_mappings", {})
++    )
++    return len(resolve_logical_video_groups(
++        repo,
++        rows,
++        path_mappings,
++    ))
+ 
+ 
+ def _try_local_crop_photo(name: str, videos: list) -> bool:
+@@ -1104,8 +1176,8 @@
  # snake_case 錯誤字面（not_found/unknown_source/... ）是舊碼遺留，範圍外不動
  # （TASK-100a-T3 決策點：新增 code 就得守新規則，不因「既有端點還沒遷移」而
  # 再新增一條 snake_case 違規）。
@@ -5461,7 +5722,7 @@
  
  # P3-1（PR #211 review）：_apply_photo_change 是 set_actress_photo（UI 端點）與
  # submit_actress（AI-facing API 端點）共用的函式。set_actress_photo 沿用下列
-@@ -1115,32 +1162,33 @@
+@@ -1115,32 +1187,33 @@
  # 是 AI 呼叫的 API contract，AGENTS.md:81 要求新增／AI 呼叫路徑一律回固定中文，
  # 不可把內部 code 原樣透給呼叫端——故只在 submit_actress 收到 err 之後做轉譯，
  # 不動 _apply_photo_change 本體（set_actress_photo 既有測試仍斷言舊 code）。
@@ -5507,7 +5768,7 @@
      """Return (URL, error, rollback_safe).
  
      v3（owner 拍板，PR #211 第三輪 followup2）：不追蹤「照片是否已安裝」，改追蹤
-@@ -1155,6 +1203,9 @@
+@@ -1155,6 +1228,9 @@
      其他非預期例外 log 後轉既有固定中文 JSON 500，rollback_safe=False（狀態不
      明，不補償）。
      """
@@ -5517,7 +5778,7 @@
      try:
          if req.source not in CLOUD_SOURCES and req.source != "local_crop":
              return None, JSONResponse(status_code=400, content={"error": "unknown_source"}), True
-@@ -1176,9 +1227,9 @@
+@@ -1176,9 +1252,9 @@
              # 是舊碼 snake_case 就跟著新增一條違規——TASK-100a-T3 已裁決過同一件事）。
              if not validate_photo_url(req.url, req.source):
                  logger.warning("[actress] set_photo URL 不在白名單 source=%s", req.source)
@@ -5529,7 +5790,7 @@
              if err:
                  return None, err, False
              ok = await asyncio.to_thread(download_actress_photo, name, req.url, req.source)
-@@ -1214,7 +1265,7 @@
+@@ -1214,7 +1290,7 @@
                  # （final3.txt：符合 owner 選擇的保守語義，不因它「其實也在寫入前」而放行）。
                  return None, JSONResponse(status_code=500, content={"error": "crop_failed"}), False
              # 🔴 CD-4 pre-invalidate：local_crop 分支插入點——crop 成功之後、寫入之前。
@@ -5538,7 +5799,7 @@
              if err:
                  return None, err, False
              # glob 刪舊副檔名 + 寫入
-@@ -1227,11 +1278,11 @@
+@@ -1227,11 +1303,11 @@
                  await asyncio.to_thread(_write_actress_photo, name, crop_bytes)
              except Exception:
                  logger.exception("[actress] set_photo local_crop 寫檔失敗 name=%s", name)
@@ -5552,7 +5813,7 @@
          if err:
              return None, err, False
  
-@@ -1240,7 +1291,7 @@
+@@ -1240,7 +1316,7 @@
          # 可能回 None（GFRIENDS_DIR 綁定不一致／外部同時刪除）——不 guard 會 None.stat()
          # 拋 AttributeError（mirror T2 review finding）。
          photo_url, err = await _photo_url_with_fp_cache_bust(
@@ -5561,7 +5822,7 @@
          if err:
              return None, err, False
          return photo_url, None, False
-@@ -1248,7 +1299,7 @@
+@@ -1248,7 +1324,7 @@
          raise
      except Exception:
          logger.exception("[actress] set_photo 未預期例外 name=%s", name)
@@ -5570,7 +5831,7 @@
  
  
  @router.post("/{name}/photo")
-@@ -1273,6 +1324,7 @@
+@@ -1273,6 +1349,7 @@
      photo_url；`auto_focal`/`crop_mode` 直接寫死（clear_focal 語意已知，不多一次
      DB round-trip），與 T2 上傳端點回應對稱（plan-100b CD-10 需要）。
      """
@@ -5578,7 +5839,7 @@
      repo, actress = await asyncio.to_thread(_load_actress, name)
      # 🔴 PR #211 第三輪 v3：身分守衛擴及本端點（原本只有 submit_actress／
      # upload_actress_photo 擋，set_actress_photo 完全沒查）——在判斷「女優是否
-@@ -1284,11 +1336,20 @@
+@@ -1284,11 +1361,20 @@
      primary_name = await asyncio.to_thread(_favorited_primary_for_alias, repo, name)
      if primary_name:
          return JSONResponse(status_code=400, content={
@@ -5603,7 +5864,7 @@
      if err:
          return err
      return JSONResponse(status_code=200, content={
-@@ -1309,10 +1370,10 @@
+@@ -1309,10 +1395,10 @@
  _UPLOAD_FORMAT_TO_EXT = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "GIF": ".gif"}
  
  # CD-8：錯誤訊息一律固定中文，機械分流走 HTTP status（不用 snake_case error code）。
@@ -5618,7 +5879,7 @@
  
  # ruff B008：fastapi.File 不在 ruff 預設 immutable-calls 允許清單內（Query/Depends/Body/
  # Form 都在，File 不在）。用模組層級單例取代 inline File(...) 呼叫，避免逐一 noqa 或改動
-@@ -1381,25 +1442,33 @@
+@@ -1381,25 +1467,33 @@
      HTTPException（別名擋下的 400）原樣放行；其他例外一律 log 後回既有固定
      中文 `_UPLOAD_ERR_FAILED`，不洩漏例外內容。
      """
@@ -5656,7 +5917,7 @@
  
          # 4. 女優存在 + 別名擋下（CD-157 身分守衛，同 submit_actress 的判準，
          # PR #211 Codex P2-2）——必須在任何寫入之前執行，且不論 name 自己有沒有
-@@ -1408,16 +1477,23 @@
+@@ -1408,16 +1502,23 @@
          primary_name = await asyncio.to_thread(_favorited_primary_for_alias, repo, name)
          if primary_name:
              raise HTTPException(
@@ -5683,7 +5944,7 @@
          if err:
              return err
  
-@@ -1425,17 +1501,17 @@
+@@ -1425,17 +1526,17 @@
              await asyncio.to_thread(_write_actress_photo, name, data, ext)
          except Exception:
              logger.exception("[actress] upload 寫檔失敗 name=%s", name)
@@ -5704,7 +5965,7 @@
          if err:
              return err
          return JSONResponse(status_code=200, content={
-@@ -1448,7 +1524,7 @@
+@@ -1448,7 +1549,7 @@
          raise
      except Exception:
          logger.exception("[actress] upload_actress_photo 未預期例外 name=%s", name)
@@ -5713,7 +5974,7 @@
  
  
  # ---------------------------------------------------------------------------
-@@ -1471,11 +1547,11 @@
+@@ -1471,11 +1572,11 @@
  _FOCAL_DETECT_RATIO = 0.75
  _MANUAL_DETECT_TIMEOUT_S = 5.0  # D2/D9: 前景與背景共用同一個 5 秒定義（CD-152d-1），不是批次上限外的安全網
  
@@ -5730,7 +5991,7 @@
  
  
  @router.post("/{name}/detect-focal")
-@@ -1513,14 +1589,21 @@
+@@ -1513,14 +1614,21 @@
      CD-13：不進 `web/routers/capabilities.py`（比照 showcase 的兩支 focal
      端點皆未揭露——同家族純預覽/寫入端點對 AI agent 用起來無明顯優勢）。
      """
@@ -5754,7 +6015,7 @@
  
          # 152d-T-D8：同 showcase，停用時不要進 run_detection 的全域鎖排隊。
          # 這支沒有預先載入的 config，而 is_disabled() 內部會讀檔 + 取鎖 ⇒ 必須 to_thread。
-@@ -1559,7 +1642,10 @@
+@@ -1559,7 +1667,10 @@
          )
      except Exception:
          logger.exception("[actress] 偵測焦點失敗 name=%s", name)
@@ -5766,7 +6027,7 @@
  
  
  @router.post("/{name}/focal")
-@@ -1589,14 +1675,21 @@
+@@ -1589,14 +1700,21 @@
      `async def` + `asyncio.to_thread`（同 detect-focal，理由見該端點 docstring）。
      CD-13：不進 capabilities（同 detect-focal）。
      """
@@ -5790,7 +6051,7 @@
  
          normalized = format_focal(parsed)
          written = await asyncio.to_thread(repo.update_manual_focal, name, normalized)
-@@ -1604,11 +1697,17 @@
+@@ -1604,11 +1722,17 @@
              # 理論不該發生（女優已確認存在）——唯一情境是驗證與寫入之間的 race，
              # spec §1.4 明示接受。無 compare token 可用，故視為一般失敗，非 409。
              logger.warning("[actress] update_manual_focal 回 False（race）name=%s", name)
@@ -13658,7 +13919,7 @@
          get missingEnrichButtonText() {
              if (this.state === 'enriching') {
                  return '<span class="loading loading-spinner loading-sm"></span> ' + window.t('scanner.stats.missing_enrich_loading');
-@@ -74,13 +158,279 @@
+@@ -74,13 +158,288 @@
              return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
          },
  
@@ -13694,6 +13955,10 @@
 +            return this.renamePlan?.summary?.rename_folders || 0;
 +        },
 +
++        get renameTitleValue() {
++            return this.renamePlan?.summary?.updated_titles || 0;
++        },
++
 +        get renameFailedValue() {
 +            return this.renamePlan?.summary?.failed || 0;
 +        },
@@ -13701,7 +13966,8 @@
 +        get renameHasChanges() {
 +            return this.renamePrimaryValue > 0
 +                || this.renameSecondaryValue > 0
-+                || this.renameFolderValue > 0;
++                || this.renameFolderValue > 0
++                || this.renameTitleValue > 0;
 +        },
 +
 +        get renamePageSize() {
@@ -13868,6 +14134,7 @@
 +                        videos: result.updated_videos || 0,
 +                        files: result.renamed_files || 0,
 +                        folders: result.renamed_folders || 0,
++                        titles: result.updated_titles || 0,
 +                    });
 +                    this.showToast(message, 'success', 5000);
 +                    await this.loadStats();
@@ -13900,6 +14167,9 @@
 +                    ? `${window.t('scanner.rename.folder_create_prefix')}${item.new_name}`
 +                    : `${item.old_name} -> ${item.new_name}`);
 +                for (const video of (item.videos || [])) {
++                    if (video.title_update) {
++                        lines.push(`  ${video.title_old || ''} -> ${video.title_new || ''}`);
++                    }
 +                    if (video.old_name !== video.new_name) {
 +                        lines.push(`  ${video.old_name} -> ${video.new_name}`);
 +                    }
@@ -13938,7 +14208,7 @@
                  if (d.total_missing > 0) {
                      // TASK-13: 後端永遠回傳完整 items 清單；前端於 runMissingEnrich 內做 > 500 confirm gate
                      this.missingBothCount = d.missing_both || 0;
-@@ -88,11 +438,206 @@
+@@ -88,11 +447,206 @@
                      this.missingCoverCount = d.missing_cover || 0;
                      this.missingItems = Array.isArray(d.items) ? d.items : [];
                      this.missingPillVisible = true;
@@ -14145,7 +14415,7 @@
              }
          },
  
-@@ -109,14 +654,17 @@
+@@ -109,14 +663,17 @@
              this.missingEnrichOffset = 0;
              this.missingEnrichSuccess = 0;
              this.missingEnrichFailed = 0;
@@ -14166,7 +14436,7 @@
              this.clearLogs();
  
              const controller = new AbortController();
-@@ -146,7 +694,7 @@
+@@ -146,7 +703,7 @@
                          }
                          this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
                          this.flushLogs();
@@ -14175,7 +14445,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          // Save remaining
-@@ -159,7 +707,7 @@
+@@ -159,7 +716,7 @@
                          const errText = await resp.text().catch(() => '');
                          this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
                          this.flushLogs();
@@ -14184,7 +14454,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -200,6 +748,12 @@
+@@ -200,6 +757,12 @@
                                  this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
                                  this.progressTotal = items.length;
                                  this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
@@ -14197,7 +14467,7 @@
                              } else if (event.type === 'result-item') {
                                  // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
                                  // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
-@@ -234,7 +788,18 @@
+@@ -234,7 +797,18 @@
                                      this.missingEnrichSuccess++;
                                  } else {
                                      this.missingEnrichFailed++;
@@ -14216,7 +14486,7 @@
                                  // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
                                  if (event.reason === 'error') {
                                      this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
-@@ -246,7 +811,7 @@
+@@ -246,7 +820,7 @@
                              } else if (event.type === 'error') {
                                  this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
                                  this.flushLogs();
@@ -14225,7 +14495,7 @@
                                  this.currentCard = null;
                                  this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -258,7 +823,7 @@
+@@ -258,7 +832,7 @@
  
                      // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
                      if (!batchDone) {
@@ -14234,7 +14504,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -284,11 +849,19 @@
+@@ -284,11 +858,19 @@
                      if (lastCover) {
                          this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
                      }
@@ -14256,7 +14526,7 @@
                      const summary = this.missingEnrichFailed > 0
                          ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
                          : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
-@@ -312,7 +885,7 @@
+@@ -312,7 +894,7 @@
                  if (e.name === 'AbortError') return;
                  console.error('runMissingEnrich error:', e);
                  this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
@@ -17771,7 +18041,7 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -805,26 +1272,137 @@
+@@ -805,26 +1272,150 @@
          </div>
      </dialog>
  
@@ -17796,6 +18066,10 @@
 +                <div class="batch-confirm-summary-item">
 +                    <span>{{ t('scanner.rename.summary_folders') }}</span>
 +                    <strong x-text="renameFolderValue"></strong>
++                </div>
++                <div class="batch-confirm-summary-item">
++                    <span>{{ t('scanner.rename.summary_titles') }}</span>
++                    <strong x-text="renameTitleValue"></strong>
 +                </div>
 +                <div class="batch-confirm-summary-item">
 +                    <span>{{ t('scanner.rename.summary_conflicts') }}</span>
@@ -17836,12 +18110,21 @@
 +                        </div>
 +                        <div class="rename-preview-videos">
 +                            <template x-for="video in item.videos" :key="video.db_old_uri">
-+                                <div class="rename-preview-video"
-+                                     x-show="video.old_name !== video.new_name">
-+                                    <i class="bi bi-film"></i>
-+                                    <span x-text="video.old_name"></span>
-+                                    <i class="bi bi-arrow-right"></i>
-+                                    <span x-text="video.new_name"></span>
++                                <div>
++                                    <div class="rename-preview-video"
++                                         x-show="video.title_update">
++                                        <i class="bi bi-type"></i>
++                                        <span x-text="video.title_old || '—'"></span>
++                                        <i class="bi bi-arrow-right"></i>
++                                        <span x-text="video.title_new"></span>
++                                    </div>
++                                    <div class="rename-preview-video"
++                                         x-show="video.old_name !== video.new_name">
++                                        <i class="bi bi-film"></i>
++                                        <span x-text="video.old_name"></span>
++                                        <i class="bi bi-arrow-right"></i>
++                                        <span x-text="video.new_name"></span>
++                                    </div>
 +                                </div>
 +                            </template>
 +                        </div>
