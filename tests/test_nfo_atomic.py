@@ -175,6 +175,41 @@ def test_atomic_write_uses_mobile_bridge_when_replace_is_denied(
     assert list(tmp_path.glob("*.tmp")) == []
 
 
+def test_atomic_write_ignores_temp_cleanup_failure_after_saf_success(
+    tmp_path,
+    monkeypatch,
+):
+    target = tmp_path / "ABC-123.nfo"
+    captured = {}
+
+    def fail_replace(_source, _destination):
+        raise PermissionError("simulated Android rename denial")
+
+    def fail_unlink(_self, *args, **kwargs):
+        raise PermissionError("simulated stale temp cleanup denial")
+
+    monkeypatch.setattr(atomic_write_module.os, "replace", fail_replace)
+    monkeypatch.setattr(Path, "unlink", fail_unlink)
+    from core import android_storage
+
+    monkeypatch.setattr(android_storage, "has_access", lambda _path: True)
+    monkeypatch.setattr(
+        android_storage,
+        "write_bytes",
+        lambda path, data: captured.update(path=path, data=data),
+    )
+
+    with atomic_write(
+        target, mode="wb", suffix=".nfo.tmp", mobile_fallback=True
+    ) as handle:
+        handle.write(b"replacement")
+
+    assert captured == {
+        "path": str(target),
+        "data": b"replacement",
+    }
+
+
 def test_rewrite_nfo_titles_changes_title_and_preserves_other_nodes(tmp_path):
     nfo = tmp_path / "ABC-123.nfo"
     nfo.write_text(

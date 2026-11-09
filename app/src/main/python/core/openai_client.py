@@ -7,6 +7,7 @@ OpenAI 相容 chat/completions 請求／解析／錯誤分類（OpenAI 翻譯唯
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -17,8 +18,13 @@ from core.cloud_translate import (
     cloud_request,
     finalize_translation,
 )
+from core.logger import get_logger
 
 TAG = "OpenAI"
+_MAX_ATTEMPTS = 2
+_DEFAULT_RETRY_DELAY = 0.8
+_MAX_RETRY_DELAY = 8.0
+logger = get_logger(__name__)
 
 
 def build_headers(api_key: str) -> dict[str, str]:
@@ -97,6 +103,14 @@ def classify_http_error(resp: httpx.Response) -> TranslateError:
     return build_error(TAG, "http_error", status, err_type, message)
 
 
+def _retry_after_seconds(resp: httpx.Response) -> float:
+    value = (resp.headers.get("retry-after") or "").strip()
+    try:
+        return min(max(float(value), 0.0), _MAX_RETRY_DELAY)
+    except ValueError:
+        return _DEFAULT_RETRY_DELAY
+
+
 async def request_translation(
     base_url: str,
     api_key: str,
@@ -105,24 +119,56 @@ async def request_translation(
     *,
     timeout: float,
 ) -> str:
-    """POST <base_url>/chat/completions；成功回非空 str，失敗拋 TranslateError。"""
-    resp = await cloud_request(
-        TAG,
-        "POST",
-        base_url.rstrip("/") + "/chat/completions",
-        headers=build_headers(api_key),
-        timeout=timeout,
-        json=build_translate_payload(model, prompt),
-    )
-    try:
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        raise classify_http_error(e.response) from None
+    """POST chat/completions with one bounded retry for transient failures."""
+    last_error: TranslateError | None = None
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            resp = await cloud_request(
+                TAG,
+                "POST",
+                base_url.rstrip("/") + "/chat/completions",
+                headers=build_headers(api_key),
+                timeout=timeout,
+                json=build_translate_payload(model, prompt),
+            )
+            if resp.status_code == 429 or 500 <= resp.status_code <= 599:
+                last_error = classify_http_error(resp)
+                if attempt + 1 >= _MAX_ATTEMPTS:
+                    raise last_error
+                delay = _retry_after_seconds(resp)
+                logger.warning(
+                    "[OpenAI] transient status=%s; retrying in %.2fs",
+                    resp.status_code,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+                continue
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise classify_http_error(e.response) from None
 
-    try:
-        data = resp.json()
-    except Exception as e:
-        raise build_error(TAG, "api_error", None, "", f"invalid JSON: {e}") from e
-    if not isinstance(data, dict):
-        raise build_error(TAG, "api_error", None, "", "response is not a JSON object")
-    return extract_text(data)
+            try:
+                data = resp.json()
+            except Exception as e:
+                raise build_error(TAG, "api_error", None, "", f"invalid JSON: {e}") from e
+            if not isinstance(data, dict):
+                raise build_error(TAG, "api_error", None, "", "response is not a JSON object")
+            return extract_text(data)
+        except TranslateError as exc:
+            last_error = exc
+            if (
+                attempt + 1 >= _MAX_ATTEMPTS
+                or exc.kind not in ("connection_timeout", "connection_failed")
+            ):
+                raise
+            logger.warning(
+                "[OpenAI] transient failure=%s; retrying in %.2fs",
+                exc.kind,
+                _DEFAULT_RETRY_DELAY,
+            )
+            await asyncio.sleep(_DEFAULT_RETRY_DELAY)
+
+    if last_error is not None:
+        raise last_error
+    raise build_error(TAG, "api_error", None, "", "translation retry exhausted")

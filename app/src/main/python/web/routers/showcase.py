@@ -93,6 +93,7 @@ def _needs_translate(
     _original_title,
     nfo_mtime,
     locale: str | None = None,
+    proper_terms=None,
 ) -> bool:
     """Whether a titled row needs translation into the active UI language."""
     return bool(
@@ -100,6 +101,7 @@ def _needs_translate(
         and title_needs_translation(
             title or "",
             locale or _showcase_locale(),
+            proper_terms=proper_terms,
         )
     )
 
@@ -109,11 +111,13 @@ def _can_manual_translate(
     _original_title,
     _nfo_mtime,
     locale: str | None = None,
+    proper_terms=None,
 ) -> bool:
     """Lightbox translation is available whenever the title is not on-target."""
     return title_needs_translation(
         title or "",
         locale or _showcase_locale(),
+        proper_terms=proper_terms,
     )
 
 
@@ -167,8 +171,20 @@ def _serialize_video(
         "user_rating": v.user_rating or 0,            # 精選標記（spec-123）；無條件輸出，未精選為 0（FE-ALPINE-06）
         "has_cover": bool(v.cover_path),             # DB 初判（不做 IO）
         "has_nfo": (v.nfo_mtime or 0) > 0,          # 對齊 41a nfo_mtime 寫入契約，防禦 NULL
-        "needs_translate": _needs_translate(v.title, v.original_title, v.nfo_mtime, locale),
-        "can_translate": _can_manual_translate(v.title, v.original_title, v.nfo_mtime, locale),
+        "needs_translate": _needs_translate(
+            v.title,
+            v.original_title,
+            v.nfo_mtime,
+            locale,
+            proper_terms=v.actresses,
+        ),
+        "can_translate": _can_manual_translate(
+            v.title,
+            v.original_title,
+            v.nfo_mtime,
+            locale,
+            proper_terms=v.actresses,
+        ),
         "auto_focal": v.auto_focal,                  # canonical "x,y" 4dp 字串或 ''（98b：前端 focalObjectPosition 消費）
         "crop_mode": v.crop_mode,                    # 'auto' | 'default'（98b：default 退 baseline 右裁）
     }
@@ -773,8 +789,12 @@ def _locate_readonly_nfo(video, path_mappings: dict, output_uri: str):
         return None, "no_nfo"
     if not output_uri or not is_path_under_dir(video.output_dir, output_uri):
         return None, "no_nfo"
-    out_fs = uri_to_local_fs_path(video.output_dir, path_mappings)
+    out_fs = Path(uri_to_local_fs_path(video.output_dir, path_mappings))
+    video_fs = Path(uri_to_local_fs_path(video.path, path_mappings))
     try:
+        exact = find_sidecar_nfos(out_fs / video_fs.name)
+        if exact:
+            return str(exact[0]), None
         with os.scandir(out_fs) as it:
             nfo_files = sorted(e.path for e in it if e.name.lower().endswith(".nfo") and e.is_file())
     except FileNotFoundError:
@@ -904,10 +924,16 @@ def _apply_title_writeback(
                 "title": body,
                 "original_title": new_original,
                 "needs_translate": _needs_translate(
-                    body, new_original, new_mtime
+                    body,
+                    new_original,
+                    new_mtime,
+                    proper_terms=video.actresses,
                 ),
                 "can_translate": _can_manual_translate(
-                    body, new_original, new_mtime
+                    body,
+                    new_original,
+                    new_mtime,
+                    proper_terms=video.actresses,
                 ),
                 "nfo_updated": True,
                 "nfo_created": True,
@@ -929,8 +955,18 @@ def _apply_title_writeback(
     if not written:
         return _title_fail("not_found", locale)
     return {"success": True, "title": body, "original_title": new_original,
-            "needs_translate": _needs_translate(body, new_original, new_mtime),
-            "can_translate": _can_manual_translate(body, new_original, new_mtime),
+            "needs_translate": _needs_translate(
+                body,
+                new_original,
+                new_mtime,
+                proper_terms=video.actresses,
+            ),
+            "can_translate": _can_manual_translate(
+                body,
+                new_original,
+                new_mtime,
+                proper_terms=video.actresses,
+            ),
             "nfo_updated": True}
 
 

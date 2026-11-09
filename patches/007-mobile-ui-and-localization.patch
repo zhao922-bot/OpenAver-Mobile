@@ -40,7 +40,7 @@
          try:
              translate_service = create_translate_service(translate_config, locale)
          except Exception:
-@@ -185,8 +182,10 @@
+@@ -185,10 +182,24 @@
  
          metadata = dict(results[0])  # CD-144-5：原樣，不加不減（不覆蓋 number）
  
@@ -48,11 +48,36 @@
 -        if not chinese_title and translate_service is not None and has_japanese(metadata.get('title', '')):
 +        if (
 +            translate_service is not None
-+            and title_needs_translation(metadata.get('title', ''), locale)
++            and title_needs_translation(
++                metadata.get('title', ''),
++                locale,
++                proper_terms=metadata.get('actors') or (),
++            )
 +        ):
              try:
-                 translated = asyncio.run(translate_service.translate_single(metadata['title']))
+-                translated = asyncio.run(translate_service.translate_single(metadata['title']))
++                translated = asyncio.run(
++                    translate_service.translate_single(
++                        metadata['title'],
++                        {
++                            'actors': metadata.get('actors') or [],
++                            'number': number,
++                        },
++                    )
++                )
              except Exception:
+                 # 不擋、不計 failed（DoD-8），但要留痕（Codex PR #181 二審 P3）：
+                 # 無人值守跑完只會回報「成功」，沒有這一行就查不出為什麼標題沒翻。
+--- a/core/cloud_translate.py
++++ b/core/cloud_translate.py
+@@ -35,6 +35,7 @@
+     "http_error": "http_error",
+     "blocked": "blocked",
+     "refused": "blocked",
++    "invalid_response": "translate_failed",
+     "truncated": "translate_failed",
+     "empty_response": "translate_failed",
+     "api_error": "translate_failed",
 --- a/core/config.py
 +++ b/core/config.py
 @@ -8,6 +8,7 @@
@@ -1034,6 +1059,122 @@
      return None
  
  
+--- a/core/openai_client.py
++++ b/core/openai_client.py
+@@ -7,6 +7,7 @@
+ 
+ from __future__ import annotations
+ 
++import asyncio
+ from typing import Any
+ 
+ import httpx
+@@ -17,8 +18,13 @@
+     cloud_request,
+     finalize_translation,
+ )
++from core.logger import get_logger
+ 
+ TAG = "OpenAI"
++_MAX_ATTEMPTS = 2
++_DEFAULT_RETRY_DELAY = 0.8
++_MAX_RETRY_DELAY = 8.0
++logger = get_logger(__name__)
+ 
+ 
+ def build_headers(api_key: str) -> dict[str, str]:
+@@ -97,6 +103,14 @@
+     return build_error(TAG, "http_error", status, err_type, message)
+ 
+ 
++def _retry_after_seconds(resp: httpx.Response) -> float:
++    value = (resp.headers.get("retry-after") or "").strip()
++    try:
++        return min(max(float(value), 0.0), _MAX_RETRY_DELAY)
++    except ValueError:
++        return _DEFAULT_RETRY_DELAY
++
++
+ async def request_translation(
+     base_url: str,
+     api_key: str,
+@@ -105,24 +119,56 @@
+     *,
+     timeout: float,
+ ) -> str:
+-    """POST <base_url>/chat/completions；成功回非空 str，失敗拋 TranslateError。"""
+-    resp = await cloud_request(
+-        TAG,
+-        "POST",
+-        base_url.rstrip("/") + "/chat/completions",
+-        headers=build_headers(api_key),
+-        timeout=timeout,
+-        json=build_translate_payload(model, prompt),
+-    )
+-    try:
+-        resp.raise_for_status()
+-    except httpx.HTTPStatusError as e:
+-        raise classify_http_error(e.response) from None
++    """POST chat/completions with one bounded retry for transient failures."""
++    last_error: TranslateError | None = None
++    for attempt in range(_MAX_ATTEMPTS):
++        try:
++            resp = await cloud_request(
++                TAG,
++                "POST",
++                base_url.rstrip("/") + "/chat/completions",
++                headers=build_headers(api_key),
++                timeout=timeout,
++                json=build_translate_payload(model, prompt),
++            )
++            if resp.status_code == 429 or 500 <= resp.status_code <= 599:
++                last_error = classify_http_error(resp)
++                if attempt + 1 >= _MAX_ATTEMPTS:
++                    raise last_error
++                delay = _retry_after_seconds(resp)
++                logger.warning(
++                    "[OpenAI] transient status=%s; retrying in %.2fs",
++                    resp.status_code,
++                    delay,
++                )
++                await asyncio.sleep(delay)
++                continue
++            try:
++                resp.raise_for_status()
++            except httpx.HTTPStatusError as e:
++                raise classify_http_error(e.response) from None
+ 
+-    try:
+-        data = resp.json()
+-    except Exception as e:
+-        raise build_error(TAG, "api_error", None, "", f"invalid JSON: {e}") from e
+-    if not isinstance(data, dict):
+-        raise build_error(TAG, "api_error", None, "", "response is not a JSON object")
+-    return extract_text(data)
++            try:
++                data = resp.json()
++            except Exception as e:
++                raise build_error(TAG, "api_error", None, "", f"invalid JSON: {e}") from e
++            if not isinstance(data, dict):
++                raise build_error(TAG, "api_error", None, "", "response is not a JSON object")
++            return extract_text(data)
++        except TranslateError as exc:
++            last_error = exc
++            if (
++                attempt + 1 >= _MAX_ATTEMPTS
++                or exc.kind not in ("connection_timeout", "connection_failed")
++            ):
++                raise
++            logger.warning(
++                "[OpenAI] transient failure=%s; retrying in %.2fs",
++                exc.kind,
++                _DEFAULT_RETRY_DELAY,
++            )
++            await asyncio.sleep(_DEFAULT_RETRY_DELAY)
++
++    if last_error is not None:
++        raise last_error
++    raise build_error(TAG, "api_error", None, "", "translation retry exhausted")
 --- a/core/readonly_producer.py
 +++ b/core/readonly_producer.py
 @@ -43,6 +43,7 @@
@@ -1144,7 +1285,18 @@
  
 --- a/core/translate_service.py
 +++ b/core/translate_service.py
-@@ -38,24 +38,31 @@
+@@ -31,6 +31,10 @@
+     request_translation,
+ )
+ from core.cloud_translate import CLOUD_TRANSLATE_TIMEOUT, TranslateError, build_error
++from core.title_language import (
++    normalize_translation_text,
++    translation_result_issue,
++)
+ 
+ 
+ # ============ 語言 Prompt 模板 ============
+@@ -38,30 +42,65 @@
  LANGUAGE_PROMPTS = {
      "zh-TW": {
          "name": "繁體中文",
@@ -1185,7 +1337,50 @@
      },
  }
  
-@@ -105,7 +112,7 @@
+ 
+ class TranslateService(ABC):
+     """翻譯服務抽象基類"""
++
++    target_language = "zh-CN"
++
++    def _validate_result(
++        self,
++        source: str,
++        translated: str,
++        context: Optional[Dict] = None,
++    ) -> str:
++        """Reject refusals, source echoes, and output in the wrong language."""
++        cleaned = normalize_translation_text(translated)
++        proper_terms = (context or {}).get("actors") or ()
++        issue = translation_result_issue(
++            source,
++            cleaned,
++            self.target_language,
++            proper_terms=proper_terms,
++        )
++        if issue is not None:
++            kind = "refused" if issue == "refusal" else "invalid_response"
++            raise build_error(
++                "Translation",
++                kind,
++                None,
++                issue,
++                issue,
++            )
++        return cleaned
+ 
+     @abstractmethod
+     async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
+@@ -85,7 +124,7 @@
+         result = await self.translate_single(title, context)
+         if not result:
+             raise TranslateError("empty_response", None, "", "translation is empty")
+-        return result
++        return self._validate_result(title, result, context)
+ 
+     @abstractmethod
+     async def translate_batch(self, titles: List[str], context: Optional[Dict] = None) -> List[str]:
+@@ -105,7 +144,7 @@
  class OllamaTranslateService(TranslateService):
      """Ollama 翻譯服務實現"""
  
@@ -1194,7 +1389,7 @@
          """
          初始化 Ollama 服務
  
-@@ -122,12 +129,8 @@
+@@ -122,12 +161,8 @@
          self.target_language = target_language
  
      async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -1209,7 +1404,29 @@
          system_msg = lang_data["ollama_system"]
          example = lang_data["ollama_example"]
          prompt = f"""範例：{example}
-@@ -236,7 +239,7 @@
+@@ -175,9 +210,7 @@
+                 "Ollama", "api_error", None, type(e).__name__, str(e)
+             ) from None
+ 
+-        if not result:
+-            raise build_error("Ollama", "empty_response", None, "", "translation is empty")
+-        return result
++        return self._validate_result(title, result, context)
+ 
+     async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
+         """
+@@ -210,8 +243,8 @@
+     def _clean_output(self, text: str) -> str:
+         """清理翻譯輸出"""
+         text = text.strip().strip('"').strip("'")
+-        text = re.sub(r'^翻譯[：:]\\s*', '', text)
+-        text = re.sub(r'^中文[：:]\\s*', '', text)
++        text = re.sub(r'^翻譯[：:]\s*', '', text)
++        text = re.sub(r'^中文[：:]\s*', '', text)
+         text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+         return text.strip()
+ 
+@@ -236,7 +269,7 @@
  class GeminiTranslateService(TranslateService):
      """Google Gemini API 翻譯服務實現"""
  
@@ -1218,7 +1435,7 @@
          """
          初始化 Gemini 服務
  
-@@ -256,11 +259,7 @@
+@@ -256,20 +289,17 @@
              raise ValueError("Gemini API Key is required")
  
      async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -1231,7 +1448,18 @@
          prompt = build_cloud_translate_prompt(title, self.target_language)
  
          try:
-@@ -310,7 +309,7 @@
+-            return await gemini_client.request_translation(
++            result = await gemini_client.request_translation(
+                 self.api_key,
+                 self.model,
+                 prompt,
+                 timeout=CLOUD_TRANSLATE_TIMEOUT,
+             )
++            return self._validate_result(title, result, context)
+         except TranslateError:
+             raise
+         except Exception as e:
+@@ -310,7 +340,7 @@
  class OpenAICompatibleTranslateService(TranslateService):
      """OpenAI Compatible API 翻譯服務實現（支援 OpenAI、Perplexity、OpenRouter、本地 LLM 等）"""
  
@@ -1240,7 +1468,7 @@
          """
          初始化 OpenAI Compatible 服務
  
-@@ -329,11 +328,7 @@
+@@ -329,21 +359,34 @@
          self.target_language = target_language
  
      async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -1253,7 +1481,35 @@
          prompt = build_cloud_translate_prompt(title, self.target_language)
  
          try:
-@@ -375,11 +370,11 @@
+-            return await openai_client.request_translation(
++            result = await openai_client.request_translation(
+                 self.base_url,
+                 self.api_key,
+                 self.model,
+                 prompt,
+                 timeout=CLOUD_TRANSLATE_TIMEOUT,
+             )
++            try:
++                return self._validate_result(title, result, context)
++            except TranslateError as first_error:
++                if first_error.kind not in ("refused", "invalid_response"):
++                    raise
++                retry_prompt = (
++                    f"{prompt}\n"
++                    "只輸出最終譯文本身。不要評論、解釋、道歉，也不要輸出任何前綴。"
++                )
++                retried = await openai_client.request_translation(
++                    self.base_url,
++                    self.api_key,
++                    self.model,
++                    retry_prompt,
++                    timeout=CLOUD_TRANSLATE_TIMEOUT,
++                )
++                return self._validate_result(title, retried, context)
+         except TranslateError:
+             raise
+         except Exception as e:
+@@ -375,11 +418,11 @@
  
  
  def build_cloud_translate_prompt(title: str, target_language: str) -> str:
@@ -1268,7 +1524,7 @@
  
  原文：
  {title}
-@@ -392,7 +387,7 @@
+@@ -392,7 +435,7 @@
  class ClaudeTranslateService(TranslateService):
      """Anthropic Claude Messages API 翻譯服務"""
  
@@ -1277,7 +1533,7 @@
          """
          Args:
              config: Claude 配置字典
-@@ -410,10 +405,7 @@
+@@ -410,19 +453,17 @@
              raise ValueError("Claude API Key is required")
  
      async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -1289,7 +1545,18 @@
          prompt = build_cloud_translate_prompt(title, self.target_language)
  
          try:
-@@ -451,7 +443,7 @@
+-            return await request_translation(
++            result = await request_translation(
+                 self.api_key,
+                 self.model,
+                 prompt,
+                 timeout=30,
+             )
++            return self._validate_result(title, result, context)
+         except TranslateError:
+             raise
+         except Exception as e:
+@@ -451,7 +492,7 @@
          return results
  
  
@@ -1298,7 +1565,7 @@
      """
      創建翻譯服務實例（工廠函數）
  
-@@ -464,7 +456,7 @@
+@@ -464,7 +505,7 @@
                  "claude": {...},
                  "openai": {...}
              }
@@ -1472,7 +1739,7 @@
    "scanner": {
 +    "rename": {
 +      "row_title": "Normalize video filenames",
-+      "row_hint": "Normalize number/title spacing; overlong names are safely truncated with ...",
++      "row_hint": "Normalize number/title spacing; overlong names are safely truncated with …",
 +      "source_row_title": "Normalize filenames and folders",
 +      "source_row_hint": "Choose a metadata source for video and folder names; root-level videos get a matching folder automatically",
 +      "source_select_label": "Title source",
@@ -1501,7 +1768,7 @@
 +      "summary_folders": "Folders to process",
 +      "summary_files": "Files including sidecars",
 +      "summary_conflicts": "Conflicts",
-+      "modal_intro": "Only video filenames and sidecars in the same folder are changed: NFO, cover, poster, fanart, and subtitles. Overlong names share a safe limit and end with ..., while folders, extrafanart, and other videos stay unchanged.",
++      "modal_intro": "Only video filenames and sidecars in the same folder are changed: NFO, cover, poster, fanart, and subtitles. Overlong names share a safe limit and end with …, while folders, extrafanart, and other videos stay unchanged.",
 +      "folder_modal_intro": "Only direct-child movie folder names under each scan root are changed, together with database paths. Videos, NFO, cover, and still-image files inside keep their filenames.",
 +      "modal_note": "The preview is checked again before execution and stops if files changed. Any failure rolls files, NFO titles, and database records back automatically and saves a rename manifest.",
 +      "related_files": "Also handles {count} sidecar files",
@@ -2315,7 +2582,7 @@
    "scanner": {
 +    "rename": {
 +      "row_title": "動画ファイル名を統一",
-+      "row_hint": "品番とタイトルの間隔を統一し、長すぎる名前は ... 付きで安全に短縮",
++      "row_hint": "品番とタイトルの間隔を統一し、長すぎる名前は … 付きで安全に短縮",
 +      "source_row_title": "ファイル名とフォルダー名を統一",
 +      "source_row_hint": "取得元のタイトルを動画名とフォルダー名に使用し、ルート直下の動画にはフォルダーを自動作成します",
 +      "source_select_label": "タイトル取得元",
@@ -2344,7 +2611,7 @@
 +      "summary_folders": "処理するフォルダー",
 +      "summary_files": "サイドカーファイルを含む",
 +      "summary_conflicts": "競合",
-+      "modal_intro": "同じフォルダー内の動画名と、NFO、カバー、poster、fanart、字幕だけを変更します。長すぎる名前は共通の安全な長さに揃えて ... を付け、フォルダー、extrafanart、他の動画は変更しません。",
++      "modal_intro": "同じフォルダー内の動画名と、NFO、カバー、poster、fanart、字幕だけを変更します。長すぎる名前は共通の安全な長さに揃えて … を付け、フォルダー、extrafanart、他の動画は変更しません。",
 +      "folder_modal_intro": "各スキャンルート直下の動画フォルダー名とデータベースパスだけを変更します。フォルダー内の動画、NFO、カバー、サンプル画像のファイル名は変更しません。",
 +      "modal_note": "実行前にプレビューを再確認し、ファイルが変わっていれば停止します。途中で失敗した場合はファイル、NFO タイトル、データベース記録を自動で元に戻し、名前変更マニフェストを保存します。",
 +      "related_files": "サイドカーファイル {count} 件も処理",
@@ -3158,7 +3425,7 @@
    "scanner": {
 +    "rename": {
 +      "row_title": "统一文件名格式",
-+      "row_hint": "统一番号与标题间距；超过系统限制的名称会安全截断并加 ...",
++      "row_hint": "统一番号与标题间距；超过系统限制的名称会安全截断并加 …",
 +      "source_row_title": "统一文件名与文件夹",
 +      "source_row_hint": "选择元数据来源，用来源标题决定视频名和文件夹名；根目录视频会自动建夹并移入",
 +      "source_select_label": "标题来源",
@@ -3187,7 +3454,7 @@
 +      "summary_folders": "需要处理的文件夹",
 +      "summary_files": "包含侧车文件",
 +      "summary_conflicts": "冲突项",
-+      "modal_intro": "只会修改视频文件名和同目录下的 NFO、封面、poster、fanart、字幕；超长名称会共用安全长度并以 ... 结尾，文件夹、extrafanart 和其他视频保持不动。",
++      "modal_intro": "只会修改视频文件名和同目录下的 NFO、封面、poster、fanart、字幕；超长名称会共用安全长度并以 … 结尾，文件夹、extrafanart 和其他视频保持不动。",
 +      "folder_modal_intro": "只修改扫描目录下一层的影片文件夹名称，并同步数据库路径；文件夹内的视频、NFO、封面和剧照文件保持原名。",
 +      "modal_note": "执行前会再次核对预览结果；若文件发生变化会停止。任何一步失败都会自动回滚文件、NFO 标题和数据库记录，并保存重命名清单。",
 +      "related_files": "同时处理 {count} 个侧车文件",
@@ -4116,7 +4383,7 @@
    "scanner": {
 +    "rename": {
 +      "row_title": "統一檔名格式",
-+      "row_hint": "統一編號與標題間距；超過系統限制的名稱會安全截斷並加上 ...",
++      "row_hint": "統一編號與標題間距；超過系統限制的名稱會安全截斷並加上 …",
 +      "source_row_title": "統一檔名與資料夾",
 +      "source_row_hint": "選擇中繼資料來源，用來源標題決定影片名和資料夾名；根目錄影片會自動建立資料夾並移入",
 +      "source_select_label": "標題來源",
@@ -4145,7 +4412,7 @@
 +      "summary_folders": "需要處理的資料夾",
 +      "summary_files": "包含側車檔案",
 +      "summary_conflicts": "衝突項目",
-+      "modal_intro": "只會修改影片檔名和同目錄下的 NFO、封面、poster、fanart、字幕；超長名稱會共用安全長度並以 ... 結尾，資料夾、extrafanart 和其他影片保持不動。",
++      "modal_intro": "只會修改影片檔名和同目錄下的 NFO、封面、poster、fanart、字幕；超長名稱會共用安全長度並以 … 結尾，資料夾、extrafanart 和其他影片保持不動。",
 +      "folder_modal_intro": "只修改掃描目錄下一層的影片資料夾名稱，並同步資料庫路徑；資料夾內的影片、NFO、封面和劇照檔案保持原名。",
 +      "modal_note": "執行前會再次核對預覽結果；若檔案發生變化會停止。任何一步失敗都會自動回滾檔案、NFO 標題和資料庫記錄，並保存重新命名清單。",
 +      "related_files": "同時處理 {count} 個側車檔案",

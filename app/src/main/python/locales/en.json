@@ -867,7 +867,7 @@
   "scanner": {
     "rename": {
       "row_title": "Normalize video filenames",
-      "row_hint": "Normalize number/title spacing; overlong names are safely truncated with ...",
+      "row_hint": "Normalize number/title spacing; overlong names are safely truncated with …",
       "source_row_title": "Normalize filenames and folders",
       "source_row_hint": "Choose a metadata source for video and folder names; root-level videos get a matching folder automatically",
       "source_select_label": "Title source",
@@ -896,7 +896,7 @@
       "summary_folders": "Folders to process",
       "summary_files": "Files including sidecars",
       "summary_conflicts": "Conflicts",
-      "modal_intro": "Only video filenames and sidecars in the same folder are changed: NFO, cover, poster, fanart, and subtitles. Overlong names share a safe limit and end with ..., while folders, extrafanart, and other videos stay unchanged.",
+      "modal_intro": "Only video filenames and sidecars in the same folder are changed: NFO, cover, poster, fanart, and subtitles. Overlong names share a safe limit and end with …, while folders, extrafanart, and other videos stay unchanged.",
       "folder_modal_intro": "Only direct-child movie folder names under each scan root are changed, together with database paths. Videos, NFO, cover, and still-image files inside keep their filenames.",
       "modal_note": "The preview is checked again before execution and stops if files changed. Any failure rolls files, NFO titles, and database records back automatically and saves a rename manifest.",
       "related_files": "Also handles {count} sidecar files",

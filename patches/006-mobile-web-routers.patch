@@ -892,7 +892,7 @@
  from datetime import datetime
  from pathlib import Path
  from typing import Any, Callable, Dict, Generator, List, Optional
-@@ -32,27 +33,61 @@
+@@ -32,27 +33,66 @@
  from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
  from starlette.background import BackgroundTask
  
@@ -950,7 +950,12 @@
 +from core.scraper import get_javbus_lang, search_jav, smart_search
  from core.source_settings import is_uncensored_mode_effective
 +from core.scrapers.utils import check_subtitle, extract_number
-+from core.title_language import title_needs_translation
++from core.cloud_translate import TranslateError, build_error
++from core.title_language import (
++    normalize_translation_text,
++    title_needs_translation,
++    translation_result_issue,
++)
 +from core.source_config import get_manual_only_sources, validate_source_id
  from pydantic import BaseModel
  from core.logger import get_logger
@@ -958,7 +963,7 @@
  from core.platform_info import DSM_PERMISSION_HINT, is_synology
  from core.proxy_policy import proxy_kwargs
  from web.routers.notifications import emit_notification as _emit_notif
-@@ -65,11 +100,32 @@
+@@ -65,11 +105,32 @@
  # T3(40c): Jellyfin check TTL 快取（60 秒）
  _jellyfin_cache_result: dict | None = None
  _jellyfin_cache_time: float = 0
@@ -991,7 +996,7 @@
  
  
  def _collect_long_paths(
-@@ -97,21 +153,36 @@
+@@ -97,21 +158,36 @@
  # TASK-88c-T2: readonly 來源分流 + SSE thread/queue 橋接 + 四數摘要
  # ---------------------------------------------------------------------------
  
@@ -1040,7 +1045,7 @@
      return {"type": "log", "level": "warn" if o.status == "failed" else "info", "message": msg}
  
  
-@@ -142,7 +213,7 @@
+@@ -142,7 +218,7 @@
          summary["partial"] += 1
  
  
@@ -1049,7 +1054,7 @@
      """該來源小結（產生器）。
  
      no_output_path → 「請先設定輸出夾」提示（Acceptance #11）。
-@@ -153,25 +224,39 @@
+@@ -153,25 +229,39 @@
      if result.aborted_reason == "no_output_path":
          yield _sse_event({
              "type": "log", "level": "warn",
@@ -1095,7 +1100,7 @@
              })
  
  
-@@ -188,6 +273,7 @@
+@@ -188,6 +278,7 @@
      q: "queue.Queue" = queue.Queue()  # 無界：worker 永不阻塞於 put，client 斷線 daemon 自然退出
      _SENTINEL = object()
      box: dict = {}
@@ -1103,7 +1108,7 @@
  
      def _work():
          try:
-@@ -206,39 +292,58 @@
+@@ -206,39 +297,58 @@
  
      t = threading.Thread(target=_work, daemon=True)
      t.start()
@@ -1173,7 +1178,7 @@
      """根目錄不可存取時回傳警告；可存取時回傳 None。
  
      白名單：只有明確的「不存在」才說資料夾不存在，其餘 OSError 一律「無法存取」（NAS 斷線不誤導成打錯字）。
-@@ -246,29 +351,379 @@
+@@ -246,29 +356,379 @@
      try:
          os.stat(normalized_dir)
      except PermissionError:
@@ -1563,7 +1568,7 @@
          gallery_config = config.get('gallery', {})
  
          directories = get_gallery_source_paths(gallery_config)
-@@ -287,7 +742,12 @@
+@@ -287,7 +747,12 @@
          default_theme = config.get('general', {}).get('theme', 'light')
  
          if not directories:
@@ -1577,7 +1582,7 @@
              return
  
          # 53b-T3: 確認 directories 有值才 emit 掃描開始通知
-@@ -302,19 +762,49 @@
+@@ -302,19 +767,49 @@
          cache_path = output_path / output_filename.replace('.html', '_cache.json')
          db_path = get_db_path()
  
@@ -1631,7 +1636,7 @@
  
          # 初始化掃描器
          scanner = VideoScanner(path_mappings=path_mappings, nfo_title_format=config.get('scraper', {}).get('nfo_title_format', '[{num}]{title}'))
-@@ -323,6 +813,7 @@
+@@ -323,6 +818,7 @@
          total_inserted = 0
          total_updated = 0
          total_deleted = 0
@@ -1639,7 +1644,7 @@
          scan_error_count = 0
          session_added_paths = []  # 追蹤本次新增/變更的影片路徑
          long_paths: list[str] = []  # a5: Windows 長路徑收集（只在 win32 填充）
-@@ -369,161 +860,39 @@
+@@ -369,161 +865,39 @@
                  normalized_dir = uri_to_fs_path(directory)  # uri-no-reverse: native config path (DirectoryConfig.path), no DB-mapped namespace
              except ValueError:
                  logger.exception("路徑轉換失敗: %s", directory)
@@ -1827,7 +1832,7 @@
  
          # TASK-90b-T4 / PR#90b Codex P1: 尾段每個外顯副作用（HTML 檔、完成通知、
          # done event）之前各自 fresh 查一次 should_abort()，而非迴圈結束時單次
-@@ -550,9 +919,36 @@
+@@ -550,9 +924,36 @@
          all_db_videos = [v for v in repo.get_all()
                           if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
  
@@ -1865,7 +1870,7 @@
              info = VideoInfo(
                  path=v.path,
                  title=v.title,
-@@ -562,6 +958,7 @@
+@@ -562,6 +963,7 @@
                  maker=v.maker,
                  date=v.release_date,
                  genre=','.join(v.tags) if v.tags else '',
@@ -1873,7 +1878,7 @@
                  size=v.size_bytes,
                  mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
                  img=v.cover_path
-@@ -593,19 +990,57 @@
+@@ -593,19 +995,57 @@
                      }
              if session_cache:
                  session_stats = check_cache_needs_update(session_cache)
@@ -1936,7 +1941,7 @@
  
          # TASK-90b-T4: abort 時跳過 orphan 清理（全庫 pass，非本次掃描範圍新增
          # 的成本，abort 時執行拿不到「這次掃描結果更完整」的好處，純屬多做一次
-@@ -615,7 +1050,16 @@
+@@ -615,7 +1055,16 @@
              try:
                  cleaned = _run_sample_images_cleanup_pass(repo, path_mappings)
                  if cleaned > 0:
@@ -1954,7 +1959,7 @@
              except Exception as e:
                  logger.warning("sample_images cleanup pass failed: %s: %s", type(e).__name__, e)
                  # 失敗不中斷 scan 流程
-@@ -627,7 +1071,9 @@
+@@ -627,7 +1076,9 @@
              # 產生 HTML
              yield _sse_event({
                  "type": "progress",
@@ -1965,7 +1970,7 @@
                  "current": total_dirs,
                  "total": total_dirs + 1
              })
-@@ -641,12 +1087,13 @@
+@@ -641,12 +1092,13 @@
                  sort=default_sort,
                  order=default_order,
                  items_per_page=items_per_page,
@@ -1981,7 +1986,7 @@
                  "current": total_dirs + 1,
                  "total": total_dirs + 1
              })
-@@ -704,7 +1151,7 @@
+@@ -704,7 +1156,7 @@
          if _wl_removed:
              _emit_notif(
                  "info", "notif.wishlist_auto_removed",
@@ -1990,7 +1995,7 @@
                  task_type="wishlist_reconcile",
              )
  
-@@ -723,26 +1170,69 @@
+@@ -723,26 +1175,69 @@
                      or _readonly_no_output > 0 or _readonly_unreachable > 0 or _readonly_partial > 0):
                  _err_parts = []
                  if scan_error_count > 0:
@@ -2068,7 +2073,7 @@
                      task_type="scanner_generate",
                  )
  
-@@ -754,6 +1244,7 @@
+@@ -754,6 +1249,7 @@
                  "video_count": len(all_videos),
                  "output_path": str(html_path),
                  "session_update": session_update,
@@ -2076,7 +2081,7 @@
                  "long_paths": long_paths,  # a5
                  "stats": {
                      "inserted": total_inserted,
-@@ -772,10 +1263,15 @@
+@@ -772,10 +1268,15 @@
          # 53b-T3: 掃描失敗通知（不洩漏 str(e) 到前端）
          _emit_notif(
              "error", "notif.scanner_failed",
@@ -2094,7 +2099,7 @@
  
  
  # TASK-90b-T2: 斷線偵測輪詢間隔（秒）。定案依據見 plan-90b.md CD-90b-5/6：
-@@ -786,6 +1282,66 @@
+@@ -786,6 +1287,66 @@
  # `request.is_disconnected()`，非搶 iterate_in_threadpool 的同一組 receive
  # channel（該輪詢與 StreamingResponse 內部行為互不干擾，spike 已驗證）。
  _DISCONNECT_POLL_INTERVAL_SEC = 0.5
@@ -2161,7 +2166,7 @@
  
  
  @router.get("/generate")
-@@ -803,8 +1359,13 @@
+@@ -803,8 +1364,13 @@
      # 反方向——若設定頁正在切換模式（purge 窗口中），回 False → 拒絕開始產生，避免背景
      # producer 讀到舊唯讀來源、把剛被 purge 的卡 _upsert 補回（切模式後殭屍卡）。
      if not try_mark_generate_active(cancel_event):
@@ -2176,7 +2181,7 @@
          return StreamingResponse(
              _refuse_switching(),
              media_type="text/event-stream",
-@@ -874,7 +1435,11 @@
+@@ -874,7 +1440,11 @@
              return {"success": True, "data": {"total": 0, "last_run": None, "last_added": None}}
  
          repo = VideoRepository(db_path)
@@ -2189,7 +2194,7 @@
  
          return {
              "success": True,
-@@ -887,7 +1452,10 @@
+@@ -887,7 +1457,10 @@
          }
      except Exception as e:
          logger.error("取得統計資訊失敗: %s", e)
@@ -2201,7 +2206,7 @@
  
  
  @router.delete("/cache")
-@@ -897,9 +1465,21 @@
+@@ -897,9 +1470,21 @@
          db_path = get_db_path()
  
          if not db_path.exists():
@@ -2224,7 +2229,7 @@
          deleted = repo.clear_all()
          # feature/71 T8: 清空整個縮圖快取目錄（CD-11 / spec 2.A.9）
          thumbnail_cache.clear_all()
-@@ -907,10 +1487,17 @@
+@@ -907,10 +1492,17 @@
          global _jellyfin_cache_result, _jellyfin_cache_time
          _jellyfin_cache_result = None
          _jellyfin_cache_time = 0
@@ -2244,7 +2249,7 @@
  
  
  def _build_nfo_update_cache(all_videos, config) -> tuple:
-@@ -959,6 +1546,728 @@
+@@ -959,6 +1551,728 @@
      return cache, skipped_readonly, path_mappings
  
  
@@ -2973,7 +2978,7 @@
  @router.get("/update-check")
  def check_update():
      """檢查需要更新的影片數量（從 SQLite 讀取）"""
-@@ -971,73 +2280,269 @@
+@@ -971,73 +2285,273 @@
          repo = VideoRepository(db_path)
          all_videos = repo.get_all()
  
@@ -3062,7 +3067,11 @@
 +    title = (video.title or "").strip()
 +    return bool(
 +        title
-+        and title_needs_translation(title, locale or _active_locale())
++        and title_needs_translation(
++            title,
++            locale or _active_locale(),
++            proper_terms=video.actresses or (),
++        )
 +    )
 +
 +
@@ -3275,7 +3284,7 @@
          return {
              "success": True,
              "data": {
-@@ -1046,75 +2551,1567 @@
+@@ -1046,75 +2560,1600 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
@@ -3367,6 +3376,7 @@
 +    candidates: List[Video],
 +    cancel_event: threading.Event,
 +    concurrency: int = _TITLE_BACKFILL_CONCURRENCY,
++    locale: str | None = None,
 +) -> Generator[tuple[Video, Optional[str], Optional[Exception]], None, None]:
 +    """Translate candidates concurrently and yield results as they finish."""
 +    loop = asyncio.new_event_loop()
@@ -3377,13 +3387,30 @@
 +        async with semaphore:
 +            if cancel_event.is_set():
 +                raise asyncio.CancelledError()
-+            return await translate_service.translate_or_raise(
++            result = await translate_service.translate_or_raise(
 +                video.title,
 +                {
 +                    "actors": video.actresses or [],
 +                    "number": _candidate_number(video),
 +                },
 +            )
++            cleaned = normalize_translation_text(result)
++            issue = translation_result_issue(
++                video.title,
++                cleaned,
++                locale or _active_locale(),
++                proper_terms=video.actresses or (),
++            )
++            if issue is not None:
++                kind = "refused" if issue == "refusal" else "invalid_response"
++                raise build_error(
++                    "TitleBackfill",
++                    kind,
++                    None,
++                    issue,
++                    issue,
++                )
++            return cleaned
 +
 +    async def drain_pending() -> None:
 +        if pending:
@@ -3546,6 +3573,7 @@
 +            translate_service,
 +            candidates,
 +            cancel_event,
++            locale=locale,
 +        ):
 +            number = _candidate_number(video)
 +            group = group_by_candidate_path.get(video.path)
@@ -3584,6 +3612,20 @@
 +                        ),
 +                        member_results[0][1],
 +                    )
++            except TranslateError as exc:
++                logger.warning(
++                    "批次補齊標題翻譯失敗: %s kind=%s status=%s",
++                    video.path,
++                    exc.kind,
++                    exc.status,
++                )
++                result = {
++                    "success": False,
++                    "error": "translate_failed",
++                    "message": _runtime_text(
++                        "title", "translation_failed", locale
++                    ),
++                }
 +            except Exception:
 +                logger.exception("批次補齊標題失敗: %s", video.path)
 +                result = {
@@ -4870,7 +4912,7 @@
      )
  
  
-@@ -1123,6 +4120,7 @@
+@@ -1123,6 +4162,7 @@
      """取得產生的 HTML 列表檔案（修改圖片路徑為 API 代理）"""
      try:
          config = load_config()
@@ -4878,7 +4920,7 @@
          gallery_config = config.get('gallery', {})
          output_dir = gallery_config.get('output_dir', '') or ''
          output_filename = gallery_config.get('output_filename', 'gallery_output.html')
-@@ -1131,7 +4129,10 @@
+@@ -1131,7 +4171,10 @@
  
          if not html_path.exists():
              return HTMLResponse(
@@ -4890,7 +4932,7 @@
                  status_code=404
              )
  
-@@ -1161,8 +4162,12 @@
+@@ -1161,8 +4204,12 @@
          return HTMLResponse(content=content)
      except Exception:
          logger.exception("view_list 讀取失敗")
@@ -4904,7 +4946,7 @@
              status_code=500
          )
  
-@@ -1177,12 +4182,25 @@
+@@ -1177,12 +4224,25 @@
              return {"success": True, "data": {"count": 0}}
  
          repo = VideoRepository(db_path)
@@ -4932,7 +4974,7 @@
  
  
  # === Jellyfin 圖片批次補齊 ===
-@@ -1191,30 +4209,43 @@
+@@ -1191,30 +4251,43 @@
      """檢查 DB 中有多少影片缺少 poster/fanart"""
      videos = repo.get_all()
      need_update = []
@@ -4994,7 +5036,7 @@
      try:
          # Codex PR#123 P2：gate 必須排在 get_db_path() 之前——get_db_path() 內部會
          # mkdir 建立 output/ 資料夾（core/database/connection.py:15-22），是有副作用
-@@ -1224,17 +4255,29 @@
+@@ -1224,17 +4297,29 @@
          # done + updated:0（off 時零寫入），且與 _check_jellyfin_needed() 的順序
          # 不對稱。config 只讀一次，下面 path_mappings 沿用同一個 config。
          config = load_config()
@@ -5026,7 +5068,7 @@
              return
  
          repo = VideoRepository(db_path)
-@@ -1246,13 +4289,31 @@
+@@ -1246,13 +4331,31 @@
          if total == 0:
              _jellyfin_cache_result = None
              _jellyfin_cache_time = 0
@@ -5060,7 +5102,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,45 +4322,129 @@
+@@ -1261,45 +4364,129 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -5207,7 +5249,7 @@
  
  
  def _check_jellyfin_needed() -> dict | None:
-@@ -1359,15 +4504,11 @@
+@@ -1359,15 +4546,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -5227,7 +5269,7 @@
      )
  
  
-@@ -1463,26 +4604,49 @@
+@@ -1463,26 +4646,49 @@
      ```
      """
      numbers = [n.strip() for n in body.numbers if isinstance(n, str) and n.strip()]
@@ -5282,7 +5324,7 @@
      gallery_config = config.get('gallery', {})
      output_dir = gallery_config.get('output_dir', '') or ''
      theme = config.get('general', {}).get('theme', 'light')
-@@ -1494,7 +4658,13 @@
+@@ -1494,7 +4700,13 @@
          db_results = repo.get_by_numbers(numbers)
      except Exception as e:
          logger.error('generate_from_ids: DB 查詢失敗: %s', e)
@@ -5297,7 +5339,7 @@
  
      all_videos: List[VideoInfo] = []
      missing: List[str] = []
-@@ -1577,7 +4747,13 @@
+@@ -1577,7 +4789,13 @@
          )
      except Exception as e:
          logger.error('generate_from_ids: HTML 產生失敗: %s', e)
@@ -5312,7 +5354,7 @@
  
      result = {
          "success": True,
-@@ -1621,6 +4797,11 @@
+@@ -1621,6 +4839,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:
@@ -7059,7 +7101,7 @@
  
  
  class DetectFocalRequest(BaseModel):
-@@ -70,12 +88,41 @@
+@@ -70,12 +88,45 @@
      original_title: Optional[str] = None
  
  
@@ -7074,6 +7116,7 @@
 +    _original_title,
 +    nfo_mtime,
 +    locale: str | None = None,
++    proper_terms=None,
 +) -> bool:
 +    """Whether a titled row needs translation into the active UI language."""
 +    return bool(
@@ -7081,6 +7124,7 @@
 +        and title_needs_translation(
 +            title or "",
 +            locale or _showcase_locale(),
++            proper_terms=proper_terms,
 +        )
 +    )
 +
@@ -7090,11 +7134,13 @@
 +    _original_title,
 +    _nfo_mtime,
 +    locale: str | None = None,
++    proper_terms=None,
 +) -> bool:
 +    """Lightbox translation is available whenever the title is not on-target."""
 +    return title_needs_translation(
 +        title or "",
 +        locale or _showcase_locale(),
++        proper_terms=proper_terms,
 +    )
 +
 +
@@ -7107,13 +7153,25 @@
      """將 Video ORM 物件序列化為前端 JSON dict（列表端點與單筆端點共用）。
  
      feature/71 T4：thumbnail_cache_enabled 開關決定 cover_url 走 thumb / image 分支。
-@@ -120,30 +167,70 @@
+@@ -120,30 +171,82 @@
          "user_rating": v.user_rating or 0,            # 精選標記（spec-123）；無條件輸出，未精選為 0（FE-ALPINE-06）
          "has_cover": bool(v.cover_path),             # DB 初判（不做 IO）
          "has_nfo": (v.nfo_mtime or 0) > 0,          # 對齊 41a nfo_mtime 寫入契約，防禦 NULL
 -        "needs_translate": _needs_translate(v.title, v.original_title, v.nfo_mtime),  # 無條件輸出（FE-ALPINE-06）
-+        "needs_translate": _needs_translate(v.title, v.original_title, v.nfo_mtime, locale),
-+        "can_translate": _can_manual_translate(v.title, v.original_title, v.nfo_mtime, locale),
++        "needs_translate": _needs_translate(
++            v.title,
++            v.original_title,
++            v.nfo_mtime,
++            locale,
++            proper_terms=v.actresses,
++        ),
++        "can_translate": _can_manual_translate(
++            v.title,
++            v.original_title,
++            v.nfo_mtime,
++            locale,
++            proper_terms=v.actresses,
++        ),
          "auto_focal": v.auto_focal,                  # canonical "x,y" 4dp 字串或 ''（98b：前端 focalObjectPosition 消費）
          "crop_mode": v.crop_mode,                    # 'auto' | 'default'（98b：default 退 baseline 右裁）
      }
@@ -7184,7 +7242,7 @@
  
  
  def _etag_matches(if_none_match: str, etag: str) -> bool:
-@@ -158,8 +245,20 @@
+@@ -158,8 +261,20 @@
  
  
  @router.get("/videos")
@@ -7206,7 +7264,7 @@
  
      帶 ETag（CD-145a-8/11/12）：涵蓋 DB 內部寫入 revision、DB/-wal 檔案指紋（涵蓋外部
      抽換或還原備份）、無機密設定投影（來源資料夾／path_mappings／縮圖開關）三項，
-@@ -182,22 +281,51 @@
+@@ -182,22 +297,51 @@
  
          # 只取「當前設定資料夾」底下的記錄（DB 保留全部當 cache）
          config = load_config()
@@ -7262,7 +7320,7 @@
                        if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
  
          # feature/122 CD-122-1：分組在序列化層收斂，前端拿到的 videos 陣列已是
-@@ -205,23 +333,41 @@
+@@ -205,23 +349,41 @@
          # 一個 member，_serialize_group() 輸出與改動前逐鍵逐值相同（AC-4）。
          groups = group_rows(all_videos, fs_path_of=lambda v: uri_to_local_fs_path(v.path, path_mappings))
  
@@ -7309,7 +7367,7 @@
              "videos": [],
              "total": 0
          }, status_code=500)
-@@ -230,23 +376,43 @@
+@@ -230,23 +392,43 @@
  @router.get("/video")
  def get_video(path: str = Query(..., description="file:/// URI")):
      """取得單筆影片資料（用於 T3 refreshVideoData enrich 後刷新卡片）"""
@@ -7356,7 +7414,7 @@
  
          thumb_enabled = config.get('thumbnail_cache_enabled', False)
  
-@@ -257,14 +423,22 @@
+@@ -257,14 +439,22 @@
          group = resolve_group(repo, path, path_mappings, folder_source_uri=v.path)
          if group is None:
              return JSONResponse({"success": True,
@@ -7382,7 +7440,7 @@
  
  
  @router.delete("/video")
-@@ -353,30 +527,58 @@
+@@ -353,30 +543,58 @@
      ⚠️ 停用狀態已於上方端點層短路，不會走到這裡，所以「關掉之後直接進手動」不受鎖排隊影響。
      **不進 capabilities（不揭露）。**
      """
@@ -7446,7 +7504,7 @@
  
          # 152d-T-D8：停用時在這裡就回，不要進 run_detection ——
          # pre_spawn_check 跑在全域 _slot_lock 裡面（subprocess_runner.py:298→309），
-@@ -430,7 +632,13 @@
+@@ -430,7 +648,13 @@
  
      except Exception as e:
          logger.error("偵測焦點失敗: %s", e)
@@ -7461,7 +7519,7 @@
  
  
  @router.post("/video/save-focal")
-@@ -451,58 +659,102 @@
+@@ -451,58 +675,102 @@
      rescrape 期間換了封面）→ 409，DB 不變，前端應提示使用者重新開啟裁切工具。
      `def`（非 async）→ Starlette threadpool。**不進 capabilities（不揭露）。**
      """
@@ -7583,7 +7641,21 @@
  
  
  def _new_original_title(req, video) -> str:
-@@ -541,7 +793,13 @@
+@@ -521,8 +789,12 @@
+         return None, "no_nfo"
+     if not output_uri or not is_path_under_dir(video.output_dir, output_uri):
+         return None, "no_nfo"
+-    out_fs = uri_to_local_fs_path(video.output_dir, path_mappings)
++    out_fs = Path(uri_to_local_fs_path(video.output_dir, path_mappings))
++    video_fs = Path(uri_to_local_fs_path(video.path, path_mappings))
+     try:
++        exact = find_sidecar_nfos(out_fs / video_fs.name)
++        if exact:
++            return str(exact[0]), None
+         with os.scandir(out_fs) as it:
+             nfo_files = sorted(e.path for e in it if e.name.lower().endswith(".nfo") and e.is_file())
+     except FileNotFoundError:
+@@ -541,7 +813,13 @@
      owning = resolve_owning_output_root(video.path, config)
      if owning is not None:
          return _locate_readonly_nfo(video, path_mappings, owning[2])
@@ -7598,7 +7670,7 @@
  
  
  def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: str) -> Optional[str]:
-@@ -556,28 +814,108 @@
+@@ -556,28 +834,114 @@
          return "no_nfo"
      except NfoParseError:
          return "nfo_unreadable"
@@ -7695,10 +7767,16 @@
 +                "title": body,
 +                "original_title": new_original,
 +                "needs_translate": _needs_translate(
-+                    body, new_original, new_mtime
++                    body,
++                    new_original,
++                    new_mtime,
++                    proper_terms=video.actresses,
 +                ),
 +                "can_translate": _can_manual_translate(
-+                    body, new_original, new_mtime
++                    body,
++                    new_original,
++                    new_mtime,
++                    proper_terms=video.actresses,
 +                ),
 +                "nfo_updated": True,
 +                "nfo_created": True,
@@ -7711,7 +7789,7 @@
  
      # 取實際寫入那份 NFO 的 mtime；取不到沿用舊值（下次掃描最多多讀一次）
      new_mtime = nfo_mtime_or_none(Path(nfo_path))
-@@ -587,11 +925,12 @@
+@@ -587,11 +951,22 @@
          written = repo.update_titles(video.path, body, new_original, new_mtime)
      except Exception as e:
          logger.error("[title-writeback] DB 寫入失敗: %s", e)
@@ -7721,12 +7799,23 @@
 -        return _title_fail("not_found")
 +        return _title_fail("not_found", locale)
      return {"success": True, "title": body, "original_title": new_original,
-             "needs_translate": _needs_translate(body, new_original, new_mtime),
-+            "can_translate": _can_manual_translate(body, new_original, new_mtime),
+-            "needs_translate": _needs_translate(body, new_original, new_mtime),
++            "needs_translate": _needs_translate(
++                body,
++                new_original,
++                new_mtime,
++                proper_terms=video.actresses,
++            ),
++            "can_translate": _can_manual_translate(
++                body,
++                new_original,
++                new_mtime,
++                proper_terms=video.actresses,
++            ),
              "nfo_updated": True}
  
  
-@@ -602,25 +941,29 @@
+@@ -602,25 +977,29 @@
      失敗一律 HTTP 200 ＋ {success:false, error:<code>}。`def`（非 async）→ threadpool。
      端點內不呼叫翻譯；唯讀來源只改輸出夾那份 NFO，來源零寫入。
      """
@@ -7800,7 +7889,7 @@
                  _translate_service = create_translate_service(translate_config, locale)
      return _translate_service
  
-@@ -87,16 +93,23 @@
+@@ -87,16 +93,27 @@
  
      config = await asyncio.to_thread(load_config)
      translate_config = config.get("translate", {})
@@ -7819,7 +7908,11 @@
 +    if (
 +        request.mode == "translate"
 +        and not request.force
-+        and not title_needs_translation(request.text, locale)
++        and not title_needs_translation(
++            request.text,
++            locale,
++            proper_terms=request.actors or (),
++        )
 +    ):
          return {
              "skipped": True,
@@ -7830,7 +7923,7 @@
              "original": request.text
          }
  
-@@ -112,7 +125,11 @@
+@@ -112,7 +129,11 @@
              result = await translate_service.translate_or_raise(request.text, context)
  
              if not result:
@@ -7843,7 +7936,7 @@
  
              return {
                  "success": True,
-@@ -121,14 +138,26 @@
+@@ -121,14 +142,26 @@
              }
  
          except TranslateError as e:
@@ -7873,7 +7966,7 @@
  
      # === optimize 模式：使用 Ollama 清理標題 ===
      # 兼容嵌套結構和舊扁平結構
-@@ -176,7 +205,10 @@
+@@ -176,7 +209,10 @@
              result = data.get("message", {}).get("content", "").strip()
  
              if not result:
@@ -7885,7 +7978,7 @@
  
              # 清理輸出
              result = result.strip().strip('"').strip("'")
-@@ -192,12 +224,21 @@
+@@ -192,12 +228,21 @@
              }
  
      except httpx.TimeoutException:
@@ -7910,7 +8003,7 @@
  
  
  @router.post("/translate-batch")
-@@ -237,41 +278,43 @@
+@@ -237,41 +282,43 @@
  
          # 獲取配置的批次大小（預留：可從 config 讀取默認值）
          config = await asyncio.to_thread(load_config)
@@ -7967,7 +8060,7 @@
  
          return {
              "translations": results,
-@@ -282,6 +325,7 @@
+@@ -282,6 +329,7 @@
  
      except Exception as e:
          logger.exception("批次翻譯失敗: %s", e)
@@ -7975,7 +8068,7 @@
  
          # 返回錯誤響應（不拋出異常，避免前端報錯）
          return {
-@@ -289,6 +333,6 @@
+@@ -289,6 +337,6 @@
              "count": 0,
              "skipped": 0,
              "errors": list(range(len(request.titles))),

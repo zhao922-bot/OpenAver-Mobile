@@ -220,7 +220,7 @@
      tmp = Path(tmp)
      try:
          # 🔴 os.fdopen 自己包一層 try（Codex PR review P2）：mkstemp 回傳的 fd
-@@ -84,7 +121,22 @@
+@@ -84,7 +121,28 @@
                  f.flush()
                  os.fsync(f.fileno())
          # fd 已由上面的 with 關閉 → 安全 replace（Windows file-lock 前提）
@@ -240,7 +240,13 @@
 +            if not android_storage.has_access(str(dest)):
 +                raise
 +            android_storage.write_bytes(str(dest), tmp.read_bytes())
-+            tmp.unlink(missing_ok=True)
++            # The destination is already verified by the SAF bridge. A stale
++            # temp file on the same restricted mount must not turn a successful
++            # NFO write into a reported failure.
++            try:
++                tmp.unlink(missing_ok=True)
++            except OSError:
++                pass
      except BaseException:
          # 路徑 1：區塊內使用者程式碼拋例外；路徑 2：os.replace 自己拋例外
          # （BE-ENV-01：Windows 防毒/縮圖快取會擋，不是必成功）。
@@ -2778,7 +2784,7 @@
  
  # CDATA 區塊 pattern（用於先拆出 CDATA 再對非 CDATA 部分 sanitize）
  _CDATA_RE = re.compile(rb'<!\[CDATA\[.*?\]\]>', re.DOTALL)
-@@ -40,3 +42,37 @@
+@@ -40,3 +42,44 @@
      # 最後一段普通區域
      result.append(_BARE_AMP_RE.sub(b'&amp;', raw[last_end:]))
      return b''.join(result)
@@ -2815,7 +2821,14 @@
 +        elif stem.casefold() == expected_stem.casefold():
 +            folded.append(candidate)
 +
-+    return sorted(exact) if exact else sorted(folded)
++    selected = exact or folded
++    return sorted(
++        selected,
++        key=lambda candidate: (
++            candidate.suffix != ".nfo",
++            candidate.name.casefold(),
++        ),
++    )
 --- a/core/nfo_updater.py
 +++ b/core/nfo_updater.py
 @@ -3,17 +3,32 @@
@@ -3930,13 +3943,14 @@
              dest = str(ef_dir / f'fanart{i}.jpg')
 --- /dev/null
 +++ b/core/rename_combined_plan.py
-@@ -0,0 +1,986 @@
+@@ -0,0 +1,1245 @@
 +"""Combined filename/folder rename planning, execution, and validation."""
 +
 +from __future__ import annotations
 +
 +import hashlib
 +import json
++import os
 +import re
 +from datetime import datetime, timezone
 +from pathlib import Path
@@ -3945,6 +3959,7 @@
 +from core.atomic_write import atomic_write
 +from core.media_io import delete_file
 +from core.multipart_group import group_rows
++from core.nfo_utils import find_sidecar_nfos
 +from core.path_utils import to_file_uri, uri_to_fs_path
 +from core.rename_file_plan import build_rename_plan
 +from core.rename_names import (
@@ -3968,6 +3983,7 @@
 +    _write_manifest,
 +)
 +from core.scrapers.utils import extract_number, normalize_number_impl
++from core.video_extensions import get_video_extensions
 +
 +
 +def _rewrite_nfo_titles(nfo_path, **kwargs) -> bytes:
@@ -3991,6 +4007,229 @@
 +        if isinstance(scraper_config, dict)
 +        else "[{num}]{title}"
 +    )
++
++
++def _find_nfo_for_video(video_path: str, number: str) -> Path | None:
++    """Find the sidecar for an actual video after a platform path rewrite."""
++    if not video_path:
++        return None
++    video = Path(video_path)
++    exact = find_sidecar_nfos(video)
++    if exact:
++        return exact[0]
++
++    normalized_number = normalize_number_impl(str(number or ""))
++    try:
++        entries = sorted(
++            (
++                Path(entry.path)
++                for entry in os.scandir(video.parent)
++                if entry.is_file(follow_symlinks=False)
++                and Path(entry.name).suffix.lower() == ".nfo"
++            ),
++            key=lambda path: path.name.casefold(),
++        )
++    except OSError:
++        return None
++    if not entries:
++        return None
++
++    if normalized_number:
++        numbered = [
++            path
++            for path in entries
++            if (
++                (candidate := extract_number(path.name))
++                and normalize_number_impl(candidate) == normalized_number
++            )
++        ]
++        if len(numbered) == 1:
++            return numbered[0]
++    if len(entries) == 1:
++        return entries[0]
++    return None
++
++
++def _resolve_title_nfo_path(update: dict[str, Any]) -> Path:
++    """Resolve the title sidecar without trusting a stale plan path."""
++    video_path = str(update.get("new_video_path") or "")
++    number = str(update.get("number") or "")
++    if video_path:
++        video = Path(video_path)
++        found = _find_nfo_for_video(video_path, number)
++        if found is not None:
++            return found
++        default = video.with_suffix(".nfo")
++        if not default.is_dir():
++            return default
++
++    planned = Path(str(update.get("nfo_path_new") or ""))
++    if planned.is_file():
++        return planned
++    if planned.is_dir():
++        stem = planned.stem or "title"
++        return planned.with_name(f"{stem}.openaver.nfo")
++    return planned
++
++
++def _same_number_videos(
++    directory: Path,
++    update: dict[str, Any],
++) -> list[Path]:
++    """Return files in *directory* that can be the planned video."""
++    number = normalize_number_impl(str(update.get("number") or ""))
++    if not number:
++        return []
++    extensions = get_video_extensions({})
++    expected_size = int(update.get("expected_size") or 0)
++    expected_token = multipart_token(
++        Path(str(update.get("new_video_path") or "")).stem
++    )
++    candidates: list[Path] = []
++    try:
++        entries = list(os.scandir(directory))
++    except OSError:
++        return []
++    for entry in entries:
++        try:
++            if (
++                not entry.is_file(follow_symlinks=False)
++                or Path(entry.name).suffix.lower() not in extensions
++            ):
++                continue
++            candidate_number = extract_number(entry.name)
++            if (
++                not candidate_number
++                or normalize_number_impl(candidate_number) != number
++            ):
++                continue
++            path = Path(entry.path)
++            if expected_size and path.stat().st_size != expected_size:
++                continue
++            token = multipart_token(path.stem)
++            if expected_token and token != expected_token:
++                continue
++            candidates.append(path)
++        except OSError:
++            continue
++    return sorted(candidates, key=lambda path: path.name.casefold())
++
++
++def _resolve_actual_video_path(update: dict[str, Any]) -> Path | None:
++    """Recover a path normalized by Android after a successful rename."""
++    planned = Path(str(update.get("new_video_path") or ""))
++    if planned.is_file():
++        return planned
++
++    directories: list[Path] = []
++    if planned.parent.is_dir():
++        directories.append(planned.parent)
++    folder_parent = planned.parent.parent
++    number = normalize_number_impl(str(update.get("number") or ""))
++    if folder_parent.is_dir() and number:
++        try:
++            for entry in os.scandir(folder_parent):
++                if not entry.is_dir(follow_symlinks=False):
++                    continue
++                candidate_number = extract_number(entry.name)
++                if (
++                    candidate_number
++                    and normalize_number_impl(candidate_number) == number
++                ):
++                    directories.append(Path(entry.path))
++        except OSError:
++            pass
++
++    seen: set[str] = set()
++    for directory in directories:
++        key = _path_key(str(directory))
++        if key in seen:
++            continue
++        seen.add(key)
++        candidates = _same_number_videos(directory, update)
++        exact = [
++            path
++            for path in candidates
++            if path.name.casefold() == planned.name.casefold()
++        ]
++        if len(exact) == 1:
++            return exact[0]
++        if len(candidates) == 1:
++            return candidates[0]
++    return None
++
++
++def _reconcile_video_update(
++    update: dict[str, Any],
++    path_mappings: dict,
++) -> None:
++    """Point database/sidecar updates at the file Android actually created."""
++    planned = Path(str(update.get("new_video_path") or ""))
++    actual = _resolve_actual_video_path(update)
++    if actual is None:
++        return
++    if _path_key(str(actual)) == _path_key(str(planned)):
++        return
++
++    update["new_video_path"] = str(actual)
++    update["db_new_uri"] = to_file_uri(str(actual), path_mappings)
++    old_parent = planned.parent
++    new_parent = actual.parent
++
++    nfo_path = Path(str(update.get("nfo_path_new") or ""))
++    if nfo_path and _path_key(str(nfo_path.parent)) == _path_key(
++        str(old_parent)
++    ):
++        update["nfo_path_new"] = str(new_parent / nfo_path.name)
++
++    cover_path = str(update.get("cover_path_new") or "")
++    if cover_path:
++        cover_fs = Path(uri_to_fs_path(cover_path))
++        suffix = cover_fs.suffix
++        candidate = actual.with_suffix(suffix) if suffix else actual
++        if suffix and candidate.is_file():
++            update["cover_path_new"] = to_file_uri(
++                str(candidate),
++                path_mappings,
++            )
++        elif _path_key(str(cover_fs.parent)) == _path_key(str(old_parent)):
++            update["cover_path_new"] = to_file_uri(
++                str(new_parent / cover_fs.name),
++                path_mappings,
++            )
++
++    update["sample_images_new"] = _rebase_path_list(
++        list(update.get("sample_images_new") or []),
++        old_parent,
++        new_parent,
++        path_mappings,
++    )
++
++
++def _resolve_actual_folder_path(
++    planned_folder: str,
++    number: str,
++) -> Path | None:
++    planned = Path(planned_folder)
++    if planned.is_dir():
++        return planned
++    normalized_number = normalize_number_impl(str(number or ""))
++    if not normalized_number or not planned.parent.is_dir():
++        return None
++    candidates: list[Path] = []
++    try:
++        for entry in os.scandir(planned.parent):
++            if not entry.is_dir(follow_symlinks=False):
++                continue
++            candidate_number = extract_number(entry.name)
++            if (
++                candidate_number
++                and normalize_number_impl(candidate_number) == normalized_number
++            ):
++                candidates.append(Path(entry.path))
++    except OSError:
++        return None
++    return candidates[0] if len(candidates) == 1 else None
 +
 +
 +def _combined_plan_id(items: list[dict[str, Any]], source_id: str) -> str:
@@ -4207,7 +4446,7 @@
 +            stem_overrides.get(file_item["db_old_uri"])
 +            or primary_override
 +        )
-+        title_new = source_title_body(
++        source_title_new = source_title_body(
 +            source_stem,
 +            file_item.get("number") or primary.get("number"),
 +        )
@@ -4215,6 +4454,14 @@
 +        original_title_old = str(
 +            getattr(row, "original_title", "") or ""
 +        )
++        # A non-empty original title persists a translated row. Unified naming
++        # must not replace that user-visible translation with its source title.
++        if title_old and original_title_old:
++            title_new = title_old
++            original_title_new = original_title_old
++        else:
++            title_new = source_title_new
++            original_title_new = ""
 +        nfo_path_old = ""
 +        nfo_path_new = ""
 +        for associated in file_item.get("associated_files", []):
@@ -4233,7 +4480,7 @@
 +            title_new
 +            and (
 +                title_old != title_new
-+                or original_title_old != ""
++                or original_title_old != original_title_new
 +                or nfo_create
 +            )
 +        )
@@ -4282,7 +4529,7 @@
 +            "title_old": title_old,
 +            "title_new": title_new,
 +            "original_title_old": original_title_old,
-+            "original_title_new": "",
++            "original_title_new": original_title_new,
 +            "title_update": title_update,
 +            "nfo_path_old": nfo_path_old,
 +            "nfo_path_new": nfo_path_new,
@@ -4295,6 +4542,9 @@
 +            ),
 +            "nfo_mtime_old": float(
 +                getattr(row, "nfo_mtime", 0) or 0
++            ),
++            "expected_size": int(
++                getattr(row, "size_bytes", 0) or 0
 +            ),
 +            "status": file_item["status"],
 +            "reason": file_item["reason"],
@@ -4511,6 +4761,7 @@
 +        "plan_id": _combined_plan_id(items, source_id),
 +        "generated_at": datetime.now(timezone.utc).isoformat(),
 +        "source": source_id,
++        "path_mappings": dict(path_mappings or {}),
 +        "summary": _combined_plan_summary(items, failed_items),
 +        "failed_items": failed_items,
 +        "items": items,
@@ -4536,6 +4787,7 @@
 +        raise ValueError("plan_has_conflicts")
 +
 +    items = [item for item in plan.get("items", []) if item["status"] == "ready"]
++    path_mappings = dict(plan.get("path_mappings") or {})
 +    manifest = _write_manifest(manifest_dir, {
 +        **plan,
 +        "rename_kind": "combined",
@@ -4603,7 +4855,16 @@
 +                        f"{item['old_name']} -> {item['new_name']}: {exc}"
 +                    ) from exc
 +                completed_folders.append(
-+                    (item["old_folder_path"], item["new_folder_path"])
++                    (
++                        item["old_folder_path"],
++                        str(
++                            _resolve_actual_folder_path(
++                                item["new_folder_path"],
++                                str(item.get("number") or ""),
++                            )
++                            or item["new_folder_path"]
++                        ),
++                    )
 +                )
 +
 +            for video in item["videos"]:
@@ -4635,21 +4896,23 @@
 +                    "actresses": list(video.get("actresses") or []),
 +                    "maker": video.get("maker", ""),
 +                    "release_date": video.get("release_date", ""),
++                    "nfo_mtime_old": float(
++                        video.get("nfo_mtime_old") or 0
++                    ),
++                    "expected_size": int(video.get("expected_size") or 0),
 +                }
++                _reconcile_video_update(update, path_mappings)
 +                db_updates.append(update)
 +
 +        for update in db_updates:
 +            if not update.get("title_update"):
 +                continue
-+            nfo_path = str(update.get("nfo_path_new") or "")
-+            if not nfo_path:
-+                new_video_path = str(update.get("new_video_path") or "")
-+                if not new_video_path:
-+                    continue
-+                nfo_path = str(Path(new_video_path).with_suffix(".nfo"))
-+                update["nfo_path_new"] = nfo_path
-+                update["nfo_create"] = True
-+            path = Path(nfo_path)
++            new_video_path = str(update.get("new_video_path") or "")
++            if not new_video_path:
++                continue
++            path = _resolve_title_nfo_path(update)
++            nfo_path = str(path)
++            update["nfo_path_new"] = nfo_path
 +            nfo_kwargs = {
 +                "number": str(update.get("number") or ""),
 +                "title_body": update.get("title_new", ""),
@@ -4662,13 +4925,10 @@
 +                    "[{num}]{title}",
 +                ),
 +            }
-+            if path.exists():
-+                if update.get("nfo_create"):
-+                    raise RuntimeError(f"nfo_target_exists:{nfo_path}")
-+                if not path.is_file():
-+                    raise RuntimeError(
-+                        f"nfo_missing_after_rename:{nfo_path}"
-+                    )
++            if path.is_file():
++                # A plan can predate a folder-rename-sidecar discovery. Rewrite
++                # the real file and preserve its metadata instead of failing.
++                update["nfo_create"] = False
 +                original_bytes = path.read_bytes()
 +                completed_nfo.append((nfo_path, original_bytes))
 +                try:
@@ -4678,12 +4938,9 @@
 +                        f"nfo_title_write_failed:{nfo_path}:{exc}"
 +                    ) from exc
 +            else:
-+                if not update.get("nfo_create"):
-+                    raise RuntimeError(
-+                        f"nfo_missing_after_rename:{nfo_path}"
-+                    )
-+                # Track before writing so a partial failed write is still
-+                # removed during rollback.
++                # Missing sidecars are repaired instead of aborting the whole
++                # rename. Track before writing so partial output is rolled back.
++                update["nfo_create"] = True
 +                created_nfo.append(nfo_path)
 +                try:
 +                    nfo_create_fn(nfo_path, **nfo_kwargs)
@@ -4691,7 +4948,22 @@
 +                    raise RuntimeError(
 +                        f"nfo_title_create_failed:{nfo_path}:{exc}"
 +                    ) from exc
-+            update["nfo_mtime_new"] = float(path.stat().st_mtime)
++            try:
++                update["nfo_mtime_new"] = float(path.stat().st_mtime)
++            except OSError:
++                resolved = _find_nfo_for_video(
++                    new_video_path,
++                    str(update.get("number") or ""),
++                )
++                if resolved is not None:
++                    path = resolved
++                    nfo_path = str(path)
++                    update["nfo_path_new"] = nfo_path
++                    update["nfo_mtime_new"] = float(path.stat().st_mtime)
++                else:
++                    update["nfo_mtime_new"] = float(
++                        update.get("nfo_mtime_old") or 0
++                    )
 +            update["nfo_mtime_update"] = True
 +
 +        _apply_rename_updates(
@@ -5901,7 +6173,7 @@
 +    }
 --- /dev/null
 +++ b/core/rename_names.py
-@@ -0,0 +1,272 @@
+@@ -0,0 +1,284 @@
 +"""Filename normalization primitives shared by rename planning."""
 +
 +from __future__ import annotations
@@ -5922,7 +6194,11 @@
 +LEADING_SEPARATORS = " \t\u3000-_＿－"
 +IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp"})
 +MAX_COMPONENT_BYTES = 255
-+TRUNCATION_MARKER = "..."
++# Android's shared-storage layer drops a trailing dot from the final path
++# component. A Unicode ellipsis keeps the full component below the same byte
++# limit without producing a planned path that differs from the actual path.
++TRUNCATION_MARKER = "…"
++LEGACY_TRUNCATION_MARKERS = ("...",)
 +PORTABLE_FILENAME_REPLACEMENTS = str.maketrans({
 +    "<": "＜",
 +    ">": "＞",
@@ -5981,12 +6257,20 @@
 +
 +    title = canonical_input[match.end():].lstrip(LEADING_SEPARATORS)
 +    canonical = number if not title else f"{number} {title}"
-+    if canonical.endswith(TRUNCATION_MARKER):
++    marker = next(
++        (
++            value
++            for value in (TRUNCATION_MARKER, *LEGACY_TRUNCATION_MARKERS)
++            if canonical.endswith(value)
++        ),
++        "",
++    )
++    if marker:
 +        # Preserve the safety marker so a preview that truncated a name is
 +        # stable when the user opens it again.
 +        canonical = (
-+            canonical[:-len(TRUNCATION_MARKER)].rstrip(" .")
-+            + TRUNCATION_MARKER
++            canonical[:-len(marker)].rstrip(" .")
++            + marker
 +        )
 +    else:
 +        canonical = canonical.rstrip(" .")
@@ -6101,7 +6385,7 @@
 +    prefix_match = re.match(r"^([A-Z0-9]+(?:-[A-Z0-9]+)* )", stem, re.IGNORECASE)
 +    prefix = prefix_match.group(1) if prefix_match else ""
 +    body = stem[len(prefix):]
-+    marker_bytes = len(TRUNCATION_MARKER.encode("ascii"))
++    marker_bytes = _utf8_len(TRUNCATION_MARKER)
 +    body_budget = budget - _utf8_len(prefix) - marker_bytes
 +    if body_budget < 0:
 +        return None
@@ -6588,16 +6872,31 @@
              logger.warning("thumbnail generate failed: cover=%s err=%s", cover_fs_path, e)
 --- /dev/null
 +++ b/core/title_language.py
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,234 @@
 +"""Target-language checks for library title translation."""
 +
 +from __future__ import annotations
++
++import re
++from collections.abc import Iterable
 +
 +from core.i18n import normalize_locale
 +from core.title_language_data import (
 +    SIMPLIFIED_ONLY_CHARS,
 +    TRADITIONAL_ONLY_CHARS,
 +)
++
++_KANA_RATIO_FOR_JAPANESE = 0.18
++_LATIN_RATIO_FOR_ENGLISH = 0.65
++_SCRIPT_MARKER_RATIO = 0.12
++_JAPANESE_GRAMMAR_RE = re.compile(
++    r"(?:の|を|は|が|に|で|と|へ|から|まで|より|です|ます|して|する|した|しない|される)"
++)
++_TRANSLATION_LABEL_RE = re.compile(
++    r"^(?:译文|譯文|翻译|翻譯|翻訳|translation|output)\s*[:：]\s*",
++    re.IGNORECASE,
++)
++_ZERO_WIDTH_RE = re.compile(r"[\ufeff\u200b\u200c\u200d]")
 +
 +
 +def _is_han(character: str) -> bool:
@@ -6632,44 +6931,182 @@
 +    return any(_is_kana(character) for character in text)
 +
 +
-+def title_matches_target_language(title: str, locale: str | None) -> bool:
++def _strip_proper_terms(text: str, proper_terms: Iterable[str] | None) -> str:
++    cleaned = text
++    values = (
++        [proper_terms]
++        if isinstance(proper_terms, str)
++        else (proper_terms or ())
++    )
++    for term in sorted(
++        {
++            str(value or "").strip()
++            for value in values
++            if str(value or "").strip()
++        },
++        key=len,
++        reverse=True,
++    ):
++        cleaned = re.sub(re.escape(term), "", cleaned, flags=re.IGNORECASE)
++    return cleaned
++
++
++def _looks_japanese(text: str) -> bool:
++    han_count = sum(_is_han(character) for character in text)
++    kana_count = sum(_is_kana(character) for character in text)
++    script_total = han_count + kana_count
++    if not kana_count or not script_total:
++        return False
++    kana_ratio = kana_count / script_total
++    return (
++        kana_ratio >= _KANA_RATIO_FOR_JAPANESE
++        or (
++            kana_count >= 1
++            and kana_ratio >= 0.05
++            and _JAPANESE_GRAMMAR_RE.search(text) is not None
++        )
++    )
++
++
++def _is_refusal_text(text: str) -> bool:
++    """Detect common model refusal/explanatory responses without matching titles."""
++    prefix = text.casefold()[:280]
++    checks = (
++        r"(?:抱歉|对不起|對不起|不好意思).{0,60}(?:无法|無法|不能|不便|恕不)"
++        r".{0,40}(?:协助|協助|翻译|翻譯|提供)",
++        r"(?:我|本模型|人工智能|ai).{0,30}(?:无法|無法|不能)"
++        r".{0,30}(?:协助|協助|翻译|翻譯|完成)",
++        r"(?:i am sorry|i'm sorry|sorry).{0,100}"
++        r"(?:cannot|can't|can not|unable|not able)",
++        r"(?:as an ai|i am an ai|i'm an ai).{0,120}",
++        r"(?:申し訳|すみません).{0,80}(?:できません|対応できません|お答えできません)",
++        r"(?:aiとして|私はai).{0,100}(?:できません|対応できません)",
++    )
++    return any(re.search(pattern, prefix, re.IGNORECASE | re.DOTALL) for pattern in checks)
++
++
++def _comparison_key(text: str) -> str:
++    return "".join(
++        character.casefold()
++        for character in text
++        if character.isalnum() or _is_han(character) or _is_kana(character)
++    )
++
++
++def normalize_translation_text(text: str) -> str:
++    """Normalize common model wrappers while leaving the translated title intact."""
++    cleaned = _ZERO_WIDTH_RE.sub("", str(text or "")).replace("\r\n", "\n").replace("\r", "\n")
++    cleaned = cleaned.strip()
++    for _ in range(3):
++        previous = cleaned
++        cleaned = cleaned.strip()
++        if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in {'"', "'", "“", "”", "「", "」"}:
++            cleaned = cleaned[1:-1].strip()
++        cleaned = _TRANSLATION_LABEL_RE.sub("", cleaned).strip()
++        if cleaned == previous:
++            break
++    return cleaned
++
++
++def title_matches_target_language(
++    title: str,
++    locale: str | None,
++    proper_terms: Iterable[str] | None = None,
++) -> bool:
 +    """Return whether *title* is already written in the active UI language.
 +
-+    Han-only titles are treated as Chinese when they contain no character that
-+    OpenCC maps exclusively in the other Chinese script. Japanese titles are
-+    identified by kana, while English titles must contain Latin text and no
-+    CJK script. Ambiguous punctuation and number fragments never qualify.
++    Script balance matters more than a single character: proper names often
++    retain a traditional glyph or short kana sequence inside an otherwise
++    translated title. Callers can pass known actor/brand names so those terms
++    are ignored completely.
 +    """
-+    text = str(title or "").strip()
++    text = normalize_translation_text(title)
 +    if not text:
 +        return False
++    if _is_refusal_text(text) or "\n\n" in text:
++        return False
++
++    script_text = _strip_proper_terms(text, proper_terms)
++    if not script_text:
++        script_text = text
 +    target = normalize_locale(locale)
-+    has_han = _has_han(text)
-+    has_kana = _has_kana(text)
++    han_count = sum(_is_han(character) for character in script_text)
++    kana_count = sum(_is_kana(character) for character in script_text)
++    latin_count = sum(
++        "A" <= character <= "Z"
++        or "a" <= character <= "z"
++        or 0x00C0 <= ord(character) <= 0x024F
++        for character in script_text
++    )
++    script_total = han_count + kana_count + latin_count
 +
 +    if target == "en":
-+        return _has_latin_letter(text) and not has_han and not has_kana
++        return bool(
++            latin_count
++            and script_total
++            and latin_count / script_total >= _LATIN_RATIO_FOR_ENGLISH
++            and not _looks_japanese(script_text)
++        )
 +    if target == "ja":
-+        return has_kana
-+    if has_kana or not has_han:
++        return _looks_japanese(script_text)
++    if not han_count or _looks_japanese(script_text):
 +        return False
++
++    simplified_count = sum(
++        character in SIMPLIFIED_ONLY_CHARS for character in script_text
++    )
++    traditional_count = sum(
++        character in TRADITIONAL_ONLY_CHARS for character in script_text
++    )
++    marker_ratio = max(simplified_count, traditional_count) / han_count
 +    if target == "zh-CN":
-+        return not any(
-+            character in TRADITIONAL_ONLY_CHARS
-+            for character in text
++        return not (
++            traditional_count > simplified_count
++            and marker_ratio >= _SCRIPT_MARKER_RATIO
 +        )
 +    if target == "zh-TW":
-+        return not any(
-+            character in SIMPLIFIED_ONLY_CHARS
-+            for character in text
++        return not (
++            simplified_count > traditional_count
++            and marker_ratio >= _SCRIPT_MARKER_RATIO
 +        )
 +    return False
 +
 +
-+def title_needs_translation(title: str, locale: str | None) -> bool:
++def title_needs_translation(
++    title: str,
++    locale: str | None,
++    proper_terms: Iterable[str] | None = None,
++) -> bool:
 +    """Return whether the title is not in the active target language."""
 +    text = str(title or "").strip()
-+    return bool(text and not title_matches_target_language(text, locale))
++    return bool(
++        text
++        and not title_matches_target_language(text, locale, proper_terms)
++    )
++
++
++def translation_result_issue(
++    source: str,
++    translated: str,
++    locale: str | None,
++    proper_terms: Iterable[str] | None = None,
++) -> str | None:
++    """Return a stable failure code when a model result is not a usable title."""
++    source_text = normalize_translation_text(source)
++    result = normalize_translation_text(translated)
++    if not result:
++        return "empty_response"
++    if _is_refusal_text(result):
++        return "refusal"
++    if "\n\n" in result:
++        return "explanatory_response"
++    if len(result) > max(400, len(source_text) * 3):
++        return "explanatory_response"
++    if _comparison_key(result) == _comparison_key(source_text):
++        return "source_echo"
++    if not title_matches_target_language(result, locale, proper_terms):
++        return "wrong_target_language"
++    return None
 --- /dev/null
 +++ b/core/title_language_data.py
 @@ -0,0 +1,14 @@

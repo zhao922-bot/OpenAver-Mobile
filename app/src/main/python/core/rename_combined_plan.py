@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Any, Callable
 from core.atomic_write import atomic_write
 from core.media_io import delete_file
 from core.multipart_group import group_rows
+from core.nfo_utils import find_sidecar_nfos
 from core.path_utils import to_file_uri, uri_to_fs_path
 from core.rename_file_plan import build_rename_plan
 from core.rename_names import (
@@ -35,6 +37,7 @@ from core.rename_shared import (
     _write_manifest,
 )
 from core.scrapers.utils import extract_number, normalize_number_impl
+from core.video_extensions import get_video_extensions
 
 
 def _rewrite_nfo_titles(nfo_path, **kwargs) -> bytes:
@@ -58,6 +61,229 @@ def _nfo_title_format(config: dict | None) -> str:
         if isinstance(scraper_config, dict)
         else "[{num}]{title}"
     )
+
+
+def _find_nfo_for_video(video_path: str, number: str) -> Path | None:
+    """Find the sidecar for an actual video after a platform path rewrite."""
+    if not video_path:
+        return None
+    video = Path(video_path)
+    exact = find_sidecar_nfos(video)
+    if exact:
+        return exact[0]
+
+    normalized_number = normalize_number_impl(str(number or ""))
+    try:
+        entries = sorted(
+            (
+                Path(entry.path)
+                for entry in os.scandir(video.parent)
+                if entry.is_file(follow_symlinks=False)
+                and Path(entry.name).suffix.lower() == ".nfo"
+            ),
+            key=lambda path: path.name.casefold(),
+        )
+    except OSError:
+        return None
+    if not entries:
+        return None
+
+    if normalized_number:
+        numbered = [
+            path
+            for path in entries
+            if (
+                (candidate := extract_number(path.name))
+                and normalize_number_impl(candidate) == normalized_number
+            )
+        ]
+        if len(numbered) == 1:
+            return numbered[0]
+    if len(entries) == 1:
+        return entries[0]
+    return None
+
+
+def _resolve_title_nfo_path(update: dict[str, Any]) -> Path:
+    """Resolve the title sidecar without trusting a stale plan path."""
+    video_path = str(update.get("new_video_path") or "")
+    number = str(update.get("number") or "")
+    if video_path:
+        video = Path(video_path)
+        found = _find_nfo_for_video(video_path, number)
+        if found is not None:
+            return found
+        default = video.with_suffix(".nfo")
+        if not default.is_dir():
+            return default
+
+    planned = Path(str(update.get("nfo_path_new") or ""))
+    if planned.is_file():
+        return planned
+    if planned.is_dir():
+        stem = planned.stem or "title"
+        return planned.with_name(f"{stem}.openaver.nfo")
+    return planned
+
+
+def _same_number_videos(
+    directory: Path,
+    update: dict[str, Any],
+) -> list[Path]:
+    """Return files in *directory* that can be the planned video."""
+    number = normalize_number_impl(str(update.get("number") or ""))
+    if not number:
+        return []
+    extensions = get_video_extensions({})
+    expected_size = int(update.get("expected_size") or 0)
+    expected_token = multipart_token(
+        Path(str(update.get("new_video_path") or "")).stem
+    )
+    candidates: list[Path] = []
+    try:
+        entries = list(os.scandir(directory))
+    except OSError:
+        return []
+    for entry in entries:
+        try:
+            if (
+                not entry.is_file(follow_symlinks=False)
+                or Path(entry.name).suffix.lower() not in extensions
+            ):
+                continue
+            candidate_number = extract_number(entry.name)
+            if (
+                not candidate_number
+                or normalize_number_impl(candidate_number) != number
+            ):
+                continue
+            path = Path(entry.path)
+            if expected_size and path.stat().st_size != expected_size:
+                continue
+            token = multipart_token(path.stem)
+            if expected_token and token != expected_token:
+                continue
+            candidates.append(path)
+        except OSError:
+            continue
+    return sorted(candidates, key=lambda path: path.name.casefold())
+
+
+def _resolve_actual_video_path(update: dict[str, Any]) -> Path | None:
+    """Recover a path normalized by Android after a successful rename."""
+    planned = Path(str(update.get("new_video_path") or ""))
+    if planned.is_file():
+        return planned
+
+    directories: list[Path] = []
+    if planned.parent.is_dir():
+        directories.append(planned.parent)
+    folder_parent = planned.parent.parent
+    number = normalize_number_impl(str(update.get("number") or ""))
+    if folder_parent.is_dir() and number:
+        try:
+            for entry in os.scandir(folder_parent):
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                candidate_number = extract_number(entry.name)
+                if (
+                    candidate_number
+                    and normalize_number_impl(candidate_number) == number
+                ):
+                    directories.append(Path(entry.path))
+        except OSError:
+            pass
+
+    seen: set[str] = set()
+    for directory in directories:
+        key = _path_key(str(directory))
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates = _same_number_videos(directory, update)
+        exact = [
+            path
+            for path in candidates
+            if path.name.casefold() == planned.name.casefold()
+        ]
+        if len(exact) == 1:
+            return exact[0]
+        if len(candidates) == 1:
+            return candidates[0]
+    return None
+
+
+def _reconcile_video_update(
+    update: dict[str, Any],
+    path_mappings: dict,
+) -> None:
+    """Point database/sidecar updates at the file Android actually created."""
+    planned = Path(str(update.get("new_video_path") or ""))
+    actual = _resolve_actual_video_path(update)
+    if actual is None:
+        return
+    if _path_key(str(actual)) == _path_key(str(planned)):
+        return
+
+    update["new_video_path"] = str(actual)
+    update["db_new_uri"] = to_file_uri(str(actual), path_mappings)
+    old_parent = planned.parent
+    new_parent = actual.parent
+
+    nfo_path = Path(str(update.get("nfo_path_new") or ""))
+    if nfo_path and _path_key(str(nfo_path.parent)) == _path_key(
+        str(old_parent)
+    ):
+        update["nfo_path_new"] = str(new_parent / nfo_path.name)
+
+    cover_path = str(update.get("cover_path_new") or "")
+    if cover_path:
+        cover_fs = Path(uri_to_fs_path(cover_path))
+        suffix = cover_fs.suffix
+        candidate = actual.with_suffix(suffix) if suffix else actual
+        if suffix and candidate.is_file():
+            update["cover_path_new"] = to_file_uri(
+                str(candidate),
+                path_mappings,
+            )
+        elif _path_key(str(cover_fs.parent)) == _path_key(str(old_parent)):
+            update["cover_path_new"] = to_file_uri(
+                str(new_parent / cover_fs.name),
+                path_mappings,
+            )
+
+    update["sample_images_new"] = _rebase_path_list(
+        list(update.get("sample_images_new") or []),
+        old_parent,
+        new_parent,
+        path_mappings,
+    )
+
+
+def _resolve_actual_folder_path(
+    planned_folder: str,
+    number: str,
+) -> Path | None:
+    planned = Path(planned_folder)
+    if planned.is_dir():
+        return planned
+    normalized_number = normalize_number_impl(str(number or ""))
+    if not normalized_number or not planned.parent.is_dir():
+        return None
+    candidates: list[Path] = []
+    try:
+        for entry in os.scandir(planned.parent):
+            if not entry.is_dir(follow_symlinks=False):
+                continue
+            candidate_number = extract_number(entry.name)
+            if (
+                candidate_number
+                and normalize_number_impl(candidate_number) == normalized_number
+            ):
+                candidates.append(Path(entry.path))
+    except OSError:
+        return None
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def _combined_plan_id(items: list[dict[str, Any]], source_id: str) -> str:
@@ -274,7 +500,7 @@ def _build_combined_item(
             stem_overrides.get(file_item["db_old_uri"])
             or primary_override
         )
-        title_new = source_title_body(
+        source_title_new = source_title_body(
             source_stem,
             file_item.get("number") or primary.get("number"),
         )
@@ -282,6 +508,14 @@ def _build_combined_item(
         original_title_old = str(
             getattr(row, "original_title", "") or ""
         )
+        # A non-empty original title persists a translated row. Unified naming
+        # must not replace that user-visible translation with its source title.
+        if title_old and original_title_old:
+            title_new = title_old
+            original_title_new = original_title_old
+        else:
+            title_new = source_title_new
+            original_title_new = ""
         nfo_path_old = ""
         nfo_path_new = ""
         for associated in file_item.get("associated_files", []):
@@ -300,7 +534,7 @@ def _build_combined_item(
             title_new
             and (
                 title_old != title_new
-                or original_title_old != ""
+                or original_title_old != original_title_new
                 or nfo_create
             )
         )
@@ -349,7 +583,7 @@ def _build_combined_item(
             "title_old": title_old,
             "title_new": title_new,
             "original_title_old": original_title_old,
-            "original_title_new": "",
+            "original_title_new": original_title_new,
             "title_update": title_update,
             "nfo_path_old": nfo_path_old,
             "nfo_path_new": nfo_path_new,
@@ -362,6 +596,9 @@ def _build_combined_item(
             ),
             "nfo_mtime_old": float(
                 getattr(row, "nfo_mtime", 0) or 0
+            ),
+            "expected_size": int(
+                getattr(row, "size_bytes", 0) or 0
             ),
             "status": file_item["status"],
             "reason": file_item["reason"],
@@ -578,6 +815,7 @@ def build_combined_rename_plan(
         "plan_id": _combined_plan_id(items, source_id),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": source_id,
+        "path_mappings": dict(path_mappings or {}),
         "summary": _combined_plan_summary(items, failed_items),
         "failed_items": failed_items,
         "items": items,
@@ -603,6 +841,7 @@ def execute_combined_rename_plan(
         raise ValueError("plan_has_conflicts")
 
     items = [item for item in plan.get("items", []) if item["status"] == "ready"]
+    path_mappings = dict(plan.get("path_mappings") or {})
     manifest = _write_manifest(manifest_dir, {
         **plan,
         "rename_kind": "combined",
@@ -670,7 +909,16 @@ def execute_combined_rename_plan(
                         f"{item['old_name']} -> {item['new_name']}: {exc}"
                     ) from exc
                 completed_folders.append(
-                    (item["old_folder_path"], item["new_folder_path"])
+                    (
+                        item["old_folder_path"],
+                        str(
+                            _resolve_actual_folder_path(
+                                item["new_folder_path"],
+                                str(item.get("number") or ""),
+                            )
+                            or item["new_folder_path"]
+                        ),
+                    )
                 )
 
             for video in item["videos"]:
@@ -702,21 +950,23 @@ def execute_combined_rename_plan(
                     "actresses": list(video.get("actresses") or []),
                     "maker": video.get("maker", ""),
                     "release_date": video.get("release_date", ""),
+                    "nfo_mtime_old": float(
+                        video.get("nfo_mtime_old") or 0
+                    ),
+                    "expected_size": int(video.get("expected_size") or 0),
                 }
+                _reconcile_video_update(update, path_mappings)
                 db_updates.append(update)
 
         for update in db_updates:
             if not update.get("title_update"):
                 continue
-            nfo_path = str(update.get("nfo_path_new") or "")
-            if not nfo_path:
-                new_video_path = str(update.get("new_video_path") or "")
-                if not new_video_path:
-                    continue
-                nfo_path = str(Path(new_video_path).with_suffix(".nfo"))
-                update["nfo_path_new"] = nfo_path
-                update["nfo_create"] = True
-            path = Path(nfo_path)
+            new_video_path = str(update.get("new_video_path") or "")
+            if not new_video_path:
+                continue
+            path = _resolve_title_nfo_path(update)
+            nfo_path = str(path)
+            update["nfo_path_new"] = nfo_path
             nfo_kwargs = {
                 "number": str(update.get("number") or ""),
                 "title_body": update.get("title_new", ""),
@@ -729,13 +979,10 @@ def execute_combined_rename_plan(
                     "[{num}]{title}",
                 ),
             }
-            if path.exists():
-                if update.get("nfo_create"):
-                    raise RuntimeError(f"nfo_target_exists:{nfo_path}")
-                if not path.is_file():
-                    raise RuntimeError(
-                        f"nfo_missing_after_rename:{nfo_path}"
-                    )
+            if path.is_file():
+                # A plan can predate a folder-rename-sidecar discovery. Rewrite
+                # the real file and preserve its metadata instead of failing.
+                update["nfo_create"] = False
                 original_bytes = path.read_bytes()
                 completed_nfo.append((nfo_path, original_bytes))
                 try:
@@ -745,12 +992,9 @@ def execute_combined_rename_plan(
                         f"nfo_title_write_failed:{nfo_path}:{exc}"
                     ) from exc
             else:
-                if not update.get("nfo_create"):
-                    raise RuntimeError(
-                        f"nfo_missing_after_rename:{nfo_path}"
-                    )
-                # Track before writing so a partial failed write is still
-                # removed during rollback.
+                # Missing sidecars are repaired instead of aborting the whole
+                # rename. Track before writing so partial output is rolled back.
+                update["nfo_create"] = True
                 created_nfo.append(nfo_path)
                 try:
                     nfo_create_fn(nfo_path, **nfo_kwargs)
@@ -758,7 +1002,22 @@ def execute_combined_rename_plan(
                     raise RuntimeError(
                         f"nfo_title_create_failed:{nfo_path}:{exc}"
                     ) from exc
-            update["nfo_mtime_new"] = float(path.stat().st_mtime)
+            try:
+                update["nfo_mtime_new"] = float(path.stat().st_mtime)
+            except OSError:
+                resolved = _find_nfo_for_video(
+                    new_video_path,
+                    str(update.get("number") or ""),
+                )
+                if resolved is not None:
+                    path = resolved
+                    nfo_path = str(path)
+                    update["nfo_path_new"] = nfo_path
+                    update["nfo_mtime_new"] = float(path.stat().st_mtime)
+                else:
+                    update["nfo_mtime_new"] = float(
+                        update.get("nfo_mtime_old") or 0
+                    )
             update["nfo_mtime_update"] = True
 
         _apply_rename_updates(

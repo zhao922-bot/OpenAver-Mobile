@@ -63,3 +63,27 @@ def test_title_translation_without_nfo_creates_nfo_and_saves_database(tmp_path):
     nfo_text = nfo_path.read_text(encoding="utf-8")
     assert "中文标题" in nfo_text
     assert "日本語タイトル" in nfo_text
+
+
+def test_readonly_title_writeback_prefers_video_matching_nfo(tmp_path):
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    video = Video(
+        path=to_file_uri(str(tmp_path / "source" / "ABC-123.mp4")),
+        output_dir=to_file_uri(str(output_dir)),
+        number="ABC-123",
+        title="日本語タイトル",
+    )
+    expected = output_dir / "ABC-123.nfo"
+    other = output_dir / "OTHER-999.nfo"
+    expected.write_text("<movie />", encoding="utf-8")
+    other.write_text("<movie />", encoding="utf-8")
+
+    found, error = showcase_router._locate_readonly_nfo(  # noqa: SLF001
+        video,
+        {},
+        video.output_dir,
+    )
+
+    assert error is None
+    assert found == str(expected)

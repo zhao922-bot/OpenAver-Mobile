@@ -2,11 +2,26 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
+
 from core.i18n import normalize_locale
 from core.title_language_data import (
     SIMPLIFIED_ONLY_CHARS,
     TRADITIONAL_ONLY_CHARS,
 )
+
+_KANA_RATIO_FOR_JAPANESE = 0.18
+_LATIN_RATIO_FOR_ENGLISH = 0.65
+_SCRIPT_MARKER_RATIO = 0.12
+_JAPANESE_GRAMMAR_RE = re.compile(
+    r"(?:の|を|は|が|に|で|と|へ|から|まで|より|です|ます|して|する|した|しない|される)"
+)
+_TRANSLATION_LABEL_RE = re.compile(
+    r"^(?:译文|譯文|翻译|翻譯|翻訳|translation|output)\s*[:：]\s*",
+    re.IGNORECASE,
+)
+_ZERO_WIDTH_RE = re.compile(r"[\ufeff\u200b\u200c\u200d]")
 
 
 def _is_han(character: str) -> bool:
@@ -41,41 +56,179 @@ def _has_kana(text: str) -> bool:
     return any(_is_kana(character) for character in text)
 
 
-def title_matches_target_language(title: str, locale: str | None) -> bool:
+def _strip_proper_terms(text: str, proper_terms: Iterable[str] | None) -> str:
+    cleaned = text
+    values = (
+        [proper_terms]
+        if isinstance(proper_terms, str)
+        else (proper_terms or ())
+    )
+    for term in sorted(
+        {
+            str(value or "").strip()
+            for value in values
+            if str(value or "").strip()
+        },
+        key=len,
+        reverse=True,
+    ):
+        cleaned = re.sub(re.escape(term), "", cleaned, flags=re.IGNORECASE)
+    return cleaned
+
+
+def _looks_japanese(text: str) -> bool:
+    han_count = sum(_is_han(character) for character in text)
+    kana_count = sum(_is_kana(character) for character in text)
+    script_total = han_count + kana_count
+    if not kana_count or not script_total:
+        return False
+    kana_ratio = kana_count / script_total
+    return (
+        kana_ratio >= _KANA_RATIO_FOR_JAPANESE
+        or (
+            kana_count >= 1
+            and kana_ratio >= 0.05
+            and _JAPANESE_GRAMMAR_RE.search(text) is not None
+        )
+    )
+
+
+def _is_refusal_text(text: str) -> bool:
+    """Detect common model refusal/explanatory responses without matching titles."""
+    prefix = text.casefold()[:280]
+    checks = (
+        r"(?:抱歉|对不起|對不起|不好意思).{0,60}(?:无法|無法|不能|不便|恕不)"
+        r".{0,40}(?:协助|協助|翻译|翻譯|提供)",
+        r"(?:我|本模型|人工智能|ai).{0,30}(?:无法|無法|不能)"
+        r".{0,30}(?:协助|協助|翻译|翻譯|完成)",
+        r"(?:i am sorry|i'm sorry|sorry).{0,100}"
+        r"(?:cannot|can't|can not|unable|not able)",
+        r"(?:as an ai|i am an ai|i'm an ai).{0,120}",
+        r"(?:申し訳|すみません).{0,80}(?:できません|対応できません|お答えできません)",
+        r"(?:aiとして|私はai).{0,100}(?:できません|対応できません)",
+    )
+    return any(re.search(pattern, prefix, re.IGNORECASE | re.DOTALL) for pattern in checks)
+
+
+def _comparison_key(text: str) -> str:
+    return "".join(
+        character.casefold()
+        for character in text
+        if character.isalnum() or _is_han(character) or _is_kana(character)
+    )
+
+
+def normalize_translation_text(text: str) -> str:
+    """Normalize common model wrappers while leaving the translated title intact."""
+    cleaned = _ZERO_WIDTH_RE.sub("", str(text or "")).replace("\r\n", "\n").replace("\r", "\n")
+    cleaned = cleaned.strip()
+    for _ in range(3):
+        previous = cleaned
+        cleaned = cleaned.strip()
+        if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in {'"', "'", "“", "”", "「", "」"}:
+            cleaned = cleaned[1:-1].strip()
+        cleaned = _TRANSLATION_LABEL_RE.sub("", cleaned).strip()
+        if cleaned == previous:
+            break
+    return cleaned
+
+
+def title_matches_target_language(
+    title: str,
+    locale: str | None,
+    proper_terms: Iterable[str] | None = None,
+) -> bool:
     """Return whether *title* is already written in the active UI language.
 
-    Han-only titles are treated as Chinese when they contain no character that
-    OpenCC maps exclusively in the other Chinese script. Japanese titles are
-    identified by kana, while English titles must contain Latin text and no
-    CJK script. Ambiguous punctuation and number fragments never qualify.
+    Script balance matters more than a single character: proper names often
+    retain a traditional glyph or short kana sequence inside an otherwise
+    translated title. Callers can pass known actor/brand names so those terms
+    are ignored completely.
     """
-    text = str(title or "").strip()
+    text = normalize_translation_text(title)
     if not text:
         return False
+    if _is_refusal_text(text) or "\n\n" in text:
+        return False
+
+    script_text = _strip_proper_terms(text, proper_terms)
+    if not script_text:
+        script_text = text
     target = normalize_locale(locale)
-    has_han = _has_han(text)
-    has_kana = _has_kana(text)
+    han_count = sum(_is_han(character) for character in script_text)
+    kana_count = sum(_is_kana(character) for character in script_text)
+    latin_count = sum(
+        "A" <= character <= "Z"
+        or "a" <= character <= "z"
+        or 0x00C0 <= ord(character) <= 0x024F
+        for character in script_text
+    )
+    script_total = han_count + kana_count + latin_count
 
     if target == "en":
-        return _has_latin_letter(text) and not has_han and not has_kana
+        return bool(
+            latin_count
+            and script_total
+            and latin_count / script_total >= _LATIN_RATIO_FOR_ENGLISH
+            and not _looks_japanese(script_text)
+        )
     if target == "ja":
-        return has_kana
-    if has_kana or not has_han:
+        return _looks_japanese(script_text)
+    if not han_count or _looks_japanese(script_text):
         return False
+
+    simplified_count = sum(
+        character in SIMPLIFIED_ONLY_CHARS for character in script_text
+    )
+    traditional_count = sum(
+        character in TRADITIONAL_ONLY_CHARS for character in script_text
+    )
+    marker_ratio = max(simplified_count, traditional_count) / han_count
     if target == "zh-CN":
-        return not any(
-            character in TRADITIONAL_ONLY_CHARS
-            for character in text
+        return not (
+            traditional_count > simplified_count
+            and marker_ratio >= _SCRIPT_MARKER_RATIO
         )
     if target == "zh-TW":
-        return not any(
-            character in SIMPLIFIED_ONLY_CHARS
-            for character in text
+        return not (
+            simplified_count > traditional_count
+            and marker_ratio >= _SCRIPT_MARKER_RATIO
         )
     return False
 
 
-def title_needs_translation(title: str, locale: str | None) -> bool:
+def title_needs_translation(
+    title: str,
+    locale: str | None,
+    proper_terms: Iterable[str] | None = None,
+) -> bool:
     """Return whether the title is not in the active target language."""
     text = str(title or "").strip()
-    return bool(text and not title_matches_target_language(text, locale))
+    return bool(
+        text
+        and not title_matches_target_language(text, locale, proper_terms)
+    )
+
+
+def translation_result_issue(
+    source: str,
+    translated: str,
+    locale: str | None,
+    proper_terms: Iterable[str] | None = None,
+) -> str | None:
+    """Return a stable failure code when a model result is not a usable title."""
+    source_text = normalize_translation_text(source)
+    result = normalize_translation_text(translated)
+    if not result:
+        return "empty_response"
+    if _is_refusal_text(result):
+        return "refusal"
+    if "\n\n" in result:
+        return "explanatory_response"
+    if len(result) > max(400, len(source_text) * 3):
+        return "explanatory_response"
+    if _comparison_key(result) == _comparison_key(source_text):
+        return "source_echo"
+    if not title_matches_target_language(result, locale, proper_terms):
+        return "wrong_target_language"
+    return None

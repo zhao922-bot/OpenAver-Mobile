@@ -227,6 +227,70 @@ def test_title_backfill_generator_processes_only_missing_candidates(
     assert done["summary"]["failed"] == 0
 
 
+def test_title_backfill_rejects_model_refusal_without_writing_nfo(
+    tmp_path,
+    monkeypatch,
+):
+    db_path = tmp_path / "db.sqlite"
+    db_path.write_bytes(b"")
+    candidate = Video(
+        path="file:///ABC-207.mp4",
+        number="ABC-207",
+        title="先輩って夜はすごく激しいんですね",
+    )
+    write_calls = []
+
+    class FakeRepo:
+        def __init__(self, _db_path):
+            pass
+
+        def get_untranslated_title_candidates(self):
+            return [candidate]
+
+    class FakeService:
+        target_language = "zh-CN"
+
+        async def translate_or_raise(self, title, context):
+            return "抱歉，我无法协助翻译这个标题。"
+
+    def fake_writeback(*args, **kwargs):
+        write_calls.append((args, kwargs))
+        return {"success": True}
+
+    monkeypatch.setattr(scanner_router, "get_db_path", lambda: db_path)
+    monkeypatch.setattr(scanner_router, "VideoRepository", FakeRepo)
+    monkeypatch.setattr(
+        scanner_router,
+        "load_config",
+        lambda: {
+            "translate": {"enabled": True},
+            "general": {"locale": "zh-CN"},
+            "gallery": {"path_mappings": {}},
+        },
+    )
+    monkeypatch.setattr(
+        "web.routers.translate.get_translate_service",
+        lambda: FakeService(),
+    )
+    monkeypatch.setattr(
+        "web.routers.showcase._apply_title_writeback",
+        fake_writeback,
+    )
+
+    events = _drain_events(
+        scanner_router._title_backfill_generator(threading.Event())  # noqa: SLF001
+    )
+
+    assert write_calls == []
+    result = next(
+        event for event in events if event.get("type") == "result-item"
+    )
+    assert result["success"] is False
+    assert result["error_code"] == "translate_failed"
+    assert events[-1]["summary"]["success"] == 0
+    assert events[-1]["summary"]["failed"] == 1
+
+
 def test_title_backfill_translates_concurrently_and_reports_progress(
     tmp_path,
     monkeypatch,

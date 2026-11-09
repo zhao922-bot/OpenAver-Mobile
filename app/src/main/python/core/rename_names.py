@@ -18,7 +18,11 @@ SIDECAR_SEPARATORS = frozenset(" .-_[(【")
 LEADING_SEPARATORS = " \t\u3000-_＿－"
 IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp"})
 MAX_COMPONENT_BYTES = 255
-TRUNCATION_MARKER = "..."
+# Android's shared-storage layer drops a trailing dot from the final path
+# component. A Unicode ellipsis keeps the full component below the same byte
+# limit without producing a planned path that differs from the actual path.
+TRUNCATION_MARKER = "…"
+LEGACY_TRUNCATION_MARKERS = ("...",)
 PORTABLE_FILENAME_REPLACEMENTS = str.maketrans({
     "<": "＜",
     ">": "＞",
@@ -77,12 +81,20 @@ def canonicalize_stem(stem: str, number_hint: str | None = None) -> tuple[str, s
 
     title = canonical_input[match.end():].lstrip(LEADING_SEPARATORS)
     canonical = number if not title else f"{number} {title}"
-    if canonical.endswith(TRUNCATION_MARKER):
+    marker = next(
+        (
+            value
+            for value in (TRUNCATION_MARKER, *LEGACY_TRUNCATION_MARKERS)
+            if canonical.endswith(value)
+        ),
+        "",
+    )
+    if marker:
         # Preserve the safety marker so a preview that truncated a name is
         # stable when the user opens it again.
         canonical = (
-            canonical[:-len(TRUNCATION_MARKER)].rstrip(" .")
-            + TRUNCATION_MARKER
+            canonical[:-len(marker)].rstrip(" .")
+            + marker
         )
     else:
         canonical = canonical.rstrip(" .")
@@ -197,7 +209,7 @@ def _fit_filename_stem(
     prefix_match = re.match(r"^([A-Z0-9]+(?:-[A-Z0-9]+)* )", stem, re.IGNORECASE)
     prefix = prefix_match.group(1) if prefix_match else ""
     body = stem[len(prefix):]
-    marker_bytes = len(TRUNCATION_MARKER.encode("ascii"))
+    marker_bytes = _utf8_len(TRUNCATION_MARKER)
     body_budget = budget - _utf8_len(prefix) - marker_bytes
     if body_budget < 0:
         return None

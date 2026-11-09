@@ -184,10 +184,22 @@ def run_one_round(
 
         if (
             translate_service is not None
-            and title_needs_translation(metadata.get('title', ''), locale)
+            and title_needs_translation(
+                metadata.get('title', ''),
+                locale,
+                proper_terms=metadata.get('actors') or (),
+            )
         ):
             try:
-                translated = asyncio.run(translate_service.translate_single(metadata['title']))
+                translated = asyncio.run(
+                    translate_service.translate_single(
+                        metadata['title'],
+                        {
+                            'actors': metadata.get('actors') or [],
+                            'number': number,
+                        },
+                    )
+                )
             except Exception:
                 # 不擋、不計 failed（DoD-8），但要留痕（Codex PR #181 二審 P3）：
                 # 無人值守跑完只會回報「成功」，沒有這一行就查不出為什麼標題沒翻。

@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r49-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r50-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r49-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r50-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r49`（versionCode `17065`）
+- 版本：`0.17.18-r50`（versionCode `17066`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -67,6 +67,10 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 修复 Pydantic v1 兼容层缺少 `model_copy()` 导致“补抓剧照失败”的问题
 - 修复 Android 返回键跨菜单后退的问题；弹窗、灯箱、抽屉和编辑层会按层级优先关闭
 - 标题翻译写回兼容 Android 文件系统的大小写规则，`.NFO` 不再被误判为不存在，并改为原子写入
+- r50：标题翻译按整段文字的简繁/假名比例判断，演员专名中的单个繁体字或短假名不会再让已翻译标题反复回到待翻译队列
+- r50：拒绝模型拒答、原文回显和非目标语言结果；临时超时/429/5xx 自动重试一次，失败不会误写 NFO
+- r50：改名流程会在 NFO 目标路径过期或缺失时重新定位或补建标题 NFO，不再因 `nfo_missing_after_rename` 中止
+- r50：统一命名会保留已有译文和 `original_title`，并改用不会触发 Android 去掉尾点的 `…` 截断标记，避免实际路径与数据库路径不一致
 - 修复灯箱多行标题第一、二行间距异常过大的问题
 - 右侧灰色菜单按钮支持拖动，位置会持久化，并在旋转或窗口尺寸变化后保持在屏幕内
 - 补抓剧照增加来源 URL 规范化、JavDB Referer、图片内容校验、下载诊断和可重复重试
@@ -149,7 +153,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r27：识别 MTP/FUSE 复制到 SD 卡时因超过 255 字节而被截断的超长文件名；
     可在数据库记录仍完整时按番号找回唯一视频，并修复到安全长度
 - r27：视频、封面、NFO、poster 和 fanart 共用同一条截断后的文件名主干，
-    超长标题以 `...` 结尾，避免侧车名称不一致或再次超过 Android 文件系统限制
+    超长标题以 `…` 结尾，避免侧车名称不一致或再次超过 Android 文件系统限制
 - r28：合并“统一文件名格式”和“统一文件夹格式”为一个统一命名流程
 - r28：可选择元数据来源，以该来源的标题决定番号后面的视频名和影片文件夹名；
     预览会同时展示视频、侧车和文件夹变更，并支持整批失败回滚

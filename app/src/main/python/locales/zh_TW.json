@@ -867,7 +867,7 @@
   "scanner": {
     "rename": {
       "row_title": "統一檔名格式",
-      "row_hint": "統一編號與標題間距；超過系統限制的名稱會安全截斷並加上 ...",
+      "row_hint": "統一編號與標題間距；超過系統限制的名稱會安全截斷並加上 …",
       "source_row_title": "統一檔名與資料夾",
       "source_row_hint": "選擇中繼資料來源，用來源標題決定影片名和資料夾名；根目錄影片會自動建立資料夾並移入",
       "source_select_label": "標題來源",
@@ -896,7 +896,7 @@
       "summary_folders": "需要處理的資料夾",
       "summary_files": "包含側車檔案",
       "summary_conflicts": "衝突項目",
-      "modal_intro": "只會修改影片檔名和同目錄下的 NFO、封面、poster、fanart、字幕；超長名稱會共用安全長度並以 ... 結尾，資料夾、extrafanart 和其他影片保持不動。",
+      "modal_intro": "只會修改影片檔名和同目錄下的 NFO、封面、poster、fanart、字幕；超長名稱會共用安全長度並以 … 結尾，資料夾、extrafanart 和其他影片保持不動。",
       "folder_modal_intro": "只修改掃描目錄下一層的影片資料夾名稱，並同步資料庫路徑；資料夾內的影片、NFO、封面和劇照檔案保持原名。",
       "modal_note": "執行前會再次核對預覽結果；若檔案發生變化會停止。任何一步失敗都會自動回滾檔案、NFO 標題和資料庫記錄，並保存重新命名清單。",
       "related_files": "同時處理 {count} 個側車檔案",

@@ -74,6 +74,11 @@ def test_canonicalize_stem_inserts_space_without_changing_title():
         "ABC-123",
         "unchanged",
     )
+    assert canonicalize_stem("ABC-123 標題…") == (
+        "ABC-123 標題…",
+        "ABC-123",
+        "unchanged",
+    )
 
 
 def test_canonicalize_stem_preserves_multipart_suffix():
@@ -254,7 +259,7 @@ def test_preview_repairs_missing_path_and_fits_android_name_limit(tmp_path):
     assert len(item["operations"]) == 5
     assert all(len(op["new_name"].encode("utf-8")) <= 255 for op in item["operations"])
     target_stem = item["new_name"][:-len(actual_video.suffix)]
-    assert target_stem.endswith("...")
+    assert target_stem.endswith("…")
     assert item["cover_path_new"].endswith(
         Path(target_stem + actual_cover.suffix).name
     )
@@ -780,6 +785,224 @@ def test_combined_title_sync_creates_title_only_nfo_when_missing(tmp_path):
     assert root.find("actor") is None
     assert root.find("poster") is None
     assert root.find("release") is None
+
+
+def test_combined_title_sync_recovers_stale_nfo_target_path(tmp_path):
+    source = tmp_path / "library"
+    folder = source / "ABC-123 新しいタイトル"
+    folder.mkdir(parents=True)
+    video = folder / "ABC-123 新しいタイトル.mp4"
+    nfo = folder / "ABC-123 新しいタイトル.nfo"
+    video.write_bytes(b"video")
+    nfo.write_text(
+        "<movie><num>ABC-123</num><title>旧标题</title>"
+        "<originaltitle></originaltitle><plot>keep me</plot></movie>",
+        encoding="utf-8",
+    )
+
+    old_uri = to_file_uri(str(video))
+    db_path = tmp_path / "openaver.db"
+    connection._clear_db_init_cache()
+    connection.init_db(db_path)
+    repo = VideoRepository(db_path)
+    repo.upsert(Video(
+        path=old_uri,
+        number="ABC-123",
+        title="旧标题",
+        original_title="",
+    ))
+
+    plan = build_combined_rename_plan(
+        repo.get_all(),
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 新しいタイトル"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+    planned_video = plan["items"][0]["videos"][0]
+    planned_video["nfo_path_new"] = str(folder / "stale-target.nfo")
+
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+    )
+
+    assert result["success"] is True
+    assert result["rewritten_nfos"] == 1
+    assert result["created_nfos"] == 0
+    assert repo.get_by_path(old_uri).title == "新しいタイトル"
+    root = ET.parse(nfo).getroot()
+    assert root.findtext("title") == "[ABC-123]新しいタイトル"
+    assert root.findtext("plot") == "keep me"
+
+
+def test_combined_title_sync_resolves_nfo_after_folder_path_rewrite(
+    tmp_path,
+):
+    source = tmp_path / "library"
+    folder = source / "ABC-123 旧标题"
+    folder.mkdir(parents=True)
+    video = folder / "ABC-123 旧标题.mp4"
+    nfo = folder / "legacy-sidecar.nfo"
+    video.write_bytes(b"video")
+    nfo.write_text(
+        "<movie><num>ABC-123</num><title>旧标题</title>"
+        "<originaltitle></originaltitle><plot>keep me</plot></movie>",
+        encoding="utf-8",
+    )
+
+    old_uri = to_file_uri(str(video))
+    db_path = tmp_path / "openaver.db"
+    connection._clear_db_init_cache()
+    connection.init_db(db_path)
+    repo = VideoRepository(db_path)
+    repo.upsert(Video(
+        path=old_uri,
+        number="ABC-123",
+        title="旧标题",
+        original_title="",
+    ))
+
+    plan = build_combined_rename_plan(
+        repo.get_all(),
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 新しいタイトル"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+    planned_video = plan["items"][0]["videos"][0]
+    planned = Path(planned_video["new_video_path"])
+    actual_folder = planned.parent.with_name(planned.parent.name[:-1])
+
+    def rewrite_folder_target(source_path, target_path):
+        os.rename(source_path, actual_folder)
+
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+        folder_rename_fn=rewrite_folder_target,
+    )
+
+    actual_video = actual_folder / planned.name
+    actual_nfos = list(actual_folder.glob("*.nfo"))
+    assert result["success"] is True
+    assert actual_video.is_file()
+    assert len(actual_nfos) == 1
+    assert repo.get_by_path(to_file_uri(str(actual_video))) is not None
+    root = ET.parse(actual_nfos[0]).getroot()
+    assert root.findtext("title") == "[ABC-123]新しいタイトル"
+
+
+def test_combined_rename_preserves_translated_title_and_original(
+    tmp_path,
+):
+    source = tmp_path / "library"
+    folder = source / "ABC-123 中文标题"
+    folder.mkdir(parents=True)
+    video = folder / "ABC-123 中文标题-cd1.mp4"
+    nfo = folder / "ABC-123 中文标题-cd1.nfo"
+    video.write_bytes(b"video")
+    nfo.write_text(
+        "<movie><num>ABC-123</num><title>[ABC-123]中文标题</title>"
+        "<originaltitle>日本語タイトル</originaltitle></movie>",
+        encoding="utf-8",
+    )
+
+    old_uri = to_file_uri(str(video))
+    db_path = tmp_path / "openaver.db"
+    connection._clear_db_init_cache()
+    connection.init_db(db_path)
+    repo = VideoRepository(db_path)
+    repo.upsert(Video(
+        path=old_uri,
+        number="ABC-123",
+        title="中文标题",
+        original_title="日本語タイトル",
+    ))
+
+    plan = build_combined_rename_plan(
+        repo.get_all(),
+        source_id="javbus",
+        stem_overrides={
+            old_uri: "ABC-123 日本語タイトル-cd1",
+        },
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+    item = plan["items"][0]
+    planned_video = item["videos"][0]
+    assert planned_video["title_new"] == "中文标题"
+    assert planned_video["original_title_new"] == "日本語タイトル"
+    assert planned_video["title_update"] is False
+
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+    )
+
+    new_uri = planned_video["db_new_uri"]
+    renamed = repo.get_by_path(new_uri)
+    assert result["success"] is True
+    assert renamed is not None
+    assert renamed.title == "中文标题"
+    assert renamed.original_title == "日本語タイトル"
+    updated_nfo = Path(planned_video["new_video_path"]).with_suffix(".nfo")
+    root = ET.parse(updated_nfo).getroot()
+    assert root.findtext("title") == "[ABC-123]中文标题"
+    assert root.findtext("originaltitle") == "日本語タイトル"
+
+
+def test_combined_rename_creates_nfo_with_preserved_translation(
+    tmp_path,
+):
+    source = tmp_path / "library"
+    folder = source / "ABC-123 中文标题"
+    folder.mkdir(parents=True)
+    video = folder / "ABC-123 中文标题.mp4"
+    video.write_bytes(b"video")
+
+    old_uri = to_file_uri(str(video))
+    db_path = tmp_path / "openaver.db"
+    connection._clear_db_init_cache()
+    connection.init_db(db_path)
+    repo = VideoRepository(db_path)
+    repo.upsert(Video(
+        path=old_uri,
+        number="ABC-123",
+        title="中文标题",
+        original_title="日本語タイトル",
+    ))
+
+    plan = build_combined_rename_plan(
+        repo.get_all(),
+        source_id="javbus",
+        stem_overrides={old_uri: "ABC-123 日本語タイトル"},
+        source_roots=[str(source)],
+        path_mappings={},
+        config={},
+    )
+    planned_video = plan["items"][0]["videos"][0]
+    assert planned_video["nfo_create"] is True
+    assert planned_video["title_update"] is True
+
+    result = execute_combined_rename_plan(
+        plan,
+        repo,
+        manifest_dir=tmp_path / "manifests",
+    )
+
+    assert result["success"] is True
+    nfo = Path(planned_video["new_video_path"]).with_suffix(".nfo")
+    assert nfo.is_file()
+    root = ET.parse(nfo).getroot()
+    assert root.findtext("title") == "[ABC-123]中文标题"
+    assert root.findtext("originaltitle") == "日本語タイトル"
 
 
 def test_combined_created_nfo_is_removed_when_database_update_fails(

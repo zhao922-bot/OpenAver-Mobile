@@ -75,4 +75,11 @@ def find_sidecar_nfos(video_path) -> list[Path]:
         elif stem.casefold() == expected_stem.casefold():
             folded.append(candidate)
 
-    return sorted(exact) if exact else sorted(folded)
+    selected = exact or folded
+    return sorted(
+        selected,
+        key=lambda candidate: (
+            candidate.suffix != ".nfo",
+            candidate.name.casefold(),
+        ),
+    )

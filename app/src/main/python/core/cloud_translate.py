@@ -35,6 +35,7 @@ SETTINGS_ERROR_KEY = {
     "http_error": "http_error",
     "blocked": "blocked",
     "refused": "blocked",
+    "invalid_response": "translate_failed",
     "truncated": "translate_failed",
     "empty_response": "translate_failed",
     "api_error": "translate_failed",

@@ -136,7 +136,13 @@ def atomic_write(
             if not android_storage.has_access(str(dest)):
                 raise
             android_storage.write_bytes(str(dest), tmp.read_bytes())
-            tmp.unlink(missing_ok=True)
+            # The destination is already verified by the SAF bridge. A stale
+            # temp file on the same restricted mount must not turn a successful
+            # NFO write into a reported failure.
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
     except BaseException:
         # 路徑 1：區塊內使用者程式碼拋例外；路徑 2：os.replace 自己拋例外
         # （BE-ENV-01：Windows 防毒/縮圖快取會擋，不是必成功）。

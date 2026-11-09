@@ -83,7 +83,12 @@ from core.multipart_group import (
 from core.scraper import get_javbus_lang, search_jav, smart_search
 from core.source_settings import is_uncensored_mode_effective
 from core.scrapers.utils import check_subtitle, extract_number
-from core.title_language import title_needs_translation
+from core.cloud_translate import TranslateError, build_error
+from core.title_language import (
+    normalize_translation_text,
+    title_needs_translation,
+    translation_result_issue,
+)
 from core.source_config import get_manual_only_sources, validate_source_id
 from pydantic import BaseModel
 from core.logger import get_logger
@@ -2351,7 +2356,11 @@ def _is_untranslated_title_candidate(
     title = (video.title or "").strip()
     return bool(
         title
-        and title_needs_translation(title, locale or _active_locale())
+        and title_needs_translation(
+            title,
+            locale or _active_locale(),
+            proper_terms=video.actresses or (),
+        )
     )
 
 
@@ -2631,6 +2640,7 @@ def _iter_title_translations(
     candidates: List[Video],
     cancel_event: threading.Event,
     concurrency: int = _TITLE_BACKFILL_CONCURRENCY,
+    locale: str | None = None,
 ) -> Generator[tuple[Video, Optional[str], Optional[Exception]], None, None]:
     """Translate candidates concurrently and yield results as they finish."""
     loop = asyncio.new_event_loop()
@@ -2641,13 +2651,30 @@ def _iter_title_translations(
         async with semaphore:
             if cancel_event.is_set():
                 raise asyncio.CancelledError()
-            return await translate_service.translate_or_raise(
+            result = await translate_service.translate_or_raise(
                 video.title,
                 {
                     "actors": video.actresses or [],
                     "number": _candidate_number(video),
                 },
             )
+            cleaned = normalize_translation_text(result)
+            issue = translation_result_issue(
+                video.title,
+                cleaned,
+                locale or _active_locale(),
+                proper_terms=video.actresses or (),
+            )
+            if issue is not None:
+                kind = "refused" if issue == "refusal" else "invalid_response"
+                raise build_error(
+                    "TitleBackfill",
+                    kind,
+                    None,
+                    issue,
+                    issue,
+                )
+            return cleaned
 
     async def drain_pending() -> None:
         if pending:
@@ -2808,6 +2835,7 @@ def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, N
             translate_service,
             candidates,
             cancel_event,
+            locale=locale,
         ):
             number = _candidate_number(video)
             group = group_by_candidate_path.get(video.path)
@@ -2846,6 +2874,20 @@ def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, N
                         ),
                         member_results[0][1],
                     )
+            except TranslateError as exc:
+                logger.warning(
+                    "批次補齊標題翻譯失敗: %s kind=%s status=%s",
+                    video.path,
+                    exc.kind,
+                    exc.status,
+                )
+                result = {
+                    "success": False,
+                    "error": "translate_failed",
+                    "message": _runtime_text(
+                        "title", "translation_failed", locale
+                    ),
+                }
             except Exception:
                 logger.exception("批次補齊標題失敗: %s", video.path)
                 result = {

@@ -104,7 +104,11 @@ async def translate_title(request: TranslateRequest) -> dict:
     if (
         request.mode == "translate"
         and not request.force
-        and not title_needs_translation(request.text, locale)
+        and not title_needs_translation(
+            request.text,
+            locale,
+            proper_terms=request.actors or (),
+        )
     ):
         return {
             "skipped": True,

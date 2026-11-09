@@ -104,9 +104,11 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "007-mobile-ui-and-localization.patch",
         (
             "core/auto_organize.py",
+            "core/cloud_translate.py",
             "core/config.py",
             "core/i18n.py",
             "core/nfo_title_format.py",
+            "core/openai_client.py",
             "core/readonly_producer.py",
             "core/scraper.py",
             "core/translate_service.py",

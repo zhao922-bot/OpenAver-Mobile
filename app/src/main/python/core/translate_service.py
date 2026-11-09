@@ -31,6 +31,10 @@ from core.anthropic_client import (
     request_translation,
 )
 from core.cloud_translate import CLOUD_TRANSLATE_TIMEOUT, TranslateError, build_error
+from core.title_language import (
+    normalize_translation_text,
+    translation_result_issue,
+)
 
 
 # ============ 語言 Prompt 模板 ============
@@ -70,6 +74,34 @@ LANGUAGE_PROMPTS = {
 class TranslateService(ABC):
     """翻譯服務抽象基類"""
 
+    target_language = "zh-CN"
+
+    def _validate_result(
+        self,
+        source: str,
+        translated: str,
+        context: Optional[Dict] = None,
+    ) -> str:
+        """Reject refusals, source echoes, and output in the wrong language."""
+        cleaned = normalize_translation_text(translated)
+        proper_terms = (context or {}).get("actors") or ()
+        issue = translation_result_issue(
+            source,
+            cleaned,
+            self.target_language,
+            proper_terms=proper_terms,
+        )
+        if issue is not None:
+            kind = "refused" if issue == "refusal" else "invalid_response"
+            raise build_error(
+                "Translation",
+                kind,
+                None,
+                issue,
+                issue,
+            )
+        return cleaned
+
     @abstractmethod
     async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
         """
@@ -92,7 +124,7 @@ class TranslateService(ABC):
         result = await self.translate_single(title, context)
         if not result:
             raise TranslateError("empty_response", None, "", "translation is empty")
-        return result
+        return self._validate_result(title, result, context)
 
     @abstractmethod
     async def translate_batch(self, titles: List[str], context: Optional[Dict] = None) -> List[str]:
@@ -178,9 +210,7 @@ class OllamaTranslateService(TranslateService):
                 "Ollama", "api_error", None, type(e).__name__, str(e)
             ) from None
 
-        if not result:
-            raise build_error("Ollama", "empty_response", None, "", "translation is empty")
-        return result
+        return self._validate_result(title, result, context)
 
     async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
         """
@@ -213,8 +243,8 @@ class OllamaTranslateService(TranslateService):
     def _clean_output(self, text: str) -> str:
         """清理翻譯輸出"""
         text = text.strip().strip('"').strip("'")
-        text = re.sub(r'^翻譯[：:]\\s*', '', text)
-        text = re.sub(r'^中文[：:]\\s*', '', text)
+        text = re.sub(r'^翻譯[：:]\s*', '', text)
+        text = re.sub(r'^中文[：:]\s*', '', text)
         text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
         return text.strip()
 
@@ -263,12 +293,13 @@ class GeminiTranslateService(TranslateService):
         prompt = build_cloud_translate_prompt(title, self.target_language)
 
         try:
-            return await gemini_client.request_translation(
+            result = await gemini_client.request_translation(
                 self.api_key,
                 self.model,
                 prompt,
                 timeout=CLOUD_TRANSLATE_TIMEOUT,
             )
+            return self._validate_result(title, result, context)
         except TranslateError:
             raise
         except Exception as e:
@@ -332,13 +363,30 @@ class OpenAICompatibleTranslateService(TranslateService):
         prompt = build_cloud_translate_prompt(title, self.target_language)
 
         try:
-            return await openai_client.request_translation(
+            result = await openai_client.request_translation(
                 self.base_url,
                 self.api_key,
                 self.model,
                 prompt,
                 timeout=CLOUD_TRANSLATE_TIMEOUT,
             )
+            try:
+                return self._validate_result(title, result, context)
+            except TranslateError as first_error:
+                if first_error.kind not in ("refused", "invalid_response"):
+                    raise
+                retry_prompt = (
+                    f"{prompt}\n"
+                    "只輸出最終譯文本身。不要評論、解釋、道歉，也不要輸出任何前綴。"
+                )
+                retried = await openai_client.request_translation(
+                    self.base_url,
+                    self.api_key,
+                    self.model,
+                    retry_prompt,
+                    timeout=CLOUD_TRANSLATE_TIMEOUT,
+                )
+                return self._validate_result(title, retried, context)
         except TranslateError:
             raise
         except Exception as e:
@@ -409,12 +457,13 @@ class ClaudeTranslateService(TranslateService):
         prompt = build_cloud_translate_prompt(title, self.target_language)
 
         try:
-            return await request_translation(
+            result = await request_translation(
                 self.api_key,
                 self.model,
                 prompt,
                 timeout=30,
             )
+            return self._validate_result(title, result, context)
         except TranslateError:
             raise
         except Exception as e:

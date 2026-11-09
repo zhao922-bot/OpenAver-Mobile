@@ -867,7 +867,7 @@
   "scanner": {
     "rename": {
       "row_title": "统一文件名格式",
-      "row_hint": "统一番号与标题间距；超过系统限制的名称会安全截断并加 ...",
+      "row_hint": "统一番号与标题间距；超过系统限制的名称会安全截断并加 …",
       "source_row_title": "统一文件名与文件夹",
       "source_row_hint": "选择元数据来源，用来源标题决定视频名和文件夹名；根目录视频会自动建夹并移入",
       "source_select_label": "标题来源",
@@ -896,7 +896,7 @@
       "summary_folders": "需要处理的文件夹",
       "summary_files": "包含侧车文件",
       "summary_conflicts": "冲突项",
-      "modal_intro": "只会修改视频文件名和同目录下的 NFO、封面、poster、fanart、字幕；超长名称会共用安全长度并以 ... 结尾，文件夹、extrafanart 和其他视频保持不动。",
+      "modal_intro": "只会修改视频文件名和同目录下的 NFO、封面、poster、fanart、字幕；超长名称会共用安全长度并以 … 结尾，文件夹、extrafanart 和其他视频保持不动。",
       "folder_modal_intro": "只修改扫描目录下一层的影片文件夹名称，并同步数据库路径；文件夹内的视频、NFO、封面和剧照文件保持原名。",
       "modal_note": "执行前会再次核对预览结果；若文件发生变化会停止。任何一步失败都会自动回滚文件、NFO 标题和数据库记录，并保存重命名清单。",
       "related_files": "同时处理 {count} 个侧车文件",
