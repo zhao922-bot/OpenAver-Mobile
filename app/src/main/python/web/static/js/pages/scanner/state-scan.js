@@ -273,17 +273,29 @@ export function stateScan() {
             return this.state === 'done' && this.outputPath !== '';
         },
 
+        get renameSourceOptions() {
+            return this._batchSourceOptions(false);
+        },
+
         get tagSourceOptions() {
+            return this._batchSourceOptions(true);
+        },
+
+        _batchSourceOptions(includeJable) {
             const options = [{
                 id: 'auto',
                 display_name: window.t('scanner.stats.tag_source_auto'),
+                requires_cf: false,
             }];
             const seen = new Set(['auto']);
             const rows = (this.config.sources || [])
-                .filter((source) => source
-                    && source.enabled
-                    && !source.manual_only
-                    && !String(source.id || '').startsWith('custom:'))
+                .filter((source) => {
+                    if (!source || String(source.id || '').startsWith('custom:')) {
+                        return false;
+                    }
+                    const jableBatchTag = includeJable && source.id === 'jable';
+                    return jableBatchTag || (source.enabled && !source.manual_only);
+                })
                 .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
             for (const source of rows) {
                 if (!source.id || seen.has(source.id)) continue;
@@ -293,6 +305,7 @@ export function stateScan() {
                     display_name: source.type === 'metatube'
                         ? (source.display_name_raw || source.id)
                         : (source.display_name_key || source.id),
+                    requires_cf: source.id === 'jable',
                 });
             }
             return options;
@@ -303,6 +316,13 @@ export function stateScan() {
                 (source) => source.id === this.tagSourceUpdateSource
             );
             return selected ? selected.display_name : this.tagSourceUpdateSource;
+        },
+
+        get selectedTagSourceRequiresCf() {
+            const selected = this.tagSourceOptions.find(
+                (source) => source.id === this.tagSourceUpdateSource
+            );
+            return !!selected?.requires_cf;
         },
 
         get tagSourceModalSourceLabel() {
@@ -529,12 +549,13 @@ export function stateScan() {
                 if (result.success) {
                     this.config = result.data;
                     this.directories = this.config.gallery?.directories || [];
-                    const availableSources = this.tagSourceOptions;
-                    if (!availableSources.some((source) => source.id === this.tagSourceUpdateSource)) {
-                        this.tagSourceUpdateSource = availableSources[0]?.id || 'auto';
+                    const tagSources = this.tagSourceOptions;
+                    if (!tagSources.some((source) => source.id === this.tagSourceUpdateSource)) {
+                        this.tagSourceUpdateSource = tagSources[0]?.id || 'auto';
                     }
-                    if (!availableSources.some((source) => source.id === this.renameSource)) {
-                        this.renameSource = availableSources[0]?.id || 'auto';
+                    const renameSources = this.renameSourceOptions;
+                    if (!renameSources.some((source) => source.id === this.renameSource)) {
+                        this.renameSource = renameSources[0]?.id || 'auto';
                     }
                     // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                     this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';

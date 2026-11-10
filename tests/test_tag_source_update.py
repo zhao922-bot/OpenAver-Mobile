@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from core.database import Video
+from core.cf_transport import CfChallengeRequired
 from core.path_utils import to_file_uri
 from web.routers import scanner as scanner_router
 
@@ -111,6 +112,19 @@ def test_batch_tag_source_rejects_manual_only_source():
 
     assert error is not None
     assert "Cloudflare" in error
+
+
+def test_batch_tag_source_accepts_jable_manual_only_source():
+    error = scanner_router._validate_batch_tag_source(  # noqa: SLF001
+        "jable",
+        {
+            "sources": [
+                {"id": "jable", "enabled": False, "manual_only": True}
+            ]
+        },
+    )
+
+    assert error is None
 
 
 def test_batch_tag_source_rejects_known_manual_only_source_without_config_row():
@@ -359,4 +373,94 @@ def test_batch_tag_source_update_creates_nfo_backup(tmp_path, monkeypatch):
     assert events[-1]["summary"]["backed_up"] == 1
     assert backup.exists()
     assert backup.read_text(encoding="utf-8") == original_nfo
+    assert "<tag>new</tag>" in nfo.read_text(encoding="utf-8")
+
+
+def test_batch_tag_source_jable_waits_for_cf_and_retries(
+    tmp_path, monkeypatch
+):
+    video_file = tmp_path / "ABC-126.mp4"
+    video_file.write_bytes(b"video")
+    nfo = tmp_path / "ABC-126.nfo"
+    nfo.write_text(
+        '<?xml version="1.0" encoding="utf-8"?>'
+        "<movie><title>Keep</title><tag>old</tag></movie>",
+        encoding="utf-8",
+    )
+    video = Video(
+        path=to_file_uri(str(video_file)),
+        number="ABC-126",
+        title="Keep",
+        original_title="",
+        tags=["old"],
+    )
+    (tmp_path / "db.sqlite").write_bytes(b"")
+    calls = {"search": 0, "begin": [], "ready": 0}
+
+    class FakeRepo:
+        def __init__(self, _db_path):
+            pass
+
+        def get_all(self):
+            return [video]
+
+        def update_tags_if_changed(self, _path, _tags):
+            return True
+
+        def update_titles(self, *_args):
+            return True
+
+    class FakeTransport:
+        def begin_solve(self, origin, key):
+            calls["begin"].append((origin, key))
+
+        def is_ready(self, key):
+            calls["ready"] += 1
+            assert key == "jable"
+            return True
+
+    def fake_search(*_args, **_kwargs):
+        calls["search"] += 1
+        if calls["search"] == 1:
+            raise CfChallengeRequired("verification required")
+        return {"tags": ["new", "drama"]}
+
+    monkeypatch.setattr(
+        scanner_router,
+        "load_config",
+        lambda: {
+            "sources": [
+                {"id": "jable", "enabled": False, "manual_only": True}
+            ],
+            "gallery": {},
+        },
+    )
+    monkeypatch.setattr(scanner_router, "get_db_path", lambda: tmp_path / "db.sqlite")
+    monkeypatch.setattr(scanner_router, "VideoRepository", FakeRepo)
+    monkeypatch.setattr(scanner_router, "get_javbus_lang", lambda: "zh-tw")
+    monkeypatch.setattr(scanner_router, "search_jav", fake_search)
+    monkeypatch.setattr(
+        scanner_router, "get_cf_transport", lambda: FakeTransport()
+    )
+    monkeypatch.setattr(
+        scanner_router,
+        "readonly_source_prefixes",
+        lambda *_args, **_kwargs: set(),
+    )
+    monkeypatch.setattr(
+        scanner_router,
+        "writable_source_prefixes",
+        lambda *_args, **_kwargs: set(),
+    )
+
+    events = _sse_payloads(
+        scanner_router.generate_tag_source_update("jable")
+    )
+
+    assert calls["search"] == 2
+    assert calls["begin"] == [("https://jable.tv/", "jable")]
+    assert calls["ready"] == 1
+    assert any(event["type"] == "progress" for event in events)
+    assert events[-1]["type"] == "done"
+    assert events[-1]["summary"]["success"] == 1
     assert "<tag>new</tag>" in nfo.read_text(encoding="utf-8")

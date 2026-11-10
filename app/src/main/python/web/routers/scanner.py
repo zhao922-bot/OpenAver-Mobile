@@ -80,7 +80,18 @@ from core.multipart_group import (
     resolve_groups_bulk,
     resolve_logical_video_groups,
 )
-from core.scraper import get_javbus_lang, search_jav, smart_search
+from core.scraper import (
+    get_javbus_lang,
+    search_jav,
+    smart_search,
+    source_display_name,
+)
+from core import cf_handoff
+from core.cf_transport import (
+    CfChallengeRequired,
+    CfTransportUnavailable,
+    get_cf_transport,
+)
 from core.source_settings import is_uncensored_mode_effective
 from core.scrapers.utils import check_subtitle, extract_number
 from core.cloud_translate import TranslateError, build_error
@@ -108,6 +119,9 @@ _jellyfin_cache_time: float = 0
 _rename_execute_lock = threading.Lock()
 _rename_plan_cache: dict[str, tuple[float, dict]] = {}
 _RENAME_PLAN_TTL_SECONDS = 30 * 60
+_TAG_SOURCE_MANUAL_ALLOWLIST = frozenset({'jable'})
+_TAG_SOURCE_CF_WAIT_SECONDS = 300.0
+_TAG_SOURCE_CF_POLL_SECONDS = 0.5
 
 
 class RenameExecuteRequest(BaseModel):
@@ -1758,6 +1772,7 @@ def _validate_batch_source(
     action: str | None = None,
     action_key: str | None = None,
     locale: str | None = None,
+    allow_manual_only: frozenset[str] = frozenset(),
 ) -> Optional[str]:
     """Return a user-facing error for sources that cannot run in a batch."""
     locale = _active_locale(config) if locale is None else locale
@@ -1772,7 +1787,10 @@ def _validate_batch_source(
         )
     if not validate_source_id(source):
         return _runtime_text("scanner", "batch_unknown_source", locale)
-    if source in {row.id for row in get_manual_only_sources()}:
+    if (
+        source in {row.id for row in get_manual_only_sources()}
+        and source not in allow_manual_only
+    ):
         return _runtime_text(
             "scanner", "batch_cloudflare_unsupported", locale, action=action
         )
@@ -1784,10 +1802,19 @@ def _validate_batch_source(
         ),
         None,
     )
-    if source_row and source_row.get("manual_only"):
+    if (
+        source_row
+        and source_row.get("manual_only")
+        and source not in allow_manual_only
+    ):
         return _runtime_text(
             "scanner", "batch_cloudflare_unsupported", locale, action=action
         )
+    # Manual-only sources stay out of automatic fan-out, but a source can be
+    # explicitly allowlisted for one batch workflow. Jable is exact-number only
+    # and its Cloudflare verification is handled by the interactive batch flow.
+    if source in allow_manual_only:
+        return None
     if not source_row or not source_row.get("enabled"):
         return _runtime_text("scanner", "batch_source_disabled", locale)
     return None
@@ -1804,6 +1831,7 @@ def _validate_batch_tag_source(
         config,
         action_key="batch_action_tag",
         locale=locale,
+        allow_manual_only=_TAG_SOURCE_MANUAL_ALLOWLIST,
     )
 
 
@@ -1958,37 +1986,179 @@ def generate_tag_source_update(
                     "eta_seconds": eta_seconds,
                 })
 
-            try:
-                metadata = search_jav(
-                    video.number,
-                    source=source,
-                    javbus_lang=javbus_lang,
-                    surface_access_errors=True,
-                )
-            except Exception as exc:
-                summary["failed"] += 1
-                summary["failed_items"].append({
-                    "path": video.path,
-                    "number": video.number,
-                    "error": str(exc),
-                })
-                logger.warning(
-                    "tag source update failed: source=%s number=%s error=%s",
-                    source,
-                    video.number,
-                    exc,
-                )
-                yield _sse_event({
-                    "type": "log",
-                    "level": "error",
-                    "message": _runtime_text(
+            fetch_failed = False
+            retried_after_cf = False
+            while True:
+                try:
+                    metadata = search_jav(
+                        video.number,
+                        source=source,
+                        javbus_lang=javbus_lang,
+                        surface_access_errors=True,
+                    )
+                    break
+                except CfChallengeRequired:
+                    if retried_after_cf:
+                        yield _sse_event({
+                            "type": "error",
+                            "message": _runtime_text(
+                                "scanner",
+                                "tag_source_cf_rejected",
+                                locale,
+                                source=source_display_name(source),
+                            ),
+                        })
+                        return
+
+                    transport = get_cf_transport()
+                    origin = cf_handoff.CF_SITE_ORIGINS.get(source)
+                    if transport is None or origin is None:
+                        yield _sse_event({
+                            "type": "error",
+                            "message": _runtime_text(
+                                "scanner",
+                                "tag_source_cf_unavailable",
+                                locale,
+                                source=source_display_name(source),
+                            ),
+                        })
+                        return
+                    try:
+                        transport.begin_solve(origin, source)
+                    except Exception:
+                        logger.exception(
+                            "tag source CF begin_solve failed: source=%s",
+                            source,
+                        )
+                        yield _sse_event({
+                            "type": "error",
+                            "message": _runtime_text(
+                                "scanner",
+                                "tag_source_cf_unavailable",
+                                locale,
+                                source=source_display_name(source),
+                            ),
+                        })
+                        return
+
+                    retried_after_cf = True
+                    cf_status = _runtime_text(
                         "scanner",
-                        "tag_source_fetch_failed",
+                        "tag_source_cf_required",
                         locale,
-                        number=video.number,
-                        error=str(exc),
-                    ),
-                })
+                        source=source_display_name(source),
+                    )
+                    yield _sse_event({
+                        "type": "progress",
+                        "current": len(seen_group_progress),
+                        "total": len(logical_groups),
+                        "number": video.number,
+                        "status": cf_status,
+                        "success": summary["success"],
+                        "failed": summary["failed"],
+                        "skipped": summary["skipped"],
+                        "changed": summary["changed"],
+                    })
+                    yield _sse_event({
+                        "type": "log",
+                        "level": "info",
+                        "message": cf_status,
+                    })
+
+                    deadline = time.monotonic() + _TAG_SOURCE_CF_WAIT_SECONDS
+                    ready = False
+                    cf_error = ""
+                    while time.monotonic() < deadline:
+                        if cancel_event is not None and cancel_event.is_set():
+                            summary["cancelled"] = True
+                            break
+                        try:
+                            ready = bool(transport.is_ready(source))
+                        except CfTransportUnavailable:
+                            cf_error = "unavailable"
+                            break
+                        except Exception:
+                            logger.warning(
+                                "tag source CF readiness check failed: source=%s",
+                                source,
+                                exc_info=True,
+                            )
+                        if ready:
+                            break
+                        time.sleep(_TAG_SOURCE_CF_POLL_SECONDS)
+
+                    if summary["cancelled"]:
+                        break
+                    if not ready:
+                        key = (
+                            "tag_source_cf_unavailable"
+                            if cf_error == "unavailable"
+                            else "tag_source_cf_timeout"
+                        )
+                        yield _sse_event({
+                            "type": "error",
+                            "message": _runtime_text(
+                                "scanner",
+                                key,
+                                locale,
+                                source=source_display_name(source),
+                            ),
+                        })
+                        return
+
+                    cf_ready_message = _runtime_text(
+                        "scanner",
+                        "tag_source_cf_ready",
+                        locale,
+                        source=source_display_name(source),
+                    )
+                    yield _sse_event({
+                        "type": "log",
+                        "level": "info",
+                        "message": cf_ready_message,
+                    })
+                    continue
+                except CfTransportUnavailable:
+                    yield _sse_event({
+                        "type": "error",
+                        "message": _runtime_text(
+                            "scanner",
+                            "tag_source_cf_unavailable",
+                            locale,
+                            source=source_display_name(source),
+                        ),
+                    })
+                    return
+                except Exception as exc:
+                    summary["failed"] += 1
+                    summary["failed_items"].append({
+                        "path": video.path,
+                        "number": video.number,
+                        "error": str(exc),
+                    })
+                    logger.warning(
+                        "tag source update failed: source=%s number=%s error=%s",
+                        source,
+                        video.number,
+                        exc,
+                    )
+                    yield _sse_event({
+                        "type": "log",
+                        "level": "error",
+                        "message": _runtime_text(
+                            "scanner",
+                            "tag_source_fetch_failed",
+                            locale,
+                            number=video.number,
+                            error=str(exc),
+                        ),
+                    })
+                    fetch_failed = True
+                    break
+
+            if summary["cancelled"]:
+                break
+            if fetch_failed:
                 continue
 
             if not metadata:

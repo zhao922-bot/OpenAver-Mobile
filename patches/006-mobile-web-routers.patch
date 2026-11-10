@@ -892,7 +892,7 @@
  from datetime import datetime
  from pathlib import Path
  from typing import Any, Callable, Dict, Generator, List, Optional
-@@ -32,27 +33,66 @@
+@@ -32,27 +33,77 @@
  from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
  from starlette.background import BackgroundTask
  
@@ -947,7 +947,18 @@
 +    resolve_groups_bulk,
 +    resolve_logical_video_groups,
 +)
-+from core.scraper import get_javbus_lang, search_jav, smart_search
++from core.scraper import (
++    get_javbus_lang,
++    search_jav,
++    smart_search,
++    source_display_name,
++)
++from core import cf_handoff
++from core.cf_transport import (
++    CfChallengeRequired,
++    CfTransportUnavailable,
++    get_cf_transport,
++)
  from core.source_settings import is_uncensored_mode_effective
 +from core.scrapers.utils import check_subtitle, extract_number
 +from core.cloud_translate import TranslateError, build_error
@@ -963,13 +974,16 @@
  from core.platform_info import DSM_PERMISSION_HINT, is_synology
  from core.proxy_policy import proxy_kwargs
  from web.routers.notifications import emit_notification as _emit_notif
-@@ -65,11 +105,32 @@
+@@ -65,11 +116,35 @@
  # T3(40c): Jellyfin check TTL 快取（60 秒）
  _jellyfin_cache_result: dict | None = None
  _jellyfin_cache_time: float = 0
 +_rename_execute_lock = threading.Lock()
 +_rename_plan_cache: dict[str, tuple[float, dict]] = {}
 +_RENAME_PLAN_TTL_SECONDS = 30 * 60
++_TAG_SOURCE_MANUAL_ALLOWLIST = frozenset({'jable'})
++_TAG_SOURCE_CF_WAIT_SECONDS = 300.0
++_TAG_SOURCE_CF_POLL_SECONDS = 0.5
 +
 +
 +class RenameExecuteRequest(BaseModel):
@@ -996,7 +1010,7 @@
  
  
  def _collect_long_paths(
-@@ -97,21 +158,36 @@
+@@ -97,21 +172,36 @@
  # TASK-88c-T2: readonly 來源分流 + SSE thread/queue 橋接 + 四數摘要
  # ---------------------------------------------------------------------------
  
@@ -1045,7 +1059,7 @@
      return {"type": "log", "level": "warn" if o.status == "failed" else "info", "message": msg}
  
  
-@@ -142,7 +218,7 @@
+@@ -142,7 +232,7 @@
          summary["partial"] += 1
  
  
@@ -1054,7 +1068,7 @@
      """該來源小結（產生器）。
  
      no_output_path → 「請先設定輸出夾」提示（Acceptance #11）。
-@@ -153,25 +229,39 @@
+@@ -153,25 +243,39 @@
      if result.aborted_reason == "no_output_path":
          yield _sse_event({
              "type": "log", "level": "warn",
@@ -1100,7 +1114,7 @@
              })
  
  
-@@ -188,6 +278,7 @@
+@@ -188,6 +292,7 @@
      q: "queue.Queue" = queue.Queue()  # 無界：worker 永不阻塞於 put，client 斷線 daemon 自然退出
      _SENTINEL = object()
      box: dict = {}
@@ -1108,7 +1122,7 @@
  
      def _work():
          try:
-@@ -206,39 +297,58 @@
+@@ -206,39 +311,58 @@
  
      t = threading.Thread(target=_work, daemon=True)
      t.start()
@@ -1178,7 +1192,7 @@
      """根目錄不可存取時回傳警告；可存取時回傳 None。
  
      白名單：只有明確的「不存在」才說資料夾不存在，其餘 OSError 一律「無法存取」（NAS 斷線不誤導成打錯字）。
-@@ -246,29 +356,379 @@
+@@ -246,29 +370,379 @@
      try:
          os.stat(normalized_dir)
      except PermissionError:
@@ -1568,7 +1582,7 @@
          gallery_config = config.get('gallery', {})
  
          directories = get_gallery_source_paths(gallery_config)
-@@ -287,7 +747,12 @@
+@@ -287,7 +761,12 @@
          default_theme = config.get('general', {}).get('theme', 'light')
  
          if not directories:
@@ -1582,7 +1596,7 @@
              return
  
          # 53b-T3: 確認 directories 有值才 emit 掃描開始通知
-@@ -302,19 +767,49 @@
+@@ -302,19 +781,49 @@
          cache_path = output_path / output_filename.replace('.html', '_cache.json')
          db_path = get_db_path()
  
@@ -1636,7 +1650,7 @@
  
          # 初始化掃描器
          scanner = VideoScanner(path_mappings=path_mappings, nfo_title_format=config.get('scraper', {}).get('nfo_title_format', '[{num}]{title}'))
-@@ -323,6 +818,7 @@
+@@ -323,6 +832,7 @@
          total_inserted = 0
          total_updated = 0
          total_deleted = 0
@@ -1644,7 +1658,7 @@
          scan_error_count = 0
          session_added_paths = []  # 追蹤本次新增/變更的影片路徑
          long_paths: list[str] = []  # a5: Windows 長路徑收集（只在 win32 填充）
-@@ -369,161 +865,39 @@
+@@ -369,161 +879,39 @@
                  normalized_dir = uri_to_fs_path(directory)  # uri-no-reverse: native config path (DirectoryConfig.path), no DB-mapped namespace
              except ValueError:
                  logger.exception("路徑轉換失敗: %s", directory)
@@ -1832,7 +1846,7 @@
  
          # TASK-90b-T4 / PR#90b Codex P1: 尾段每個外顯副作用（HTML 檔、完成通知、
          # done event）之前各自 fresh 查一次 should_abort()，而非迴圈結束時單次
-@@ -550,9 +924,36 @@
+@@ -550,9 +938,36 @@
          all_db_videos = [v for v in repo.get_all()
                           if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
  
@@ -1870,7 +1884,7 @@
              info = VideoInfo(
                  path=v.path,
                  title=v.title,
-@@ -562,6 +963,7 @@
+@@ -562,6 +977,7 @@
                  maker=v.maker,
                  date=v.release_date,
                  genre=','.join(v.tags) if v.tags else '',
@@ -1878,7 +1892,7 @@
                  size=v.size_bytes,
                  mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
                  img=v.cover_path
-@@ -593,19 +995,57 @@
+@@ -593,19 +1009,57 @@
                      }
              if session_cache:
                  session_stats = check_cache_needs_update(session_cache)
@@ -1941,7 +1955,7 @@
  
          # TASK-90b-T4: abort 時跳過 orphan 清理（全庫 pass，非本次掃描範圍新增
          # 的成本，abort 時執行拿不到「這次掃描結果更完整」的好處，純屬多做一次
-@@ -615,7 +1055,16 @@
+@@ -615,7 +1069,16 @@
              try:
                  cleaned = _run_sample_images_cleanup_pass(repo, path_mappings)
                  if cleaned > 0:
@@ -1959,7 +1973,7 @@
              except Exception as e:
                  logger.warning("sample_images cleanup pass failed: %s: %s", type(e).__name__, e)
                  # 失敗不中斷 scan 流程
-@@ -627,7 +1076,9 @@
+@@ -627,7 +1090,9 @@
              # 產生 HTML
              yield _sse_event({
                  "type": "progress",
@@ -1970,7 +1984,7 @@
                  "current": total_dirs,
                  "total": total_dirs + 1
              })
-@@ -641,12 +1092,13 @@
+@@ -641,12 +1106,13 @@
                  sort=default_sort,
                  order=default_order,
                  items_per_page=items_per_page,
@@ -1986,7 +2000,7 @@
                  "current": total_dirs + 1,
                  "total": total_dirs + 1
              })
-@@ -704,7 +1156,7 @@
+@@ -704,7 +1170,7 @@
          if _wl_removed:
              _emit_notif(
                  "info", "notif.wishlist_auto_removed",
@@ -1995,7 +2009,7 @@
                  task_type="wishlist_reconcile",
              )
  
-@@ -723,26 +1175,69 @@
+@@ -723,26 +1189,69 @@
                      or _readonly_no_output > 0 or _readonly_unreachable > 0 or _readonly_partial > 0):
                  _err_parts = []
                  if scan_error_count > 0:
@@ -2073,7 +2087,7 @@
                      task_type="scanner_generate",
                  )
  
-@@ -754,6 +1249,7 @@
+@@ -754,6 +1263,7 @@
                  "video_count": len(all_videos),
                  "output_path": str(html_path),
                  "session_update": session_update,
@@ -2081,7 +2095,7 @@
                  "long_paths": long_paths,  # a5
                  "stats": {
                      "inserted": total_inserted,
-@@ -772,10 +1268,15 @@
+@@ -772,10 +1282,15 @@
          # 53b-T3: 掃描失敗通知（不洩漏 str(e) 到前端）
          _emit_notif(
              "error", "notif.scanner_failed",
@@ -2099,7 +2113,7 @@
  
  
  # TASK-90b-T2: 斷線偵測輪詢間隔（秒）。定案依據見 plan-90b.md CD-90b-5/6：
-@@ -786,6 +1287,66 @@
+@@ -786,6 +1301,66 @@
  # `request.is_disconnected()`，非搶 iterate_in_threadpool 的同一組 receive
  # channel（該輪詢與 StreamingResponse 內部行為互不干擾，spike 已驗證）。
  _DISCONNECT_POLL_INTERVAL_SEC = 0.5
@@ -2166,7 +2180,7 @@
  
  
  @router.get("/generate")
-@@ -803,8 +1364,13 @@
+@@ -803,8 +1378,13 @@
      # 反方向——若設定頁正在切換模式（purge 窗口中），回 False → 拒絕開始產生，避免背景
      # producer 讀到舊唯讀來源、把剛被 purge 的卡 _upsert 補回（切模式後殭屍卡）。
      if not try_mark_generate_active(cancel_event):
@@ -2181,7 +2195,7 @@
          return StreamingResponse(
              _refuse_switching(),
              media_type="text/event-stream",
-@@ -874,7 +1440,11 @@
+@@ -874,7 +1454,11 @@
              return {"success": True, "data": {"total": 0, "last_run": None, "last_added": None}}
  
          repo = VideoRepository(db_path)
@@ -2194,7 +2208,7 @@
  
          return {
              "success": True,
-@@ -887,7 +1457,10 @@
+@@ -887,7 +1471,10 @@
          }
      except Exception as e:
          logger.error("取得統計資訊失敗: %s", e)
@@ -2206,7 +2220,7 @@
  
  
  @router.delete("/cache")
-@@ -897,9 +1470,21 @@
+@@ -897,9 +1484,21 @@
          db_path = get_db_path()
  
          if not db_path.exists():
@@ -2229,7 +2243,7 @@
          deleted = repo.clear_all()
          # feature/71 T8: 清空整個縮圖快取目錄（CD-11 / spec 2.A.9）
          thumbnail_cache.clear_all()
-@@ -907,10 +1492,17 @@
+@@ -907,10 +1506,17 @@
          global _jellyfin_cache_result, _jellyfin_cache_time
          _jellyfin_cache_result = None
          _jellyfin_cache_time = 0
@@ -2249,7 +2263,7 @@
  
  
  def _build_nfo_update_cache(all_videos, config) -> tuple:
-@@ -959,6 +1551,728 @@
+@@ -959,6 +1565,884 @@
      return cache, skipped_readonly, path_mappings
  
  
@@ -2460,6 +2474,7 @@
 +    action: str | None = None,
 +    action_key: str | None = None,
 +    locale: str | None = None,
++    allow_manual_only: frozenset[str] = frozenset(),
 +) -> Optional[str]:
 +    """Return a user-facing error for sources that cannot run in a batch."""
 +    locale = _active_locale(config) if locale is None else locale
@@ -2474,7 +2489,10 @@
 +        )
 +    if not validate_source_id(source):
 +        return _runtime_text("scanner", "batch_unknown_source", locale)
-+    if source in {row.id for row in get_manual_only_sources()}:
++    if (
++        source in {row.id for row in get_manual_only_sources()}
++        and source not in allow_manual_only
++    ):
 +        return _runtime_text(
 +            "scanner", "batch_cloudflare_unsupported", locale, action=action
 +        )
@@ -2486,10 +2504,19 @@
 +        ),
 +        None,
 +    )
-+    if source_row and source_row.get("manual_only"):
++    if (
++        source_row
++        and source_row.get("manual_only")
++        and source not in allow_manual_only
++    ):
 +        return _runtime_text(
 +            "scanner", "batch_cloudflare_unsupported", locale, action=action
 +        )
++    # Manual-only sources stay out of automatic fan-out, but a source can be
++    # explicitly allowlisted for one batch workflow. Jable is exact-number only
++    # and its Cloudflare verification is handled by the interactive batch flow.
++    if source in allow_manual_only:
++        return None
 +    if not source_row or not source_row.get("enabled"):
 +        return _runtime_text("scanner", "batch_source_disabled", locale)
 +    return None
@@ -2506,6 +2533,7 @@
 +        config,
 +        action_key="batch_action_tag",
 +        locale=locale,
++        allow_manual_only=_TAG_SOURCE_MANUAL_ALLOWLIST,
 +    )
 +
 +
@@ -2660,37 +2688,179 @@
 +                    "eta_seconds": eta_seconds,
 +                })
 +
-+            try:
-+                metadata = search_jav(
-+                    video.number,
-+                    source=source,
-+                    javbus_lang=javbus_lang,
-+                    surface_access_errors=True,
-+                )
-+            except Exception as exc:
-+                summary["failed"] += 1
-+                summary["failed_items"].append({
-+                    "path": video.path,
-+                    "number": video.number,
-+                    "error": str(exc),
-+                })
-+                logger.warning(
-+                    "tag source update failed: source=%s number=%s error=%s",
-+                    source,
-+                    video.number,
-+                    exc,
-+                )
-+                yield _sse_event({
-+                    "type": "log",
-+                    "level": "error",
-+                    "message": _runtime_text(
++            fetch_failed = False
++            retried_after_cf = False
++            while True:
++                try:
++                    metadata = search_jav(
++                        video.number,
++                        source=source,
++                        javbus_lang=javbus_lang,
++                        surface_access_errors=True,
++                    )
++                    break
++                except CfChallengeRequired:
++                    if retried_after_cf:
++                        yield _sse_event({
++                            "type": "error",
++                            "message": _runtime_text(
++                                "scanner",
++                                "tag_source_cf_rejected",
++                                locale,
++                                source=source_display_name(source),
++                            ),
++                        })
++                        return
++
++                    transport = get_cf_transport()
++                    origin = cf_handoff.CF_SITE_ORIGINS.get(source)
++                    if transport is None or origin is None:
++                        yield _sse_event({
++                            "type": "error",
++                            "message": _runtime_text(
++                                "scanner",
++                                "tag_source_cf_unavailable",
++                                locale,
++                                source=source_display_name(source),
++                            ),
++                        })
++                        return
++                    try:
++                        transport.begin_solve(origin, source)
++                    except Exception:
++                        logger.exception(
++                            "tag source CF begin_solve failed: source=%s",
++                            source,
++                        )
++                        yield _sse_event({
++                            "type": "error",
++                            "message": _runtime_text(
++                                "scanner",
++                                "tag_source_cf_unavailable",
++                                locale,
++                                source=source_display_name(source),
++                            ),
++                        })
++                        return
++
++                    retried_after_cf = True
++                    cf_status = _runtime_text(
 +                        "scanner",
-+                        "tag_source_fetch_failed",
++                        "tag_source_cf_required",
 +                        locale,
-+                        number=video.number,
-+                        error=str(exc),
-+                    ),
-+                })
++                        source=source_display_name(source),
++                    )
++                    yield _sse_event({
++                        "type": "progress",
++                        "current": len(seen_group_progress),
++                        "total": len(logical_groups),
++                        "number": video.number,
++                        "status": cf_status,
++                        "success": summary["success"],
++                        "failed": summary["failed"],
++                        "skipped": summary["skipped"],
++                        "changed": summary["changed"],
++                    })
++                    yield _sse_event({
++                        "type": "log",
++                        "level": "info",
++                        "message": cf_status,
++                    })
++
++                    deadline = time.monotonic() + _TAG_SOURCE_CF_WAIT_SECONDS
++                    ready = False
++                    cf_error = ""
++                    while time.monotonic() < deadline:
++                        if cancel_event is not None and cancel_event.is_set():
++                            summary["cancelled"] = True
++                            break
++                        try:
++                            ready = bool(transport.is_ready(source))
++                        except CfTransportUnavailable:
++                            cf_error = "unavailable"
++                            break
++                        except Exception:
++                            logger.warning(
++                                "tag source CF readiness check failed: source=%s",
++                                source,
++                                exc_info=True,
++                            )
++                        if ready:
++                            break
++                        time.sleep(_TAG_SOURCE_CF_POLL_SECONDS)
++
++                    if summary["cancelled"]:
++                        break
++                    if not ready:
++                        key = (
++                            "tag_source_cf_unavailable"
++                            if cf_error == "unavailable"
++                            else "tag_source_cf_timeout"
++                        )
++                        yield _sse_event({
++                            "type": "error",
++                            "message": _runtime_text(
++                                "scanner",
++                                key,
++                                locale,
++                                source=source_display_name(source),
++                            ),
++                        })
++                        return
++
++                    cf_ready_message = _runtime_text(
++                        "scanner",
++                        "tag_source_cf_ready",
++                        locale,
++                        source=source_display_name(source),
++                    )
++                    yield _sse_event({
++                        "type": "log",
++                        "level": "info",
++                        "message": cf_ready_message,
++                    })
++                    continue
++                except CfTransportUnavailable:
++                    yield _sse_event({
++                        "type": "error",
++                        "message": _runtime_text(
++                            "scanner",
++                            "tag_source_cf_unavailable",
++                            locale,
++                            source=source_display_name(source),
++                        ),
++                    })
++                    return
++                except Exception as exc:
++                    summary["failed"] += 1
++                    summary["failed_items"].append({
++                        "path": video.path,
++                        "number": video.number,
++                        "error": str(exc),
++                    })
++                    logger.warning(
++                        "tag source update failed: source=%s number=%s error=%s",
++                        source,
++                        video.number,
++                        exc,
++                    )
++                    yield _sse_event({
++                        "type": "log",
++                        "level": "error",
++                        "message": _runtime_text(
++                            "scanner",
++                            "tag_source_fetch_failed",
++                            locale,
++                            number=video.number,
++                            error=str(exc),
++                        ),
++                    })
++                    fetch_failed = True
++                    break
++
++            if summary["cancelled"]:
++                break
++            if fetch_failed:
 +                continue
 +
 +            if not metadata:
@@ -2978,7 +3148,7 @@
  @router.get("/update-check")
  def check_update():
      """檢查需要更新的影片數量（從 SQLite 讀取）"""
-@@ -971,73 +2285,273 @@
+@@ -971,73 +2455,273 @@
          repo = VideoRepository(db_path)
          all_videos = repo.get_all()
  
@@ -3284,7 +3454,7 @@
          return {
              "success": True,
              "data": {
-@@ -1046,75 +2560,1616 @@
+@@ -1046,75 +2730,1616 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
@@ -4928,7 +5098,7 @@
      )
  
  
-@@ -1123,6 +4178,7 @@
+@@ -1123,6 +4348,7 @@
      """取得產生的 HTML 列表檔案（修改圖片路徑為 API 代理）"""
      try:
          config = load_config()
@@ -4936,7 +5106,7 @@
          gallery_config = config.get('gallery', {})
          output_dir = gallery_config.get('output_dir', '') or ''
          output_filename = gallery_config.get('output_filename', 'gallery_output.html')
-@@ -1131,7 +4187,10 @@
+@@ -1131,7 +4357,10 @@
  
          if not html_path.exists():
              return HTMLResponse(
@@ -4948,7 +5118,7 @@
                  status_code=404
              )
  
-@@ -1161,8 +4220,12 @@
+@@ -1161,8 +4390,12 @@
          return HTMLResponse(content=content)
      except Exception:
          logger.exception("view_list 讀取失敗")
@@ -4962,7 +5132,7 @@
              status_code=500
          )
  
-@@ -1177,12 +4240,25 @@
+@@ -1177,12 +4410,25 @@
              return {"success": True, "data": {"count": 0}}
  
          repo = VideoRepository(db_path)
@@ -4990,7 +5160,7 @@
  
  
  # === Jellyfin 圖片批次補齊 ===
-@@ -1191,30 +4267,43 @@
+@@ -1191,30 +4437,43 @@
      """檢查 DB 中有多少影片缺少 poster/fanart"""
      videos = repo.get_all()
      need_update = []
@@ -5052,7 +5222,7 @@
      try:
          # Codex PR#123 P2：gate 必須排在 get_db_path() 之前——get_db_path() 內部會
          # mkdir 建立 output/ 資料夾（core/database/connection.py:15-22），是有副作用
-@@ -1224,17 +4313,29 @@
+@@ -1224,17 +4483,29 @@
          # done + updated:0（off 時零寫入），且與 _check_jellyfin_needed() 的順序
          # 不對稱。config 只讀一次，下面 path_mappings 沿用同一個 config。
          config = load_config()
@@ -5084,7 +5254,7 @@
              return
  
          repo = VideoRepository(db_path)
-@@ -1246,13 +4347,31 @@
+@@ -1246,13 +4517,31 @@
          if total == 0:
              _jellyfin_cache_result = None
              _jellyfin_cache_time = 0
@@ -5118,7 +5288,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,45 +4380,129 @@
+@@ -1261,45 +4550,129 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -5265,7 +5435,7 @@
  
  
  def _check_jellyfin_needed() -> dict | None:
-@@ -1359,15 +4562,11 @@
+@@ -1359,15 +4732,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -5285,7 +5455,7 @@
      )
  
  
-@@ -1463,26 +4662,49 @@
+@@ -1463,26 +4832,49 @@
      ```
      """
      numbers = [n.strip() for n in body.numbers if isinstance(n, str) and n.strip()]
@@ -5340,7 +5510,7 @@
      gallery_config = config.get('gallery', {})
      output_dir = gallery_config.get('output_dir', '') or ''
      theme = config.get('general', {}).get('theme', 'light')
-@@ -1494,7 +4716,13 @@
+@@ -1494,7 +4886,13 @@
          db_results = repo.get_by_numbers(numbers)
      except Exception as e:
          logger.error('generate_from_ids: DB 查詢失敗: %s', e)
@@ -5355,7 +5525,7 @@
  
      all_videos: List[VideoInfo] = []
      missing: List[str] = []
-@@ -1577,7 +4805,13 @@
+@@ -1577,7 +4975,13 @@
          )
      except Exception as e:
          logger.error('generate_from_ids: HTML 產生失敗: %s', e)
@@ -5370,7 +5540,7 @@
  
      result = {
          "success": True,
-@@ -1621,6 +4855,11 @@
+@@ -1621,6 +5025,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:

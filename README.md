@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r54-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r55-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r54-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r55-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r54`（versionCode `17072`）
+- 版本：`0.17.18-r55`（versionCode `17073`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -251,6 +251,10 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   支持标题、封面、女优、分类标签和简介，并可在高级搜索中手动选择
 - r54：Jable 标签只从影片信息区读取，不会混入站点头部导航、推荐影片或广告标签；
   Jable 网页没有剧照图集，因此该来源返回空剧照，不把推荐封面和 Logo 误当剧照
+- r55：“批量更换标签来源”可直接选择 Jable；遇到 Cloudflare 验证时会打开验证窗口，
+  完成后自动继续并重试当前影片
+- r55：修复 Jable 不存在的番号返回 404 时被误报为验证窗口故障的问题；现在会正常
+  显示“所选来源没有结果”，不会中断整批任务
 
 ## 限制
 

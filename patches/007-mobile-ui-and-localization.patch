@@ -1922,7 +1922,7 @@
        "path_copied": "Copied: {path}",
        "browse_dir_fallback": "Your browser can’t read the path of dropped files, so the folder picker has been opened for you"
      },
-@@ -868,13 +991,84 @@
+@@ -868,13 +991,85 @@
        "clear_display_title": "Clear display (restored on reload)",
        "clear_all_title": "Clear all (including history)"
      },
@@ -1958,6 +1958,7 @@
        "nfo_update_title": "Fill incomplete NFO fields",
 +      "tag_source_label": "Batch tag source",
 +      "tag_source_hint": "Choose one source to replace ordinary tags and genres while preserving title, cover, plot, and user tags",
++      "tag_source_cf_hint": "The first Jable run opens Cloudflare verification and continues automatically when complete",
 +      "tag_source_auto": "Auto (source order)",
 +      "tag_source_update_btn": "Replace Tags",
 +      "tag_source_preview_btn": "Preview only",
@@ -2007,7 +2008,7 @@
        "jellyfin_prefix": "Jellyfin cover format missing:",
        "jellyfin_suffix": " videos",
        "jellyfin_update_title": "Generate Jellyfin poster + fanart",
-@@ -928,6 +1122,29 @@
+@@ -928,6 +1123,29 @@
        "missing_enrich_confirm_body_suffix": " minutes. Continue?",
        "missing_enrich_confirm_cancel": "Cancel",
        "missing_enrich_confirm_confirm": "Confirm",
@@ -2037,7 +2038,7 @@
        "log_interrupted": "⚠ Generation interrupted (left the page)",
        "status_preparing": "Preparing...",
        "status_done_count": "Done! {count} videos",
-@@ -1291,6 +1508,7 @@
+@@ -1291,6 +1509,7 @@
        "tag_nfo_write_blocked": "Tag saved, but there's no permission to write the NFO",
        "translate_tooltip": "Translate title",
        "translate_done": "Title translated",
@@ -2045,7 +2046,7 @@
        "translate_undo": "Undo",
        "translate_skipped": "Nothing in the title needs translating",
        "translate_undone": "Title restored",
-@@ -1410,10 +1628,90 @@
+@@ -1410,10 +1629,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -2136,7 +2137,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1845,6 +2143,12 @@
+@@ -1845,6 +2144,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -2149,7 +2150,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2164,11 @@
+@@ -1860,7 +2165,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -2162,7 +2163,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2186,15 @@
+@@ -1878,11 +2187,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -2180,7 +2181,7 @@
      },
      "costar": {
        "count_label": "{n} videos"
-@@ -1976,5 +2288,381 @@
+@@ -1976,5 +2289,386 @@
        "saved": "Mapping table saved",
        "save_failed": "Failed to save the mapping table"
      }
@@ -2246,6 +2247,11 @@
 +      "tag_updated_db_only": "{number}: updated {count} tags (database only; NFO not found)",
 +      "tag_updated_unchanged": "{number}: updated {count} tags (database values unchanged)",
 +      "tag_source_failed": "Failed to change the tag source",
++      "tag_source_cf_required": "Complete {source} verification in the window; the task will continue automatically",
++      "tag_source_cf_ready": "{source} verification is complete; continuing with tag lookup",
++      "tag_source_cf_timeout": "{source} verification timed out. Try again.",
++      "tag_source_cf_unavailable": "Could not open the {source} verification window. Reopen the app and try again.",
++      "tag_source_cf_rejected": "{source} still returned a verification page after verification. Try again.",
 +      "tag_source_no_result": "{number}: the selected source returned no results",
 +      "tag_source_no_tags": "{number}: the selected source has no tags; existing tags kept",
 +      "tag_source_changed": "{number}: tags changed; {added} added, {removed} removed",
@@ -2768,7 +2774,7 @@
        "path_copied": "コピーしました: {path}",
        "browse_dir_fallback": "ブラウザではドロップしたファイルのパスを直接読み取れないため、フォルダ選択画面を開きました"
      },
-@@ -868,13 +991,84 @@
+@@ -868,13 +991,85 @@
        "clear_display_title": "画面をクリア（リロード後に復元）",
        "clear_all_title": "すべてクリア（履歴含む）"
      },
@@ -2804,6 +2810,7 @@
        "nfo_update_title": "NFO項目を補完",
 +      "tag_source_label": "タグ取得元を一括変更",
 +      "tag_source_hint": "1つの取得元を選び、通常タグとジャンルだけを置換します。タイトル、カバー、あらすじ、ユーザータグは保持します",
++      "tag_source_cf_hint": "Jable の初回実行時は Cloudflare 認証が開き、完了後は自動的に続行します",
 +      "tag_source_auto": "自動（取得元の順序）",
 +      "tag_source_update_btn": "タグを変更",
 +      "tag_source_preview_btn": "プレビューのみ",
@@ -2853,7 +2860,7 @@
        "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
        "jellyfin_suffix": "本",
        "jellyfin_update_title": "Jellyfin poster + fanart を補完",
-@@ -928,6 +1122,29 @@
+@@ -928,6 +1123,29 @@
        "missing_enrich_confirm_body_suffix": " 分です。続行しますか？",
        "missing_enrich_confirm_cancel": "キャンセル",
        "missing_enrich_confirm_confirm": "補完を確認",
@@ -2883,7 +2890,7 @@
        "log_interrupted": "⚠ 生成が中断されました（ページを離れました）",
        "status_preparing": "準備中...",
        "status_done_count": "完了！{count} 本の動画",
-@@ -1291,6 +1508,7 @@
+@@ -1291,6 +1509,7 @@
        "tag_nfo_write_blocked": "タグは保存されましたが、NFO への書き込み権限がありません",
        "translate_tooltip": "タイトルを翻訳",
        "translate_done": "タイトルを翻訳しました",
@@ -2891,7 +2898,7 @@
        "translate_undo": "元に戻す",
        "translate_skipped": "翻訳が必要な内容はありません",
        "translate_undone": "タイトルを元に戻しました",
-@@ -1410,10 +1628,90 @@
+@@ -1410,10 +1629,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -2982,7 +2989,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1845,6 +2143,12 @@
+@@ -1845,6 +2144,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -2995,7 +3002,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2164,11 @@
+@@ -1860,7 +2165,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -3008,7 +3015,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2186,15 @@
+@@ -1878,11 +2187,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -3026,7 +3033,7 @@
      },
      "costar": {
        "count_label": "{n} 本"
-@@ -1976,5 +2288,381 @@
+@@ -1976,5 +2289,386 @@
        "saved": "パス対応表を保存しました",
        "save_failed": "パス対応表の保存に失敗しました"
      }
@@ -3092,6 +3099,11 @@
 +      "tag_updated_db_only": "{number}：{count} 個のタグを更新しました（データベースのみ、NFO なし）",
 +      "tag_updated_unchanged": "{number}：{count} 個のタグを更新しました（データベース値は変更なし）",
 +      "tag_source_failed": "タグソースの一括変更に失敗しました",
++      "tag_source_cf_required": "表示されたウィンドウで {source} の認証を完了してください。完了後は自動的に続行します",
++      "tag_source_cf_ready": "{source} の認証が完了しました。タグ取得を続行します",
++      "tag_source_cf_timeout": "{source} の認証がタイムアウトしました。もう一度お試しください",
++      "tag_source_cf_unavailable": "{source} の認証ウィンドウを開けませんでした。アプリを開き直してから再試行してください",
++      "tag_source_cf_rejected": "{source} の認証後も確認ページが返されました。もう一度お試しください",
 +      "tag_source_no_result": "{number}：選択したソースに結果がありません",
 +      "tag_source_no_tags": "{number}：選択したソースにタグがないため、元のタグを保持しました",
 +      "tag_source_changed": "{number}：タグが変更されました（追加 {added}、削除 {removed}）",
@@ -3614,7 +3626,7 @@
        "path_copied": "已复制: {path}",
        "browse_dir_fallback": "浏览器无法直接读取拖放文件的路径，已为您打开文件夹选择器"
      },
-@@ -868,13 +991,84 @@
+@@ -868,13 +991,85 @@
        "clear_display_title": "清除画面（刷新后恢复）",
        "clear_all_title": "清除全部（包含历史）"
      },
@@ -3650,6 +3662,7 @@
        "nfo_update_title": "补齐 NFO 字段",
 +      "tag_source_label": "批量更换标签来源",
 +      "tag_source_hint": "选择一个来源，仅替换普通标签与类型，保留标题、封面、简介和用户标签",
++      "tag_source_cf_hint": "Jable 首次使用会打开 Cloudflare 验证；完成后会自动继续",
 +      "tag_source_auto": "自动（按来源顺序）",
 +      "tag_source_update_btn": "更换标签",
 +      "tag_source_preview_btn": "仅预览",
@@ -3699,7 +3712,7 @@
        "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
-@@ -928,6 +1122,29 @@
+@@ -928,6 +1123,29 @@
        "missing_enrich_confirm_body_suffix": " 分钟，是否继续？",
        "missing_enrich_confirm_cancel": "取消",
        "missing_enrich_confirm_confirm": "确认补全",
@@ -3729,7 +3742,7 @@
        "log_interrupted": "⚠ 生成被中断（离开页面）",
        "status_preparing": "准备中...",
        "status_done_count": "完成！{count} 部视频",
-@@ -1044,7 +1261,7 @@
+@@ -1044,7 +1262,7 @@
        "generating": "生成正在进行中，离开将会中断操作！",
        "image_check": "图片检查进行中，离开将会中断！",
        "folder_dirty": "您有未保存的文件夹变更",
@@ -3738,7 +3751,7 @@
      }
    },
    "scraper": {
-@@ -1291,6 +1508,7 @@
+@@ -1291,6 +1509,7 @@
        "tag_nfo_write_blocked": "标签已保存，但没有权限写入 NFO",
        "translate_tooltip": "翻译标题",
        "translate_done": "已翻译标题",
@@ -3746,7 +3759,7 @@
        "translate_undo": "复原",
        "translate_skipped": "标题没有需要翻译的内容",
        "translate_undone": "已复原标题",
-@@ -1410,10 +1628,90 @@
+@@ -1410,10 +1629,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -3837,7 +3850,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1845,6 +2143,12 @@
+@@ -1845,6 +2144,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -3850,7 +3863,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2164,11 @@
+@@ -1860,7 +2165,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -3863,7 +3876,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2186,15 @@
+@@ -1878,11 +2187,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -3881,7 +3894,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1976,5 +2288,381 @@
+@@ -1976,5 +2289,386 @@
        "saved": "对照表已保存",
        "save_failed": "对照表保存失败"
      }
@@ -3947,6 +3960,11 @@
 +      "tag_updated_db_only": "{number}：已更新 {count} 个标签（仅更新数据库，NFO 不存在）",
 +      "tag_updated_unchanged": "{number}：已更新 {count} 个标签（数据库值未变化）",
 +      "tag_source_failed": "批量更换标签来源失败",
++      "tag_source_cf_required": "请在验证窗口完成 {source} 验证；完成后会自动继续",
++      "tag_source_cf_ready": "{source} 验证完成，正在继续获取标签",
++      "tag_source_cf_timeout": "{source} 验证超时，请重试",
++      "tag_source_cf_unavailable": "无法启动 {source} 验证窗口，请重新打开 App 后重试",
++      "tag_source_cf_rejected": "{source} 验证完成后仍返回验证页面，请重试",
 +      "tag_source_no_result": "{number}：所选来源没有结果",
 +      "tag_source_no_tags": "{number}：所选来源没有标签，保留原标签",
 +      "tag_source_changed": "{number}：标签有变化，新增 {added}，移除 {removed}",
@@ -4589,7 +4607,7 @@
        "cross_machine_settings_link": "設定路徑替換"
      },
      "terminal": {
-@@ -868,13 +991,84 @@
+@@ -868,13 +991,85 @@
        "clear_display_title": "清除畫面（重整後恢復）",
        "clear_all_title": "清除全部（包含歷史）"
      },
@@ -4625,6 +4643,7 @@
        "nfo_update_title": "補齊 NFO 欄位",
 +      "tag_source_label": "批次更換標籤來源",
 +      "tag_source_hint": "選擇一個來源，只替換一般標籤與類型，保留標題、封面、簡介和自訂標籤",
++      "tag_source_cf_hint": "Jable 首次使用會開啟 Cloudflare 驗證；完成後會自動繼續",
 +      "tag_source_auto": "自動（依來源順序）",
 +      "tag_source_update_btn": "更換標籤",
 +      "tag_source_preview_btn": "僅預覽",
@@ -4674,7 +4693,7 @@
        "jellyfin_prefix": "外部媒體管理器封面缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "補齊 poster + fanart",
-@@ -928,6 +1122,29 @@
+@@ -928,6 +1123,29 @@
        "missing_enrich_confirm_body_suffix": " 分鐘，是否繼續？",
        "missing_enrich_confirm_cancel": "取消",
        "missing_enrich_confirm_confirm": "確認補完",
@@ -4704,7 +4723,7 @@
        "log_interrupted": "⚠ 生成被中斷（離開頁面）",
        "status_preparing": "準備中...",
        "status_done_count": "完成！{count} 部影片",
-@@ -1030,7 +1247,7 @@
+@@ -1030,7 +1248,7 @@
        "confirm": "確認設為唯讀",
        "intro": "唯讀來源代表 OpenAver 不會改動這個資料夾裡的任何檔案（不搬移、不改名、不寫入 NFO 或封面），改為在輸出夾另外生成一份本地媒體庫（每片一資料夾：NFO＋封面）供 OpenAver 自己瀏覽與播放。適合塞滿影片的唯讀網盤、NAS 分享、SMB 掛載等不可寫入的位置。若你只是本機一般收藏、資料夾可正常寫入，就不需要勾這個。",
        "output_hint_offline": "目前為預設模式，產物會自動落在 App 內建的固定本地夾，不需要另外指定輸出夾。",
@@ -4713,7 +4732,7 @@
        "nas_hint": "想餵給 NAS 上的 Emby／Jellyfin／Kodi？預設模式只生成 OpenAver 自己瀏覽用的本地庫、不會產生 .strm 捷徑檔。若你要讓媒體伺服器掃這批片，請先到「設定」把模式切到 Emby·Jellyfin·Kodi 模式。"
      },
      "clear_cache_modal": {
-@@ -1044,7 +1261,7 @@
+@@ -1044,7 +1262,7 @@
        "generating": "生成正在進行中，離開將會中斷操作！",
        "image_check": "圖片檢查進行中，離開將會中斷！",
        "folder_dirty": "您有未儲存的資料夾變更",
@@ -4722,7 +4741,7 @@
      }
    },
    "scraper": {
-@@ -1123,7 +1340,7 @@
+@@ -1123,7 +1341,7 @@
        "fail": "重新刮削失敗，請稍後再試。",
        "jl_desktop_only": "僅限桌面應用程式（standalone）可用",
        "cf_window_restart": "這個來源的驗證視窗沒有啟動成功，請重新啟動 OpenAver 再試。若重啟仍不行，到「連線」頁看原因",
@@ -4731,7 +4750,7 @@
        "cf_window_preparing": "驗證視窗正在準備，請幾秒後再試",
        "jl_cf_solving": "Cloudflare 驗證中……通過後將自動繼續",
        "versions_found": "找到 {count} 部同番號作品",
-@@ -1291,6 +1508,7 @@
+@@ -1291,6 +1509,7 @@
        "tag_nfo_write_blocked": "標籤已存，但沒有權限寫入 NFO",
        "translate_tooltip": "翻譯標題",
        "translate_done": "已翻譯標題",
@@ -4739,7 +4758,7 @@
        "translate_undo": "復原",
        "translate_skipped": "標題沒有需要翻譯的內容",
        "translate_undone": "已復原標題",
-@@ -1302,7 +1520,7 @@
+@@ -1302,7 +1521,7 @@
        "mask_toggle": "封面裁切預覽",
        "mask_detect_failed": "焦點偵測失敗，請稍後再試",
        "mask_focal_too_slow_auto_disabled": "這張封面找臉花了超過 5 秒，已經先幫你關掉自動對焦。想調整位置直接拖就可以，隨時能到設定開回來。",
@@ -4748,7 +4767,7 @@
        "mask_focal_too_slow_hint": "找臉花了超過 5 秒。先用拖的會快一些——不想每次都等，可以到「設定 → 刮削行為 → 進階刮削設定」關掉自動對焦。",
        "mask_save_failed": "裁切設定儲存失敗，請稍後再試",
        "mask_cover_changed": "封面已變更，請重新開啟裁切工具再試一次",
-@@ -1410,12 +1628,92 @@
+@@ -1410,12 +1629,92 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -4842,7 +4861,7 @@
        "copy_curl": "複製指令",
        "page_title": "使用說明",
        "subtitle": "JAV 影片元數據管理工具",
-@@ -1426,8 +1724,8 @@
+@@ -1426,8 +1725,8 @@
        "update_available_prefix": "新版本",
        "update_available_suffix": "可用",
        "up_to_date": "已是最新版本",
@@ -4853,7 +4872,7 @@
        "client_update_available_suffix": "可用",
        "auto_check_toggle": "啟動時檢查更新",
        "auto_check_save_failed": "設定儲存失敗，請稍後再試",
-@@ -1587,9 +1885,9 @@
+@@ -1587,9 +1886,9 @@
        "jellyfin_canonical": "選了媒體管理器模式後<strong>不再另外產生同名封面</strong>——那張圖會被 Jellyfin／Emby 優先讀取，造成封面牆出現橫式圖。既有的片維持原本的封面位置（以免清掉你已調整過的對焦），要修正請自行刪掉該片的同名封面後重新產生。",
        "jellyfin_showcase": "掃描完成後可至 <code>/showcase</code> 頁面瀏覽生成結果",
        "h6_strm_deploy": "唯讀來源 + 讓 Emby／Jellyfin／Kodi 掃到片（跨機器部署）",
@@ -4866,7 +4885,7 @@
        "strm_deploy_step4": "之後改了映射規則，既有的 <code>.strm</code> 會自動一次改寫，不用重建整個媒體庫。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎麼在 Emby/Jellyfin 合併？",
        "multiversion_intro": "多版本合併是 Emby 與 Jellyfin 共同支援的原生功能（同一套「資料夾名 - 標籤」規則），不是哪一家獨有。把同一片各版本放進以番號命名的資料夾，檔名都以資料夾名開頭加「 - 標籤」：",
-@@ -1736,26 +2034,26 @@
+@@ -1736,26 +2035,26 @@
      "server_mode": {
        "title": "伺服器模式 — 讓手機/平板連進來",
        "h6_what": "這是什麼",
@@ -4900,7 +4919,7 @@
        "h6_recover": "不小心按了「取消 / 拒絕」怎麼救回",
        "recover_win_intro": "Windows 救回步驟：",
        "recover_win_1": "按 <code>Win + R</code>，輸入 <code>wf.msc</code> 後 Enter，開啟「Windows Defender 防火牆 進階安全性」。",
-@@ -1800,9 +2098,9 @@
+@@ -1800,9 +2099,9 @@
      "update_modal": {
        "trigger_btn": "更新",
        "title": "即將開啟安裝視窗",
@@ -4913,7 +4932,7 @@
        "case_a_body": "安裝程式開啟後，請依畫面提示先關閉 OpenAver，再繼續更新。",
        "case_b_body": "您目前不是安裝在預設位置。\n安裝程式會先把新版本安裝到預設目錄，安裝期間不需要先關閉目前的 OpenAver。\n\n安裝完成後，請依序操作：\n1. 關閉 OpenAver\n2. 刪除舊安裝目錄中的 python 資料夾\n3. 將新版本的所有檔案複製覆蓋回原本的安裝位置\n\nOpenAver 不需要重新安裝或重新設定，直接覆蓋檔案即可使用。",
        "cancel_btn": "取消",
-@@ -1850,6 +2148,12 @@
+@@ -1850,6 +2149,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -4926,7 +4945,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1861,11 +2165,15 @@
+@@ -1861,11 +2166,15 @@
        "series": "系列",
        "deep_dive": "深入：女優與片商",
        "gantt": "主要片商年表",
@@ -4944,7 +4963,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2191,15 @@
+@@ -1883,11 +2192,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -4962,7 +4981,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1896,7 +2208,7 @@
+@@ -1896,7 +2209,7 @@
    },
    "connect": {
      "nobridge": "請在桌面版開啟",
@@ -4971,7 +4990,7 @@
      "status_connected": "已連線 {host}",
      "status_down": "連不到 {host}",
      "version_line": "版本 {version}（{kind}）",
-@@ -1906,63 +2218,63 @@
+@@ -1906,63 +2219,63 @@
      "kind_windows": "Windows 桌面版",
      "kind_mac": "Mac 桌面版",
      "last_ok": "上次成功連線：{time}",
@@ -5054,7 +5073,7 @@
        "slow": "這個位置回應太慢或連不到，請確認路徑後再測一次",
        "no_sample": "這個來源裡沒有可測試的影片",
        "loading": "正在讀取伺服器的掃描來源…",
-@@ -1976,5 +2288,381 @@
+@@ -1976,5 +2289,386 @@
        "saved": "對照表已儲存",
        "save_failed": "對照表儲存失敗"
      }
@@ -5120,6 +5139,11 @@
 +      "tag_updated_db_only": "{number}：已更新 {count} 個標籤（僅更新資料庫，NFO 不存在）",
 +      "tag_updated_unchanged": "{number}：已更新 {count} 個標籤（資料庫值未變化）",
 +      "tag_source_failed": "批次更換標籤來源失敗",
++      "tag_source_cf_required": "請在驗證視窗完成 {source} 驗證；完成後會自動繼續",
++      "tag_source_cf_ready": "{source} 驗證完成，正在繼續取得標籤",
++      "tag_source_cf_timeout": "{source} 驗證逾時，請重試",
++      "tag_source_cf_unavailable": "無法啟動 {source} 驗證視窗，請重新開啟 App 後重試",
++      "tag_source_cf_rejected": "{source} 驗證完成後仍回傳驗證頁面，請重試",
 +      "tag_source_no_result": "{number}：所選來源沒有結果",
 +      "tag_source_no_tags": "{number}：所選來源沒有標籤，保留原標籤",
 +      "tag_source_changed": "{number}：標籤有變化，新增 {added}，移除 {removed}",
@@ -13341,23 +13365,35 @@
          },
  
          get isBusy() {
-@@ -119,6 +271,68 @@
+@@ -119,6 +271,88 @@
  
          get doneActionsVisible() {
              return this.state === 'done' && this.outputPath !== '';
 +        },
 +
++        get renameSourceOptions() {
++            return this._batchSourceOptions(false);
++        },
++
 +        get tagSourceOptions() {
++            return this._batchSourceOptions(true);
++        },
++
++        _batchSourceOptions(includeJable) {
 +            const options = [{
 +                id: 'auto',
 +                display_name: window.t('scanner.stats.tag_source_auto'),
++                requires_cf: false,
 +            }];
 +            const seen = new Set(['auto']);
 +            const rows = (this.config.sources || [])
-+                .filter((source) => source
-+                    && source.enabled
-+                    && !source.manual_only
-+                    && !String(source.id || '').startsWith('custom:'))
++                .filter((source) => {
++                    if (!source || String(source.id || '').startsWith('custom:')) {
++                        return false;
++                    }
++                    const jableBatchTag = includeJable && source.id === 'jable';
++                    return jableBatchTag || (source.enabled && !source.manual_only);
++                })
 +                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 +            for (const source of rows) {
 +                if (!source.id || seen.has(source.id)) continue;
@@ -13367,6 +13403,7 @@
 +                    display_name: source.type === 'metatube'
 +                        ? (source.display_name_raw || source.id)
 +                        : (source.display_name_key || source.id),
++                    requires_cf: source.id === 'jable',
 +                });
 +            }
 +            return options;
@@ -13377,6 +13414,13 @@
 +                (source) => source.id === this.tagSourceUpdateSource
 +            );
 +            return selected ? selected.display_name : this.tagSourceUpdateSource;
++        },
++
++        get selectedTagSourceRequiresCf() {
++            const selected = this.tagSourceOptions.find(
++                (source) => source.id === this.tagSourceUpdateSource
++            );
++            return !!selected?.requires_cf;
 +        },
 +
 +        get tagSourceModalSourceLabel() {
@@ -13410,7 +13454,7 @@
          },
  
          get generateButtonText() {
-@@ -212,13 +426,18 @@
+@@ -212,13 +446,18 @@
                      },
                      onBeforeUnload: () => {
                          const guard = this.shouldWarnBeforeLeave();
@@ -13430,7 +13474,7 @@
                          // T2(40c): abort jellyfin check fetch
                          if (this._jellyfinCheckController) {
                              this._jellyfinCheckController.abort();
-@@ -233,6 +452,10 @@
+@@ -233,6 +472,10 @@
                              this._enrichAbortController.abort();
                              this._enrichAbortController = null;
                          }
@@ -13441,7 +13485,7 @@
                          // TASK-94 Codex P1：離頁時清最後一片 flush dwell timer，避免 timer 事後
                          // 觸發 finalize（checkMissing fetch / state 變更）clobber 已離頁狀態。
                          if (this._flushTimer) {
-@@ -246,6 +469,7 @@
+@@ -246,6 +489,7 @@
              // 初始載入
              await this.loadConfig();
              this.loadStats();
@@ -13449,21 +13493,22 @@
  
              // T7b: 恢復日誌（logOutput 為 scanner.html 靜態 x-ref 元素，
              // init 時早已 mount，直接同步還原、無需等 $nextTick）
-@@ -305,6 +529,13 @@
+@@ -305,6 +549,14 @@
                  if (result.success) {
                      this.config = result.data;
                      this.directories = this.config.gallery?.directories || [];
-+                    const availableSources = this.tagSourceOptions;
-+                    if (!availableSources.some((source) => source.id === this.tagSourceUpdateSource)) {
-+                        this.tagSourceUpdateSource = availableSources[0]?.id || 'auto';
++                    const tagSources = this.tagSourceOptions;
++                    if (!tagSources.some((source) => source.id === this.tagSourceUpdateSource)) {
++                        this.tagSourceUpdateSource = tagSources[0]?.id || 'auto';
 +                    }
-+                    if (!availableSources.some((source) => source.id === this.renameSource)) {
-+                        this.renameSource = availableSources[0]?.id || 'auto';
++                    const renameSources = this.renameSourceOptions;
++                    if (!renameSources.some((source) => source.id === this.renameSource)) {
++                        this.renameSource = renameSources[0]?.id || 'auto';
 +                    }
                      // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                      this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
  
-@@ -358,7 +589,8 @@
+@@ -358,7 +610,8 @@
  
                          if (stats.last_run) {
                              const lastRun = new Date(stats.last_run);
@@ -13473,7 +13518,7 @@
                                  month: 'numeric',
                                  day: 'numeric',
                                  hour: '2-digit',
-@@ -377,6 +609,25 @@
+@@ -377,6 +630,25 @@
              }
          },
  
@@ -13499,7 +13544,7 @@
          async clearCache() {
              this.clearCacheLoading = true;
              try {
-@@ -387,6 +638,10 @@
+@@ -387,6 +659,10 @@
                      this.statTotal = 0;
                      this.statsVisible = false;
                      this.nfoUpdateVisible = false;
@@ -13510,7 +13555,7 @@
                      this.jellyfinImageVisible = false;
                      this.jellyfinCheckState = 'idle';
                      this.clearCacheModalOpen = false;
-@@ -636,6 +891,9 @@
+@@ -636,6 +912,9 @@
          addLog(level, message) {
              // T7d: 加入結構化陣列
              this.logEntries.push({ level, message, timestamp: Date.now() });
@@ -13520,7 +13565,7 @@
  
              const cls = level === 'error' ? 'log-error' :
                          level === 'warn' ? 'log-warn' : 'log-info';
-@@ -662,13 +920,30 @@
+@@ -662,13 +941,30 @@
  
              // 儲存到 localStorage
              localStorage.setItem('avlist_logs', this.logHtml);
@@ -13551,7 +13596,7 @@
              const wasGenerating = localStorage.getItem('avlist_generating') === 'true';
  
              if (savedLogs) {
-@@ -709,14 +984,27 @@
+@@ -709,14 +1005,27 @@
  
          clearLogs() {
              localStorage.removeItem('avlist_logs');
@@ -13579,7 +13624,7 @@
          clearLogsDisplay() {
              this.logHtml = '';
              this.logEntries = [];
-@@ -758,7 +1046,11 @@
+@@ -758,7 +1067,11 @@
          },
  
          confirmClearAll() {
@@ -13592,7 +13637,7 @@
              if (!hasLogs) {
                  this.showToast(window.t('scanner.toast.no_logs'), 'info');
                  return;
-@@ -768,6 +1060,154 @@
+@@ -768,6 +1081,154 @@
              if (confirm(window.t('scanner.toast.confirm_clear_logs'))) {
                  this.clearLogs();
                  this.showToast(window.t('scanner.toast.logs_cleared'), 'success');
@@ -13747,7 +13792,7 @@
              }
          },
  
-@@ -792,9 +1232,7 @@
+@@ -792,9 +1253,7 @@
  
              // 重置狀態
              this.state = 'generating';
@@ -13758,7 +13803,7 @@
              this.outputPath = '';
              this.nfoUpdateVisible = false;
              this.clearLogs();
-@@ -812,19 +1250,24 @@
+@@ -812,19 +1271,24 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -13786,7 +13831,7 @@
                          localStorage.removeItem('avlist_state');  // 清除 viewer 狀態
  
                          // 處理 NFO 更新提示
-@@ -868,6 +1311,15 @@
+@@ -868,6 +1332,15 @@
                              this.showToast(window.t('scanner.toast.generate_success', { count: data.video_count }), 'success');
                          }
  
@@ -13802,7 +13847,7 @@
                          // a5: Windows 長路徑警告
                          if (data.long_paths && data.long_paths.length > 0) {
                              this.showToast(
-@@ -890,24 +1342,24 @@
+@@ -890,24 +1363,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -13831,7 +13876,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] generate error:', e);
                  this.showToast(window.t('scanner.toast.generate_error'), 'error', 4000);
-@@ -915,26 +1367,63 @@
+@@ -915,26 +1388,63 @@
          },
  
          // ===== T7b: NFO Update Flow =====
@@ -13901,7 +13946,7 @@
  
                  this.eventSource.onmessage = (event) => {
                      const data = JSON.parse(event.data);
-@@ -943,55 +1432,288 @@
+@@ -943,55 +1453,288 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -14202,7 +14247,7 @@
          // ===== T6d: Jellyfin Image Update Flow =====
          async runJellyfinImageUpdate() {
              if (this.isGenerating) return;
-@@ -1002,9 +1724,7 @@
+@@ -1002,9 +1745,7 @@
              }
  
              this.state = 'jellyfinUpdating';
@@ -14213,7 +14258,7 @@
              this.clearLogs();
  
              localStorage.setItem('avlist_generating', 'true');
-@@ -1019,14 +1739,13 @@
+@@ -1019,14 +1760,13 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -14230,7 +14275,7 @@
                          // TASK-111 P2-b 後續（codex delta review）：done 不再必然代表「全數完成」——
                          // 批次跑到一半若把 external_manager 切成 off，後端會在下一部片 break 並送
                          // done(updated=已完成筆數)。這裡若無條件補滿 progressTotal，UI 會顯示 3/3
-@@ -1035,9 +1754,14 @@
+@@ -1035,9 +1775,14 @@
                          this.progressCurrent = (typeof data.updated === 'number')
                              ? data.updated
                              : this.progressTotal;
@@ -14246,7 +14291,7 @@
  
                          // T3(40c) Codex fix: update 完成後重設 jellyfin check 狀態，讓觸發列重新出現
                          this.jellyfinImageVisible = false;
-@@ -1045,7 +1769,13 @@
+@@ -1045,7 +1790,13 @@
                          this.jellyfinItems = [];
                          this.jellyfinCheckState = 'idle';
  
@@ -14261,7 +14306,7 @@
                          if (data.message) {
                              this.addLog('info', data.message);
                          }
-@@ -1053,24 +1783,24 @@
+@@ -1053,24 +1804,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -14290,7 +14335,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] runJellyfinImageUpdate error:', e);
                  this.showToast(window.t('scanner.toast.jellyfin_update_error'), 'error', 4000);
-@@ -1078,6 +1808,21 @@
+@@ -1078,6 +1829,21 @@
          },
  
          // ===== T7b: Utility =====
@@ -14312,7 +14357,7 @@
          copyOutputPath() {
              if (!this.outputPath) return;
  
-@@ -1097,5 +1842,6 @@
+@@ -1097,5 +1863,6 @@
                  }
              });
          },
@@ -18184,7 +18229,7 @@
              <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
                  <i class="bi bi-exclamation-circle"></i>
                  {{ t('scanner.stats.nfo_prefix') }}
-@@ -238,14 +396,76 @@
+@@ -238,14 +396,78 @@
                  {{ t('scanner.stats.nfo_suffix') }}
                  {{ number_drilldown_panel() }}
              </span>
@@ -18209,7 +18254,7 @@
 +                        x-model="renameSource"
 +                        :disabled="isBusy"
 +                        :aria-label="window.t('scanner.rename.source_select_label')">
-+                    <template x-for="source in tagSourceOptions" :key="source.id">
++                    <template x-for="source in renameSourceOptions" :key="source.id">
 +                        <option :value="source.id" x-text="source.display_name"></option>
 +                    </template>
 +                </select>
@@ -18231,7 +18276,9 @@
 +                <span class="maintenance-icon"><i class="bi bi-tags"></i></span>
 +                <span class="maintenance-text">
 +                    <strong>{{ t('scanner.stats.tag_source_label') }}</strong>
-+                    <small>{{ t('scanner.stats.tag_source_hint') }}</small>
++                    <small x-show="!selectedTagSourceRequiresCf">{{ t('scanner.stats.tag_source_hint') }}</small>
++                    <small x-show="selectedTagSourceRequiresCf" x-cloak
++                           x-text="window.t('scanner.stats.tag_source_cf_hint')"></small>
 +                </span>
 +            </div>
 +            <div class="maintenance-controls">
@@ -18263,7 +18310,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -294,8 +514,47 @@
+@@ -294,8 +516,47 @@
              </button>
          </div>
  
@@ -18312,7 +18359,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-arrow-repeat"></i>
                  <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-@@ -313,7 +572,7 @@
+@@ -313,7 +574,7 @@
  
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
          <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
@@ -18321,7 +18368,7 @@
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +598,7 @@
+@@ -339,7 +600,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -18330,7 +18377,7 @@
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +633,8 @@
+@@ -374,6 +635,8 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
@@ -18339,7 +18386,7 @@
          </div>
      </div>
  
-@@ -520,6 +781,7 @@
+@@ -520,6 +783,7 @@
              <div class="title">
                  <i class="bi bi-tags"></i> <span>{{ t('scanner.tag_alias.section_title') }}</span>
              </div>
@@ -18347,7 +18394,7 @@
              <!-- (?) AI hint icon + popover — @click.stop 避免觸發 collapse -->
              <div class="tag-alias-ai-hint-wrap" @click.stop x-data="helpPopover">
                  <button type="button"
-@@ -540,6 +802,7 @@
+@@ -540,6 +804,7 @@
                         x-text="window.t('scanner.tag_alias.ai_hint.tooltip')"></p>
                  </div>
              </div>
@@ -18355,7 +18402,7 @@
              <span class="btn-collapse" aria-hidden="true">
                  <i class="bi" :class="tagAliasCardCollapsed ? 'bi-chevron-down' : 'bi-chevron-up'"></i>
              </span>
-@@ -782,6 +1045,212 @@
+@@ -782,6 +1047,212 @@
          </div>
      </dialog>
  
@@ -18568,7 +18615,7 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -805,26 +1274,150 @@
+@@ -805,26 +1276,150 @@
          </div>
      </dialog>
  

@@ -416,7 +416,7 @@
                         x-model="renameSource"
                         :disabled="isBusy"
                         :aria-label="window.t('scanner.rename.source_select_label')">
-                    <template x-for="source in tagSourceOptions" :key="source.id">
+                    <template x-for="source in renameSourceOptions" :key="source.id">
                         <option :value="source.id" x-text="source.display_name"></option>
                     </template>
                 </select>
@@ -438,7 +438,9 @@
                 <span class="maintenance-icon"><i class="bi bi-tags"></i></span>
                 <span class="maintenance-text">
                     <strong>{{ t('scanner.stats.tag_source_label') }}</strong>
-                    <small>{{ t('scanner.stats.tag_source_hint') }}</small>
+                    <small x-show="!selectedTagSourceRequiresCf">{{ t('scanner.stats.tag_source_hint') }}</small>
+                    <small x-show="selectedTagSourceRequiresCf" x-cloak
+                           x-text="window.t('scanner.stats.tag_source_cf_hint')"></small>
                 </span>
             </div>
             <div class="maintenance-controls">

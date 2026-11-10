@@ -274,6 +274,17 @@ def test_cloudflare_webviews_are_created_lazily():
     )
 
 
+def test_cloudflare_transport_passes_http_404_pages_to_scrapers():
+    transport = (
+        ROOT
+        / "app/src/main/java/dev/openaver/mobile/AndroidCfTransport.java"
+    ).read_text(encoding="utf-8")
+
+    assert "if (status >= 500)" in transport
+    assert "if (status >= 400)" not in transport
+    assert "Jable returns 404" in transport
+
+
 def test_webview_renderer_death_is_handled_without_killing_the_app():
     activity = (
         ROOT

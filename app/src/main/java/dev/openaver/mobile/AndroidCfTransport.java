@@ -325,7 +325,9 @@ public final class AndroidCfTransport {
         if (status == 0) {
             throw new TransportException("WebView fetch returned status 0");
         }
-        if (status >= 400) {
+        // 4xx responses are still source content. Scrapers use them to detect
+        // missing titles (for example, Jable returns 404 for an unknown number).
+        if (status >= 500) {
             throw new TransportException("WebView fetch returned HTTP " + status);
         }
         return html;
