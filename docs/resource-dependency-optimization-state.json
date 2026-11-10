@@ -4,7 +4,7 @@
   "plan": "docs/resource-dependency-optimization-plan.md",
   "baseline": "v0.17.18-android-r55",
   "createdAt": "2026-11-10T17:46:37.5064329+08:00",
-  "updatedAt": "2026-11-11T00:08:26.2433938+08:00",
+  "updatedAt": "2026-11-11T00:17:33.3946509+08:00",
   "phases": [
     {
       "id": "A0",
@@ -156,8 +156,8 @@
       "title": "发布条件确认",
       "status": "done",
       "startedAt": "2026-11-10T23:51:36.4507508+08:00",
-      "completedAt": "2026-11-11T00:08:26.2253024+08:00",
-      "note": "维护者已确认以 0.17.18-r56（versionCode 17074）发布；D4 技术审计完成，开始提交并触发 GitHub Release。"
+      "completedAt": "2026-11-11T00:17:33.3920251+08:00",
+      "note": "r56 已发布：GitHub Actions 42851967230 成功；Release v0.17.18-android-r56；签名 APK 23,284,612 bytes，versionCode 17074，arm64-v8a，v3 签名；SHA-256 7456841B1C5F312CC4E03837792C382F62C61F16D57BDD5AAE93404E16CF7434。"
     }
   ],
   "metrics": [
@@ -166,7 +166,7 @@
       "label": "APK 大小",
       "unit": "bytes",
       "before": 30136752.0,
-      "after": 23278068.0,
+      "after": 23284612.0,
       "target": null
     },
     {
@@ -994,6 +994,24 @@
       "action": "complete",
       "phase": "D4",
       "note": "维护者已确认以 0.17.18-r56（versionCode 17074）发布；D4 技术审计完成，开始提交并触发 GitHub Release。",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-11T00:17:33.2633773+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "apkBytes",
+      "stage": "after",
+      "value": "23284612"
+    },
+    {
+      "timestamp": "2026-11-11T00:17:33.3942762+08:00",
+      "action": "complete",
+      "phase": "D4",
+      "note": "r56 已发布：GitHub Actions 42851967230 成功；Release v0.17.18-android-r56；签名 APK 23,284,612 bytes，versionCode 17074，arm64-v8a，v3 签名；SHA-256 7456841B1C5F312CC4E03837792C382F62C61F16D57BDD5AAE93404E16CF7434。",
       "metric": "",
       "stage": "",
       "value": ""

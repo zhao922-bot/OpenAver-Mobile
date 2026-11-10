@@ -261,7 +261,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r56：将五个 `lxml` 解析入口迁移到 BeautifulSoup `html.parser`，移除
   `lxml`/libxml2/libxslt 运行时依赖；Release 包仅压缩自研 JS/CSS，不修改
   `vendor` 源码
-- r56：最终 arm64 Release 约 `22.20 MiB`，较 r55 减少约 `6.54 MiB`；扫描、
+- r56：最终 arm64 Release 约 `22.21 MiB`，较 r55 减少约 `6.53 MiB`；扫描、
   浏览、搜索、Insights、设置、四语言、播放、翻译、NFO、剧照、数据库导入导出、
   后台任务和真实设备 SD 卡路径均已回归验证
 

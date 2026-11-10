@@ -434,6 +434,11 @@ app\build\python\env\cleanup\Scripts\python.exe tools\verify_python_sync.py `
 - API 36 五页巡检未捕获 JavaScript 异常、HTTP 4xx/5xx 或控制台错误；可见区域没有破图，Insights 图表 canvas 正常生成。
 - 残余风险：5000 部片库滚动仍为 `37 帧/5.1s`、`p95 216.7ms`，不能据此宣称滚动性能已优化；本计划只记录基线，未把滚动优化纳入本次范围。
 - 维护者已确认发布 `0.17.18-r56`（versionCode `17074`），发布动作由 GitHub Actions 完成。
+- 发布结果：GitHub Actions run `42851967230` 成功，Release
+  `v0.17.18-android-r56` 已上传签名 APK；版本 `0.17.18-r56` / versionCode
+  `17074`，仅 `arm64-v8a`，v3 签名验证通过。
+- 发布包：`openaver-v0.17.18-android-r56-arm64-v8a.apk`，`23,284,612 bytes`，
+  SHA-256 `7456841B1C5F312CC4E03837792C382F62C61F16D57BDD5AAE93404E16CF7434`。
 
 ## 8. 推荐提交拆分
 
@@ -472,7 +477,7 @@ app\build\python\env\cleanup\Scripts\python.exe tools\verify_python_sync.py `
 
 | 检查项 | 修改前 | 修改后 | 结论 |
 | --- | ---: | ---: | --- |
-| APK bytes | 30,136,752 | 23,278,068 | 减少 6,858,684 bytes（22.76%） |
+| APK bytes | 30,136,752 | 23,284,612 | 签名发布包减少 6,852,140 bytes（22.74%） |
 | `assets` compressed | 25,161,857 | 18,311,143 | 减少 6,850,714 bytes |
 | `lib` compressed | 4,764,779 | 4,764,783 | 基本不变 |
 | 静态图片总量 | 3,606,239 | 0 | 演示图片已移除 |
