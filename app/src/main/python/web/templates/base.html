@@ -7,10 +7,10 @@
       :data-theme="theme"
       :style="'font-size:' + {xs:'13px',sm:'14px',md:'16px',lg:'18px',xl:'20px'}[fontSize]">
 
-{% set uses_gsap = page in ['showcase', 'search', 'scanner', 'insights', 'motion-lab', 'design-system'] %}
-{% set uses_motion_plugins = page in ['showcase', 'search', 'motion-lab', 'design-system'] %}
-{% set uses_ghost_fly = page in ['showcase', 'search', 'scanner', 'motion-lab', 'design-system'] %}
-{% set uses_burst_picker = page in ['showcase', 'motion-lab', 'design-system'] %}
+{% set uses_gsap = page in ['showcase', 'search', 'scanner', 'insights'] %}
+{% set uses_motion_plugins = page in ['showcase', 'search'] %}
+{% set uses_ghost_fly = page in ['showcase', 'search', 'scanner'] %}
+{% set uses_burst_picker = page in ['showcase'] %}
 
 <head>
     <meta charset="UTF-8">
@@ -143,7 +143,7 @@
     <link href="/static/css/components/browse-dir-modal.css" rel="stylesheet">
     <!-- 從片庫加入女優面板（117-T3；同為 modal 元件，緊接 rescrape-modal） -->
     <link href="/static/css/components/actress-add-panel.css" rel="stylesheet">
-    <!-- Cover badge pill（121c-T4；封面／燈箱／設定頁／design-system 共用本體） -->
+    <!-- Cover badge pill（121c-T4；封面／燈箱／設定頁共用本體） -->
     <link href="/static/css/components/cover-badge.css" rel="stylesheet">
 
     <style>
@@ -634,7 +634,7 @@
 }"
      x-init="$watch('sidebarCollapsed', configSync('sidebar_collapsed'))"
      :class="{ 'sidebar-collapsed': sidebarCollapsed }"
-     class="{% if page in ['design-system', 'showcase'] %}ds-page{% endif %} fluent-canvas page-{{ page }}"
+     class="{% if page == 'showcase' %}ds-page{% endif %} fluent-canvas page-{{ page }}"
      data-is-android="{{ 'true' if is_android else 'false' }}"
      data-network-state="online">
     <div id="uiOfflineBanner"
@@ -947,7 +947,7 @@
     <script defer src="/static/vendor/gsap/CustomEase.min.js"></script>
     {% endif %}
     {% if uses_motion_plugins %}
-    <!-- Heavy GSAP plugins used only by showcase/search/motion-lab/design-system. -->
+    <!-- Heavy GSAP plugins used only by showcase/search. -->
     <script defer src="/static/vendor/gsap/Flip.min.js"></script>
     <script defer src="/static/vendor/gsap/Physics2DPlugin.min.js"></script>
     <script defer src="/static/vendor/gsap/CustomBounce.min.js"></script>
@@ -991,14 +991,14 @@
     <!-- 168e-T6: shell reload hook -->
     <script type="module" src="/static/js/shared/shell-reload.js"></script>
     <script type="module" src="/static/js/shared/conn-state.js"></script>
-    {% if page in ['settings', 'scanner', 'motion-lab', 'design-system'] %}
+    {% if page in ['settings', 'scanner'] %}
     <!-- Help Popover — 說明浮層共用元件（131b-T4） -->
     <script type="module" src="/static/js/components/help-popover.js"></script>
     {% endif %}
-    {% if page in ['scanner', 'design-system'] %}
+    {% if page == 'scanner' %}
     <script type="module" src="/static/js/components/number-drilldown.js"></script>
     {% endif %}
-    {% if page in ['search', 'design-system'] %}
+    {% if page == 'search' %}
     <!-- Auto Organize Panel — 搜尋頁自動整理 popover（TASK-144-T7） -->
     <script type="module" src="/static/js/components/auto-organize-panel.js"></script>
     {% endif %}

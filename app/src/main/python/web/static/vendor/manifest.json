@@ -139,18 +139,7 @@
       "version": "1.11.1",
       "upstream_url": "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css",
       "upstream_sha256": "bb6fd8cd85394cb367e8ac58e47292f2d68eb288fa12fab68e65430a5ddfce48",
-      "local_sha256": "bb6fd8cd85394cb367e8ac58e47292f2d68eb288fa12fab68e65430a5ddfce48",
-      "license": "MIT",
-      "vendored_date": "2026-06-21",
-      "banner_added": false
-    },
-    {
-      "path": "web/static/vendor/bootstrap-icons/fonts/bootstrap-icons.woff",
-      "package": "bootstrap-icons",
-      "version": "1.11.1",
-      "upstream_url": "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/fonts/bootstrap-icons.woff",
-      "upstream_sha256": "4d4572ef314e1b734cdd6485f913b0396d81bedf4d216a47cfde0cdf32a9316e",
-      "local_sha256": "4d4572ef314e1b734cdd6485f913b0396d81bedf4d216a47cfde0cdf32a9316e",
+      "local_sha256": "edc9031bdcded0aa287bd11e12b5883c70a98b99c94e98d186f11a71489ddf69",
       "license": "MIT",
       "vendored_date": "2026-06-21",
       "banner_added": false
@@ -172,10 +161,10 @@
       "version": "6.1.0",
       "upstream_url": "https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js",
       "upstream_sha256": "b66b25aeb4df84e33199dc21694014d336d222cbd9deb0e5a7c14bd6aa0d0fd0",
-      "local_sha256": "b66b25aeb4df84e33199dc21694014d336d222cbd9deb0e5a7c14bd6aa0d0fd0",
+      "local_sha256": "186a8cdc592b91c13ce79025194373f6b811fa2c9b0998f709caa15a51df255a",
       "license": "Apache-2.0",
-      "vendored_date": "2026-09-25",
-      "banner_added": false
+      "vendored_date": "2026-11-10",
+      "banner_added": true
     }
   ],
   "facefinder": {

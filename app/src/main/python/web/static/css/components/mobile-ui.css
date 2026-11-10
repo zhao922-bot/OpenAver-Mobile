@@ -573,6 +573,47 @@
     padding: 0.75rem;
   }
 
+  /* Long localized read-only labels used to squeeze the folder path into a
+     one-character-wide column. Put the path on its own row on Android. */
+  [data-is-android="true"] #scannerPage .folder-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "readonly icon remove"
+      "path path path";
+    row-gap: 0.45rem;
+  }
+
+  [data-is-android="true"] #scannerPage .folder-item > label {
+    grid-area: readonly;
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  [data-is-android="true"] #scannerPage .folder-item > label > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  [data-is-android="true"] #scannerPage .folder-item .folder-icon {
+    grid-area: icon;
+  }
+
+  [data-is-android="true"] #scannerPage .folder-item .folder-path {
+    grid-area: path;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
+  }
+
+  [data-is-android="true"] #scannerPage .folder-item .btn-remove {
+    grid-area: remove;
+    opacity: 1;
+  }
+
   [data-is-android="true"] .output-info-path {
     flex-wrap: wrap;
   }
@@ -589,9 +630,21 @@
 
   [data-is-android="true"] .output-info-actions.scanner-action-cluster {
     display: grid;
-    grid-template-columns: max-content max-content minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: stretch;
     gap: 0.5rem;
+  }
+
+  [data-is-android="true"] .scanner-action-cluster .path-copy-btn {
+    grid-column: 1;
+  }
+
+  [data-is-android="true"] .scanner-action-cluster .settings-link {
+    grid-column: 2;
+  }
+
+  [data-is-android="true"] .scanner-action-cluster .scanner-generate-inline {
+    grid-column: 1 / -1;
   }
 
   [data-is-android="true"] .scanner-action-cluster .scanner-action-btn {
@@ -606,6 +659,12 @@
   [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > span,
   [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > i {
     flex: 0 0 auto;
+  }
+
+  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   [data-is-android="true"] .scanner-generate-inline {

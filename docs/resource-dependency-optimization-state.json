@@ -1,0 +1,1002 @@
+{
+  "schemaVersion": 1,
+  "project": "OpenAver Mobile",
+  "plan": "docs/resource-dependency-optimization-plan.md",
+  "baseline": "v0.17.18-android-r55",
+  "createdAt": "2026-11-10T17:46:37.5064329+08:00",
+  "updatedAt": "2026-11-11T00:08:26.2433938+08:00",
+  "phases": [
+    {
+      "id": "A0",
+      "group": "A",
+      "title": "记录 r55 基线",
+      "status": "done",
+      "startedAt": "2026-11-10T17:47:02.7908598+08:00",
+      "completedAt": "2026-11-10T17:56:44.8961533+08:00",
+      "note": "已记录 APK、assets、静态图片、ECharts、依赖归档、266 项测试和冷启动；5000 部滚动/扫描基线转到 C3/D3"
+    },
+    {
+      "id": "A1",
+      "group": "A",
+      "title": "移除演示子系统与图片",
+      "status": "done",
+      "startedAt": "2026-11-10T17:56:45.0514287+08:00",
+      "completedAt": "2026-11-10T18:32:02.4941791+08:00",
+      "note": "已删除 motion-lab/design-system 入口、专属脚本和 30 张演示 JPEG；267 测试通过，生产页面模拟器验证正常，APK 减少 3,748,656 bytes"
+    },
+    {
+      "id": "A2",
+      "group": "A",
+      "title": "清理重复 WOFF 字体",
+      "status": "done",
+      "startedAt": "2026-11-10T18:34:13.4437961+08:00",
+      "completedAt": "2026-11-10T18:47:02.6648917+08:00",
+      "note": "已删除 Bootstrap Icons WOFF 回退和 176200-byte 重复字体；图标回归正常，268 测试通过，APK 再减少 175496 bytes"
+    },
+    {
+      "id": "A3",
+      "group": "A",
+      "title": "ECharts 按需构建",
+      "status": "done",
+      "startedAt": "2026-11-10T18:51:09.1479539+08:00",
+      "completedAt": "2026-11-10T19:52:31.4534781+08:00",
+      "note": "ECharts 1,121,883 降至 600,580 bytes（46.5%）；保留 bar/pie/treemap 与过渡/标签/标注能力；269 测试和模拟器 Insights 验证通过，APK 再减少 166,624 bytes"
+    },
+    {
+      "id": "A4",
+      "group": "A",
+      "title": "评估发布版 JS/CSS 压缩",
+      "status": "done",
+      "startedAt": "2026-11-10T19:53:08.4447887+08:00",
+      "completedAt": "2026-11-10T20:17:53.7364893+08:00",
+      "note": "Release 构建仅压缩 146 个自研 JS/CSS，app.imy 4,329,692→3,852,395 bytes；arm64 APK 再减 476,640 bytes，270 测试及模拟器六页面回归通过"
+    },
+    {
+      "id": "A5",
+      "group": "A",
+      "title": "阶段 A 验收",
+      "status": "done",
+      "startedAt": "2026-11-10T20:18:07.5426004+08:00",
+      "completedAt": "2026-11-10T20:58:37.2932866+08:00",
+      "note": "阶段 A 验收完成：静态图片 3.44 MiB→0，arm64 APK 30,136,752→25,570,372 bytes（减少 4.35 MiB）；四语言四页面、271 项测试和模拟器回归通过，并修复日文扫描页路径/按钮布局"
+    },
+    {
+      "id": "B1",
+      "group": "B",
+      "title": "准备 lxml 解析样本",
+      "status": "done",
+      "startedAt": "2026-11-10T20:59:35.5630671+08:00",
+      "completedAt": "2026-11-10T21:03:51.9075498+08:00",
+      "note": "五个入口的固定 HTML 样本与字段基线已建立；两套环境各 6 项测试通过，测试总数 271→277"
+    },
+    {
+      "id": "B2",
+      "group": "B",
+      "title": "逐来源替换 lxml",
+      "status": "done",
+      "startedAt": "2026-11-10T21:03:51.9351163+08:00",
+      "completedAt": "2026-11-10T21:24:35.814343+08:00",
+      "note": "五个入口已替换为 BeautifulSoup html.parser；固定样本与两套全量测试 278 项通过；FC2/DMM 模拟器真实请求成功，FC2-javten/HEYZO 线上被 403/CF 阻挡但样本回归通过"
+    },
+    {
+      "id": "B3",
+      "group": "B",
+      "title": "移除 lxml 依赖",
+      "status": "done",
+      "startedAt": "2026-11-10T21:24:35.8494765+08:00",
+      "completedAt": "2026-11-10T21:26:53.378961+08:00",
+      "note": "已从 app/build.gradle 与 requirements-test 移除 lxml；x86_64 Debug 重新安装后应用正常启动，APK 内 requirements-common.imy 不含 lxml/libxml2/libxslt；FC2 与 DMM 经 WebView 实际请求成功"
+    },
+    {
+      "id": "B4",
+      "group": "B",
+      "title": "阶段 B 回归",
+      "status": "done",
+      "startedAt": "2026-11-10T21:26:53.4728911+08:00",
+      "completedAt": "2026-11-10T21:42:32.4643437+08:00",
+      "note": "B4 完成：两套测试各 278 passed；116 个 App JS 语法通过；12 个补丁与上游同步；FC2/DMM 线上请求成功，自定义来源 FC2 正例+软404反例验收通过，搜索/预览成功；FC2-javten/HEYZO 线上仍受 CF/403 阻挡，固定样本回归通过；arm64 Release 23,277,504 bytes，requirements-common 7,306,096 bytes，无 lxml/libxml2/libxslt；四语言错误与空结果文案通过。"
+    },
+    {
+      "id": "C1",
+      "group": "C",
+      "title": "评估 R8 和资源压缩",
+      "status": "done",
+      "startedAt": "2026-11-10T21:42:32.503204+08:00",
+      "completedAt": "2026-11-10T21:45:18.1547909+08:00",
+      "note": "R8 + shrinkResources 实测 APK 23,277,504→23,225,584 bytes，仅节省 51,920 bytes（约 0.05 MiB），低于 0.2 MiB 门槛；未发现需要牺牲桥接稳定性的理由，已恢复 minifyEnabled false / shrinkResources false。"
+    },
+    {
+      "id": "C2",
+      "group": "C",
+      "title": "检查 ABI、语言和归档",
+      "status": "done",
+      "startedAt": null,
+      "completedAt": "2026-11-10T21:45:18.239153+08:00",
+      "note": "Release APK 仅含 arm64-v8a；string 资源配置为 default/ja/zh/en/zh-rTW；requirements-common/app/stdlib-common/stdlib-arm64-v8a 四套归档条目无重复；未拆语言 APK。"
+    },
+    {
+      "id": "C3",
+      "group": "C",
+      "title": "记录运行时指标",
+      "status": "done",
+      "startedAt": "2026-11-10T21:45:18.2823208+08:00",
+      "completedAt": "2026-11-10T22:07:19.5374301+08:00",
+      "note": "C3 完成：正常2逻辑影片冷启动7148ms、PSS约106176KB；5000行库冷启动5606ms，初始PSS约189372KB，打开片库后约223944KB；/showcase API 5002项3144ms、DOM首屏4370ms；5000部滚动37帧/5.1s（平均138.85ms/帧，p95 216.7ms，max 433.3ms，gfx 100% janky）；5000文件扫描约1文件/秒，535项耗时约9分钟，预计约80分钟，已中止；模拟器原数据库与配置已恢复。"
+    },
+    {
+      "id": "D1",
+      "group": "D",
+      "title": "自动化测试",
+      "status": "done",
+      "startedAt": "2026-11-10T22:07:19.5648485+08:00",
+      "completedAt": "2026-11-10T22:08:53.8955019+08:00",
+      "note": "D1 完成：TUR 278 passed；Cleanup 278 passed；116 个 App JS 文件 node --check 全部通过；重新生成 12 个 Python 补丁，verify_python_sync 输出 412 files match upstream + patches。"
+    },
+    {
+      "id": "D2",
+      "group": "D",
+      "title": "四语言和功能回归",
+      "status": "done",
+      "startedAt": "2026-11-10T22:08:54.0471519+08:00",
+      "completedAt": "2026-11-10T23:03:46.7616686+08:00",
+      "note": "D2 完成：四语言五页面 locale/标题/图表正常；扫描 23 部逻辑影片、浏览 2→23 部、搜索与女优筛选、封面缩略图加载通过；分段 cd1/cd2 保持一个逻辑视频；普通视频与分段视频播放器选择框通过；翻译未启用错误本地化、剧照补齐成功下载 10 张、缺失检查与 NFO 写入/统一命名/标签更新通过；JavBus 标签更新成功，Jable 能正确进入 CF 验证流程并返回本地化失败提示；数据库导出/导入成功且坏 ZIP 422 回滚；后台前台服务、通知和隐藏 WebView 计数正常；设置重启持久化与清缓存 23/24 通过。测试后已恢复模拟器原始 DB、配置和文件。"
+    },
+    {
+      "id": "D3",
+      "group": "D",
+      "title": "模拟器与真实设备验证",
+      "status": "done",
+      "startedAt": "2026-11-10T23:03:46.9307868+08:00",
+      "completedAt": "2026-11-10T23:49:52.4811617+08:00",
+      "note": "API36 最终五页巡检和冷启动 4236ms 完成；真实设备验证普通视频内置播放、21 项后台任务隐藏 WebView 计数、前台 Service 和通知；测试后恢复 Debug DB/配置并删除测试目录；arm64 Release 23,278,068 bytes，仅含 arm64-v8a。"
+    },
+    {
+      "id": "D4",
+      "group": "D",
+      "title": "发布条件确认",
+      "status": "done",
+      "startedAt": "2026-11-10T23:51:36.4507508+08:00",
+      "completedAt": "2026-11-11T00:08:26.2253024+08:00",
+      "note": "维护者已确认以 0.17.18-r56（versionCode 17074）发布；D4 技术审计完成，开始提交并触发 GitHub Release。"
+    }
+  ],
+  "metrics": [
+    {
+      "name": "apkBytes",
+      "label": "APK 大小",
+      "unit": "bytes",
+      "before": 30136752.0,
+      "after": 23278068.0,
+      "target": null
+    },
+    {
+      "name": "assetsBytes",
+      "label": "assets 压缩体积",
+      "unit": "bytes",
+      "before": 25161857.0,
+      "after": 18311143.0,
+      "target": null
+    },
+    {
+      "name": "nativeLibBytes",
+      "label": "native libs 压缩体积",
+      "unit": "bytes",
+      "before": 4764779.0,
+      "after": 4764783,
+      "target": null
+    },
+    {
+      "name": "staticImageBytes",
+      "label": "静态图片总量",
+      "unit": "bytes",
+      "before": 3606239.0,
+      "after": 0,
+      "target": null
+    },
+    {
+      "name": "echartsBytes",
+      "label": "ECharts 体积",
+      "unit": "bytes",
+      "before": 1121883.0,
+      "after": 600580,
+      "target": null
+    },
+    {
+      "name": "requirementsBytes",
+      "label": "requirements-common",
+      "unit": "bytes",
+      "before": 9599673.0,
+      "after": 7306096.0,
+      "target": null
+    },
+    {
+      "name": "testCount",
+      "label": "自动化测试数",
+      "unit": "count",
+      "before": 266.0,
+      "after": 278.0,
+      "target": null
+    },
+    {
+      "name": "coldStartMs",
+      "label": "冷启动",
+      "unit": "ms",
+      "before": 13209.0,
+      "after": 4236.0,
+      "target": null
+    },
+    {
+      "name": "libraryFirstPaintMs",
+      "label": "片库首屏",
+      "unit": "ms",
+      "before": null,
+      "after": 4370.0,
+      "target": null
+    },
+    {
+      "name": "scrollJank",
+      "label": "5000 部滚动卡顿",
+      "unit": "text",
+      "before": null,
+      "after": "5000行: 37帧/5.1s, 平均138.85ms, p95 216.7ms, gfx 100% janky",
+      "target": null
+    },
+    {
+      "name": "scanMs",
+      "label": "扫描耗时",
+      "unit": "ms",
+      "before": null,
+      "after": "5000空文件约1文件/秒, 535/5000约9分钟, 预计约80分钟, 已中止",
+      "target": null
+    }
+  ],
+  "history": [
+    {
+      "timestamp": "2026-11-10T17:47:02.7983593+08:00",
+      "action": "start",
+      "phase": "A0",
+      "note": "开始记录 r55 基线",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T17:47:17.8717789+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "apkBytes",
+      "stage": "before",
+      "value": "30136752"
+    },
+    {
+      "timestamp": "2026-11-10T17:47:17.937924+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "assetsBytes",
+      "stage": "before",
+      "value": "25161857"
+    },
+    {
+      "timestamp": "2026-11-10T17:47:17.9820558+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "nativeLibBytes",
+      "stage": "before",
+      "value": "4764779"
+    },
+    {
+      "timestamp": "2026-11-10T17:47:18.0043114+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "staticImageBytes",
+      "stage": "before",
+      "value": "3606239"
+    },
+    {
+      "timestamp": "2026-11-10T17:47:18.0273678+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "echartsBytes",
+      "stage": "before",
+      "value": "1121883"
+    },
+    {
+      "timestamp": "2026-11-10T17:47:18.0474669+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "requirementsBytes",
+      "stage": "before",
+      "value": "9599673"
+    },
+    {
+      "timestamp": "2026-11-10T17:47:35.294954+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "before",
+      "value": "266"
+    },
+    {
+      "timestamp": "2026-11-10T17:51:56.9364591+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "coldStartMs",
+      "stage": "before",
+      "value": "13209"
+    },
+    {
+      "timestamp": "2026-11-10T17:52:25.7848108+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "before",
+      "value": "266"
+    },
+    {
+      "timestamp": "2026-11-10T17:52:26.1531748+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "before",
+      "value": "266"
+    },
+    {
+      "timestamp": "2026-11-10T17:52:26.4485066+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "before",
+      "value": "266"
+    },
+    {
+      "timestamp": "2026-11-10T17:52:26.7420164+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "before",
+      "value": "266"
+    },
+    {
+      "timestamp": "2026-11-10T17:52:27.0609251+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "before",
+      "value": "266"
+    },
+    {
+      "timestamp": "2026-11-10T17:52:27.3681027+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "before",
+      "value": "266"
+    },
+    {
+      "timestamp": "2026-11-10T17:52:27.6641317+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "before",
+      "value": "266"
+    },
+    {
+      "timestamp": "2026-11-10T17:52:27.9612129+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "before",
+      "value": "266"
+    },
+    {
+      "timestamp": "2026-11-10T17:52:28.2759545+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "before",
+      "value": "266"
+    },
+    {
+      "timestamp": "2026-11-10T17:52:28.6235632+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "before",
+      "value": "266"
+    },
+    {
+      "timestamp": "2026-11-10T17:56:44.9046172+08:00",
+      "action": "complete",
+      "phase": "A0",
+      "note": "已记录 APK、assets、静态图片、ECharts、依赖归档、266 项测试和冷启动；5000 部滚动/扫描基线转到 C3/D3",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T17:56:45.0525525+08:00",
+      "action": "start",
+      "phase": "A1",
+      "note": "删除 motion-lab/design-system 入口、专属脚本和 30 张演示 JPEG",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T18:31:53.5652689+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "apkBytes",
+      "stage": "after",
+      "value": "26388096"
+    },
+    {
+      "timestamp": "2026-11-10T18:31:56.7302495+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "assetsBytes",
+      "stage": "after",
+      "value": "21421171"
+    },
+    {
+      "timestamp": "2026-11-10T18:31:59.0531678+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "nativeLibBytes",
+      "stage": "after",
+      "value": "4764783"
+    },
+    {
+      "timestamp": "2026-11-10T18:32:00.5202755+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "staticImageBytes",
+      "stage": "after",
+      "value": "0"
+    },
+    {
+      "timestamp": "2026-11-10T18:32:01.5373741+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "after",
+      "value": "267"
+    },
+    {
+      "timestamp": "2026-11-10T18:32:02.5058779+08:00",
+      "action": "complete",
+      "phase": "A1",
+      "note": "已删除 motion-lab/design-system 入口、专属脚本和 30 张演示 JPEG；267 测试通过，生产页面模拟器验证正常，APK 减少 3,748,656 bytes",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T18:34:13.4577606+08:00",
+      "action": "start",
+      "phase": "A2",
+      "note": "删除 Bootstrap Icons WOFF 回退，仅保留 WOFF2",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T18:46:58.7868267+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "apkBytes",
+      "stage": "after",
+      "value": "26212600"
+    },
+    {
+      "timestamp": "2026-11-10T18:46:59.8493218+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "assetsBytes",
+      "stage": "after",
+      "value": "21245674"
+    },
+    {
+      "timestamp": "2026-11-10T18:47:01.4063275+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "after",
+      "value": "268"
+    },
+    {
+      "timestamp": "2026-11-10T18:47:02.6820014+08:00",
+      "action": "complete",
+      "phase": "A2",
+      "note": "已删除 Bootstrap Icons WOFF 回退和 176200-byte 重复字体；图标回归正常，268 测试通过，APK 再减少 175496 bytes",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T18:51:09.1589962+08:00",
+      "action": "start",
+      "phase": "A3",
+      "note": "用 ECharts 6.1.0 core 按需构建 Insights 图表包",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T19:52:28.8962045+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "apkBytes",
+      "stage": "after",
+      "value": "26045976"
+    },
+    {
+      "timestamp": "2026-11-10T19:52:29.5236734+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "assetsBytes",
+      "stage": "after",
+      "value": "21079050"
+    },
+    {
+      "timestamp": "2026-11-10T19:52:30.1328851+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "echartsBytes",
+      "stage": "after",
+      "value": "600580"
+    },
+    {
+      "timestamp": "2026-11-10T19:52:30.795593+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "after",
+      "value": "269"
+    },
+    {
+      "timestamp": "2026-11-10T19:52:31.4626527+08:00",
+      "action": "complete",
+      "phase": "A3",
+      "note": "ECharts 1,121,883 降至 600,580 bytes（46.5%）；保留 bar/pie/treemap 与过渡/标签/标注能力；269 测试和模拟器 Insights 验证通过，APK 再减少 166,624 bytes",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T19:53:08.453022+08:00",
+      "action": "start",
+      "phase": "A4",
+      "note": "评估自定义 JS/CSS 在 release 内进一步压缩的实际收益",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T20:17:53.6039898+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "apkBytes",
+      "stage": "after",
+      "value": "25569336"
+    },
+    {
+      "timestamp": "2026-11-10T20:17:53.6856796+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "assetsBytes",
+      "stage": "after",
+      "value": "20602410"
+    },
+    {
+      "timestamp": "2026-11-10T20:17:53.7084078+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "after",
+      "value": "270"
+    },
+    {
+      "timestamp": "2026-11-10T20:17:53.7379038+08:00",
+      "action": "complete",
+      "phase": "A4",
+      "note": "Release 构建仅压缩 146 个自研 JS/CSS，app.imy 4,329,692→3,852,395 bytes；arm64 APK 再减 476,640 bytes，270 测试及模拟器六页面回归通过",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T20:18:07.5467473+08:00",
+      "action": "start",
+      "phase": "A5",
+      "note": "验收静态资源、APK 缩减及四语言/核心页面",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T20:58:37.1611037+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "apkBytes",
+      "stage": "after",
+      "value": "25570372"
+    },
+    {
+      "timestamp": "2026-11-10T20:58:37.2408478+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "assetsBytes",
+      "stage": "after",
+      "value": "20603450"
+    },
+    {
+      "timestamp": "2026-11-10T20:58:37.2639362+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "after",
+      "value": "271"
+    },
+    {
+      "timestamp": "2026-11-10T20:58:37.2945575+08:00",
+      "action": "complete",
+      "phase": "A5",
+      "note": "阶段 A 验收完成：静态图片 3.44 MiB→0，arm64 APK 30,136,752→25,570,372 bytes（减少 4.35 MiB）；四语言四页面、271 项测试和模拟器回归通过，并修复日文扫描页路径/按钮布局",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T20:59:35.5687185+08:00",
+      "action": "start",
+      "phase": "B1",
+      "note": "为五个 lxml 解析入口准备固定 HTML 样本和字段基线",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T21:03:51.8183542+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "after",
+      "value": "277"
+    },
+    {
+      "timestamp": "2026-11-10T21:03:51.9089909+08:00",
+      "action": "complete",
+      "phase": "B1",
+      "note": "五个入口的固定 HTML 样本与字段基线已建立；两套环境各 6 项测试通过，测试总数 271→277",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T21:03:51.9358408+08:00",
+      "action": "start",
+      "phase": "B2",
+      "note": "按顺序逐来源替换 lxml；先处理 fc2_official.py",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T21:24:35.7184394+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "after",
+      "value": "278"
+    },
+    {
+      "timestamp": "2026-11-10T21:24:35.8159535+08:00",
+      "action": "complete",
+      "phase": "B2",
+      "note": "五个入口已替换为 BeautifulSoup html.parser；固定样本与两套全量测试 278 项通过；FC2/DMM 模拟器真实请求成功，FC2-javten/HEYZO 线上被 403/CF 阻挡但样本回归通过",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T21:24:35.8503742+08:00",
+      "action": "start",
+      "phase": "B3",
+      "note": "移除 lxml 安装依赖并验证生成的 requirements 与 APK 不含 lxml 运行时文件",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T21:26:53.3850011+08:00",
+      "action": "complete",
+      "phase": "B3",
+      "note": "已从 app/build.gradle 与 requirements-test 移除 lxml；x86_64 Debug 重新安装后应用正常启动，APK 内 requirements-common.imy 不含 lxml/libxml2/libxslt；FC2 与 DMM 经 WebView 实际请求成功",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T21:26:53.4738099+08:00",
+      "action": "start",
+      "phase": "B4",
+      "note": "执行阶段 B 全量回归：测试、JS、补丁同步、四语言提示、模拟器与 APK 检查",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T21:42:32.2536602+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "apkBytes",
+      "stage": "after",
+      "value": "23277504"
+    },
+    {
+      "timestamp": "2026-11-10T21:42:32.3514323+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "assetsBytes",
+      "stage": "after",
+      "value": "18310582"
+    },
+    {
+      "timestamp": "2026-11-10T21:42:32.3882605+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "requirementsBytes",
+      "stage": "after",
+      "value": "7306096"
+    },
+    {
+      "timestamp": "2026-11-10T21:42:32.4196594+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "testCount",
+      "stage": "after",
+      "value": "278"
+    },
+    {
+      "timestamp": "2026-11-10T21:42:32.4665988+08:00",
+      "action": "complete",
+      "phase": "B4",
+      "note": "B4 完成：两套测试各 278 passed；116 个 App JS 语法通过；12 个补丁与上游同步；FC2/DMM 线上请求成功，自定义来源 FC2 正例+软404反例验收通过，搜索/预览成功；FC2-javten/HEYZO 线上仍受 CF/403 阻挡，固定样本回归通过；arm64 Release 23,277,504 bytes，requirements-common 7,306,096 bytes，无 lxml/libxml2/libxslt；四语言错误与空结果文案通过。",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T21:42:32.5039939+08:00",
+      "action": "start",
+      "phase": "C1",
+      "note": "评估 release R8 与 shrinkResources，先建立当前未开启基线",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T21:45:18.16481+08:00",
+      "action": "complete",
+      "phase": "C1",
+      "note": "R8 + shrinkResources 实测 APK 23,277,504→23,225,584 bytes，仅节省 51,920 bytes（约 0.05 MiB），低于 0.2 MiB 门槛；未发现需要牺牲桥接稳定性的理由，已恢复 minifyEnabled false / shrinkResources false。",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T21:45:18.2393458+08:00",
+      "action": "complete",
+      "phase": "C2",
+      "note": "Release APK 仅含 arm64-v8a；string 资源配置为 default/ja/zh/en/zh-rTW；requirements-common/app/stdlib-common/stdlib-arm64-v8a 四套归档条目无重复；未拆语言 APK。",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T21:45:18.2830473+08:00",
+      "action": "start",
+      "phase": "C3",
+      "note": "记录稳定 release 的安装占用、冷启动、内存、首屏和滚动指标",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T22:07:19.3714247+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "coldStartMs",
+      "stage": "after",
+      "value": "7148"
+    },
+    {
+      "timestamp": "2026-11-10T22:07:19.4521502+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "libraryFirstPaintMs",
+      "stage": "after",
+      "value": "4370"
+    },
+    {
+      "timestamp": "2026-11-10T22:07:19.4765916+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "scrollJank",
+      "stage": "after",
+      "value": "5000行: 37帧/5.1s, 平均138.85ms, p95 216.7ms, gfx 100% janky"
+    },
+    {
+      "timestamp": "2026-11-10T22:07:19.5056399+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "scanMs",
+      "stage": "after",
+      "value": "5000空文件约1文件/秒, 535/5000约9分钟, 预计约80分钟, 已中止"
+    },
+    {
+      "timestamp": "2026-11-10T22:07:19.538745+08:00",
+      "action": "complete",
+      "phase": "C3",
+      "note": "C3 完成：正常2逻辑影片冷启动7148ms、PSS约106176KB；5000行库冷启动5606ms，初始PSS约189372KB，打开片库后约223944KB；/showcase API 5002项3144ms、DOM首屏4370ms；5000部滚动37帧/5.1s（平均138.85ms/帧，p95 216.7ms，max 433.3ms，gfx 100% janky）；5000文件扫描约1文件/秒，535项耗时约9分钟，预计约80分钟，已中止；模拟器原数据库与配置已恢复。",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T22:07:19.5656438+08:00",
+      "action": "start",
+      "phase": "D1",
+      "note": "执行 TUR/Cleanup 两套全量 Python 测试、全部 App JS 语法检查、补丁生成与上游同步校验",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T22:08:53.9024924+08:00",
+      "action": "complete",
+      "phase": "D1",
+      "note": "D1 完成：TUR 278 passed；Cleanup 278 passed；116 个 App JS 文件 node --check 全部通过；重新生成 12 个 Python 补丁，verify_python_sync 输出 412 files match upstream + patches。",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T22:08:54.0491009+08:00",
+      "action": "start",
+      "phase": "D2",
+      "note": "按计划执行四语言、扫描/浏览/搜索/筛选、分段视频、播放器、翻译、剧照、NFO、统一命名、Jable、数据库导入导出、后台任务、设置与缓存回归",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T23:03:46.7732799+08:00",
+      "action": "complete",
+      "phase": "D2",
+      "note": "D2 完成：四语言五页面 locale/标题/图表正常；扫描 23 部逻辑影片、浏览 2→23 部、搜索与女优筛选、封面缩略图加载通过；分段 cd1/cd2 保持一个逻辑视频；普通视频与分段视频播放器选择框通过；翻译未启用错误本地化、剧照补齐成功下载 10 张、缺失检查与 NFO 写入/统一命名/标签更新通过；JavBus 标签更新成功，Jable 能正确进入 CF 验证流程并返回本地化失败提示；数据库导出/导入成功且坏 ZIP 422 回滚；后台前台服务、通知和隐藏 WebView 计数正常；设置重启持久化与清缓存 23/24 通过。测试后已恢复模拟器原始 DB、配置和文件。",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T23:03:46.9319679+08:00",
+      "action": "start",
+      "phase": "D3",
+      "note": "先完成 API36 模拟器最终验证与 arm64 Release 构建；真实设备验证等待授权设备重新连接",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T23:49:52.4862549+08:00",
+      "action": "complete",
+      "phase": "D3",
+      "note": "API36 最终五页巡检和冷启动 4236ms 完成；真实设备验证普通视频内置播放、21 项后台任务隐藏 WebView 计数、前台 Service 和通知；测试后恢复 Debug DB/配置并删除测试目录；arm64 Release 23,278,068 bytes，仅含 arm64-v8a。",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T23:49:52.5530493+08:00",
+      "action": "start",
+      "phase": "D4",
+      "note": "执行发布条件审计：自动化测试、JS、补丁同步、APK 体积、关键页面和残余性能风险；版本号与是否发布等待维护者决定。",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T23:51:36.3613474+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "coldStartMs",
+      "stage": "after",
+      "value": "4236"
+    },
+    {
+      "timestamp": "2026-11-10T23:51:36.4523507+08:00",
+      "action": "start",
+      "phase": "D4",
+      "note": "D4 技术审计完成：TUR/Cleanup 278 passed，116 个 JS 文件通过，12 个补丁/412 files sync；arm64 Release 23,278,068 bytes（较 r55 减少 6,858,684 bytes，22.76%）；API36 五页巡检无 JS/HTTP/控制台异常，可见区域无破图；真实设备播放、后台 Service、通知和恢复验证完成。5000 部滚动仍有卡顿，作为残余风险记录。版本号和是否发布等待维护者决定。",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    },
+    {
+      "timestamp": "2026-11-10T23:53:23.8004755+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "apkBytes",
+      "stage": "after",
+      "value": "23278068"
+    },
+    {
+      "timestamp": "2026-11-10T23:53:23.8832216+08:00",
+      "action": "metric",
+      "phase": "",
+      "note": "",
+      "metric": "assetsBytes",
+      "stage": "after",
+      "value": "18311143"
+    },
+    {
+      "timestamp": "2026-11-11T00:08:26.2326836+08:00",
+      "action": "complete",
+      "phase": "D4",
+      "note": "维护者已确认以 0.17.18-r56（versionCode 17074）发布；D4 技术审计完成，开始提交并触发 GitHub Release。",
+      "metric": "",
+      "stage": "",
+      "value": ""
+    }
+  ]
+}

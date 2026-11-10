@@ -156,7 +156,6 @@
         "web/static/js/shared/video-player.js",
         "web/templates/_macros/ui_state.html",
         "web/templates/base.html",
-        "web/templates/design-system.html",
         "web/templates/help.html",
         "web/templates/help_mobile.html",
         "web/templates/insights.html",
@@ -170,6 +169,76 @@
       "patch": "008-mobile-loopback-auth.patch",
       "files": [
         "mobile_auth.py"
+      ]
+    },
+    {
+      "patch": "009-remove-demo-subsystem.patch",
+      "files": [
+        "web/routers/motion_lab.py",
+        "web/static/css/pages/design-system.css",
+        "web/static/img/demo/cawd-441.jpg",
+        "web/static/img/demo/fc2-1723984.jpg",
+        "web/static/img/demo/ipzz-001.jpg",
+        "web/static/img/demo/mide-974.jpg",
+        "web/static/img/demo/sone-103.jpg",
+        "web/static/img/picker-demo/cand-1.jpg",
+        "web/static/img/picker-demo/cand-2.jpg",
+        "web/static/img/picker-demo/cand-3.jpg",
+        "web/static/img/picker-demo/cand-4.jpg",
+        "web/static/img/picker-demo/cover.jpg",
+        "web/static/img/showcase/sc-1.jpg",
+        "web/static/img/showcase/sc-2.jpg",
+        "web/static/img/showcase/sc-3.jpg",
+        "web/static/img/showcase/sc-4.jpg",
+        "web/static/img/showcase/sc-5.jpg",
+        "web/static/img/showcase/sc-6.jpg",
+        "web/static/img/showcase/sc-7.jpg",
+        "web/static/img/showcase/sc-8.jpg",
+        "web/static/img/showcase/sc-9.jpg",
+        "web/static/img/showcase/sc-10.jpg",
+        "web/static/img/showcase/sc-11.jpg",
+        "web/static/img/showcase/sc-12.jpg",
+        "web/static/img/showcase/sc-13.jpg",
+        "web/static/img/showcase/sc-14.jpg",
+        "web/static/img/showcase/sc-15.jpg",
+        "web/static/img/showcase/sc-16.jpg",
+        "web/static/img/showcase/sc-17.jpg",
+        "web/static/img/showcase/sc-18.jpg",
+        "web/static/img/showcase/sc-19.jpg",
+        "web/static/img/showcase/sc-20.jpg",
+        "web/static/js/pages/motion-lab-state.js",
+        "web/static/js/pages/motion-lab.js",
+        "web/static/js/pages/motion-lab/constellation-host.js",
+        "web/templates/design-system.html",
+        "web/templates/design_system/gallery-components.html",
+        "web/templates/design_system/page-compositions.html",
+        "web/templates/design_system/page-states.html",
+        "web/templates/design_system/settings-components.html",
+        "web/templates/motion_lab.html"
+      ]
+    },
+    {
+      "patch": "010-woff2-only-icons.patch",
+      "files": [
+        "web/static/vendor/bootstrap-icons/bootstrap-icons.css",
+        "web/static/vendor/bootstrap-icons/fonts/bootstrap-icons.woff"
+      ]
+    },
+    {
+      "patch": "011-echarts-insights-bundle.patch",
+      "files": [
+        "web/static/vendor/echarts/echarts.min.js",
+        "web/static/vendor/manifest.json"
+      ]
+    },
+    {
+      "patch": "012-bs4-html-parser.patch",
+      "files": [
+        "core/custom_source/extract.py",
+        "core/scrapers/dmm.py",
+        "core/scrapers/fc2_javten.py",
+        "core/scrapers/fc2_official.py",
+        "core/scrapers/heyzo.py"
       ]
     }
   ]

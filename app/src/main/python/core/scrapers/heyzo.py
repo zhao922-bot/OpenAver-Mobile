@@ -5,9 +5,9 @@ import requests
 from typing import Optional
 
 from core.logger import get_logger
+from bs4 import BeautifulSoup
 
 logger = get_logger(__name__)
-from lxml import etree
 from .base import BaseScraper
 from .models import Video, Actress, ScraperConfig
 from .utils import rate_limit
@@ -76,11 +76,11 @@ class HEYZOScraper(BaseScraper):
             解析後的 dict，找不到或解析失敗返回 None
         """
         try:
-            html = etree.fromstring(html_content, etree.HTMLParser())
-            scripts = html.xpath('//script[@type="application/ld+json"]/text()')
+            html = BeautifulSoup(html_content, "html.parser")
+            scripts = html.find_all("script", attrs={"type": "application/ld+json"})
             for script in scripts:
                 try:
-                    data = json.loads(script)
+                    data = json.loads(script.get_text())
                     if isinstance(data, dict) and data.get('@type') == 'Movie':
                         return data
                 except json.JSONDecodeError:
@@ -203,17 +203,16 @@ class HEYZOScraper(BaseScraper):
             'actresses': [], 'date': '',
         }
         try:
-            html = etree.fromstring(html_content, etree.HTMLParser())
+            html = BeautifulSoup(html_content, "html.parser")
+            table = html.select_one("table.movieInfo")
 
             # Series（值現在可能被 <a> 包住（有連結的 series），也可能是純文字
             # placeholder（"-----"）；讀整格文字（.//text()）而非只讀直接 text
             # node，否則 <a> 包住的值會被漏接，抽出全空字串）
-            series_nodes = html.xpath(
-                '//table[@class="movieInfo"]//tr/td[contains(text(),"Series")]/following-sibling::td[1]'
-            )
             series_text = ''
-            if series_nodes:
-                raw = ''.join(series_nodes[0].xpath('.//text()')).replace('\xa0', ' ')
+            series_node = self._table_value(table, "Series")
+            if series_node is not None:
+                raw = series_node.get_text(" ", strip=True).replace('\xa0', ' ')
                 series_text = ' '.join(raw.split())
             # Filter out placeholder values like "-----" or "---"
             if series_text and all(c == '-' for c in series_text):
@@ -221,30 +220,25 @@ class HEYZOScraper(BaseScraper):
             result['series'] = series_text
 
             # Tags（Type 欄位）
-            tags = html.xpath(
-                '//table[@class="movieInfo"]//tr/td[contains(text(),"Type")]/following-sibling::td[1]//a/text()'
-            )
-            result['tags'] = [t.strip() for t in tags if t.strip()]
+            tags_node = self._table_value(table, "Type")
+            tags = tags_node.select("a") if tags_node is not None else []
+            result['tags'] = [t.get_text(strip=True) for t in tags if t.get_text(strip=True)]
 
             # Actress(es)（支援多個 <a>；文字含大量 \t\n 與 \xa0，需正規化後再判空）
-            actress_nodes = html.xpath(
-                '//table[@class="movieInfo"]//tr/td[contains(text(),"Actress")]'
-                '/following-sibling::td[1]//a/text()'
-            )
+            actress_node = self._table_value(table, "Actress")
+            actress_nodes = actress_node.select("a") if actress_node is not None else []
             actresses = []
-            for name in actress_nodes:
-                cleaned = name.replace('\xa0', ' ').strip()
+            for node in actress_nodes:
+                cleaned = node.get_text(" ", strip=True).replace('\xa0', ' ').strip()
                 if cleaned:
                     actresses.append(cleaned)
             result['actresses'] = actresses
 
             # Released（可能是單一日期、日期區間「start ～ end」、"Coming Soon !!"
             # 或空白；一律取 leading date，抽不到就回空字串，不 raise）
-            released = html.xpath(
-                '//table[@class="movieInfo"]//tr/td[contains(text(),"Released")]/following-sibling::td[1]'
-            )
-            if released:
-                released_text = released[0].xpath('string(.)')
+            released = self._table_value(table, "Released")
+            if released is not None:
+                released_text = released.get_text(" ", strip=True)
                 released_text = released_text.replace('\xa0', ' ').strip()
                 date_match = re.match(r'^(\d{4}-\d{2}-\d{2})', released_text)
                 if date_match:
@@ -275,6 +269,19 @@ class HEYZOScraper(BaseScraper):
         except Exception as e:
             logger.debug(f"HEYZO table parse error: {e}")
         return result
+
+    @staticmethod
+    def _table_value(table, label: str):
+        """Return the cell following the first movieInfo cell containing label."""
+        if table is None:
+            return None
+        for cell in table.find_all("td"):
+            if label not in cell.get_text(" ", strip=True):
+                continue
+            sibling = cell.find_next_sibling("td")
+            if sibling is not None:
+                return sibling
+        return None
 
     def search(self, number: str) -> Optional[Video]:
         """

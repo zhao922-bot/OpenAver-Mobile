@@ -305,7 +305,15 @@
  from web.routers import config as config_router
  from web.routers import scraper as scraper_router
  from web.routers import translate as translate_router
-@@ -337,6 +376,7 @@
+@@ -303,7 +342,6 @@
+ from web.routers import claude_translate as claude_translate_router
+ from web.routers import filename as filename_router
+ from web.routers import showcase as showcase_router
+-from web.routers import motion_lab as motion_lab_router
+ from web.routers import capabilities as capabilities_router
+ from web.routers import collection as collection_router
+ from web.routers import actress as actress_router
+@@ -337,6 +375,7 @@
  # correct use-site binding (TASK-63e-1; function-local import would defeat patch).
  from web.routers.settings_metatube import startup_reconnect, _fire_probe  # noqa: E402, PLC2701 — 既有註解（TASK-63e-1）已明講：module-level import 是為了讓 patch("web.app._fire_probe") 打中呼叫端 binding，函式內 import 會讓 patch 失效；_fire_probe 是 metatube 重連探測的內部 primitive，尚未升格為公開 API
  app.include_router(search_router.router)
@@ -313,7 +321,15 @@
  app.include_router(config_router.router)
  app.include_router(scraper_router.router)
  app.include_router(translate_router.router)
-@@ -375,9 +415,13 @@
+@@ -347,7 +386,6 @@
+ app.include_router(claude_translate_router.router)
+ app.include_router(filename_router.router)
+ app.include_router(showcase_router.router)
+-app.include_router(motion_lab_router.router)
+ app.include_router(capabilities_router.router)
+ app.include_router(collection_router.router)
+ app.include_router(collection_router.user_tags_router)
+@@ -375,9 +413,13 @@
  
  @app.exception_handler(RequestValidationError)
  async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -328,7 +344,7 @@
      )
  
  
-@@ -720,7 +764,12 @@
+@@ -720,7 +762,12 @@
  def get_common_context(request: Request) -> dict:
      """取得共用的模板 Context (包含設定)"""
      from core.config import load_config, mutate_config
@@ -342,7 +358,7 @@
      config = load_config()
  
      # Font size mapping
-@@ -748,6 +797,7 @@
+@@ -748,6 +795,7 @@
              mutate_config(_persist_locale)
          except Exception as e:
              logger.warning("[i18n] 首次偵測語系寫入 config 失敗: %s", e)
@@ -350,7 +366,7 @@
  
      merged_translations = get_merged_translations(locale)
  
-@@ -805,6 +855,7 @@
+@@ -805,6 +853,7 @@
          "locale": locale,
          "merged_translations": merged_translations,
          "t": _t_bound,
@@ -358,17 +374,25 @@
          "is_windows_desktop": getattr(request.state, "shell_kind", None) == "windows",
          "is_mac_desktop": getattr(request.state, "shell_kind", None) == "mac",
          "is_desktop": getattr(request.state, "shell_kind", None) is not None,
-@@ -953,7 +1004,8 @@
+@@ -953,15 +1002,8 @@
      if show_agent_auth:
          context["agent_token"] = snap.agent_token
  
 -    return templates.TemplateResponse(request, "help.html", context)
+-
+-
+-@app.get("/design-system")
+-async def design_system_page(request: Request):
+-    """設計系統展示頁面"""
+-    context = get_common_context(request)
+-    context["page"] = "design-system"
+-    return templates.TemplateResponse(request, "design-system.html", context)
 +    template_name = "help.html" if context.get("is_desktop") else "help_mobile.html"
 +    return templates.TemplateResponse(request, template_name, context)
  
  
- @app.get("/design-system")
-@@ -984,6 +1036,7 @@
+ # ============ API 路由（稍後移到 routers/）============
+@@ -984,6 +1026,7 @@
      import asyncio
      import httpx
  
@@ -376,7 +400,7 @@
      current_version = VERSION
      github_api = self_update.GITHUB_LATEST_API
  
-@@ -1024,17 +1077,17 @@
+@@ -1024,17 +1067,17 @@
                  "download_url": download_url
              }
      except (httpx.TimeoutException, TimeoutError):
@@ -397,7 +421,7 @@
      return {"is_default_path": self_update.is_default_install()}
  
  
-@@ -1079,10 +1132,10 @@
+@@ -1079,10 +1122,10 @@
              "trigger-update 拒絕：layer=%s client_host=%.64s origin=%.128s",
              denied, str(client_host), str(origin),
          )

@@ -57,8 +57,11 @@ tools/*
 !tools/apply_patches.sh
 !tools/code_health.py
 !tools/generate_patches.py
+!tools/minify-release-web-assets.py
 !tools/prepare_python_tree.py
 !tools/verify_python_sync.py
+!tools/echarts-build/
+!tools/echarts-build/**
 
 # OS and editor files
 .DS_Store

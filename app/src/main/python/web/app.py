@@ -342,7 +342,6 @@ from web.routers import openai_translate as openai_translate_router
 from web.routers import claude_translate as claude_translate_router
 from web.routers import filename as filename_router
 from web.routers import showcase as showcase_router
-from web.routers import motion_lab as motion_lab_router
 from web.routers import capabilities as capabilities_router
 from web.routers import collection as collection_router
 from web.routers import actress as actress_router
@@ -387,7 +386,6 @@ app.include_router(openai_translate_router.router)
 app.include_router(claude_translate_router.router)
 app.include_router(filename_router.router)
 app.include_router(showcase_router.router)
-app.include_router(motion_lab_router.router)
 app.include_router(capabilities_router.router)
 app.include_router(collection_router.router)
 app.include_router(collection_router.user_tags_router)
@@ -1006,14 +1004,6 @@ async def help_page(request: Request):
 
     template_name = "help.html" if context.get("is_desktop") else "help_mobile.html"
     return templates.TemplateResponse(request, template_name, context)
-
-
-@app.get("/design-system")
-async def design_system_page(request: Request):
-    """設計系統展示頁面"""
-    context = get_common_context(request)
-    context["page"] = "design-system"
-    return templates.TemplateResponse(request, "design-system.html", context)
 
 
 # ============ API 路由（稍後移到 routers/）============

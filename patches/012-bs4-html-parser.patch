@@ -1,0 +1,368 @@
+--- a/core/custom_source/extract.py
++++ b/core/custom_source/extract.py
+@@ -21,7 +21,7 @@
+ 
+ 
+ def parse_html(html):
+-    return BeautifulSoup(html, "lxml")
++    return BeautifulSoup(html, "html.parser")
+ 
+ 
+ # ---------------------------------------------------------------- 來源
+--- a/core/scrapers/dmm.py
++++ b/core/scrapers/dmm.py
+@@ -2,6 +2,7 @@
+ import json
+ import re
+ import requests
++from bs4 import BeautifulSoup
+ from pathlib import Path
+ from typing import NamedTuple, Optional
+ 
+@@ -390,27 +391,34 @@
+             if resp.status_code != 200:
+                 return []
+ 
+-            from lxml import etree
+-            import json as _json
+-
+-            html = etree.fromstring(resp.content, etree.HTMLParser())
++            html = BeautifulSoup(resp.content, "html.parser")
+ 
+             # 方法 1: JSON-LD VideoObject.genre
+-            for script in html.xpath('//script[@type="application/ld+json"]/text()'):
++            for script in html.find_all(
++                "script", attrs={"type": "application/ld+json"}
++            ):
+                 try:
+-                    ld = _json.loads(script)
++                    ld = json.loads(script.get_text())
+                     if isinstance(ld, dict) and ld.get('@type') == 'VideoObject':
+                         genre = ld.get('genre')
+                         if genre and isinstance(genre, list):
+                             return [g for g in genre if isinstance(g, str)]
+-                except _json.JSONDecodeError:
++                except json.JSONDecodeError:
+                     continue
+ 
+             # 方法 2: XPath ジャンル 表格欄
+-            tags = html.xpath(
+-                '//th[contains(.//text(),"ジャンル")]/following-sibling::td//a/text()'
+-            )
+-            return [t.strip() for t in tags if t.strip()]
++            for header in html.find_all("th"):
++                if "ジャンル" not in header.get_text(" ", strip=True):
++                    continue
++                cell = header.find_next_sibling("td")
++                if cell is None:
++                    return []
++                return [
++                    node.get_text(strip=True)
++                    for node in cell.select("a")
++                    if node.get_text(strip=True)
++                ]
++            return []
+ 
+         except Exception:
+             return []
+--- a/core/scrapers/fc2_javten.py
++++ b/core/scrapers/fc2_javten.py
+@@ -4,7 +4,7 @@
+ from typing import Optional
+ from urllib.parse import urlsplit
+ 
+-from lxml import etree
++from bs4 import BeautifulSoup
+ 
+ from core.cf_transport import (
+     CfChallengeRequired,
+@@ -114,50 +114,50 @@
+ 
+     def _get_title(self, html) -> str:
+         """取得標題"""
+-        # BE-SCRAPER-05：/text() 已知脆弱點（站方多包一層 <a> 會靜默抽空）；T0 真檔實測全中，不改
+-        result = html.xpath("//h1/text()")
++        result = [node.get_text(strip=True) for node in html.find_all("h1")]
+         # 第二個 h1 是標題（第一個是番號）
+-        return result[1].strip() if len(result) > 1 else ""
++        return result[1] if len(result) > 1 else ""
+ 
+     def _get_cover(self, html) -> str:
+         """取得封面"""
+-        result = html.xpath('//a[@data-fancybox="gallery"]/@href')
+-        if result:
+-            url = result[0]
+-            return f"https:{url}" if url.startswith("//") else url
+-        return ""
++        node = html.select_one('a[data-fancybox="gallery"][href]')
++        if not node:
++            return ""
++        url = node.get("href", "")
++        return f"https:{url}" if url.startswith("//") else url
+ 
+     def _get_extrafanart(self, html) -> list[str]:
+         """取得額外劇照"""
+-        result = html.xpath('//div[@style="padding: 0"]/a/@href')
++        result = [
++            node.get("href", "")
++            for node in html.select('div[style="padding: 0"] a[href]')
++        ]
+         return [f"https:{u}" if u.startswith("//") else u for u in result]
+ 
+     def _get_studio(self, html) -> str:
+         """取得賣家（作為片商）"""
+-        # BE-SCRAPER-05：/text() 已知脆弱點（站方多包一層 <a> 會靜默抽空）；T0 真檔實測全中，不改
+-        result = html.xpath('//div[@class="col-8"]/text()')
+-        return result[0].strip() if result else ""
++        node = html.select_one("div.col-8")
++        return node.get_text(strip=True) if node else ""
+ 
+     def _get_tags(self, html) -> list[str]:
+         """取得標籤"""
+-        # BE-SCRAPER-05：/text() 已知脆弱點（站方多包一層 <a> 會靜默抽空）；T0 真檔實測全中，不改
+-        result = html.xpath('//p[@class="card-text"]/a[contains(@href, "/tag/")]/text()')
+-        return [tag.strip() for tag in result if tag.strip()]
++        result = html.select('p.card-text a[href*="/tag/"]')
++        return [tag.get_text(strip=True) for tag in result if tag.get_text(strip=True)]
+ 
+     def _get_outline(self, html) -> str:
+         """取得簡介"""
+-        result = html.xpath('//div[@class="col des"]//text()')
+-        text = "".join(result).strip()
++        node = html.select_one("div.col.des")
++        text = node.get_text().strip() if node else ""
+         # 清理文字
+         text = text.replace("\\n", " ").replace("・", "").strip()
+         return text
+ 
+     def _get_rating(self, html) -> Optional[float]:
+         """取得評分（JSON-LD aggregateRating.ratingValue，0–5，defensive）"""
+-        scripts = html.xpath('//script[@type="application/ld+json"]/text()')
++        scripts = html.find_all("script", attrs={"type": "application/ld+json"})
+         for script in scripts:
+             try:
+-                data = json.loads(script)
++                data = json.loads(script.get_text())
+                 # JSON-LD 可能是：單一物件（dict）、頂層陣列（list）、
+                 # 或 {"@graph": [...]} 包裹（常見於多節點 JSON-LD）
+                 if isinstance(data, list):
+@@ -225,7 +225,7 @@
+             ja_url = strip_lang_segment(final)
+             html = transport.fetch(ja_url, 'fc-javten')
+ 
+-            html_tree = etree.fromstring(html.encode('utf-8'), etree.HTMLParser())
++            html_tree = BeautifulSoup(html, "html.parser")
+             title = self._get_title(html_tree)
+             if not title:
+                 return None
+--- a/core/scrapers/fc2_official.py
++++ b/core/scrapers/fc2_official.py
+@@ -11,7 +11,7 @@
+ from typing import Optional
+ 
+ import requests
+-from lxml import etree
++from bs4 import BeautifulSoup
+ 
+ from core.logger import get_logger
+ 
+@@ -80,9 +80,9 @@
+ 
+     def _get_json_ld_product(self, html) -> Optional[dict]:
+         """取得 JSON-LD Product 節點（頁面只有一個 ld+json script）"""
+-        scripts = html.xpath('//script[@type="application/ld+json"]')
++        scripts = html.find_all("script", attrs={"type": "application/ld+json"})
+         for script in scripts:
+-            text = "".join(script.itertext())
++            text = script.get_text()
+             if not text:
+                 continue
+             try:
+@@ -94,8 +94,10 @@
+         return None
+ 
+     def _get_meta_content(self, html, prop: str) -> str:
+-        result = html.xpath(f'//meta[@property="{prop}"]/@content')
+-        return result[0].strip() if result else ""
++        node = html.find("meta", attrs={"property": prop})
++        if not node:
++            return ""
++        return (node.get("content") or "").strip()
+ 
+     def _get_title(self, ld: Optional[dict], html, fc2_number: str) -> str:
+         """標題來源：JSON-LD name 為主（CD-118b-3）；無 JSON-LD 時退回 og:title
+@@ -140,32 +142,31 @@
+         （選擇器不釘標籤名，實測該區塊是 section，CD-118b-9 的鄰居陷阱）
+         再套既有過濾移除 無修正／无修正（CD-118b-5＋18）
+         """
+-        nodes = html.xpath(
+-            '//*[contains(@class,"items_article_TagArea")]'
+-            '//a[contains(@href,"/search/?tag=")]'
++        nodes = html.select(
++            '[class*="items_article_TagArea"] a[href*="/search/?tag="]'
+         )
+         tags = []
+         for node in nodes:
+-            text = "".join(node.itertext()).strip()
++            text = "".join(node.stripped_strings)
+             if text:
+                 tags.append(text)
+         return [t for t in tags if t not in ("無修正", "无修正")]
+ 
+     def _get_seller(self, html) -> str:
+         """賣家：sellerBox 的 h4//a 文字（同時填 maker 與 actresses[0]，CD-118b-18）"""
+-        nodes = html.xpath('//*[contains(@class,"items_comment_sellerBox")]//h4//a')
++        nodes = html.select('[class*="items_comment_sellerBox"] h4 a')
+         if not nodes:
+             return ""
+-        return "".join(nodes[0].itertext()).strip()
++        return "".join(nodes[0].stripped_strings)
+ 
+     def _get_date(self, html) -> str:
+         """
+         發售日：含「販売日」的 items_article_softDevice → YYYY/MM/DD → YYYY-MM-DD
+         （實測同頁該 class 出現 3 次：對應裝置／販売日／商品ID，CD-118b-6）
+         """
+-        nodes = html.xpath('//*[contains(@class,"items_article_softDevice")]')
++        nodes = html.select('[class*="items_article_softDevice"]')
+         for node in nodes:
+-            text = "".join(node.itertext())
++            text = node.get_text(" ", strip=True)
+             if "販売日" not in text:
+                 continue
+             m = re.search(r'(\d{4})/(\d{2})/(\d{2})', text)
+@@ -178,9 +179,10 @@
+         劇照：items_article_SampleImagesArea 內 a/@href（w1280）
+         （實測該區塊是 ul 不是 section，CD-118b-9）；// 補 https:
+         """
+-        result = html.xpath(
+-            '//*[contains(@class,"items_article_SampleImagesArea")]//a/@href'
+-        )
++        result = [
++            node.get("href", "")
++            for node in html.select('[class*="items_article_SampleImagesArea"] a[href]')
++        ]
+         images = []
+         for url in result:
+             url = url.strip()
+@@ -236,7 +238,7 @@
+             return None
+ 
+         try:
+-            html = etree.fromstring(resp.content, etree.HTMLParser())
++            html = BeautifulSoup(resp.content, "html.parser")
+ 
+             ld = self._get_json_ld_product(html)
+             og_url = self._get_meta_content(html, "og:url")
+--- a/core/scrapers/heyzo.py
++++ b/core/scrapers/heyzo.py
+@@ -5,9 +5,9 @@
+ from typing import Optional
+ 
+ from core.logger import get_logger
++from bs4 import BeautifulSoup
+ 
+ logger = get_logger(__name__)
+-from lxml import etree
+ from .base import BaseScraper
+ from .models import Video, Actress, ScraperConfig
+ from .utils import rate_limit
+@@ -76,11 +76,11 @@
+             解析後的 dict，找不到或解析失敗返回 None
+         """
+         try:
+-            html = etree.fromstring(html_content, etree.HTMLParser())
+-            scripts = html.xpath('//script[@type="application/ld+json"]/text()')
++            html = BeautifulSoup(html_content, "html.parser")
++            scripts = html.find_all("script", attrs={"type": "application/ld+json"})
+             for script in scripts:
+                 try:
+-                    data = json.loads(script)
++                    data = json.loads(script.get_text())
+                     if isinstance(data, dict) and data.get('@type') == 'Movie':
+                         return data
+                 except json.JSONDecodeError:
+@@ -203,17 +203,16 @@
+             'actresses': [], 'date': '',
+         }
+         try:
+-            html = etree.fromstring(html_content, etree.HTMLParser())
++            html = BeautifulSoup(html_content, "html.parser")
++            table = html.select_one("table.movieInfo")
+ 
+             # Series（值現在可能被 <a> 包住（有連結的 series），也可能是純文字
+             # placeholder（"-----"）；讀整格文字（.//text()）而非只讀直接 text
+             # node，否則 <a> 包住的值會被漏接，抽出全空字串）
+-            series_nodes = html.xpath(
+-                '//table[@class="movieInfo"]//tr/td[contains(text(),"Series")]/following-sibling::td[1]'
+-            )
+             series_text = ''
+-            if series_nodes:
+-                raw = ''.join(series_nodes[0].xpath('.//text()')).replace('\xa0', ' ')
++            series_node = self._table_value(table, "Series")
++            if series_node is not None:
++                raw = series_node.get_text(" ", strip=True).replace('\xa0', ' ')
+                 series_text = ' '.join(raw.split())
+             # Filter out placeholder values like "-----" or "---"
+             if series_text and all(c == '-' for c in series_text):
+@@ -221,30 +220,25 @@
+             result['series'] = series_text
+ 
+             # Tags（Type 欄位）
+-            tags = html.xpath(
+-                '//table[@class="movieInfo"]//tr/td[contains(text(),"Type")]/following-sibling::td[1]//a/text()'
+-            )
+-            result['tags'] = [t.strip() for t in tags if t.strip()]
++            tags_node = self._table_value(table, "Type")
++            tags = tags_node.select("a") if tags_node is not None else []
++            result['tags'] = [t.get_text(strip=True) for t in tags if t.get_text(strip=True)]
+ 
+             # Actress(es)（支援多個 <a>；文字含大量 \t\n 與 \xa0，需正規化後再判空）
+-            actress_nodes = html.xpath(
+-                '//table[@class="movieInfo"]//tr/td[contains(text(),"Actress")]'
+-                '/following-sibling::td[1]//a/text()'
+-            )
++            actress_node = self._table_value(table, "Actress")
++            actress_nodes = actress_node.select("a") if actress_node is not None else []
+             actresses = []
+-            for name in actress_nodes:
+-                cleaned = name.replace('\xa0', ' ').strip()
++            for node in actress_nodes:
++                cleaned = node.get_text(" ", strip=True).replace('\xa0', ' ').strip()
+                 if cleaned:
+                     actresses.append(cleaned)
+             result['actresses'] = actresses
+ 
+             # Released（可能是單一日期、日期區間「start ～ end」、"Coming Soon !!"
+             # 或空白；一律取 leading date，抽不到就回空字串，不 raise）
+-            released = html.xpath(
+-                '//table[@class="movieInfo"]//tr/td[contains(text(),"Released")]/following-sibling::td[1]'
+-            )
+-            if released:
+-                released_text = released[0].xpath('string(.)')
++            released = self._table_value(table, "Released")
++            if released is not None:
++                released_text = released.get_text(" ", strip=True)
+                 released_text = released_text.replace('\xa0', ' ').strip()
+                 date_match = re.match(r'^(\d{4}-\d{2}-\d{2})', released_text)
+                 if date_match:
+@@ -275,6 +269,19 @@
+         except Exception as e:
+             logger.debug(f"HEYZO table parse error: {e}")
+         return result
++
++    @staticmethod
++    def _table_value(table, label: str):
++        """Return the cell following the first movieInfo cell containing label."""
++        if table is None:
++            return None
++        for cell in table.find_all("td"):
++            if label not in cell.get_text(" ", strip=True):
++                continue
++            sibling = cell.find_next_sibling("td")
++            if sibling is not None:
++                return sibling
++        return None
+ 
+     def search(self, number: str) -> Optional[Video]:
+         """

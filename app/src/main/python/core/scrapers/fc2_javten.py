@@ -4,7 +4,7 @@ import re
 from typing import Optional
 from urllib.parse import urlsplit
 
-from lxml import etree
+from bs4 import BeautifulSoup
 
 from core.cf_transport import (
     CfChallengeRequired,
@@ -114,50 +114,50 @@ class FC2JavtenScraper(BaseScraper):
 
     def _get_title(self, html) -> str:
         """取得標題"""
-        # BE-SCRAPER-05：/text() 已知脆弱點（站方多包一層 <a> 會靜默抽空）；T0 真檔實測全中，不改
-        result = html.xpath("//h1/text()")
+        result = [node.get_text(strip=True) for node in html.find_all("h1")]
         # 第二個 h1 是標題（第一個是番號）
-        return result[1].strip() if len(result) > 1 else ""
+        return result[1] if len(result) > 1 else ""
 
     def _get_cover(self, html) -> str:
         """取得封面"""
-        result = html.xpath('//a[@data-fancybox="gallery"]/@href')
-        if result:
-            url = result[0]
-            return f"https:{url}" if url.startswith("//") else url
-        return ""
+        node = html.select_one('a[data-fancybox="gallery"][href]')
+        if not node:
+            return ""
+        url = node.get("href", "")
+        return f"https:{url}" if url.startswith("//") else url
 
     def _get_extrafanart(self, html) -> list[str]:
         """取得額外劇照"""
-        result = html.xpath('//div[@style="padding: 0"]/a/@href')
+        result = [
+            node.get("href", "")
+            for node in html.select('div[style="padding: 0"] a[href]')
+        ]
         return [f"https:{u}" if u.startswith("//") else u for u in result]
 
     def _get_studio(self, html) -> str:
         """取得賣家（作為片商）"""
-        # BE-SCRAPER-05：/text() 已知脆弱點（站方多包一層 <a> 會靜默抽空）；T0 真檔實測全中，不改
-        result = html.xpath('//div[@class="col-8"]/text()')
-        return result[0].strip() if result else ""
+        node = html.select_one("div.col-8")
+        return node.get_text(strip=True) if node else ""
 
     def _get_tags(self, html) -> list[str]:
         """取得標籤"""
-        # BE-SCRAPER-05：/text() 已知脆弱點（站方多包一層 <a> 會靜默抽空）；T0 真檔實測全中，不改
-        result = html.xpath('//p[@class="card-text"]/a[contains(@href, "/tag/")]/text()')
-        return [tag.strip() for tag in result if tag.strip()]
+        result = html.select('p.card-text a[href*="/tag/"]')
+        return [tag.get_text(strip=True) for tag in result if tag.get_text(strip=True)]
 
     def _get_outline(self, html) -> str:
         """取得簡介"""
-        result = html.xpath('//div[@class="col des"]//text()')
-        text = "".join(result).strip()
+        node = html.select_one("div.col.des")
+        text = node.get_text().strip() if node else ""
         # 清理文字
         text = text.replace("\\n", " ").replace("・", "").strip()
         return text
 
     def _get_rating(self, html) -> Optional[float]:
         """取得評分（JSON-LD aggregateRating.ratingValue，0–5，defensive）"""
-        scripts = html.xpath('//script[@type="application/ld+json"]/text()')
+        scripts = html.find_all("script", attrs={"type": "application/ld+json"})
         for script in scripts:
             try:
-                data = json.loads(script)
+                data = json.loads(script.get_text())
                 # JSON-LD 可能是：單一物件（dict）、頂層陣列（list）、
                 # 或 {"@graph": [...]} 包裹（常見於多節點 JSON-LD）
                 if isinstance(data, list):
@@ -225,7 +225,7 @@ class FC2JavtenScraper(BaseScraper):
             ja_url = strip_lang_segment(final)
             html = transport.fetch(ja_url, 'fc-javten')
 
-            html_tree = etree.fromstring(html.encode('utf-8'), etree.HTMLParser())
+            html_tree = BeautifulSoup(html, "html.parser")
             title = self._get_title(html_tree)
             if not title:
                 return None

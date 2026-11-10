@@ -43,6 +43,10 @@ Do not edit a current Android file without updating its patch.
 | `006-mobile-web-routers.patch` | mobile scanner/showcase/capability routes, batch tag-source updates, missing-sidecar number recovery, source-title rename previews, and combined filename/folder rename execution |
 | `007-mobile-ui-and-localization.patch` | Simplified Chinese defaults, navigation, unified mobile state/error cards, single-load compiled theme CSS, shared global toast dispatch, compact and high-contrast library-insight summary/deep-dive views, responsive search and scanner layouts, touch-safe floating handle, desktop-only settings cleanup, system video-player handoff, task controls, safe batch maintenance, persistent settings save state, the phone-specific Help guide with tutorial removal, coordinated scanner action controls, the merged source-driven file/folder naming UI, and bounded video/actress cover image windows that release decoded bitmaps after cards leave the viewport |
 | `008-mobile-loopback-auth.patch` | process-local token gate for the embedded loopback server |
+| `009-remove-demo-subsystem.patch` | removes developer-only motion-lab/design-system pages, scripts, styles, and demo images |
+| `010-woff2-only-icons.patch` | keeps the Bootstrap Icons WOFF2 asset and removes the duplicate WOFF fallback |
+| `011-echarts-insights-bundle.patch` | replaces full ECharts with the reproducible Insights-only build and vendor manifest |
+| `012-bs4-html-parser.patch` | replaces runtime `lxml` parsing with BeautifulSoup `html.parser` across scrapers and custom sources |
 
 `manifest.json` records the exact file membership for automated checks.
 

@@ -79,7 +79,7 @@ async def verify_pin(request: Request) -> Response:
     不讓例外冒穿成 Starlette 500（那本身就是另一種洩漏——未認證訪客看到
     的東西必須永遠長一樣）。
     """
-    from web.app import render_access_gate_page  # 延遲 import，避免循環依賴（同 motion_lab.py:25 先例）
+    from web.app import render_access_gate_page  # 延遲 import，避免循環依賴
 
     await _fixed_delay()
 
@@ -133,8 +133,8 @@ def get_access_settings(raw_request: Request) -> dict:
     （loopback，或已通過 PIN 驗證的遠端持票人）都能看到 enabled 狀態；
     PIN 真值只給 loopback 或已登入（cookie／bearer）的呼叫者；
     reveal 由 web 層判斷，core 層不判斷位址或票證。"""
-    # 延遲 import，避免與 web.app → access router 的循環依賴（同 verify_pin /
-    # motion_lab.py 先例）。PLC2701 仍以 noqa 標明跨模組私有名依賴理由。
+    # 延遲 import，避免與 web.app → access router 的循環依賴。
+    # PLC2701 仍以 noqa 標明跨模組私有名依賴理由。
     from web.app import _bearer_token, _is_loopback_host  # noqa: PLC2701 — 與 middleware 共用判斷
 
     _client = raw_request.client

@@ -2,6 +2,7 @@
 import json
 import re
 import requests
+from bs4 import BeautifulSoup
 from pathlib import Path
 from typing import NamedTuple, Optional
 
@@ -390,27 +391,34 @@ class DMMScraper(BaseScraper):
             if resp.status_code != 200:
                 return []
 
-            from lxml import etree
-            import json as _json
-
-            html = etree.fromstring(resp.content, etree.HTMLParser())
+            html = BeautifulSoup(resp.content, "html.parser")
 
             # 方法 1: JSON-LD VideoObject.genre
-            for script in html.xpath('//script[@type="application/ld+json"]/text()'):
+            for script in html.find_all(
+                "script", attrs={"type": "application/ld+json"}
+            ):
                 try:
-                    ld = _json.loads(script)
+                    ld = json.loads(script.get_text())
                     if isinstance(ld, dict) and ld.get('@type') == 'VideoObject':
                         genre = ld.get('genre')
                         if genre and isinstance(genre, list):
                             return [g for g in genre if isinstance(g, str)]
-                except _json.JSONDecodeError:
+                except json.JSONDecodeError:
                     continue
 
             # 方法 2: XPath ジャンル 表格欄
-            tags = html.xpath(
-                '//th[contains(.//text(),"ジャンル")]/following-sibling::td//a/text()'
-            )
-            return [t.strip() for t in tags if t.strip()]
+            for header in html.find_all("th"):
+                if "ジャンル" not in header.get_text(" ", strip=True):
+                    continue
+                cell = header.find_next_sibling("td")
+                if cell is None:
+                    return []
+                return [
+                    node.get_text(strip=True)
+                    for node in cell.select("a")
+                    if node.get_text(strip=True)
+                ]
+            return []
 
         except Exception:
             return []

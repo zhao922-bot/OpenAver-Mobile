@@ -1,4 +1,10 @@
+import hashlib
+import importlib.util
+import json
+import zipfile
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -346,6 +352,233 @@ def test_heavy_motion_assets_are_page_gated():
     assert "{% if uses_ghost_fly %}" in base
     assert "{% if uses_burst_picker %}" in base
     assert "{% if page == 'insights' %}" in base
+
+
+def test_demo_subsystem_is_not_shipped():
+    app = (
+        ROOT
+        / "app/src/main/python/web/app.py"
+    ).read_text(encoding="utf-8")
+    patch_generator = (
+        ROOT
+        / "tools/generate_patches.py"
+    ).read_text(encoding="utf-8")
+
+    assert "/design-system" not in app
+    assert "motion_lab" not in app
+    assert not (
+        ROOT / "app/src/main/python/web/routers/motion_lab.py"
+    ).exists()
+    assert not (
+        ROOT / "app/src/main/python/web/templates/motion_lab.html"
+    ).exists()
+    assert not (
+        ROOT / "app/src/main/python/web/templates/design-system.html"
+    ).exists()
+    assert not (
+        ROOT / "app/src/main/python/web/static/css/pages/design-system.css"
+    ).exists()
+    assert not (
+        ROOT / "app/src/main/python/web/static/js/pages/motion-lab.js"
+    ).exists()
+    assert not (
+        ROOT / "app/src/main/python/web/static/js/pages/motion-lab-state.js"
+    ).exists()
+    assert not (
+        ROOT / "app/src/main/python/web/static/img/showcase"
+    ).exists()
+    assert not (
+        ROOT / "app/src/main/python/web/static/img/picker-demo"
+    ).exists()
+    assert not (
+        ROOT / "app/src/main/python/web/static/img/demo"
+    ).exists()
+    assert "009-remove-demo-subsystem.patch" in patch_generator
+    for relative in (
+        "web/routers/motion_lab.py",
+        "web/static/css/pages/design-system.css",
+        "web/static/img/showcase/sc-1.jpg",
+        "web/static/js/pages/motion-lab.js",
+        "web/templates/design-system.html",
+        "web/templates/motion_lab.html",
+    ):
+        assert f'"{relative}"' in patch_generator
+
+
+def test_bootstrap_icons_are_woff2_only():
+    css = (
+        ROOT
+        / "app/src/main/python/web/static/vendor/bootstrap-icons/bootstrap-icons.css"
+    ).read_text(encoding="utf-8")
+    manifest = (
+        ROOT
+        / "app/src/main/python/web/static/vendor/manifest.json"
+    ).read_text(encoding="utf-8")
+    patch_generator = (
+        ROOT
+        / "tools/generate_patches.py"
+    ).read_text(encoding="utf-8")
+
+    assert "bootstrap-icons.woff2" in css
+    assert "bootstrap-icons.woff?" not in css
+    assert not (
+        ROOT
+        / "app/src/main/python/web/static/vendor/bootstrap-icons/fonts/bootstrap-icons.woff"
+    ).exists()
+    assert "bootstrap-icons/fonts/bootstrap-icons.woff\"" not in manifest
+    assert "010-woff2-only-icons.patch" in patch_generator
+
+
+def test_echarts_insights_bundle_is_reduced_and_reproducible():
+    bundle = (
+        ROOT
+        / "app/src/main/python/web/static/vendor/echarts/echarts.min.js"
+    )
+    bundle_bytes = bundle.read_bytes()
+    bundle_text = bundle_bytes.decode("utf-8")
+    manifest = json.loads(
+        (
+            ROOT
+            / "app/src/main/python/web/static/vendor/manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    entry = (
+        ROOT
+        / "tools/echarts-build/src/insights-entry.js"
+    ).read_text(encoding="utf-8")
+    package = json.loads(
+        (
+            ROOT
+            / "tools/echarts-build/package.json"
+        ).read_text(encoding="utf-8")
+    )
+    patch_generator = (
+        ROOT
+        / "tools/generate_patches.py"
+    ).read_text(encoding="utf-8")
+    echarts = next(
+        item
+        for item in manifest["vendor"]
+        if item["path"] == "web/static/vendor/echarts/echarts.min.js"
+    )
+
+    assert len(bundle_bytes) < 650_000
+    assert bundle_text.startswith("/*! ECharts 6.1.0")
+    assert hashlib.sha256(bundle_bytes).hexdigest() == echarts["local_sha256"]
+    assert package["devDependencies"]["echarts"] == "6.1.0"
+    for module in (
+        "BarChart",
+        "PieChart",
+        "TreemapChart",
+        "TooltipComponent",
+        "UniversalTransition",
+        "CanvasRenderer",
+    ):
+        assert module in entry
+    assert "011-echarts-insights-bundle.patch" in patch_generator
+
+
+def test_release_web_assets_are_minified_without_touching_sources(tmp_path):
+    script_path = ROOT / "tools/minify-release-web-assets.py"
+    spec = importlib.util.spec_from_file_location(
+        "minify_release_web_assets",
+        script_path,
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    build_gradle = (ROOT / "app/build.gradle").read_text(encoding="utf-8")
+    base = (
+        ROOT
+        / "app/src/main/python/web/templates/base.html"
+    ).read_text(encoding="utf-8")
+    tailwind = (
+        ROOT
+        / "app/src/main/python/web/static/css/tailwind.css"
+    ).read_text(encoding="utf-8")
+
+    assert 'tasks.register("minifyReleaseWebAssets")' in build_gradle
+    assert 'dependsOn tasks.named("generateReleasePythonBuildAssets")' in build_gradle
+    assert 'if (task.name == "mergeReleaseAssets")' in build_gradle
+    assert "task.dependsOn(minifyReleaseWebAssets)" in build_gradle
+    assert "tools/minify-release-web-assets.py" in build_gradle
+    assert "minifyDebug" not in build_gradle
+    assert "npm ci --prefix tools/echarts-build" in (
+        ROOT / ".github/workflows/build.yml"
+    ).read_text(encoding="utf-8")
+    assert "npm ci --prefix tools/echarts-build" in (
+        ROOT / ".github/workflows/release.yml"
+    ).read_text(encoding="utf-8")
+
+    assert module.is_minifiable_entry("web/static/js/app.js")
+    assert module.is_minifiable_entry("web/static/css/pages/home.css")
+    assert not module.is_minifiable_entry("web/static/vendor/alpine/alpine.min.js")
+    assert not module.is_minifiable_entry("web/templates/base.html")
+    assert not module.is_minifiable_entry("core/app.py")
+    assert "@tailwind" not in tailwind
+    assert base.count('src="/static/vendor/alpine/alpine.min.js"') == 1
+    assert base.count('src="/static/vendor/gsap/gsap.min.js"') == 1
+    assert base.count('href="/static/vendor/bootstrap-icons/bootstrap-icons.css"') == 1
+
+    archive = tmp_path / "app.imy"
+    original = {
+        "web/static/js/app.js": b"function longName() { return 1; }\n",
+        "web/static/css/app.css": b".example { color: red; }\n",
+        "web/static/vendor/alpine/alpine.min.js": b"vendor-script",
+        "core/app.py": b"print('source')",
+    }
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
+        for name, data in original.items():
+            output.writestr(name, data)
+
+    replacements = {
+        "web/static/js/app.js": b"function longName(){return 1}",
+        "web/static/css/app.css": b".example{color:red}",
+        "web/static/vendor/alpine/alpine.min.js": b"vendor",
+    }
+    with pytest.raises(ValueError):
+        module.apply_replacements(archive, replacements)
+    assert archive.read_bytes().startswith(b"PK")
+
+    replacements.pop("web/static/vendor/alpine/alpine.min.js")
+    replaced, before_bytes, after_bytes = module.apply_replacements(
+        archive,
+        replacements,
+    )
+    assert replaced == 2
+    assert before_bytes > after_bytes
+    with zipfile.ZipFile(archive, "r") as rewritten:
+        assert rewritten.read("web/static/js/app.js") == replacements[
+            "web/static/js/app.js"
+        ]
+        assert rewritten.read("web/static/css/app.css") == replacements[
+            "web/static/css/app.css"
+        ]
+        assert (
+            rewritten.read("web/static/vendor/alpine/alpine.min.js")
+            == original["web/static/vendor/alpine/alpine.min.js"]
+        )
+        assert rewritten.read("core/app.py") == original["core/app.py"]
+        assert rewritten.testzip() is None
+
+
+def test_android_scanner_layout_keeps_localized_paths_and_actions_visible():
+    scanner = (
+        ROOT
+        / "app/src/main/python/web/templates/scanner.html"
+    ).read_text(encoding="utf-8")
+    mobile_css = (
+        ROOT
+        / "app/src/main/python/web/static/css/components/mobile-ui.css"
+    ).read_text(encoding="utf-8")
+
+    assert 'id="scannerPage"' in scanner
+    assert '[data-is-android="true"] #scannerPage .folder-item {' in mobile_css
+    assert 'grid-template-areas:\n      "readonly icon remove"\n      "path path path";' in mobile_css
+    assert "word-break: normal;" in mobile_css
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in mobile_css
+    assert "grid-column: 1 / -1;" in mobile_css
 
 
 def test_lightweight_motion_pages_share_runtime_without_heavy_plugins():

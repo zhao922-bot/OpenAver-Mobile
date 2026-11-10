@@ -21,7 +21,7 @@ _NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
 
 
 def parse_html(html):
-    return BeautifulSoup(html, "lxml")
+    return BeautifulSoup(html, "html.parser")
 
 
 # ---------------------------------------------------------------- 來源

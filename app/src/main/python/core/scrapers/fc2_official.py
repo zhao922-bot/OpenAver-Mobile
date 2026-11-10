@@ -11,7 +11,7 @@ import re
 from typing import Optional
 
 import requests
-from lxml import etree
+from bs4 import BeautifulSoup
 
 from core.logger import get_logger
 
@@ -80,9 +80,9 @@ class FC2OfficialScraper(BaseScraper):
 
     def _get_json_ld_product(self, html) -> Optional[dict]:
         """取得 JSON-LD Product 節點（頁面只有一個 ld+json script）"""
-        scripts = html.xpath('//script[@type="application/ld+json"]')
+        scripts = html.find_all("script", attrs={"type": "application/ld+json"})
         for script in scripts:
-            text = "".join(script.itertext())
+            text = script.get_text()
             if not text:
                 continue
             try:
@@ -94,8 +94,10 @@ class FC2OfficialScraper(BaseScraper):
         return None
 
     def _get_meta_content(self, html, prop: str) -> str:
-        result = html.xpath(f'//meta[@property="{prop}"]/@content')
-        return result[0].strip() if result else ""
+        node = html.find("meta", attrs={"property": prop})
+        if not node:
+            return ""
+        return (node.get("content") or "").strip()
 
     def _get_title(self, ld: Optional[dict], html, fc2_number: str) -> str:
         """標題來源：JSON-LD name 為主（CD-118b-3）；無 JSON-LD 時退回 og:title
@@ -140,32 +142,31 @@ class FC2OfficialScraper(BaseScraper):
         （選擇器不釘標籤名，實測該區塊是 section，CD-118b-9 的鄰居陷阱）
         再套既有過濾移除 無修正／无修正（CD-118b-5＋18）
         """
-        nodes = html.xpath(
-            '//*[contains(@class,"items_article_TagArea")]'
-            '//a[contains(@href,"/search/?tag=")]'
+        nodes = html.select(
+            '[class*="items_article_TagArea"] a[href*="/search/?tag="]'
         )
         tags = []
         for node in nodes:
-            text = "".join(node.itertext()).strip()
+            text = "".join(node.stripped_strings)
             if text:
                 tags.append(text)
         return [t for t in tags if t not in ("無修正", "无修正")]
 
     def _get_seller(self, html) -> str:
         """賣家：sellerBox 的 h4//a 文字（同時填 maker 與 actresses[0]，CD-118b-18）"""
-        nodes = html.xpath('//*[contains(@class,"items_comment_sellerBox")]//h4//a')
+        nodes = html.select('[class*="items_comment_sellerBox"] h4 a')
         if not nodes:
             return ""
-        return "".join(nodes[0].itertext()).strip()
+        return "".join(nodes[0].stripped_strings)
 
     def _get_date(self, html) -> str:
         """
         發售日：含「販売日」的 items_article_softDevice → YYYY/MM/DD → YYYY-MM-DD
         （實測同頁該 class 出現 3 次：對應裝置／販売日／商品ID，CD-118b-6）
         """
-        nodes = html.xpath('//*[contains(@class,"items_article_softDevice")]')
+        nodes = html.select('[class*="items_article_softDevice"]')
         for node in nodes:
-            text = "".join(node.itertext())
+            text = node.get_text(" ", strip=True)
             if "販売日" not in text:
                 continue
             m = re.search(r'(\d{4})/(\d{2})/(\d{2})', text)
@@ -178,9 +179,10 @@ class FC2OfficialScraper(BaseScraper):
         劇照：items_article_SampleImagesArea 內 a/@href（w1280）
         （實測該區塊是 ul 不是 section，CD-118b-9）；// 補 https:
         """
-        result = html.xpath(
-            '//*[contains(@class,"items_article_SampleImagesArea")]//a/@href'
-        )
+        result = [
+            node.get("href", "")
+            for node in html.select('[class*="items_article_SampleImagesArea"] a[href]')
+        ]
         images = []
         for url in result:
             url = url.strip()
@@ -236,7 +238,7 @@ class FC2OfficialScraper(BaseScraper):
             return None
 
         try:
-            html = etree.fromstring(resp.content, etree.HTMLParser())
+            html = BeautifulSoup(resp.content, "html.parser")
 
             ld = self._get_json_ld_product(html)
             og_url = self._get_meta_content(html, "og:url")

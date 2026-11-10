@@ -5783,6 +5783,26 @@
  
  _VERIFY_DELAY_SECONDS = 1.0
  _COOKIE_MAX_AGE_SECONDS = 10 * 365 * 24 * 3600  # 十年（CD-114a-6）
+@@ -70,7 +79,7 @@
+     不讓例外冒穿成 Starlette 500（那本身就是另一種洩漏——未認證訪客看到
+     的東西必須永遠長一樣）。
+     """
+-    from web.app import render_access_gate_page  # 延遲 import，避免循環依賴（同 motion_lab.py:25 先例）
++    from web.app import render_access_gate_page  # 延遲 import，避免循環依賴
+ 
+     await _fixed_delay()
+ 
+@@ -124,8 +133,8 @@
+     （loopback，或已通過 PIN 驗證的遠端持票人）都能看到 enabled 狀態；
+     PIN 真值只給 loopback 或已登入（cookie／bearer）的呼叫者；
+     reveal 由 web 層判斷，core 層不判斷位址或票證。"""
+-    # 延遲 import，避免與 web.app → access router 的循環依賴（同 verify_pin /
+-    # motion_lab.py 先例）。PLC2701 仍以 noqa 標明跨模組私有名依賴理由。
++    # 延遲 import，避免與 web.app → access router 的循環依賴。
++    # PLC2701 仍以 noqa 標明跨模組私有名依賴理由。
+     from web.app import _bearer_token, _is_loopback_host  # noqa: PLC2701 — 與 middleware 共用判斷
+ 
+     _client = raw_request.client
 @@ -162,14 +171,14 @@
      else:
          return JSONResponse(status_code=403, content={
@@ -8821,7 +8841,7 @@
  /* 數字清單浮層開著時，把所在統計卡墊到後面的卡片之上（dim 主題 .stats-card 有 backdrop-filter，自成 stacking context；FE-CSS-24） */
 --- /dev/null
 +++ b/web/static/css/components/mobile-ui.css
-@@ -0,0 +1,770 @@
+@@ -0,0 +1,829 @@
 +/* r19: shared mobile state, touch, hierarchy, and density rules. */
 +
 +:root {
@@ -9397,6 +9417,47 @@
 +    padding: 0.75rem;
 +  }
 +
++  /* Long localized read-only labels used to squeeze the folder path into a
++     one-character-wide column. Put the path on its own row on Android. */
++  [data-is-android="true"] #scannerPage .folder-item {
++    display: grid;
++    grid-template-columns: minmax(0, 1fr) auto auto;
++    grid-template-areas:
++      "readonly icon remove"
++      "path path path";
++    row-gap: 0.45rem;
++  }
++
++  [data-is-android="true"] #scannerPage .folder-item > label {
++    grid-area: readonly;
++    min-width: 0;
++    white-space: nowrap;
++  }
++
++  [data-is-android="true"] #scannerPage .folder-item > label > span {
++    min-width: 0;
++    overflow: hidden;
++    text-overflow: ellipsis;
++  }
++
++  [data-is-android="true"] #scannerPage .folder-item .folder-icon {
++    grid-area: icon;
++  }
++
++  [data-is-android="true"] #scannerPage .folder-item .folder-path {
++    grid-area: path;
++    min-width: 0;
++    overflow: hidden;
++    text-overflow: ellipsis;
++    white-space: nowrap;
++    word-break: normal;
++  }
++
++  [data-is-android="true"] #scannerPage .folder-item .btn-remove {
++    grid-area: remove;
++    opacity: 1;
++  }
++
 +  [data-is-android="true"] .output-info-path {
 +    flex-wrap: wrap;
 +  }
@@ -9413,9 +9474,21 @@
 +
 +  [data-is-android="true"] .output-info-actions.scanner-action-cluster {
 +    display: grid;
-+    grid-template-columns: max-content max-content minmax(0, 1fr);
++    grid-template-columns: repeat(2, minmax(0, 1fr));
 +    align-items: stretch;
 +    gap: 0.5rem;
++  }
++
++  [data-is-android="true"] .scanner-action-cluster .path-copy-btn {
++    grid-column: 1;
++  }
++
++  [data-is-android="true"] .scanner-action-cluster .settings-link {
++    grid-column: 2;
++  }
++
++  [data-is-android="true"] .scanner-action-cluster .scanner-generate-inline {
++    grid-column: 1 / -1;
 +  }
 +
 +  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn {
@@ -9430,6 +9503,12 @@
 +  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > span,
 +  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > i {
 +    flex: 0 0 auto;
++  }
++
++  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > span {
++    min-width: 0;
++    overflow: hidden;
++    text-overflow: ellipsis;
 +  }
 +
 +  [data-is-android="true"] .scanner-generate-inline {
@@ -17087,10 +17166,10 @@
        :data-theme="theme"
        :style="'font-size:' + {xs:'13px',sm:'14px',md:'16px',lg:'18px',xl:'20px'}[fontSize]">
 +
-+{% set uses_gsap = page in ['showcase', 'search', 'scanner', 'insights', 'motion-lab', 'design-system'] %}
-+{% set uses_motion_plugins = page in ['showcase', 'search', 'motion-lab', 'design-system'] %}
-+{% set uses_ghost_fly = page in ['showcase', 'search', 'scanner', 'motion-lab', 'design-system'] %}
-+{% set uses_burst_picker = page in ['showcase', 'motion-lab', 'design-system'] %}
++{% set uses_gsap = page in ['showcase', 'search', 'scanner', 'insights'] %}
++{% set uses_motion_plugins = page in ['showcase', 'search'] %}
++{% set uses_ghost_fly = page in ['showcase', 'search', 'scanner'] %}
++{% set uses_burst_picker = page in ['showcase'] %}
  
  <head>
      <meta charset="UTF-8">
@@ -17122,6 +17201,15 @@
      <!-- Rotating Border Effect -->
      <link href="/static/css/components/rotating-border.css" rel="stylesheet">
      <!-- Help Popover -->
+@@ -136,7 +143,7 @@
+     <link href="/static/css/components/browse-dir-modal.css" rel="stylesheet">
+     <!-- 從片庫加入女優面板（117-T3；同為 modal 元件，緊接 rescrape-modal） -->
+     <link href="/static/css/components/actress-add-panel.css" rel="stylesheet">
+-    <!-- Cover badge pill（121c-T4；封面／燈箱／設定頁／design-system 共用本體） -->
++    <!-- Cover badge pill（121c-T4；封面／燈箱／設定頁共用本體） -->
+     <link href="/static/css/components/cover-badge.css" rel="stylesheet">
+ 
+     <style>
 @@ -332,6 +339,38 @@
              height: var(--mobile-topbar-height);
          }
@@ -17217,7 +17305,7 @@
       x-init="$watch('sidebarCollapsed', configSync('sidebar_collapsed'))"
       :class="{ 'sidebar-collapsed': sidebarCollapsed }"
 -     class="{% if page in ['design-system', 'showcase'] %}ds-page{% endif %} fluent-canvas page-{{ page }}">
-+     class="{% if page in ['design-system', 'showcase'] %}ds-page{% endif %} fluent-canvas page-{{ page }}"
++     class="{% if page == 'showcase' %}ds-page{% endif %} fluent-canvas page-{{ page }}"
 +     data-is-android="{{ 'true' if is_android else 'false' }}"
 +     data-network-state="online">
 +    <div id="uiOfflineBanner"
@@ -17321,7 +17409,7 @@
 +    <script defer src="/static/vendor/gsap/CustomEase.min.js"></script>
 +    {% endif %}
 +    {% if uses_motion_plugins %}
-+    <!-- Heavy GSAP plugins used only by showcase/search/motion-lab/design-system. -->
++    <!-- Heavy GSAP plugins used only by showcase/search. -->
      <script defer src="/static/vendor/gsap/Flip.min.js"></script>
      <script defer src="/static/vendor/gsap/Physics2DPlugin.min.js"></script>
 -    <script defer src="/static/vendor/gsap/CustomEase.min.js"></script>
@@ -17367,14 +17455,14 @@
      <!-- 168e-T6: shell reload hook -->
      <script type="module" src="/static/js/shared/shell-reload.js"></script>
      <script type="module" src="/static/js/shared/conn-state.js"></script>
-+    {% if page in ['settings', 'scanner', 'motion-lab', 'design-system'] %}
++    {% if page in ['settings', 'scanner'] %}
      <!-- Help Popover — 說明浮層共用元件（131b-T4） -->
      <script type="module" src="/static/js/components/help-popover.js"></script>
 +    {% endif %}
-+    {% if page in ['scanner', 'design-system'] %}
++    {% if page == 'scanner' %}
      <script type="module" src="/static/js/components/number-drilldown.js"></script>
 +    {% endif %}
-+    {% if page in ['search', 'design-system'] %}
++    {% if page == 'search' %}
      <!-- Auto Organize Panel — 搜尋頁自動整理 popover（TASK-144-T7） -->
      <script type="module" src="/static/js/components/auto-organize-panel.js"></script>
 +    {% endif %}
@@ -17415,17 +17503,6 @@
              </template>
              <template x-for="item in notifBell.items" :key="item.id">
                  <div class="px-4 py-3 border-b border-base-200"
---- a/web/templates/design-system.html
-+++ b/web/templates/design-system.html
-@@ -3614,7 +3614,7 @@
-                                         <div class="text-sm font-medium" x-text="window.t(item.title_key)"></div>
-                                         <div class="text-xs text-base-content/60" x-text="item.message"></div>
-                                         <div class="text-xs text-base-content/40 mt-1"
--                                             x-text="new Date(item.timestamp * 1000).toLocaleString('zh-TW')"></div>
-+                                             x-text="new Date(item.timestamp * 1000).toLocaleString(window.__locale || 'zh-CN')"></div>
-                                     </div>
-                                 </div>
-                             </div>
 --- a/web/templates/help.html
 +++ b/web/templates/help.html
 @@ -36,11 +36,6 @@
@@ -17914,9 +17991,12 @@
  
  {% block title %}{{ t('scanner.page_title') }} - OpenAver{% endblock %}
  
-@@ -15,9 +16,10 @@
+@@ -13,11 +14,12 @@
+ 
+ {% block content %}
  <div class="page-layer">
- <div class="avlist-container ds-gallery-composition" x-data="scanner"
+-<div class="avlist-container ds-gallery-composition" x-data="scanner"
++<div id="scannerPage" class="avlist-container ds-gallery-composition" x-data="scanner"
       data-shell-mode="{{ shell_mode or '' }}"
 +     data-is-android="{{ 'true' if is_android else 'false' }}"
       @dragover.document.prevent="handleDragOver($event)"

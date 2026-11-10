@@ -78,6 +78,9 @@ jobs:
       - name: Check JavaScript syntax
         run: find app/src/main/python/web/static/js -name '*.js' -exec node --check {} \;
 
+      - name: Install build JavaScript dependencies
+        run: npm ci --prefix tools/echarts-build
+
       - name: Run Android JVM unit tests
         run: |
           chmod +x ./gradlew

@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r55-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r56-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r55-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r56-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r55`（versionCode `17073`）
+- 版本：`0.17.18-r56`（versionCode `17074`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -255,6 +255,15 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   完成后自动继续并重试当前影片
 - r55：修复 Jable 不存在的番号返回 404 时被误报为验证窗口故障的问题；现在会正常
   显示“所选来源没有结果”，不会中断整批任务
+- r56：移除仅用于开发演示的页面、脚本和静态图片，删除重复的 Bootstrap Icons
+  WOFF 字体，并将 ECharts 改为 Insights 所需的按需构建；静态图片减少约
+  3.44 MiB，ECharts 减少约 46.5%
+- r56：将五个 `lxml` 解析入口迁移到 BeautifulSoup `html.parser`，移除
+  `lxml`/libxml2/libxslt 运行时依赖；Release 包仅压缩自研 JS/CSS，不修改
+  `vendor` 源码
+- r56：最终 arm64 Release 约 `22.20 MiB`，较 r55 减少约 `6.54 MiB`；扫描、
+  浏览、搜索、Insights、设置、四语言、播放、翻译、NFO、剧照、数据库导入导出、
+  后台任务和真实设备 SD 卡路径均已回归验证
 
 ## 限制
 
@@ -282,6 +291,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - Android SDK 36
 - Android NDK `28.2.13676358`
 - 可选：Python 3.13
+- Node.js 18+（Release 构建会使用固定版本的 ESBuild 压缩自研 JS/CSS）
 
 设置 SDK 后构建：
 
@@ -300,6 +310,15 @@ $env:OPENAVER_BUILD_PYTHON = "C:\path\to\python.exe"
 未指定 `OPENAVER_BUILD_PYTHON` 或 `openaverBuildPython` 时，采用 Chaquopy 的
 Python 构建环境。Gradle 产物默认是未签名 APK，需要自行创建密钥、使用
 `zipalign` 对齐，再通过 `apksigner` 签名。仓库不会包含发布密钥或签名密码。
+
+首次执行 Release 构建前安装固定版本的前端构建依赖：
+
+```powershell
+npm ci --prefix tools/echarts-build
+```
+
+`minifyReleaseWebAssets` 只处理 Release 产物中的自研 JS/CSS，并排除
+`web/static/vendor`。仓库中的原始源码不会被覆盖，便于继续开发和排查问题。
 
 ### GitHub Actions
 

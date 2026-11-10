@@ -12,11 +12,56 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import subprocess
 from pathlib import Path
 
 
 UPSTREAM_RELEASE = "v0.17.18"
 UPSTREAM_COMMIT = "af0d99741e63e71980773c9ade04c473407a60b7"
+
+DEMO_SUBSYSTEM_FILES = (
+    "web/routers/motion_lab.py",
+    "web/static/css/pages/design-system.css",
+    "web/static/img/demo/cawd-441.jpg",
+    "web/static/img/demo/fc2-1723984.jpg",
+    "web/static/img/demo/ipzz-001.jpg",
+    "web/static/img/demo/mide-974.jpg",
+    "web/static/img/demo/sone-103.jpg",
+    "web/static/img/picker-demo/cand-1.jpg",
+    "web/static/img/picker-demo/cand-2.jpg",
+    "web/static/img/picker-demo/cand-3.jpg",
+    "web/static/img/picker-demo/cand-4.jpg",
+    "web/static/img/picker-demo/cover.jpg",
+    "web/static/img/showcase/sc-1.jpg",
+    "web/static/img/showcase/sc-2.jpg",
+    "web/static/img/showcase/sc-3.jpg",
+    "web/static/img/showcase/sc-4.jpg",
+    "web/static/img/showcase/sc-5.jpg",
+    "web/static/img/showcase/sc-6.jpg",
+    "web/static/img/showcase/sc-7.jpg",
+    "web/static/img/showcase/sc-8.jpg",
+    "web/static/img/showcase/sc-9.jpg",
+    "web/static/img/showcase/sc-10.jpg",
+    "web/static/img/showcase/sc-11.jpg",
+    "web/static/img/showcase/sc-12.jpg",
+    "web/static/img/showcase/sc-13.jpg",
+    "web/static/img/showcase/sc-14.jpg",
+    "web/static/img/showcase/sc-15.jpg",
+    "web/static/img/showcase/sc-16.jpg",
+    "web/static/img/showcase/sc-17.jpg",
+    "web/static/img/showcase/sc-18.jpg",
+    "web/static/img/showcase/sc-19.jpg",
+    "web/static/img/showcase/sc-20.jpg",
+    "web/static/js/pages/motion-lab-state.js",
+    "web/static/js/pages/motion-lab.js",
+    "web/static/js/pages/motion-lab/constellation-host.js",
+    "web/templates/design-system.html",
+    "web/templates/design_system/gallery-components.html",
+    "web/templates/design_system/page-compositions.html",
+    "web/templates/design_system/page-states.html",
+    "web/templates/design_system/settings-components.html",
+    "web/templates/motion_lab.html",
+)
 
 GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
@@ -171,7 +216,6 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "web/static/js/shared/video-player.js",
             "web/templates/_macros/ui_state.html",
             "web/templates/base.html",
-            "web/templates/design-system.html",
             "web/templates/help.html",
             "web/templates/help_mobile.html",
             "web/templates/insights.html",
@@ -184,6 +228,34 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "008-mobile-loopback-auth.patch",
         ("mobile_auth.py",),
+    ),
+    (
+        "009-remove-demo-subsystem.patch",
+        DEMO_SUBSYSTEM_FILES,
+    ),
+    (
+        "010-woff2-only-icons.patch",
+        (
+            "web/static/vendor/bootstrap-icons/bootstrap-icons.css",
+            "web/static/vendor/bootstrap-icons/fonts/bootstrap-icons.woff",
+        ),
+    ),
+    (
+        "011-echarts-insights-bundle.patch",
+        (
+            "web/static/vendor/echarts/echarts.min.js",
+            "web/static/vendor/manifest.json",
+        ),
+    ),
+    (
+        "012-bs4-html-parser.patch",
+        (
+            "core/custom_source/extract.py",
+            "core/scrapers/dmm.py",
+            "core/scrapers/fc2_javten.py",
+            "core/scrapers/fc2_official.py",
+            "core/scrapers/heyzo.py",
+        ),
     ),
 )
 
@@ -212,6 +284,16 @@ TEXT_SUFFIXES = {
     ".txt",
     ".yaml",
     ".yml",
+}
+BINARY_SUFFIXES = {
+    ".gif",
+    ".ico",
+    ".jpeg",
+    ".jpg",
+    ".png",
+    ".webp",
+    ".woff",
+    ".woff2",
 }
 
 
@@ -258,6 +340,25 @@ def files_equal(left: Path, right: Path) -> bool:
 def patch_for_file(upstream_root: Path, source_root: Path, rel: str) -> str:
     old_path = upstream_root / rel
     new_path = source_root / rel
+    if (
+        old_path.is_file()
+        and not new_path.is_file()
+        and Path(rel).suffix.lower() in BINARY_SUFFIXES
+    ):
+        result = subprocess.run(
+            ["git", "diff", "--no-index", "--binary", "--", rel, "/dev/null"],
+            cwd=upstream_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 1:
+            raise RuntimeError(
+                f"unable to generate binary deletion patch for {rel}: "
+                f"{result.stderr.strip()}"
+            )
+        return result.stdout
+
     old_lines = normalize_lines(old_path) if old_path.is_file() else []
     new_lines = normalize_lines(new_path) if new_path.is_file() else []
     if not old_path.is_file() and not new_path.is_file():
