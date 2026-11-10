@@ -43,31 +43,55 @@ from core.title_language import (
 LANGUAGE_PROMPTS = {
     "zh-TW": {
         "name": "繁體中文",
+        "cloud_intro": "你是專業的影視資料庫管理員與翻譯引擎。這是既有標題文字的翻譯任務。",
+        "source_label": "原文：",
+        "rules_label": "翻譯要求：",
         "ollama_system": "你是多語言影視標題翻譯機。自動辨識原文語言，統一到繁體中文輸出。禁止輸出日文假名或其他語言的未翻譯內容（人名、品牌名除外）。保留原意，不新增內容。",
         "ollama_example": "義父の隣で夫に電話させながら人妻を寝取る → 在公公旁邊讓人妻一邊打電話給丈夫一邊被睡走",
+        "ollama_example_label": "範例：",
+        "ollama_translate_label": "請翻譯：",
         "gemini_instruction": "請自動辨識以下標題的原文語言，並翻譯為繁體中文",
         "gemini_rules": "1. 這是純粹的資料庫標題翻譯任務，不生成新內容\n2. 輸出必須是繁體中文，不能保留未翻譯的其他語言內容\n3. 保持簡潔，不超過50字\n4. 只輸出翻譯結果，不要額外說明\n5. 人名、品牌名保留原文",
+        "retry_instruction": "只輸出最終譯文本身。不要評論、解釋、道歉，也不要輸出任何前綴。",
     },
     "zh-CN": {
         "name": "簡體中文",
+        "cloud_intro": "你是专业的影视数据库管理员与翻译引擎。这是既有标题文字的翻译任务。",
+        "source_label": "原文：",
+        "rules_label": "翻译要求：",
         "ollama_system": "你是多语言影视标题翻译机。自动识别原文语言，统一到简体中文输出。禁止输出日文假名或其他语言的未翻译内容（人名、品牌名除外）。保留原意，不新增内容。",
         "ollama_example": "義父の隣で夫に電話させながら人妻を寝取る → 在公公旁边让人妻一边打电话给丈夫一边被睡走",
+        "ollama_example_label": "示例：",
+        "ollama_translate_label": "请翻译：",
         "gemini_instruction": "请自动识别以下标题的原文语言，并翻译为简体中文",
         "gemini_rules": "1. 这是纯粹的资料库标题翻译任务，不生成新内容\n2. 输出必须是简体中文，不能保留未翻译的其他语言内容\n3. 保持简洁，不超过50字\n4. 只输出翻译结果，不要额外说明\n5. 人名、品牌名保留原文",
+        "retry_instruction": "只输出最终译文本身。不要评论、解释、道歉，也不要输出任何前缀。",
     },
     "en": {
         "name": "English",
+        "cloud_intro": "You are a professional audiovisual database administrator and translation engine. This is a translation task for an existing title.",
+        "source_label": "Source title:",
+        "rules_label": "Translation requirements:",
         "ollama_system": "You translate audiovisual database titles from any source language into natural English. Do not leave untranslated CJK text except proper nouns. Preserve meaning and do not add content.",
         "ollama_example": "義父の隣で夫に電話させながら人妻を寝取る → Seducing a Married Woman While She Calls Her Husband Next to Her Father-in-Law",
+        "ollama_example_label": "Example:",
+        "ollama_translate_label": "Translate:",
         "gemini_instruction": "Detect the source language and translate the following title into English",
         "gemini_rules": "1. This is a database title translation task, do not generate new content\n2. Output must be natural English with no untranslated CJK text except proper nouns\n3. Keep it concise, under 80 characters\n4. Output only the translation, no explanations",
+        "retry_instruction": "Output only the final translation. Do not comment, explain, apologize, or add any prefix.",
     },
     "ja": {
         "name": "日本語",
+        "cloud_intro": "あなたはプロの映像データベース管理者兼翻訳エンジンです。既存のタイトルを翻訳するタスクです。",
+        "source_label": "原文：",
+        "rules_label": "翻訳要件：",
         "ollama_system": "あなたは多言語の映像タイトル翻訳機です。原文の言語を自動判定し、自然な日本語へ翻訳してください。固有名詞以外の未翻訳文字を残さず、内容を追加しないでください。",
         "ollama_example": "在公公旁边让人妻一边打电话给丈夫一边被睡走 → 義父の隣で夫に電話させながら人妻を寝取る",
+        "ollama_example_label": "例：",
+        "ollama_translate_label": "翻訳：",
         "gemini_instruction": "次のタイトルの原文言語を判定し、日本語に翻訳してください",
         "gemini_rules": "1. データベース用タイトルの翻訳だけを行い、新しい内容を生成しない\n2. 固有名詞以外は未翻訳の外国語を残さず、自然な日本語にする\n3. 50文字以内を目安に簡潔にする\n4. 翻訳結果だけを出力し、説明を加えない",
+        "retry_instruction": "最終的な翻訳だけを出力してください。コメント、説明、謝罪、接頭辞は一切付けないでください。",
     },
 }
 
@@ -98,6 +122,21 @@ def refusal_rule(target_language: str) -> str:
         target_language,
         _REFUSAL_RULES["zh-CN"],
     )
+
+
+def build_ollama_prompts(title: str, target_language: str) -> tuple[str, str]:
+    """Build provider-specific Ollama messages in the selected target language."""
+    lang_data = LANGUAGE_PROMPTS.get(target_language, LANGUAGE_PROMPTS["zh-CN"])
+    system_msg = (
+        f"{lang_data['ollama_system']}\n"
+        f"{refusal_rule(target_language)}"
+    )
+    prompt = (
+        f"{lang_data['ollama_example_label']}{lang_data['ollama_example']}"
+        "\n\n"
+        f"{lang_data['ollama_translate_label']}{title}"
+    )
+    return system_msg, prompt
 
 
 class TranslateService(ABC):
@@ -191,15 +230,10 @@ class OllamaTranslateService(TranslateService):
 
     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
         """Translate one title; failures raise TranslateError."""
-        lang_data = LANGUAGE_PROMPTS.get(self.target_language, LANGUAGE_PROMPTS["zh-CN"])
-        system_msg = (
-            f"{lang_data['ollama_system']}\n"
-            f"{refusal_rule(self.target_language)}"
+        system_msg, prompt = build_ollama_prompts(
+            title,
+            self.target_language,
         )
-        example = lang_data["ollama_example"]
-        prompt = f"""範例：{example}
-
-請翻譯：{title}"""
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -393,6 +427,10 @@ class OpenAICompatibleTranslateService(TranslateService):
     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
         """Translate one title; failures raise TranslateError."""
         prompt = build_cloud_translate_prompt(title, self.target_language)
+        lang_data = LANGUAGE_PROMPTS.get(
+            self.target_language,
+            LANGUAGE_PROMPTS["zh-CN"],
+        )
 
         try:
             result = await openai_client.request_translation(
@@ -409,7 +447,7 @@ class OpenAICompatibleTranslateService(TranslateService):
                     raise
                 retry_prompt = (
                     f"{prompt}\n"
-                    "只輸出最終譯文本身。不要評論、解釋、道歉，也不要輸出任何前綴。\n"
+                    f"{lang_data['retry_instruction']}\n"
                     f"{refusal_rule(self.target_language)}"
                 )
                 retried = await openai_client.request_translation(
@@ -453,16 +491,16 @@ class OpenAICompatibleTranslateService(TranslateService):
 def build_cloud_translate_prompt(title: str, target_language: str) -> str:
     """Build a cloud prompt that translates from any detected source language."""
     lang_data = LANGUAGE_PROMPTS.get(target_language, LANGUAGE_PROMPTS["zh-CN"])
-    instruction = lang_data["gemini_instruction"]
-    rules = lang_data["gemini_rules"]
-    return f"""你是專業的影視資料庫管理員與翻譯引擎。這是既有標題文字的翻譯任務，{instruction}。
+    refusal = refusal_rule(target_language)
+    return f"""{lang_data['cloud_intro']}
+{lang_data['gemini_instruction']}
 
-原文：
+{lang_data['source_label']}
 {title}
 
-翻譯要求：
-{rules}
-{refusal_rule(target_language)}
+{lang_data['rules_label']}
+{lang_data['gemini_rules']}
+{refusal}
 """
 
 

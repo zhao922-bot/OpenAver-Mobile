@@ -158,6 +158,47 @@ def test_cloud_prompts_require_a_stable_refusal_marker():
         assert translate_service.refusal_rule(locale) in prompt
 
 
+def test_prompt_shell_and_labels_follow_the_target_language():
+    expected = {
+        "zh-CN": ("原文：", "翻译要求：", "示例：", "请翻译："),
+        "zh-TW": ("原文：", "翻譯要求：", "範例：", "請翻譯："),
+        "en": ("Source title:", "Translation requirements:", "Example:", "Translate:"),
+        "ja": ("原文：", "翻訳要件：", "例：", "翻訳："),
+    }
+
+    for locale, labels in expected.items():
+        cloud_prompt = translate_service.build_cloud_translate_prompt(
+            "テストタイトル",
+            locale,
+        )
+        _system, ollama_prompt = translate_service.build_ollama_prompts(
+            "テストタイトル",
+            locale,
+        )
+        source_label, rules_label, example_label, translate_label = labels
+        assert source_label in cloud_prompt
+        assert rules_label in cloud_prompt
+        assert example_label in ollama_prompt
+        assert translate_label in ollama_prompt
+        assert translate_service.LANGUAGE_PROMPTS[locale]["retry_instruction"]
+
+    simplified_prompt = translate_service.build_cloud_translate_prompt(
+        "日本語のタイトル",
+        "zh-CN",
+    )
+    assert "你是专业的影视数据库管理员与翻译引擎" in simplified_prompt
+    assert "翻譯要求：" not in simplified_prompt
+    assert "這是既有標題文字的翻譯任務" not in simplified_prompt
+    _system, simplified_ollama = translate_service.build_ollama_prompts(
+        "日本語のタイトル",
+        "zh-CN",
+    )
+    assert "示例：" in simplified_ollama
+    assert "请翻译：" in simplified_ollama
+    assert "範例：" not in simplified_ollama
+    assert "請翻譯：" not in simplified_ollama
+
+
 def test_translation_normalization_removes_only_wrappers():
     assert normalize_translation_text('  译文："这是标题"  ') == "这是标题"
     assert normalize_translation_text("Translation: English title") == "English title"
