@@ -76,8 +76,12 @@ def test_gantt_dots_use_actual_maker_colors():
     assert "--gantt-cell-color:" in template
     assert "background: var(--gantt-cell-color, var(--text-muted));" in css
     assert "ganttDotSize(cell.filmCount)" in template
+    assert "cell.state !== 'empty'" in template
     assert "--gantt-dot-size:" in template
     assert "width: var(--gantt-dot-size, 0.5rem);" in css
+    assert ".gantt-cell--main::after" in css
+    assert ".gantt-cell--main::before" in css
+    assert "background:var(--gantt-cell-color)" not in template
     assert "GANTT_DOT_SIZES_REM" in read(
         PYTHON_WEB / "static/js/pages/insights/state.js"
     )

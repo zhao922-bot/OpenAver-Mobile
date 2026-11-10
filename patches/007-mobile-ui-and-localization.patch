@@ -2153,7 +2153,7 @@
 -      "skipped_note": "{n} with no birth date skipped"
 +      "tooltip_dot_maker": "{label} · {total} videos · most frequent studio: {maker} ({count})",
 +      "skipped_note": "{n} with no birth date skipped",
-+      "subtitle": "Only actresses with at least 4 videos in one year and one studio at 80% or more are listed. Dot size reflects the number of videos that year.",
++      "subtitle": "Only actresses with at least 4 videos in one year and one studio at 80% or more are listed. Dot size reflects the number of videos that year; a pale halo marks a main-studio year.",
 +      "scroll_hint": "Swipe horizontally to see every year"
      },
      "solo": {
@@ -2999,7 +2999,7 @@
 -      "skipped_note": "生年月日が不明な {n} 名はスキップされました"
 +      "tooltip_dot_maker": "{label} ・ コレクション {total} 本 ・ 最も多いメーカー：{maker}（{count} 本）",
 +      "skipped_note": "生年月日が不明な {n} 名はスキップされました",
-+      "subtitle": "同じ女優の同年作品が 4 本以上、かつ同一メーカーが 80% 以上の女優だけを表示します。点の大きさはその年の作品数です。",
++      "subtitle": "同じ女優の同年作品が 4 本以上、かつ同一メーカーが 80% 以上の女優だけを表示します。点の大きさはその年の作品数で、淡い光輪は主力メーカーの年を示します。",
 +      "scroll_hint": "横にスワイプして全年を表示"
      },
      "solo": {
@@ -3854,7 +3854,7 @@
 -      "skipped_note": "{n} 位无生日资料已略过"
 +      "tooltip_dot_maker": "{label} · 收藏 {total} 部 · 出现最多的片商：{maker}（{count} 部）",
 +      "skipped_note": "{n} 位无生日资料已略过",
-+      "subtitle": "仅显示同一女优某年至少 4 部、且同一片商占比不低于 80% 的情况。色点大小表示该年作品数量。",
++      "subtitle": "仅显示同一女优某年至少 4 部、且同一片商占比不低于 80% 的情况。色点大小表示该年作品数量，带淡色光晕的是主力片商年。",
 +      "scroll_hint": "左右滑动查看完整年份"
      },
      "solo": {
@@ -4935,7 +4935,7 @@
 -      "skipped_note": "{n} 位無生日資料已略過"
 +      "tooltip_dot_maker": "{label} · 收藏 {total} 部 · 出現最多的片商：{maker}（{count} 部）",
 +      "skipped_note": "{n} 位無生日資料已略過",
-+      "subtitle": "僅顯示同一女優某年至少 4 部、且同一片商佔比不低於 80% 的情況。色點大小表示該年作品數量。",
++      "subtitle": "僅顯示同一女優某年至少 4 部、且同一片商佔比不低於 80% 的情況。色點大小表示該年作品數量，帶淡色光暈的是主力片商年。",
 +      "scroll_hint": "左右滑動查看完整年份"
      },
      "solo": {
@@ -10334,12 +10334,24 @@
      display: flex;
      flex-direction: column;
      width: 100%;
-@@ -975,11 +1030,48 @@
+@@ -973,13 +1028,70 @@
+     border-radius: var(--fluent-radius-md);
+ }
  
- .insights-container .gantt-cell--dot::after {
+-.insights-container .gantt-cell--dot::after {
++.insights-container .gantt-cell--dot,
++.insights-container .gantt-cell--main {
++    position: relative;
++}
++
++.insights-container .gantt-cell--dot::after,
++.insights-container .gantt-cell--main::after {
      content: '';
 -    width: 0.3125rem;
 -    height: 0.3125rem;
++    position: absolute;
++    inset: 0;
++    margin: auto;
 +    width: var(--gantt-dot-size, 0.5rem);
 +    height: var(--gantt-dot-size, 0.5rem);
      border-radius: var(--radius-pill);
@@ -10347,6 +10359,17 @@
 -    opacity: 0.55;
 +    background: var(--gantt-cell-color, var(--text-muted));
 +    opacity: 1;
++}
++
++.insights-container .gantt-cell--main::before {
++    content: '';
++    position: absolute;
++    inset: 0;
++    margin: auto;
++    width: calc(var(--gantt-dot-size, 0.5rem) + 0.5rem);
++    height: calc(var(--gantt-dot-size, 0.5rem) + 0.5rem);
++    border-radius: var(--radius-pill);
++    background: color-mix(in srgb, var(--gantt-cell-color) 18%, transparent);
 +}
 +
 +.insights-container .maker-marker--square::after {
@@ -10387,7 +10410,7 @@
  }
  
  .insights-container .gantt-legend {
-@@ -987,13 +1079,22 @@
+@@ -987,13 +1099,22 @@
      flex-wrap: wrap;
      align-items: center;
      gap: 0.5rem;
@@ -10413,7 +10436,7 @@
  .insights-container .gantt-legend-item {
      display: inline-flex;
      align-items: center;
-@@ -1002,10 +1103,47 @@
+@@ -1002,10 +1123,47 @@
  }
  
  .insights-container .gantt-legend-dot {
@@ -10463,7 +10486,7 @@
  }
  
  .insights-container .insights-gantt-toggle {
-@@ -1310,11 +1448,104 @@
+@@ -1310,11 +1468,104 @@
  /* ===== 響應式斷點 ===== */
  @media (max-width: 1024px) {
      .insights-container .row1 {
@@ -10573,7 +10596,7 @@
      }
  
      .insights-container .row2,
-@@ -1324,19 +1555,148 @@
+@@ -1324,19 +1575,148 @@
          grid-template-columns: 1fr;
      }
  
@@ -17780,7 +17803,7 @@
                                      </template>
                                  </div>
                                  <template x-for="row in ganttView(ganttAxis).rows"
-@@ -453,10 +485,18 @@
+@@ -453,10 +485,15 @@
                                                       ganttAxis === 'year' && sel.period.type !== 'all'
                                                           ? (isYearInSel(cell.year) ? ' is-selected' : ' is-dimmed')
                                                           : ''
@@ -17791,19 +17814,16 @@
 +                                                 ) + (cell.maker ? ' ' + makerMarkerClass(cell.maker) : '')"
 +                                                 :style="cell.maker
 +                                                     ? ('--gantt-cell-color:' + colorForMakerName(cell.maker) + ';'
-+                                                         + (cell.state === 'main'
-+                                                             ? 'background:var(--gantt-cell-color)'
-+                                                             : '')
-+                                                         + (cell.state === 'dot'
++                                                         + (cell.state !== 'empty'
 +                                                             ? '--gantt-dot-size:' + ganttDotSize(cell.filmCount) + ';'
 +                                                             : ''))
-+                                                     : (cell.state === 'dot'
++                                                     : (cell.state !== 'empty'
 +                                                         ? '--gantt-dot-size:' + ganttDotSize(cell.filmCount) + ';'
 +                                                         : '')"
                                                   @click.stop="ganttCellClick(row.name, cell, ganttAxis, $event)"
                                                   :title="ganttCellTitle(cell, ganttAxis)"></div>
                                          </template>
-@@ -477,7 +517,10 @@
+@@ -477,7 +514,10 @@
      <div class="row6" id="row6">
          <section class="card">
              <div class="card-head">
@@ -17815,7 +17835,7 @@
              </div>
              <div class="card-body">
                  <div class="list-rows" id="soloList">
-@@ -508,7 +551,7 @@
+@@ -508,7 +548,7 @@
                                      <span class="solo-segment"
                                            :class="'solo-segment--' + seg.kind"
                                            :style="'width:' + (row.total ? Math.round(seg.count / row.total * 100) : 0) + '%' + (seg.kind === 'named' ? (';background:' + colorForMakerName(seg.maker)) : '')"

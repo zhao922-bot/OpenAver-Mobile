@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r52-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r53-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r52-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r53-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r52`（versionCode `17070`）
+- 版本：`0.17.18-r53`（versionCode `17071`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -242,6 +242,9 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   10 部为 12.5px，10 部以上保持封顶尺寸，避免挤压年表行
 - r52：主要片商图例扩展为八种可辨识形状；紫色第四高频片商由近似圆形的环改为
   三角形，新增十字、六边形等形状，并在四种界面语言中说明圆点大小的含义
+- r53：修复主要片商年表在 4 部以上直接切换为整块色卡、导致尺寸不再递增的问题；
+  所有非空年份统一按 1～10 部逐步放大到 12.5px，10 部以上封顶，主力片商年改用
+  淡色光晕标识
 
 ## 限制
 

@@ -1028,13 +1028,33 @@
     border-radius: var(--fluent-radius-md);
 }
 
-.insights-container .gantt-cell--dot::after {
+.insights-container .gantt-cell--dot,
+.insights-container .gantt-cell--main {
+    position: relative;
+}
+
+.insights-container .gantt-cell--dot::after,
+.insights-container .gantt-cell--main::after {
     content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
     width: var(--gantt-dot-size, 0.5rem);
     height: var(--gantt-dot-size, 0.5rem);
     border-radius: var(--radius-pill);
     background: var(--gantt-cell-color, var(--text-muted));
     opacity: 1;
+}
+
+.insights-container .gantt-cell--main::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: calc(var(--gantt-dot-size, 0.5rem) + 0.5rem);
+    height: calc(var(--gantt-dot-size, 0.5rem) + 0.5rem);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--gantt-cell-color) 18%, transparent);
 }
 
 .insights-container .maker-marker--square::after {
