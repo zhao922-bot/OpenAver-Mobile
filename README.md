@@ -237,7 +237,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r51 build 2：翻译提示词外层、字段标签、Ollama 示例标签和重试语句全部跟随
   当前软件语言；简体中文提示词不再混入繁体中文，并增加四语言回归测试
 - r51 build 3：Android 手机版隐藏 Tag 别名管理中无实际用途的 AI agent
-  `/api/capabilities` 问号提示；桌面版保留，手动 Tag 别名管理不受影响
+  `/api/capabilities` 问号提示；手动 Tag 别名管理不受影响
 
 ## 限制
 
