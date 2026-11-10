@@ -18202,7 +18202,23 @@
          </div>
      </div>
  
-@@ -782,6 +1043,212 @@
+@@ -520,6 +781,7 @@
+             <div class="title">
+                 <i class="bi bi-tags"></i> <span>{{ t('scanner.tag_alias.section_title') }}</span>
+             </div>
++            {% if not is_android %}
+             <!-- (?) AI hint icon + popover — @click.stop 避免觸發 collapse -->
+             <div class="tag-alias-ai-hint-wrap" @click.stop x-data="helpPopover">
+                 <button type="button"
+@@ -540,6 +802,7 @@
+                        x-text="window.t('scanner.tag_alias.ai_hint.tooltip')"></p>
+                 </div>
+             </div>
++            {% endif %}
+             <span class="btn-collapse" aria-hidden="true">
+                 <i class="bi" :class="tagAliasCardCollapsed ? 'bi-chevron-down' : 'bi-chevron-up'"></i>
+             </span>
+@@ -782,6 +1045,212 @@
          </div>
      </dialog>
  
@@ -18415,7 +18431,7 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -805,26 +1272,150 @@
+@@ -805,26 +1274,150 @@
          </div>
      </dialog>
  

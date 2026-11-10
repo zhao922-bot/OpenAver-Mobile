@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r51-build2-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r51-build3-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r51-build2-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r51-build3-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r51`（versionCode `17068`）
+- 版本：`0.17.18-r51`（versionCode `17069`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -236,6 +236,8 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   并在四语言界面显示对应的安全/内容限制提示
 - r51 build 2：翻译提示词外层、字段标签、Ollama 示例标签和重试语句全部跟随
   当前软件语言；简体中文提示词不再混入繁体中文，并增加四语言回归测试
+- r51 build 3：Android 手机版隐藏 Tag 别名管理中无实际用途的 AI agent
+  `/api/capabilities` 问号提示；桌面版保留，手动 Tag 别名管理不受影响
 
 ## 限制
 

@@ -781,6 +781,7 @@
             <div class="title">
                 <i class="bi bi-tags"></i> <span>{{ t('scanner.tag_alias.section_title') }}</span>
             </div>
+            {% if not is_android %}
             <!-- (?) AI hint icon + popover — @click.stop 避免觸發 collapse -->
             <div class="tag-alias-ai-hint-wrap" @click.stop x-data="helpPopover">
                 <button type="button"
@@ -801,6 +802,7 @@
                        x-text="window.t('scanner.tag_alias.ai_hint.tooltip')"></p>
                 </div>
             </div>
+            {% endif %}
             <span class="btn-collapse" aria-hidden="true">
                 <i class="bi" :class="tagAliasCardCollapsed ? 'bi-chevron-down' : 'bi-chevron-up'"></i>
             </span>
