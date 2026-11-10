@@ -2188,7 +2188,7 @@
       "tooltip_dot": "{label} · {total} videos in your collection",
       "tooltip_dot_maker": "{label} · {total} videos · most frequent studio: {maker} ({count})",
       "skipped_note": "{n} with no birth date skipped",
-      "subtitle": "Only actresses with at least 4 videos in one year and one studio at 80% or more are listed.",
+      "subtitle": "Only actresses with at least 4 videos in one year and one studio at 80% or more are listed. Dot size reflects the number of videos that year.",
       "scroll_hint": "Swipe horizontally to see every year"
     },
     "solo": {

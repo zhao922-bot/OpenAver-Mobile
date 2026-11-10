@@ -80,6 +80,20 @@ const FAVORITE_TOAST = {
     failed: ['error', 'showcase.actress.addTimeout'],
 };
 
+// 1-10 works map from 8px to 12.5px; 10+ stays capped so rows remain compact.
+const GANTT_DOT_SIZES_REM = [
+    0.5,
+    0.53125,
+    0.5625,
+    0.59375,
+    0.625,
+    0.65625,
+    0.6875,
+    0.71875,
+    0.75,
+    0.78125,
+];
+
 // goBrowse／goBrowseWith 共用：寫入 showcase_state 成功才同步導向瀏覽頁；失敗＝不導航。
 function writeHandoffAndNavigate(sel, extra) {
     try {
@@ -728,6 +742,12 @@ export function libraryInsightsState() {
                     total: cell.filmCount,
                 })
                 : label;
+        },
+
+        ganttDotSize(filmCount) {
+            const count = Math.max(1, Math.floor(Number(filmCount) || 1));
+            const index = Math.min(count, GANTT_DOT_SIZES_REM.length) - 1;
+            return GANTT_DOT_SIZES_REM[index] + 'rem';
         },
 
         /**

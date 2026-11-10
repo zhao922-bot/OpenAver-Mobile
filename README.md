@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r51-build3-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r52-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r51-build3-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r52-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r51`（versionCode `17069`）
+- 版本：`0.17.18-r52`（versionCode `17070`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -238,6 +238,10 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   当前软件语言；简体中文提示词不再混入繁体中文，并增加四语言回归测试
 - r51 build 3：Android 手机版隐藏 Tag 别名管理中无实际用途的 AI agent
   `/api/capabilities` 问号提示；手动 Tag 别名管理不受影响
+- r52：主要片商年表中的普通作品圆点按当年作品数量逐步放大，1 部为 8px，
+  10 部为 12.5px，10 部以上保持封顶尺寸，避免挤压年表行
+- r52：主要片商图例扩展为八种可辨识形状；紫色第四高频片商由近似圆形的环改为
+  三角形，新增十字、六边形等形状，并在四种界面语言中说明圆点大小的含义
 
 ## 限制
 

@@ -490,8 +490,13 @@
                                                      ? ('--gantt-cell-color:' + colorForMakerName(cell.maker) + ';'
                                                          + (cell.state === 'main'
                                                              ? 'background:var(--gantt-cell-color)'
+                                                             : '')
+                                                         + (cell.state === 'dot'
+                                                             ? '--gantt-dot-size:' + ganttDotSize(cell.filmCount) + ';'
                                                              : ''))
-                                                     : ''"
+                                                     : (cell.state === 'dot'
+                                                         ? '--gantt-dot-size:' + ganttDotSize(cell.filmCount) + ';'
+                                                         : '')"
                                                  @click.stop="ganttCellClick(row.name, cell, ganttAxis, $event)"
                                                  :title="ganttCellTitle(cell, ganttAxis)"></div>
                                         </template>

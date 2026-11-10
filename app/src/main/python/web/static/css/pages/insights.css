@@ -1030,8 +1030,8 @@
 
 .insights-container .gantt-cell--dot::after {
     content: '';
-    width: 0.3125rem;
-    height: 0.3125rem;
+    width: var(--gantt-dot-size, 0.5rem);
+    height: var(--gantt-dot-size, 0.5rem);
     border-radius: var(--radius-pill);
     background: var(--gantt-cell-color, var(--text-muted));
     opacity: 1;
@@ -1051,9 +1051,27 @@
 }
 
 .insights-container .maker-marker--bar::after {
-    width: 0.5rem;
-    height: 0.1875rem;
+    width: var(--gantt-dot-size, 0.5rem);
+    height: 0.25rem;
     border-radius: 1px;
+}
+
+.insights-container .maker-marker--triangle::after {
+    border-radius: 0;
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.insights-container .maker-marker--cross::after {
+    border-radius: 0;
+    clip-path: polygon(
+        35% 0, 65% 0, 65% 35%, 100% 35%, 100% 65%, 65% 65%,
+        65% 100%, 35% 100%, 35% 65%, 0 65%, 0 35%, 35% 35%
+    );
+}
+
+.insights-container .maker-marker--hexagon::after {
+    border-radius: 0;
+    clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
 }
 
 .insights-container .gantt-legend {
@@ -1085,8 +1103,8 @@
 }
 
 .insights-container .gantt-legend-dot {
-    width: 0.5rem;
-    height: 0.5rem;
+    width: 0.625rem;
+    height: 0.625rem;
     border-radius: var(--radius-pill);
     flex: 0 0 auto;
 }
@@ -1105,9 +1123,27 @@
 }
 
 .insights-container .gantt-legend-dot.maker-marker--bar {
-    width: 0.625rem;
+    width: 0.75rem;
     height: 0.25rem;
     border-radius: 1px;
+}
+
+.insights-container .gantt-legend-dot.maker-marker--triangle {
+    border-radius: 0;
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.insights-container .gantt-legend-dot.maker-marker--cross {
+    border-radius: 0;
+    clip-path: polygon(
+        35% 0, 65% 0, 65% 35%, 100% 35%, 100% 65%, 65% 65%,
+        65% 100%, 35% 100%, 35% 65%, 0 65%, 0 35%, 35% 35%
+    );
+}
+
+.insights-container .gantt-legend-dot.maker-marker--hexagon {
+    border-radius: 0;
+    clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
 }
 
 .insights-container .insights-gantt-toggle {

@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 
@@ -74,6 +75,12 @@ def test_gantt_dots_use_actual_maker_colors():
     assert "--insights-maker-16:" in css
     assert "--gantt-cell-color:" in template
     assert "background: var(--gantt-cell-color, var(--text-muted));" in css
+    assert "ganttDotSize(cell.filmCount)" in template
+    assert "--gantt-dot-size:" in template
+    assert "width: var(--gantt-dot-size, 0.5rem);" in css
+    assert "GANTT_DOT_SIZES_REM" in read(
+        PYTHON_WEB / "static/js/pages/insights/state.js"
+    )
 
 
 def test_bazooka_and_befree_have_distinct_colors_and_marker_shapes():
@@ -89,3 +96,35 @@ def test_bazooka_and_befree_have_distinct_colors_and_marker_shapes():
     assert "maker-marker--diamond::after" in css
     assert "makerMarkerClass(mk)" in template
     assert "makerMarkerClass(cell.maker)" in template
+    marker_block = re.search(
+        r"const MAKER_MARKER_CLASSES = \[(.*?)\];",
+        charts,
+        re.DOTALL,
+    )
+    assert marker_block is not None
+    marker_classes = re.findall(r"'([^']+)'", marker_block.group(1))
+    assert len(marker_classes) == 8
+    assert len(set(marker_classes)) == 8
+    # The fourth ranked maker is the purple marker shown in the mobile legend.
+    assert marker_classes[3] == "triangle"
+    assert marker_classes[-3:] == ["cross", "hexagon", "ring"]
+    assert "maker-marker--triangle::after" in css
+    assert "maker-marker--cross::after" in css
+    assert "maker-marker--hexagon::after" in css
+
+
+def test_gantt_dot_sizes_grow_with_count_and_have_a_visible_minimum():
+    state = read(PYTHON_WEB / "static/js/pages/insights/state.js")
+    sizes_match = re.search(
+        r"const GANTT_DOT_SIZES_REM = \[([^\]]+)\];",
+        state,
+    )
+    assert sizes_match is not None
+    sizes = [float(value) for value in re.findall(r"\d+(?:\.\d+)?", sizes_match.group(1))]
+
+    assert sizes[0] >= 0.5
+    assert len(sizes) == 10
+    assert sizes == sorted(sizes)
+    assert len(set(sizes)) == len(sizes)
+    assert sizes[-1] <= 0.8
+    assert "Math.min(count, GANTT_DOT_SIZES_REM.length)" in state

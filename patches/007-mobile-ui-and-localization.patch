@@ -2153,7 +2153,7 @@
 -      "skipped_note": "{n} with no birth date skipped"
 +      "tooltip_dot_maker": "{label} · {total} videos · most frequent studio: {maker} ({count})",
 +      "skipped_note": "{n} with no birth date skipped",
-+      "subtitle": "Only actresses with at least 4 videos in one year and one studio at 80% or more are listed.",
++      "subtitle": "Only actresses with at least 4 videos in one year and one studio at 80% or more are listed. Dot size reflects the number of videos that year.",
 +      "scroll_hint": "Swipe horizontally to see every year"
      },
      "solo": {
@@ -2999,7 +2999,7 @@
 -      "skipped_note": "生年月日が不明な {n} 名はスキップされました"
 +      "tooltip_dot_maker": "{label} ・ コレクション {total} 本 ・ 最も多いメーカー：{maker}（{count} 本）",
 +      "skipped_note": "生年月日が不明な {n} 名はスキップされました",
-+      "subtitle": "同じ女優の同年作品が 4 本以上、かつ同一メーカーが 80% 以上の女優だけを表示します。",
++      "subtitle": "同じ女優の同年作品が 4 本以上、かつ同一メーカーが 80% 以上の女優だけを表示します。点の大きさはその年の作品数です。",
 +      "scroll_hint": "横にスワイプして全年を表示"
      },
      "solo": {
@@ -3854,7 +3854,7 @@
 -      "skipped_note": "{n} 位无生日资料已略过"
 +      "tooltip_dot_maker": "{label} · 收藏 {total} 部 · 出现最多的片商：{maker}（{count} 部）",
 +      "skipped_note": "{n} 位无生日资料已略过",
-+      "subtitle": "仅显示同一女优某年至少 4 部、且同一片商占比不低于 80% 的情况。",
++      "subtitle": "仅显示同一女优某年至少 4 部、且同一片商占比不低于 80% 的情况。色点大小表示该年作品数量。",
 +      "scroll_hint": "左右滑动查看完整年份"
      },
      "solo": {
@@ -4935,7 +4935,7 @@
 -      "skipped_note": "{n} 位無生日資料已略過"
 +      "tooltip_dot_maker": "{label} · 收藏 {total} 部 · 出現最多的片商：{maker}（{count} 部）",
 +      "skipped_note": "{n} 位無生日資料已略過",
-+      "subtitle": "僅顯示同一女優某年至少 4 部、且同一片商佔比不低於 80% 的情況。",
++      "subtitle": "僅顯示同一女優某年至少 4 部、且同一片商佔比不低於 80% 的情況。色點大小表示該年作品數量。",
 +      "scroll_hint": "左右滑動查看完整年份"
      },
      "solo": {
@@ -10334,9 +10334,14 @@
      display: flex;
      flex-direction: column;
      width: 100%;
-@@ -978,8 +1033,27 @@
-     width: 0.3125rem;
-     height: 0.3125rem;
+@@ -975,11 +1030,48 @@
+ 
+ .insights-container .gantt-cell--dot::after {
+     content: '';
+-    width: 0.3125rem;
+-    height: 0.3125rem;
++    width: var(--gantt-dot-size, 0.5rem);
++    height: var(--gantt-dot-size, 0.5rem);
      border-radius: var(--radius-pill);
 -    background: var(--text-muted);
 -    opacity: 0.55;
@@ -10358,13 +10363,31 @@
 +}
 +
 +.insights-container .maker-marker--bar::after {
-+    width: 0.5rem;
-+    height: 0.1875rem;
++    width: var(--gantt-dot-size, 0.5rem);
++    height: 0.25rem;
 +    border-radius: 1px;
++}
++
++.insights-container .maker-marker--triangle::after {
++    border-radius: 0;
++    clip-path: polygon(50% 0, 100% 100%, 0 100%);
++}
++
++.insights-container .maker-marker--cross::after {
++    border-radius: 0;
++    clip-path: polygon(
++        35% 0, 65% 0, 65% 35%, 100% 35%, 100% 65%, 65% 65%,
++        65% 100%, 35% 100%, 35% 65%, 0 65%, 0 35%, 35% 35%
++    );
++}
++
++.insights-container .maker-marker--hexagon::after {
++    border-radius: 0;
++    clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
  }
  
  .insights-container .gantt-legend {
-@@ -987,11 +1061,20 @@
+@@ -987,13 +1079,22 @@
      flex-wrap: wrap;
      align-items: center;
      gap: 0.5rem;
@@ -10376,8 +10399,8 @@
 +    justify-content: flex-start;
      font-size: 0.6875rem;
      color: var(--text-secondary);
-+}
-+
+ }
+ 
 +.insights-container .gantt-scroll-hint {
 +    display: none;
 +    align-items: center;
@@ -10385,11 +10408,19 @@
 +    margin: 0.35rem 0 0.2rem;
 +    color: var(--text-muted);
 +    font-size: 0.625rem;
++}
++
+ .insights-container .gantt-legend-item {
+     display: inline-flex;
+     align-items: center;
+@@ -1002,10 +1103,47 @@
  }
  
- .insights-container .gantt-legend-item {
-@@ -1006,6 +1089,25 @@
-     height: 0.5rem;
+ .insights-container .gantt-legend-dot {
+-    width: 0.5rem;
+-    height: 0.5rem;
++    width: 0.625rem;
++    height: 0.625rem;
      border-radius: var(--radius-pill);
      flex: 0 0 auto;
 +}
@@ -10408,13 +10439,31 @@
 +}
 +
 +.insights-container .gantt-legend-dot.maker-marker--bar {
-+    width: 0.625rem;
++    width: 0.75rem;
 +    height: 0.25rem;
 +    border-radius: 1px;
++}
++
++.insights-container .gantt-legend-dot.maker-marker--triangle {
++    border-radius: 0;
++    clip-path: polygon(50% 0, 100% 100%, 0 100%);
++}
++
++.insights-container .gantt-legend-dot.maker-marker--cross {
++    border-radius: 0;
++    clip-path: polygon(
++        35% 0, 65% 0, 65% 35%, 100% 35%, 100% 65%, 65% 65%,
++        65% 100%, 35% 100%, 35% 65%, 0 65%, 0 35%, 35% 35%
++    );
++}
++
++.insights-container .gantt-legend-dot.maker-marker--hexagon {
++    border-radius: 0;
++    clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
  }
  
  .insights-container .insights-gantt-toggle {
-@@ -1310,11 +1412,104 @@
+@@ -1310,11 +1448,104 @@
  /* ===== 響應式斷點 ===== */
  @media (max-width: 1024px) {
      .insights-container .row1 {
@@ -10524,7 +10573,7 @@
      }
  
      .insights-container .row2,
-@@ -1324,19 +1519,148 @@
+@@ -1324,19 +1555,148 @@
          grid-template-columns: 1fr;
      }
  
@@ -12720,13 +12769,24 @@
  }
  
  export function setMainMakerYearMap(map) {
-@@ -360,6 +397,21 @@
+@@ -360,6 +397,32 @@
  
  export function colorForMakerName(name) {
      return colorForMaker(name);
 +}
 +
-+const MAKER_MARKER_CLASSES = ['circle', 'square', 'diamond', 'ring', 'bar'];
++// Keep the first eight markers unique so the legend never falls back to the
++// same shape for two high-volume makers (for example S1 and Attackers).
++const MAKER_MARKER_CLASSES = [
++    'circle',
++    'square',
++    'diamond',
++    'triangle',
++    'bar',
++    'cross',
++    'hexagon',
++    'ring',
++];
 +
 +export function makerMarkerClass(name) {
 +    let index = 0;
@@ -12742,7 +12802,7 @@
  }
  
  // ── 生命週期 ─────────────────────────────────────────────────────────
-@@ -1010,7 +1062,7 @@
+@@ -1010,7 +1073,7 @@
  
      const centerSub = tKey('insights.unit');
      const centerText =
@@ -12751,7 +12811,7 @@
  
      try {
          chart.dispatchAction({ type: 'hideTip' });
-@@ -1104,7 +1156,7 @@
+@@ -1104,7 +1167,7 @@
                      return (
                          escapeHtml(title) +
                          '<br/>' +
@@ -12760,7 +12820,7 @@
                          '（' +
                          p.percent +
                          '%）'
-@@ -1230,7 +1282,7 @@
+@@ -1230,7 +1293,7 @@
      const p = Array.isArray(params) ? params[0] : params;
      if (!p) return '';
      const name = p.name;
@@ -12769,7 +12829,7 @@
          '<br/>' + escapeHtml(tKey('insights.count_open_browse'));
  }
  
-@@ -1376,7 +1428,7 @@
+@@ -1376,7 +1439,7 @@
                  formatter: function (p) {
                      return tKey('insights.tags.tooltip', {
                          name: escapeHtml(p.name),
@@ -12788,7 +12848,28 @@
      emptyKeyForCard,
  } from './charts.js';
  import { applyCellFocal } from '../../shared/focal-cell.js';
-@@ -257,12 +258,15 @@
+@@ -78,6 +79,20 @@
+     not_found: ['error', 'showcase.actress.addNotFound'],
+     failed: ['error', 'showcase.actress.addTimeout'],
+ };
++
++// 1-10 works map from 8px to 12.5px; 10+ stays capped so rows remain compact.
++const GANTT_DOT_SIZES_REM = [
++    0.5,
++    0.53125,
++    0.5625,
++    0.59375,
++    0.625,
++    0.65625,
++    0.6875,
++    0.71875,
++    0.75,
++    0.78125,
++];
+ 
+ // goBrowse／goBrowseWith 共用：寫入 showcase_state 成功才同步導向瀏覽頁；失敗＝不導航。
+ function writeHandoffAndNavigate(sel, extra) {
+@@ -257,12 +272,15 @@
          ganttRows: [],
          // 修正 1（第 2 輪）：圖例名單存進 reactive 欄位，見 ganttLegendMakers() 註解。
          ganttLegend: [],
@@ -12804,7 +12885,7 @@
          // P3-3：以女優名為 key，記錄該人頭像照片曾經載入失敗——取代舊版
          // @error 直接改寫 DOM textContent 的寫法（會把 x-if 錨點一併砍掉，
          // Alpine 之後永遠無法再插回新內容）。女優格與女優榜共用同一份。
-@@ -456,6 +460,25 @@
+@@ -456,6 +474,25 @@
                  _mainMakerYearMap,
                  this.sel,
              );
@@ -12830,7 +12911,7 @@
          },
  
          /**
-@@ -689,6 +712,16 @@
+@@ -689,6 +726,16 @@
                      })
                      : label;
              }
@@ -12847,7 +12928,20 @@
              return tFn
                  ? tFn('insights.gantt.tooltip_dot', {
                      label: label,
-@@ -706,7 +739,7 @@
+@@ -697,6 +744,12 @@
+                 : label;
+         },
+ 
++        ganttDotSize(filmCount) {
++            const count = Math.max(1, Math.floor(Number(filmCount) || 1));
++            const index = Math.min(count, GANTT_DOT_SIZES_REM.length) - 1;
++            return GANTT_DOT_SIZES_REM[index] + 'rem';
++        },
++
+         /**
+          * 修正 1（第 2 輪，真瀏覽器重現）：舊版直接讀模組級非 reactive
+          * 變數 `_makerColorSlots`——模板首次渲染（快照載完前）算出 []，
+@@ -706,7 +759,7 @@
           * 觸發依賴），排序改在 `_loadSnapshot` 算好存進去，這裡只回傳。
           */
          ganttLegendMakers() {
@@ -12856,7 +12950,7 @@
          },
  
          /**
-@@ -735,8 +768,18 @@
+@@ -735,8 +788,18 @@
              return (
                  'grid-template-columns: var(--gantt-name-w) repeat(' +
                  n +
@@ -12876,7 +12970,7 @@
          },
  
          /**
-@@ -1463,7 +1506,7 @@
+@@ -1463,7 +1526,7 @@
           */
          totalCountLabel() {
              const n = this.snapshot ? this.snapshot.logicalTitles : 0;
@@ -12885,7 +12979,7 @@
              return typeof window !== 'undefined' && typeof window.t === 'function'
                  ? window.t('insights.total_count', { n: nStr })
                  : 'insights.total_count';
-@@ -1815,7 +1858,7 @@
+@@ -1815,7 +1878,7 @@
  
                  setRecords(records);
                  var slots = buildMakerColorSlots(getRecords());
@@ -17686,23 +17780,30 @@
                                      </template>
                                  </div>
                                  <template x-for="row in ganttView(ganttAxis).rows"
-@@ -453,9 +485,12 @@
+@@ -453,10 +485,18 @@
                                                       ganttAxis === 'year' && sel.period.type !== 'all'
                                                           ? (isYearInSel(cell.year) ? ' is-selected' : ' is-dimmed')
                                                           : ''
 -                                                 )"
 -                                                 :style="cell.state === 'main'
 -                                                     ? ('background:' + colorForMakerName(cell.maker))
+-                                                     : ''"
 +                                                 ) + (cell.maker ? ' ' + makerMarkerClass(cell.maker) : '')"
 +                                                 :style="cell.maker
 +                                                     ? ('--gantt-cell-color:' + colorForMakerName(cell.maker) + ';'
 +                                                         + (cell.state === 'main'
 +                                                             ? 'background:var(--gantt-cell-color)'
++                                                             : '')
++                                                         + (cell.state === 'dot'
++                                                             ? '--gantt-dot-size:' + ganttDotSize(cell.filmCount) + ';'
 +                                                             : ''))
-                                                      : ''"
++                                                     : (cell.state === 'dot'
++                                                         ? '--gantt-dot-size:' + ganttDotSize(cell.filmCount) + ';'
++                                                         : '')"
                                                   @click.stop="ganttCellClick(row.name, cell, ganttAxis, $event)"
                                                   :title="ganttCellTitle(cell, ganttAxis)"></div>
-@@ -477,7 +512,10 @@
+                                         </template>
+@@ -477,7 +517,10 @@
      <div class="row6" id="row6">
          <section class="card">
              <div class="card-head">
@@ -17714,7 +17815,7 @@
              </div>
              <div class="card-body">
                  <div class="list-rows" id="soloList">
-@@ -508,7 +546,7 @@
+@@ -508,7 +551,7 @@
                                      <span class="solo-segment"
                                            :class="'solo-segment--' + seg.kind"
                                            :style="'width:' + (row.total ? Math.round(seg.count / row.total * 100) : 0) + '%' + (seg.kind === 'named' ? (';background:' + colorForMakerName(seg.maker)) : '')"

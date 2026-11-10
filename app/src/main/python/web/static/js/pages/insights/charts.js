@@ -399,7 +399,18 @@ export function colorForMakerName(name) {
     return colorForMaker(name);
 }
 
-const MAKER_MARKER_CLASSES = ['circle', 'square', 'diamond', 'ring', 'bar'];
+// Keep the first eight markers unique so the legend never falls back to the
+// same shape for two high-volume makers (for example S1 and Attackers).
+const MAKER_MARKER_CLASSES = [
+    'circle',
+    'square',
+    'diamond',
+    'triangle',
+    'bar',
+    'cross',
+    'hexagon',
+    'ring',
+];
 
 export function makerMarkerClass(name) {
     let index = 0;
