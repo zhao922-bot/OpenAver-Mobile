@@ -1235,7 +1235,15 @@
      existing = repo.get_by_path(canonical)
 --- a/core/scraper.py
 +++ b/core/scraper.py
-@@ -67,7 +67,7 @@
+@@ -20,6 +20,7 @@
+     FC2OfficialScraper, FC2JavtenScraper, AVSOXScraper,
+     D2PassScraper, HEYZOScraper, DMMScraper,
+     JavLibraryScraper,          # T3 新增
++    JableScraper,
+     Video
+ )
+ from core.scrapers.errors import SourceBlocked, SourceParseEmpty, SourceUnreachable
+@@ -67,7 +68,7 @@
      """從 config 讀取 locale 並轉換為 JavBus lang code"""
      try:
          config = load_config()
@@ -1244,7 +1252,15 @@
          return _LOCALE_TO_JAVBUS.get(locale, "zh-tw")
      except Exception as e:
          logger.warning("[i18n] 讀取 locale config 失敗，使用預設語系: %s", e)
-@@ -450,17 +450,34 @@
+@@ -312,6 +313,7 @@
+         'fc2': lambda: [FC2OfficialScraper()],
+         'avsox': lambda: [AVSOXScraper()],
+         'javlibrary': lambda: [JavLibraryScraper()],
++        'jable': lambda: [JableScraper()],
+         'fc-javten': lambda: [FC2JavtenScraper()],
+     }
+ 
+@@ -450,17 +452,34 @@
      )
  
  

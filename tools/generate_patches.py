@@ -43,13 +43,17 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "004-network-and-scraper-fallbacks.patch",
         (
+            "core/cf_handoff.py",
             "core/custom_source/fetch.py",
             "core/custom_source/schema.py",
             "core/proxy_policy.py",
+            "core/scrapers/__init__.py",
             "core/scrapers/actress/avbase.py",
+            "core/scrapers/jable.py",
             "core/scrapers/javdb.py",
             "core/scrapers/models.py",
             "core/scrapers/utils.py",
+            "core/source_probe.py",
         ),
     ),
     (

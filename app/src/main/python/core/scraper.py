@@ -20,6 +20,7 @@ from core.scrapers import (
     FC2OfficialScraper, FC2JavtenScraper, AVSOXScraper,
     D2PassScraper, HEYZOScraper, DMMScraper,
     JavLibraryScraper,          # T3 新增
+    JableScraper,
     Video
 )
 from core.scrapers.errors import SourceBlocked, SourceParseEmpty, SourceUnreachable
@@ -312,6 +313,7 @@ def search_jav(
         'fc2': lambda: [FC2OfficialScraper()],
         'avsox': lambda: [AVSOXScraper()],
         'javlibrary': lambda: [JavLibraryScraper()],
+        'jable': lambda: [JableScraper()],
         'fc-javten': lambda: [FC2JavtenScraper()],
     }
 

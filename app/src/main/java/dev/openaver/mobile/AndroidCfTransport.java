@@ -50,13 +50,14 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class AndroidCfTransport {
     public static final String SITE_JAVLIBRARY = "javlibrary";
     public static final String SITE_FC2_JAVTEN = "fc-javten";
+    public static final String SITE_JABLE = "jable";
 
     private static final long PAGE_TIMEOUT_MS = 45_000L;
     private static final long FETCH_TIMEOUT_MS = 60_000L;
     private static final long READY_TIMEOUT_MS = 10_000L;
     private static final long SITE_CREATE_TIMEOUT_MS = 10_000L;
     private static final List<String> KNOWN_SITES = Arrays.asList(
-            SITE_JAVLIBRARY, "fc-javten"
+            SITE_JAVLIBRARY, SITE_FC2_JAVTEN, SITE_JABLE
     );
 
     private final Activity activity;

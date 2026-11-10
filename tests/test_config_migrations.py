@@ -98,6 +98,7 @@ def test_sources_migration_appends_manual_only_sources(tmp_path, monkeypatch):
     assert result["sources_bak"] == []
     assert "javlibrary" in source_ids
     assert "fc-javten" in source_ids
+    assert "jable" in source_ids
 
 
 def test_source_config_model_dump_includes_is_censored():

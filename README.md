@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r53-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r54-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r53-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r54-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r53`（versionCode `17071`）
+- 版本：`0.17.18-r54`（versionCode `17072`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -51,6 +51,8 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - 本机 HTTP Range 视频服务，支持播放器拖动进度
 - JavLibrary Android WebView Cloudflare 验证窗口
 - FC2-javten 复用 Cloudflare WebView 验证通路
+- Jable 精确番号搜索，复用 Android WebView Cloudflare 验证；可抓取标题、封面、
+  女优、分类标签和简介（Jable 网页没有剧照图集）
 - JavDB `curl_cffi` 缺失时的网页 `requests` fallback
 - AVBase 女优资料 `requests` fallback 和 UTF-8 修复
 - 自定义来源 `fetch: cf` 的普通浏览器请求兼容模式
@@ -245,6 +247,10 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r53：修复主要片商年表在 4 部以上直接切换为整块色卡、导致尺寸不再递增的问题；
   所有非空年份统一按 1～10 部逐步放大到 12.5px，10 部以上封顶，主力片商年改用
   淡色光晕标识
+- r54：新增 Jable 精确番号刮削来源，复用 Android WebView Cloudflare 验证，
+  支持标题、封面、女优、分类标签和简介，并可在高级搜索中手动选择
+- r54：Jable 标签只从影片信息区读取，不会混入站点头部导航、推荐影片或广告标签；
+  Jable 网页没有剧照图集，因此该来源返回空剧照，不把推荐封面和 Logo 误当剧照
 
 ## 限制
 
@@ -254,6 +260,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   兼容的 `requests` fallback，不保证与桌面端完全相同。
 - 自定义来源 `fetch: cf` 使用普通浏览器请求兼容模式，不保证通过所有
   Cloudflare 站点。
+- Jable 网页只提供封面和播放器拖动预览，没有剧照图集，因此 Jable 来源不提供剧照。
 - 自动检查更新已关闭；升级需安装新 APK。
 - 自动对焦仍遵循上游规则：有码/普通厂牌默认使用标准右裁，手动“自动侦测”不受此限制。
 - 播放能力取决于手机系统 WebView 编解码器。MP4/H.264/AAC 已验证；MKV、AVI、

@@ -84,7 +84,8 @@ public final class CfShellAgent {
         body.put("shell", "windows");
         JSONArray sites = new JSONArray();
         sites.put(AndroidCfTransport.SITE_JAVLIBRARY);
-        sites.put("fc-javten");
+        sites.put(AndroidCfTransport.SITE_FC2_JAVTEN);
+        sites.put(AndroidCfTransport.SITE_JABLE);
         body.put("sites", sites);
         body.put("applied_proxy", JSONObject.NULL);
         body.put("server_remote", false);

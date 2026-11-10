@@ -129,7 +129,7 @@ def render_name(s: SourceConfig) -> str:
 
 
 def get_builtin_sources() -> list[SourceConfig]:
-    """回傳 8 個內建來源，order 對齊 SOURCE_ORDER（dmm 開頭）。
+    """回傳 8 個自動 fan-out 內建來源，order 對齊 SOURCE_ORDER（dmm 開頭）。
 
     全部 type='builtin'、enabled=True、manual_only=False、is_beta=False。
     不含 'auto'（auto 是 mode 不是 source，CD-61-5）。
@@ -152,7 +152,7 @@ def get_builtin_sources() -> list[SourceConfig]:
 
 
 def get_manual_only_sources() -> list[SourceConfig]:
-    """回傳 manual_only=True 的 builtin 來源（javlibrary、fc-javten）。
+    """回傳 manual_only=True 的 builtin 來源（javlibrary、fc-javten、jable）。
 
     不進 SOURCE_ORDER / fan-out，不揭露至 capabilities，僅供：
     - config migration additive step（追加至 sources 段）
@@ -189,6 +189,19 @@ def get_manual_only_sources() -> list[SourceConfig]:
             manual_only=True,
             # requires_proxy 由 _derive_requires_proxy field_validator 自動推為 False
             # （fc-javten 不在 PROXY_SOURCES）
+        ),
+        SourceConfig(
+            id='jable',
+            type='builtin',
+            display_name_key='Jable',
+            display_name_raw='',
+            enabled=False,
+            order=101,
+            config={},
+            # Cloudflare transport source: the capsule stays gated until the
+            # shell reports its per-site verification window as available.
+            is_beta=True,
+            manual_only=True,
         ),
     ]
 

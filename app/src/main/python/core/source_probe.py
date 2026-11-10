@@ -45,7 +45,7 @@ REASON_CODES = frozenset({
     'custom_use_verify',
 })
 
-MANUAL_ONLY_IDS = frozenset({'javlibrary', 'fc-javten'})
+MANUAL_ONLY_IDS = frozenset({'javlibrary', 'fc-javten', 'jable'})
 BUILTIN_IDS = ('dmm', 'javbus', 'jav321', 'javdb', 'd2pass', 'heyzo', 'fc2', 'avsox')
 
 _CF_BODY_MARKERS = (b'just a moment', b'cf-browser-verification', b'challenge-platform')
@@ -224,6 +224,7 @@ def scraper_class_for(source_id: str):
     from core.scrapers.javbus import JavBusScraper
     from core.scrapers.javdb import JavDBScraper
     from core.scrapers.javlibrary import JavLibraryScraper
+    from core.scrapers.jable import JableScraper
     from core.scrapers.fc2_javten import FC2JavtenScraper
 
     return {
@@ -231,6 +232,7 @@ def scraper_class_for(source_id: str):
         'javdb': JavDBScraper, 'd2pass': D2PassScraper, 'heyzo': HEYZOScraper,
         'fc2': FC2OfficialScraper, 'avsox': AVSOXScraper,
         'javlibrary': JavLibraryScraper, 'fc-javten': FC2JavtenScraper,
+        'jable': JableScraper,
     }[source_id]
 
 

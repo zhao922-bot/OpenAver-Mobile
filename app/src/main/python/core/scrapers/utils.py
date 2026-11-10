@@ -411,6 +411,9 @@ SOURCE_ORDER = CENSORED_SOURCES + UNCENSORED_SOURCES
 # - 不註冊為 search provider（CD-70b：exact-only；模糊搜尋的來源由 core/search_providers/registry.py 決定）。
 # - 必須在 SOURCE_ORDER 建立後才 append，否則 SOURCE_ORDER tuple 已含 javlibrary（污染 fan-out）。
 CENSORED_SOURCES.append('javlibrary')
+# Jable is an exact-only source behind Cloudflare. Keep it out of SOURCE_ORDER
+# so making the verification source available cannot change auto fan-out.
+CENSORED_SOURCES.append('jable')
 # CD-118a-1：fc-javten 無碼 manual_only BETA。鏡射 javlibrary 的 append 時機（SOURCE_ORDER 建立後）。
 UNCENSORED_SOURCES.append('fc-javten')
 
@@ -424,6 +427,7 @@ SOURCE_NAMES = {
     'fc2': 'FC2',
     'avsox': 'AVSOX',
     'javlibrary': 'JavLibrary',
+    'jable': 'Jable',
     'fc-javten': 'FC2-javten',
 }
 

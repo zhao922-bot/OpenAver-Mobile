@@ -32,16 +32,22 @@ from core.proxy_policy import (
     client_cf_settings,
 )
 from core.scrapers.fc2_javten import _JAVTEN_ALLOWED_NETLOCS, JAVTEN_ORIGIN
+from core.scrapers.jable import JABLE_ALLOWED_NETLOCS, JABLE_ORIGIN
 from core.scrapers.javlibrary import JAVLIBRARY_ORIGIN
 
 logger = get_logger(__name__)
 
-CF_SITE_ORIGINS = {'javlibrary': JAVLIBRARY_ORIGIN, 'fc-javten': JAVTEN_ORIGIN}
+CF_SITE_ORIGINS = {
+    'javlibrary': JAVLIBRARY_ORIGIN,
+    'fc-javten': JAVTEN_ORIGIN,
+    'jable': JABLE_ORIGIN,
+}
 # 殼端白名單（windows/cf_shell.check_job）：netloc 整串精確屬於集合；scheme 取 CF_SITE_ORIGINS 的。
 # javten 站方會落地 www.，引用 fc2_javten 既有常數不複製。
 CF_SITE_NETLOCS = {
     'javlibrary': frozenset({urlsplit(JAVLIBRARY_ORIGIN).netloc.lower()}),
     'fc-javten': frozenset(_JAVTEN_ALLOWED_NETLOCS),
+    'jable': JABLE_ALLOWED_NETLOCS,
 }
 
 # (claim 逾時, exec 逾時) 秒
