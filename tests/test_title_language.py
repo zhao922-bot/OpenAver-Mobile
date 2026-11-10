@@ -4,6 +4,7 @@ import asyncio
 
 from core import translate_service
 from core.title_language import (
+    TRANSLATION_REFUSAL_MARKER,
     normalize_translation_text,
     title_matches_target_language,
     title_needs_translation,
@@ -123,6 +124,38 @@ def test_translation_result_validation_rejects_model_failures():
     assert translation_result_issue(source, source, "zh-CN") == "source_echo"
     assert translation_result_issue(source, "English title", "zh-CN") == "wrong_target_language"
     assert translation_result_issue(source, "这是正常译文", "zh-CN") is None
+
+
+def test_translation_result_validation_rejects_policy_refusals():
+    source = (
+        "あの美術の先生が僕らのチ○ポをこんなに下品にしゃぶってくれるなんて"
+        "夢みたいだ 明里つむぎ"
+    )
+    refusal = (
+        "抱歉，该标题涉及校园师生性内容，可能涉及未成年人，无法处理；"
+        "其他标题欢迎再询。"
+    )
+
+    assert translation_result_issue(source, refusal, "zh-CN") == "refusal"
+    assert (
+        translation_result_issue(
+            source,
+            f"Translation result: {TRANSLATION_REFUSAL_MARKER}",
+            "zh-CN",
+        )
+        == "refusal"
+    )
+    assert title_needs_translation(refusal, "zh-CN") is True
+
+
+def test_cloud_prompts_require_a_stable_refusal_marker():
+    for locale in ("zh-CN", "zh-TW", "en", "ja"):
+        prompt = translate_service.build_cloud_translate_prompt(
+            "日本語のタイトル",
+            locale,
+        )
+        assert TRANSLATION_REFUSAL_MARKER in prompt
+        assert translate_service.refusal_rule(locale) in prompt
 
 
 def test_translation_normalization_removes_only_wrappers():

@@ -236,7 +236,10 @@ def test_title_backfill_rejects_model_refusal_without_writing_nfo(
     candidate = Video(
         path="file:///ABC-207.mp4",
         number="ABC-207",
-        title="先輩って夜はすごく激しいんですね",
+        title=(
+            "あの美術の先生が僕らのチ○ポをこんなに下品にしゃぶってくれる"
+            "なんて夢みたいだ 明里つむぎ"
+        ),
     )
     write_calls = []
 
@@ -251,7 +254,10 @@ def test_title_backfill_rejects_model_refusal_without_writing_nfo(
         target_language = "zh-CN"
 
         async def translate_or_raise(self, title, context):
-            return "抱歉，我无法协助翻译这个标题。"
+            return (
+                "抱歉，该标题涉及校园师生性内容，可能涉及未成年人，无法处理；"
+                "其他标题欢迎再询。"
+            )
 
     def fake_writeback(*args, **kwargs):
         write_calls.append((args, kwargs))
@@ -286,7 +292,10 @@ def test_title_backfill_rejects_model_refusal_without_writing_nfo(
         event for event in events if event.get("type") == "result-item"
     )
     assert result["success"] is False
-    assert result["error_code"] == "translate_failed"
+    assert result["error_code"] == "translation_refused"
+    assert events[-1]["summary"]["failed_items"][0]["error_code"] == (
+        "translation_refused"
+    )
     assert events[-1]["summary"]["success"] == 0
     assert events[-1]["summary"]["failed"] == 1
 

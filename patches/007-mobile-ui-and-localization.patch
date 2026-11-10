@@ -1285,18 +1285,19 @@
  
 --- a/core/translate_service.py
 +++ b/core/translate_service.py
-@@ -31,6 +31,10 @@
+@@ -31,6 +31,11 @@
      request_translation,
  )
  from core.cloud_translate import CLOUD_TRANSLATE_TIMEOUT, TranslateError, build_error
 +from core.title_language import (
++    TRANSLATION_REFUSAL_MARKER,
 +    normalize_translation_text,
 +    translation_result_issue,
 +)
  
  
  # ============ 語言 Prompt 模板 ============
-@@ -38,30 +42,65 @@
+@@ -38,30 +43,93 @@
  LANGUAGE_PROMPTS = {
      "zh-TW": {
          "name": "繁體中文",
@@ -1337,6 +1338,34 @@
      },
  }
  
++_REFUSAL_RULES = {
++    "zh-CN": (
++        "如果因安全策略、内容限制、政策原因或任何其他原因无法翻译，"
++        f"不要解释、道歉或说明原因，只输出 {TRANSLATION_REFUSAL_MARKER}"
++    ),
++    "zh-TW": (
++        "如果因安全策略、內容限制、政策原因或任何其他原因無法翻譯，"
++        f"不要解釋、道歉或說明原因，只輸出 {TRANSLATION_REFUSAL_MARKER}"
++    ),
++    "en": (
++        "If you cannot translate because of safety rules, content limits, "
++        "policy restrictions, or any other reason, do not explain or apologize; "
++        f"output only {TRANSLATION_REFUSAL_MARKER}"
++    ),
++    "ja": (
++        "安全ポリシー、コンテンツ制限、その他の理由で翻訳できない場合は、"
++        "説明や謝罪をせず、"
++        f"{TRANSLATION_REFUSAL_MARKER} だけを出力してください"
++    ),
++}
++
++
++def refusal_rule(target_language: str) -> str:
++    return _REFUSAL_RULES.get(
++        target_language,
++        _REFUSAL_RULES["zh-CN"],
++    )
++
  
  class TranslateService(ABC):
      """翻譯服務抽象基類"""
@@ -1371,7 +1400,7 @@
  
      @abstractmethod
      async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
-@@ -85,7 +124,7 @@
+@@ -85,7 +153,7 @@
          result = await self.translate_single(title, context)
          if not result:
              raise TranslateError("empty_response", None, "", "translation is empty")
@@ -1380,7 +1409,7 @@
  
      @abstractmethod
      async def translate_batch(self, titles: List[str], context: Optional[Dict] = None) -> List[str]:
-@@ -105,7 +144,7 @@
+@@ -105,7 +173,7 @@
  class OllamaTranslateService(TranslateService):
      """Ollama 翻譯服務實現"""
  
@@ -1389,7 +1418,7 @@
          """
          初始化 Ollama 服務
  
-@@ -122,12 +161,8 @@
+@@ -122,13 +190,12 @@
          self.target_language = target_language
  
      async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -1399,12 +1428,17 @@
 -            return title
 -
 -        lang_data = LANGUAGE_PROMPTS.get(self.target_language, LANGUAGE_PROMPTS["zh-TW"])
+-        system_msg = lang_data["ollama_system"]
 +        """Translate one title; failures raise TranslateError."""
 +        lang_data = LANGUAGE_PROMPTS.get(self.target_language, LANGUAGE_PROMPTS["zh-CN"])
-         system_msg = lang_data["ollama_system"]
++        system_msg = (
++            f"{lang_data['ollama_system']}\n"
++            f"{refusal_rule(self.target_language)}"
++        )
          example = lang_data["ollama_example"]
          prompt = f"""範例：{example}
-@@ -175,9 +210,7 @@
+ 
+@@ -175,9 +242,7 @@
                  "Ollama", "api_error", None, type(e).__name__, str(e)
              ) from None
  
@@ -1415,7 +1449,7 @@
  
      async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
          """
-@@ -210,8 +243,8 @@
+@@ -210,8 +275,8 @@
      def _clean_output(self, text: str) -> str:
          """清理翻譯輸出"""
          text = text.strip().strip('"').strip("'")
@@ -1426,7 +1460,7 @@
          text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
          return text.strip()
  
-@@ -236,7 +269,7 @@
+@@ -236,7 +301,7 @@
  class GeminiTranslateService(TranslateService):
      """Google Gemini API 翻譯服務實現"""
  
@@ -1435,7 +1469,7 @@
          """
          初始化 Gemini 服務
  
-@@ -256,20 +289,17 @@
+@@ -256,20 +321,17 @@
              raise ValueError("Gemini API Key is required")
  
      async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -1459,7 +1493,7 @@
          except TranslateError:
              raise
          except Exception as e:
-@@ -310,7 +340,7 @@
+@@ -310,7 +372,7 @@
  class OpenAICompatibleTranslateService(TranslateService):
      """OpenAI Compatible API 翻譯服務實現（支援 OpenAI、Perplexity、OpenRouter、本地 LLM 等）"""
  
@@ -1468,7 +1502,7 @@
          """
          初始化 OpenAI Compatible 服務
  
-@@ -329,21 +359,34 @@
+@@ -329,21 +391,35 @@
          self.target_language = target_language
  
      async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -1496,7 +1530,8 @@
 +                    raise
 +                retry_prompt = (
 +                    f"{prompt}\n"
-+                    "只輸出最終譯文本身。不要評論、解釋、道歉，也不要輸出任何前綴。"
++                    "只輸出最終譯文本身。不要評論、解釋、道歉，也不要輸出任何前綴。\n"
++                    f"{refusal_rule(self.target_language)}"
 +                )
 +                retried = await openai_client.request_translation(
 +                    self.base_url,
@@ -1509,7 +1544,7 @@
          except TranslateError:
              raise
          except Exception as e:
-@@ -375,11 +418,11 @@
+@@ -375,24 +451,25 @@
  
  
  def build_cloud_translate_prompt(title: str, target_language: str) -> str:
@@ -1524,7 +1559,13 @@
  
  原文：
  {title}
-@@ -392,7 +435,7 @@
+ 
+ 翻譯要求：
+ {rules}
++{refusal_rule(target_language)}
+ """
+ 
+ 
  class ClaudeTranslateService(TranslateService):
      """Anthropic Claude Messages API 翻譯服務"""
  
@@ -1533,7 +1574,7 @@
          """
          Args:
              config: Claude 配置字典
-@@ -410,19 +453,17 @@
+@@ -410,19 +487,17 @@
              raise ValueError("Claude API Key is required")
  
      async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -1556,7 +1597,7 @@
          except TranslateError:
              raise
          except Exception as e:
-@@ -451,7 +492,7 @@
+@@ -451,7 +526,7 @@
          return results
  
  
@@ -1565,7 +1606,7 @@
      """
      創建翻譯服務實例（工廠函數）
  
-@@ -464,7 +505,7 @@
+@@ -464,7 +539,7 @@
                  "claude": {...},
                  "openai": {...}
              }
@@ -2069,7 +2110,7 @@
      },
      "costar": {
        "count_label": "{n} videos"
-@@ -1976,5 +2288,378 @@
+@@ -1976,5 +2288,381 @@
        "saved": "Mapping table saved",
        "save_failed": "Failed to save the mapping table"
      }
@@ -2196,6 +2237,9 @@
 +      "status": "Translating titles in parallel ({concurrency} workers)...",
 +      "status_count": "Translating titles ({current}/{total}, {concurrency} workers)...",
 +      "translation_failed": "Title translation failed",
++      "translation_refused": "The model refused to translate this title (content or safety limit)",
++      "translation_invalid": "The model returned an invalid translation",
++      "translation_empty": "The model returned an empty translation",
 +      "log": "[{current}/{total}] {item}: {original} → {translated}",
 +      "write_failed": "Failed to write the title back",
 +      "cancelled": "Title backfill cancelled",
@@ -2912,7 +2956,7 @@
      },
      "costar": {
        "count_label": "{n} 本"
-@@ -1976,5 +2288,378 @@
+@@ -1976,5 +2288,381 @@
        "saved": "パス対応表を保存しました",
        "save_failed": "パス対応表の保存に失敗しました"
      }
@@ -3039,6 +3083,9 @@
 +      "status": "タイトルを並列翻訳しています（{concurrency} 並列）...",
 +      "status_count": "タイトルを翻訳中（{current}/{total}、{concurrency} 並列）...",
 +      "translation_failed": "タイトル翻訳に失敗しました",
++      "translation_refused": "モデルがこのタイトルの翻訳を拒否しました（内容または安全上の制限）",
++      "translation_invalid": "モデルから無効な翻訳結果が返されました",
++      "translation_empty": "モデルから空の翻訳が返されました",
 +      "log": "[{current}/{total}] {item}：{original} → {translated}",
 +      "write_failed": "タイトルの書き戻しに失敗しました",
 +      "cancelled": "タイトル補完をキャンセルしました",
@@ -3764,7 +3811,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1976,5 +2288,378 @@
+@@ -1976,5 +2288,381 @@
        "saved": "对照表已保存",
        "save_failed": "对照表保存失败"
      }
@@ -3891,6 +3938,9 @@
 +      "status": "正在并行翻译标题（{concurrency} 路）...",
 +      "status_count": "正在翻译标题（{current}/{total}，并行 {concurrency} 路）...",
 +      "translation_failed": "标题翻译失败",
++      "translation_refused": "模型拒绝翻译该标题（可能受内容或安全限制）",
++      "translation_invalid": "模型返回了无效的翻译结果",
++      "translation_empty": "模型返回了空翻译",
 +      "log": "[{current}/{total}] {item}：{original} → {translated}",
 +      "write_failed": "标题写回失败",
 +      "cancelled": "标题补齐已取消",
@@ -4934,7 +4984,7 @@
        "slow": "這個位置回應太慢或連不到，請確認路徑後再測一次",
        "no_sample": "這個來源裡沒有可測試的影片",
        "loading": "正在讀取伺服器的掃描來源…",
-@@ -1976,5 +2288,378 @@
+@@ -1976,5 +2288,381 @@
        "saved": "對照表已儲存",
        "save_failed": "對照表儲存失敗"
      }
@@ -5061,6 +5111,9 @@
 +      "status": "正在並行翻譯標題（{concurrency} 路）...",
 +      "status_count": "正在翻譯標題（{current}/{total}，並行 {concurrency} 路）...",
 +      "translation_failed": "標題翻譯失敗",
++      "translation_refused": "模型拒絕翻譯該標題（可能受內容或安全限制）",
++      "translation_invalid": "模型傳回了無效的翻譯結果",
++      "translation_empty": "模型傳回了空白翻譯",
 +      "log": "[{current}/{total}] {item}：{original} → {translated}",
 +      "write_failed": "標題寫回失敗",
 +      "cancelled": "標題補齊已取消",

@@ -32,6 +32,7 @@ from core.anthropic_client import (
 )
 from core.cloud_translate import CLOUD_TRANSLATE_TIMEOUT, TranslateError, build_error
 from core.title_language import (
+    TRANSLATION_REFUSAL_MARKER,
     normalize_translation_text,
     translation_result_issue,
 )
@@ -69,6 +70,34 @@ LANGUAGE_PROMPTS = {
         "gemini_rules": "1. データベース用タイトルの翻訳だけを行い、新しい内容を生成しない\n2. 固有名詞以外は未翻訳の外国語を残さず、自然な日本語にする\n3. 50文字以内を目安に簡潔にする\n4. 翻訳結果だけを出力し、説明を加えない",
     },
 }
+
+_REFUSAL_RULES = {
+    "zh-CN": (
+        "如果因安全策略、内容限制、政策原因或任何其他原因无法翻译，"
+        f"不要解释、道歉或说明原因，只输出 {TRANSLATION_REFUSAL_MARKER}"
+    ),
+    "zh-TW": (
+        "如果因安全策略、內容限制、政策原因或任何其他原因無法翻譯，"
+        f"不要解釋、道歉或說明原因，只輸出 {TRANSLATION_REFUSAL_MARKER}"
+    ),
+    "en": (
+        "If you cannot translate because of safety rules, content limits, "
+        "policy restrictions, or any other reason, do not explain or apologize; "
+        f"output only {TRANSLATION_REFUSAL_MARKER}"
+    ),
+    "ja": (
+        "安全ポリシー、コンテンツ制限、その他の理由で翻訳できない場合は、"
+        "説明や謝罪をせず、"
+        f"{TRANSLATION_REFUSAL_MARKER} だけを出力してください"
+    ),
+}
+
+
+def refusal_rule(target_language: str) -> str:
+    return _REFUSAL_RULES.get(
+        target_language,
+        _REFUSAL_RULES["zh-CN"],
+    )
 
 
 class TranslateService(ABC):
@@ -163,7 +192,10 @@ class OllamaTranslateService(TranslateService):
     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
         """Translate one title; failures raise TranslateError."""
         lang_data = LANGUAGE_PROMPTS.get(self.target_language, LANGUAGE_PROMPTS["zh-CN"])
-        system_msg = lang_data["ollama_system"]
+        system_msg = (
+            f"{lang_data['ollama_system']}\n"
+            f"{refusal_rule(self.target_language)}"
+        )
         example = lang_data["ollama_example"]
         prompt = f"""範例：{example}
 
@@ -377,7 +409,8 @@ class OpenAICompatibleTranslateService(TranslateService):
                     raise
                 retry_prompt = (
                     f"{prompt}\n"
-                    "只輸出最終譯文本身。不要評論、解釋、道歉，也不要輸出任何前綴。"
+                    "只輸出最終譯文本身。不要評論、解釋、道歉，也不要輸出任何前綴。\n"
+                    f"{refusal_rule(self.target_language)}"
                 )
                 retried = await openai_client.request_translation(
                     self.base_url,
@@ -429,6 +462,7 @@ def build_cloud_translate_prompt(title: str, target_language: str) -> str:
 
 翻譯要求：
 {rules}
+{refusal_rule(target_language)}
 """
 
 

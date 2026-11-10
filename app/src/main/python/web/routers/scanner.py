@@ -2589,6 +2589,9 @@ _TITLE_ERROR_KEYS = {
     "db_write_failed": "error_db_write_failed",
     "invalid_path": "error_invalid_path",
     "translate_failed": "translation_failed",
+    "translation_refused": "translation_refused",
+    "translation_invalid": "translation_invalid",
+    "translation_empty": "translation_empty",
     "write_failed": "write_failed",
 }
 _SAMPLE_ERROR_KEYS = {
@@ -2615,6 +2618,15 @@ def _localized_title_error(
     if key:
         return _runtime_text("title", key, locale)
     return fallback or _runtime_text("title", "write_failed", locale)
+
+
+def _title_translation_error_code(exc: TranslateError) -> str:
+    """Keep refusal and malformed output distinct from transport failures."""
+    return {
+        "refused": "translation_refused",
+        "invalid_response": "translation_invalid",
+        "empty_response": "translation_empty",
+    }.get(exc.kind, "translate_failed")
 
 
 def _localized_sample_error(
@@ -2881,11 +2893,14 @@ def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, N
                     exc.kind,
                     exc.status,
                 )
+                error_code = _title_translation_error_code(exc)
                 result = {
                     "success": False,
-                    "error": "translate_failed",
+                    "error": error_code,
                     "message": _runtime_text(
-                        "title", "translation_failed", locale
+                        "title",
+                        _TITLE_ERROR_KEYS[error_code],
+                        locale,
                     ),
                 }
             except Exception:
@@ -2960,6 +2975,7 @@ def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, N
             failed_items.append({
                 "path": video.path,
                 "number": number,
+                "error_code": error_code,
                 "error": error_message,
             })
             yield _sse_event({

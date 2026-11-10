@@ -22,6 +22,7 @@ _TRANSLATION_LABEL_RE = re.compile(
     re.IGNORECASE,
 )
 _ZERO_WIDTH_RE = re.compile(r"[\ufeff\u200b\u200c\u200d]")
+TRANSLATION_REFUSAL_MARKER = "__OPENAVER_TRANSLATION_REFUSED__"
 
 
 def _is_han(character: str) -> bool:
@@ -95,10 +96,24 @@ def _looks_japanese(text: str) -> bool:
 
 def _is_refusal_text(text: str) -> bool:
     """Detect common model refusal/explanatory responses without matching titles."""
-    prefix = text.casefold()[:280]
+    folded = text.casefold()
+    if TRANSLATION_REFUSAL_MARKER.casefold() in folded:
+        return True
+
+    prefix = folded[:280]
     checks = (
         r"(?:抱歉|对不起|對不起|不好意思).{0,60}(?:无法|無法|不能|不便|恕不)"
         r".{0,40}(?:协助|協助|翻译|翻譯|提供)",
+        r"^(?:抱歉|对不起|對不起|不好意思)[^。！？\n]{0,120}"
+        r"(?:标题|標題|内容|內容|请求|請求|title|request).{0,100}"
+        r"(?:无法|無法|不能|不便).{0,40}"
+        r"(?:处理|處理|翻译|翻譯|协助|協助|提供|回答|回覆|回应|回應"
+        r"|help|translate|process)",
+        r"^(?:抱歉|对不起|對不起|不好意思)[^。！？\n]{0,100}"
+        r"(?:无法|無法|不能|不便).{0,40}"
+        r"(?:处理|處理|翻译|翻譯|协助|協助|提供|回答|回覆|回应|回應)"
+        r".{0,80}(?:其他|other).{0,40}"
+        r"(?:标题|標題|title|询问|詢問|问|問)",
         r"(?:我|本模型|人工智能|ai).{0,30}(?:无法|無法|不能)"
         r".{0,30}(?:协助|協助|翻译|翻譯|完成)",
         r"(?:i am sorry|i'm sorry|sorry).{0,100}"

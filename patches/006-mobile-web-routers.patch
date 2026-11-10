@@ -3284,7 +3284,7 @@
          return {
              "success": True,
              "data": {
-@@ -1046,75 +2560,1600 @@
+@@ -1046,75 +2560,1616 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
@@ -3325,6 +3325,9 @@
 +    "db_write_failed": "error_db_write_failed",
 +    "invalid_path": "error_invalid_path",
 +    "translate_failed": "translation_failed",
++    "translation_refused": "translation_refused",
++    "translation_invalid": "translation_invalid",
++    "translation_empty": "translation_empty",
 +    "write_failed": "write_failed",
 +}
 +_SAMPLE_ERROR_KEYS = {
@@ -3351,6 +3354,15 @@
 +    if key:
 +        return _runtime_text("title", key, locale)
 +    return fallback or _runtime_text("title", "write_failed", locale)
++
++
++def _title_translation_error_code(exc: TranslateError) -> str:
++    """Keep refusal and malformed output distinct from transport failures."""
++    return {
++        "refused": "translation_refused",
++        "invalid_response": "translation_invalid",
++        "empty_response": "translation_empty",
++    }.get(exc.kind, "translate_failed")
 +
 +
 +def _localized_sample_error(
@@ -3619,11 +3631,14 @@
 +                    exc.kind,
 +                    exc.status,
 +                )
++                error_code = _title_translation_error_code(exc)
 +                result = {
 +                    "success": False,
-+                    "error": "translate_failed",
++                    "error": error_code,
 +                    "message": _runtime_text(
-+                        "title", "translation_failed", locale
++                        "title",
++                        _TITLE_ERROR_KEYS[error_code],
++                        locale,
 +                    ),
 +                }
 +            except Exception:
@@ -3698,6 +3713,7 @@
 +            failed_items.append({
 +                "path": video.path,
 +                "number": number,
++                "error_code": error_code,
 +                "error": error_message,
 +            })
 +            yield _sse_event({
@@ -4912,7 +4928,7 @@
      )
  
  
-@@ -1123,6 +4162,7 @@
+@@ -1123,6 +4178,7 @@
      """取得產生的 HTML 列表檔案（修改圖片路徑為 API 代理）"""
      try:
          config = load_config()
@@ -4920,7 +4936,7 @@
          gallery_config = config.get('gallery', {})
          output_dir = gallery_config.get('output_dir', '') or ''
          output_filename = gallery_config.get('output_filename', 'gallery_output.html')
-@@ -1131,7 +4171,10 @@
+@@ -1131,7 +4187,10 @@
  
          if not html_path.exists():
              return HTMLResponse(
@@ -4932,7 +4948,7 @@
                  status_code=404
              )
  
-@@ -1161,8 +4204,12 @@
+@@ -1161,8 +4220,12 @@
          return HTMLResponse(content=content)
      except Exception:
          logger.exception("view_list 讀取失敗")
@@ -4946,7 +4962,7 @@
              status_code=500
          )
  
-@@ -1177,12 +4224,25 @@
+@@ -1177,12 +4240,25 @@
              return {"success": True, "data": {"count": 0}}
  
          repo = VideoRepository(db_path)
@@ -4974,7 +4990,7 @@
  
  
  # === Jellyfin 圖片批次補齊 ===
-@@ -1191,30 +4251,43 @@
+@@ -1191,30 +4267,43 @@
      """檢查 DB 中有多少影片缺少 poster/fanart"""
      videos = repo.get_all()
      need_update = []
@@ -5036,7 +5052,7 @@
      try:
          # Codex PR#123 P2：gate 必須排在 get_db_path() 之前——get_db_path() 內部會
          # mkdir 建立 output/ 資料夾（core/database/connection.py:15-22），是有副作用
-@@ -1224,17 +4297,29 @@
+@@ -1224,17 +4313,29 @@
          # done + updated:0（off 時零寫入），且與 _check_jellyfin_needed() 的順序
          # 不對稱。config 只讀一次，下面 path_mappings 沿用同一個 config。
          config = load_config()
@@ -5068,7 +5084,7 @@
              return
  
          repo = VideoRepository(db_path)
-@@ -1246,13 +4331,31 @@
+@@ -1246,13 +4347,31 @@
          if total == 0:
              _jellyfin_cache_result = None
              _jellyfin_cache_time = 0
@@ -5102,7 +5118,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,45 +4364,129 @@
+@@ -1261,45 +4380,129 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -5249,7 +5265,7 @@
  
  
  def _check_jellyfin_needed() -> dict | None:
-@@ -1359,15 +4546,11 @@
+@@ -1359,15 +4562,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -5269,7 +5285,7 @@
      )
  
  
-@@ -1463,26 +4646,49 @@
+@@ -1463,26 +4662,49 @@
      ```
      """
      numbers = [n.strip() for n in body.numbers if isinstance(n, str) and n.strip()]
@@ -5324,7 +5340,7 @@
      gallery_config = config.get('gallery', {})
      output_dir = gallery_config.get('output_dir', '') or ''
      theme = config.get('general', {}).get('theme', 'light')
-@@ -1494,7 +4700,13 @@
+@@ -1494,7 +4716,13 @@
          db_results = repo.get_by_numbers(numbers)
      except Exception as e:
          logger.error('generate_from_ids: DB 查詢失敗: %s', e)
@@ -5339,7 +5355,7 @@
  
      all_videos: List[VideoInfo] = []
      missing: List[str] = []
-@@ -1577,7 +4789,13 @@
+@@ -1577,7 +4805,13 @@
          )
      except Exception as e:
          logger.error('generate_from_ids: HTML 產生失敗: %s', e)
@@ -5354,7 +5370,7 @@
  
      result = {
          "success": True,
-@@ -1621,6 +4839,11 @@
+@@ -1621,6 +4855,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:

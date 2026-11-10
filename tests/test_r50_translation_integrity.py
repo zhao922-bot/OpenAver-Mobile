@@ -48,6 +48,33 @@ def test_openai_service_does_not_return_a_second_refusal(monkeypatch):
     assert raised.value.kind == "refused"
 
 
+def test_openai_service_rejects_policy_refusal_after_retry(monkeypatch):
+    refusal = (
+        "抱歉，该标题涉及校园师生性内容，可能涉及未成年人，无法处理；"
+        "其他标题欢迎再询。"
+    )
+
+    async def fake_request(base_url, api_key, model, prompt, *, timeout):
+        return refusal
+
+    monkeypatch.setattr(openai_client, "request_translation", fake_request)
+    service = translate_service.OpenAICompatibleTranslateService(
+        {"base_url": "https://example.invalid/v1", "model": "test"},
+        "zh-CN",
+    )
+
+    with pytest.raises(TranslateError) as raised:
+        asyncio.run(
+            service.translate_or_raise(
+                "あの美術の先生が僕らのチ○ポをこんなに下品に"
+                "しゃぶってくれるなんて夢みたいだ 明里つむぎ"
+            )
+        )
+
+    assert raised.value.kind == "refused"
+    assert raised.value.error_type == "refusal"
+
+
 def test_openai_validation_ignores_actor_proper_terms_from_context(monkeypatch):
     translated = (
         "这是一个正常的简体中文标题，包含较长的日语演员专名"

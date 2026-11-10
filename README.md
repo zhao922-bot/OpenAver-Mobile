@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r50-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r51-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r50-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r51-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r50`（versionCode `17066`）
+- 版本：`0.17.18-r51`（versionCode `17067`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -231,6 +231,9 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r49：完整分段视频在片库、扫描统计、女优、缺失检查、补翻译和补剧照等界面
   统一按 1 部计算；统一命名在缺少 NFO 时生成只含标题信息的最小 NFO，
   并继续同步数据库标题、原始标题和 NFO 标题
+- r51：标题翻译遇到模型的自然语言拒答（例如“该标题涉及……无法处理”）时，
+  按 `translation_refused` 记为失败而不是成功；不会覆盖数据库标题或 NFO，
+  并在四语言界面显示对应的安全/内容限制提示
 
 ## 限制
 
