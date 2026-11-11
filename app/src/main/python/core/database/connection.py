@@ -120,6 +120,18 @@ def _ensure_notifications_schema(cursor: sqlite3.Cursor) -> None:
         cursor.execute("ALTER TABLE notifications ADD COLUMN url TEXT")
 
 
+_VIDEO_EMBEDDINGS_DDL = """
+CREATE TABLE IF NOT EXISTS video_embeddings (
+    video_id INTEGER PRIMARY KEY,
+    model TEXT NOT NULL,
+    dim INTEGER NOT NULL,
+    vec BLOB NOT NULL,
+    cover_path TEXT NOT NULL DEFAULT '',
+    updated_at REAL NOT NULL
+)
+"""
+
+
 # 片商 → JavBus 作品頁代號對應表（173-T2，CD-173-5）。
 # 三態：有列 found／有列 not_found／沒有列＝沒查過。maker_key 對後端是不透明字串。
 _MAKER_JAVBUS_MAP_DDL = """
@@ -167,6 +179,7 @@ def _init_db_schema(db_path: Path = None) -> None:
             auto_focal TEXT DEFAULT '',
             crop_mode TEXT NOT NULL DEFAULT 'auto',
             focal_attempted_at TIMESTAMP DEFAULT NULL,
+            focal_model TEXT NOT NULL DEFAULT 'local-pigo',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -322,6 +335,7 @@ def _init_db_schema(db_path: Path = None) -> None:
             value TEXT NOT NULL
         )
     """)
+    cursor.execute(_VIDEO_EMBEDDINGS_DDL)
 
     # Migration: 加入 Phase 37 新欄位
     existing_cols = {row[1] for row in cursor.execute("PRAGMA table_info(videos)").fetchall()}
@@ -371,6 +385,11 @@ def _init_db_schema(db_path: Path = None) -> None:
     # 每次重掃無限重排。nullable：NULL = 從未偵測過，非 NULL = 偵測跑過（不論有臉/無臉）。
     if 'focal_attempted_at' not in existing_cols:
         cursor.execute("ALTER TABLE videos ADD COLUMN focal_attempted_at TIMESTAMP DEFAULT NULL")
+
+    if 'focal_model' not in existing_cols:
+        cursor.execute(
+            "ALTER TABLE videos ADD COLUMN focal_model TEXT NOT NULL DEFAULT 'local-pigo'"
+        )
 
     # Migration: 加入 user_rating 欄位（videos，spec-123 精選標記；0=未精選，>0=已精選。
     # 只由 set_user_rating()/set_user_rating_bulk() 與 repath() 分支 3 的 max() 合併寫入，

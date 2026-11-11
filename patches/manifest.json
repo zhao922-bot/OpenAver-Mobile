@@ -20,8 +20,10 @@
       "patch": "003-android-native-focal.patch",
       "files": [
         "core/focal/detector.py",
+        "core/focal/device_state.py",
         "core/focal/subprocess_runner.py",
         "core/focal/pigo.py",
+        "core/focal/worker.py",
         "core/focal_trigger.py"
       ]
     },
@@ -326,6 +328,40 @@
         "web/templates/help.html",
         "web/templates/scraper.html",
         "web/templates/updater.html"
+      ]
+    },
+    {
+      "patch": "014-mobile-ai-services.patch",
+      "files": [
+        "core/ai_services/__init__.py",
+        "core/ai_services/backfill_state.py",
+        "core/ai_services/embedding_cache.py",
+        "core/ai_services/embeddings.py",
+        "core/ai_services/faces.py",
+        "core/ai_services/faces_config.py",
+        "core/ai_services/faces_detect.py",
+        "core/ai_services/faces_recompute.py",
+        "core/ai_services/faces_state.py",
+        "core/ai_services/image_prep.py",
+        "core/ai_services/job_shell.py",
+        "core/ai_services/samples.py",
+        "core/ai_services/similar_index.py",
+        "core/ai_services/similar_state.py",
+        "core/database/__init__.py",
+        "core/database/embeddings.py",
+        "core/secret_fields.py",
+        "core/similar/canonicalize.py",
+        "core/similar/ranker.py",
+        "web/routers/ai_services.py",
+        "web/routers/similar.py",
+        "web/static/js/pages/settings/ai-backfill-controls.js",
+        "web/static/js/pages/settings/ai-backfill-logic.js",
+        "web/static/js/pages/settings/ai-faces-logic.js",
+        "web/static/js/pages/settings/ai-faces-panel.js",
+        "web/static/js/pages/settings/ai-services-card.js",
+        "web/static/js/pages/settings/ai-similar-logic.js",
+        "web/static/js/pages/settings/ai-similar-panel.js",
+        "web/templates/_macros/ai_backfill_controls.html"
       ]
     }
   ]

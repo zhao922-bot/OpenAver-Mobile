@@ -141,10 +141,47 @@
      server_mode: bool = False  # LAN 伺服器模式開關（feature/80）
      close_action: Literal["ask", "tray", "exit"] = "ask"  # 視窗關閉行為（feature/82）
      auto_check_update: bool = True  # 啟動時檢查更新（feature/107）
-@@ -251,6 +267,43 @@
+@@ -237,6 +253,35 @@
+     consecutive_timeout_count: int = 0
+     judged_at_version: str = ""   # 累積目前這個 streak／disabled 狀態時的 App 版本號
+     set_by_user: bool = False  # True = 使用者決定；自動關閉／版本 reset 不得覆寫
++
++
++class ImageSimilarConfig(BaseModel):
++    """Remote image-embedding endpoint used for cover-similarity fusion."""
++    enabled: bool = False
++    url: str = ""
++    api_key: str = ""
++    model: str = ""
++
++
++class FacesConfig(BaseModel):
++    """Remote face-detection endpoint with local detector fallback."""
++    enabled: bool = False
++    url: str = ""
++    api_key: str = ""
++    model: str = ""
++
++
++class TagsConfig(BaseModel):
++    """Reserved for the r6 AI-tagging release; preserved across mobile saves."""
++    enabled: bool = False
++    provider: str = ""
++    model: str = ""
++
++
++class AIServicesConfig(BaseModel):
++    image_similar: ImageSimilarConfig = ImageSimilarConfig()
++    faces: FacesConfig = FacesConfig()
++    tags: TagsConfig = TagsConfig()
+ 
+ 
+ class AppConfig(BaseModel):
+@@ -251,6 +296,44 @@
      thumbnail_cache_enabled: bool = False  # 縮圖快取開關（feature/71 T2）；預設關閉；top-level additive migration 補缺漏
      metatube: MetatubeConfig = MetatubeConfig()  # CD-63b-3；Pydantic default 自動補缺漏（no migration needed）
      focal_device: FocalDeviceState = FocalDeviceState()
++    ai_services: AIServicesConfig = AIServicesConfig()
 +
 +    def model_dump(self, *args, **kwargs):
 +        data = super().model_dump(*args, **kwargs)
@@ -185,7 +222,7 @@
  
  
  # ============ 載入 / 儲存 ============
-@@ -302,345 +355,407 @@
+@@ -302,345 +385,427 @@
          return False
  
  
@@ -567,6 +604,26 @@
 +        raw_config['focal_device'] = FocalDeviceState().model_dump()
 +        need_save = True
 +
++    # r5 AI services: add missing nests without discarding the reserved tags
++    # subtree that a future release will consume.
++    if 'ai_services' not in raw_config:
++        raw_config['ai_services'] = AIServicesConfig().model_dump()
++        need_save = True
++    else:
++        ai = raw_config.setdefault('ai_services', {})
++        if not isinstance(ai, dict):
++            ai = {}
++            raw_config['ai_services'] = ai
++            need_save = True
++        for name, model in (
++            ('image_similar', ImageSimilarConfig),
++            ('faces', FacesConfig),
++            ('tags', TagsConfig),
++        ):
++            if name not in ai or not isinstance(ai.get(name), dict):
++                ai[name] = model().model_dump()
++                need_save = True
++
 +    if (
 +        'scraper' in raw_config
 +        and 'nfo_title_format' not in raw_config['scraper']
@@ -909,7 +966,7 @@
              _save_config_unlocked(raw_config)
  
          return raw_config
-@@ -648,10 +763,37 @@
+@@ -648,10 +813,37 @@
      return AppConfig().model_dump()
  
  
@@ -949,7 +1006,7 @@
  
  
  def _save_config_unlocked(config: dict) -> None:
-@@ -672,6 +814,7 @@
+@@ -672,6 +864,7 @@
  
      with atomic_write(CONFIG_PATH, mode='w', encoding='utf-8') as f:
          json.dump(config, f, indent=2, ensure_ascii=False)
@@ -957,7 +1014,7 @@
  
  
  def save_config(config: dict) -> None:
-@@ -691,16 +834,19 @@
+@@ -691,16 +884,19 @@
      mutate_config / reset_config_file）—— 會在已持鎖時二次 acquire → 自我死鎖。
      """
      with _config_write_lock:
@@ -2302,7 +2359,7 @@
        "mode_off": "Default mode",
        "mode_media": "Emby / Jellyfin / Kodi mode"
      },
-@@ -557,17 +648,17 @@
+@@ -557,18 +648,18 @@
        "system": "System Settings"
      },
      "favorite_folder": {
@@ -2322,10 +2379,12 @@
        "favorite_folder_hint": "Load a commonly used folder with one click",
        "favorite_folder_placeholder": "Leave blank = system Downloads folder",
 -      "favorite_folder_placeholder_server": "Leave blank = don't use a favorite folder",
+-      "favorite_folder_example_prefix": "Example: C:\\Users\\&lt;your username&gt;\\Downloads",
 +      "favorite_folder_placeholder_server": "Leave blank = don't use an inbox folder",
-       "favorite_folder_example_prefix": "Example: C:\\Users\\&lt;your username&gt;\\Downloads",
++        "favorite_folder_example_prefix": "Example: /sdcard/Download",
        "proxy_placeholder": "Leave empty to connect directly or use the system proxy",
        "proxy_scope_label": "Proxy Scope",
+       "proxy_scope_dmm": "DMM only",
 @@ -602,7 +693,9 @@
        "openai_custom_model": "Custom...",
        "claude_cloud": "(Anthropic cloud)",
@@ -2401,7 +2460,7 @@
        "locale_switch_confirm": "You have unsaved changes that will be lost when switching language. Continue?"
      },
      "reset_modal": {
-@@ -797,15 +908,82 @@
+@@ -797,15 +908,176 @@
        "gemini_connection_timeout": "Connection timed out",
        "gemini_http_error": "HTTP request failed",
        "gemini_translate_failed": "Translation test failed",
@@ -2418,6 +2477,100 @@
 +      "openai_official_missing_model": "Please choose a model first",
 +      "openai_official_missing_key": "Authentication failed, check API Key",
 +      "openai_official_blocked": "This test title was blocked by the provider's content filter. Switching models usually won't help — try another translation service"
++    },
++    "ai": {
++      "title": "AI Features",
++      "tab_translate": "Translate",
++      "tab_similar": "Image Similarity",
++      "help_body": "Configure title translation, cover-image similarity search, and face detection. Services run on your own remote HTTP server; covers and titles are not written to app logs.",
++      "help_docs_link": "External AI guide (GitHub: docs/external-ai.md)",
++      "connections_title": "Connections",
++      "backfill": {
++        "btn_start": "Fill Whole Library",
++        "btn_continue": "Continue",
++        "btn_stop": "Stop",
++        "btn_rebuild": "Rebuild All",
++        "save_first": "Save settings first",
++        "pending_line": "{n} not processed yet",
++        "progress_running": "Processed {n}/{m}",
++        "progress_last_success": "・Last success {time}"
++      },
++      "similar": {
++        "enabled_label": "Enable image similarity",
++        "empty_desc": "This needs a small service you host yourself (or ask your AI assistant to set one up). OpenAver sends covers to it to turn them into vectors, so Constellation can tell when covers look alike. If you don't have one, just skip it — nothing else is affected.",
++        "btn_docs": "View docs",
++        "url_label": "Endpoint URL",
++        "url_placeholder": "http://127.0.0.1:8000",
++        "api_key_label": "API Key",
++        "api_key_placeholder": "Leave blank = no Authorization header",
++        "model_label": "Model name",
++        "model_placeholder": "The model string reported by the endpoint",
++        "rebuild_confirm": "This deletes the vectors for {n} videos and recomputes them from scratch (takes tens of minutes). Until it finishes, Constellation falls back to rule-based ordering.",
++        "btn_retry_unreadable": "Retry unreadable covers ({n})",
++        "test_ok": "Connected・Model {model}・Dimensions {dim}",
++        "test_unreachable": "Can't reach this URL",
++        "test_contract": "Connected, but the response doesn't match the expected format",
++        "test_failed_generic": "Test failed",
++        "test_http_error": "Test request failed",
++        "index_http_error": "Failed to build the index",
++        "status_none": "Not indexed yet",
++        "status_model_changed": "Model changed — Constellation isn't using vectors for now",
++        "status_unreachable": "Last success {time}・Currently unreachable",
++        "status_unreachable_no_time": "Currently unreachable",
++        "status_ready": "Indexed {n}/{m}・Model {model}・Last success {time}",
++        "status_unreadable_extra": "・{k} covers couldn't be read",
++        "check_auth": "Authentication failed (key rejected)",
++        "check_http_4xx": "Endpoint returned 4xx",
++        "check_http_5xx": "Endpoint returned 5xx",
++        "check_not_json": "Response is not JSON",
++        "check_shape": "Response shape doesn't match the embeddings spec",
++        "check_no_model": "Response is missing the model field",
++        "check_not_numeric": "Vector contains non-numeric values",
++        "check_dim_range": "Dimensions outside 128–4096",
++        "check_zero_norm": "Vector is all zeros",
++        "check_dim_mismatch": "Dimensions differ within the same test",
++        "check_unstable": "Two vectors for the same image aren't close enough",
++        "check_not_discriminative": "Vectors for two different images are too close",
++        "check_model_flapping": "The model string differs within the same test",
++        "check_unknown": "Response doesn't match the expected format (reason unknown)"
++      },
++      "tab_faces": "Faces",
++      "faces": {
++        "enabled_label": "Enable face endpoint",
++        "empty_desc": "This needs a small service you host yourself (or ask your AI assistant to set one up). OpenAver sends covers to it to find faces and set the focus. While the external endpoint is on, this phone's processing-power limits don't apply. If you don't have one, just skip it — nothing else is affected.",
++        "url_label": "Endpoint URL",
++        "url_placeholder": "http://127.0.0.1:8000",
++        "api_key_label": "API Key",
++        "api_key_placeholder": "Leave blank = no Authorization header",
++        "model_label": "Model name",
++        "model_placeholder": "The model string reported by the endpoint",
++        "btn_docs": "View docs",
++        "rebuild_confirm": "This deletes the auto focus for {n} videos and recomputes it from scratch. Until it finishes, those videos use a centered crop. Videos whose focus you dragged by hand are not affected.",
++        "test_ok": "Connected・Model {model}",
++        "test_unreachable": "Can't reach this URL",
++        "test_contract": "Connected, but the response doesn't match the expected format",
++        "test_failed_generic": "Test failed",
++        "test_http_error": "Test request failed",
++        "recompute_http_error": "Re-focus failed",
++        "status_external": "Currently using: self-hosted・Model {model}・Last success {time}",
++        "status_external_no_time": "Currently using: self-hosted・Model {model}",
++        "status_external_unobserved": "Currently using: self-hosted・No successful run yet",
++        "status_local_degraded": "Currently using: local (endpoint unreachable)・Last success {time}",
++        "status_local_degraded_no_time": "Currently using: local (endpoint unreachable)",
++        "status_local": "Currently using: local",
++        "recompute_unreadable_extra": "({k} covers couldn't be read)",
++        "recompute_stopped_unreachable": "Re-focus stopped: endpoint unreachable",
++        "recompute_stopped_contract": "Re-focus stopped: the endpoint's response doesn't match the expected format",
++        "check_auth": "Authentication failed (key rejected)",
++        "check_http_4xx": "Endpoint returned 4xx",
++        "check_http_5xx": "Endpoint returned 5xx",
++        "check_not_json": "Response is not JSON",
++        "check_shape": "Response shape doesn't match the faces spec",
++        "check_no_model": "Response is missing the model field",
++        "check_no_face": "No face found in the sample image",
++        "check_center_off": "The detected face position is too far from the sample's",
++        "check_unknown": "Response doesn't match the expected format (reason unknown)"
++      }
      }
    },
    "scanner": {
@@ -2487,7 +2640,7 @@
        "nfo_update_error": "NFO update failed. Check the log for details.",
        "jellyfin_update_error": "Jellyfin image update failed. Check the log for details.",
        "config_saved": "Settings saved",
-@@ -823,12 +1001,15 @@
+@@ -823,12 +1095,15 @@
        "partial_count": "{count} sources partially failed",
        "no_output_count": "{count} without output folder set",
        "done_with_warnings": "Completed {count}, but {parts}; see log for details",
@@ -2505,7 +2658,7 @@
        "path_copied": "Copied: {path}",
        "browse_dir_fallback": "Your browser can’t read the path of dropped files, so the folder picker has been opened for you"
      },
-@@ -851,9 +1032,9 @@
+@@ -851,9 +1126,9 @@
        "readonly_label": "Read-only",
        "output_path_label": "Output to",
        "output_path_placeholder": "A writable output folder on this machine (for Emby / Jellyfin / Kodi to scan; can be on a NAS)...",
@@ -2517,7 +2670,7 @@
        "cross_machine_hint": "(Unrelated to the \"Output to\" folder above) The strm file contains the read-only source's video path as seen on this machine. If the Emby / Jellyfin / Kodi that plays it runs on another machine and sees a different path, set a path-mapping rule on the Settings page.",
        "cross_machine_settings_link": "Set path mapping"
      },
-@@ -868,20 +1049,92 @@
+@@ -868,20 +1143,92 @@
        "clear_display_title": "Clear display (restored on reload)",
        "clear_all_title": "Clear all (including history)"
      },
@@ -2612,7 +2765,7 @@
        "nfo_idle": "Fill Fields",
        "nfo_loading": "Filling...",
        "jellyfin_help_line1": "Jellyfin / Emby media servers require additional cover formats:",
-@@ -928,7 +1181,30 @@
+@@ -928,7 +1275,30 @@
        "missing_enrich_confirm_body_suffix": " minutes. Continue?",
        "missing_enrich_confirm_cancel": "Cancel",
        "missing_enrich_confirm_confirm": "Confirm",
@@ -2644,7 +2797,7 @@
        "status_preparing": "Preparing...",
        "status_done_count": "Done! {count} videos",
        "status_done": "Done",
-@@ -1019,7 +1295,7 @@
+@@ -1019,7 +1389,7 @@
      },
      "dirty_modal": {
        "title": "Unsaved Changes",
@@ -2653,7 +2806,7 @@
        "cancel": "Cancel",
        "discard": "Discard Changes",
        "save": "Save and Leave"
-@@ -1041,7 +1317,7 @@
+@@ -1041,7 +1411,7 @@
        "confirm": "Delete"
      },
      "leave_warning": {
@@ -2662,7 +2815,7 @@
        "image_check": "Image check is in progress — leaving will interrupt it!",
        "folder_dirty": "You have unsaved folder changes",
        "confirm": "{message} Leave anyway?"
-@@ -1072,9 +1348,9 @@
+@@ -1072,9 +1442,9 @@
      "update_available": "A new version of OpenAver is available",
      "auto_organize_summary": "Scheduled Organize",
      "auto_organize_aborted": "Scheduled organize aborted",
@@ -2675,7 +2828,7 @@
      "auto_organize_failed": "Scheduled organize failed, check the logs",
      "wishlist_auto_removed": "Wishlist auto-updated",
      "wishlist_reconcile_failed": "Wishlist reconciliation failed, check the logs",
-@@ -1092,8 +1368,8 @@
+@@ -1092,8 +1462,8 @@
      "page_title": "Browse",
      "state": {
        "loading": "Loading video list...",
@@ -2686,7 +2839,7 @@
        "retry": "Retry"
      },
      "error": {
-@@ -1197,6 +1473,7 @@
+@@ -1197,6 +1567,7 @@
        "mdate": "Modified",
        "random": "Random",
        "actress": {
@@ -2694,7 +2847,7 @@
          "video_count": "Film Count",
          "name": "Name",
          "added_at": "Date Added",
-@@ -1291,6 +1568,7 @@
+@@ -1291,6 +1662,7 @@
        "tag_nfo_write_blocked": "Tag saved, but there's no permission to write the NFO",
        "translate_tooltip": "Translate title",
        "translate_done": "Title translated",
@@ -2702,7 +2855,7 @@
        "translate_undo": "Undo",
        "translate_skipped": "Nothing in the title needs translating",
        "translate_undone": "Title restored",
-@@ -1298,7 +1576,7 @@
+@@ -1298,7 +1670,7 @@
        "translate_no_nfo": "This title has no NFO yet. Enrich it first, then translate the title",
        "user_tags_label": "Custom Tags",
        "alias_label": "Aliases",
@@ -2711,7 +2864,7 @@
        "mask_toggle": "Cover crop preview",
        "mask_detect_failed": "Focal detection failed. Please try again later.",
        "mask_focal_too_slow_auto_disabled": "Detecting the face on this cover took longer than 5 seconds, so we've turned off Auto Face Focus for you. Just drag to adjust the position directly — you can turn it back on anytime in Settings.",
-@@ -1307,9 +1585,23 @@
+@@ -1307,9 +1679,23 @@
        "mask_save_failed": "Failed to save crop settings. Please try again later.",
        "mask_cover_changed": "Cover has changed. Please reopen the crop tool and try again.",
        "cover_unavailable": "This cover can’t be loaded right now — the file location may be unreachable, or the cover file may be missing",
@@ -2737,7 +2890,7 @@
      },
      "pick": {
        "add_aria": "Add to picks",
-@@ -1410,10 +1702,90 @@
+@@ -1410,10 +1796,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -2828,7 +2981,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1447,7 +1819,7 @@
+@@ -1447,7 +1913,7 @@
        "title": "First time? Follow these 3 steps",
        "subtitle": "From adding your folder to filling metadata — three steps to get started",
        "step1_title": "Add Your Library Folder",
@@ -2837,7 +2990,7 @@
        "step2_title": "Generate Page",
        "step2_desc": "Scan and build a browsable collection page in one click",
        "step3_title": "NFO Fill",
-@@ -1464,7 +1836,7 @@
+@@ -1464,7 +1930,7 @@
      "tag_alias": {
        "title": "Tag Alias Management",
        "intro": "Manage Chinese/Japanese/English synonyms in one place so the search box, chip filters, and fuzzy exploration all speak the same language.",
@@ -2846,7 +2999,7 @@
        "scanner_chipwall": "The chip wall lists all tag alias groups. Click \"+\" to add an alias; the primary name is shown in pink, aliases in grey.",
        "scanner_ai_hint": "Click \"?\" to open the AI suggestion panel: describe your tag needs to the AI and it returns suggested alias groups for direct import.",
        "h6_showcase": "Auto-expand in Showcase",
-@@ -1501,16 +1873,16 @@
+@@ -1501,16 +1967,16 @@
      "batch": {
        "title": "Batch File Search",
        "h6_add": "Add Multiple Files",
@@ -2867,7 +3020,7 @@
        "fav_auto": "Automatically begins searching the first 20 files",
        "fav_nfo_skip": "If a same-name .nfo already exists, the file is treated as organized and the scraper is skipped",
        "pause_pause": "Click the 'Pause' button during batch search",
-@@ -1563,17 +1935,17 @@
+@@ -1563,17 +2029,17 @@
        "h6_manage": "Favorites Management",
        "manage_add": "Add favorites from Search or Showcase; profile photo is downloaded locally automatically",
        "manage_library": "The <strong>+</strong> next to the search bar opens an \"Add from library\" list: actresses already in your library sorted by title count, with aliases merged into a single person — tap the heart on any row to favorite her",
@@ -2889,7 +3042,7 @@
        "feat_nfo": "Automatically reads NFO files and displays metadata",
        "feat_nfo_fill": "Supports 'NFO Fill': automatically searches for missing NFO files",
        "feat_terminal": "Built-in Mini Terminal shows real-time processing progress",
-@@ -1587,7 +1959,7 @@
+@@ -1587,7 +2053,7 @@
        "jellyfin_canonical": "With a media-manager mode selected, OpenAver <strong>no longer writes a same-name cover file</strong> — Jellyfin / Emby prefer that file, which is what puts landscape images on the poster wall. Existing titles keep whatever cover location they already have (so manual focal crops are not wiped); to fix one, delete its same-name cover yourself and regenerate.",
        "jellyfin_showcase": "After scanning, browse results on the <code>/showcase</code> page",
        "h6_strm_deploy": "Read-only source + letting Emby / Jellyfin / Kodi find your titles (cross-machine setup)",
@@ -2898,7 +3051,7 @@
        "strm_deploy_step2": "Under \"Output to,\" specify a folder <strong>this machine can write to</strong> (which can be a writable NAS share mounted on this machine) — the generated <code>.strm</code> + NFO + covers go here, and you point Emby / Jellyfin / Kodi at it to build the library. This output folder is not the read-only source itself.",
        "strm_deploy_step4": "If you later change the mapping rules, the existing <code>.strm</code> files are rewritten automatically in one pass — no need to rebuild the whole library.",
        "h6_multiversion": "Multi-version manual merge (native Emby / Jellyfin feature)",
-@@ -1601,7 +1973,7 @@
+@@ -1601,7 +2067,7 @@
        "h6_modes": "Display Modes",
        "h6_sort": "Sort & Search",
        "h6_other": "Other Features",
@@ -2907,7 +3060,7 @@
        "mode_grid": "<strong>Full Cover</strong>: cover wall showing the whole cover image; click to open the Lightbox (default)",
        "mode_poster": "<strong>Poster</strong>: shows only the right half of the cover (the front), so cards are narrower and more fit per row; phones and narrow windows always use this layout",
        "mode_list": "<strong>List Mode</strong>: Compact list, ideal for quick browsing",
-@@ -1632,7 +2004,7 @@
+@@ -1632,7 +2098,7 @@
        "beta_compilation": "More complete tags (series / maker / cast) means better accuracy; videos with few tags should have their NFO filled in first",
        "h6_manage": "Tips",
        "manage_enable": "No configuration needed — works out of the box",
@@ -2916,7 +3069,7 @@
      },
      "shortcuts": {
        "title": "Keyboard Shortcuts",
-@@ -1809,6 +2181,15 @@
+@@ -1809,6 +2275,15 @@
        "client_title": "About to update OpenAver on this computer",
        "client_case_a_body": "This updates OpenAver on this computer, not the server. After you confirm, a terminal opens on this computer to run the installation. Please close OpenAver first, and reopen it yourself once the installation finishes.",
        "client_case_b_body": "OpenAver on this computer is not installed in the default location.\nThe installer will first install the new version to the default directory; you do not need to close the current OpenAver during installation.\n\nWhen the installation finishes, do the following in order:\n1. Close OpenAver\n2. Delete the python folder in the old installation directory\n3. Copy all files of the new version over your original installation location on this computer\n\nNo reinstall or reconfiguration is needed; just overwrite the files and use it."
@@ -2932,7 +3085,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2197,18 @@
+@@ -1816,20 +2291,18 @@
      "skip": "Skip",
      "next": "Next →",
      "done": "Done 🎉",
@@ -2965,7 +3118,7 @@
    },
    "updater": {
      "page_title": "Updater",
-@@ -1845,6 +2224,12 @@
+@@ -1845,6 +2318,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -2978,7 +3131,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2245,11 @@
+@@ -1860,7 +2339,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -2991,7 +3144,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2267,15 @@
+@@ -1878,11 +2361,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -3009,7 +3162,7 @@
      },
      "costar": {
        "count_label": "{n} videos"
-@@ -1957,7 +2350,7 @@
+@@ -1957,7 +2444,7 @@
        "intro": "The left column is the folder on the server; in the right column enter the path as seen from this computer. You can leave it empty and fill it in later.",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -3018,7 +3171,7 @@
        "readonly": "Read-only",
        "test_btn": "Test",
        "found": "Found",
-@@ -1968,7 +2361,7 @@
+@@ -1968,7 +2455,7 @@
        "loading": "Loading the server's scan sources...",
        "load_failed": "Could not read the server's scan sources",
        "reload_btn": "Reload",
@@ -3027,7 +3180,7 @@
        "stale": "(no longer on the server)",
        "remove": "Remove",
        "save_btn": "Save Mapping Table",
-@@ -1976,5 +2369,391 @@
+@@ -1976,5 +2463,391 @@
        "saved": "Mapping table saved",
        "save_failed": "Failed to save the mapping table"
      }
@@ -3678,7 +3831,7 @@
        "mode_off": "デフォルトモード",
        "mode_media": "Emby・Jellyfin・Kodi モード"
      },
-@@ -557,17 +648,17 @@
+@@ -557,18 +648,18 @@
        "system": "システム設定"
      },
      "favorite_folder": {
@@ -3698,10 +3851,12 @@
        "favorite_folder_hint": "よく使うフォルダをワンクリックで読み込み",
        "favorite_folder_placeholder": "空欄 = システムのダウンロードフォルダ",
 -      "favorite_folder_placeholder_server": "空欄 = お気に入りフォルダを使わない",
+-      "favorite_folder_example_prefix": "例：C:\\Users\\&lt;ユーザー名&gt;\\Downloads",
 +      "favorite_folder_placeholder_server": "空欄 = 整理待ちフォルダを使わない",
-       "favorite_folder_example_prefix": "例：C:\\Users\\&lt;ユーザー名&gt;\\Downloads",
++        "favorite_folder_example_prefix": "例：/sdcard/Download",
        "proxy_placeholder": "空欄の場合は直接接続またはシステムのプロキシを使用します",
        "proxy_scope_label": "プロキシの適用範囲",
+       "proxy_scope_dmm": "DMM のみ",
 @@ -602,7 +693,9 @@
        "openai_custom_model": "カスタム...",
        "claude_cloud": "（Anthropic クラウド）",
@@ -3777,7 +3932,7 @@
        "locale_switch_confirm": "保存していない変更があります。言語を切り替えると失われます。続行しますか？"
      },
      "reset_modal": {
-@@ -797,15 +908,82 @@
+@@ -797,15 +908,176 @@
        "gemini_connection_timeout": "接続がタイムアウトしました",
        "gemini_http_error": "HTTP リクエストに失敗しました",
        "gemini_translate_failed": "翻訳テストに失敗しました",
@@ -3794,6 +3949,100 @@
 +      "openai_official_missing_model": "先にモデルを選択してください",
 +      "openai_official_missing_key": "認証失敗、API Key を確認してください",
 +      "openai_official_blocked": "このテスト用タイトルはサービス提供元のコンテンツ審査でブロックされました。モデルを変えても解決しないことが多いので、別の翻訳サービスをお試しください"
++    },
++    "ai": {
++      "title": "AI 機能",
++      "tab_translate": "翻訳",
++      "tab_similar": "画像の類似",
++      "help_body": "タイトル翻訳、カバー画像の類似検索、顔検出を設定します。サービスはユーザー自身のリモート HTTP サービスで実行され、カバー画像やタイトルはアプリログに記録されません。",
++      "help_docs_link": "外部 AI の説明（GitHub：docs/external-ai.md）",
++      "connections_title": "接続",
++      "backfill": {
++        "btn_start": "ライブラリ全体を補完",
++        "btn_continue": "続ける",
++        "btn_stop": "停止",
++        "btn_rebuild": "すべて再構築",
++        "save_first": "先に設定を保存",
++        "pending_line": "まだ {n} 本が未処理です",
++        "progress_running": "{n}／{m} 本を処理済み",
++        "progress_last_success": "・前回成功 {time}"
++      },
++      "similar": {
++        "enabled_label": "画像の類似を有効にする",
++        "empty_desc": "この機能には、自分で小さなサービスを立てる必要があります（AI アシスタントに頼んでもOK）。OpenAver がカバーを送ってベクトルに変換することで、星空でも「カバーが似ている」ことが分かるようになります。なければ省略できます。ほかの機能には影響しません。",
++        "btn_docs": "ドキュメントを見る",
++        "url_label": "エンドポイント URL",
++        "url_placeholder": "http://127.0.0.1:8000",
++        "api_key_label": "API Key",
++        "api_key_placeholder": "空白 = Authorization ヘッダーなし",
++        "model_label": "モデル名",
++        "model_placeholder": "エンドポイントが返す model 文字列",
++        "rebuild_confirm": "{n} 本分のベクトルを削除して最初から計算し直します（数十分ほどかかります）。完了するまで、星空はルールベースの並びになります。",
++        "btn_retry_unreadable": "読み込めないカバーを再試行（{n} 枚）",
++        "test_ok": "接続成功・モデル {model}・次元数 {dim}",
++        "test_unreachable": "この URL に接続できません",
++        "test_contract": "接続できましたが、返ってきた内容が仕様と一致しません",
++        "test_failed_generic": "テストに失敗しました",
++        "test_http_error": "テストリクエストに失敗しました",
++        "index_http_error": "インデックスの作成に失敗しました",
++        "status_none": "インデックスは未作成です",
++        "status_model_changed": "モデルが変わったため、星空では当面ベクトルを使いません",
++        "status_unreachable": "前回成功 {time}・現在接続できません",
++        "status_unreachable_no_time": "現在接続できません",
++        "status_ready": "{n}／{m} 本をインデックス済み・モデル {model}・前回成功 {time}",
++        "status_unreadable_extra": "・ほかに {k} 枚のカバーが読み込めません",
++        "check_auth": "認証に失敗しました（キーが拒否されました）",
++        "check_http_4xx": "エンドポイントが 4xx を返しました",
++        "check_http_5xx": "エンドポイントが 5xx を返しました",
++        "check_not_json": "返ってきた内容が JSON ではありません",
++        "check_shape": "返ってきた形式が embeddings の仕様と一致しません",
++        "check_no_model": "返ってきた内容に model フィールドがありません",
++        "check_not_numeric": "ベクトルに数値以外が含まれています",
++        "check_dim_range": "次元数が 128〜4096 の範囲外です",
++        "check_zero_norm": "ベクトルがすべてゼロです",
++        "check_dim_mismatch": "同じテスト内で次元数が一致しません",
++        "check_unstable": "同じ画像の 2 回分のベクトルが十分に近くありません",
++        "check_not_discriminative": "異なる 2 枚の画像のベクトルが近すぎます",
++        "check_model_flapping": "同じテスト内で model 文字列が一致しません",
++        "check_unknown": "返ってきた内容が仕様と一致しません（原因不明）"
++      },
++      "tab_faces": "顔",
++      "faces": {
++        "enabled_label": "顔エンドポイントを有効にする",
++        "empty_desc": "この機能には、自分で小さなサービスを立てる必要があります（AI アシスタントに頼んでもOK）。OpenAver がカバーを送って顔を検出し、フォーカスを合わせます。外部エンドポイントがオンの間は、この端末の処理能力による制限は適用されません。なければ省略できます。ほかの機能には影響しません。",
++        "url_label": "エンドポイント URL",
++        "url_placeholder": "http://127.0.0.1:8000",
++        "api_key_label": "API Key",
++        "api_key_placeholder": "空白 = Authorization ヘッダーなし",
++        "model_label": "モデル名",
++        "model_placeholder": "エンドポイントが返す model 文字列",
++        "btn_docs": "ドキュメントを見る",
++        "rebuild_confirm": "{n} 本分の自動フォーカスを削除して最初から計算し直します。完了するまで、それらの作品は中央切り抜きになります。手動でフォーカスを動かした作品は影響を受けません。",
++        "test_ok": "接続成功・モデル {model}",
++        "test_unreachable": "この URL に接続できません",
++        "test_contract": "接続できましたが、返ってきた内容が仕様と一致しません",
++        "test_failed_generic": "テストに失敗しました",
++        "test_http_error": "テストリクエストに失敗しました",
++        "recompute_http_error": "フォーカスのやり直しに失敗しました",
++        "status_external": "現在の利用先：自前・モデル {model}・前回成功 {time}",
++        "status_external_no_time": "現在の利用先：自前・モデル {model}",
++        "status_external_unobserved": "現在の利用先：自前・成功の記録はまだありません",
++        "status_local_degraded": "現在の利用先：ローカル（エンドポイントに接続できません）・前回成功 {time}",
++        "status_local_degraded_no_time": "現在の利用先：ローカル（エンドポイントに接続できません）",
++        "status_local": "現在の利用先：ローカル",
++        "recompute_unreadable_extra": "（{k} 本はカバーが読み込めません）",
++        "recompute_stopped_unreachable": "フォーカスのやり直しを停止しました：エンドポイントに接続できません",
++        "recompute_stopped_contract": "フォーカスのやり直しを停止しました：エンドポイントの応答が仕様と一致しません",
++        "check_auth": "認証に失敗しました（キーが拒否されました）",
++        "check_http_4xx": "エンドポイントが 4xx を返しました",
++        "check_http_5xx": "エンドポイントが 5xx を返しました",
++        "check_not_json": "返ってきた内容が JSON ではありません",
++        "check_shape": "返ってきた形式が faces の仕様と一致しません",
++        "check_no_model": "返ってきた内容に model フィールドがありません",
++        "check_no_face": "サンプル画像から顔が見つかりませんでした",
++        "check_center_off": "見つかった顔の位置がサンプルと大きくずれています",
++        "check_unknown": "返ってきた内容が仕様と一致しません（原因不明）"
++      }
      }
    },
    "scanner": {
@@ -3863,7 +4112,7 @@
        "nfo_update_error": "NFO 補完に失敗しました。ログを確認してください",
        "jellyfin_update_error": "Jellyfin 画像補完に失敗しました。ログを確認してください",
        "config_saved": "設定を保存しました",
-@@ -823,12 +1001,15 @@
+@@ -823,12 +1095,15 @@
        "partial_count": "{count} 件のソースが部分的に読み取り失敗",
        "no_output_count": "{count} 件が出力フォルダ未設定",
        "done_with_warnings": "{count} 本完了、ただし {parts}。詳細はログを参照",
@@ -3881,7 +4130,7 @@
        "path_copied": "コピーしました: {path}",
        "browse_dir_fallback": "ブラウザではドロップしたファイルのパスを直接読み取れないため、フォルダ選択画面を開きました"
      },
-@@ -851,9 +1032,9 @@
+@@ -851,9 +1126,9 @@
        "readonly_label": "読み取り専用",
        "output_path_label": "出力先",
        "output_path_placeholder": "このマシンで書き込める出力フォルダー（Emby／Jellyfin／Kodi のスキャン用、NAS でも可）...",
@@ -3893,7 +4142,7 @@
        "cross_machine_hint": "（上の「出力先」フォルダーとは無関係）strm ファイルには、このマシンから見た読み取り専用ソースの動画パスが書き込まれます。再生する Emby／Jellyfin／Kodi が別のマシンにあり、見えるパスが異なる場合は、設定ページでパス置換ルールを設定してください。",
        "cross_machine_settings_link": "パス置換を設定"
      },
-@@ -868,20 +1049,92 @@
+@@ -868,20 +1143,92 @@
        "clear_display_title": "画面をクリア（リロード後に復元）",
        "clear_all_title": "すべてクリア（履歴含む）"
      },
@@ -3988,7 +4237,7 @@
        "nfo_idle": "項目補完",
        "nfo_loading": "補完中...",
        "jellyfin_help_line1": "Jellyfin / Emby などのメディアサーバーには追加のカバー形式が必要です：",
-@@ -928,7 +1181,30 @@
+@@ -928,7 +1275,30 @@
        "missing_enrich_confirm_body_suffix": " 分です。続行しますか？",
        "missing_enrich_confirm_cancel": "キャンセル",
        "missing_enrich_confirm_confirm": "補完を確認",
@@ -4020,7 +4269,7 @@
        "status_preparing": "準備中...",
        "status_done_count": "完了！{count} 本の動画",
        "status_done": "完了",
-@@ -1019,7 +1295,7 @@
+@@ -1019,7 +1389,7 @@
      },
      "dirty_modal": {
        "title": "未保存の変更",
@@ -4029,7 +4278,7 @@
        "cancel": "キャンセル",
        "discard": "変更を破棄",
        "save": "保存して終了"
-@@ -1041,7 +1317,7 @@
+@@ -1041,7 +1411,7 @@
        "confirm": "削除する"
      },
      "leave_warning": {
@@ -4038,7 +4287,7 @@
        "image_check": "画像チェックが進行中です。移動すると中断されます！",
        "folder_dirty": "保存していないフォルダの変更があります",
        "confirm": "{message}移動してもよろしいですか？"
-@@ -1072,9 +1348,9 @@
+@@ -1072,9 +1442,9 @@
      "update_available": "OpenAver の新しいバージョンがあります",
      "auto_organize_summary": "定期整理",
      "auto_organize_aborted": "定期整理を中止しました",
@@ -4051,7 +4300,7 @@
      "auto_organize_failed": "定期整理に失敗しました。ログを確認してください",
      "wishlist_auto_removed": "ブックマークを自動更新しました",
      "wishlist_reconcile_failed": "ブックマークの照合に失敗しました。ログを確認してください",
-@@ -1092,8 +1368,8 @@
+@@ -1092,8 +1462,8 @@
      "page_title": "動画ブラウズ",
      "state": {
        "loading": "動画リストを読み込み中...",
@@ -4062,7 +4311,7 @@
        "retry": "再試行"
      },
      "error": {
-@@ -1197,6 +1473,7 @@
+@@ -1197,6 +1567,7 @@
        "mdate": "更新日時",
        "random": "ランダム",
        "actress": {
@@ -4070,7 +4319,7 @@
          "video_count": "作品数",
          "name": "名前",
          "added_at": "追加日時",
-@@ -1291,6 +1568,7 @@
+@@ -1291,6 +1662,7 @@
        "tag_nfo_write_blocked": "タグは保存されましたが、NFO への書き込み権限がありません",
        "translate_tooltip": "タイトルを翻訳",
        "translate_done": "タイトルを翻訳しました",
@@ -4078,7 +4327,7 @@
        "translate_undo": "元に戻す",
        "translate_skipped": "翻訳が必要な内容はありません",
        "translate_undone": "タイトルを元に戻しました",
-@@ -1298,7 +1576,7 @@
+@@ -1298,7 +1670,7 @@
        "translate_no_nfo": "この作品にはまだ NFO がありません。先に補完してから翻訳してください",
        "user_tags_label": "カスタムタグ",
        "alias_label": "別名",
@@ -4087,7 +4336,7 @@
        "mask_toggle": "カバーの切り抜きプレビュー",
        "mask_detect_failed": "焦点の検出に失敗しました。しばらくしてからもう一度お試しください。",
        "mask_focal_too_slow_auto_disabled": "このカバーの顔検出に5秒以上かかったため、自動フォーカスを先にオフにしました。位置を調整したい場合は直接ドラッグしてください。いつでも設定から再度オンにできます。",
-@@ -1307,9 +1585,23 @@
+@@ -1307,9 +1679,23 @@
        "mask_save_failed": "切り抜き設定の保存に失敗しました。しばらくしてからもう一度お試しください。",
        "mask_cover_changed": "カバーが変更されました。切り抜きツールを開き直してもう一度お試しください。",
        "cover_unavailable": "このカバー画像を読み込めません。ファイルの場所にアクセスできないか、カバー画像自体が失われている可能性があります",
@@ -4113,7 +4362,7 @@
      },
      "pick": {
        "add_aria": "★を付ける",
-@@ -1410,10 +1702,90 @@
+@@ -1410,10 +1796,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -4204,7 +4453,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1447,7 +1819,7 @@
+@@ -1447,7 +1913,7 @@
        "title": "初めてですか？3ステップで始めましょう",
        "subtitle": "フォルダ追加からメタデータ補完まで、3ステップで始める",
        "step1_title": "ライブラリフォルダを追加",
@@ -4213,7 +4462,7 @@
        "step2_title": "ページを生成",
        "step2_desc": "ワンクリックでスキャンして閲覧可能なコレクションページを作成",
        "step3_title": "NFO 補完",
-@@ -1464,7 +1836,7 @@
+@@ -1464,7 +1930,7 @@
      "tag_alias": {
        "title": "Tag エイリアス管理",
        "intro": "中日英の同義語を一元管理することで、検索ボックス・chip フィルター・あいまい探索がすべて同じ言語で動きます。",
@@ -4222,7 +4471,7 @@
        "scanner_chipwall": "chip ウォールにすべての Tag エイリアスグループが表示されます。「+」をクリックして alias を追加。プライマリ名はピンク、エイリアスはグレーで表示されます。",
        "scanner_ai_hint": "「?」をクリックすると AI 提案パネルが開きます。tag の要件を AI に説明すると、提案エイリアスグループをそのままインポートできます。",
        "h6_showcase": "Showcase で自動展開",
-@@ -1501,16 +1873,16 @@
+@@ -1501,16 +1967,16 @@
      "batch": {
        "title": "バッチファイル検索",
        "h6_add": "複数ファイルの追加",
@@ -4243,7 +4492,7 @@
        "fav_auto": "自動的に最初の 20 ファイルの検索を開始",
        "fav_nfo_skip": "同名の .nfo が存在する場合は整理済みとみなし、scraper を再実行しません",
        "pause_pause": "バッチ検索中に「一時停止」ボタンをクリック",
-@@ -1563,17 +1935,17 @@
+@@ -1563,17 +2029,17 @@
        "h6_manage": "お気に入り管理",
        "manage_add": "検索ページまたはショーケースページからお気に入りに追加。プロフィール写真は自動でローカルに保存",
        "manage_library": "検索バー横の <strong>+</strong> で「ライブラリから女優を追加」一覧を開けます。ライブラリ内の女優が作品数の多い順に並び、別名は同一人物としてまとめられます。行のハートをタップすればお気に入りに追加されます",
@@ -4265,7 +4514,7 @@
        "feat_nfo": "NFO ファイルを自動で読み込みメタデータを表示",
        "feat_nfo_fill": "「NFO 補完」に対応：欠損した NFO ファイルを自動検索",
        "feat_terminal": "内蔵 Mini Terminal でリアルタイム処理進捗を表示",
-@@ -1587,7 +1959,7 @@
+@@ -1587,7 +2053,7 @@
        "jellyfin_canonical": "メディアマネージャーモードを選ぶと<strong>同名のカバー画像は生成されなくなります</strong>——そのファイルは Jellyfin／Emby が優先的に読み込むため、ポスターウォールに横長画像が並ぶ原因になります。既存の作品はカバーの場所をそのまま維持します（手動で調整したフォーカス位置を消さないため）。修正したい場合は該当作品の同名カバーを削除してから再生成してください。",
        "jellyfin_showcase": "スキャン完了後、<code>/showcase</code> ページで生成結果を閲覧可能",
        "h6_strm_deploy": "読み取り専用ソース + Emby／Jellyfin／Kodi に作品をスキャンさせる（マシンをまたぐ配置）",
@@ -4274,7 +4523,7 @@
        "strm_deploy_step2": "「出力先」に<strong>このマシンで書き込める</strong>フォルダー（このマシンにマウントした NAS の書き込み可能な共有でも可）を指定します——生成される <code>.strm</code>＋NFO＋表紙がここに置かれ、それを Emby／Jellyfin／Kodi に指定してライブラリを作らせます。この出力フォルダーは読み取り専用ソースそのものではありません。",
        "strm_deploy_step4": "その後マッピングルールを変更すると、既存の <code>.strm</code> が一括で自動的に書き換えられ、ライブラリ全体を作り直す必要はありません。",
        "h6_multiversion": "同一作品の複数版（流出 / 4K / 字幕）を Emby/Jellyfin で結合するには？",
-@@ -1601,7 +1973,7 @@
+@@ -1601,7 +2067,7 @@
        "h6_modes": "表示モード",
        "h6_sort": "ソートと検索",
        "h6_other": "その他の機能",
@@ -4283,7 +4532,7 @@
        "mode_grid": "<strong>カバー全体</strong>：ジャケット全体を並べるカバーウォール。クリックで Lightbox を開きます（既定）",
        "mode_poster": "<strong>縦型ポスター</strong>：ジャケットの右半分（表面）だけを表示。カードが細くなり 1 行に多く並びます。スマホ／狭いウィンドウでは常にこのレイアウトです",
        "mode_list": "<strong>リストモード</strong>：コンパクトなリスト、素早い閲覧に最適",
-@@ -1632,7 +2004,7 @@
+@@ -1632,7 +2098,7 @@
        "beta_compilation": "tag が多いほど（シリーズ / メーカー / cast）精度が上がる；tag が少ない動画は先に NFO を補完することを推奨",
        "h6_manage": "使用ヒント",
        "manage_enable": "設定不要、すぐ使える",
@@ -4292,7 +4541,7 @@
      },
      "shortcuts": {
        "title": "キーボードショートカット",
-@@ -1809,6 +2181,15 @@
+@@ -1809,6 +2275,15 @@
        "client_title": "このPCの OpenAver を更新します",
        "client_case_a_body": "更新するのはこのPCの OpenAver で、サーバーではありません。確認を押すとこのPCでターミナルが開いてインストールが実行されます。先に OpenAver を閉じ、インストール完了後に手動で開き直してください。",
        "client_case_b_body": "このPCの OpenAver は既定の場所にインストールされていません。\nインストーラーはまず新バージョンを既定のディレクトリにインストールします。インストール中に現在の OpenAver を閉じる必要はありません。\n\nインストール完了後、次の順に操作してください：\n1. OpenAver を閉じる\n2. 旧インストールディレクトリの python フォルダを削除する\n3. 新バージョンのすべてのファイルを、このPCの元のインストール場所にコピーして上書きする\n\n再インストールや再設定は不要で、ファイルを上書きするだけで使えます。"
@@ -4308,7 +4557,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2197,18 @@
+@@ -1816,20 +2291,18 @@
      "skip": "スキップ",
      "next": "次へ →",
      "done": "完了 🎉",
@@ -4341,7 +4590,7 @@
    },
    "updater": {
      "page_title": "アップデーター",
-@@ -1845,6 +2224,12 @@
+@@ -1845,6 +2318,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -4354,7 +4603,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2245,11 @@
+@@ -1860,7 +2339,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -4367,7 +4616,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2267,15 @@
+@@ -1878,11 +2361,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -4385,7 +4634,7 @@
      },
      "costar": {
        "count_label": "{n} 本"
-@@ -1957,7 +2350,7 @@
+@@ -1957,7 +2444,7 @@
        "intro": "左の欄はサーバー上のフォルダ、右の欄はこのPCから見えるパスです。後で入力することもできるので、空欄のままでも構いません。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -4394,7 +4643,7 @@
        "readonly": "読み取り専用",
        "test_btn": "テスト",
        "found": "見つかりました",
-@@ -1968,7 +2361,7 @@
+@@ -1968,7 +2455,7 @@
        "loading": "サーバーのスキャンソースを読み込み中…",
        "load_failed": "サーバーのスキャンソースを読み込めません",
        "reload_btn": "再読み込み",
@@ -4403,7 +4652,7 @@
        "stale": "（サーバーにこのソースはもうありません）",
        "remove": "削除",
        "save_btn": "パス対応表を保存",
-@@ -1976,5 +2369,391 @@
+@@ -1976,5 +2463,391 @@
        "saved": "パス対応表を保存しました",
        "save_failed": "パス対応表の保存に失敗しました"
      }
@@ -4797,7 +5046,7 @@
  }
 --- /dev/null
 +++ b/locales/ko.json
-@@ -0,0 +1,2759 @@
+@@ -0,0 +1,2853 @@
 +{
 +  "nav": {
 +    "search": "검색",
@@ -5459,7 +5708,7 @@
 +      "favorite_folder_hint": "원클릭으로 자주 사용하는 폴더를 불러옵니다. 다운로더의 완료된 폴더를 지정해 주세요. 다운로드 중인 폴더는 지정하지 마세요.",
 +      "favorite_folder_placeholder": "비워둠 = 시스템 다운로드 폴더",
 +      "favorite_folder_placeholder_server": "비워둠 = 관리 폴더 사용 안 함",
-+      "favorite_folder_example_prefix": "예시: C:\\Users\\&lt;사용자 이름&gt;\\다운로드",
++        "favorite_folder_example_prefix": "예시: /sdcard/Download",
 +      "proxy_placeholder": "비워두면 직접 연결하거나 시스템 프록시를 사용합니다.",
 +      "proxy_scope_label": "프록시 범위",
 +      "proxy_scope_dmm": "DMM만",
@@ -5720,6 +5969,100 @@
 +      "openai_official_missing_model": "먼저 모델을 선택해 주세요",
 +      "openai_official_missing_key": "인증 실패, API 키를 확인해 주세요",
 +      "openai_official_blocked": "이 테스트 제목은 서비스 제공업체의 콘텐츠 검토에 의해 차단되었습니다. 모델을 변경해도 소용이 없을 수 있으니 다른 번역 서비스를 사용해 보세요"
++    },
++    "ai": {
++      "title": "AI 기능",
++      "tab_translate": "번역",
++      "tab_similar": "이미지 유사성",
++      "help_body": "제목 번역, 표지 이미지 유사 검색, 얼굴 감지를 설정합니다. 서비스는 사용자가 직접 운영하는 원격 HTTP 서버에서 실행되며 표지와 제목은 앱 로그에 기록되지 않습니다.",
++      "help_docs_link": "외부 AI 설명 (GitHub: docs/external-ai.md)",
++      "connections_title": "연결",
++      "backfill": {
++        "btn_start": "라이브러리 완성",
++        "btn_continue": "계속",
++        "btn_stop": "중지",
++        "btn_rebuild": "전체 재구축",
++        "save_first": "설정 먼저 저장",
++        "pending_line": "{n}개 남음",
++        "progress_running": "{n}/{m}개 처리됨",
++        "progress_last_success": "• 마지막 성공 시간: {time}"
++      },
++      "similar": {
++        "enabled_label": "이미지 유사성 활성화",
++        "empty_desc": "이 기능은 사용자께서 직접 소규모 서비스를 구축해야 합니다 (또는 AI 어시스턴트에게 요청). OpenAver가 커버 이미지를 벡터로 변환하여 Xingkong이 '커버의 모양'을 이해할 수 있게 합니다. 없으시면 건너뛰셔도 되며, 다른 기능에는 영향을 미치지 않습니다.",
++        "btn_docs": "문서 보기",
++        "url_label": "엔드포인트 URL",
++        "url_placeholder": "http://127.0.0.1:8000",
++        "api_key_label": "API 키",
++        "api_key_placeholder": "비워두면 = 인증 정보 미전송",
++        "model_label": "모델 이름",
++        "model_placeholder": "엔드포인트가 반환하는 model 문자열",
++        "rebuild_confirm": "{n}개 벡터를 삭제하고 처음부터 재계산합니다 (약 수십 분 소요). 재계산이 완료되기 전까지 Xingkong은 규칙 기반으로 정렬합니다.",
++        "btn_retry_unreadable": "읽을 수 없는 커버 재시도 ({n}장)",
++        "test_ok": "연결 성공 • 모델 {model} • 차원 {dim}",
++        "test_unreachable": "이 URL에 연결할 수 없습니다.",
++        "test_contract": "연결은 되었으나, 응답이 계약(스키마)과 일치하지 않습니다.",
++        "test_failed_generic": "테스트 실패",
++        "test_http_error": "테스트 요청 실패",
++        "index_http_error": "인덱스 생성 실패",
++        "status_none": "인덱스가 아직 생성되지 않았습니다.",
++        "status_model_changed": "모델이 변경되어, 성공은 일시적으로 벡터를 사용하지 않습니다.",
++        "status_unreachable": "마지막 성공: {time} ・ 현재 연결할 수 없음",
++        "status_unreachable_no_time": "현재 연결할 수 없음",
++        "status_ready": "{n}/{m} 항목 인덱싱 완료 ・ 모델: {model} ・ 마지막 성공: {time}",
++        "status_unreadable_extra": "・ 추가로 {k}개의 커버를 읽을 수 없습니다.",
++        "check_auth": "인증 실패 (키 거부됨)",
++        "check_http_4xx": "엔드포인트에서 4xx 응답이 왔습니다.",
++        "check_http_5xx": "엔드포인트에서 5xx 응답이 왔습니다.",
++        "check_not_json": "응답이 JSON 형식이 아닙니다.",
++        "check_shape": "응답 형식이 embeddings 규약과 일치하지 않습니다.",
++        "check_no_model": "응답에 model 필드가 누락되었습니다.",
++        "check_not_numeric": "벡터에 숫자가 아닌 값이 포함되어 있습니다.",
++        "check_dim_range": "차원이 128–4096 범위에 있지 않습니다.",
++        "check_zero_norm": "벡터가 모두 0입니다.",
++        "check_dim_mismatch": "동일 테스트에서 차원 불일치",
++        "check_unstable": "동일 이미지의 두 벡터가 충분히 가깝지 않음",
++        "check_not_discriminative": "두 개의 다른 이미지 벡터가 너무 가깝습니다",
++        "check_model_flapping": "동일 테스트에서 모델 문자열 불일치",
++        "check_unknown": "반환값이 계약과 일치하지 않음 (원인 불명)"
++      },
++      "tab_faces": "얼굴",
++      "faces": {
++        "enabled_label": "얼굴 엔드포인트 활성화",
++        "empty_desc": "이 기능은 직접 소규모 서비스를 구축하거나(또는 AI 어시스턴트에게 요청) 구축해야 합니다. OpenAver가 커버 이미지를 보내 얼굴을 찾고 초점을 맞춥니다. 외부 엔드포인트가 실행 중일 때는 휴대폰의 컴퓨팅 제한이 적용되지 않습니다. 없어도 무방하며, 다른 기능에는 영향을 미치지 않습니다.",
++        "url_label": "엔드포인트 URL",
++        "url_placeholder": "http://127.0.0.1:8000",
++        "api_key_label": "API 키",
++        "api_key_placeholder": "비워둠 = 인증 정보 미전송",
++        "model_label": "모델 이름",
++        "model_placeholder": "엔드포인트가 보고하는 모델 문자열",
++        "btn_docs": "문서 보기",
++        "rebuild_confirm": "{n} 부분의 자동 초점을 삭제하고 처음부터 다시 계산합니다. 재계산이 완료되기 전까지 이 이미지들은 임시로 중앙 자르기를 사용합니다. 수동으로 초점을 드래그한 이미지는 영향을 받지 않습니다.",
++        "test_ok": "연결 성공 - 모델 {model}",
++        "test_unreachable": "이 주소에 연결할 수 없습니다.",
++        "test_contract": "연결은 되었으나, 반환된 데이터가 계약(규격)과 일치하지 않습니다.",
++        "test_failed_generic": "테스트 실패",
++        "test_http_error": "테스트 요청 실패",
++        "recompute_http_error": "재초점 실패",
++        "status_external": "현재 사용: 자체 호스팅 - 모델 {model} - 마지막 성공: {time}",
++        "status_external_no_time": "현재 사용: 자체 호스팅 - 모델 {model}",
++        "status_external_unobserved": "현재 사용: 자체 호스팅 - 성공 기록 없음",
++        "status_local_degraded": "현재 사용: 로컬(엔드포인트 연결 불가) - 마지막 성공: {time}",
++        "status_local_degraded_no_time": "현재 사용: 로컬(엔드포인트 연결 불가)",
++        "status_local": "현재 사용: 로컬",
++        "recompute_unreadable_extra": "(표지 {k} 부분을 읽을 수 없음)",
++        "recompute_stopped_unreachable": "재초점 중지: 엔드포인트 연결 불가",
++        "recompute_stopped_contract": "재초점 중지: 엔드포인트 반환 데이터가 계약과 일치하지 않음",
++        "check_auth": "인증 실패 (키 거부됨)",
++        "check_http_4xx": "엔드포인트에서 4xx 응답이 왔습니다.",
++        "check_http_5xx": "엔드포인트에서 5xx 응답이 왔습니다.",
++        "check_not_json": "응답이 JSON 형식이 아닙니다.",
++        "check_shape": "응답 형식이 faces 계약과 일치하지 않습니다.",
++        "check_no_model": "응답에 model 필드가 누락되었습니다.",
++        "check_no_face": "샘플 이미지에서 얼굴을 찾지 못했습니다.",
++        "check_center_off": "찾은 얼굴 위치가 샘플과 너무 다릅니다.",
++        "check_unknown": "반환된 데이터가 계약과 일치하지 않습니다 (원인 불명)."
++      }
 +    }
 +  },
 +  "scanner": {
@@ -7816,7 +8159,7 @@
        "mode_off": "默认模式",
        "mode_media": "Emby·Jellyfin·Kodi 模式"
      },
-@@ -557,17 +648,17 @@
+@@ -557,18 +648,18 @@
        "system": "系统设置"
      },
      "favorite_folder": {
@@ -7836,10 +8179,12 @@
        "favorite_folder_hint": "一键载入常用文件夹",
        "favorite_folder_placeholder": "留空 = 系统下载文件夹",
 -      "favorite_folder_placeholder_server": "留空 = 不使用我的最爱文件夹",
+-      "favorite_folder_example_prefix": "示例：C:\\Users\\&lt;你的用户名&gt;\\Downloads",
 +      "favorite_folder_placeholder_server": "留空 = 不使用待整理文件夹",
-       "favorite_folder_example_prefix": "示例：C:\\Users\\&lt;你的用户名&gt;\\Downloads",
++        "favorite_folder_example_prefix": "示例：/sdcard/Download",
        "proxy_placeholder": "留空就直接连接或走系统代理",
        "proxy_scope_label": "代理范围",
+       "proxy_scope_dmm": "仅 DMM",
 @@ -602,7 +693,9 @@
        "openai_custom_model": "自定义...",
        "claude_cloud": "（Anthropic 云端）",
@@ -7915,7 +8260,7 @@
        "locale_switch_confirm": "您有未保存的更改，切换语言后将丢失。确定继续？"
      },
      "reset_modal": {
-@@ -797,15 +908,82 @@
+@@ -797,15 +908,176 @@
        "gemini_connection_timeout": "连接超时",
        "gemini_http_error": "HTTP 请求失败",
        "gemini_translate_failed": "翻译测试失败",
@@ -7932,6 +8277,100 @@
 +      "openai_official_missing_model": "请先选择模型",
 +      "openai_official_missing_key": "认证失败，请检查 API Key",
 +      "openai_official_blocked": "这个测试片名被服务商的内容审查拦下了；换模型通常没用，可改用其他翻译服务"
++    },
++    "ai": {
++      "title": "AI 功能",
++      "tab_translate": "翻译",
++      "tab_similar": "图片相似",
++      "help_body": "配置标题翻译、封面相似检索和人脸检测。服务运行在你自建的远端 HTTP 服务中，封面和标题不会写入应用日志。",
++      "help_docs_link": "外部 AI 说明（GitHub：docs/external-ai.md）",
++      "connections_title": "连接",
++      "backfill": {
++        "btn_start": "补完全库",
++        "btn_continue": "继续",
++        "btn_stop": "停止",
++        "btn_rebuild": "全部重建",
++        "save_first": "先保存设置",
++        "pending_line": "还有 {n} 部没跑",
++        "progress_running": "已处理 {n}／{m} 部",
++        "progress_last_success": "・上次成功 {time}"
++      },
++      "similar": {
++        "enabled_label": "启用图片相似",
++        "empty_desc": "这个能力需要你自己架一个小服务（或请 AI 助理帮你架），OpenAver 会把封面送过去换成向量，让星空也看得懂「封面长得像」。没有的话可以略过，其他功能不受影响。",
++        "btn_docs": "看文档",
++        "url_label": "端点网址",
++        "url_placeholder": "http://127.0.0.1:8000",
++        "api_key_label": "API Key",
++        "api_key_placeholder": "留空 = 不发送 Authorization",
++        "model_label": "模型名",
++        "model_placeholder": "端点返回的 model 字符串",
++        "rebuild_confirm": "会删除 {n} 部的向量并从头重算（约需数十分钟）；重算完成前星空用规则排序。",
++        "btn_retry_unreadable": "重试读不到的封面（{n} 张）",
++        "test_ok": "连接成功・模型 {model}・维度 {dim}",
++        "test_unreachable": "连不上这个网址",
++        "test_contract": "连上了，但返回不符合约定",
++        "test_failed_generic": "测试失败",
++        "test_http_error": "测试请求失败",
++        "index_http_error": "建立索引失败",
++        "status_none": "尚未建立索引",
++        "status_model_changed": "模型已变，星空暂不使用向量",
++        "status_unreachable": "上次成功 {time}・目前连不上",
++        "status_unreachable_no_time": "目前连不上",
++        "status_ready": "已索引 {n}／{m} 部・模型 {model}・上次成功 {time}",
++        "status_unreadable_extra": "・另有 {k} 张封面读不到",
++        "check_auth": "认证失败（密钥被拒）",
++        "check_http_4xx": "端点返回了 4xx",
++        "check_http_5xx": "端点返回了 5xx",
++        "check_not_json": "返回内容不是 JSON",
++        "check_shape": "返回格式不符合 embeddings 约定",
++        "check_no_model": "返回内容缺少 model 字段",
++        "check_not_numeric": "向量含非数字",
++        "check_dim_range": "维度不在 128–4096",
++        "check_zero_norm": "向量全为零",
++        "check_dim_mismatch": "同一次测试维度不一致",
++        "check_unstable": "同一张图两次的向量不够接近",
++        "check_not_discriminative": "两张不同的图向量太接近",
++        "check_model_flapping": "同一次测试 model 字符串不一致",
++        "check_unknown": "返回不符合约定（原因不明）"
++      },
++      "tab_faces": "人脸",
++      "faces": {
++        "enabled_label": "启用人脸端点",
++        "empty_desc": "这个能力需要你自己架一个小服务（或请 AI 助理帮你架），OpenAver 会把封面送过去找脸并对焦。外部端点开着时，手机的算力限制不适用。没有的话可以略过，其他功能不受影响。",
++        "url_label": "端点网址",
++        "url_placeholder": "http://127.0.0.1:8000",
++        "api_key_label": "API Key",
++        "api_key_placeholder": "留空 = 不发送 Authorization",
++        "model_label": "模型名",
++        "model_placeholder": "端点返回的 model 字符串",
++        "btn_docs": "看文档",
++        "rebuild_confirm": "会删除 {n} 部的自动焦点并从头重算；重算完成前，这些片暂时改用居中裁切。手动拖过焦点的片不受影响。",
++        "test_ok": "连接成功・模型 {model}",
++        "test_unreachable": "连不上这个网址",
++        "test_contract": "连上了，但返回不符合约定",
++        "test_failed_generic": "测试失败",
++        "test_http_error": "测试请求失败",
++        "recompute_http_error": "重新对焦失败",
++        "status_external": "目前使用：自建・模型 {model}・上次成功 {time}",
++        "status_external_no_time": "目前使用：自建・模型 {model}",
++        "status_external_unobserved": "目前使用：自建・尚无成功记录",
++        "status_local_degraded": "目前使用：本机（端点连不上）・上次成功 {time}",
++        "status_local_degraded_no_time": "目前使用：本机（端点连不上）",
++        "status_local": "目前使用：本机",
++        "recompute_unreadable_extra": "（{k} 部封面读不到）",
++        "recompute_stopped_unreachable": "重新对焦已停止：端点连不上",
++        "recompute_stopped_contract": "重新对焦已停止：端点返回不符合约定",
++        "check_auth": "认证失败（密钥被拒）",
++        "check_http_4xx": "端点返回了 4xx",
++        "check_http_5xx": "端点返回了 5xx",
++        "check_not_json": "返回内容不是 JSON",
++        "check_shape": "返回格式不符合 faces 约定",
++        "check_no_model": "返回内容缺少 model 字段",
++        "check_no_face": "样本图里没找到脸",
++        "check_center_off": "找到的脸位置和样本差太多",
++        "check_unknown": "返回不符合约定（原因不明）"
++      }
      }
    },
    "scanner": {
@@ -8001,7 +8440,7 @@
        "nfo_update_error": "NFO 补齐失败，请查看日志",
        "jellyfin_update_error": "Jellyfin 图片补齐失败，请查看日志",
        "config_saved": "设置已保存",
-@@ -823,12 +1001,15 @@
+@@ -823,12 +1095,15 @@
        "partial_count": "{count} 个来源部分读取失败",
        "no_output_count": "{count} 个未设输出文件夹",
        "done_with_warnings": "完成 {count} 部，但 {parts}，详细见日志",
@@ -8019,7 +8458,7 @@
        "path_copied": "已复制: {path}",
        "browse_dir_fallback": "浏览器无法直接读取拖放文件的路径，已为您打开文件夹选择器"
      },
-@@ -851,9 +1032,9 @@
+@@ -851,9 +1126,9 @@
        "readonly_label": "只读",
        "output_path_label": "输出到",
        "output_path_placeholder": "这台能写入的输出夹（给 Emby／Jellyfin／Kodi 扫描，可放 NAS）...",
@@ -8031,7 +8470,7 @@
        "cross_machine_hint": "（与上面「输出到」文件夹无关）strm 文件里写的是这台看到的只读来源视频路径。若播放的 Emby／Jellyfin／Kodi 在别台机器、看到的路径不同，请到设置页设路径替换规则。",
        "cross_machine_settings_link": "设置路径替换"
      },
-@@ -868,20 +1049,92 @@
+@@ -868,20 +1143,92 @@
        "clear_display_title": "清除画面（刷新后恢复）",
        "clear_all_title": "清除全部（包含历史）"
      },
@@ -8126,7 +8565,7 @@
        "nfo_idle": "补齐字段",
        "nfo_loading": "补齐中...",
        "jellyfin_help_line1": "Jellyfin / Emby 等媒体服务器需要额外封面格式：",
-@@ -928,7 +1181,30 @@
+@@ -928,7 +1275,30 @@
        "missing_enrich_confirm_body_suffix": " 分钟，是否继续？",
        "missing_enrich_confirm_cancel": "取消",
        "missing_enrich_confirm_confirm": "确认补全",
@@ -8158,7 +8597,7 @@
        "status_preparing": "准备中...",
        "status_done_count": "完成！{count} 部视频",
        "status_done": "完成",
-@@ -1019,7 +1295,7 @@
+@@ -1019,7 +1389,7 @@
      },
      "dirty_modal": {
        "title": "尚未保存的更改",
@@ -8167,7 +8606,7 @@
        "cancel": "取消",
        "discard": "放弃更改",
        "save": "保存并离开"
-@@ -1041,7 +1317,7 @@
+@@ -1041,7 +1411,7 @@
        "confirm": "确认删除"
      },
      "leave_warning": {
@@ -8176,7 +8615,7 @@
        "image_check": "图片检查进行中，离开将会中断！",
        "folder_dirty": "您有未保存的文件夹变更",
        "confirm": "{message}确定要离开吗？"
-@@ -1072,9 +1348,9 @@
+@@ -1072,9 +1442,9 @@
      "update_available": "OpenAver 有新版本",
      "auto_organize_summary": "定时整理",
      "auto_organize_aborted": "定时整理已中止",
@@ -8189,7 +8628,7 @@
      "auto_organize_failed": "定时整理失败，请查阅日志",
      "wishlist_auto_removed": "书签自动更新",
      "wishlist_reconcile_failed": "书签对账失败，请查阅日志",
-@@ -1092,8 +1368,8 @@
+@@ -1092,8 +1462,8 @@
      "page_title": "视频浏览",
      "state": {
        "loading": "加载视频列表中...",
@@ -8200,7 +8639,7 @@
        "retry": "重试"
      },
      "error": {
-@@ -1197,6 +1473,7 @@
+@@ -1197,6 +1567,7 @@
        "mdate": "修改时间",
        "random": "随机",
        "actress": {
@@ -8208,7 +8647,7 @@
          "video_count": "作品数",
          "name": "姓名",
          "added_at": "收藏时间",
-@@ -1291,6 +1568,7 @@
+@@ -1291,6 +1662,7 @@
        "tag_nfo_write_blocked": "标签已保存，但没有权限写入 NFO",
        "translate_tooltip": "翻译标题",
        "translate_done": "已翻译标题",
@@ -8216,7 +8655,7 @@
        "translate_undo": "复原",
        "translate_skipped": "标题没有需要翻译的内容",
        "translate_undone": "已复原标题",
-@@ -1298,7 +1576,7 @@
+@@ -1298,7 +1670,7 @@
        "translate_no_nfo": "这部影片还没有 NFO，请先补全再翻译标题",
        "user_tags_label": "自定义标签",
        "alias_label": "别名",
@@ -8225,7 +8664,7 @@
        "mask_toggle": "封面裁切预览",
        "mask_detect_failed": "焦点检测失败，请稍后再试",
        "mask_focal_too_slow_auto_disabled": "这张封面找脸花了超过 5 秒，已经先帮你关掉自动对焦。想调整位置直接拖就可以，随时能到设置开回来。",
-@@ -1307,9 +1585,23 @@
+@@ -1307,9 +1679,23 @@
        "mask_save_failed": "裁切设置保存失败，请稍后再试",
        "mask_cover_changed": "封面已变更，请重新打开裁切工具再试一次",
        "cover_unavailable": "这部视频的封面现在读不到——可能是文件位置目前无法访问，或者封面文件本身不见了",
@@ -8251,7 +8690,7 @@
      },
      "pick": {
        "add_aria": "加入精选",
-@@ -1410,10 +1702,90 @@
+@@ -1410,10 +1796,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -8342,7 +8781,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1447,7 +1819,7 @@
+@@ -1447,7 +1913,7 @@
        "title": "第一次使用？先看这 3 步",
        "subtitle": "从加入文件夹到补全资料，三步上手",
        "step1_title": "加入片库文件夹",
@@ -8351,7 +8790,7 @@
        "step2_title": "生成网页",
        "step2_desc": "一键扫描并建立可浏览的收藏页",
        "step3_title": "NFO 补全",
-@@ -1464,7 +1836,7 @@
+@@ -1464,7 +1930,7 @@
      "tag_alias": {
        "title": "Tag 别名管理",
        "intro": "中日英同义词集中管理，让搜索框、chip 筛选、模糊探索全部说同一种语言。",
@@ -8360,7 +8799,7 @@
        "scanner_chipwall": "chip 墙列出所有 Tag 别名组。点「+」新增 alias，主名（primary）以粉红色显示，别名以灰色显示。",
        "scanner_ai_hint": "点「?」开启 AI 建议框：把你的 tag 需求描述给 AI，它会回传建议的别名组供你直接汇入。",
        "h6_showcase": "Showcase 自动展开",
-@@ -1501,16 +1873,16 @@
+@@ -1501,16 +1967,16 @@
      "batch": {
        "title": "批次文件搜索",
        "h6_add": "加入多个文件",
@@ -8381,7 +8820,7 @@
        "fav_auto": "自动开始搜索前 20 个文件",
        "fav_nfo_skip": "同名 .nfo 存在则视为已整理，不重打 scraper",
        "pause_pause": "批次搜索时可点击「暂停」按钮",
-@@ -1563,17 +1935,17 @@
+@@ -1563,17 +2029,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "从搜索页或浏览页加入收藏，照片自动下载至本地",
        "manage_library": "搜索栏旁的 <strong>+</strong> 可打开「从片库加入女优」列表：库内女优按片数由多到少排序，别名自动合并成同一人，逐行点爱心即可加入收藏",
@@ -8403,7 +8842,7 @@
        "feat_nfo": "自动读取 NFO 文件并显示元数据",
        "feat_nfo_fill": "支持「NFO 补全」：自动搜索缺失的 NFO 文件",
        "feat_terminal": "内建 Mini Terminal 显示即时处理进度",
-@@ -1587,7 +1959,7 @@
+@@ -1587,7 +2053,7 @@
        "jellyfin_canonical": "选了媒体管理器模式后<strong>不再另外生成同名封面</strong>——那张图会被 Jellyfin／Emby 优先读取，导致封面墙出现横版图。既有的片维持原本的封面位置（以免清掉你已调整过的对焦），要修正请自行删掉该片的同名封面后重新生成。",
        "jellyfin_showcase": "扫描完成后可至 <code>/showcase</code> 页面浏览生成结果",
        "h6_strm_deploy": "只读来源 + 让 Emby／Jellyfin／Kodi 扫到片（跨机器部署）",
@@ -8412,7 +8851,7 @@
        "strm_deploy_step2": "在「输出到」指定一个<strong>这台能写入</strong>的文件夹（可以是挂载到这台的 NAS 可写共享）——生成的 <code>.strm</code>＋NFO＋封面会放这里，再让 Emby／Jellyfin／Kodi 指向它建媒体库。这个输出夹不是只读来源本身。",
        "strm_deploy_step4": "之后改了映射规则，既有的 <code>.strm</code> 会自动一次改写，不用重建整个媒体库。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎么在 Emby/Jellyfin 合并？",
-@@ -1601,7 +1973,7 @@
+@@ -1601,7 +2067,7 @@
        "h6_modes": "显示模式",
        "h6_sort": "排序与搜索",
        "h6_other": "其他功能",
@@ -8421,7 +8860,7 @@
        "mode_grid": "<strong>完整封面</strong>：整张封面的封面墙，点击开启 Lightbox（默认）",
        "mode_poster": "<strong>竖版海报</strong>：只显示封面右半（正面），卡片变窄、一行放得更多；手机／窄窗口一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精简列表，适合快速浏览",
-@@ -1632,7 +2004,7 @@
+@@ -1632,7 +2098,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越准；tag 很少的视频建议先补完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "无需设置，开箱即用",
@@ -8430,7 +8869,7 @@
      },
      "shortcuts": {
        "title": "快捷键",
-@@ -1809,6 +2181,15 @@
+@@ -1809,6 +2275,15 @@
        "client_title": "即将更新这台电脑的 OpenAver",
        "client_case_a_body": "更新的是这台电脑上的 OpenAver，不是服务器。点击确认后会在这台电脑打开终端运行安装，请先关闭 OpenAver，安装完成后再自行重新打开。",
        "client_case_b_body": "这台电脑的 OpenAver 不是安装在默认位置。\n安装程序会先把新版本安装到默认目录，安装期间不需要先关闭当前的 OpenAver。\n\n安装完成后，请依次操作：\n1. 关闭 OpenAver\n2. 删除旧安装目录中的 python 文件夹\n3. 将新版本的所有文件复制覆盖回这台电脑原本的安装位置\n\n不需要重新安装或重新设置，直接覆盖文件即可使用。"
@@ -8446,7 +8885,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2197,18 @@
+@@ -1816,20 +2291,18 @@
      "skip": "跳过",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -8479,7 +8918,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1845,6 +2224,12 @@
+@@ -1845,6 +2318,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -8492,7 +8931,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2245,11 @@
+@@ -1860,7 +2339,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -8505,7 +8944,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2267,15 @@
+@@ -1878,11 +2361,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -8523,7 +8962,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1957,7 +2350,7 @@
+@@ -1957,7 +2444,7 @@
        "intro": "左栏是服务器上的文件夹，右栏填这台电脑看到的路径，可以先留空、之后再填。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -8532,7 +8971,7 @@
        "readonly": "只读",
        "test_btn": "测试",
        "found": "找得到",
-@@ -1968,7 +2361,7 @@
+@@ -1968,7 +2455,7 @@
        "loading": "正在读取服务器的扫描来源…",
        "load_failed": "读不到服务器的扫描来源",
        "reload_btn": "重新读取",
@@ -8541,7 +8980,7 @@
        "stale": "（服务器已无此来源）",
        "remove": "移除",
        "save_btn": "保存对照表",
-@@ -1976,5 +2369,391 @@
+@@ -1976,5 +2463,391 @@
        "saved": "对照表已保存",
        "save_failed": "对照表保存失败"
      }
@@ -9283,7 +9722,7 @@
      },
      "search": {
        "uncensored_mode": "無碼模式",
-@@ -572,10 +663,10 @@
+@@ -572,11 +663,11 @@
        "proxy_scope_all_hint": "所有來源都走這個代理",
        "proxy_scope_all_hint_mac": "所有來源都走這個代理（JavLibrary／FC2-javten 除外）",
        "proxy_restart_hint": "JavLibrary／FC2-javten 重開 OpenAver 後才會改走新設定",
@@ -9292,10 +9731,12 @@
        "favorite_folder_hint": "一鍵載入常用資料夾。請指向下載器的完成資料夾，不要指到下載中的資料夾",
        "favorite_folder_placeholder": "留空 = 系統下載資料夾",
 -      "favorite_folder_placeholder_server": "留空 = 不使用最愛資料夾",
+-      "favorite_folder_example_prefix": "範例：C:\\Users\\&lt;你的使用者名稱&gt;\\下載",
 +      "favorite_folder_placeholder_server": "留空 = 不使用待整理資料夾",
-       "favorite_folder_example_prefix": "範例：C:\\Users\\&lt;你的使用者名稱&gt;\\下載",
++        "favorite_folder_example_prefix": "範例：/sdcard/Download",
        "favorite_folder_example_prefix_synology": "範例：/volume1/&lt;共用資料夾&gt;/下載"
      },
+     "translate": {
 @@ -602,7 +693,9 @@
        "openai_api_key_placeholder": "留空 = 不送 Authorization header",
        "openai_api_key_hint": "本地 LLM 可留空，雲端服務需填入 API Key",
@@ -9379,7 +9820,7 @@
        "locale_switch_confirm": "您有未儲存的變更，切換語系後將遺失。確定繼續？"
      },
      "reset_modal": {
-@@ -797,15 +908,82 @@
+@@ -797,15 +908,176 @@
        "gemini_http_error": "HTTP 請求失敗",
        "gemini_translate_failed": "翻譯測試失敗",
        "gemini_blocked": "這個測試片名被服務商的內容審查擋下了；換模型通常沒用，可改用其他翻譯服務",
@@ -9396,6 +9837,100 @@
 +      "openai_official_missing_model": "請先選擇模型",
 +      "openai_official_missing_key": "認證失敗，請檢查 API Key",
 +      "openai_official_blocked": "這個測試片名被服務商的內容審查擋下了；換模型通常沒用，可改用其他翻譯服務"
++    },
++    "ai": {
++      "title": "AI 功能",
++      "tab_translate": "翻譯",
++      "tab_similar": "圖片相似",
++      "help_body": "設定標題翻譯、封面相似檢索與人臉偵測。服務執行於你自建的遠端 HTTP 服務，封面與標題不會寫入應用程式日誌。",
++      "help_docs_link": "外部 AI 說明（GitHub：docs/external-ai.md）",
++      "connections_title": "連線",
++      "backfill": {
++        "btn_start": "補完全庫",
++        "btn_continue": "繼續",
++        "btn_stop": "停止",
++        "btn_rebuild": "全部重建",
++        "save_first": "先儲存設定",
++        "pending_line": "還有 {n} 部沒跑",
++        "progress_running": "已處理 {n}／{m} 部",
++        "progress_last_success": "・上次成功 {time}"
++      },
++      "similar": {
++        "enabled_label": "啟用圖片相似",
++        "empty_desc": "這個能力需要你自己架一個小服務（或請 AI 助理替你架），OpenAver 會把封面送過去換成向量，讓星空也看得懂「封面長得像」。沒有的話可以略過，其他功能不受影響。",
++        "btn_docs": "看文件",
++        "url_label": "端點網址",
++        "url_placeholder": "http://127.0.0.1:8000",
++        "api_key_label": "API Key",
++        "api_key_placeholder": "留空 = 不送 Authorization",
++        "model_label": "模型名",
++        "model_placeholder": "端點回報的 model 字串",
++        "rebuild_confirm": "會刪除 {n} 部的向量並從頭重算（約需數十分鐘）；重算完成前星空用規則排序。",
++        "btn_retry_unreadable": "重試讀不到的封面（{n} 張）",
++        "test_ok": "連線成功・模型 {model}・維度 {dim}",
++        "test_unreachable": "連不上這個網址",
++        "test_contract": "連上了，但回傳不符契約",
++        "test_failed_generic": "測試失敗",
++        "test_http_error": "測試請求失敗",
++        "index_http_error": "建立索引失敗",
++        "status_none": "尚未建立索引",
++        "status_model_changed": "模型已變，星空暫不使用向量",
++        "status_unreachable": "上次成功 {time}・目前連不上",
++        "status_unreachable_no_time": "目前連不上",
++        "status_ready": "已索引 {n}／{m} 部・模型 {model}・上次成功 {time}",
++        "status_unreadable_extra": "・另有 {k} 張封面讀不到",
++        "check_auth": "認證失敗（金鑰被拒）",
++        "check_http_4xx": "端點回了 4xx",
++        "check_http_5xx": "端點回了 5xx",
++        "check_not_json": "回應不是 JSON",
++        "check_shape": "回應形狀不符 embeddings 契約",
++        "check_no_model": "回應缺少 model 欄位",
++        "check_not_numeric": "向量含非數字",
++        "check_dim_range": "維度不在 128–4096",
++        "check_zero_norm": "向量全為零",
++        "check_dim_mismatch": "同一次測試維度不一致",
++        "check_unstable": "同圖兩次向量不夠接近",
++        "check_not_discriminative": "兩張不同圖向量太接近",
++        "check_model_flapping": "同一次測試 model 字串不一致",
++        "check_unknown": "回傳不符契約（原因不明）"
++      },
++      "tab_faces": "人臉",
++      "faces": {
++        "enabled_label": "啟用人臉端點",
++        "empty_desc": "這個能力需要你自己架一個小服務（或請 AI 助理替你架），OpenAver 會把封面送過去找臉並對焦。外部端點開著時，手機的算力限制不適用。沒有的話可以略過，其他功能不受影響。",
++        "url_label": "端點網址",
++        "url_placeholder": "http://127.0.0.1:8000",
++        "api_key_label": "API Key",
++        "api_key_placeholder": "留空 = 不送 Authorization",
++        "model_label": "模型名",
++        "model_placeholder": "端點回報的 model 字串",
++        "btn_docs": "看文件",
++        "rebuild_confirm": "會刪除 {n} 部的自動焦點並從頭重算；重算完成前，這些片暫時改用置中裁切。手動拖過焦點的片不受影響。",
++        "test_ok": "連線成功・模型 {model}",
++        "test_unreachable": "連不上這個網址",
++        "test_contract": "連上了，但回傳不符契約",
++        "test_failed_generic": "測試失敗",
++        "test_http_error": "測試請求失敗",
++        "recompute_http_error": "重新對焦失敗",
++        "status_external": "目前使用：自架・模型 {model}・上次成功 {time}",
++        "status_external_no_time": "目前使用：自架・模型 {model}",
++        "status_external_unobserved": "目前使用：自架・尚未有成功紀錄",
++        "status_local_degraded": "目前使用：本機（端點連不上）・上次成功 {time}",
++        "status_local_degraded_no_time": "目前使用：本機（端點連不上）",
++        "status_local": "目前使用：本機",
++        "recompute_unreadable_extra": "（封面讀不到 {k} 部）",
++        "recompute_stopped_unreachable": "重新對焦已停止：端點連不上",
++        "recompute_stopped_contract": "重新對焦已停止：端點回傳不符契約",
++        "check_auth": "認證失敗（金鑰被拒）",
++        "check_http_4xx": "端點回了 4xx",
++        "check_http_5xx": "端點回了 5xx",
++        "check_not_json": "回應不是 JSON",
++        "check_shape": "回應形狀不符 faces 契約",
++        "check_no_model": "回應缺少 model 欄位",
++        "check_no_face": "樣本圖裡沒找到臉",
++        "check_center_off": "找到的臉位置和樣本差太多",
++        "check_unknown": "回傳不符契約（原因不明）"
++      }
      }
    },
    "scanner": {
@@ -9465,7 +10000,7 @@
        "nfo_update_error": "NFO 補齊失敗，請查看日誌",
        "jellyfin_update_error": "圖片補齊失敗，請查看日誌",
        "config_saved": "設定已儲存",
-@@ -823,12 +1001,15 @@
+@@ -823,12 +1095,15 @@
        "partial_count": "{count} 個來源部分讀取失敗",
        "no_output_count": "{count} 個未設輸出夾",
        "done_with_warnings": "完成 {count} 部，但 {parts}，詳細見日誌",
@@ -9483,7 +10018,7 @@
        "path_copied": "已複製: {path}",
        "browse_dir_fallback": "瀏覽器無法直接讀取拖放檔案的路徑，已為您開啟資料夾選擇器"
      },
-@@ -850,11 +1031,11 @@
+@@ -850,11 +1125,11 @@
        "remove_title": "移除",
        "readonly_label": "唯讀",
        "output_path_label": "輸出到",
@@ -9499,7 +10034,7 @@
        "cross_machine_settings_link": "設定路徑替換"
      },
      "terminal": {
-@@ -868,20 +1049,92 @@
+@@ -868,20 +1143,92 @@
        "clear_display_title": "清除畫面（重整後恢復）",
        "clear_all_title": "清除全部（包含歷史）"
      },
@@ -9594,7 +10129,7 @@
        "nfo_idle": "補齊欄位",
        "nfo_loading": "補齊中...",
        "jellyfin_help_line1": "Jellyfin / Emby / Kodi 等媒體伺服器需要額外封面格式：",
-@@ -928,7 +1181,30 @@
+@@ -928,7 +1275,30 @@
        "missing_enrich_confirm_body_suffix": " 分鐘，是否繼續？",
        "missing_enrich_confirm_cancel": "取消",
        "missing_enrich_confirm_confirm": "確認補完",
@@ -9626,7 +10161,7 @@
        "status_preparing": "準備中...",
        "status_done_count": "完成！{count} 部影片",
        "status_done": "完成",
-@@ -1019,7 +1295,7 @@
+@@ -1019,7 +1389,7 @@
      },
      "dirty_modal": {
        "title": "尚未儲存的變更",
@@ -9635,7 +10170,7 @@
        "cancel": "取消",
        "discard": "放棄變更",
        "save": "儲存並離開"
-@@ -1030,7 +1306,7 @@
+@@ -1030,7 +1400,7 @@
        "confirm": "確認設為唯讀",
        "intro": "唯讀來源代表 OpenAver 不會改動這個資料夾裡的任何檔案（不搬移、不改名、不寫入 NFO 或封面），改為在輸出夾另外生成一份本地媒體庫（每片一資料夾：NFO＋封面）供 OpenAver 自己瀏覽與播放。適合塞滿影片的唯讀網盤、NAS 分享、SMB 掛載等不可寫入的位置。若你只是本機一般收藏、資料夾可正常寫入，就不需要勾這個。",
        "output_hint_offline": "目前為預設模式，產物會自動落在 App 內建的固定本地夾，不需要另外指定輸出夾。",
@@ -9644,7 +10179,7 @@
        "nas_hint": "想餵給 NAS 上的 Emby／Jellyfin／Kodi？預設模式只生成 OpenAver 自己瀏覽用的本地庫、不會產生 .strm 捷徑檔。若你要讓媒體伺服器掃這批片，請先到「設定」把模式切到 Emby·Jellyfin·Kodi 模式。"
      },
      "clear_cache_modal": {
-@@ -1041,7 +1317,7 @@
+@@ -1041,7 +1411,7 @@
        "confirm": "確認刪除"
      },
      "leave_warning": {
@@ -9653,7 +10188,7 @@
        "image_check": "圖片檢查進行中，離開將會中斷！",
        "folder_dirty": "您有未儲存的資料夾變更",
        "confirm": "{message}確定要離開嗎？"
-@@ -1073,9 +1349,9 @@
+@@ -1073,9 +1443,9 @@
      "update_available": "OpenAver 有新版本",
      "auto_organize_summary": "定時整理",
      "auto_organize_aborted": "定時整理已中止",
@@ -9666,7 +10201,7 @@
      "auto_organize_failed": "定時整理失敗，請查閱日誌",
      "wishlist_auto_removed": "書籤自動更新",
      "wishlist_reconcile_failed": "書籤對帳失敗，請查閱日誌",
-@@ -1093,7 +1369,7 @@
+@@ -1093,7 +1463,7 @@
      "state": {
        "loading": "載入影片列表中...",
        "empty": "尚未產生影片列表",
@@ -9675,7 +10210,7 @@
        "retry": "重試"
      },
      "error": {
-@@ -1123,7 +1399,7 @@
+@@ -1123,7 +1493,7 @@
        "fail": "重新刮削失敗，請稍後再試。",
        "jl_desktop_only": "僅限桌面應用程式（standalone）可用",
        "cf_window_restart": "這個來源的驗證視窗沒有啟動成功，請重新啟動 OpenAver 再試。若重啟仍不行，到「連線」頁看原因",
@@ -9684,7 +10219,7 @@
        "cf_window_preparing": "驗證視窗正在準備，請幾秒後再試",
        "jl_cf_solving": "Cloudflare 驗證中……通過後將自動繼續",
        "versions_found": "找到 {count} 部同番號作品",
-@@ -1197,6 +1473,7 @@
+@@ -1197,6 +1567,7 @@
        "mdate": "修改時間",
        "random": "隨機",
        "actress": {
@@ -9692,7 +10227,7 @@
          "video_count": "作品數",
          "name": "姓名",
          "added_at": "收藏時間",
-@@ -1291,6 +1568,7 @@
+@@ -1291,6 +1662,7 @@
        "tag_nfo_write_blocked": "標籤已存，但沒有權限寫入 NFO",
        "translate_tooltip": "翻譯標題",
        "translate_done": "已翻譯標題",
@@ -9700,7 +10235,7 @@
        "translate_undo": "復原",
        "translate_skipped": "標題沒有需要翻譯的內容",
        "translate_undone": "已復原標題",
-@@ -1298,18 +1576,32 @@
+@@ -1298,18 +1670,32 @@
        "translate_no_nfo": "這部片還沒有 NFO，請先補完再翻譯標題",
        "user_tags_label": "自訂標籤",
        "alias_label": "別名",
@@ -9736,7 +10271,7 @@
      },
      "pick": {
        "add_aria": "加入精選",
-@@ -1410,12 +1702,92 @@
+@@ -1410,12 +1796,92 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -9830,7 +10365,7 @@
        "copy_curl": "複製指令",
        "page_title": "使用說明",
        "subtitle": "JAV 影片元數據管理工具",
-@@ -1426,8 +1798,8 @@
+@@ -1426,8 +1892,8 @@
        "update_available_prefix": "新版本",
        "update_available_suffix": "可用",
        "up_to_date": "已是最新版本",
@@ -9841,7 +10376,7 @@
        "client_update_available_suffix": "可用",
        "auto_check_toggle": "啟動時檢查更新",
        "auto_check_save_failed": "設定儲存失敗，請稍後再試",
-@@ -1447,7 +1819,7 @@
+@@ -1447,7 +1913,7 @@
        "title": "第一次使用？先看這 3 步",
        "subtitle": "從加入資料夾到補全資料，三步上手",
        "step1_title": "加入片庫資料夾",
@@ -9850,7 +10385,7 @@
        "step2_title": "產生網頁",
        "step2_desc": "一鍵掃描並建立可瀏覽的收藏頁",
        "step3_title": "NFO 補全",
-@@ -1464,7 +1836,7 @@
+@@ -1464,7 +1930,7 @@
      "tag_alias": {
        "title": "Tag 別名管理",
        "intro": "中日英同義詞集中管理，讓搜尋框、chip 篩選、模糊探索全部說同一種語言。",
@@ -9859,7 +10394,7 @@
        "scanner_chipwall": "chip 牆列出所有 Tag 別名組。點「+」新增 alias，主名（primary）以粉紅色顯示，別名以灰色顯示。",
        "scanner_ai_hint": "點「?」開啟 AI 建議框：把你的 tag 需求描述給 AI，它會回傳建議的別名組供你直接匯入。",
        "h6_showcase": "Showcase 自動展開",
-@@ -1501,16 +1873,16 @@
+@@ -1501,16 +1967,16 @@
      "batch": {
        "title": "批次檔案搜尋",
        "h6_add": "加入多個檔案",
@@ -9880,7 +10415,7 @@
        "fav_auto": "自動開始搜尋前 20 個檔案",
        "fav_nfo_skip": "同名 .nfo 存在則視為已整理，不重打 scraper",
        "pause_pause": "批次搜尋時可點擊「暫停」按鈕",
-@@ -1563,17 +1935,17 @@
+@@ -1563,17 +2029,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "從搜尋頁或瀏覽頁加入收藏，照片自動下載至本地",
        "manage_library": "搜尋列旁的 <strong>+</strong> 可開啟「從片庫加入女優」清單：庫內女優依片數由多到少排序，別名自動合併成同一人，逐列點愛心即可加入收藏",
@@ -9902,7 +10437,7 @@
        "feat_nfo": "自動讀取 NFO 檔案並顯示元數據",
        "feat_nfo_fill": "「就地補資料」：原地補缺失的 NFO + 封面，不改名、不搬位 — 適合唯讀網盤、已有自己的資料夾結構，或只想瀏覽不被改檔案",
        "feat_terminal": "內建 Mini Terminal 顯示即時處理進度",
-@@ -1587,9 +1959,9 @@
+@@ -1587,9 +2053,9 @@
        "jellyfin_canonical": "選了媒體管理器模式後<strong>不再另外產生同名封面</strong>——那張圖會被 Jellyfin／Emby 優先讀取，造成封面牆出現橫式圖。既有的片維持原本的封面位置（以免清掉你已調整過的對焦），要修正請自行刪掉該片的同名封面後重新產生。",
        "jellyfin_showcase": "掃描完成後可至 <code>/showcase</code> 頁面瀏覽生成結果",
        "h6_strm_deploy": "唯讀來源 + 讓 Emby／Jellyfin／Kodi 掃到片（跨機器部署）",
@@ -9914,7 +10449,7 @@
        "strm_deploy_step4": "之後改了映射規則，既有的 <code>.strm</code> 會自動一次改寫，不用重建整個媒體庫。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎麼在 Emby/Jellyfin 合併？",
        "multiversion_intro": "多版本合併是 Emby 與 Jellyfin 共同支援的原生功能（同一套「資料夾名 - 標籤」規則），不是哪一家獨有。把同一片各版本放進以番號命名的資料夾，檔名都以資料夾名開頭加「 - 標籤」：",
-@@ -1601,7 +1973,7 @@
+@@ -1601,7 +2067,7 @@
        "h6_modes": "顯示模式",
        "h6_sort": "排序與搜尋",
        "h6_other": "其他功能",
@@ -9923,7 +10458,7 @@
        "mode_grid": "<strong>完整封面</strong>：整張封面的封面牆，點擊開啟 Lightbox（預設）",
        "mode_poster": "<strong>直式海報</strong>：只顯示封面右半（正面），卡片變窄、一列放得更多；手機／窄視窗一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精簡列表，適合快速瀏覽（預設不顯示；可至「設定」→「列表顯示預設」開啟「顯示表格與清單」）",
-@@ -1632,7 +2004,7 @@
+@@ -1632,7 +2098,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越準；tag 很少的影片建議先補完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "無需設定，開箱即用",
@@ -9932,7 +10467,7 @@
      },
      "shortcuts": {
        "title": "快捷鍵",
-@@ -1736,26 +2108,26 @@
+@@ -1736,26 +2202,26 @@
      "server_mode": {
        "title": "伺服器模式 — 讓手機/平板連進來",
        "h6_what": "這是什麼",
@@ -9966,7 +10501,7 @@
        "h6_recover": "不小心按了「取消 / 拒絕」怎麼救回",
        "recover_win_intro": "Windows 救回步驟：",
        "recover_win_1": "按 <code>Win + R</code>，輸入 <code>wf.msc</code> 後 Enter，開啟「Windows Defender 防火牆 進階安全性」。",
-@@ -1800,15 +2172,24 @@
+@@ -1800,15 +2266,24 @@
      "update_modal": {
        "trigger_btn": "更新",
        "title": "即將開啟安裝視窗",
@@ -9994,7 +10529,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2197,18 @@
+@@ -1816,20 +2291,18 @@
      "skip": "跳過",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -10027,7 +10562,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1850,6 +2229,12 @@
+@@ -1850,6 +2323,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -10040,7 +10575,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1861,11 +2246,15 @@
+@@ -1861,11 +2340,15 @@
        "series": "系列",
        "deep_dive": "深入：女優與片商",
        "gantt": "主要片商年表",
@@ -10058,7 +10593,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2272,15 @@
+@@ -1883,11 +2366,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -10076,7 +10611,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1896,7 +2289,7 @@
+@@ -1896,7 +2383,7 @@
    },
    "connect": {
      "nobridge": "請在桌面版開啟",
@@ -10085,7 +10620,7 @@
      "status_connected": "已連線 {host}",
      "status_down": "連不到 {host}",
      "version_line": "版本 {version}（{kind}）",
-@@ -1906,69 +2299,69 @@
+@@ -1906,69 +2393,69 @@
      "kind_windows": "Windows 桌面版",
      "kind_mac": "Mac 桌面版",
      "last_ok": "上次成功連線：{time}",
@@ -10176,7 +10711,7 @@
        "stale": "（伺服器已無此來源）",
        "remove": "移除",
        "save_btn": "儲存對照表",
-@@ -1976,5 +2369,391 @@
+@@ -1976,5 +2463,391 @@
        "saved": "對照表已儲存",
        "save_failed": "對照表儲存失敗"
      }
@@ -10715,6 +11250,31 @@
    },
    "sources": [
      {
+@@ -205,5 +205,24 @@
+     "consecutive_timeout_count": 0,
+     "judged_at_version": "",
+     "set_by_user": false
++  },
++  "ai_services": {
++    "image_similar": {
++      "enabled": false,
++      "url": "",
++      "api_key": "",
++      "model": ""
++    },
++    "faces": {
++      "enabled": false,
++      "url": "",
++      "api_key": "",
++      "model": ""
++    },
++    "tags": {
++      "enabled": false,
++      "provider": "",
++      "model": ""
++    }
+   }
+ }
 --- a/web/routers/_custom_gate.py
 +++ b/web/routers/_custom_gate.py
 @@ -1,26 +1,38 @@
@@ -18036,10 +18596,45 @@
 +}
 --- a/web/static/css/pages/settings.css
 +++ b/web/static/css/pages/settings.css
-@@ -293,6 +293,51 @@
-     gap: 0.75rem;
+@@ -262,6 +262,11 @@
+     border-bottom: 1px solid var(--stroke-subtle);  /* 視覺分隔線 */
  }
  
++#settings-components .settings-quick-toggle-row--embedded {
++    margin-bottom: 0.9rem;
++    padding-top: 0;
++}
++
+ /* 內含的 settings-form-group 維持 flex-col，不需覆蓋 */
+ #settings-components .settings-quick-toggle-row .settings-form-group {
+     flex-shrink: 0;                    /* 避免被 flex container 縮小 */
+@@ -271,6 +276,7 @@
+ 
+ .settings-header {
+     display: flex;
++    flex-wrap: wrap;
+     justify-content: space-between;
+     align-items: center;
+     gap: 1rem;
+@@ -283,14 +289,62 @@
+     margin-bottom: 0.5rem;
+     /* 64b-1: sticky header（tab-bar 移除後，header 接管釘頂；z-index 31 > 舊 tab-bar 30）*/
+     position: sticky;
+-    top: 0;
++    top: var(--mobile-topbar-height, 0px);
+     z-index: 31;
+ }
+ 
+ .settings-header-actions {
+     display: flex;
+-    align-items: center;
++    flex-wrap: wrap;
++    align-items: center;
++    justify-content: flex-end;
++    min-width: 0;
+     gap: 0.75rem;
++}
++
 +.settings-appearance-controls {
 +    display: flex;
 +    align-items: center;
@@ -18083,12 +18678,10 @@
 +#settings-components .settings-header-actions .settings-theme-toggle .theme-toggle-btn i {
 +    font-size: 18px;
 +    line-height: 1;
-+}
-+
+ }
+ 
  /* Locale Toggle Button — 與 theme toggle 同款 */
- .settings-locale-toggle {
-     flex-shrink: 0;
-@@ -392,34 +437,44 @@
+@@ -392,34 +446,44 @@
  
      /* P2(Codex): settings-header 換行防溢出（需在 .settings-header base rule 之後，避免被 cascade 覆蓋）*/
  
@@ -18158,7 +18751,7 @@
      }
  
      /* quick-toggle-row 子 form-group：窄屏允許縮小（覆蓋 flex-shrink:0），避免橫向溢出 */
-@@ -461,10 +516,56 @@
+@@ -461,10 +525,56 @@
      gap: 0.5rem;
  }
  
@@ -18215,7 +18808,7 @@
  }
  
  /* ─── Cap counter (tabular-nums prevents digit jitter on toggle) ─── */
-@@ -1729,3 +1830,210 @@
+@@ -1729,3 +1839,367 @@
      background: color-mix(in oklch, var(--surface-2) 55%, transparent);
      border-radius: var(--radius-sm);
  }
@@ -18290,7 +18883,8 @@
 +    font-size: 0.8rem;
 +    font-weight: 700;
 +    line-height: 1.2;
-+    white-space: nowrap;
++    white-space: normal;
++    overflow-wrap: anywhere;
 +    transition:
 +        color var(--fluent-duration-fast) var(--fluent-ease-standard),
 +        background var(--fluent-duration-fast) var(--fluent-ease-standard),
@@ -18343,28 +18937,66 @@
 +}
 +
 +@media (max-width: 768px) {
-+    #settings-components .settings-tabs {
-+        grid-template-columns: repeat(5, minmax(6.4rem, 1fr));
-+        overflow-x: auto;
-+        overscroll-behavior-inline: contain;
-+        scroll-snap-type: inline proximity;
-+        scrollbar-width: none;
-+        position: sticky;
-+        top: calc(var(--mobile-topbar-height) + 112px);
-+        z-index: 24;
++    #settings-components .settings-header {
++        align-items: flex-start;
++        gap: 0.65rem;
++        padding-bottom: 0.75rem;
 +    }
 +
-+    #settings-components .settings-tabs::-webkit-scrollbar {
-+        display: none;
++    #settings-components .settings-header-left,
++    #settings-components .settings-header-actions {
++        width: 100%;
++    }
++
++    #settings-components .settings-header-actions {
++        display: grid;
++        grid-template-columns: minmax(0, 1fr);
++        gap: 0.55rem;
++    }
++
++    #settings-components .settings-appearance-controls {
++        width: 100%;
++        justify-content: center;
++    }
++
++    #settings-components .settings-tabs {
++        grid-template-columns: repeat(5, minmax(0, 1fr));
++        overflow: visible;
++        position: relative;
++        z-index: auto;
++        gap: 0.2rem;
++        padding: 0.25rem;
 +    }
 +
 +    #settings-components .settings-tab {
-+        scroll-snap-align: center;
 +        flex-direction: column;
 +        gap: 0.2rem;
-+        min-height: 3.35rem;
-+        padding: 0.45rem 0.55rem;
-+        font-size: 0.72rem;
++        min-height: 3.5rem;
++        padding: 0.4rem 0.2rem;
++        font-size: 0.68rem;
++        line-height: 1.25;
++        text-align: center;
++    }
++
++    #settings-components .settings-tab span {
++        display: block;
++        max-width: 100%;
++        overflow-wrap: anywhere;
++    }
++
++    #settings-components .card-body {
++        padding: 1rem;
++    }
++
++    #settings-components .settings-form-row > *,
++    #settings-components .settings-form-row .flex-1 {
++        min-width: 0;
++    }
++
++    #settings-components .settings-form-row input,
++    #settings-components .settings-form-row select,
++    #settings-components .settings-form-row .variable-input-group {
++        max-width: 100%;
 +    }
 +
 +    #settingsForm {
@@ -18414,6 +19046,27 @@
 +}
 +
 +@media (max-width: 480px) {
++    #settingsForm {
++        padding-inline: 0.75rem;
++    }
++
++    #settings-components .settings-header {
++        padding-inline: 0.75rem;
++    }
++
++    #settings-components .settings-tab {
++        min-height: 3.65rem;
++        font-size: 0.63rem;
++    }
++
++    #settings-components .settings-tab i {
++        font-size: 0.9rem;
++    }
++
++    #settings-components .card-body {
++        padding: 0.85rem;
++    }
++
 +    #settings-components .save-btn-wrapper {
 +        gap: 0.5rem;
 +    }
@@ -18425,6 +19078,103 @@
 +    #settings-components .save-btn {
 +        padding-inline: 0.9rem;
 +    }
++
++    #settings-components .ai-similar-fields .variable-input-group {
++        flex-direction: column;
++        align-items: stretch;
++    }
++
++    #settings-components .ai-similar-fields .variable-input-group > .btn {
++        width: 100%;
++    }
++}
++
++/* ==================== Remote AI services ==================== */
++
++#settings-components .ai-card-intro {
++    margin-bottom: 1rem;
++}
++
++#settings-components .settings-tab-desc {
++    margin: 0;
++    color: var(--text-secondary);
++    font-size: 0.82rem;
++    line-height: 1.55;
++    overflow-wrap: anywhere;
++}
++
++#settings-components .ai-tabs-row {
++    margin-bottom: 1rem;
++}
++
++#settings-components .ai-tabs-row .tabs {
++    display: grid;
++    grid-template-columns: repeat(3, minmax(0, 1fr));
++    width: 100%;
++}
++
++#settings-components .ai-tabs-row .tab {
++    min-width: 0;
++    padding-inline: 0.5rem;
++    white-space: normal;
++    overflow-wrap: anywhere;
++}
++
++#settings-components .ai-tabs-row .tabs-border > .tab.tab-active,
++#settings-components .ai-tabs-row .tabs-border > .tab[aria-selected="true"] {
++    color: var(--accent);
++    --tab-border-color: var(--accent);
++}
++
++#settings-components .ai-similar-empty-desc {
++    margin: 0.75rem 0;
++}
++
++#settings-components .ai-similar-empty-actions {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 0.5rem;
++}
++
++#settings-components .ai-similar-fields {
++    display: flex;
++    flex-direction: column;
++    gap: 0.75rem;
++    margin: 0.75rem 0 1rem;
++}
++
++#settings-components .ai-similar-status {
++    margin: 0.25rem 0 0;
++    overflow-wrap: anywhere;
++}
++
++#settings-components .ai-similar-index-row {
++    display: flex;
++    flex-wrap: wrap;
++    align-items: center;
++    gap: 0.5rem;
++}
++
++#settings-components .ai-similar-save-first {
++    margin: 0;
++    color: var(--text-secondary);
++}
++
++#settings-components .ai-similar-test-result {
++    margin: 0.25rem 0 0;
++    padding: 0.5rem 0.75rem;
++    border-radius: var(--fluent-radius-sm);
++    background: var(--surface-2);
++    color: var(--text-primary);
++    white-space: pre-wrap;
++    overflow-wrap: anywhere;
++    font-family: inherit;
++    font-size: 0.875rem;
++    line-height: 1.4;
++}
++
++#settings-components .ai-backfill-pending {
++    color: var(--text-secondary);
 +}
 --- /dev/null
 +++ b/web/static/js/components/mobile-back.js
@@ -22281,7 +23031,7 @@
  
  // 同時啟用來源數上限（前端鏡像；後端真理來源 core/source_config.py:MAX_ENABLED_SOURCES）
  const MAX_ENABLED_SOURCES = 10;
-@@ -41,11 +44,14 @@
+@@ -41,11 +44,24 @@
              openaiBaseUrl: '',
              openaiApiKey: '',
              openaiModel: 'gpt-4o-mini',
@@ -22290,13 +23040,23 @@
              claudeApiKey: '',
              claudeModel: 'claude-haiku-5-5',
  
++            // Remote AI services (mobile only connects to user-provided HTTP services)
++            aiSimilarEnabled: false,
++            aiSimilarUrl: '',
++            aiSimilarApiKey: '',
++            aiSimilarModel: '',
++            aiFacesEnabled: false,
++            aiFacesUrl: '',
++            aiFacesApiKey: '',
++            aiFacesModel: '',
++
              // Scraper
              createFolder: true,
 +            focalAutoEnabled: true,
              // 資料夾層級：{id,value}[] 動態清單（外→內，上到下）。load 時 slice(0,3) 正規化
              // （後端只用前 3 層，CD-95a-7/12）。id 走 naming.layerSeq，x-for :key="layer.id"。
              folderLayerList: [],
-@@ -60,62 +66,27 @@
+@@ -60,62 +76,27 @@
              strmRules: [],   // strm 路徑映射編輯狀態（array of {local, remote}）；load/save 兩端與 dict 對稱轉換
  
              // Gallery
@@ -22368,7 +23128,7 @@
  
          // ===== 全域模式切換破壞性 confirm State (90c-T5) =====
          switchModeConfirmOpen: false,
-@@ -130,9 +101,13 @@
+@@ -130,9 +111,13 @@
  
          // ===== Dirty Check State =====
          savedState: null,
@@ -22382,7 +23142,7 @@
          // 95a-T8: filename 膠囊編輯器收斂式 hydrate 就緒旗標（響應式鏡像，供 x-effect 追蹤；
          // naming.ready 是 closure 布林、非響應式，x-effect 追不到）。loadConfig 開頭重設 false、
          // form 設妥後翻 true；由 hydrateFilenameEditor() 讀取觸發 reactive 補載。
-@@ -204,11 +179,41 @@
+@@ -204,11 +189,41 @@
          },
  
          // ===== Computed Properties =====
@@ -22425,7 +23185,7 @@
          },
  
          // 命名預覽（依 data 套範例值）。誠實反映後端空值行為（U-A2）：空變數 → 空字串，
-@@ -299,7 +304,7 @@
+@@ -299,7 +314,7 @@
              const censored = this.sources.filter(s => this.CENSORED_SOURCES.includes(s.id));
              return censored.length > 0 && censored.every(s => !s.enabled);
          },
@@ -22434,7 +23194,7 @@
          // setter(false) = NO-OP + transient hint（EC-2：off 不自動重開有碼，由使用者手動重啟任一有碼 pill）。
          set uncensoredMode(v) {
              if (v === true) {
-@@ -308,7 +313,6 @@
+@@ -308,7 +323,6 @@
                          s.enabled = false;
                      }
                  });
@@ -22442,7 +23202,7 @@
              } else {
                  this._flashUncensoredOffHint();
              }
-@@ -344,15 +348,15 @@
+@@ -344,15 +358,15 @@
  
          // ===== Lifecycle =====
          init() {
@@ -22461,7 +23221,7 @@
  
              this.loadConfig().then(() => {
                  // B1: init scanner link state after config loaded
-@@ -389,108 +393,84 @@
+@@ -389,108 +403,84 @@
          },
  
          // ===== Methods =====
@@ -22647,7 +23407,7 @@
              try {
                  const resp = await fetch('/api/config/focal-device/disabled', {
                      method: 'PUT',
-@@ -498,51 +478,19 @@
+@@ -498,51 +488,19 @@
                      body: JSON.stringify({ value: disabled })
                  });
                  const result = await resp.json();
@@ -22708,7 +23468,7 @@
          // 90c-T5: 全域模式切換破壞性 confirm ─────────────────────────────────────
          // 攔截 external_manager segmented button：即時 fetch 判離線來源 → 有則跳破壞性
          // confirm（消費 T4 POST /api/config/switch-external-manager）→ 成功後同步三處。
-@@ -647,26 +595,13 @@
+@@ -647,26 +605,13 @@
              this.pendingRewriteCount = 0;
          },
  
@@ -22737,7 +23497,7 @@
              // 95a-T8: 對稱重設 hydrate 旗標（reset 設定 / 重跑 loadConfig 時需重新 hydrate，
              // 否則 one-shot 會擋住 filename editor 的重新載入）。
              this.namingConfigReady = false;
-@@ -683,7 +618,6 @@
+@@ -683,7 +628,6 @@
                  const resp = await fetch('/api/config');
                  const result = await resp.json();
                  if (result.success) {
@@ -22745,21 +23505,35 @@
                      const config = result.data;
  
                      // Search
-@@ -713,6 +647,13 @@
-                     this.form.openaiApiKey = config.translate.openai?.api_key || '';
+@@ -714,10 +658,27 @@
                      this.form.openaiModel = config.translate.openai?.model || 'gpt-4o-mini';
                      this.openaiUseCustomModel = config.translate.openai?.use_custom_model || false;
-+
+ 
 +                    // OpenAI Official
 +                    this.form.openaiOfficialApiKey = config.translate.openai_official?.api_key || '';
 +                    this.form.openaiOfficialModel = config.translate.openai_official?.model || '';
 +                    if (config.translate.openai_official?.model) {
 +                        this.openaiOfficialModels = [config.translate.openai_official.model];
 +                    }
- 
++
                      // Claude
                      this.form.claudeApiKey = config.translate.claude?.api_key || '';
-@@ -769,65 +710,28 @@
+                     this.form.claudeModel = config.translate.claude?.model || 'claude-haiku-5-5';
+                     this.claudeModels = [this.form.claudeModel];
++
++                    // Remote AI services
++                    this.form.aiSimilarEnabled = config.ai_services?.image_similar?.enabled === true;
++                    this.form.aiSimilarUrl = config.ai_services?.image_similar?.url || '';
++                    this.form.aiSimilarApiKey = config.ai_services?.image_similar?.api_key || '';
++                    this.form.aiSimilarModel = config.ai_services?.image_similar?.model || '';
++                    this.form.aiFacesEnabled = config.ai_services?.faces?.enabled === true;
++                    this.form.aiFacesUrl = config.ai_services?.faces?.url || '';
++                    this.form.aiFacesApiKey = config.ai_services?.faces?.api_key || '';
++                    this.form.aiFacesModel = config.ai_services?.faces?.model || '';
+ 
+                     // 自動測試 Gemini（如果有 API Key 且是 gemini provider）
+                     if (config.translate.gemini?.api_key && config.translate.provider === 'gemini') {
+@@ -769,65 +730,28 @@
                          .map(([local, remote]) => ({ local, remote }));
  
                      // Gallery
@@ -22832,7 +23606,7 @@
  
                      // Sources（61c-2）：讀 config.sources 段填入 unified scope。
                      // FIELD-NAME TRAP：後端用 display_name_key / display_name_raw；
-@@ -850,12 +754,11 @@
+@@ -850,12 +774,11 @@
                              available: s.available ?? (s.type !== 'metatube'),  // builtins default available; metatube waits for /status
                          }))
                          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -22846,7 +23620,7 @@
                      // 解鎖表單（config hydrate 完成）
                      this._configLoading = false;
  
-@@ -875,6 +778,7 @@
+@@ -875,6 +798,7 @@
  
                      // Hydrate metatube fields from config + /status (CD-63b-3)
                      this.metatubeEnabled = config.metatube?.enabled || false;
@@ -22854,7 +23628,7 @@
                      this.metatubeServerUrl = config.metatube?.url || '';
                      this.metatubeToken = config.metatube?.token || '';
                      this.metatubeLanMode = !!config.metatube?.allow_lan;   // hydrate LAN opt-in so re-connect doesn't fail SSRF (Codex P2)
-@@ -886,9 +790,18 @@
+@@ -886,9 +810,18 @@
                      if (ollamaUrl && config.translate.provider === 'ollama') {
                          this.loadOllamaModels(ollamaUrl, ollamaModel);  // 不 await
                      }
@@ -22873,7 +23647,7 @@
              } finally {
                  this._configLoading = false;
              }
-@@ -921,60 +834,33 @@
+@@ -921,60 +854,33 @@
              }
          },
  
@@ -22956,7 +23730,7 @@
              try {
                  // 先載入現有設定
                  const currentResp = await fetch('/api/config');
-@@ -987,6 +873,13 @@
+@@ -987,6 +893,13 @@
                  // 71-T5: 存檔前的「已持久化」縮圖快取狀態（authoritative：剛從 server GET 的 config.json）。
                  // 用來在 PUT 成功後判定「這次儲存是否剛把它從開變關」→ 才清空 output/thumb/（現在只有 disable 半在用）。
                  const prevThumbEnabled = config.thumbnail_cache_enabled === true;
@@ -22970,7 +23744,7 @@
                  // 90c-T6: 存前「已持久化」的 strm 映射（authoritative：剛 GET 的 config.json）。
                  // PUT 成功後與新映射比對，判定「這次儲存是否改動了路徑規則」→ 才提示改寫既有 strm。
                  const prevStrmMappings = JSON.stringify(config.scraper?.strm_path_mappings || {});
-@@ -1090,6 +983,10 @@
+@@ -1090,23 +1003,43 @@
                          model: this.form.openaiModel.trim() || 'gpt-4o-mini',
                          use_custom_model: this.openaiUseCustomModel
                      },
@@ -22981,7 +23755,29 @@
                      claude: {
                          api_key: this.form.claudeApiKey,
                          model: this.form.claudeModel || 'claude-haiku-5-5'
-@@ -1099,14 +996,10 @@
+                     }
+                 };
+ 
++                // Preserve the future AI-tags subtree; the mobile settings UI does not expose it.
++                config.ai_services = {
++                    ...(config.ai_services || {}),
++                    image_similar: {
++                        ...(config.ai_services?.image_similar || {}),
++                        enabled: this.form.aiSimilarEnabled,
++                        url: this.form.aiSimilarUrl.trim(),
++                        api_key: this.form.aiSimilarApiKey,
++                        model: this.form.aiSimilarModel.trim(),
++                    },
++                    faces: {
++                        ...(config.ai_services?.faces || {}),
++                        enabled: this.form.aiFacesEnabled,
++                        url: this.form.aiFacesUrl.trim(),
++                        api_key: this.form.aiFacesApiKey,
++                        model: this.form.aiFacesModel.trim(),
++                    },
++                    tags: { ...(config.ai_services?.tags || {}) },
++                };
++
                  // 更新 gallery
                  config.gallery = {
                      ...config.gallery,
@@ -22996,7 +23792,7 @@
                      show_table_list: this.form.showTableList,
                      cover_badges: {
                          enabled: this.form.coverBadgesEnabled,
-@@ -1118,12 +1011,12 @@
+@@ -1118,12 +1051,12 @@
                  config.general = {
                      ...config.general,
                      default_page: this.form.defaultPage,
@@ -23014,7 +23810,7 @@
  
                  // 更新 metatube enabled（CD-63b-3）：保留 url/token（GET 載入的），只更新 enabled。
                  config.metatube = { ...(config.metatube || {}), enabled: this.metatubeEnabled };
-@@ -1149,12 +1042,17 @@
+@@ -1149,12 +1082,17 @@
                  });
                  const result = await resp.json();
                  if (result.success) {
@@ -23033,7 +23829,7 @@
                      // 71b-T2: 縮圖快取「剛被關閉」(persisted true → 現在 false) 才清空 output/thumb/。
                      // 必在 PUT 成功之後——先存才清（config.json 已寫 false）。confirmThumbCacheDisable
                      // 自身不 POST clear，統一收斂於此。
-@@ -1185,21 +1083,30 @@
+@@ -1185,21 +1123,30 @@
                              this.showToast(window.t('settings.scraper.strm_mapping.rewrite_failed'), 'error');
                          }
                      }
@@ -23075,7 +23871,7 @@
                  this.showToast(window.t('settings.toast.save_failed', { error: e.message }), 'error');
                  return saved;
              }
-@@ -1249,9 +1156,9 @@
+@@ -1249,9 +1196,9 @@
          },
  
          // ===== Thumbnail Cache Toggle Handler + Disable Modal (71b-T2) =====
@@ -23087,7 +23883,7 @@
          async onThumbCacheToggleChange() {
              // x-model 已先翻值 → 進來時 form.thumbnailCacheEnabled 已是使用者撥到的新值。
              if (this.form.thumbnailCacheEnabled !== true) {
-@@ -1267,10 +1174,8 @@
+@@ -1267,10 +1214,8 @@
              }
              // persisted 已 true（未存的 OFF 後撥回 ON）：不開 modal，讓 toggle 照常變 true。
              if (this.savedState?.thumbnailCacheEnabled === true) return;
@@ -23099,7 +23895,7 @@
          },
  
          // 71b-T2: 關閉確認取消 → 關 modal、toggle 維持 true（保持啟用）；不存檔、不清快取。
-@@ -1278,13 +1183,10 @@
+@@ -1278,13 +1223,10 @@
              this.thumbCacheDisableConfirmOpen = false;
          },
  
@@ -23114,7 +23910,7 @@
          },
  
          // ===== 命名區膠囊編輯器（feature/95 Part A）=====
-@@ -1518,7 +1420,7 @@
+@@ -1518,7 +1460,7 @@
          },
  
          // Builtin：原地翻轉 enabled（膠囊留 Active Row、停用 = inline 刪除線）。
@@ -23123,7 +23919,7 @@
          toggleBuiltin(id) {
              const s = this.sources.find(x => x.id === id);
              if (!s || s.type !== 'builtin') return;
-@@ -1527,7 +1429,6 @@
+@@ -1527,7 +1469,6 @@
                  return;
              }
              s.enabled = !s.enabled;
@@ -23131,7 +23927,7 @@
          },
  
          // Promote：Parts Bin → Active Row（enabled=true）。cap 檢查。splice 移到陣列末尾
-@@ -1555,7 +1456,6 @@
+@@ -1555,7 +1496,6 @@
                  const [moved] = this.sources.splice(idx, 1);
                  this.sources.push(moved);
              }
@@ -23139,7 +23935,7 @@
          },
  
          // Demote：Active Row → Parts Bin（enabled=false）。
-@@ -1563,7 +1463,6 @@
+@@ -1563,7 +1503,6 @@
              const s = this.sources.find(x => x.id === id);
              if (!s || s.type !== 'metatube') return;
              s.enabled = false;
@@ -23147,7 +23943,7 @@
          },
  
          // 斷線 metatube 點擊：toast 提示重連，無 state mutation（EC-9）。
-@@ -1682,41 +1581,6 @@
+@@ -1682,41 +1621,6 @@
              }
          },
  
@@ -23189,7 +23985,7 @@
          // 全開：builtin 先（依序），到 cap 即 break；不碰 metatube / manual_only。
          enableAllToCap() {
              for (const s of this.sources) {
-@@ -1725,7 +1589,6 @@
+@@ -1725,7 +1629,6 @@
                  if (this.enabledCount >= MAX_ENABLED_SOURCES) break;
                  s.enabled = true;
              }
@@ -23197,7 +23993,7 @@
          },
  
          _flashCapAlert() {
-@@ -1749,8 +1612,8 @@
+@@ -1749,8 +1652,8 @@
          },
          onDragEnd() { this.draggingId = null; this.dropTargetId = null; },
          onDragOver(e, id) {
@@ -23208,7 +24004,7 @@
              if (!this.draggingId || this.draggingId === id) return;
              const target = this.sources.find(x => x.id === id);
              if (!target || !this.isDraggable(target)) return;
-@@ -1771,7 +1634,6 @@
+@@ -1771,7 +1674,6 @@
              const insertAt = srcIdx < tgtIdx ? tgtIdx - 1 : tgtIdx;
              this.sources.splice(insertAt, 0, moved);
              this.onDragEnd();
@@ -23216,7 +24012,7 @@
          },
  
          // ═══════════════════════════════════════════════════════════════
-@@ -1785,9 +1647,8 @@
+@@ -1785,9 +1687,8 @@
              if (!src) return;
              if (!this.isDraggable(src)) { this.clickActiveRowPill(src); return; }
              if (this._grabbedId === src.id) {
@@ -23227,7 +24023,7 @@
              } else {
                  this._grabbedId = src.id;
              }
-@@ -1807,11 +1668,10 @@
+@@ -1807,11 +1708,10 @@
              this.sources.splice(targetIdx, 0, moved);
          },
  
@@ -23393,7 +24189,7 @@
  
 --- /dev/null
 +++ b/web/static/js/pages/settings/settings-tabs.js
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,68 @@
 +const STORAGE_KEY = 'settings_tab';
 +const DEFAULT_TAB = 'sources';
 +export const SETTINGS_TABS = Object.freeze([
@@ -23406,7 +24202,9 @@
 +
 +const LEGACY_SECTIONS = Object.freeze({
 +    'sec-search': 'sources',
++    'sec-naming': 'naming',
 +    'sec-gallery': 'gallery',
++    'sec-ai': 'ai',
 +    'sec-system': 'system',
 +});
 +
@@ -23462,18 +24260,21 @@
 +}
 --- a/web/static/js/pages/settings/main.js
 +++ b/web/static/js/pages/settings/main.js
-@@ -1,8 +1,9 @@
+@@ -1,8 +1,12 @@
 -import { stateConfig }       from '@/settings/state-config.js';
-+import { stateConfig }       from '@/settings/state-config.js?v=17035-2';
++import { stateConfig }       from '@/settings/state-config.js?v=18005-1';
  import { stateProviders }    from '@/settings/state-providers.js';
  import { stateUI }           from '@/settings/state-ui.js';
  import { stateSourceProbe }  from '@/settings/state-source-probe.js';
  import { customSources }     from '@/settings/state-custom-sources.js';
 +import { stateDatabase }     from '@/settings/state-database.js';
++import { aiServicesCard }    from '@/settings/ai-services-card.js';
++import { aiSimilarPanel }    from '@/settings/ai-similar-panel.js';
++import { aiFacesPanel }      from '@/settings/ai-faces-panel.js';
  import { browseDirState }    from '@/shared/state-browse-dir.js';
  import { toastState }        from '@/shared/state-toast.js';
  import { mergeState }        from '@/shared/merge-state.js';
-@@ -15,6 +16,7 @@
+@@ -15,7 +19,11 @@
          stateSourceProbe(),
          browseDirState(),
          toastState(),
@@ -23481,6 +24282,10 @@
      ));
      // 165-T9: 自訂來源是獨立元件（不進 mergeState）
      Alpine.data('customSources', customSources);
++    Alpine.data('aiServicesCard', aiServicesCard);
++    Alpine.data('aiSimilarPanel', aiSimilarPanel);
++    Alpine.data('aiFacesPanel', aiFacesPanel);
+ });
 --- a/web/static/js/pages/showcase/state-actress.js
 +++ b/web/static/js/pages/showcase/state-actress.js
 @@ -52,6 +52,11 @@
@@ -25131,32 +25936,34 @@
  }
 --- /dev/null
 +++ b/web/static/js/shared/task-keepalive.js
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,27 @@
 +const ANDROID_SHELL_UA = /(?:^|\s)OpenAverMobile\/\S+/;
 +let active = false;
++const owners = new Set();
 +
 +function notify(schemeUrl) {
 +    if (!ANDROID_SHELL_UA.test(navigator.userAgent)) return;
 +    window.location.href = schemeUrl;
 +}
 +
++function sync() {
++    const shouldRun = owners.size > 0;
++    if (shouldRun === active) return;
++    active = shouldRun;
++    notify(shouldRun ? 'openaver-task://start' : 'openaver-task://stop');
++}
++
 +window.__openaverTaskKeepAlive = {
-+    start() {
-+        if (active) return;
-+        active = true;
-+        notify('openaver-task://start');
++    start(owner = 'default') {
++        owners.add(String(owner));
++        sync();
 +    },
 +
-+    stop() {
-+        if (!active) return;
-+        active = false;
-+        notify('openaver-task://stop');
++    stop(owner = 'default') {
++        owners.delete(String(owner));
++        sync();
 +    },
 +};
-+
-+window.addEventListener('pagehide', () => {
-+    if (active) notify('openaver-task://stop');
-+});
 --- /dev/null
 +++ b/web/static/js/shared/video-player.js
 @@ -0,0 +1,54 @@
@@ -27740,13 +28547,14 @@
  <script src="/static/js/pages/search/animations.js"></script>
 --- a/web/templates/settings.html
 +++ b/web/templates/settings.html
-@@ -1,4 +1,5 @@
+@@ -1,4 +1,6 @@
  {% extends "base.html" %}
 +{% from '_macros/ui_state.html' import state_error_card, state_toast with context %}
++{% from '_macros/ai_backfill_controls.html' import ai_backfill_controls with context %}
  
  {% block title %}{{ t('settings.page_title') }} - OpenAver{% endblock %}
  
-@@ -7,197 +8,157 @@
+@@ -7,248 +9,162 @@
  {% endblock %}
  
  {% block content %}
@@ -28015,6 +28823,57 @@
      <!-- Alpine boot 後由 :inert binding 接管 -->
      <!-- 64b-1: form wraps all 3 sections (replaces 6-panel layout). -->
 -    <form id="settingsForm" @submit.prevent="saveConfig" inert :inert="_configLoading">
+-
+-        <!-- ── quick-toggle 列（CD-64-B8）：下載劇照 + 進階搜尋，header 下 section 上 ── -->
+-        <div class="settings-quick-toggle-row">
+-
+-            <!-- 下載劇照（extrafanart） -->
+-            <div class="settings-form-group popover-anchor" x-data="helpPopover">
+-                <label class="settings-label">
+-                    <input type="checkbox" class="toggle toggle-primary"
+-                           x-model="form.downloadSampleImages">
+-                    <span class="label-text">{{ t('settings.scraper.download_sample_images_label') }}</span>
+-                    <button type="button" class="help-popover-btn"
+-                            @click.prevent="toggle()"
+-                            :aria-expanded="open">
+-                        <i class="bi bi-question-circle"></i>
+-                    </button>
+-                </label>
+-                <div x-show="open" x-cloak x-transition
+-                     @click.outside="close()"
+-                     class="help-popover">
+-                    <small class="help-popover__body">
+-                        {{ t('settings.scraper.download_sample_images_hint') }}
+-                    </small>
+-                </div>
+-            </div>
+-
+-            <!-- 封面縮圖快取（71-T5） -->
+-            <div class="settings-form-group popover-anchor" x-data="helpPopover">
+-                <label class="settings-label">
+-                    <input type="checkbox" class="toggle toggle-primary"
+-                           x-model="form.thumbnailCacheEnabled"
+-                           @change="onThumbCacheToggleChange()">
+-                    <span class="label-text">{{ t('settings.thumbnail_cache.label') }}</span>
+-                    <button type="button" class="help-popover-btn"
+-                            @click.prevent="toggle()"
+-                            :aria-expanded="open">
+-                        <i class="bi bi-question-circle"></i>
+-                    </button>
+-                </label>
+-                <div x-show="open" x-cloak x-transition
+-                     @click.outside="close()"
+-                     class="help-popover">
+-                    <small class="help-popover__body">
+-                        {{ t('settings.thumbnail_cache.hint') }}
+-                    </small>
+-                </div>
+-            </div>
+-
+-        </div><!-- /settings-quick-toggle-row -->
+-
+-        <!-- ── Section 1: 搜尋與刮削（兩卡同包） ── -->
+-        <section id="sec-search" class="settings-section">
 +    <form id="settingsForm"
 +          @submit.prevent="saveConfig"
 +          inert
@@ -28053,7 +28912,7 @@
 +                    :tabindex="settingsTab === 'ai' ? 0 : -1"
 +                    @click="selectSettingsTab('ai')">
 +                <i class="bi bi-stars" aria-hidden="true"></i>
-+                <span>{{ t('settings.tabs.translate') }}</span>
++                <span>{{ t('settings.ai.title') }}</span>
 +            </button>
 +            <button type="button" role="tab" id="settingsTabSystem"
 +                    class="settings-tab" :class="{ 'is-active': settingsTab === 'system' }"
@@ -28064,22 +28923,11 @@
 +                <span>{{ t('settings.section.system') }}</span>
 +            </button>
 +        </div>
- 
-         <!-- ── quick-toggle 列（CD-64-B8）：下載劇照 + 進階搜尋，header 下 section 上 ── -->
--        <div class="settings-quick-toggle-row">
-+        <div class="settings-quick-toggle-row"
-+             data-settings-panel="naming"
-+             x-show="settingsTab === 'naming'">
- 
-             <!-- 下載劇照（extrafanart） -->
-             <div class="settings-form-group popover-anchor" x-data="helpPopover">
-@@ -245,10 +206,13 @@
-         </div><!-- /settings-quick-toggle-row -->
- 
-         <!-- ── Section 1: 搜尋與刮削（兩卡同包） ── -->
--        <section id="sec-search" class="settings-section">
++
++        <!-- Section 1: Sources -->
 +        <section id="sec-search" class="settings-section"
-+                 x-show="['sources', 'naming', 'ai'].includes(settingsTab)">
++                 data-settings-panel="sources"
++                 x-show="settingsTab === 'sources'">
  
            <!-- Card ①：搜尋來源 -->
 -          <div class="card mb-4">
@@ -28089,7 +28937,7 @@
              <div class="settings-card-header"><i class="bi bi-collection"></i> {{ t('settings.tabs.sources') }}</div>
              <div class="card-body">
  
-@@ -282,6 +246,8 @@
+@@ -282,6 +198,8 @@
                                  <span x-show="srcProbeStatus !== 'running'">{{ t('settings.sources.probe_btn') }}</span>
                                  <span x-show="srcProbeStatus === 'running'">{{ t('settings.status.testing') }}</span>
                              </button>
@@ -28098,44 +28946,236 @@
                              <small class="settings-sources-probe-summary" aria-live="polite"
                                     x-show="srcProbeSummary.total > 0" x-cloak
                                     x-text="window.t('settings.sources.probe_summary', { ok: srcProbeSummary.ok, total: srcProbeSummary.total })"></small>
-@@ -497,13 +463,8 @@
-                                 {{ t('settings.search.proxy_scope_dmm_hint') }}
-                             </small>
-                             <small class="settings-hint" x-show="form.proxyScope === 'all'">
+@@ -469,177 +387,73 @@
+                         <span>{{ t('settings.sources.warn_all_disabled') }}</span>
+                     </div>
+ 
+-                    <!-- 64e-3: proxy row 搬至 metatube toggle 正上方；163b：欄位＋範圍切換＋說明合成一列 -->
+-                    <div class="settings-form-row settings-form-row--proxy">
+-                        <label class="row-label">Proxy</label>
+-                        <div class="flex-1 flex flex-wrap items-center gap-3">
+-                            <input type="text" class="input input-bordered input-sm"
+-                                x-model="form.proxyUrl"
+-                                placeholder="{{ t('settings.search.proxy_placeholder') }}">
+-                            <div class="settings-sources-segmented" role="group"
+-                                 aria-label="{{ t('settings.search.proxy_scope_label') }}">
+-                                <button type="button"
+-                                        :class="{ 'is-on': form.proxyScope === 'dmm' }"
+-                                        :aria-pressed="(form.proxyScope === 'dmm') ? 'true' : 'false'"
+-                                        :disabled="!form.proxyUrl.trim()"
+-                                        @click="form.proxyScope = 'dmm'">
+-                                    {{ t('settings.search.proxy_scope_dmm') }}
+-                                </button>
+-                                <button type="button"
+-                                        :class="{ 'is-on': form.proxyScope === 'all' }"
+-                                        :aria-pressed="(form.proxyScope === 'all') ? 'true' : 'false'"
+-                                        :disabled="!form.proxyUrl.trim()"
+-                                        @click="form.proxyScope = 'all'">
+-                                    {{ t('settings.search.proxy_scope_all') }}
+-                                </button>
+-                            </div>
+-                            <small class="settings-hint" x-show="form.proxyScope === 'dmm'">
+-                                {{ t('settings.search.proxy_scope_dmm_hint') }}
+-                            </small>
+-                            <small class="settings-hint" x-show="form.proxyScope === 'all'">
 -                                {% if is_mac_desktop %}{{ t('settings.search.proxy_scope_all_hint_mac') }}{% else %}{{ t('settings.search.proxy_scope_all_hint') }}{% endif %}
-+                                {{ t('settings.search.proxy_scope_all_hint') }}
-                             </small>
+-                            </small>
 -                            {% if is_windows_desktop %}
 -                            <small class="settings-hint" x-show="cfWindowProxyRestartNeeded">
 -                                {{ t('settings.search.proxy_restart_hint') }}
 -                            </small>
 -                            {% endif %}
-                         </div>
-                     </div>
- 
-@@ -512,8 +473,7 @@
-                         <label class="settings-label">
-                             <input type="checkbox" class="toggle toggle-primary"
-                                    id="metatubeEnableToggle"
+-                        </div>
+-                    </div>
+-
+-                    <!-- Metatube 連線（B3）toggle（CD-63b-3）— 64b-6: 移至 Section 3 正上方 -->
+-                    <div class="settings-form-group">
+-                        <label class="settings-label">
+-                            <input type="checkbox" class="toggle toggle-primary"
+-                                   id="metatubeEnableToggle"
 -                                   x-model="metatubeEnabled"
 -                                   @change="onMetatubeEnabledChange()">
-+                                   x-model="metatubeEnabled">
-                             <span class="label-text">{{ t('settings.sources.mt_enable_label') }}</span>
-                         </label>
-                         <small class="settings-hint">{{ t('settings.sources.mt_enable_help') }}</small>
-@@ -635,11 +595,18 @@
+-                            <span class="label-text">{{ t('settings.sources.mt_enable_label') }}</span>
+-                        </label>
+-                        <small class="settings-hint">{{ t('settings.sources.mt_enable_help') }}</small>
+-                    </div>
+-
+-                    <!-- ===== Section 3 — Metatube Connection (Zone B) — 61c-1 guard wrapper ===== -->
+-                    <!-- B1: metatubeEnabled hardcoded false → 整段不渲染（disabled state）。
+-                         idle/connected 結構在此就位，供測試 + B3 接實際連線。 -->
+-                    <div class="settings-sources-section3" x-show="metatubeEnabled" x-collapse>
+-
+-                        <!-- STATE: idle — connect form (metatubeEnabled && !metatubeConnected) -->
+-                        <div class="settings-mt-connect-form"
+-                             x-show="!metatubeConnected"
+-                             role="group">
+-                            <label class="settings-mt-field">
+-                                <span>{{ t('settings.sources.mt_server_url_label') }}</span>
+-                                <input type="text"
+-                                       x-model="metatubeServerUrl"
+-                                       placeholder="http://192.168.1.50:8900">
+-                            </label>
+-                            <label class="settings-mt-field">
+-                                <span>{{ t('settings.sources.mt_token_label') }}</span>
+-                                <input type="password"
+-                                       x-model="metatubeToken"
+-                                       autocomplete="off">
+-                            </label>
+-                            <label class="settings-mt-field-checkbox">
+-                                <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="metatubeLanMode">
+-                                <span>{{ t('settings.sources.mt_lan_mode_label') }}</span>
+-                            </label>
+-                            <button type="button"
+-                                    class="settings-mt-connect-btn"
+-                                    :disabled="metatubeConnecting"
+-                                    @click="metatubeConnect()">
+-                                <i class="bi" :class="metatubeConnecting ? 'bi-hourglass-split' : 'bi-plug'"></i>
+-                                <span x-text="metatubeConnecting ? window.t('settings.sources.mt_connecting_btn') : window.t('settings.sources.mt_connect_btn')"></span>
+-                            </button>
+-                        </div>
+-
+-                        <!-- STATE: connected — status row + Parts Bin (metatubeEnabled && metatubeConnected) -->
+-                        <div x-show="metatubeConnected">
+-
+-                            <!-- Connection status row -->
+-                            <div class="settings-mt-connect-status">
+-                                <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+-                                <span class="status-text">
+-                                    {{ t('settings.sources.mt_connected_status') }}
+-                                    <code x-text="metatubeServerUrl" x-show="metatubeServerUrl"></code>
+-                                </span>
+-                                <button type="button"
+-                                        class="settings-sources-mini-btn"
+-                                        @click="metatubeEdit()">
+-                                    <i class="bi bi-pencil"></i> {{ t('settings.sources.mt_edit_btn') }}
+-                                </button>
+-                                <button type="button"
+-                                        class="settings-sources-mini-btn"
+-                                        @click="metatubeDisconnect()">
+-                                    <i class="bi bi-x-circle"></i> {{ t('settings.sources.mt_disconnect_btn') }}
+-                                </button>
+-                                <!-- Retest button — shown when connected AND probe finished (CD-63b-4 B2) -->
+-                                <button type="button" class="settings-sources-mini-btn"
+-                                        x-show="metatubeConnected && probeDone"
+-                                        @click="metatubeRetest()">
+-                                    <i class="bi bi-arrow-clockwise"></i> {{ t('settings.sources.mt_retest_btn') }}
+-                                </button>
+-                            </div>
+-
+-                            <!-- Probe progress line — shown while probe is running (CD-63b-4 B1) -->
+-                            <div class="settings-mt-probe-progress" x-show="!probeDone">
+-                                <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+-                                <span>{{ t('settings.sources.mt_probe_testing') }}</span>
+-                                <span class="probe-counter">(<span x-text="probeProgress"></span>/<span x-text="probeTotal"></span>)</span>
+-                            </div>
+-
+-                            <!-- Tier hint -->
+-                            <div class="settings-mt-tier-hint">
+-                                <i class="bi bi-stars" aria-hidden="true"></i>
+-                                <span>{{ t('settings.sources.mt_connected_tier_hint') }}</span>
+-                            </div>
+-
+-                            <!-- Parts Bin header (collapsible, default collapsed) — N = partsBinSources.length -->
+-                            <button type="button"
+-                                    class="settings-mt-partsbin-head"
+-                                    @click="partsBinExpanded = !partsBinExpanded"
+-                                    :aria-expanded="partsBinExpanded ? 'true' : 'false'"
+-                                    :aria-label="partsBinExpanded ? '{{ t('settings.sources.mt_provider_list_collapse_aria') }}' : '{{ t('settings.sources.mt_provider_list_expand_aria') }}'">
+-                                <i class="bi" :class="partsBinExpanded ? 'bi-chevron-down' : 'bi-chevron-right'" aria-hidden="true"></i>
+-                                <span>{{ t('settings.sources.mt_provider_list_header') }}</span>
+-                                <span class="settings-mt-partsbin-count" x-text="partsBinSources.length"></span>
+-                            </button>
+-
+-                            <!-- Parts Bin body — flat pill loop (NOT draggable; no Recommended group, B3 §7.5). -->
+-                            <div class="settings-mt-partsbin-body" x-show="partsBinExpanded">
+-                                <div class="settings-sources-pills" role="listbox" aria-label="Provider list">
+-                                    <template x-for="src in partsBinSources" :key="src.id">
+-                                        <div class="source-pill is-partsbin"
+-                                             data-enabled="false"
+-                                             :data-available="src.available ? 'true' : 'false'"
+-                                             role="option"
+-                                             :aria-selected="false"
+-                                             :aria-label="`${src.display_name} — ${src.available === false ? window.t('settings.sources.mt_probe_failed_pill_hint') : window.t('settings.sources.mt_promote_hint')}`"
+-                                             :title="src.available === false ? window.t('settings.sources.mt_probe_failed_pill_hint') : window.t('settings.sources.mt_promote_hint')"
+-                                             tabindex="0"
+-                                             @click="promoteMetatube(src.id)"
+-                                             @keydown.enter.prevent="promoteMetatube(src.id)"
+-                                             @keydown.space.prevent="promoteMetatube(src.id)">
+-                                            <i class="bi bi-plus-circle plus-icn" aria-hidden="true"></i>
+-                                            <i class="bi bi-slash-circle slash-icn" aria-hidden="true"></i>
+-                                            <span class="pill-name" x-text="src.display_name"></span>
+-                                        </div>
+-                                    </template>
+-                                </div>
+-                            </div>
+-                        </div>
+-                    </div>
  
-           <!-- Card ②：刮削與翻譯 -->
-           <div class="card mb-4">
+             </div>
+           </div>
+ 
+-          <!-- Card ②：刮削與翻譯 -->
+-          <div class="card mb-4">
 -            <div class="settings-card-header"><i class="bi bi-gear"></i> {{ t('settings.tabs.scraping') }}</div>
++        </section><!-- /sec-search -->
++
++        <!-- Section 2: Naming and file organization -->
++        <section id="sec-naming" class="settings-section"
++                 data-settings-panel="naming"
++                 x-show="settingsTab === 'naming'">
++          <div class="card mb-4" data-settings-panel="naming">
 +            <div class="settings-card-header">
-+                <i class="bi" :class="settingsTab === 'ai' ? 'bi-translate' : 'bi-gear'" aria-hidden="true"></i>
-+                <span x-text="settingsTab === 'ai'
-+                    ? window.t('settings.tabs.translate')
-+                    : window.t('settings.tabs.naming')"></span>
++                <i class="bi bi-gear" aria-hidden="true"></i>
++                {{ t('settings.tabs.naming') }}
 +            </div>
              <div class="card-body">
  
++                    <!-- Quick toggles belong to this card, not to the page header. -->
++                    <div class="settings-quick-toggle-row settings-quick-toggle-row--embedded">
++                        <!-- 下載劇照（extrafanart） -->
++                        <div class="settings-form-group popover-anchor" x-data="helpPopover">
++                            <label class="settings-label">
++                                <input type="checkbox" class="toggle toggle-primary"
++                                       x-model="form.downloadSampleImages">
++                                <span class="label-text">{{ t('settings.scraper.download_sample_images_label') }}</span>
++                                <button type="button" class="help-popover-btn"
++                                        @click.prevent="toggle()"
++                                        :aria-expanded="open">
++                                    <i class="bi bi-question-circle"></i>
++                                </button>
++                            </label>
++                            <div x-show="open" x-cloak x-transition
++                                 @click.outside="close()"
++                                 class="help-popover">
++                                <small class="help-popover__body">
++                                    {{ t('settings.scraper.download_sample_images_hint') }}
++                                </small>
++                            </div>
++                        </div>
++
++                        <!-- 封面縮圖快取（71-T5） -->
++                        <div class="settings-form-group popover-anchor" x-data="helpPopover">
++                            <label class="settings-label">
++                                <input type="checkbox" class="toggle toggle-primary"
++                                       x-model="form.thumbnailCacheEnabled"
++                                       @change="onThumbCacheToggleChange()">
++                                <span class="label-text">{{ t('settings.thumbnail_cache.label') }}</span>
++                                <button type="button" class="help-popover-btn"
++                                        @click.prevent="toggle()"
++                                        :aria-expanded="open">
++                                    <i class="bi bi-question-circle"></i>
++                                </button>
++                            </label>
++                            <div x-show="open" x-cloak x-transition
++                                 @click.outside="close()"
++                                 class="help-popover">
++                                <small class="help-popover__body">
++                                    {{ t('settings.thumbnail_cache.hint') }}
++                                </small>
++                            </div>
++                        </div>
++                    </div>
++
                      <!-- 我的最愛資料夾（scanner dropdown + favoriteScannerLink） -->
 -                    <div class="settings-form-row">
 +                    <div class="settings-form-row"
@@ -28144,7 +29184,7 @@
                          <label class="row-label">
                              {{ t('settings.search.favorite_folder_label') }}
                              <small class="settings-hint">{{ t('settings.search.favorite_folder_hint') }}</small>
-@@ -649,7 +616,7 @@
+@@ -649,7 +463,7 @@
                              <div class="variable-input-group" style="position:relative;">
                                  <input type="text" class="input input-bordered input-sm flex-1" id="searchFavoriteFolder"
                                      x-model="form.searchFavoriteFolder"
@@ -28153,15 +29193,362 @@
                                  <button type="button"
                                      class="btn btn-sm btn-outline"
                                      :title="t('settings.favorite_folder.pick_from_scanner')"
-@@ -691,6 +658,7 @@
+@@ -691,6 +505,354 @@
                          </div>
                      </div>
  
-+                    <div data-settings-panel="ai" x-show="settingsTab === 'ai'">
++
++
++                    <div data-settings-panel="naming" x-show="settingsTab === 'naming'">
++                    <!-- 外部媒體管理器模式（spec F1）— 沿用 .settings-sources-segmented 元件 -->
++                    <div class="settings-form-row settings-form-row--external-manager">
++                        <label class="row-label">{{ t('settings.scraper.external_manager_label') }}</label>
++                        <div class="flex-1 flex items-center gap-3 flex-wrap">
++                            <div class="settings-sources-segmented" role="group"
++                                 aria-label="{{ t('settings.scraper.external_manager_label') }}">
++                                <button type="button"
++                                        :class="{ 'is-on': form.externalManager === 'off' }"
++                                        :aria-pressed="(form.externalManager === 'off') ? 'true' : 'false'"
++                                        @click="requestExternalManagerChange('off')">
++                                    {{ t('settings.scraper.external_manager_off') }}
++                                </button>
++                                <button type="button"
++                                        :class="{ 'is-on': form.externalManager === 'jellyfin' }"
++                                        :aria-pressed="(form.externalManager === 'jellyfin') ? 'true' : 'false'"
++                                        @click="requestExternalManagerChange('jellyfin')">
++                                    Jellyfin
++                                </button>
++                                <button type="button"
++                                        :class="{ 'is-on': form.externalManager === 'emby' }"
++                                        :aria-pressed="(form.externalManager === 'emby') ? 'true' : 'false'"
++                                        @click="requestExternalManagerChange('emby')">
++                                    Emby
++                                </button>
++                                <button type="button"
++                                        :class="{ 'is-on': form.externalManager === 'kodi' }"
++                                        :aria-pressed="(form.externalManager === 'kodi') ? 'true' : 'false'"
++                                        @click="requestExternalManagerChange('kodi')">
++                                    Kodi
++                                </button>
++                            </div>
++                            <!-- hint trailing：segmented 右側同列；flex-1 min-w-0 讓窄視窗時 hint 可 wrap 到下一行 -->
++                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'off'">
++                                {{ t('settings.scraper.external_manager_off_hint') }}
++                            </small>
++                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'jellyfin'">
++                                {{ t('settings.scraper.external_manager_jellyfin_hint') }}
++                            </small>
++                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'emby'">
++                                {{ t('settings.scraper.external_manager_emby_hint') }}
++                            </small>
++                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'kodi'">
++                                {{ t('settings.scraper.external_manager_kodi_hint') }}
++                            </small>
++                        </div>
++                    </div>
++
++                    <!-- strm 路徑映射（spec 90a）— media-server 風味才顯示；與 external_manager 同層並列 -->
++                    <div class="settings-form-row"
++                         x-show="['jellyfin','emby','kodi'].includes(form.externalManager)">
++                        <label class="row-label">
++                            {{ t('settings.scraper.strm_mapping.title') }}
++                            <small class="settings-hint">{{ t('settings.scraper.strm_mapping.intro') }}</small>
++                        </label>
++                        <div class="flex-1 flex flex-col gap-2">
++                            <!-- 規則列：本機前綴 → 播放端前綴 + 刪除 -->
++                            <template x-for="(rule, idx) in form.strmRules" :key="idx">
++                                <div class="flex items-center gap-2 flex-wrap">
++                                    <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
++                                           x-model="rule.local"
++                                           :placeholder="window.t('settings.scraper.strm_mapping.local_placeholder')">
++                                    <span class="text-base-content/50" aria-hidden="true">→</span>
++                                    <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
++                                           x-model="rule.remote"
++                                           :placeholder="window.t('settings.scraper.strm_mapping.remote_placeholder')">
++                                    <button class="btn btn-xs btn-outline" type="button"
++                                            @click="removeStrmRule(idx)"
++                                            :aria-label="window.t('settings.scraper.strm_mapping.remove')">&times;</button>
++                                </div>
++                            </template>
++                            <!-- 新增規則 -->
++                            <div>
++                                <button class="btn btn-xs btn-outline" type="button" @click="addStrmRule()">
++                                    + <span x-text="window.t('settings.scraper.strm_mapping.add_rule')"></span>
++                                </button>
++                            </div>
++                            <!-- 範本回顯：唯讀 media-server 來源的掃描路徑（顯示形，可預填左欄）-->
++                            <template x-if="strmTemplateDirs.length">
++                                <div class="flex flex-col gap-1">
++                                    <small class="settings-hint">{{ t('settings.scraper.strm_mapping.template_hint') }}</small>
++                                    <template x-for="tpl in strmTemplateDirs" :key="tpl">
++                                        <div class="flex items-center gap-2 flex-wrap">
++                                            <code class="text-xs flex-1 min-w-0 break-all" x-text="tpl"></code>
++                                            <button class="btn btn-xs btn-outline" type="button"
++                                                    @click="useTemplate(tpl)"
++                                                    x-text="window.t('settings.scraper.strm_mapping.template_use')"></button>
++                                        </div>
++                                    </template>
++                                </div>
++                            </template>
++                        </div>
++                    </div>
++
++                    <!-- 進階刮削摺疊（實填既有欄位）；x-collapse 需 @alpinejs/collapse plugin，已在 base.html 載入 -->
++                    <button class="collapsible-trigger" type="button" @click="scraperAdvanced = !scraperAdvanced"
++                            :aria-expanded="scraperAdvanced.toString()">
++                        <span class="collapsible-title"><i class="bi bi-sliders"></i> {{ t('settings.section.scraper_advanced') }}</span>
++                        <span class="btn-icon-collapse" aria-hidden="true"><i class="bi bi-chevron-down" :class="{ 'rotate-180': scraperAdvanced }"></i></span>
++                    </button>
++                    <div x-show="scraperAdvanced" x-collapse class="collapsible-content">
++
++                        <!-- suffix keywords -->
++                        <div class="settings-form-row">
++                            <label class="row-label">
++                                {{ t('settings.scraper.suffix_keywords_label') }}
++                                <small class="settings-hint">{{ t('settings.scraper.suffix_keywords_hint') }}</small>
++                            </label>
++                            <div class="flex-1 flex flex-col gap-1">
++                                <div class="suffix-tags-container">
++                                    <template x-for="(kw, idx) in form.suffixKeywords" :key="idx">
++                                        <span class="badge badge-sm suffix-tag">
++                                            <span x-text="kw"></span>
++                                            <span class="suffix-tag-remove" @click="removeSuffix(idx)">&times;</span>
++                                        </span>
++                                    </template>
++                                    <div class="suffix-input-inline">
++                                        <input type="text" class="input input-bordered input-xs"
++                                            x-model="newSuffixInput"
++                                            placeholder="-4k"
++                                            @keydown.enter.prevent="addSuffix()"
++                                            style="width: 80px;">
++                                        <button class="btn btn-xs btn-outline" type="button"
++                                            @click="addSuffix()" :disabled="!newSuffixInput.trim()">+</button>
++                                    </div>
++                                </div>
++                            </div>
++                        </div>
++
++                        <div class="settings-form-group">
++                            <label class="settings-label">
++                                <input type="checkbox" class="toggle toggle-primary" id="createFolder"
++                                    x-model="form.createFolder">
++                                <span class="label-text">{{ t('settings.scraper.create_folder_label') }}</span>
++                            </label>
++                        </div>
++
++                        <!-- 資料夾層級：可增減層數的動態清單（上到下＝外到內，CD-95a-3/7）。膠囊複用 .source-pill。 -->
++                        <div class="settings-form-row">
++                            <label class="row-label">{{ t('settings.scraper.folder_layers_label') }}</label>
++                            <div class="flex-1 flex flex-col gap-2 naming-block" :class="{ 'naming-disabled': !form.createFolder }"
++                                 x-effect="setFolderEditingDisabled(!form.createFolder)">
++                                <template x-for="(layer, idx) in form.folderLayerList" :key="layer.id">
++                                    <div class="folder-layer-item" x-data="{ open: false }">
++                                        <span class="folder-layer-index" x-text="idx + 1"></span>
++                                        <!-- 膠囊編輯器（非受控 widget，onChange 以 layer.id 寫回，CD-95a-9/12） -->
++                                        <div class="chip-editor-host flex-1" x-init="mountLayerEditor($el, layer.id)"></div>
++                                        <div class="variable-dropdown">
++                                            <button class="btn-variable" type="button" @click="open = !open"
++                                                :disabled="!form.createFolder" :aria-expanded="open">
++                                                <i class="bi bi-braces"></i> {{ t('settings.action.variable') }}
++                                            </button>
++                                            <div x-show="open" @click.outside="open = false" x-transition class="variable-menu">
++                                                <template x-for="v in namingMenuVars('folder')" :key="v.name">
++                                                    <span class="variable-badge" @click="insertLayerVar(layer.id, v.name); open = false"
++                                                          x-text="v.label" :title="v.name"></span>
++                                                </template>
++                                            </div>
++                                        </div>
++                                        <button class="btn-layer-remove" type="button" @click="removeFolderLayer(layer.id)"
++                                            :disabled="!form.createFolder" aria-label="{{ t('settings.scraper.remove_layer') }}"
++                                            title="{{ t('settings.scraper.remove_layer') }}">
++                                            <i class="bi bi-x-lg"></i>
++                                        </button>
++                                    </div>
++                                </template>
++                                <button class="btn-add-layer" type="button" @click="addFolderLayer()"
++                                    :disabled="form.folderLayerList.length >= 3 || !form.createFolder">
++                                    <i class="bi bi-plus-lg"></i> {{ t('settings.scraper.add_layer') }}
++                                </button>
++                                <div class="folder-preview naming-preview">
++                                    <div class="preview-line">
++                                        <i class="bi bi-file-earmark-play"></i>
++                                        <span class="preview-text">{{ t('settings.scraper.preview_prefix') }}: <span x-text="folderPreviewText"></span></span>
++                                    </div>
++                                    <div class="preview-line preview-line-empty">
++                                        <span class="preview-empty-tag">{{ t('settings.scraper.preview_empty_tag') }}</span>
++                                        <span class="preview-text" x-text="folderPreviewTextEmpty"></span>
++                                    </div>
++                                </div>
++                            </div>
++                        </div>
++
++                        <!-- 檔名格式：膠囊 + 字面文字混排（id="filenameFormat" 保留給 form-id 守衛）。 -->
++                        <div class="settings-form-row">
++                            <label class="row-label">{{ t('settings.scraper.filename_format_label') }}</label>
++                            <div class="flex-1 flex flex-col gap-1 naming-block" x-data="{ open: false }">
++                                <div class="filename-format-row">
++                                    <!-- x-effect="hydrateFilenameEditor()"：95a-T8 reactive 補載觸發點（namingConfigReady
++                                         flip true 時重跑，覆蓋冷模組快取下 mount 早於 ready 造成的 $nextTick 補載失效，
++                                         見 state-config.js hydrateFilenameEditor() 註解）。one-shot 保證不重載打斷游標。 -->
++                                    <div class="chip-editor-host flex-1" id="filenameFormat" x-init="mountFilenameEditor($el)" x-effect="hydrateFilenameEditor()"></div>
++                                    <div class="variable-dropdown">
++                                        <button class="btn-variable" type="button" @click="open = !open" :aria-expanded="open">
++                                            <i class="bi bi-braces"></i> {{ t('settings.action.variable') }}
++                                        </button>
++                                        <div x-show="open" @click.outside="open = false" x-transition class="variable-menu">
++                                            <template x-for="v in namingMenuVars('filename')" :key="v.name">
++                                                <span class="variable-badge" @click="insertFilenameVar(v.name); open = false"
++                                                      x-text="v.label" :title="v.name"></span>
++                                            </template>
++                                        </div>
++                                    </div>
++                                </div>
++                            </div>
++                        </div>
++
++                        <!-- NFO 標題格式（154b-T4）：膠囊編輯器 + 必備 {num}/{title} + 兩行預覽。 -->
++                        <div class="settings-form-row">
++                            <label class="row-label">{{ t('settings.scraper.nfo_title_format_label') }}</label>
++                            <div class="flex-1 flex flex-col gap-1 naming-block" x-data="{ open: false }">
++                                <div class="filename-format-row">
++                                    <div class="chip-editor-host flex-1" id="nfoTitleFormat" x-init="mountNfoTitleFormatEditor($el)" x-effect="hydrateNfoTitleFormatEditor()"></div>
++                                    <div class="variable-dropdown">
++                                        <button class="btn-variable" type="button" @click="open = !open" :aria-expanded="open">
++                                            <i class="bi bi-braces"></i> {{ t('settings.action.variable') }}
++                                        </button>
++                                        <div x-show="open" @click.outside="open = false" x-transition class="variable-menu">
++                                            <template x-for="v in namingMenuVars('nfo_title')" :key="v.name">
++                                                <span class="variable-badge" @click="insertNfoTitleFormatVar(v.name); open = false"
++                                                      x-text="v.label" :title="v.name"></span>
++                                            </template>
++                                        </div>
++                                    </div>
++                                    <div class="popover-anchor" x-data="helpPopover">
++                                        <button type="button" class="help-popover-btn"
++                                                @click="toggle()"
++                                                :aria-expanded="open"
++                                                aria-controls="nfoTitleFormatHelp"
++                                                aria-label="{{ t('settings.scraper.nfo_title_format_help_aria') }}">
++                                            <i class="bi bi-question-circle"></i>
++                                        </button>
++                                        <div id="nfoTitleFormatHelp" x-show="open" x-cloak x-transition
++                                             @click.outside="close()"
++                                             class="help-popover help-popover--left">
++                                            <small class="help-popover__body">
++                                                {{ t('settings.scraper.nfo_title_format_help') }}
++                                            </small>
++                                        </div>
++                                    </div>
++                                </div>
++                                <div class="folder-preview naming-preview">
++                                    <div class="preview-line">
++                                        <i class="bi bi-file-earmark-play"></i>
++                                        <span class="preview-text">{{ t('settings.scraper.preview_prefix') }}: <span x-text="nfoTitleFormatPreviewText"></span></span>
++                                    </div>
++                                    <div class="preview-line preview-line-empty">
++                                        <span class="preview-empty-tag">{{ t('settings.scraper.nfo_title_format_preview_actor_missing_label') }}</span>
++                                        <span class="preview-text" x-text="nfoTitleFormatPreviewTextActorMissing"></span>
++                                    </div>
++                                </div>
++                            </div>
++                        </div>
++
++                        <div class="settings-form-row">
++                            <label class="row-label">{{ t('settings.scraper.max_title_length_label') }}</label>
++                            <div class="input-group-inline">
++                                <input type="number" class="input input-bordered input-sm" id="maxTitleLength"
++                                    x-model.number="form.maxTitleLength" min="20" max="200">
++                                <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
++                            </div>
++                        </div>
++
++                        <div class="settings-form-row">
++                            <label class="row-label" for="maxFilenameLength">{{ t('settings.scraper.max_filename_length_label') }}</label>
++                            <div class="input-group-inline">
++                                <input type="number" class="input input-bordered input-sm" id="maxFilenameLength"
++                                    x-model.number="form.maxFilenameLength" min="50" max="255">
++                                <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
++                            </div>
++                        </div>
++
++                        <div class="settings-form-row">
++                            <label class="row-label">{{ t('settings.scraper.video_extensions_label') }}</label>
++                            <div class="flex-1 flex flex-col gap-1">
++                                <input type="text" class="input input-bordered input-sm" id="videoExtensions"
++                                    x-model="form.videoExtensions">
++                                <small class="settings-hint">{{ t('settings.scraper.video_extensions_hint') }}</small>
++                            </div>
++                        </div>
++
++                        {# 人臉自動對焦開關：跟隨主表單草稿，儲存時才寫專用端點。 #}
++                        <div class="settings-form-group popover-anchor" x-data="helpPopover">
++                            <label class="settings-label">
++                                <input type="checkbox" data-focal-auto-pill class="toggle toggle-primary"
++                                       x-model="form.focalAutoEnabled">
++                                <span class="label-text">{{ t('settings.scraper.focal_pill_label') }}</span>
++                                <button type="button" class="help-popover-btn"
++                                        @click.prevent="toggle()"
++                                        :aria-expanded="open">
++                                    <i class="bi bi-question-circle"></i>
++                                </button>
++                            </label>
++                            <div x-show="open" x-cloak x-transition
++                                 @click.outside="close()"
++                                 class="help-popover help-popover--up">
++                                <small class="help-popover__body">
++                                    {{ t('settings.scraper.focal_help') }}
++                                </small>
++                            </div>
++                        </div>
++
++                    </div><!-- /collapsible-content scraperAdvanced -->
++                    </div><!-- /naming panel -->
++
++            </div>
++          </div>
++
++        </section><!-- /sec-naming -->
++
++        <!-- Section 3: Remote AI services -->
++        <section id="sec-ai" class="settings-section"
++                 data-settings-panel="ai"
++                 x-show="settingsTab === 'ai'" x-cloak>
++          <div class="card mb-4" id="aiServicesCard"
++               x-data="aiServicesCard" role="tabpanel">
++            <div class="settings-card-header">
++                <i class="bi bi-stars" aria-hidden="true"></i>
++                {{ t('settings.ai.title') }}
++            </div>
++            <div class="card-body">
++                <div class="ai-card-intro">
++                    <p class="settings-tab-desc">{{ t('settings.ai.help_body') }}</p>
++                </div>
++
++                <div class="ai-tabs-row">
++                    <div role="tablist" class="tabs tabs-border">
++                        <button type="button" role="tab" class="tab" id="aiTabTranslate"
++                                @click="selectAiTab('translate')"
++                                :aria-selected="aiTab === 'translate'"
++                                :class="{ 'tab-active': aiTab === 'translate' }"
++                                x-text="window.t('settings.ai.tab_translate')"></button>
++                        <button type="button" role="tab" class="tab" id="aiTabSimilar"
++                                @click="selectAiTab('similar')"
++                                :aria-selected="aiTab === 'similar'"
++                                :class="{ 'tab-active': aiTab === 'similar' }"
++                                x-text="window.t('settings.ai.tab_similar')"></button>
++                        <button type="button" role="tab" class="tab" id="aiTabFaces"
++                                @click="selectAiTab('faces')"
++                                :aria-selected="aiTab === 'faces'"
++                                :class="{ 'tab-active': aiTab === 'faces' }"
++                                x-text="window.t('settings.ai.tab_faces')"></button>
++                    </div>
++                </div>
++
++<div id="aiPanelTranslate" role="tabpanel" x-show="aiTab === 'translate'" x-cloak>
                      <!-- 翻譯三引擎（Ollama/Gemini/OpenAI-compat 完整欄位） -->
                      <div class="settings-form-group">
                          <label class="settings-label">
-@@ -712,6 +680,7 @@
+@@ -712,6 +874,7 @@
                                  <option value="ollama">Ollama{{ t('settings.translate.ollama_local') }}</option>
                                  <option value="gemini">Gemini{{ t('settings.translate.gemini_cloud') }}</option>
                                  <option value="claude">Claude{{ t('settings.translate.claude_cloud') }}</option>
@@ -28169,7 +29556,7 @@
                                  <option value="openai" x-text="t('settings.translate.openai_compatible')">OpenAI Compatible</option>
                              </select>
                          </div>
-@@ -891,6 +860,57 @@
+@@ -891,6 +1054,57 @@
                                          </button>
                                      </div>
                                      <small class="settings-hint" x-html="claudeModelStatus"></small>
@@ -28227,26 +29614,287 @@
                                  </div>
                              </div>
                          </div>
-@@ -979,7 +999,9 @@
+@@ -979,338 +1193,162 @@
                              </div>
                          </div>
                      </div>
 -
+-                    <!-- 外部媒體管理器模式（spec F1）— 沿用 .settings-sources-segmented 元件 -->
+-                    <div class="settings-form-row settings-form-row--external-manager">
+-                        <label class="row-label">{{ t('settings.scraper.external_manager_label') }}</label>
+-                        <div class="flex-1 flex items-center gap-3 flex-wrap">
+-                            <div class="settings-sources-segmented" role="group"
+-                                 aria-label="{{ t('settings.scraper.external_manager_label') }}">
+-                                <button type="button"
+-                                        :class="{ 'is-on': form.externalManager === 'off' }"
+-                                        :aria-pressed="(form.externalManager === 'off') ? 'true' : 'false'"
+-                                        @click="requestExternalManagerChange('off')">
+-                                    {{ t('settings.scraper.external_manager_off') }}
+-                                </button>
+-                                <button type="button"
+-                                        :class="{ 'is-on': form.externalManager === 'jellyfin' }"
+-                                        :aria-pressed="(form.externalManager === 'jellyfin') ? 'true' : 'false'"
+-                                        @click="requestExternalManagerChange('jellyfin')">
+-                                    Jellyfin
+-                                </button>
+-                                <button type="button"
+-                                        :class="{ 'is-on': form.externalManager === 'emby' }"
+-                                        :aria-pressed="(form.externalManager === 'emby') ? 'true' : 'false'"
+-                                        @click="requestExternalManagerChange('emby')">
+-                                    Emby
+-                                </button>
+-                                <button type="button"
+-                                        :class="{ 'is-on': form.externalManager === 'kodi' }"
+-                                        :aria-pressed="(form.externalManager === 'kodi') ? 'true' : 'false'"
+-                                        @click="requestExternalManagerChange('kodi')">
+-                                    Kodi
+-                                </button>
+-                            </div>
+-                            <!-- hint trailing：segmented 右側同列；flex-1 min-w-0 讓窄視窗時 hint 可 wrap 到下一行 -->
+-                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'off'">
+-                                {{ t('settings.scraper.external_manager_off_hint') }}
+-                            </small>
+-                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'jellyfin'">
+-                                {{ t('settings.scraper.external_manager_jellyfin_hint') }}
+-                            </small>
+-                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'emby'">
+-                                {{ t('settings.scraper.external_manager_emby_hint') }}
+-                            </small>
+-                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'kodi'">
+-                                {{ t('settings.scraper.external_manager_kodi_hint') }}
+-                            </small>
+-                        </div>
+-                    </div>
+-
+-                    <!-- strm 路徑映射（spec 90a）— media-server 風味才顯示；與 external_manager 同層並列 -->
+-                    <div class="settings-form-row"
+-                         x-show="['jellyfin','emby','kodi'].includes(form.externalManager)">
+-                        <label class="row-label">
+-                            {{ t('settings.scraper.strm_mapping.title') }}
+-                            <small class="settings-hint">{{ t('settings.scraper.strm_mapping.intro') }}</small>
+-                        </label>
+-                        <div class="flex-1 flex flex-col gap-2">
+-                            <!-- 規則列：本機前綴 → 播放端前綴 + 刪除 -->
+-                            <template x-for="(rule, idx) in form.strmRules" :key="idx">
+-                                <div class="flex items-center gap-2 flex-wrap">
+-                                    <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
+-                                           x-model="rule.local"
+-                                           :placeholder="window.t('settings.scraper.strm_mapping.local_placeholder')">
+-                                    <span class="text-base-content/50" aria-hidden="true">→</span>
+-                                    <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
+-                                           x-model="rule.remote"
+-                                           :placeholder="window.t('settings.scraper.strm_mapping.remote_placeholder')">
+-                                    <button class="btn btn-xs btn-outline" type="button"
+-                                            @click="removeStrmRule(idx)"
+-                                            :aria-label="window.t('settings.scraper.strm_mapping.remove')">&times;</button>
+-                                </div>
+-                            </template>
+-                            <!-- 新增規則 -->
+-                            <div>
+-                                <button class="btn btn-xs btn-outline" type="button" @click="addStrmRule()">
+-                                    + <span x-text="window.t('settings.scraper.strm_mapping.add_rule')"></span>
+-                                </button>
+-                            </div>
+-                            <!-- 範本回顯：唯讀 media-server 來源的掃描路徑（顯示形，可預填左欄）-->
+-                            <template x-if="strmTemplateDirs.length">
+-                                <div class="flex flex-col gap-1">
+-                                    <small class="settings-hint">{{ t('settings.scraper.strm_mapping.template_hint') }}</small>
+-                                    <template x-for="tpl in strmTemplateDirs" :key="tpl">
+-                                        <div class="flex items-center gap-2 flex-wrap">
+-                                            <code class="text-xs flex-1 min-w-0 break-all" x-text="tpl"></code>
+-                                            <button class="btn btn-xs btn-outline" type="button"
+-                                                    @click="useTemplate(tpl)"
+-                                                    x-text="window.t('settings.scraper.strm_mapping.template_use')"></button>
+-                                        </div>
+-                                    </template>
+-                                </div>
+-                            </template>
+-                        </div>
+-                    </div>
+-
+-                    <!-- 進階刮削摺疊（實填既有欄位）；x-collapse 需 @alpinejs/collapse plugin，已在 base.html 載入 -->
+-                    <button class="collapsible-trigger" type="button" @click="scraperAdvanced = !scraperAdvanced"
+-                            :aria-expanded="scraperAdvanced.toString()">
+-                        <span class="collapsible-title"><i class="bi bi-sliders"></i> {{ t('settings.section.scraper_advanced') }}</span>
+-                        <span class="btn-icon-collapse" aria-hidden="true"><i class="bi bi-chevron-down" :class="{ 'rotate-180': scraperAdvanced }"></i></span>
+-                    </button>
+-                    <div x-show="scraperAdvanced" x-collapse class="collapsible-content">
+-
+-                        <!-- suffix keywords -->
+-                        <div class="settings-form-row">
+-                            <label class="row-label">
+-                                {{ t('settings.scraper.suffix_keywords_label') }}
+-                                <small class="settings-hint">{{ t('settings.scraper.suffix_keywords_hint') }}</small>
+-                            </label>
+-                            <div class="flex-1 flex flex-col gap-1">
+-                                <div class="suffix-tags-container">
+-                                    <template x-for="(kw, idx) in form.suffixKeywords" :key="idx">
+-                                        <span class="badge badge-sm suffix-tag">
+-                                            <span x-text="kw"></span>
+-                                            <span class="suffix-tag-remove" @click="removeSuffix(idx)">&times;</span>
+-                                        </span>
+-                                    </template>
+-                                    <div class="suffix-input-inline">
+-                                        <input type="text" class="input input-bordered input-xs"
+-                                            x-model="newSuffixInput"
+-                                            placeholder="-4k"
+-                                            @keydown.enter.prevent="addSuffix()"
+-                                            style="width: 80px;">
+-                                        <button class="btn btn-xs btn-outline" type="button"
+-                                            @click="addSuffix()" :disabled="!newSuffixInput.trim()">+</button>
+-                                    </div>
+-                                </div>
+-                            </div>
+-                        </div>
+-
 +                    </div><!-- /AI translation panel -->
-+
-+                    <div data-settings-panel="naming" x-show="settingsTab === 'naming'">
-                     <!-- 外部媒體管理器模式（spec F1）— 沿用 .settings-sources-segmented 元件 -->
-                     <div class="settings-form-row settings-form-row--external-manager">
-                         <label class="row-label">{{ t('settings.scraper.external_manager_label') }}</label>
-@@ -1244,30 +1266,10 @@
- 
-                         <div class="settings-form-row">
-                             <label class="row-label" for="maxFilenameLength">{{ t('settings.scraper.max_filename_length_label') }}</label>
++                    <div id="aiPanelSimilar" role="tabpanel"
++                         x-show="aiTab === 'similar'" x-cloak
++                         x-data="aiSimilarPanel">
+                         <div class="settings-form-group">
+                             <label class="settings-label">
+-                                <input type="checkbox" class="toggle toggle-primary" id="createFolder"
+-                                    x-model="form.createFolder">
+-                                <span class="label-text">{{ t('settings.scraper.create_folder_label') }}</span>
++                                <input type="checkbox" class="toggle toggle-primary"
++                                       id="aiSimilarEnabled"
++                                       x-model="form.aiSimilarEnabled">
++                                <span class="label-text">{{ t('settings.ai.similar.enabled_label') }}</span>
+                             </label>
+                         </div>
+-
+-                        <!-- 資料夾層級：可增減層數的動態清單（上到下＝外到內，CD-95a-3/7）。膠囊複用 .source-pill。 -->
+-                        <div class="settings-form-row">
+-                            <label class="row-label">{{ t('settings.scraper.folder_layers_label') }}</label>
+-                            <div class="flex-1 flex flex-col gap-2 naming-block" :class="{ 'naming-disabled': !form.createFolder }"
+-                                 x-effect="setFolderEditingDisabled(!form.createFolder)">
+-                                <template x-for="(layer, idx) in form.folderLayerList" :key="layer.id">
+-                                    <div class="folder-layer-item" x-data="{ open: false }">
+-                                        <span class="folder-layer-index" x-text="idx + 1"></span>
+-                                        <!-- 膠囊編輯器（非受控 widget，onChange 以 layer.id 寫回，CD-95a-9/12） -->
+-                                        <div class="chip-editor-host flex-1" x-init="mountLayerEditor($el, layer.id)"></div>
+-                                        <div class="variable-dropdown">
+-                                            <button class="btn-variable" type="button" @click="open = !open"
+-                                                :disabled="!form.createFolder" :aria-expanded="open">
+-                                                <i class="bi bi-braces"></i> {{ t('settings.action.variable') }}
+-                                            </button>
+-                                            <div x-show="open" @click.outside="open = false" x-transition class="variable-menu">
+-                                                <template x-for="v in namingMenuVars('folder')" :key="v.name">
+-                                                    <span class="variable-badge" @click="insertLayerVar(layer.id, v.name); open = false"
+-                                                          x-text="v.label" :title="v.name"></span>
+-                                                </template>
+-                                            </div>
+-                                        </div>
+-                                        <button class="btn-layer-remove" type="button" @click="removeFolderLayer(layer.id)"
+-                                            :disabled="!form.createFolder" aria-label="{{ t('settings.scraper.remove_layer') }}"
+-                                            title="{{ t('settings.scraper.remove_layer') }}">
+-                                            <i class="bi bi-x-lg"></i>
+-                                        </button>
+-                                    </div>
+-                                </template>
+-                                <button class="btn-add-layer" type="button" @click="addFolderLayer()"
+-                                    :disabled="form.folderLayerList.length >= 3 || !form.createFolder">
+-                                    <i class="bi bi-plus-lg"></i> {{ t('settings.scraper.add_layer') }}
+-                                </button>
+-                                <div class="folder-preview naming-preview">
+-                                    <div class="preview-line">
+-                                        <i class="bi bi-file-earmark-play"></i>
+-                                        <span class="preview-text">{{ t('settings.scraper.preview_prefix') }}: <span x-text="folderPreviewText"></span></span>
+-                                    </div>
+-                                    <div class="preview-line preview-line-empty">
+-                                        <span class="preview-empty-tag">{{ t('settings.scraper.preview_empty_tag') }}</span>
+-                                        <span class="preview-text" x-text="folderPreviewTextEmpty"></span>
+-                                    </div>
+-                                </div>
+-                            </div>
+-                        </div>
+-
+-                        <!-- 檔名格式：膠囊 + 字面文字混排（id="filenameFormat" 保留給 form-id 守衛）。 -->
+-                        <div class="settings-form-row">
+-                            <label class="row-label">{{ t('settings.scraper.filename_format_label') }}</label>
+-                            <div class="flex-1 flex flex-col gap-1 naming-block" x-data="{ open: false }">
+-                                <div class="filename-format-row">
+-                                    <!-- x-effect="hydrateFilenameEditor()"：95a-T8 reactive 補載觸發點（namingConfigReady
+-                                         flip true 時重跑，覆蓋冷模組快取下 mount 早於 ready 造成的 $nextTick 補載失效，
+-                                         見 state-config.js hydrateFilenameEditor() 註解）。one-shot 保證不重載打斷游標。 -->
+-                                    <div class="chip-editor-host flex-1" id="filenameFormat" x-init="mountFilenameEditor($el)" x-effect="hydrateFilenameEditor()"></div>
+-                                    <div class="variable-dropdown">
+-                                        <button class="btn-variable" type="button" @click="open = !open" :aria-expanded="open">
+-                                            <i class="bi bi-braces"></i> {{ t('settings.action.variable') }}
+-                                        </button>
+-                                        <div x-show="open" @click.outside="open = false" x-transition class="variable-menu">
+-                                            <template x-for="v in namingMenuVars('filename')" :key="v.name">
+-                                                <span class="variable-badge" @click="insertFilenameVar(v.name); open = false"
+-                                                      x-text="v.label" :title="v.name"></span>
+-                                            </template>
+-                                        </div>
+-                                    </div>
+-                                </div>
+-                            </div>
+-                        </div>
+-
+-                        <!-- NFO 標題格式（154b-T4）：膠囊編輯器 + 必備 {num}/{title} + 兩行預覽。 -->
+-                        <div class="settings-form-row">
+-                            <label class="row-label">{{ t('settings.scraper.nfo_title_format_label') }}</label>
+-                            <div class="flex-1 flex flex-col gap-1 naming-block" x-data="{ open: false }">
+-                                <div class="filename-format-row">
+-                                    <div class="chip-editor-host flex-1" id="nfoTitleFormat" x-init="mountNfoTitleFormatEditor($el)" x-effect="hydrateNfoTitleFormatEditor()"></div>
+-                                    <div class="variable-dropdown">
+-                                        <button class="btn-variable" type="button" @click="open = !open" :aria-expanded="open">
+-                                            <i class="bi bi-braces"></i> {{ t('settings.action.variable') }}
+-                                        </button>
+-                                        <div x-show="open" @click.outside="open = false" x-transition class="variable-menu">
+-                                            <template x-for="v in namingMenuVars('nfo_title')" :key="v.name">
+-                                                <span class="variable-badge" @click="insertNfoTitleFormatVar(v.name); open = false"
+-                                                      x-text="v.label" :title="v.name"></span>
+-                                            </template>
+-                                        </div>
+-                                    </div>
+-                                    <div class="popover-anchor" x-data="helpPopover">
+-                                        <button type="button" class="help-popover-btn"
+-                                                @click="toggle()"
+-                                                :aria-expanded="open"
+-                                                aria-controls="nfoTitleFormatHelp"
+-                                                aria-label="{{ t('settings.scraper.nfo_title_format_help_aria') }}">
+-                                            <i class="bi bi-question-circle"></i>
+-                                        </button>
+-                                        <div id="nfoTitleFormatHelp" x-show="open" x-cloak x-transition
+-                                             @click.outside="close()"
+-                                             class="help-popover help-popover--left">
+-                                            <small class="help-popover__body">
+-                                                {{ t('settings.scraper.nfo_title_format_help') }}
+-                                            </small>
+-                                        </div>
+-                                    </div>
+-                                </div>
+-                                <div class="folder-preview naming-preview">
+-                                    <div class="preview-line">
+-                                        <i class="bi bi-file-earmark-play"></i>
+-                                        <span class="preview-text">{{ t('settings.scraper.preview_prefix') }}: <span x-text="nfoTitleFormatPreviewText"></span></span>
+-                                    </div>
+-                                    <div class="preview-line preview-line-empty">
+-                                        <span class="preview-empty-tag">{{ t('settings.scraper.nfo_title_format_preview_actor_missing_label') }}</span>
+-                                        <span class="preview-text" x-text="nfoTitleFormatPreviewTextActorMissing"></span>
+-                                    </div>
+-                                </div>
+-                            </div>
+-                        </div>
+-
+-                        <div class="settings-form-row">
+-                            <label class="row-label">{{ t('settings.scraper.max_title_length_label') }}</label>
+-                            <div class="input-group-inline">
+-                                <input type="number" class="input input-bordered input-sm" id="maxTitleLength"
+-                                    x-model.number="form.maxTitleLength" min="20" max="200">
+-                                <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
+-                            </div>
+-                        </div>
+-
+-                        <div class="settings-form-row">
+-                            <label class="row-label" for="maxFilenameLength">{{ t('settings.scraper.max_filename_length_label') }}</label>
 -                            <div class="input-group-inline popover-anchor" x-data="helpPopover">
-+                            <div class="input-group-inline">
-                                 <input type="number" class="input input-bordered input-sm" id="maxFilenameLength"
-                                     x-model.number="form.maxFilenameLength" min="50" max="255">
-                                 <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
+-                                <input type="number" class="input input-bordered input-sm" id="maxFilenameLength"
+-                                    x-model.number="form.maxFilenameLength" min="50" max="255">
+-                                <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
 -                                <button type="button" class="help-popover-btn"
 -                                        @click="toggle()"
 -                                        :aria-expanded="open"
@@ -28267,44 +29915,192 @@
 -                                        {{ t('settings.scraper.path_length_help_line4') }}
 -                                    </small>
 -                                </div>
-                             </div>
-                         </div>
- 
-@@ -1280,12 +1282,11 @@
-                             </div>
-                         </div>
- 
+-                            </div>
+-                        </div>
+-
+-                        <div class="settings-form-row">
+-                            <label class="row-label">{{ t('settings.scraper.video_extensions_label') }}</label>
+-                            <div class="flex-1 flex flex-col gap-1">
+-                                <input type="text" class="input input-bordered input-sm" id="videoExtensions"
+-                                    x-model="form.videoExtensions">
+-                                <small class="settings-hint">{{ t('settings.scraper.video_extensions_hint') }}</small>
+-                            </div>
+-                        </div>
+-
 -                        {# 人臉自動對焦開關（152d-T-D3，CD-152d-3b）：伺服器端算好的 focal_auto_enabled 作初始 checked；@change 寫專用端點 #}
-+                        {# 人臉自動對焦開關：跟隨主表單草稿，儲存時才寫專用端點。 #}
-                         <div class="settings-form-group popover-anchor" x-data="helpPopover">
+-                        <div class="settings-form-group popover-anchor" x-data="helpPopover">
++                        <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.similar.empty_desc') }}</p>
++
++                        <div class="ai-similar-fields" x-show="panelMode() === 'fields'">
++                            <div class="settings-form-row">
++                                <label class="row-label" for="aiSimilarUrl">{{ t('settings.ai.similar.url_label') }}</label>
++                                <div class="flex-1 flex flex-col gap-1 min-w-0">
++                                    <div class="variable-input-group">
++                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
++                                               id="aiSimilarUrl"
++                                               x-model="form.aiSimilarUrl"
++                                               :placeholder="window.t('settings.ai.similar.url_placeholder')">
++                                        <button class="btn btn-sm btn-outline" type="button"
++                                                id="aiSimilarTestBtn"
++                                                @click="runTest()"
++                                                :disabled="testDisabled()">
++                                            <span x-show="aiSimTestBusy" class="loading loading-spinner loading-sm"></span>
++                                            <span x-show="!aiSimTestBusy" x-text="window.t('settings.action.test')"></span>
++                                        </button>
++                                    </div>
++                                </div>
++                            </div>
++                            <div class="settings-form-row">
++                                <label class="row-label" for="aiSimilarApiKey">{{ t('settings.ai.similar.api_key_label') }}</label>
++                                <div class="flex-1 min-w-0">
++                                    <input type="password" class="input input-bordered input-sm w-full"
++                                           id="aiSimilarApiKey"
++                                           x-model="form.aiSimilarApiKey"
++                                           :placeholder="window.t('settings.ai.similar.api_key_placeholder')">
++                                </div>
++                            </div>
++                            <div class="settings-form-row">
++                                <label class="row-label" for="aiSimilarModel">{{ t('settings.ai.similar.model_label') }}</label>
++                                <div class="flex-1 min-w-0">
++                                    <input type="text" class="input input-bordered input-sm w-full"
++                                           id="aiSimilarModel"
++                                           x-model="form.aiSimilarModel"
++                                           :placeholder="window.t('settings.ai.similar.model_placeholder')">
++                                </div>
++                            </div>
++
++                            <p class="settings-hint ai-similar-status"
++                               id="aiSimilarStatusLine"
++                               x-show="bfStatus !== null && statusLineText()"
++                               x-text="statusLineText()"></p>
++
++                            {{ ai_backfill_controls('aiSimilar', 'ai-similar', retry=true) }}
++
++                            <pre class="ai-similar-test-result"
++                                 id="aiSimilarTestResult"
++                                 x-show="aiSimTestResultHtml"
++                                 x-text="aiSimTestResultHtml"></pre>
++                        </div>
++
++                        <div class="ai-similar-empty-actions">
++                            <a class="btn btn-sm btn-ghost"
++                               href="https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md"
++                               target="_blank" rel="noopener noreferrer">{{ t('settings.ai.similar.btn_docs') }}</a>
++                        </div>
++                    </div>
++
++                    <div id="aiPanelFaces" role="tabpanel"
++                         x-show="aiTab === 'faces'" x-cloak
++                         x-data="aiFacesPanel">
++                        <div class="settings-form-group">
                              <label class="settings-label">
-                                 <input type="checkbox" data-focal-auto-pill class="toggle toggle-primary"
+-                                <input type="checkbox" data-focal-auto-pill class="toggle toggle-primary"
 -                                       {% if focal_auto_enabled %}checked{% endif %}
 -                                       @change="setFocalDeviceDisabled($event)">
-+                                       x-model="form.focalAutoEnabled">
-                                 <span class="label-text">{{ t('settings.scraper.focal_pill_label') }}</span>
-                                 <button type="button" class="help-popover-btn"
-                                         @click.prevent="toggle()"
-@@ -1303,6 +1304,7 @@
-                         </div>
- 
-                     </div><!-- /collapsible-content scraperAdvanced -->
-+                    </div><!-- /naming panel -->
+-                                <span class="label-text">{{ t('settings.scraper.focal_pill_label') }}</span>
+-                                <button type="button" class="help-popover-btn"
+-                                        @click.prevent="toggle()"
+-                                        :aria-expanded="open">
+-                                    <i class="bi bi-question-circle"></i>
+-                                </button>
++                                <input type="checkbox" class="toggle toggle-primary"
++                                       id="aiFacesEnabled"
++                                       x-model="form.aiFacesEnabled">
++                                <span class="label-text">{{ t('settings.ai.faces.enabled_label') }}</span>
+                             </label>
+-                            <div x-show="open" x-cloak x-transition
+-                                 @click.outside="close()"
+-                                 class="help-popover help-popover--up">
+-                                <small class="help-popover__body">
+-                                    {{ t('settings.scraper.focal_help') }}
+-                                </small>
+-                            </div>
+-                        </div>
+-
+-                    </div><!-- /collapsible-content scraperAdvanced -->
++                        </div>
++                        <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.faces.empty_desc') }}</p>
++
++                        <div class="ai-similar-fields" x-show="panelMode() === 'fields'">
++                            <div class="settings-form-row">
++                                <label class="row-label" for="aiFacesUrl">{{ t('settings.ai.faces.url_label') }}</label>
++                                <div class="flex-1 flex flex-col gap-1 min-w-0">
++                                    <div class="variable-input-group">
++                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
++                                               id="aiFacesUrl"
++                                               x-model="form.aiFacesUrl"
++                                               :placeholder="window.t('settings.ai.faces.url_placeholder')">
++                                        <button class="btn btn-sm btn-outline" type="button"
++                                                id="aiFacesTestBtn"
++                                                @click="runTest()"
++                                                :disabled="testDisabled()">
++                                            <span x-show="aiFacesTestBusy" class="loading loading-spinner loading-sm"></span>
++                                            <span x-show="!aiFacesTestBusy" x-text="window.t('settings.action.test')"></span>
++                                        </button>
++                                    </div>
++                                </div>
++                            </div>
++                            <div class="settings-form-row">
++                                <label class="row-label" for="aiFacesApiKey">{{ t('settings.ai.faces.api_key_label') }}</label>
++                                <div class="flex-1 min-w-0">
++                                    <input type="password" class="input input-bordered input-sm w-full"
++                                           id="aiFacesApiKey"
++                                           x-model="form.aiFacesApiKey"
++                                           :placeholder="window.t('settings.ai.faces.api_key_placeholder')">
++                                </div>
++                            </div>
++                            <div class="settings-form-row">
++                                <label class="row-label" for="aiFacesModel">{{ t('settings.ai.faces.model_label') }}</label>
++                                <div class="flex-1 min-w-0">
++                                    <input type="text" class="input input-bordered input-sm w-full"
++                                           id="aiFacesModel"
++                                           x-model="form.aiFacesModel"
++                                           :placeholder="window.t('settings.ai.faces.model_placeholder')">
++                                </div>
++                            </div>
++
++                            <p class="settings-hint ai-similar-status"
++                               id="aiFacesStatusLine"
++                               x-show="bfStatus !== null"
++                               x-text="statusLineText()"></p>
++                            <p class="settings-hint ai-similar-status"
++                               id="aiFacesRecomputeLine"
++                               x-show="recomputeLineText()"
++                               x-text="recomputeLineText()"></p>
++
++                            {{ ai_backfill_controls('aiFaces', 'ai-similar') }}
++
++                            <pre class="ai-similar-test-result"
++                                 id="aiFacesTestResult"
++                                 x-show="aiFacesTestResultHtml"
++                                 x-text="aiFacesTestResultHtml"></pre>
++                        </div>
++
++                        <div class="ai-similar-empty-actions">
++                            <a class="btn btn-sm btn-ghost"
++                               href="https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md"
++                               target="_blank" rel="noopener noreferrer">{{ t('settings.ai.faces.btn_docs') }}</a>
++                        </div>
++                    </div>
  
              </div>
            </div>
-@@ -1310,7 +1312,9 @@
-         </section><!-- /sec-search -->
- 
-         <!-- ── Section 2: 列表生成 ── -->
+-
+-        </section><!-- /sec-search -->
+-
+-        <!-- ── Section 2: 列表生成 ── -->
 -        <section id="sec-gallery" class="settings-section">
++        </section><!-- /sec-ai -->
++
++        <!-- Section 4: Gallery defaults -->
 +        <section id="sec-gallery" class="settings-section"
++
 +                 data-settings-panel="gallery"
 +                 x-show="settingsTab === 'gallery'">
            <div class="card mb-4">
              <div class="settings-card-header"><i class="bi bi-list-ul"></i> {{ t('nav.scanner') }}</div>
              <div class="card-body">
-@@ -1433,67 +1437,19 @@
+@@ -1433,67 +1471,19 @@
                                          </button>
                                      </template>
                                  </div>
@@ -28379,7 +30175,7 @@
            <div class="card mb-4">
              <div class="settings-card-header"><i class="bi bi-sliders"></i> {{ t('settings.section.system') }}</div>
              <div class="card-body">
-@@ -1506,26 +1462,34 @@
+@@ -1506,26 +1496,34 @@
                              <option value="showcase">{{ t('nav.showcase') }}</option>
                          </select>
                      </div>
@@ -28432,7 +30228,7 @@
                      </div>
                      <hr class="my-3">
  
-@@ -1543,14 +1507,30 @@
+@@ -1543,14 +1541,30 @@
              </div>
            </div>
          </section><!-- /sec-system -->
@@ -28470,7 +30266,7 @@
  
      <!-- Dirty Check Modal -->
      <dialog class="modal fluent-modal"
-@@ -1629,38 +1609,6 @@
+@@ -1629,38 +1643,6 @@
          </div>
      </dialog>
  
@@ -28509,7 +30305,7 @@
      <!-- 90c-T5: 全域模式切換（破壞性重設）Confirm Modal -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': switchModeConfirmOpen }"
-@@ -1709,20 +1657,13 @@
+@@ -1709,20 +1691,13 @@
      </dialog>
  
  <!-- Toast 容器（Alpine controlled）-->
@@ -28528,7 +30324,7 @@
  
  {% block pre_alpine_module %}
 -<script type="module" src="/static/js/pages/settings/main.js"></script>
-+<script type="module" src="/static/js/pages/settings/main.js?v=17035-2"></script>
++<script type="module" src="/static/js/pages/settings/main.js?v=18005-1"></script>
  {% endblock %}
  {% block extra_js %}
  <script src="/static/js/pages/settings/theme-transition.js"></script>

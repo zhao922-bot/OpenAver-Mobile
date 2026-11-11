@@ -19,6 +19,7 @@ Single `threading.Lock` guards only the pending/queued/inflight state
 transitions -- never the CPU-bound `detect()` call itself.
 """
 import os
+import inspect
 import queue
 import threading
 
@@ -61,6 +62,25 @@ def _run_detection_via_subprocess(fs_path, ratio, work_width):
         fs_path, ratio, job_key=fs_path, timeout_s=_DETECT_TIMEOUT_S,
         pre_spawn_check=device_state.is_disabled, on_outcome=device_state.record_outcome,
     )
+
+
+def _commit_outcome(commit, focal, fingerprint, model):
+    """Pass the remote model when the callback supports the additive argument."""
+    if not model:
+        return commit(focal, fingerprint)
+    try:
+        params = inspect.signature(commit).parameters.values()
+        accepts_model = any(
+            p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD) for p in params
+        ) or len([
+            p for p in params
+            if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        ]) >= 3
+    except (TypeError, ValueError):
+        accepts_model = False
+    if accepts_model:
+        return commit(focal, fingerprint, model)
+    return commit(focal, fingerprint)
 
 
 class _Job:
@@ -162,7 +182,12 @@ class FocalWorker:
                 return
             end_fp = self._fingerprint(job.fs_path)
             if end_fp == start_fp:
-                job.commit(format_focal(outcome.focal), start_fp)
+                _commit_outcome(
+                    job.commit,
+                    format_focal(outcome.focal),
+                    start_fp,
+                    getattr(outcome, "model", None),
+                )
             # else: image changed mid-detection -> discard. If the change came
             # from a real re-submit (swap), that submit() already re-queued the
             # key (latest-wins). A bare mtime bump with no resubmit is NOT

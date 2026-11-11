@@ -47,6 +47,8 @@ Do not edit a current Android file without updating its patch.
 | `010-woff2-only-icons.patch` | keeps the Bootstrap Icons WOFF2 asset and removes the duplicate WOFF fallback |
 | `011-echarts-insights-bundle.patch` | replaces full ECharts with the reproducible Insights-only build and vendor manifest |
 | `012-bs4-html-parser.patch` | replaces runtime `lxml` parsing with BeautifulSoup `html.parser` across scrapers and custom sources |
+| `013-remove-desktop-runtime-and-pages.patch` | removes the desktop runtime, connection shell, updater, and desktop-only pages |
+| `014-mobile-ai-services.patch` | adds remote face detection, image-similarity indexing, AI backfill state, settings panels, and the associated mobile router/UI code |
 
 `manifest.json` records the exact file membership for automated checks.
 

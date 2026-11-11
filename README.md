@@ -3,9 +3,9 @@
 [![Build APK](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml/badge.svg)](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml)
 
 OpenAver Mobile 是 [OpenAver](https://github.com/slive777/OpenAver) 的非官方
-Android 移植版。当前移动端新版本线为 `v0.18.17-android-r4`，已对齐上游
+Android 移植版。当前移动端开发版本为 `v0.18.17-android-r5`，已对齐上游
 `v0.18.17` 的补完性能、批次搜索、来源修复和片库浏览体验；尚未移植的上游
-功能会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)在后续 `r5`～`r6` 完成。
+功能会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)在后续 `r6` 完成。
 内嵌代码基线仍为上游 `v0.17.18` 加本仓库补丁。
 
 App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，不需要
@@ -15,13 +15,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r4-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r5-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.18.17-android-r4-arm64-v8a.apk`
+- 文件名：`openaver-v0.18.17-android-r5-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.18.17-r4`（versionCode `18004`）
+- 版本：`0.18.17-r5`（versionCode `18005`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -299,6 +299,15 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   隐私确认、候选相似度与片库命中状态，并可将结果带入普通搜索
 - v0.18.17-r4：新增 OpenAI 官方翻译接口，可查询模型、测试翻译并参与现有标题
   补翻译；灯箱简介支持按需读取 NFO `<plot>`、原文/译文切换、翻译写回与撤销
+- v0.18.17-r5：设置页把来源、命名、片库、AI 与系统拆成五个独立内容区，修复
+  AI 分页误用“AI 翻译”标题、翻译设置混入命名卡片以及手机端页签横向滚动、
+  顶部遮挡和长文字截断问题
+- v0.18.17-r5：手机设置页移除 Proxy 和 Metatube 连接入口，现有配置字段继续
+  保留兼容；“整理与命名”保留文件夹、文件名、NFO 格式、外部媒体库和对焦设置
+- v0.18.17-r5：AI 区新增标题翻译、图片相似和人脸三个子页；相似索引与人脸补跑
+  支持进度、停止、继续、失败提示，并通过 Android 前台服务在离开页面后继续运行
+- v0.18.17-r5：移动端不暴露 AI 标签入口；配置保存会保留尚未启用的标签设置字段，
+  远端服务密钥继续使用现有遮罩与本地配置机制
 
 ## 限制
 

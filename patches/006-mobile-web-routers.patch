@@ -86,7 +86,15 @@
          "name": "user_tags",
 --- a/web/routers/config.py
 +++ b/web/routers/config.py
-@@ -28,6 +28,7 @@
+@@ -21,6 +21,7 @@
+ from typing import Literal
+ from pathlib import Path
+ import asyncio
++import copy
+ import httpx
+ import threading
+ 
+@@ -28,6 +29,7 @@
  from core.config import (
      AppConfig,
      FocalDeviceState,
@@ -94,7 +102,7 @@
      load_config,
      mutate_config,
      reset_config_file,
-@@ -58,12 +59,23 @@
+@@ -58,12 +60,23 @@
  from core.translate_service import OllamaTranslateService
  from core.cloud_translate import TranslateError
  from core.platform_info import is_synology
@@ -118,7 +126,41 @@
  
  # 序列化「server_mode 切換交易」的單一鎖（Codex P2）：toggle（start/persist/stop）與
  # reset（clear/stop）共用此鎖，避免併發 enable/disable/reset 交錯導致 config↔listener
-@@ -85,7 +97,7 @@
+@@ -78,6 +91,33 @@
+     reset_translate_service()
+ 
+ 
++def _after_faces_saved(old: dict, new: dict) -> threading.Thread | None:
++    """Warm-test changed external face settings and start recompute if needed."""
++    try:
++        if old == new:
++            return None
++        from core.ai_services import faces_recompute
++        from core.ai_services.faces_config import active_in
++
++        if not active_in({"ai_services": {"faces": new}}):
++            return None
++
++        def _run() -> None:
++            try:
++                faces_recompute.on_settings_saved()
++            except Exception:
++                logger.exception("人臉設定儲存後的重新對焦判定失敗")
++
++        thread = threading.Thread(
++            target=_run, name="faces-settings-saved", daemon=True
++        )
++        thread.start()
++        return thread
++    except Exception:
++        logger.exception("人臉設定儲存鉤子啟動失敗")
++        return None
++
++
+ @router.get("/config")
+ def get_config() -> dict:
+     """取得所有設定（三個不透明憑證以遮罩形狀回傳；CD-114c-2）
+@@ -85,7 +125,7 @@
      ``resolved`` 是 response-only 頂層欄位（與 ``data`` 同層），前端不得把它
      寫進 ``config.gallery`` 再 PUT 回來。
      """
@@ -127,7 +169,7 @@
      gallery = data.get("gallery") or {}
      return {
          "success": True,
-@@ -103,6 +115,7 @@
+@@ -103,6 +143,7 @@
  @router.put("/config")
  def update_config(config: AppConfig) -> dict:
      """更新所有設定"""
@@ -135,7 +177,7 @@
      # PR #93 P2-e：整份設定儲存納入 switch 互斥窗口（owner 拍板：互斥鎖）。否則另一分頁帶
      # 「切模式前的舊 directories 快照」的整份存檔會與 purge 交錯、把剛被 purge 的離線來源
      # 條目寫回 gallery.directories（DB 卡已刪）→ 殭屍條目。
-@@ -126,7 +139,7 @@
+@@ -126,7 +167,7 @@
          != load_config().get("scraper", {}).get("strm_path_mappings", {})
      ):
          return {"success": False, "reason": "generate_in_progress_strm_mapping",
@@ -144,7 +186,7 @@
      # 程式區守衛（TASK-153b-T3 / spec §5.1）：非空自訂值解析後落在 get_project_root()
      # 之下 → 拒絕。更新時程式區會被整包換掉；要跟著資料根走請留空。
      custom_output_dir = (config.gallery.output_dir or "").strip()
-@@ -135,16 +148,19 @@
+@@ -135,16 +176,19 @@
          return {
              "success": False,
              "reason": "gallery_output_in_program_area",
@@ -167,11 +209,36 @@
      try:
          # Cap 守衛（CD-61-16，endpoint-level；非 model_validator）：
          # 同時啟用且非 manual_only 的來源數不得超過 MAX_ENABLED_SOURCES。
-@@ -194,10 +210,10 @@
+@@ -157,6 +201,7 @@
+             )
+         try:
+             payload = config.model_dump()
++            faces_before: dict = {}
+             # server_mode is toggle-lifecycle state owned exclusively by
+             # PUT /api/config/general/server_mode (which calls lan_listener.start/stop
+             # atomically with the persist). A full-config save must NEVER overwrite the
+@@ -178,6 +223,9 @@
+                 # 空 dict」——而 load_config 的 migration 只在 key **不存在**時補，寫回一個空 dict
+                 # 會焊死一個 migration 永遠修不好的殘缺值（BE-CONFIG-02 的鏡像）。
+                 payload["focal_device"] = cfg.get("focal_device") or FocalDeviceState().model_dump()
++                faces_before.update(
++                    copy.deepcopy((cfg.get("ai_services") or {}).get("faces") or {})
++                )
+                 # Mask sentinels must be restored against disk under the same
+                 # _config_write_lock critical section as server_mode preserve —
+                 # handler-side load would be TOCTOU against concurrent writers.
+@@ -193,11 +241,17 @@
+                 cfg.update(payload)
  
              mutate_config(_write_preserving_server_owned)
++            faces_after = copy.deepcopy(
++                (payload.get("ai_services") or {}).get("faces") or {}
++            )
++            _after_faces_saved(faces_before, faces_after)
              _reset_translate_service()  # 重置翻譯服務，讓新配置生效
 -            return {"success": True, "message": "設定已儲存", "cf_window_proxy_restart_needed": cf_window_proxy_restart_needed() or cf_handoff.restart_needed_here(current_settings())}
++            from core.ai_services.embedding_cache import EmbeddingMatrixCache
++            EmbeddingMatrixCache.invalidate()
 +            return {"success": True, "message": _config_text("saved", response_locale), "cf_window_proxy_restart_needed": cf_window_proxy_restart_needed() or cf_handoff.restart_needed_here(current_settings())}
          except Exception as e:
              logger.error("儲存設定失敗: %s", e)
@@ -180,7 +247,7 @@
      finally:
          end_config_save(save_token)
  
-@@ -217,10 +233,10 @@
+@@ -217,10 +271,10 @@
              else:
                  lan_listener.stop()
          _reset_translate_service()  # 清除舊服務實例（與 server_mode 無關，鎖外）
@@ -193,7 +260,7 @@
  
  
  @router.get("/tutorial-status")
-@@ -264,25 +280,30 @@
+@@ -264,25 +318,30 @@
      註：保持同步 def —— body 內 mutate_config 走檔案 I/O，依 async-offload 守衛
      （feature/71）須在 Starlette threadpool 執行，不可改 async def 卡 event loop。
      """
@@ -228,7 +295,7 @@
  
          # server_mode 是主機決定，遠端連入的客人不得切換（spec「遠端自鎖不防護」的更乾淨版本）。
          # 僅允許 loopback 來源切換；fail-closed：client None → 視為非 loopback → 拒絕。
-@@ -296,7 +317,7 @@
+@@ -296,7 +355,7 @@
                  )
                  # reason 供前端對應專屬 i18n 訊息（remote_only），而非通用「請稍後再試」
                  return {"success": False, "reason": "remote_forbidden",
@@ -237,7 +304,7 @@
  
          # server_mode 專屬分支：start/stop LAN listener，確保 runtime ≠ persisted 不分離。
          # 整個交易在 _server_mode_toggle_lock 內序列化（Codex P2）：防併發 enable/disable
-@@ -311,7 +332,7 @@
+@@ -311,7 +370,7 @@
                          lan_port = lan_listener.start()
                      except Exception as e:                    # noqa: BLE001
                          logger.error("server_mode 啟用失敗: %s", e)
@@ -246,7 +313,7 @@
                      try:
                          mutate_config(lambda cfg: cfg.setdefault("general", {}).update({"server_mode": True}))
                      except Exception as e:                    # noqa: BLE001
-@@ -321,7 +342,7 @@
+@@ -321,7 +380,7 @@
                              lan_listener.stop()
                          except Exception:                     # noqa: BLE001,S110 — rollback best-effort
                              pass
@@ -255,7 +322,7 @@
                      from web.lan_listener import get_lan_ip, is_public_exposure
                      lan_ip = get_lan_ip()
                      return {
-@@ -340,14 +361,14 @@
+@@ -340,14 +399,14 @@
                          mutate_config(lambda cfg: cfg.setdefault("general", {}).update({"server_mode": False}))
                      except Exception as e:                    # noqa: BLE001
                          logger.error("server_mode disable persist 失敗: %s", e)
@@ -273,7 +340,7 @@
  
          def _mut(cfg):
              cfg.setdefault("general", {})[field] = request.value
-@@ -360,7 +381,7 @@
+@@ -360,7 +419,7 @@
          raise
      except Exception as e:
          logger.error("更新設定欄位失敗: %s", e)
@@ -282,7 +349,7 @@
  
  
  class FocalDeviceDisabledRequest(BaseModel):
-@@ -381,7 +402,7 @@
+@@ -381,7 +440,7 @@
          return {"success": True}
      except Exception as e:
          logger.error("更新 focal_device.disabled 失敗: %s", e)
@@ -291,7 +358,7 @@
  
  
  @router.get("/config/general/lan-port")
-@@ -440,14 +461,15 @@
+@@ -440,14 +499,15 @@
      #       成功佔住後必 end_switch()（finally 保證）。
      reason = try_begin_switch()
      if reason is not None:
@@ -310,7 +377,7 @@
          }
      try:
          return _switch_external_manager_locked(request)
-@@ -523,7 +545,7 @@
+@@ -523,7 +583,7 @@
          mutate_config(_mutator)
      except Exception as e:  # noqa: BLE001
          logger.error("switch_external_manager config 落盤失敗（卡已刪、離線仍在 config，可自癒）: %s", e)
@@ -319,7 +386,7 @@
  
      # Step 6：回傳（Step 5 = 零檔案系統刪除，全程未 rmtree/unlink/os.remove）
      return {
-@@ -601,7 +623,7 @@
+@@ -601,7 +661,7 @@
      # 此處再擋獨立/直接呼叫，防禦縱深）。dry_run 也擋，讓前端 heads-up 階段就明確拒絕。
      if is_generate_in_progress():
          return {"success": False, "reason": "generate_in_progress",
@@ -328,7 +395,7 @@
      try:
          cfg = load_config()
          scraper_cfg = cfg.get('scraper', {})
-@@ -628,7 +650,7 @@
+@@ -628,7 +688,7 @@
          return {"success": True, "rewritten": rewritten}
      except Exception as e:  # noqa: BLE001 — 端點層例外收斂為 success:False（比照 config.py 慣例）
          logger.error("rewrite_strm 失敗: %s", e)
@@ -337,7 +404,7 @@
  
  
  @router.get("/version")
-@@ -666,6 +688,7 @@
+@@ -666,6 +726,7 @@
  @router.get("/ollama/models")
  async def get_ollama_models(url: str) -> dict:
      """取得 Ollama 可用模型列表"""
@@ -345,7 +412,7 @@
      try:
          # 確保 URL 格式正確
          url = url.rstrip('/')
-@@ -680,12 +703,12 @@
+@@ -680,12 +741,12 @@
              return {"success": True, "models": models}
  
      except httpx.TimeoutException:
@@ -361,7 +428,7 @@
  
  
  class OllamaTestRequest(BaseModel):
-@@ -694,29 +717,34 @@
+@@ -694,29 +755,34 @@
  
  
  _OLLAMA_TEST_ERRORS = {
@@ -1068,7 +1135,7 @@
  from datetime import datetime
  from pathlib import Path
  from typing import Any, Callable, Dict, Generator, List, Optional
-@@ -32,27 +33,77 @@
+@@ -32,31 +33,82 @@
  from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
  from starlette.background import BackgroundTask
  
@@ -1150,7 +1217,12 @@
  from core.platform_info import DSM_PERMISSION_HINT, is_synology
  from core.proxy_policy import proxy_kwargs
  from web.routers.notifications import emit_notification as _emit_notif
-@@ -65,11 +116,35 @@
+ from core.wishlist_reconcile import reconcile_wishlist, format_wishlist_removed_message
++from core.ai_services import faces_state, similar_index
+ 
+ logger = get_logger(__name__)
+ 
+@@ -65,11 +117,47 @@
  # T3(40c): Jellyfin check TTL 快取（60 秒）
  _jellyfin_cache_result: dict | None = None
  _jellyfin_cache_time: float = 0
@@ -1160,6 +1232,18 @@
 +_TAG_SOURCE_MANUAL_ALLOWLIST = frozenset({'jable'})
 +_TAG_SOURCE_CF_WAIT_SECONDS = 300.0
 +_TAG_SOURCE_CF_POLL_SECONDS = 0.5
++
++
++def _schedule_ai_incremental() -> None:
++    """After a completed scan, queue cover embeddings and reset face notices."""
++    try:
++        similar_index.schedule_incremental()
++    except Exception:
++        logger.exception("圖片相似增量排程失敗（掃描完成收尾）")
++    try:
++        faces_state.new_round()
++    except Exception:
++        logger.exception("人臉通知輪次重置失敗（掃描完成收尾）")
 +
 +
 +class RenameExecuteRequest(BaseModel):
@@ -1186,7 +1270,7 @@
  
  
  def _collect_long_paths(
-@@ -97,21 +172,36 @@
+@@ -97,21 +185,36 @@
  # TASK-88c-T2: readonly 來源分流 + SSE thread/queue 橋接 + 四數摘要
  # ---------------------------------------------------------------------------
  
@@ -1235,7 +1319,7 @@
      return {"type": "log", "level": "warn" if o.status == "failed" else "info", "message": msg}
  
  
-@@ -142,7 +232,7 @@
+@@ -142,7 +245,7 @@
          summary["partial"] += 1
  
  
@@ -1244,7 +1328,7 @@
      """該來源小結（產生器）。
  
      no_output_path → 「請先設定輸出夾」提示（Acceptance #11）。
-@@ -153,25 +243,39 @@
+@@ -153,25 +256,39 @@
      if result.aborted_reason == "no_output_path":
          yield _sse_event({
              "type": "log", "level": "warn",
@@ -1290,7 +1374,7 @@
              })
  
  
-@@ -188,6 +292,7 @@
+@@ -188,6 +305,7 @@
      q: "queue.Queue" = queue.Queue()  # 無界：worker 永不阻塞於 put，client 斷線 daemon 自然退出
      _SENTINEL = object()
      box: dict = {}
@@ -1298,7 +1382,7 @@
  
      def _work():
          try:
-@@ -206,39 +311,58 @@
+@@ -206,39 +324,58 @@
  
      t = threading.Thread(target=_work, daemon=True)
      t.start()
@@ -1368,7 +1452,7 @@
      """根目錄不可存取時回傳警告；可存取時回傳 None。
  
      白名單：只有明確的「不存在」才說資料夾不存在，其餘 OSError 一律「無法存取」（NAS 斷線不誤導成打錯字）。
-@@ -246,29 +370,379 @@
+@@ -246,29 +383,379 @@
      try:
          os.stat(normalized_dir)
      except PermissionError:
@@ -1758,7 +1842,7 @@
          gallery_config = config.get('gallery', {})
  
          directories = get_gallery_source_paths(gallery_config)
-@@ -287,7 +761,12 @@
+@@ -287,7 +774,12 @@
          default_theme = config.get('general', {}).get('theme', 'light')
  
          if not directories:
@@ -1772,7 +1856,7 @@
              return
  
          # 53b-T3: 確認 directories 有值才 emit 掃描開始通知
-@@ -302,19 +781,49 @@
+@@ -302,19 +794,49 @@
          cache_path = output_path / output_filename.replace('.html', '_cache.json')
          db_path = get_db_path()
  
@@ -1826,7 +1910,7 @@
  
          # 初始化掃描器
          scanner = VideoScanner(path_mappings=path_mappings, nfo_title_format=config.get('scraper', {}).get('nfo_title_format', '[{num}]{title}'))
-@@ -323,6 +832,7 @@
+@@ -323,6 +845,7 @@
          total_inserted = 0
          total_updated = 0
          total_deleted = 0
@@ -1834,7 +1918,7 @@
          scan_error_count = 0
          session_added_paths = []  # 追蹤本次新增/變更的影片路徑
          long_paths: list[str] = []  # a5: Windows 長路徑收集（只在 win32 填充）
-@@ -369,161 +879,39 @@
+@@ -369,161 +892,39 @@
                  normalized_dir = uri_to_fs_path(directory)  # uri-no-reverse: native config path (DirectoryConfig.path), no DB-mapped namespace
              except ValueError:
                  logger.exception("路徑轉換失敗: %s", directory)
@@ -2022,7 +2106,7 @@
  
          # TASK-90b-T4 / PR#90b Codex P1: 尾段每個外顯副作用（HTML 檔、完成通知、
          # done event）之前各自 fresh 查一次 should_abort()，而非迴圈結束時單次
-@@ -550,9 +938,36 @@
+@@ -550,9 +951,36 @@
          all_db_videos = [v for v in repo.get_all()
                           if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
  
@@ -2060,7 +2144,7 @@
              info = VideoInfo(
                  path=v.path,
                  title=v.title,
-@@ -562,6 +977,7 @@
+@@ -562,6 +990,7 @@
                  maker=v.maker,
                  date=v.release_date,
                  genre=','.join(v.tags) if v.tags else '',
@@ -2068,7 +2152,7 @@
                  size=v.size_bytes,
                  mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
                  img=v.cover_path
-@@ -593,19 +1009,57 @@
+@@ -593,19 +1022,57 @@
                      }
              if session_cache:
                  session_stats = check_cache_needs_update(session_cache)
@@ -2131,7 +2215,7 @@
  
          # TASK-90b-T4: abort 時跳過 orphan 清理（全庫 pass，非本次掃描範圍新增
          # 的成本，abort 時執行拿不到「這次掃描結果更完整」的好處，純屬多做一次
-@@ -615,7 +1069,16 @@
+@@ -615,7 +1082,16 @@
              try:
                  cleaned = _run_sample_images_cleanup_pass(repo, path_mappings)
                  if cleaned > 0:
@@ -2149,7 +2233,7 @@
              except Exception as e:
                  logger.warning("sample_images cleanup pass failed: %s: %s", type(e).__name__, e)
                  # 失敗不中斷 scan 流程
-@@ -627,7 +1090,9 @@
+@@ -627,7 +1103,9 @@
              # 產生 HTML
              yield _sse_event({
                  "type": "progress",
@@ -2160,7 +2244,7 @@
                  "current": total_dirs,
                  "total": total_dirs + 1
              })
-@@ -641,12 +1106,13 @@
+@@ -641,12 +1119,13 @@
                  sort=default_sort,
                  order=default_order,
                  items_per_page=items_per_page,
@@ -2176,7 +2260,7 @@
                  "current": total_dirs + 1,
                  "total": total_dirs + 1
              })
-@@ -704,7 +1170,7 @@
+@@ -704,7 +1183,7 @@
          if _wl_removed:
              _emit_notif(
                  "info", "notif.wishlist_auto_removed",
@@ -2185,7 +2269,7 @@
                  task_type="wishlist_reconcile",
              )
  
-@@ -723,26 +1189,69 @@
+@@ -723,28 +1202,73 @@
                      or _readonly_no_output > 0 or _readonly_unreachable > 0 or _readonly_partial > 0):
                  _err_parts = []
                  if scan_error_count > 0:
@@ -2262,8 +2346,12 @@
 +                    ),
                      task_type="scanner_generate",
                  )
++
++            _schedule_ai_incremental()
  
-@@ -754,6 +1263,7 @@
+             # TASK-90b-T4: abort 時跳過 done event——client 已斷線收不到，且
+             # payload 的 output_path/video_count 語意上宣稱「已完成產生」，
+@@ -754,6 +1278,7 @@
                  "video_count": len(all_videos),
                  "output_path": str(html_path),
                  "session_update": session_update,
@@ -2271,7 +2359,7 @@
                  "long_paths": long_paths,  # a5
                  "stats": {
                      "inserted": total_inserted,
-@@ -772,10 +1282,15 @@
+@@ -772,10 +1297,15 @@
          # 53b-T3: 掃描失敗通知（不洩漏 str(e) 到前端）
          _emit_notif(
              "error", "notif.scanner_failed",
@@ -2289,7 +2377,7 @@
  
  
  # TASK-90b-T2: 斷線偵測輪詢間隔（秒）。定案依據見 plan-90b.md CD-90b-5/6：
-@@ -786,6 +1301,66 @@
+@@ -786,6 +1316,66 @@
  # `request.is_disconnected()`，非搶 iterate_in_threadpool 的同一組 receive
  # channel（該輪詢與 StreamingResponse 內部行為互不干擾，spike 已驗證）。
  _DISCONNECT_POLL_INTERVAL_SEC = 0.5
@@ -2356,7 +2444,7 @@
  
  
  @router.get("/generate")
-@@ -803,8 +1378,13 @@
+@@ -803,8 +1393,13 @@
      # 反方向——若設定頁正在切換模式（purge 窗口中），回 False → 拒絕開始產生，避免背景
      # producer 讀到舊唯讀來源、把剛被 purge 的卡 _upsert 補回（切模式後殭屍卡）。
      if not try_mark_generate_active(cancel_event):
@@ -2371,7 +2459,7 @@
          return StreamingResponse(
              _refuse_switching(),
              media_type="text/event-stream",
-@@ -874,7 +1454,11 @@
+@@ -874,7 +1469,11 @@
              return {"success": True, "data": {"total": 0, "last_run": None, "last_added": None}}
  
          repo = VideoRepository(db_path)
@@ -2384,7 +2472,7 @@
  
          return {
              "success": True,
-@@ -887,7 +1471,10 @@
+@@ -887,7 +1486,10 @@
          }
      except Exception as e:
          logger.error("取得統計資訊失敗: %s", e)
@@ -2396,7 +2484,7 @@
  
  
  @router.delete("/cache")
-@@ -897,9 +1484,21 @@
+@@ -897,9 +1499,21 @@
          db_path = get_db_path()
  
          if not db_path.exists():
@@ -2419,7 +2507,7 @@
          deleted = repo.clear_all()
          # feature/71 T8: 清空整個縮圖快取目錄（CD-11 / spec 2.A.9）
          thumbnail_cache.clear_all()
-@@ -907,10 +1506,17 @@
+@@ -907,10 +1521,17 @@
          global _jellyfin_cache_result, _jellyfin_cache_time
          _jellyfin_cache_result = None
          _jellyfin_cache_time = 0
@@ -2439,7 +2527,7 @@
  
  
  def _build_nfo_update_cache(all_videos, config) -> tuple:
-@@ -959,6 +1565,884 @@
+@@ -959,6 +1580,884 @@
      return cache, skipped_readonly, path_mappings
  
  
@@ -3324,7 +3412,7 @@
  @router.get("/update-check")
  def check_update():
      """檢查需要更新的影片數量（從 SQLite 讀取）"""
-@@ -971,73 +2455,273 @@
+@@ -971,73 +2470,273 @@
          repo = VideoRepository(db_path)
          all_videos = repo.get_all()
  
@@ -3630,7 +3718,7 @@
          return {
              "success": True,
              "data": {
-@@ -1046,75 +2730,1616 @@
+@@ -1046,75 +2745,1616 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
@@ -5274,7 +5362,7 @@
      )
  
  
-@@ -1123,6 +4348,7 @@
+@@ -1123,6 +4363,7 @@
      """取得產生的 HTML 列表檔案（修改圖片路徑為 API 代理）"""
      try:
          config = load_config()
@@ -5282,7 +5370,7 @@
          gallery_config = config.get('gallery', {})
          output_dir = gallery_config.get('output_dir', '') or ''
          output_filename = gallery_config.get('output_filename', 'gallery_output.html')
-@@ -1131,7 +4357,10 @@
+@@ -1131,7 +4372,10 @@
  
          if not html_path.exists():
              return HTMLResponse(
@@ -5294,7 +5382,7 @@
                  status_code=404
              )
  
-@@ -1161,8 +4390,12 @@
+@@ -1161,8 +4405,12 @@
          return HTMLResponse(content=content)
      except Exception:
          logger.exception("view_list 讀取失敗")
@@ -5308,7 +5396,7 @@
              status_code=500
          )
  
-@@ -1177,12 +4410,25 @@
+@@ -1177,12 +4425,25 @@
              return {"success": True, "data": {"count": 0}}
  
          repo = VideoRepository(db_path)
@@ -5336,7 +5424,7 @@
  
  
  # === Jellyfin 圖片批次補齊 ===
-@@ -1191,30 +4437,43 @@
+@@ -1191,30 +4452,43 @@
      """檢查 DB 中有多少影片缺少 poster/fanart"""
      videos = repo.get_all()
      need_update = []
@@ -5398,7 +5486,7 @@
      try:
          # Codex PR#123 P2：gate 必須排在 get_db_path() 之前——get_db_path() 內部會
          # mkdir 建立 output/ 資料夾（core/database/connection.py:15-22），是有副作用
-@@ -1224,17 +4483,29 @@
+@@ -1224,17 +4498,29 @@
          # done + updated:0（off 時零寫入），且與 _check_jellyfin_needed() 的順序
          # 不對稱。config 只讀一次，下面 path_mappings 沿用同一個 config。
          config = load_config()
@@ -5430,7 +5518,7 @@
              return
  
          repo = VideoRepository(db_path)
-@@ -1246,13 +4517,31 @@
+@@ -1246,13 +4532,31 @@
          if total == 0:
              _jellyfin_cache_result = None
              _jellyfin_cache_time = 0
@@ -5464,7 +5552,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,45 +4550,129 @@
+@@ -1261,45 +4565,129 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -5611,7 +5699,7 @@
  
  
  def _check_jellyfin_needed() -> dict | None:
-@@ -1359,15 +4732,11 @@
+@@ -1359,15 +4747,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -5631,7 +5719,7 @@
      )
  
  
-@@ -1463,26 +4832,49 @@
+@@ -1463,26 +4847,49 @@
      ```
      """
      numbers = [n.strip() for n in body.numbers if isinstance(n, str) and n.strip()]
@@ -5686,7 +5774,7 @@
      gallery_config = config.get('gallery', {})
      output_dir = gallery_config.get('output_dir', '') or ''
      theme = config.get('general', {}).get('theme', 'light')
-@@ -1494,7 +4886,13 @@
+@@ -1494,7 +4901,13 @@
          db_results = repo.get_by_numbers(numbers)
      except Exception as e:
          logger.error('generate_from_ids: DB 查詢失敗: %s', e)
@@ -5701,7 +5789,7 @@
  
      all_videos: List[VideoInfo] = []
      missing: List[str] = []
-@@ -1577,7 +4975,13 @@
+@@ -1577,7 +4990,13 @@
          )
      except Exception as e:
          logger.error('generate_from_ids: HTML 產生失敗: %s', e)
@@ -5716,7 +5804,7 @@
  
      result = {
          "success": True,
-@@ -1621,6 +5025,11 @@
+@@ -1621,6 +5040,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:

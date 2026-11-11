@@ -1025,7 +1025,26 @@
      # 啟用 WAL 模式以提升並發效能
      conn.execute("PRAGMA journal_mode=WAL")
      return conn
-@@ -123,7 +135,7 @@
+@@ -108,6 +120,18 @@
+         cursor.execute("ALTER TABLE notifications ADD COLUMN url TEXT")
+ 
+ 
++_VIDEO_EMBEDDINGS_DDL = """
++CREATE TABLE IF NOT EXISTS video_embeddings (
++    video_id INTEGER PRIMARY KEY,
++    model TEXT NOT NULL,
++    dim INTEGER NOT NULL,
++    vec BLOB NOT NULL,
++    cover_path TEXT NOT NULL DEFAULT '',
++    updated_at REAL NOT NULL
++)
++"""
++
++
+ # 片商 → JavBus 作品頁代號對應表（173-T2，CD-173-5）。
+ # 三態：有列 found／有列 not_found／沒有列＝沒查過。maker_key 對後端是不透明字串。
+ _MAKER_JAVBUS_MAP_DDL = """
+@@ -123,7 +147,7 @@
  """
  
  
@@ -1034,7 +1053,35 @@
      """初始化資料庫 Schema"""
      conn = get_connection(db_path)
      cursor = conn.cursor()
-@@ -383,3 +395,41 @@
+@@ -155,6 +179,7 @@
+             auto_focal TEXT DEFAULT '',
+             crop_mode TEXT NOT NULL DEFAULT 'auto',
+             focal_attempted_at TIMESTAMP DEFAULT NULL,
++            focal_model TEXT NOT NULL DEFAULT 'local-pigo',
+             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+         )
+@@ -310,6 +335,7 @@
+             value TEXT NOT NULL
+         )
+     """)
++    cursor.execute(_VIDEO_EMBEDDINGS_DDL)
+ 
+     # Migration: 加入 Phase 37 新欄位
+     existing_cols = {row[1] for row in cursor.execute("PRAGMA table_info(videos)").fetchall()}
+@@ -359,6 +385,11 @@
+     # 每次重掃無限重排。nullable：NULL = 從未偵測過，非 NULL = 偵測跑過（不論有臉/無臉）。
+     if 'focal_attempted_at' not in existing_cols:
+         cursor.execute("ALTER TABLE videos ADD COLUMN focal_attempted_at TIMESTAMP DEFAULT NULL")
++
++    if 'focal_model' not in existing_cols:
++        cursor.execute(
++            "ALTER TABLE videos ADD COLUMN focal_model TEXT NOT NULL DEFAULT 'local-pigo'"
++        )
+ 
+     # Migration: 加入 user_rating 欄位（videos，spec-123 精選標記；0=未精選，>0=已精選。
+     # 只由 set_user_rating()/set_user_rating_bulk() 與 repath() 分支 3 的 max() 合併寫入，
+@@ -383,3 +414,41 @@
  
      conn.commit()
      conn.close()
@@ -1078,9 +1125,12 @@
 +        _initialized_db_paths.clear()
 --- a/core/database/video.py
 +++ b/core/database/video.py
-@@ -3,7 +3,7 @@
+@@ -1,9 +1,9 @@
+ """core.database.video — Video 資料模型與 VideoRepository（spec-87 子模組）。"""
+ import sqlite3
  import json
- from dataclasses import dataclass, field, asdict
+-from dataclasses import dataclass, field, asdict
++from dataclasses import dataclass, field, asdict, fields
  from pathlib import Path
 -from typing import Optional, List, Tuple
 +from typing import NamedTuple, Optional, List, Tuple
@@ -1181,7 +1231,18 @@
      @classmethod
      def from_row(cls, row: tuple, columns: List[str]) -> 'Video':
          """從資料庫 row 建立"""
-@@ -189,6 +269,37 @@
+@@ -153,6 +233,10 @@
+             if isinstance(data['updated_at'], str):
+                 data['updated_at'] = datetime.fromisoformat(data['updated_at'])
+ 
++        # DB-only migration columns (focal_model, ai tags, plot flags, etc.)
++        # must not be forwarded to the dataclass constructor.
++        allowed = {f.name for f in fields(cls)}
++        data = {key: value for key, value in data.items() if key in allowed}
+         return cls(**data)
+ 
+ 
+@@ -189,6 +273,37 @@
      "WHEN videos.crop_mode = 'manual' THEN 'auto' ELSE videos.crop_mode END"
  )
  
@@ -1219,7 +1280,7 @@
  
  class VideoRepository:
      """影片資料存取層"""
-@@ -201,16 +312,19 @@
+@@ -201,16 +316,19 @@
          """取得資料庫連線"""
          return connection.get_connection(self.db_path)
  
@@ -1243,7 +1304,7 @@
          return self._columns_cache
  
      def upsert(self, video: Video) -> int:
-@@ -626,6 +740,178 @@
+@@ -626,6 +744,178 @@
  
          return rowcount > 0
  
@@ -1422,7 +1483,7 @@
      def upsert_batch(self, videos: List[Video]) -> tuple:
          """批次新增或更新
  
-@@ -726,8 +1012,30 @@
+@@ -726,8 +1016,30 @@
              cursor.execute("SELECT * FROM videos WHERE path = ?", (path,))
              row = cursor.fetchone()
              if row:
@@ -1454,7 +1515,7 @@
          finally:
              conn.close()
  
-@@ -832,7 +1140,122 @@
+@@ -832,7 +1144,122 @@
          try:
              cursor.execute("SELECT * FROM videos ORDER BY id")
              rows = cursor.fetchall()
@@ -1578,7 +1639,7 @@
          finally:
              conn.close()
  
-@@ -850,8 +1273,8 @@
+@@ -850,8 +1277,8 @@
          finally:
              conn.close()
  
@@ -1589,7 +1650,7 @@
  
          sample_count（TASK-118b-T9）：合法 JSON list → 實際張數。空字串／NULL／
          損毀 JSON／非 list 的合法 JSON 這四種壞值一律回傳哨兵值
-@@ -859,15 +1282,45 @@
+@@ -859,15 +1286,45 @@
          裁決④：壞資料要 fail-safe 成「需要重掃」，不得讓單筆壞資料中止整個
          SELECT／整次掃描）。真實檔案系統算出來的張數恆為 >= 0，-1 必定與任何
          真實張數不相等，呼叫端的比對式因此自然觸發重掃，不需要額外的例外分支。
@@ -1642,7 +1703,7 @@
                  sample_count = _SAMPLE_COUNT_UNKNOWN
                  if sample_images_raw:
                      try:
-@@ -876,7 +1329,22 @@
+@@ -876,7 +1333,22 @@
                              sample_count = len(parsed)
                      except (json.JSONDecodeError, TypeError):
                          pass
@@ -1666,7 +1727,7 @@
              return result
          finally:
              conn.close()
-@@ -885,7 +1353,7 @@
+@@ -885,7 +1357,7 @@
          """取得 {path: scrape_attempted_at} 索引，供 T3 `_should_skip` 冷啟動判斷用（TASK-89b-T1）。
  
          Additive read-only method。回傳的是 {path: int}——**不是** get_mtime_index() 的
@@ -1675,7 +1736,7 @@
          含 scrape_attempted_at == 0 的 row（不過濾）——呼叫端用 `.get(path, 0) > 0`
          統一判斷「從未試過」（key 不存在或值為 0 皆視為未試過）。
          """
-@@ -988,7 +1456,7 @@
+@@ -988,7 +1460,7 @@
              cursor.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
              row = cursor.fetchone()
              if row:
@@ -1684,7 +1745,7 @@
              return None
          finally:
              conn.close()
-@@ -1008,7 +1476,7 @@
+@@ -1008,7 +1480,7 @@
              )
              row = cursor.fetchone()
              if row:
@@ -1693,7 +1754,7 @@
              return None
          finally:
              conn.close()
-@@ -1044,8 +1512,9 @@
+@@ -1044,8 +1516,9 @@
  
              # 建立結果字典（使用原始輸入的 key）
              result = {}
@@ -1704,7 +1765,7 @@
                  if video.number:
                      # 找到原始輸入的 key
                      original_key = upper_to_original.get(video.number.upper())
-@@ -1109,7 +1578,8 @@
+@@ -1109,7 +1582,8 @@
                  (actress_name,)
              )
              rows = cursor.fetchall()
@@ -1714,7 +1775,7 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress json_each failed for %r (returning [])",
-@@ -1146,7 +1616,8 @@
+@@ -1146,7 +1620,8 @@
                  tuple(names)
              )
              rows = cursor.fetchall()
@@ -1724,7 +1785,7 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress_names json_each failed for %d names (returning [])",
-@@ -1193,6 +1664,20 @@
+@@ -1193,6 +1668,20 @@
              cursor.execute(
                  "UPDATE videos SET title = ?, original_title = ?, nfo_mtime = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?",
                  (title, original_title, nfo_mtime, path)
@@ -1745,7 +1806,82 @@
              )
              conn.commit()
              return cursor.rowcount > 0
-@@ -1566,7 +2051,7 @@
+@@ -1343,7 +1832,13 @@
+         finally:
+             conn.close()
+ 
+-    def update_auto_focal(self, path: str, focal: str, expected_cover_path: str) -> bool:
++    def update_auto_focal(
++        self,
++        path: str,
++        focal: str,
++        expected_cover_path: str,
++        model: str = "local-pigo",
++    ) -> bool:
+         """安全更新 auto_focal 欄位（不碰其他欄位，CD-98a-6 mutator，鏡射 update_user_tags）。
+ 
+         同時蓋章 focal_attempted_at = CURRENT_TIMESTAMP（單條 UPDATE 原子寫，Codex PR#105
+@@ -1383,13 +1878,57 @@
+         cursor = conn.cursor()
+         try:
+             cursor.execute(
+-                "UPDATE videos SET auto_focal = ?, focal_attempted_at = CURRENT_TIMESTAMP, "
++                "UPDATE videos SET auto_focal = ?, focal_model = ?, "
++                "focal_attempted_at = CURRENT_TIMESTAMP, "
+                 "updated_at = CURRENT_TIMESTAMP WHERE path = ? AND crop_mode != 'manual' "
+                 "AND cover_path = ?",
+-                (focal, path, expected_cover_path)
++                (focal, model, path, expected_cover_path)
+             )
+             conn.commit()
+             return cursor.rowcount > 0
++        finally:
++            conn.close()
++
++    def list_focal_recompute_rows(
++        self,
++    ) -> List[Tuple[str, Optional[str], str, str, str, bool]]:
++        """Return non-manual rows with covers for external-face recomputation."""
++        conn = self._get_connection()
++        try:
++            rows = conn.execute(
++                "SELECT path, number, maker, cover_path, focal_model, "
++                "(auto_focal != '' OR focal_attempted_at IS NOT NULL) AS has_result "
++                "FROM videos WHERE crop_mode != 'manual' AND cover_path != '' "
++                "ORDER BY path"
++            ).fetchall()
++            return [
++                (path, number, maker or "", cover or "",
++                 focal_model or "local-pigo", bool(has_result))
++                for path, number, maker, cover, focal_model, has_result in rows
++            ]
++        finally:
++            conn.close()
++
++    def clear_auto_focal_for_paths(self, paths: List[str]) -> int:
++        """Clear auto focal results while preserving manually adjusted crops."""
++        if not paths:
++            return 0
++        conn = self._get_connection()
++        cursor = conn.cursor()
++        total = 0
++        try:
++            for start in range(0, len(paths), 900):
++                chunk = paths[start:start + 900]
++                placeholders = ",".join("?" for _ in chunk)
++                cursor.execute(
++                    "UPDATE videos SET auto_focal = '', focal_attempted_at = NULL, "
++                    "focal_model = 'local-pigo', updated_at = CURRENT_TIMESTAMP "
++                    f"WHERE crop_mode != 'manual' AND path IN ({placeholders})",
++                    chunk,
++                )
++                total += cursor.rowcount
++            conn.commit()
++            return total
+         finally:
+             conn.close()
+ 
+@@ -1566,7 +2105,7 @@
                  """,
                  (escaped + '%', escaped + '%/%'),
              )

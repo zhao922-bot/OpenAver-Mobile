@@ -21,6 +21,7 @@ from pydantic import BaseModel, StrictBool, StrictStr
 from typing import Literal
 from pathlib import Path
 import asyncio
+import copy
 import httpx
 import threading
 
@@ -88,6 +89,33 @@ def _reset_translate_service():
     """延遲導入並調用 reset_translate_service()"""
     from web.routers.translate import reset_translate_service
     reset_translate_service()
+
+
+def _after_faces_saved(old: dict, new: dict) -> threading.Thread | None:
+    """Warm-test changed external face settings and start recompute if needed."""
+    try:
+        if old == new:
+            return None
+        from core.ai_services import faces_recompute
+        from core.ai_services.faces_config import active_in
+
+        if not active_in({"ai_services": {"faces": new}}):
+            return None
+
+        def _run() -> None:
+            try:
+                faces_recompute.on_settings_saved()
+            except Exception:
+                logger.exception("人臉設定儲存後的重新對焦判定失敗")
+
+        thread = threading.Thread(
+            target=_run, name="faces-settings-saved", daemon=True
+        )
+        thread.start()
+        return thread
+    except Exception:
+        logger.exception("人臉設定儲存鉤子啟動失敗")
+        return None
 
 
 @router.get("/config")
@@ -173,6 +201,7 @@ def update_config(config: AppConfig) -> dict:
             )
         try:
             payload = config.model_dump()
+            faces_before: dict = {}
             # server_mode is toggle-lifecycle state owned exclusively by
             # PUT /api/config/general/server_mode (which calls lan_listener.start/stop
             # atomically with the persist). A full-config save must NEVER overwrite the
@@ -194,6 +223,9 @@ def update_config(config: AppConfig) -> dict:
                 # 空 dict」——而 load_config 的 migration 只在 key **不存在**時補，寫回一個空 dict
                 # 會焊死一個 migration 永遠修不好的殘缺值（BE-CONFIG-02 的鏡像）。
                 payload["focal_device"] = cfg.get("focal_device") or FocalDeviceState().model_dump()
+                faces_before.update(
+                    copy.deepcopy((cfg.get("ai_services") or {}).get("faces") or {})
+                )
                 # Mask sentinels must be restored against disk under the same
                 # _config_write_lock critical section as server_mode preserve —
                 # handler-side load would be TOCTOU against concurrent writers.
@@ -209,7 +241,13 @@ def update_config(config: AppConfig) -> dict:
                 cfg.update(payload)
 
             mutate_config(_write_preserving_server_owned)
+            faces_after = copy.deepcopy(
+                (payload.get("ai_services") or {}).get("faces") or {}
+            )
+            _after_faces_saved(faces_before, faces_after)
             _reset_translate_service()  # 重置翻譯服務，讓新配置生效
+            from core.ai_services.embedding_cache import EmbeddingMatrixCache
+            EmbeddingMatrixCache.invalidate()
             return {"success": True, "message": _config_text("saved", response_locale), "cf_window_proxy_restart_needed": cf_window_proxy_restart_needed() or cf_handoff.restart_needed_here(current_settings())}
         except Exception as e:
             logger.error("儲存設定失敗: %s", e)

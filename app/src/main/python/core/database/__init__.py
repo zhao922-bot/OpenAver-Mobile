@@ -9,6 +9,7 @@ from .connection import (
     _migrate_old_aliases,
 )
 from .video import Video, VideoRepository
+from .embeddings import EmbeddingRepository
 from .alias import AliasRecord, AliasRepository
 from .tag_alias import TagAliasRecord, TagAliasRepository
 from .actress import Actress, ActressRepository
@@ -31,6 +32,7 @@ __all__ = [
     "_migrate_old_aliases",
     "Video",
     "VideoRepository",
+    "EmbeddingRepository",
     "AliasRecord",
     "AliasRepository",
     "TagAliasRecord",

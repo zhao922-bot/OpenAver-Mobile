@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from '_macros/ui_state.html' import state_error_card, state_toast with context %}
+{% from '_macros/ai_backfill_controls.html' import ai_backfill_controls with context %}
 
 {% block title %}{{ t('settings.page_title') }} - OpenAver{% endblock %}
 
@@ -143,7 +144,7 @@
                     :tabindex="settingsTab === 'ai' ? 0 : -1"
                     @click="selectSettingsTab('ai')">
                 <i class="bi bi-stars" aria-hidden="true"></i>
-                <span>{{ t('settings.tabs.translate') }}</span>
+                <span>{{ t('settings.ai.title') }}</span>
             </button>
             <button type="button" role="tab" id="settingsTabSystem"
                     class="settings-tab" :class="{ 'is-active': settingsTab === 'system' }"
@@ -155,59 +156,10 @@
             </button>
         </div>
 
-        <!-- ── quick-toggle 列（CD-64-B8）：下載劇照 + 進階搜尋，header 下 section 上 ── -->
-        <div class="settings-quick-toggle-row"
-             data-settings-panel="naming"
-             x-show="settingsTab === 'naming'">
-
-            <!-- 下載劇照（extrafanart） -->
-            <div class="settings-form-group popover-anchor" x-data="helpPopover">
-                <label class="settings-label">
-                    <input type="checkbox" class="toggle toggle-primary"
-                           x-model="form.downloadSampleImages">
-                    <span class="label-text">{{ t('settings.scraper.download_sample_images_label') }}</span>
-                    <button type="button" class="help-popover-btn"
-                            @click.prevent="toggle()"
-                            :aria-expanded="open">
-                        <i class="bi bi-question-circle"></i>
-                    </button>
-                </label>
-                <div x-show="open" x-cloak x-transition
-                     @click.outside="close()"
-                     class="help-popover">
-                    <small class="help-popover__body">
-                        {{ t('settings.scraper.download_sample_images_hint') }}
-                    </small>
-                </div>
-            </div>
-
-            <!-- 封面縮圖快取（71-T5） -->
-            <div class="settings-form-group popover-anchor" x-data="helpPopover">
-                <label class="settings-label">
-                    <input type="checkbox" class="toggle toggle-primary"
-                           x-model="form.thumbnailCacheEnabled"
-                           @change="onThumbCacheToggleChange()">
-                    <span class="label-text">{{ t('settings.thumbnail_cache.label') }}</span>
-                    <button type="button" class="help-popover-btn"
-                            @click.prevent="toggle()"
-                            :aria-expanded="open">
-                        <i class="bi bi-question-circle"></i>
-                    </button>
-                </label>
-                <div x-show="open" x-cloak x-transition
-                     @click.outside="close()"
-                     class="help-popover">
-                    <small class="help-popover__body">
-                        {{ t('settings.thumbnail_cache.hint') }}
-                    </small>
-                </div>
-            </div>
-
-        </div><!-- /settings-quick-toggle-row -->
-
-        <!-- ── Section 1: 搜尋與刮削（兩卡同包） ── -->
+        <!-- Section 1: Sources -->
         <section id="sec-search" class="settings-section"
-                 x-show="['sources', 'naming', 'ai'].includes(settingsTab)">
+                 data-settings-panel="sources"
+                 x-show="settingsTab === 'sources'">
 
           <!-- Card ①：搜尋來源 -->
           <div class="card mb-4"
@@ -435,173 +387,68 @@
                         <span>{{ t('settings.sources.warn_all_disabled') }}</span>
                     </div>
 
-                    <!-- 64e-3: proxy row 搬至 metatube toggle 正上方；163b：欄位＋範圍切換＋說明合成一列 -->
-                    <div class="settings-form-row settings-form-row--proxy">
-                        <label class="row-label">Proxy</label>
-                        <div class="flex-1 flex flex-wrap items-center gap-3">
-                            <input type="text" class="input input-bordered input-sm"
-                                x-model="form.proxyUrl"
-                                placeholder="{{ t('settings.search.proxy_placeholder') }}">
-                            <div class="settings-sources-segmented" role="group"
-                                 aria-label="{{ t('settings.search.proxy_scope_label') }}">
-                                <button type="button"
-                                        :class="{ 'is-on': form.proxyScope === 'dmm' }"
-                                        :aria-pressed="(form.proxyScope === 'dmm') ? 'true' : 'false'"
-                                        :disabled="!form.proxyUrl.trim()"
-                                        @click="form.proxyScope = 'dmm'">
-                                    {{ t('settings.search.proxy_scope_dmm') }}
-                                </button>
-                                <button type="button"
-                                        :class="{ 'is-on': form.proxyScope === 'all' }"
-                                        :aria-pressed="(form.proxyScope === 'all') ? 'true' : 'false'"
-                                        :disabled="!form.proxyUrl.trim()"
-                                        @click="form.proxyScope = 'all'">
-                                    {{ t('settings.search.proxy_scope_all') }}
-                                </button>
-                            </div>
-                            <small class="settings-hint" x-show="form.proxyScope === 'dmm'">
-                                {{ t('settings.search.proxy_scope_dmm_hint') }}
-                            </small>
-                            <small class="settings-hint" x-show="form.proxyScope === 'all'">
-                                {{ t('settings.search.proxy_scope_all_hint') }}
-                            </small>
-                        </div>
-                    </div>
-
-                    <!-- Metatube 連線（B3）toggle（CD-63b-3）— 64b-6: 移至 Section 3 正上方 -->
-                    <div class="settings-form-group">
-                        <label class="settings-label">
-                            <input type="checkbox" class="toggle toggle-primary"
-                                   id="metatubeEnableToggle"
-                                   x-model="metatubeEnabled">
-                            <span class="label-text">{{ t('settings.sources.mt_enable_label') }}</span>
-                        </label>
-                        <small class="settings-hint">{{ t('settings.sources.mt_enable_help') }}</small>
-                    </div>
-
-                    <!-- ===== Section 3 — Metatube Connection (Zone B) — 61c-1 guard wrapper ===== -->
-                    <!-- B1: metatubeEnabled hardcoded false → 整段不渲染（disabled state）。
-                         idle/connected 結構在此就位，供測試 + B3 接實際連線。 -->
-                    <div class="settings-sources-section3" x-show="metatubeEnabled" x-collapse>
-
-                        <!-- STATE: idle — connect form (metatubeEnabled && !metatubeConnected) -->
-                        <div class="settings-mt-connect-form"
-                             x-show="!metatubeConnected"
-                             role="group">
-                            <label class="settings-mt-field">
-                                <span>{{ t('settings.sources.mt_server_url_label') }}</span>
-                                <input type="text"
-                                       x-model="metatubeServerUrl"
-                                       placeholder="http://192.168.1.50:8900">
-                            </label>
-                            <label class="settings-mt-field">
-                                <span>{{ t('settings.sources.mt_token_label') }}</span>
-                                <input type="password"
-                                       x-model="metatubeToken"
-                                       autocomplete="off">
-                            </label>
-                            <label class="settings-mt-field-checkbox">
-                                <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="metatubeLanMode">
-                                <span>{{ t('settings.sources.mt_lan_mode_label') }}</span>
-                            </label>
-                            <button type="button"
-                                    class="settings-mt-connect-btn"
-                                    :disabled="metatubeConnecting"
-                                    @click="metatubeConnect()">
-                                <i class="bi" :class="metatubeConnecting ? 'bi-hourglass-split' : 'bi-plug'"></i>
-                                <span x-text="metatubeConnecting ? window.t('settings.sources.mt_connecting_btn') : window.t('settings.sources.mt_connect_btn')"></span>
-                            </button>
-                        </div>
-
-                        <!-- STATE: connected — status row + Parts Bin (metatubeEnabled && metatubeConnected) -->
-                        <div x-show="metatubeConnected">
-
-                            <!-- Connection status row -->
-                            <div class="settings-mt-connect-status">
-                                <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
-                                <span class="status-text">
-                                    {{ t('settings.sources.mt_connected_status') }}
-                                    <code x-text="metatubeServerUrl" x-show="metatubeServerUrl"></code>
-                                </span>
-                                <button type="button"
-                                        class="settings-sources-mini-btn"
-                                        @click="metatubeEdit()">
-                                    <i class="bi bi-pencil"></i> {{ t('settings.sources.mt_edit_btn') }}
-                                </button>
-                                <button type="button"
-                                        class="settings-sources-mini-btn"
-                                        @click="metatubeDisconnect()">
-                                    <i class="bi bi-x-circle"></i> {{ t('settings.sources.mt_disconnect_btn') }}
-                                </button>
-                                <!-- Retest button — shown when connected AND probe finished (CD-63b-4 B2) -->
-                                <button type="button" class="settings-sources-mini-btn"
-                                        x-show="metatubeConnected && probeDone"
-                                        @click="metatubeRetest()">
-                                    <i class="bi bi-arrow-clockwise"></i> {{ t('settings.sources.mt_retest_btn') }}
-                                </button>
-                            </div>
-
-                            <!-- Probe progress line — shown while probe is running (CD-63b-4 B1) -->
-                            <div class="settings-mt-probe-progress" x-show="!probeDone">
-                                <i class="bi bi-hourglass-split" aria-hidden="true"></i>
-                                <span>{{ t('settings.sources.mt_probe_testing') }}</span>
-                                <span class="probe-counter">(<span x-text="probeProgress"></span>/<span x-text="probeTotal"></span>)</span>
-                            </div>
-
-                            <!-- Tier hint -->
-                            <div class="settings-mt-tier-hint">
-                                <i class="bi bi-stars" aria-hidden="true"></i>
-                                <span>{{ t('settings.sources.mt_connected_tier_hint') }}</span>
-                            </div>
-
-                            <!-- Parts Bin header (collapsible, default collapsed) — N = partsBinSources.length -->
-                            <button type="button"
-                                    class="settings-mt-partsbin-head"
-                                    @click="partsBinExpanded = !partsBinExpanded"
-                                    :aria-expanded="partsBinExpanded ? 'true' : 'false'"
-                                    :aria-label="partsBinExpanded ? '{{ t('settings.sources.mt_provider_list_collapse_aria') }}' : '{{ t('settings.sources.mt_provider_list_expand_aria') }}'">
-                                <i class="bi" :class="partsBinExpanded ? 'bi-chevron-down' : 'bi-chevron-right'" aria-hidden="true"></i>
-                                <span>{{ t('settings.sources.mt_provider_list_header') }}</span>
-                                <span class="settings-mt-partsbin-count" x-text="partsBinSources.length"></span>
-                            </button>
-
-                            <!-- Parts Bin body — flat pill loop (NOT draggable; no Recommended group, B3 §7.5). -->
-                            <div class="settings-mt-partsbin-body" x-show="partsBinExpanded">
-                                <div class="settings-sources-pills" role="listbox" aria-label="Provider list">
-                                    <template x-for="src in partsBinSources" :key="src.id">
-                                        <div class="source-pill is-partsbin"
-                                             data-enabled="false"
-                                             :data-available="src.available ? 'true' : 'false'"
-                                             role="option"
-                                             :aria-selected="false"
-                                             :aria-label="`${src.display_name} — ${src.available === false ? window.t('settings.sources.mt_probe_failed_pill_hint') : window.t('settings.sources.mt_promote_hint')}`"
-                                             :title="src.available === false ? window.t('settings.sources.mt_probe_failed_pill_hint') : window.t('settings.sources.mt_promote_hint')"
-                                             tabindex="0"
-                                             @click="promoteMetatube(src.id)"
-                                             @keydown.enter.prevent="promoteMetatube(src.id)"
-                                             @keydown.space.prevent="promoteMetatube(src.id)">
-                                            <i class="bi bi-plus-circle plus-icn" aria-hidden="true"></i>
-                                            <i class="bi bi-slash-circle slash-icn" aria-hidden="true"></i>
-                                            <span class="pill-name" x-text="src.display_name"></span>
-                                        </div>
-                                    </template>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
             </div>
           </div>
 
-          <!-- Card ②：刮削與翻譯 -->
-          <div class="card mb-4">
+        </section><!-- /sec-search -->
+
+        <!-- Section 2: Naming and file organization -->
+        <section id="sec-naming" class="settings-section"
+                 data-settings-panel="naming"
+                 x-show="settingsTab === 'naming'">
+          <div class="card mb-4" data-settings-panel="naming">
             <div class="settings-card-header">
-                <i class="bi" :class="settingsTab === 'ai' ? 'bi-translate' : 'bi-gear'" aria-hidden="true"></i>
-                <span x-text="settingsTab === 'ai'
-                    ? window.t('settings.tabs.translate')
-                    : window.t('settings.tabs.naming')"></span>
+                <i class="bi bi-gear" aria-hidden="true"></i>
+                {{ t('settings.tabs.naming') }}
             </div>
             <div class="card-body">
+
+                    <!-- Quick toggles belong to this card, not to the page header. -->
+                    <div class="settings-quick-toggle-row settings-quick-toggle-row--embedded">
+                        <!-- 下載劇照（extrafanart） -->
+                        <div class="settings-form-group popover-anchor" x-data="helpPopover">
+                            <label class="settings-label">
+                                <input type="checkbox" class="toggle toggle-primary"
+                                       x-model="form.downloadSampleImages">
+                                <span class="label-text">{{ t('settings.scraper.download_sample_images_label') }}</span>
+                                <button type="button" class="help-popover-btn"
+                                        @click.prevent="toggle()"
+                                        :aria-expanded="open">
+                                    <i class="bi bi-question-circle"></i>
+                                </button>
+                            </label>
+                            <div x-show="open" x-cloak x-transition
+                                 @click.outside="close()"
+                                 class="help-popover">
+                                <small class="help-popover__body">
+                                    {{ t('settings.scraper.download_sample_images_hint') }}
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- 封面縮圖快取（71-T5） -->
+                        <div class="settings-form-group popover-anchor" x-data="helpPopover">
+                            <label class="settings-label">
+                                <input type="checkbox" class="toggle toggle-primary"
+                                       x-model="form.thumbnailCacheEnabled"
+                                       @change="onThumbCacheToggleChange()">
+                                <span class="label-text">{{ t('settings.thumbnail_cache.label') }}</span>
+                                <button type="button" class="help-popover-btn"
+                                        @click.prevent="toggle()"
+                                        :aria-expanded="open">
+                                    <i class="bi bi-question-circle"></i>
+                                </button>
+                            </label>
+                            <div x-show="open" x-cloak x-transition
+                                 @click.outside="close()"
+                                 class="help-popover">
+                                <small class="help-popover__body">
+                                    {{ t('settings.thumbnail_cache.hint') }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
 
                     <!-- 我的最愛資料夾（scanner dropdown + favoriteScannerLink） -->
                     <div class="settings-form-row"
@@ -658,7 +505,354 @@
                         </div>
                     </div>
 
-                    <div data-settings-panel="ai" x-show="settingsTab === 'ai'">
+
+
+                    <div data-settings-panel="naming" x-show="settingsTab === 'naming'">
+                    <!-- 外部媒體管理器模式（spec F1）— 沿用 .settings-sources-segmented 元件 -->
+                    <div class="settings-form-row settings-form-row--external-manager">
+                        <label class="row-label">{{ t('settings.scraper.external_manager_label') }}</label>
+                        <div class="flex-1 flex items-center gap-3 flex-wrap">
+                            <div class="settings-sources-segmented" role="group"
+                                 aria-label="{{ t('settings.scraper.external_manager_label') }}">
+                                <button type="button"
+                                        :class="{ 'is-on': form.externalManager === 'off' }"
+                                        :aria-pressed="(form.externalManager === 'off') ? 'true' : 'false'"
+                                        @click="requestExternalManagerChange('off')">
+                                    {{ t('settings.scraper.external_manager_off') }}
+                                </button>
+                                <button type="button"
+                                        :class="{ 'is-on': form.externalManager === 'jellyfin' }"
+                                        :aria-pressed="(form.externalManager === 'jellyfin') ? 'true' : 'false'"
+                                        @click="requestExternalManagerChange('jellyfin')">
+                                    Jellyfin
+                                </button>
+                                <button type="button"
+                                        :class="{ 'is-on': form.externalManager === 'emby' }"
+                                        :aria-pressed="(form.externalManager === 'emby') ? 'true' : 'false'"
+                                        @click="requestExternalManagerChange('emby')">
+                                    Emby
+                                </button>
+                                <button type="button"
+                                        :class="{ 'is-on': form.externalManager === 'kodi' }"
+                                        :aria-pressed="(form.externalManager === 'kodi') ? 'true' : 'false'"
+                                        @click="requestExternalManagerChange('kodi')">
+                                    Kodi
+                                </button>
+                            </div>
+                            <!-- hint trailing：segmented 右側同列；flex-1 min-w-0 讓窄視窗時 hint 可 wrap 到下一行 -->
+                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'off'">
+                                {{ t('settings.scraper.external_manager_off_hint') }}
+                            </small>
+                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'jellyfin'">
+                                {{ t('settings.scraper.external_manager_jellyfin_hint') }}
+                            </small>
+                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'emby'">
+                                {{ t('settings.scraper.external_manager_emby_hint') }}
+                            </small>
+                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'kodi'">
+                                {{ t('settings.scraper.external_manager_kodi_hint') }}
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- strm 路徑映射（spec 90a）— media-server 風味才顯示；與 external_manager 同層並列 -->
+                    <div class="settings-form-row"
+                         x-show="['jellyfin','emby','kodi'].includes(form.externalManager)">
+                        <label class="row-label">
+                            {{ t('settings.scraper.strm_mapping.title') }}
+                            <small class="settings-hint">{{ t('settings.scraper.strm_mapping.intro') }}</small>
+                        </label>
+                        <div class="flex-1 flex flex-col gap-2">
+                            <!-- 規則列：本機前綴 → 播放端前綴 + 刪除 -->
+                            <template x-for="(rule, idx) in form.strmRules" :key="idx">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
+                                           x-model="rule.local"
+                                           :placeholder="window.t('settings.scraper.strm_mapping.local_placeholder')">
+                                    <span class="text-base-content/50" aria-hidden="true">→</span>
+                                    <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
+                                           x-model="rule.remote"
+                                           :placeholder="window.t('settings.scraper.strm_mapping.remote_placeholder')">
+                                    <button class="btn btn-xs btn-outline" type="button"
+                                            @click="removeStrmRule(idx)"
+                                            :aria-label="window.t('settings.scraper.strm_mapping.remove')">&times;</button>
+                                </div>
+                            </template>
+                            <!-- 新增規則 -->
+                            <div>
+                                <button class="btn btn-xs btn-outline" type="button" @click="addStrmRule()">
+                                    + <span x-text="window.t('settings.scraper.strm_mapping.add_rule')"></span>
+                                </button>
+                            </div>
+                            <!-- 範本回顯：唯讀 media-server 來源的掃描路徑（顯示形，可預填左欄）-->
+                            <template x-if="strmTemplateDirs.length">
+                                <div class="flex flex-col gap-1">
+                                    <small class="settings-hint">{{ t('settings.scraper.strm_mapping.template_hint') }}</small>
+                                    <template x-for="tpl in strmTemplateDirs" :key="tpl">
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <code class="text-xs flex-1 min-w-0 break-all" x-text="tpl"></code>
+                                            <button class="btn btn-xs btn-outline" type="button"
+                                                    @click="useTemplate(tpl)"
+                                                    x-text="window.t('settings.scraper.strm_mapping.template_use')"></button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- 進階刮削摺疊（實填既有欄位）；x-collapse 需 @alpinejs/collapse plugin，已在 base.html 載入 -->
+                    <button class="collapsible-trigger" type="button" @click="scraperAdvanced = !scraperAdvanced"
+                            :aria-expanded="scraperAdvanced.toString()">
+                        <span class="collapsible-title"><i class="bi bi-sliders"></i> {{ t('settings.section.scraper_advanced') }}</span>
+                        <span class="btn-icon-collapse" aria-hidden="true"><i class="bi bi-chevron-down" :class="{ 'rotate-180': scraperAdvanced }"></i></span>
+                    </button>
+                    <div x-show="scraperAdvanced" x-collapse class="collapsible-content">
+
+                        <!-- suffix keywords -->
+                        <div class="settings-form-row">
+                            <label class="row-label">
+                                {{ t('settings.scraper.suffix_keywords_label') }}
+                                <small class="settings-hint">{{ t('settings.scraper.suffix_keywords_hint') }}</small>
+                            </label>
+                            <div class="flex-1 flex flex-col gap-1">
+                                <div class="suffix-tags-container">
+                                    <template x-for="(kw, idx) in form.suffixKeywords" :key="idx">
+                                        <span class="badge badge-sm suffix-tag">
+                                            <span x-text="kw"></span>
+                                            <span class="suffix-tag-remove" @click="removeSuffix(idx)">&times;</span>
+                                        </span>
+                                    </template>
+                                    <div class="suffix-input-inline">
+                                        <input type="text" class="input input-bordered input-xs"
+                                            x-model="newSuffixInput"
+                                            placeholder="-4k"
+                                            @keydown.enter.prevent="addSuffix()"
+                                            style="width: 80px;">
+                                        <button class="btn btn-xs btn-outline" type="button"
+                                            @click="addSuffix()" :disabled="!newSuffixInput.trim()">+</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-form-group">
+                            <label class="settings-label">
+                                <input type="checkbox" class="toggle toggle-primary" id="createFolder"
+                                    x-model="form.createFolder">
+                                <span class="label-text">{{ t('settings.scraper.create_folder_label') }}</span>
+                            </label>
+                        </div>
+
+                        <!-- 資料夾層級：可增減層數的動態清單（上到下＝外到內，CD-95a-3/7）。膠囊複用 .source-pill。 -->
+                        <div class="settings-form-row">
+                            <label class="row-label">{{ t('settings.scraper.folder_layers_label') }}</label>
+                            <div class="flex-1 flex flex-col gap-2 naming-block" :class="{ 'naming-disabled': !form.createFolder }"
+                                 x-effect="setFolderEditingDisabled(!form.createFolder)">
+                                <template x-for="(layer, idx) in form.folderLayerList" :key="layer.id">
+                                    <div class="folder-layer-item" x-data="{ open: false }">
+                                        <span class="folder-layer-index" x-text="idx + 1"></span>
+                                        <!-- 膠囊編輯器（非受控 widget，onChange 以 layer.id 寫回，CD-95a-9/12） -->
+                                        <div class="chip-editor-host flex-1" x-init="mountLayerEditor($el, layer.id)"></div>
+                                        <div class="variable-dropdown">
+                                            <button class="btn-variable" type="button" @click="open = !open"
+                                                :disabled="!form.createFolder" :aria-expanded="open">
+                                                <i class="bi bi-braces"></i> {{ t('settings.action.variable') }}
+                                            </button>
+                                            <div x-show="open" @click.outside="open = false" x-transition class="variable-menu">
+                                                <template x-for="v in namingMenuVars('folder')" :key="v.name">
+                                                    <span class="variable-badge" @click="insertLayerVar(layer.id, v.name); open = false"
+                                                          x-text="v.label" :title="v.name"></span>
+                                                </template>
+                                            </div>
+                                        </div>
+                                        <button class="btn-layer-remove" type="button" @click="removeFolderLayer(layer.id)"
+                                            :disabled="!form.createFolder" aria-label="{{ t('settings.scraper.remove_layer') }}"
+                                            title="{{ t('settings.scraper.remove_layer') }}">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </div>
+                                </template>
+                                <button class="btn-add-layer" type="button" @click="addFolderLayer()"
+                                    :disabled="form.folderLayerList.length >= 3 || !form.createFolder">
+                                    <i class="bi bi-plus-lg"></i> {{ t('settings.scraper.add_layer') }}
+                                </button>
+                                <div class="folder-preview naming-preview">
+                                    <div class="preview-line">
+                                        <i class="bi bi-file-earmark-play"></i>
+                                        <span class="preview-text">{{ t('settings.scraper.preview_prefix') }}: <span x-text="folderPreviewText"></span></span>
+                                    </div>
+                                    <div class="preview-line preview-line-empty">
+                                        <span class="preview-empty-tag">{{ t('settings.scraper.preview_empty_tag') }}</span>
+                                        <span class="preview-text" x-text="folderPreviewTextEmpty"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 檔名格式：膠囊 + 字面文字混排（id="filenameFormat" 保留給 form-id 守衛）。 -->
+                        <div class="settings-form-row">
+                            <label class="row-label">{{ t('settings.scraper.filename_format_label') }}</label>
+                            <div class="flex-1 flex flex-col gap-1 naming-block" x-data="{ open: false }">
+                                <div class="filename-format-row">
+                                    <!-- x-effect="hydrateFilenameEditor()"：95a-T8 reactive 補載觸發點（namingConfigReady
+                                         flip true 時重跑，覆蓋冷模組快取下 mount 早於 ready 造成的 $nextTick 補載失效，
+                                         見 state-config.js hydrateFilenameEditor() 註解）。one-shot 保證不重載打斷游標。 -->
+                                    <div class="chip-editor-host flex-1" id="filenameFormat" x-init="mountFilenameEditor($el)" x-effect="hydrateFilenameEditor()"></div>
+                                    <div class="variable-dropdown">
+                                        <button class="btn-variable" type="button" @click="open = !open" :aria-expanded="open">
+                                            <i class="bi bi-braces"></i> {{ t('settings.action.variable') }}
+                                        </button>
+                                        <div x-show="open" @click.outside="open = false" x-transition class="variable-menu">
+                                            <template x-for="v in namingMenuVars('filename')" :key="v.name">
+                                                <span class="variable-badge" @click="insertFilenameVar(v.name); open = false"
+                                                      x-text="v.label" :title="v.name"></span>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- NFO 標題格式（154b-T4）：膠囊編輯器 + 必備 {num}/{title} + 兩行預覽。 -->
+                        <div class="settings-form-row">
+                            <label class="row-label">{{ t('settings.scraper.nfo_title_format_label') }}</label>
+                            <div class="flex-1 flex flex-col gap-1 naming-block" x-data="{ open: false }">
+                                <div class="filename-format-row">
+                                    <div class="chip-editor-host flex-1" id="nfoTitleFormat" x-init="mountNfoTitleFormatEditor($el)" x-effect="hydrateNfoTitleFormatEditor()"></div>
+                                    <div class="variable-dropdown">
+                                        <button class="btn-variable" type="button" @click="open = !open" :aria-expanded="open">
+                                            <i class="bi bi-braces"></i> {{ t('settings.action.variable') }}
+                                        </button>
+                                        <div x-show="open" @click.outside="open = false" x-transition class="variable-menu">
+                                            <template x-for="v in namingMenuVars('nfo_title')" :key="v.name">
+                                                <span class="variable-badge" @click="insertNfoTitleFormatVar(v.name); open = false"
+                                                      x-text="v.label" :title="v.name"></span>
+                                            </template>
+                                        </div>
+                                    </div>
+                                    <div class="popover-anchor" x-data="helpPopover">
+                                        <button type="button" class="help-popover-btn"
+                                                @click="toggle()"
+                                                :aria-expanded="open"
+                                                aria-controls="nfoTitleFormatHelp"
+                                                aria-label="{{ t('settings.scraper.nfo_title_format_help_aria') }}">
+                                            <i class="bi bi-question-circle"></i>
+                                        </button>
+                                        <div id="nfoTitleFormatHelp" x-show="open" x-cloak x-transition
+                                             @click.outside="close()"
+                                             class="help-popover help-popover--left">
+                                            <small class="help-popover__body">
+                                                {{ t('settings.scraper.nfo_title_format_help') }}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="folder-preview naming-preview">
+                                    <div class="preview-line">
+                                        <i class="bi bi-file-earmark-play"></i>
+                                        <span class="preview-text">{{ t('settings.scraper.preview_prefix') }}: <span x-text="nfoTitleFormatPreviewText"></span></span>
+                                    </div>
+                                    <div class="preview-line preview-line-empty">
+                                        <span class="preview-empty-tag">{{ t('settings.scraper.nfo_title_format_preview_actor_missing_label') }}</span>
+                                        <span class="preview-text" x-text="nfoTitleFormatPreviewTextActorMissing"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-form-row">
+                            <label class="row-label">{{ t('settings.scraper.max_title_length_label') }}</label>
+                            <div class="input-group-inline">
+                                <input type="number" class="input input-bordered input-sm" id="maxTitleLength"
+                                    x-model.number="form.maxTitleLength" min="20" max="200">
+                                <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
+                            </div>
+                        </div>
+
+                        <div class="settings-form-row">
+                            <label class="row-label" for="maxFilenameLength">{{ t('settings.scraper.max_filename_length_label') }}</label>
+                            <div class="input-group-inline">
+                                <input type="number" class="input input-bordered input-sm" id="maxFilenameLength"
+                                    x-model.number="form.maxFilenameLength" min="50" max="255">
+                                <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
+                            </div>
+                        </div>
+
+                        <div class="settings-form-row">
+                            <label class="row-label">{{ t('settings.scraper.video_extensions_label') }}</label>
+                            <div class="flex-1 flex flex-col gap-1">
+                                <input type="text" class="input input-bordered input-sm" id="videoExtensions"
+                                    x-model="form.videoExtensions">
+                                <small class="settings-hint">{{ t('settings.scraper.video_extensions_hint') }}</small>
+                            </div>
+                        </div>
+
+                        {# 人臉自動對焦開關：跟隨主表單草稿，儲存時才寫專用端點。 #}
+                        <div class="settings-form-group popover-anchor" x-data="helpPopover">
+                            <label class="settings-label">
+                                <input type="checkbox" data-focal-auto-pill class="toggle toggle-primary"
+                                       x-model="form.focalAutoEnabled">
+                                <span class="label-text">{{ t('settings.scraper.focal_pill_label') }}</span>
+                                <button type="button" class="help-popover-btn"
+                                        @click.prevent="toggle()"
+                                        :aria-expanded="open">
+                                    <i class="bi bi-question-circle"></i>
+                                </button>
+                            </label>
+                            <div x-show="open" x-cloak x-transition
+                                 @click.outside="close()"
+                                 class="help-popover help-popover--up">
+                                <small class="help-popover__body">
+                                    {{ t('settings.scraper.focal_help') }}
+                                </small>
+                            </div>
+                        </div>
+
+                    </div><!-- /collapsible-content scraperAdvanced -->
+                    </div><!-- /naming panel -->
+
+            </div>
+          </div>
+
+        </section><!-- /sec-naming -->
+
+        <!-- Section 3: Remote AI services -->
+        <section id="sec-ai" class="settings-section"
+                 data-settings-panel="ai"
+                 x-show="settingsTab === 'ai'" x-cloak>
+          <div class="card mb-4" id="aiServicesCard"
+               x-data="aiServicesCard" role="tabpanel">
+            <div class="settings-card-header">
+                <i class="bi bi-stars" aria-hidden="true"></i>
+                {{ t('settings.ai.title') }}
+            </div>
+            <div class="card-body">
+                <div class="ai-card-intro">
+                    <p class="settings-tab-desc">{{ t('settings.ai.help_body') }}</p>
+                </div>
+
+                <div class="ai-tabs-row">
+                    <div role="tablist" class="tabs tabs-border">
+                        <button type="button" role="tab" class="tab" id="aiTabTranslate"
+                                @click="selectAiTab('translate')"
+                                :aria-selected="aiTab === 'translate'"
+                                :class="{ 'tab-active': aiTab === 'translate' }"
+                                x-text="window.t('settings.ai.tab_translate')"></button>
+                        <button type="button" role="tab" class="tab" id="aiTabSimilar"
+                                @click="selectAiTab('similar')"
+                                :aria-selected="aiTab === 'similar'"
+                                :class="{ 'tab-active': aiTab === 'similar' }"
+                                x-text="window.t('settings.ai.tab_similar')"></button>
+                        <button type="button" role="tab" class="tab" id="aiTabFaces"
+                                @click="selectAiTab('faces')"
+                                :aria-selected="aiTab === 'faces'"
+                                :class="{ 'tab-active': aiTab === 'faces' }"
+                                x-text="window.t('settings.ai.tab_faces')"></button>
+                    </div>
+                </div>
+
+<div id="aiPanelTranslate" role="tabpanel" x-show="aiTab === 'translate'" x-cloak>
                     <!-- 翻譯三引擎（Ollama/Gemini/OpenAI-compat 完整欄位） -->
                     <div class="settings-form-group">
                         <label class="settings-label">
@@ -1000,319 +1194,159 @@
                         </div>
                     </div>
                     </div><!-- /AI translation panel -->
-
-                    <div data-settings-panel="naming" x-show="settingsTab === 'naming'">
-                    <!-- 外部媒體管理器模式（spec F1）— 沿用 .settings-sources-segmented 元件 -->
-                    <div class="settings-form-row settings-form-row--external-manager">
-                        <label class="row-label">{{ t('settings.scraper.external_manager_label') }}</label>
-                        <div class="flex-1 flex items-center gap-3 flex-wrap">
-                            <div class="settings-sources-segmented" role="group"
-                                 aria-label="{{ t('settings.scraper.external_manager_label') }}">
-                                <button type="button"
-                                        :class="{ 'is-on': form.externalManager === 'off' }"
-                                        :aria-pressed="(form.externalManager === 'off') ? 'true' : 'false'"
-                                        @click="requestExternalManagerChange('off')">
-                                    {{ t('settings.scraper.external_manager_off') }}
-                                </button>
-                                <button type="button"
-                                        :class="{ 'is-on': form.externalManager === 'jellyfin' }"
-                                        :aria-pressed="(form.externalManager === 'jellyfin') ? 'true' : 'false'"
-                                        @click="requestExternalManagerChange('jellyfin')">
-                                    Jellyfin
-                                </button>
-                                <button type="button"
-                                        :class="{ 'is-on': form.externalManager === 'emby' }"
-                                        :aria-pressed="(form.externalManager === 'emby') ? 'true' : 'false'"
-                                        @click="requestExternalManagerChange('emby')">
-                                    Emby
-                                </button>
-                                <button type="button"
-                                        :class="{ 'is-on': form.externalManager === 'kodi' }"
-                                        :aria-pressed="(form.externalManager === 'kodi') ? 'true' : 'false'"
-                                        @click="requestExternalManagerChange('kodi')">
-                                    Kodi
-                                </button>
-                            </div>
-                            <!-- hint trailing：segmented 右側同列；flex-1 min-w-0 讓窄視窗時 hint 可 wrap 到下一行 -->
-                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'off'">
-                                {{ t('settings.scraper.external_manager_off_hint') }}
-                            </small>
-                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'jellyfin'">
-                                {{ t('settings.scraper.external_manager_jellyfin_hint') }}
-                            </small>
-                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'emby'">
-                                {{ t('settings.scraper.external_manager_emby_hint') }}
-                            </small>
-                            <small class="settings-hint flex-1 min-w-0" x-show="form.externalManager === 'kodi'">
-                                {{ t('settings.scraper.external_manager_kodi_hint') }}
-                            </small>
-                        </div>
-                    </div>
-
-                    <!-- strm 路徑映射（spec 90a）— media-server 風味才顯示；與 external_manager 同層並列 -->
-                    <div class="settings-form-row"
-                         x-show="['jellyfin','emby','kodi'].includes(form.externalManager)">
-                        <label class="row-label">
-                            {{ t('settings.scraper.strm_mapping.title') }}
-                            <small class="settings-hint">{{ t('settings.scraper.strm_mapping.intro') }}</small>
-                        </label>
-                        <div class="flex-1 flex flex-col gap-2">
-                            <!-- 規則列：本機前綴 → 播放端前綴 + 刪除 -->
-                            <template x-for="(rule, idx) in form.strmRules" :key="idx">
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
-                                           x-model="rule.local"
-                                           :placeholder="window.t('settings.scraper.strm_mapping.local_placeholder')">
-                                    <span class="text-base-content/50" aria-hidden="true">→</span>
-                                    <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
-                                           x-model="rule.remote"
-                                           :placeholder="window.t('settings.scraper.strm_mapping.remote_placeholder')">
-                                    <button class="btn btn-xs btn-outline" type="button"
-                                            @click="removeStrmRule(idx)"
-                                            :aria-label="window.t('settings.scraper.strm_mapping.remove')">&times;</button>
-                                </div>
-                            </template>
-                            <!-- 新增規則 -->
-                            <div>
-                                <button class="btn btn-xs btn-outline" type="button" @click="addStrmRule()">
-                                    + <span x-text="window.t('settings.scraper.strm_mapping.add_rule')"></span>
-                                </button>
-                            </div>
-                            <!-- 範本回顯：唯讀 media-server 來源的掃描路徑（顯示形，可預填左欄）-->
-                            <template x-if="strmTemplateDirs.length">
-                                <div class="flex flex-col gap-1">
-                                    <small class="settings-hint">{{ t('settings.scraper.strm_mapping.template_hint') }}</small>
-                                    <template x-for="tpl in strmTemplateDirs" :key="tpl">
-                                        <div class="flex items-center gap-2 flex-wrap">
-                                            <code class="text-xs flex-1 min-w-0 break-all" x-text="tpl"></code>
-                                            <button class="btn btn-xs btn-outline" type="button"
-                                                    @click="useTemplate(tpl)"
-                                                    x-text="window.t('settings.scraper.strm_mapping.template_use')"></button>
-                                        </div>
-                                    </template>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-
-                    <!-- 進階刮削摺疊（實填既有欄位）；x-collapse 需 @alpinejs/collapse plugin，已在 base.html 載入 -->
-                    <button class="collapsible-trigger" type="button" @click="scraperAdvanced = !scraperAdvanced"
-                            :aria-expanded="scraperAdvanced.toString()">
-                        <span class="collapsible-title"><i class="bi bi-sliders"></i> {{ t('settings.section.scraper_advanced') }}</span>
-                        <span class="btn-icon-collapse" aria-hidden="true"><i class="bi bi-chevron-down" :class="{ 'rotate-180': scraperAdvanced }"></i></span>
-                    </button>
-                    <div x-show="scraperAdvanced" x-collapse class="collapsible-content">
-
-                        <!-- suffix keywords -->
-                        <div class="settings-form-row">
-                            <label class="row-label">
-                                {{ t('settings.scraper.suffix_keywords_label') }}
-                                <small class="settings-hint">{{ t('settings.scraper.suffix_keywords_hint') }}</small>
-                            </label>
-                            <div class="flex-1 flex flex-col gap-1">
-                                <div class="suffix-tags-container">
-                                    <template x-for="(kw, idx) in form.suffixKeywords" :key="idx">
-                                        <span class="badge badge-sm suffix-tag">
-                                            <span x-text="kw"></span>
-                                            <span class="suffix-tag-remove" @click="removeSuffix(idx)">&times;</span>
-                                        </span>
-                                    </template>
-                                    <div class="suffix-input-inline">
-                                        <input type="text" class="input input-bordered input-xs"
-                                            x-model="newSuffixInput"
-                                            placeholder="-4k"
-                                            @keydown.enter.prevent="addSuffix()"
-                                            style="width: 80px;">
-                                        <button class="btn btn-xs btn-outline" type="button"
-                                            @click="addSuffix()" :disabled="!newSuffixInput.trim()">+</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
+                    <div id="aiPanelSimilar" role="tabpanel"
+                         x-show="aiTab === 'similar'" x-cloak
+                         x-data="aiSimilarPanel">
                         <div class="settings-form-group">
                             <label class="settings-label">
-                                <input type="checkbox" class="toggle toggle-primary" id="createFolder"
-                                    x-model="form.createFolder">
-                                <span class="label-text">{{ t('settings.scraper.create_folder_label') }}</span>
+                                <input type="checkbox" class="toggle toggle-primary"
+                                       id="aiSimilarEnabled"
+                                       x-model="form.aiSimilarEnabled">
+                                <span class="label-text">{{ t('settings.ai.similar.enabled_label') }}</span>
                             </label>
                         </div>
+                        <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.similar.empty_desc') }}</p>
 
-                        <!-- 資料夾層級：可增減層數的動態清單（上到下＝外到內，CD-95a-3/7）。膠囊複用 .source-pill。 -->
-                        <div class="settings-form-row">
-                            <label class="row-label">{{ t('settings.scraper.folder_layers_label') }}</label>
-                            <div class="flex-1 flex flex-col gap-2 naming-block" :class="{ 'naming-disabled': !form.createFolder }"
-                                 x-effect="setFolderEditingDisabled(!form.createFolder)">
-                                <template x-for="(layer, idx) in form.folderLayerList" :key="layer.id">
-                                    <div class="folder-layer-item" x-data="{ open: false }">
-                                        <span class="folder-layer-index" x-text="idx + 1"></span>
-                                        <!-- 膠囊編輯器（非受控 widget，onChange 以 layer.id 寫回，CD-95a-9/12） -->
-                                        <div class="chip-editor-host flex-1" x-init="mountLayerEditor($el, layer.id)"></div>
-                                        <div class="variable-dropdown">
-                                            <button class="btn-variable" type="button" @click="open = !open"
-                                                :disabled="!form.createFolder" :aria-expanded="open">
-                                                <i class="bi bi-braces"></i> {{ t('settings.action.variable') }}
-                                            </button>
-                                            <div x-show="open" @click.outside="open = false" x-transition class="variable-menu">
-                                                <template x-for="v in namingMenuVars('folder')" :key="v.name">
-                                                    <span class="variable-badge" @click="insertLayerVar(layer.id, v.name); open = false"
-                                                          x-text="v.label" :title="v.name"></span>
-                                                </template>
-                                            </div>
-                                        </div>
-                                        <button class="btn-layer-remove" type="button" @click="removeFolderLayer(layer.id)"
-                                            :disabled="!form.createFolder" aria-label="{{ t('settings.scraper.remove_layer') }}"
-                                            title="{{ t('settings.scraper.remove_layer') }}">
-                                            <i class="bi bi-x-lg"></i>
+                        <div class="ai-similar-fields" x-show="panelMode() === 'fields'">
+                            <div class="settings-form-row">
+                                <label class="row-label" for="aiSimilarUrl">{{ t('settings.ai.similar.url_label') }}</label>
+                                <div class="flex-1 flex flex-col gap-1 min-w-0">
+                                    <div class="variable-input-group">
+                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
+                                               id="aiSimilarUrl"
+                                               x-model="form.aiSimilarUrl"
+                                               :placeholder="window.t('settings.ai.similar.url_placeholder')">
+                                        <button class="btn btn-sm btn-outline" type="button"
+                                                id="aiSimilarTestBtn"
+                                                @click="runTest()"
+                                                :disabled="testDisabled()">
+                                            <span x-show="aiSimTestBusy" class="loading loading-spinner loading-sm"></span>
+                                            <span x-show="!aiSimTestBusy" x-text="window.t('settings.action.test')"></span>
                                         </button>
-                                    </div>
-                                </template>
-                                <button class="btn-add-layer" type="button" @click="addFolderLayer()"
-                                    :disabled="form.folderLayerList.length >= 3 || !form.createFolder">
-                                    <i class="bi bi-plus-lg"></i> {{ t('settings.scraper.add_layer') }}
-                                </button>
-                                <div class="folder-preview naming-preview">
-                                    <div class="preview-line">
-                                        <i class="bi bi-file-earmark-play"></i>
-                                        <span class="preview-text">{{ t('settings.scraper.preview_prefix') }}: <span x-text="folderPreviewText"></span></span>
-                                    </div>
-                                    <div class="preview-line preview-line-empty">
-                                        <span class="preview-empty-tag">{{ t('settings.scraper.preview_empty_tag') }}</span>
-                                        <span class="preview-text" x-text="folderPreviewTextEmpty"></span>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- 檔名格式：膠囊 + 字面文字混排（id="filenameFormat" 保留給 form-id 守衛）。 -->
-                        <div class="settings-form-row">
-                            <label class="row-label">{{ t('settings.scraper.filename_format_label') }}</label>
-                            <div class="flex-1 flex flex-col gap-1 naming-block" x-data="{ open: false }">
-                                <div class="filename-format-row">
-                                    <!-- x-effect="hydrateFilenameEditor()"：95a-T8 reactive 補載觸發點（namingConfigReady
-                                         flip true 時重跑，覆蓋冷模組快取下 mount 早於 ready 造成的 $nextTick 補載失效，
-                                         見 state-config.js hydrateFilenameEditor() 註解）。one-shot 保證不重載打斷游標。 -->
-                                    <div class="chip-editor-host flex-1" id="filenameFormat" x-init="mountFilenameEditor($el)" x-effect="hydrateFilenameEditor()"></div>
-                                    <div class="variable-dropdown">
-                                        <button class="btn-variable" type="button" @click="open = !open" :aria-expanded="open">
-                                            <i class="bi bi-braces"></i> {{ t('settings.action.variable') }}
-                                        </button>
-                                        <div x-show="open" @click.outside="open = false" x-transition class="variable-menu">
-                                            <template x-for="v in namingMenuVars('filename')" :key="v.name">
-                                                <span class="variable-badge" @click="insertFilenameVar(v.name); open = false"
-                                                      x-text="v.label" :title="v.name"></span>
-                                            </template>
-                                        </div>
-                                    </div>
+                            <div class="settings-form-row">
+                                <label class="row-label" for="aiSimilarApiKey">{{ t('settings.ai.similar.api_key_label') }}</label>
+                                <div class="flex-1 min-w-0">
+                                    <input type="password" class="input input-bordered input-sm w-full"
+                                           id="aiSimilarApiKey"
+                                           x-model="form.aiSimilarApiKey"
+                                           :placeholder="window.t('settings.ai.similar.api_key_placeholder')">
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- NFO 標題格式（154b-T4）：膠囊編輯器 + 必備 {num}/{title} + 兩行預覽。 -->
-                        <div class="settings-form-row">
-                            <label class="row-label">{{ t('settings.scraper.nfo_title_format_label') }}</label>
-                            <div class="flex-1 flex flex-col gap-1 naming-block" x-data="{ open: false }">
-                                <div class="filename-format-row">
-                                    <div class="chip-editor-host flex-1" id="nfoTitleFormat" x-init="mountNfoTitleFormatEditor($el)" x-effect="hydrateNfoTitleFormatEditor()"></div>
-                                    <div class="variable-dropdown">
-                                        <button class="btn-variable" type="button" @click="open = !open" :aria-expanded="open">
-                                            <i class="bi bi-braces"></i> {{ t('settings.action.variable') }}
-                                        </button>
-                                        <div x-show="open" @click.outside="open = false" x-transition class="variable-menu">
-                                            <template x-for="v in namingMenuVars('nfo_title')" :key="v.name">
-                                                <span class="variable-badge" @click="insertNfoTitleFormatVar(v.name); open = false"
-                                                      x-text="v.label" :title="v.name"></span>
-                                            </template>
-                                        </div>
-                                    </div>
-                                    <div class="popover-anchor" x-data="helpPopover">
-                                        <button type="button" class="help-popover-btn"
-                                                @click="toggle()"
-                                                :aria-expanded="open"
-                                                aria-controls="nfoTitleFormatHelp"
-                                                aria-label="{{ t('settings.scraper.nfo_title_format_help_aria') }}">
-                                            <i class="bi bi-question-circle"></i>
-                                        </button>
-                                        <div id="nfoTitleFormatHelp" x-show="open" x-cloak x-transition
-                                             @click.outside="close()"
-                                             class="help-popover help-popover--left">
-                                            <small class="help-popover__body">
-                                                {{ t('settings.scraper.nfo_title_format_help') }}
-                                            </small>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="folder-preview naming-preview">
-                                    <div class="preview-line">
-                                        <i class="bi bi-file-earmark-play"></i>
-                                        <span class="preview-text">{{ t('settings.scraper.preview_prefix') }}: <span x-text="nfoTitleFormatPreviewText"></span></span>
-                                    </div>
-                                    <div class="preview-line preview-line-empty">
-                                        <span class="preview-empty-tag">{{ t('settings.scraper.nfo_title_format_preview_actor_missing_label') }}</span>
-                                        <span class="preview-text" x-text="nfoTitleFormatPreviewTextActorMissing"></span>
-                                    </div>
+                            <div class="settings-form-row">
+                                <label class="row-label" for="aiSimilarModel">{{ t('settings.ai.similar.model_label') }}</label>
+                                <div class="flex-1 min-w-0">
+                                    <input type="text" class="input input-bordered input-sm w-full"
+                                           id="aiSimilarModel"
+                                           x-model="form.aiSimilarModel"
+                                           :placeholder="window.t('settings.ai.similar.model_placeholder')">
                                 </div>
                             </div>
+
+                            <p class="settings-hint ai-similar-status"
+                               id="aiSimilarStatusLine"
+                               x-show="bfStatus !== null && statusLineText()"
+                               x-text="statusLineText()"></p>
+
+                            {{ ai_backfill_controls('aiSimilar', 'ai-similar', retry=true) }}
+
+                            <pre class="ai-similar-test-result"
+                                 id="aiSimilarTestResult"
+                                 x-show="aiSimTestResultHtml"
+                                 x-text="aiSimTestResultHtml"></pre>
                         </div>
 
-                        <div class="settings-form-row">
-                            <label class="row-label">{{ t('settings.scraper.max_title_length_label') }}</label>
-                            <div class="input-group-inline">
-                                <input type="number" class="input input-bordered input-sm" id="maxTitleLength"
-                                    x-model.number="form.maxTitleLength" min="20" max="200">
-                                <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
-                            </div>
+                        <div class="ai-similar-empty-actions">
+                            <a class="btn btn-sm btn-ghost"
+                               href="https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md"
+                               target="_blank" rel="noopener noreferrer">{{ t('settings.ai.similar.btn_docs') }}</a>
                         </div>
+                    </div>
 
-                        <div class="settings-form-row">
-                            <label class="row-label" for="maxFilenameLength">{{ t('settings.scraper.max_filename_length_label') }}</label>
-                            <div class="input-group-inline">
-                                <input type="number" class="input input-bordered input-sm" id="maxFilenameLength"
-                                    x-model.number="form.maxFilenameLength" min="50" max="255">
-                                <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
-                            </div>
-                        </div>
-
-                        <div class="settings-form-row">
-                            <label class="row-label">{{ t('settings.scraper.video_extensions_label') }}</label>
-                            <div class="flex-1 flex flex-col gap-1">
-                                <input type="text" class="input input-bordered input-sm" id="videoExtensions"
-                                    x-model="form.videoExtensions">
-                                <small class="settings-hint">{{ t('settings.scraper.video_extensions_hint') }}</small>
-                            </div>
-                        </div>
-
-                        {# 人臉自動對焦開關：跟隨主表單草稿，儲存時才寫專用端點。 #}
-                        <div class="settings-form-group popover-anchor" x-data="helpPopover">
+                    <div id="aiPanelFaces" role="tabpanel"
+                         x-show="aiTab === 'faces'" x-cloak
+                         x-data="aiFacesPanel">
+                        <div class="settings-form-group">
                             <label class="settings-label">
-                                <input type="checkbox" data-focal-auto-pill class="toggle toggle-primary"
-                                       x-model="form.focalAutoEnabled">
-                                <span class="label-text">{{ t('settings.scraper.focal_pill_label') }}</span>
-                                <button type="button" class="help-popover-btn"
-                                        @click.prevent="toggle()"
-                                        :aria-expanded="open">
-                                    <i class="bi bi-question-circle"></i>
-                                </button>
+                                <input type="checkbox" class="toggle toggle-primary"
+                                       id="aiFacesEnabled"
+                                       x-model="form.aiFacesEnabled">
+                                <span class="label-text">{{ t('settings.ai.faces.enabled_label') }}</span>
                             </label>
-                            <div x-show="open" x-cloak x-transition
-                                 @click.outside="close()"
-                                 class="help-popover help-popover--up">
-                                <small class="help-popover__body">
-                                    {{ t('settings.scraper.focal_help') }}
-                                </small>
+                        </div>
+                        <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.faces.empty_desc') }}</p>
+
+                        <div class="ai-similar-fields" x-show="panelMode() === 'fields'">
+                            <div class="settings-form-row">
+                                <label class="row-label" for="aiFacesUrl">{{ t('settings.ai.faces.url_label') }}</label>
+                                <div class="flex-1 flex flex-col gap-1 min-w-0">
+                                    <div class="variable-input-group">
+                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
+                                               id="aiFacesUrl"
+                                               x-model="form.aiFacesUrl"
+                                               :placeholder="window.t('settings.ai.faces.url_placeholder')">
+                                        <button class="btn btn-sm btn-outline" type="button"
+                                                id="aiFacesTestBtn"
+                                                @click="runTest()"
+                                                :disabled="testDisabled()">
+                                            <span x-show="aiFacesTestBusy" class="loading loading-spinner loading-sm"></span>
+                                            <span x-show="!aiFacesTestBusy" x-text="window.t('settings.action.test')"></span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
+                            <div class="settings-form-row">
+                                <label class="row-label" for="aiFacesApiKey">{{ t('settings.ai.faces.api_key_label') }}</label>
+                                <div class="flex-1 min-w-0">
+                                    <input type="password" class="input input-bordered input-sm w-full"
+                                           id="aiFacesApiKey"
+                                           x-model="form.aiFacesApiKey"
+                                           :placeholder="window.t('settings.ai.faces.api_key_placeholder')">
+                                </div>
+                            </div>
+                            <div class="settings-form-row">
+                                <label class="row-label" for="aiFacesModel">{{ t('settings.ai.faces.model_label') }}</label>
+                                <div class="flex-1 min-w-0">
+                                    <input type="text" class="input input-bordered input-sm w-full"
+                                           id="aiFacesModel"
+                                           x-model="form.aiFacesModel"
+                                           :placeholder="window.t('settings.ai.faces.model_placeholder')">
+                                </div>
+                            </div>
+
+                            <p class="settings-hint ai-similar-status"
+                               id="aiFacesStatusLine"
+                               x-show="bfStatus !== null"
+                               x-text="statusLineText()"></p>
+                            <p class="settings-hint ai-similar-status"
+                               id="aiFacesRecomputeLine"
+                               x-show="recomputeLineText()"
+                               x-text="recomputeLineText()"></p>
+
+                            {{ ai_backfill_controls('aiFaces', 'ai-similar') }}
+
+                            <pre class="ai-similar-test-result"
+                                 id="aiFacesTestResult"
+                                 x-show="aiFacesTestResultHtml"
+                                 x-text="aiFacesTestResultHtml"></pre>
                         </div>
 
-                    </div><!-- /collapsible-content scraperAdvanced -->
-                    </div><!-- /naming panel -->
+                        <div class="ai-similar-empty-actions">
+                            <a class="btn btn-sm btn-ghost"
+                               href="https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md"
+                               target="_blank" rel="noopener noreferrer">{{ t('settings.ai.faces.btn_docs') }}</a>
+                        </div>
+                    </div>
 
             </div>
           </div>
+        </section><!-- /sec-ai -->
 
-        </section><!-- /sec-search -->
-
-        <!-- ── Section 2: 列表生成 ── -->
+        <!-- Section 4: Gallery defaults -->
         <section id="sec-gallery" class="settings-section"
+
                  data-settings-panel="gallery"
                  x-show="settingsTab === 'gallery'">
           <div class="card mb-4">
@@ -1663,7 +1697,7 @@
 {% endblock %}
 
 {% block pre_alpine_module %}
-<script type="module" src="/static/js/pages/settings/main.js?v=17035-2"></script>
+<script type="module" src="/static/js/pages/settings/main.js?v=18005-1"></script>
 {% endblock %}
 {% block extra_js %}
 <script src="/static/js/pages/settings/theme-transition.js"></script>

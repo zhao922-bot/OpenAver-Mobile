@@ -255,6 +255,35 @@ class FocalDeviceState(BaseModel):
     set_by_user: bool = False  # True = 使用者決定；自動關閉／版本 reset 不得覆寫
 
 
+class ImageSimilarConfig(BaseModel):
+    """Remote image-embedding endpoint used for cover-similarity fusion."""
+    enabled: bool = False
+    url: str = ""
+    api_key: str = ""
+    model: str = ""
+
+
+class FacesConfig(BaseModel):
+    """Remote face-detection endpoint with local detector fallback."""
+    enabled: bool = False
+    url: str = ""
+    api_key: str = ""
+    model: str = ""
+
+
+class TagsConfig(BaseModel):
+    """Reserved for the r6 AI-tagging release; preserved across mobile saves."""
+    enabled: bool = False
+    provider: str = ""
+    model: str = ""
+
+
+class AIServicesConfig(BaseModel):
+    image_similar: ImageSimilarConfig = ImageSimilarConfig()
+    faces: FacesConfig = FacesConfig()
+    tags: TagsConfig = TagsConfig()
+
+
 class AppConfig(BaseModel):
     scraper: ScraperConfig = ScraperConfig()
     search: SearchConfig = SearchConfig()
@@ -267,6 +296,7 @@ class AppConfig(BaseModel):
     thumbnail_cache_enabled: bool = False  # 縮圖快取開關（feature/71 T2）；預設關閉；top-level additive migration 補缺漏
     metatube: MetatubeConfig = MetatubeConfig()  # CD-63b-3；Pydantic default 自動補缺漏（no migration needed）
     focal_device: FocalDeviceState = FocalDeviceState()
+    ai_services: AIServicesConfig = AIServicesConfig()
 
     def model_dump(self, *args, **kwargs):
         data = super().model_dump(*args, **kwargs)
@@ -721,6 +751,26 @@ def _migrate_additive_config(raw_config: dict) -> bool:
     if 'focal_device' not in raw_config:
         raw_config['focal_device'] = FocalDeviceState().model_dump()
         need_save = True
+
+    # r5 AI services: add missing nests without discarding the reserved tags
+    # subtree that a future release will consume.
+    if 'ai_services' not in raw_config:
+        raw_config['ai_services'] = AIServicesConfig().model_dump()
+        need_save = True
+    else:
+        ai = raw_config.setdefault('ai_services', {})
+        if not isinstance(ai, dict):
+            ai = {}
+            raw_config['ai_services'] = ai
+            need_save = True
+        for name, model in (
+            ('image_similar', ImageSimilarConfig),
+            ('faces', FacesConfig),
+            ('tags', TagsConfig),
+        ):
+            if name not in ai or not isinstance(ai.get(name), dict):
+                ai[name] = model().model_dump()
+                need_save = True
 
     if (
         'scraper' in raw_config

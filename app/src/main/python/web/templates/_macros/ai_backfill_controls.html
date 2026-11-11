@@ -1,0 +1,48 @@
+{# Shared controls for image-similarity and face backfill panels. #}
+{% macro ai_backfill_controls(idp, css, retry=false) %}
+<p class="settings-hint {{ css }}-status" id="{{ idp }}ProgressLine"
+   x-show="bfProgressText()"
+   x-text="bfProgressText()"></p>
+<div class="{{ css }}-index-row">
+    <button type="button" class="btn btn-sm btn-outline"
+            id="{{ idp }}StopBtn"
+            x-show="bfAction().action === 'stop'"
+            @click="bfStop()">
+        <span x-text="window.t('settings.ai.backfill.btn_stop')"></span>
+    </button>
+    <button type="button" class="btn btn-sm btn-primary"
+            id="{{ idp }}RunBtn"
+            x-show="bfAction().action === 'start' || bfAction().action === 'continue'"
+            :data-action="bfAction().action"
+            @click="bfStart()"
+            :disabled="bfAction().disabled">
+        <span x-show="bfBusy" class="loading loading-spinner loading-sm"></span>
+        <span x-show="!bfBusy && bfAction().action === 'start'"
+              x-text="window.t('settings.ai.backfill.btn_start')"></span>
+        <span x-show="!bfBusy && bfAction().action === 'continue'"
+              x-text="window.t('settings.ai.backfill.btn_continue')"></span>
+    </button>
+    {% if retry %}
+    <button type="button" class="btn btn-sm btn-outline"
+            id="{{ idp }}RetryBtn"
+            x-show="bfExtraAction().action === 'retry'"
+            @click="bfRetry()"
+            :disabled="bfExtraAction().disabled">
+        <span x-text="window.t('settings.ai.similar.btn_retry_unreadable', { n: bfStatus?.unreadable || 0 })"></span>
+    </button>
+    {% endif %}
+    <button type="button" class="btn btn-sm btn-ghost"
+            id="{{ idp }}RebuildBtn"
+            x-show="bfRebuildVisible()"
+            @click="bfRebuild()"
+            :disabled="bfRebuildDisabled()">
+        <span x-text="window.t('settings.ai.backfill.btn_rebuild')"></span>
+    </button>
+    <span class="settings-hint ai-backfill-pending" id="{{ idp }}PendingLine"
+          x-show="bfPendingText()"
+          x-text="bfPendingText()"></span>
+    <span class="settings-hint {{ css }}-save-first"
+          x-show="isDirty && (bfAction().action === 'start' || bfAction().action === 'continue' || bfExtraAction().action === 'retry' || bfRebuildVisible())"
+          x-text="window.t('settings.ai.backfill.save_first')"></span>
+</div>
+{% endmacro %}

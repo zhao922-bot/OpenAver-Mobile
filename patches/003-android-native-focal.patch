@@ -122,7 +122,28 @@
  
  
  def _rotate_point(x, y, width, height, angle_deg):
-@@ -277,17 +376,9 @@
+@@ -254,6 +353,20 @@
+     return x_ratio, y_ratio
+ 
+ 
++def select_focal_from_boxes(boxes, work_w, work_h, ratio):
++    """Map normalized remote face boxes into the local focal clustering path."""
++    if not boxes:
++        return None
++    faces = []
++    for box in boxes:
++        x, y, w, h, score = box.x, box.y, box.w, box.h, box.score
++        col = min(max((x + w / 2) * work_w, 0.0), float(work_w))
++        row = min(max((y + h / 2) * work_h, 0.0), float(work_h))
++        faces.append((row, col, w * work_w, score))
++    axis = _dominant_axis_by_ratio(work_w, work_h, ratio)
++    return _cluster_and_select_2d(work_w, work_h, faces, axis)
++
++
+ def find_primary_face_axis_ratio(img, ratio, advanced, work_width=MAX_IMAGE_WIDTH):
+     """detector.go FindPrimaryFaceAxisRatio.
+ 
+@@ -277,17 +390,9 @@
      return pos, found, faces, (ww, wh), axis
  
  
@@ -143,7 +164,7 @@
      try:
          img = Image.open(fs_path)
          w, h = img.size
-@@ -298,13 +389,37 @@
+@@ -298,13 +403,37 @@
              work = img
          ww, wh = work.size
  
@@ -183,14 +204,107 @@
  
  
  # --- serde (CD-98a-3: canonical "x,y" 4-decimal string) --------------------
-@@ -366,3 +481,4 @@
+@@ -366,3 +495,4 @@
      right = min(x + w, width)
      bottom = min(y + h, height)
      return img.crop((x, y, right, bottom))
 +
+--- a/core/focal/device_state.py
++++ b/core/focal/device_state.py
+@@ -13,7 +13,9 @@
+ 
+ from typing import Callable, Optional
+ 
++from core.ai_services.faces_config import active_in
+ from core.config import load_config, mutate_config
++from core.focal import subprocess_runner
+ from core.focal.subprocess_runner import RunnerOutcome
+ from core.logger import get_logger
+ from core.version import VERSION
+@@ -34,8 +36,8 @@
+     _notification_sink = fn
+ 
+ 
+-def is_disabled_in(cfg: dict) -> bool:
+-    """Same rule as is_disabled(), answered from a config dict the caller already holds.
++def local_disabled_in(cfg: dict) -> bool:
++    """Local-device disabled rule, answered from an existing config snapshot.
+ 
+     Exists so the disabled-read rule has exactly one implementation. Callers that
+     already loaded the config (e.g. a page handler that got it from
+@@ -56,9 +58,21 @@
+     return bool(fd.get("disabled", False)) and fd.get("judged_at_version", "") == VERSION
+ 
+ 
++def is_disabled_in(cfg: dict) -> bool:
++    """External faces active → never disabled; otherwise use local state."""
++    if active_in(cfg):
++        return False
++    return local_disabled_in(cfg)
++
++
+ def is_disabled() -> bool:
+     """True when focal is disabled under the is_disabled_in() read rule."""
+     return is_disabled_in(load_config())
++
++
++def local_is_disabled() -> bool:
++    """Local-only probe used by the external-to-local fallback path."""
++    return local_disabled_in(load_config())
+ 
+ 
+ def _apply_outcome_core(
+@@ -169,8 +183,14 @@
+     never from a pre-spawn snapshot.
+     """
+     if outcome.kind in ("FOUND", "NO_FACE"):
++        if getattr(outcome, "external_failure", None):
++            return "endpoint_down"
+         return ""
+     if outcome.kind == "ABANDONED":
++        if outcome.reason == "skipped_disabled" and getattr(
++            outcome, "external_failure", None
++        ):
++            return "endpoint_down"
+         if outcome.reason == "skipped_disabled":
+             return "device_disabled"
+         if outcome.reason == "detect_timeout":
+@@ -199,3 +219,6 @@
+         fd["set_by_user"] = True
+ 
+     mutate_config(mutator)
++
++
++subprocess_runner.set_local_disabled_probe(local_is_disabled)
 --- a/core/focal/subprocess_runner.py
 +++ b/core/focal/subprocess_runner.py
-@@ -284,6 +284,15 @@
+@@ -13,6 +13,7 @@
+ import subprocess
+ import sys
+ import threading
++import dataclasses
+ from dataclasses import dataclass
+ from pathlib import Path
+ from typing import Any, Callable
+@@ -36,6 +37,8 @@
+     kind: str  # "FOUND" | "NO_FACE" | "ABANDONED"
+     focal: tuple[float, float] | None = None
+     reason: str | None = None
++    model: str | None = None
++    external_failure: str | None = None
+ 
+ 
+ def _found(x: float, y: float) -> RunnerOutcome:
+@@ -251,7 +254,7 @@
+     return _classify_event(event, call_state)
+ 
+ 
+-def run_detection(
++def _run_local_detection(
+     fs_path: str,
+     ratio: float,
+     *,
+@@ -284,6 +287,15 @@
      zero-user-impact tidy (pre-merge step 0.1). If a future on_outcome consumer
      cares about circuit_open, make the two sites agree *before* relying on it.
      """
@@ -206,10 +320,85 @@
      logger.debug("run_detection job_key=%s path=%s", job_key, fs_path)
      if _breaker_streak >= _BREAKER_THRESHOLD:
          outcome = _abandoned("circuit_open")
-@@ -351,3 +360,45 @@
+@@ -351,3 +363,120 @@
              except Exception:
                  logger.exception("focal on_outcome callback raised")
          _slot_lock.release()
++
++
++_local_disabled_probe: Callable[[], bool] | None = None
++
++
++def set_local_disabled_probe(fn: Callable[[], bool]) -> None:
++    """Register the local-only circuit-breaker probe from device_state."""
++    global _local_disabled_probe
++    _local_disabled_probe = fn
++
++
++def _local_disabled_via_probe() -> bool:
++    probe = _local_disabled_probe
++    if probe is None:
++        return False
++    try:
++        return bool(probe())
++    except Exception:
++        logger.warning("focal local-disabled probe raised; failing open", exc_info=True)
++        return False
++
++
++def _try_external(
++    fs_path: str, ratio: float, profile: str
++) -> tuple[RunnerOutcome | None, str | None]:
++    """Ask the remote faces endpoint; never let it break the local fallback."""
++    try:
++        from core.ai_services import faces_detect
++
++        result = faces_detect.detect(fs_path, ratio, profile=profile)
++    except Exception:
++        logger.exception("[faces_detect] external detection failed; falling back")
++        return None, "external_contract"
++    if result is None:
++        return None, None
++    if result.kind == "FOUND" and result.focal is not None:
++        return RunnerOutcome(
++            kind="FOUND", focal=result.focal, model=result.model
++        ), None
++    if result.kind == "NO_FACE":
++        return RunnerOutcome(kind="NO_FACE", model=result.model), None
++    return None, result.failure or "external_contract"
++
++
++def run_detection(
++    fs_path: str,
++    ratio: float,
++    *,
++    job_key: str,
++    timeout_s: float,
++    spawn_fn: Callable[..., Any] = _default_spawn,
++    pre_spawn_check: Callable[[], bool] | None = None,
++    on_outcome: Callable[[RunnerOutcome], None] | None = None,
++    external_profile: str = "background",
++) -> RunnerOutcome:
++    """Try the configured external faces endpoint before the local detector."""
++    final, failure = _try_external(fs_path, ratio, external_profile)
++    if final is not None:
++        return final
++    if failure is not None and _local_disabled_via_probe():
++        return dataclasses.replace(
++            _abandoned("skipped_disabled"), external_failure=failure
++        )
++    out = _run_local_detection(
++        fs_path,
++        ratio,
++        job_key=job_key,
++        timeout_s=timeout_s,
++        spawn_fn=spawn_fn,
++        pre_spawn_check=pre_spawn_check,
++        on_outcome=on_outcome,
++    )
++    if failure is not None:
++        out = dataclasses.replace(out, external_failure=failure)
++    return out
 +
 +
 +def _run_in_process(
@@ -263,14 +452,66 @@
          codes = self.tree_codes
          pred = self.tree_pred
          thr = self.tree_threshold
+--- a/core/focal/worker.py
++++ b/core/focal/worker.py
+@@ -19,6 +19,7 @@
+ transitions -- never the CPU-bound `detect()` call itself.
+ """
+ import os
++import inspect
+ import queue
+ import threading
+ 
+@@ -61,6 +62,25 @@
+         fs_path, ratio, job_key=fs_path, timeout_s=_DETECT_TIMEOUT_S,
+         pre_spawn_check=device_state.is_disabled, on_outcome=device_state.record_outcome,
+     )
++
++
++def _commit_outcome(commit, focal, fingerprint, model):
++    """Pass the remote model when the callback supports the additive argument."""
++    if not model:
++        return commit(focal, fingerprint)
++    try:
++        params = inspect.signature(commit).parameters.values()
++        accepts_model = any(
++            p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD) for p in params
++        ) or len([
++            p for p in params
++            if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
++        ]) >= 3
++    except (TypeError, ValueError):
++        accepts_model = False
++    if accepts_model:
++        return commit(focal, fingerprint, model)
++    return commit(focal, fingerprint)
+ 
+ 
+ class _Job:
+@@ -162,7 +182,12 @@
+                 return
+             end_fp = self._fingerprint(job.fs_path)
+             if end_fp == start_fp:
+-                job.commit(format_focal(outcome.focal), start_fp)
++                _commit_outcome(
++                    job.commit,
++                    format_focal(outcome.focal),
++                    start_fp,
++                    getattr(outcome, "model", None),
++                )
+             # else: image changed mid-detection -> discard. If the change came
+             # from a real re-submit (swap), that submit() already re-queued the
+             # key (latest-wins). A bare mtime bump with no resubmit is NOT
 --- a/core/focal_trigger.py
 +++ b/core/focal_trigger.py
-@@ -65,7 +65,7 @@
+@@ -65,7 +65,9 @@
          # fp 忽略（video 無 fingerprint 欄）；commit 綁 video_path_uri 當 WHERE key、
          # cover_path_uri 在此刻（submit 當下）被 closure 捕獲當 expected_cover_path、
          # db_path 當目標 DB。
 -        commit = lambda focal_str, fp: VideoRepository(db_path).update_auto_focal(video_path_uri, focal_str, cover_path_uri)  # noqa: E731
-+        commit = lambda focal_str, _fp: VideoRepository(db_path).update_auto_focal(video_path_uri, focal_str, cover_path_uri)  # noqa: E731
++        commit = lambda focal_str, _fp, model='local-pigo': VideoRepository(db_path).update_auto_focal(  # noqa: E731
++            video_path_uri, focal_str, cover_path_uri, model=model
++        )
          submit_focal("video", video_path_uri, cover_fs_path, _DETECT_RATIO, commit)
      except Exception:
          logger.exception("maybe_submit_video_focal 排程失敗（不影響呼叫端流程）: %s", video_path_uri)

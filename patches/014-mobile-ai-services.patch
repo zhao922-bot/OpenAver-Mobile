@@ -1,0 +1,4432 @@
+--- /dev/null
++++ b/core/ai_services/__init__.py
+@@ -0,0 +1,4 @@
++"""AI services package (embeddings client, image prep, samples).
++
++Must not import ``web`` (import-linter).
++"""
+--- /dev/null
++++ b/core/ai_services/backfill_state.py
+@@ -0,0 +1,137 @@
++"""AI 補跑狀態的共用容器（189a-T8，CD-189a-11①／-12）。
++
++標籤／相似／人臉三份記憶體觀察值逐字相同的部分收在這裡：``app_meta`` 讀寫、60 秒節流、
++連不上旗標、通知 sink 與去重旗標、job 計數。實例只活在三個 ``*_state`` 模組（各一個
++``_STATE``）；本模組不持有任何可變單例。
++
++``meta_get``／``meta_set``／``meta_delete`` 是無狀態模組函式，不放進類別：各 ``*_state``
++以模組全域薄函式包它，測試才攔得住（BE-TEST-29）。只 import ``core.*``（BE-LINT-09）。
++"""
++
++from __future__ import annotations
++
++import threading
++from contextlib import closing
++from typing import Callable, Optional
++
++from core.database import connection
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++PERSIST_INTERVAL_S = 60.0
++
++
++def _default_new_job(kind: Optional[str] = None) -> dict:
++    return {"kind": kind, "done": 0, "outcome": None}
++
++
++# ── app_meta（無狀態）────────────────────────────────────────────────────────
++
++def meta_get(key: str) -> Optional[str]:
++    """Read one ``app_meta`` value (None if absent)."""
++    with closing(connection.get_connection()) as conn:
++        row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (key,)).fetchone()
++    return row[0] if row else None
++
++
++def meta_set(key: str, value: str) -> None:
++    """Upsert one ``app_meta`` value."""
++    with closing(connection.get_connection()) as conn:
++        conn.execute("INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)", (key, value))
++        conn.commit()
++
++
++def meta_delete(key: str) -> None:
++    """Delete one ``app_meta`` value (no-op if absent)."""
++    with closing(connection.get_connection()) as conn:
++        conn.execute("DELETE FROM app_meta WHERE key = ?", (key,))
++        conn.commit()
++
++
++class BackfillState:
++    """一個 AI 功能的記憶體觀察值。欄位公開（測試與各 ``*_state`` 直接讀寫）。"""
++
++    def __init__(
++        self,
++        *,
++        name: str,
++        task_type: Optional[str] = None,
++        new_job: Optional[Callable[[Optional[str]], dict]] = None,
++    ) -> None:
++        self.name = name
++        self.task_type = task_type
++        self._new_job = new_job or _default_new_job
++        self.lock = threading.Lock()
++        self.unreachable: bool = False
++        self.last_success_at: Optional[float] = None
++        self.job: dict = self._new_job(None)
++        self.notified: bool = False
++        self.hook_notified: bool = False  # 入庫後掛勾專用；與補完全庫的 ``notified`` 互不影響
++        self.last_persist_mono: Optional[float] = None
++        self.notification_sink: Optional[Callable[..., None]] = None
++
++    # ── 通知 ─────────────────────────────────────────────────────────────────
++
++    def set_sink(self, fn: Callable[..., None]) -> None:
++        self.notification_sink = fn
++
++    def emit(self, key: str) -> None:
++        """透過已註冊的 sink 發側欄通知（sink 為 None 時 no-op；sink 例外只記 log）。"""
++        sink = self.notification_sink
++        if sink is None:
++            return
++        try:
++            sink("warn", key, task_type=self.task_type)
++        except Exception:
++            logger.exception("[%s] notification sink failed", self.name)
++
++    def note_failure(self) -> bool:
++        """補完全庫旗標：每個 job 第一次回 True。"""
++        with self.lock:
++            if self.notified:
++                return False
++            self.notified = True
++            return True
++
++    def reset_notified(self) -> None:
++        with self.lock:
++            self.notified = False
++
++    def note_hook_failure(self) -> bool:
++        """入庫後掛勾旗標：每輪第一次回 True；不碰 ``notified``。"""
++        with self.lock:
++            if self.hook_notified:
++                return False
++            self.hook_notified = True
++            return True
++
++    def new_hook_round(self) -> None:
++        with self.lock:
++            self.hook_notified = False
++
++    # ── 持久化節流 ───────────────────────────────────────────────────────────
++
++    def persist_due(self, now_mono: float) -> bool:
++        """60 秒節流（第一次恆 True）。呼叫端須已持 ``self.lock``；這裡不取鎖。"""
++        last = self.last_persist_mono
++        if last is None or (now_mono - last) >= PERSIST_INTERVAL_S:
++            self.last_persist_mono = now_mono
++            return True
++        return False
++
++    # ── job 進度（每次呼叫當下讀 ``self.job``，測試會整包替換）──────────────────
++
++    def job_begin(self, kind: str, *, reset_notified: bool = False) -> None:
++        with self.lock:
++            self.job = self._new_job(kind)
++            if reset_notified:
++                self.notified = False
++
++    def job_progress(self) -> None:
++        with self.lock:
++            self.job["done"] += 1
++
++    def job_end(self, outcome: str) -> None:
++        with self.lock:
++            self.job["outcome"] = outcome
+--- /dev/null
++++ b/core/ai_services/embedding_cache.py
+@@ -0,0 +1,89 @@
++"""EmbeddingMatrixCache — 圖片相似向量矩陣 singleton（186-T5，CD-186-13）。
++
++形狀照 ``core/similar/ranker_cache.py``：雙重檢查 + RLock + ``invalidate()``。
++查詢時不打端點；只載 ``model==index_model ∧ dim==index_dim ∧ dim>0 ∧ cover_path`` 相符的列。
++
++不 import ``similar_state``／``similar_index``（避免循環）。
++"""
++from __future__ import annotations
++
++import threading
++from array import array
++from pathlib import Path
++from typing import Optional
++
++from core.database import EmbeddingRepository
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++
++class EmbeddingMatrixCache:
++    _instance: EmbeddingMatrixCache | None = None
++    _lock: threading.RLock = threading.RLock()
++
++    def __init__(
++        self,
++        model: str,
++        dim: int,
++        vectors: dict[int, array],
++        numbers: list[str],
++    ) -> None:
++        self.model = model
++        self.dim = dim
++        self.vectors = vectors
++        self.numbers = numbers  # 大寫、去重、有有效向量的番號
++
++    @classmethod
++    def get(
++        cls,
++        model: str,
++        dim: int,
++        db_path: Optional[Path] = None,
++    ) -> dict[int, array]:
++        """Lazy build + 雙重檢查；期望 (model, dim) 與快取不同就重建。"""
++        inst = cls._instance
++        if inst is not None and inst.model == model and inst.dim == dim:
++            return inst.vectors  # fast path
++
++        with cls._lock:
++            inst = cls._instance
++            if inst is not None and inst.model == model and inst.dim == dim:
++                return inst.vectors
++
++            repo = EmbeddingRepository(db_path)
++            rows = repo.load_valid_vectors(model, dim)
++            vectors: dict[int, array] = {}
++            seen_numbers: set[str] = set()
++            numbers: list[str] = []
++            for video_id, number, vec in rows:
++                vectors[video_id] = vec
++                if number:
++                    n = number.upper()
++                    if n not in seen_numbers:
++                        seen_numbers.add(n)
++                        numbers.append(n)
++            cls._instance = EmbeddingMatrixCache(model, dim, vectors, numbers)
++            logger.debug(
++                "EmbeddingMatrixCache: built %d vectors for %s dim=%d",
++                len(vectors), model, dim,
++            )
++            return cls._instance.vectors
++
++    @classmethod
++    def boosted_numbers(
++        cls,
++        model: str,
++        dim: int,
++        db_path: Optional[Path] = None,
++    ) -> list[str]:
++        """有有效向量的番號（大寫去重）；會確保 cache 已依 (model, dim) 建好。"""
++        cls.get(model, dim, db_path)
++        inst = cls._instance
++        return list(inst.numbers) if inst is not None else []
++
++    @classmethod
++    def invalidate(cls) -> None:
++        """清空 cache，下次 get() 重建。"""
++        with cls._lock:
++            cls._instance = None
+--- /dev/null
++++ b/core/ai_services/embeddings.py
+@@ -0,0 +1,203 @@
++"""OpenAI-compatible image embeddings client (CD-186-6)."""
++
++from __future__ import annotations
++
++import math
++from dataclasses import dataclass
++
++import httpx
++
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++_DIM_MIN = 128
++_DIM_MAX = 4096
++_DEFAULT_MODEL = "openaver-image-embedding"
++
++
++class EndpointError(Exception):
++    """Embeddings endpoint failure: kind is ``unreachable`` or ``contract``."""
++
++    def __init__(
++        self,
++        kind: str,
++        check: str | None = None,
++        status: int | None = None,
++    ):
++        self.kind = kind
++        self.check = check
++        self.status = status
++        super().__init__(kind, check, status)
++
++
++@dataclass(frozen=True)
++class EmbedResult:
++    vector: list[float]
++    model: str
++    dim: int
++
++
++def _new_client(timeout: httpx.Timeout) -> httpx.Client:
++    """Factory seam for tests (patch this, not global ``httpx.Client``)."""
++    return httpx.Client(timeout=timeout)
++
++
++def _timeout_for(first: bool) -> httpx.Timeout:
++    if first:
++        return httpx.Timeout(30.0, connect=5.0, read=90.0)
++    return httpx.Timeout(30.0, connect=5.0)
++
++
++def _build_request(cfg, data_uri: str) -> tuple[str, dict[str, str], dict]:
++    base = (getattr(cfg, "url", None) or "").strip()
++    if not base:
++        raise EndpointError("unreachable", None, None)
++    try:
++        parsed = httpx.URL(base)
++    except httpx.InvalidURL as e:
++        raise EndpointError("unreachable", None, None) from e
++    if parsed.scheme not in ("http", "https"):
++        raise EndpointError("unreachable", None, None)
++
++    url = f"{base.rstrip('/')}/v1/embeddings"
++    model = (getattr(cfg, "model", None) or "").strip() or _DEFAULT_MODEL
++    payload = {"model": model, "input": [data_uri]}
++    headers: dict[str, str] = {}
++    key = (getattr(cfg, "api_key", None) or "").strip()
++    if key:
++        headers["Authorization"] = f"Bearer {key}"
++    return url, headers, payload
++
++
++def _log_failure(
++    status: int | None,
++    kind: str,
++    check: str | None,
++    body: str,
++) -> None:
++    # Never log body content — endpoints may echo secrets in JSON-escaped form.
++    logger.warning(
++        "[ai_services.embed] status=%s kind=%s check=%s body_len=%s",
++        status,
++        kind,
++        check,
++        len(body or ""),
++    )
++
++
++def _send_with_retry(
++    client: httpx.Client,
++    url: str,
++    headers: dict[str, str],
++    payload: dict,
++) -> httpx.Response:
++    resp: httpx.Response | None = None
++    for attempt in range(2):
++        try:
++            resp = client.post(url, headers=headers, json=payload)
++        except (httpx.LocalProtocolError, UnicodeEncodeError):
++            # Key with whitespace / non-ASCII → h11 rejects; str(e) contains the key.
++            _log_failure(None, "contract", "auth", "")
++            raise EndpointError("contract", "auth", None) from None
++        except httpx.TimeoutException as e:
++            if attempt == 0:
++                continue
++            _log_failure(None, "unreachable", None, "")
++            raise EndpointError("unreachable", None, None) from e
++        except httpx.TransportError as e:
++            _log_failure(None, "unreachable", None, "")
++            raise EndpointError("unreachable", None, None) from e
++        except httpx.InvalidURL as e:
++            _log_failure(None, "unreachable", None, "")
++            raise EndpointError("unreachable", None, None) from e
++
++        if 500 <= resp.status_code < 600 and attempt == 0:
++            continue
++        return resp
++
++    assert resp is not None
++    return resp
++
++
++def _parse_response(resp: httpx.Response) -> EmbedResult:
++    status = resp.status_code
++    body_text = ""
++    try:
++        body_text = resp.text or ""
++    except Exception:
++        body_text = ""
++
++    def _fail(check: str) -> None:
++        _log_failure(status, "contract", check, body_text)
++        raise EndpointError("contract", check, status)
++
++    if status in (401, 403):
++        _fail("auth")
++    if 400 <= status < 500:
++        _fail("http_4xx")
++    if 500 <= status < 600:
++        _fail("http_5xx")
++
++    try:
++        data = resp.json()
++    except Exception:
++        _log_failure(status, "contract", "not_json", body_text)
++        raise EndpointError("contract", "not_json", status) from None
++
++    if not isinstance(data, dict):
++        _fail("shape")
++
++    model = data.get("model")
++    if not isinstance(model, str) or model == "":
++        _fail("no_model")
++
++    try:
++        emb = data["data"][0]["embedding"]
++    except (KeyError, IndexError, TypeError):
++        _log_failure(status, "contract", "shape", body_text)
++        raise EndpointError("contract", "shape", status) from None
++
++    if not isinstance(emb, list):
++        _fail("shape")
++
++    vec: list[float] = []
++    for x in emb:
++        if isinstance(x, bool) or not isinstance(x, (int, float)):
++            _fail("not_numeric")
++        try:
++            fx = float(x)
++        except (OverflowError, ValueError):
++            # Huge ints / bad coercions must not escape as 500 (P2).
++            _fail("shape")
++        if not math.isfinite(fx):
++            _fail("not_numeric")
++        vec.append(fx)
++
++    dim = len(vec)
++    if not (_DIM_MIN <= dim <= _DIM_MAX):
++        _fail("dim_range")
++
++    try:
++        norm = math.sqrt(math.sumprod(vec, vec))
++    except (OverflowError, ValueError):
++        _fail("shape")
++    if not math.isfinite(norm):
++        _fail("shape")
++    if norm == 0.0:
++        _fail("zero_norm")
++
++    vec = [x / norm for x in vec]
++    return EmbedResult(vector=vec, model=model, dim=dim)
++
++
++def embed(cfg, data_uri: str, *, first: bool = False) -> EmbedResult:
++    """POST ``{base}/v1/embeddings``; return L2-normalised vector.
++
++    Raises ``EndpointError`` on unreachable transport or contract mismatch.
++    """
++    url, headers, payload = _build_request(cfg, data_uri)
++    timeout = _timeout_for(first)
++    with _new_client(timeout) as client:
++        resp = _send_with_retry(client, url, headers, payload)
++    return _parse_response(resp)
+--- /dev/null
++++ b/core/ai_services/faces.py
+@@ -0,0 +1,236 @@
++"""Faces detection client (CD-187a-4 / CD-187a-6)."""
++
++from __future__ import annotations
++
++import math
++from dataclasses import dataclass
++from typing import NamedTuple
++
++import httpx
++
++from core.ai_services.embeddings import EndpointError
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++_PROFILES: dict[str, dict] = {
++    "background": {
++        "timeout": httpx.Timeout(30.0, connect=5.0),
++        "retry_5xx": True,
++        "retry_timeout": True,
++    },
++    "sync": {
++        "timeout": httpx.Timeout(15.0, connect=5.0),
++        "retry_5xx": True,
++        "retry_timeout": False,
++    },
++    "manual": {
++        "timeout": httpx.Timeout(4.0, connect=2.0),
++        "retry_5xx": False,
++        "retry_timeout": False,
++    },
++    "warmup": {
++        "timeout": httpx.Timeout(30.0, connect=5.0, read=90.0),
++        "retry_5xx": True,
++        "retry_timeout": True,
++    },
++}
++
++
++class Box(NamedTuple):
++    x: float
++    y: float
++    w: float
++    h: float
++    score: float
++
++
++@dataclass(frozen=True)
++class FacesResult:
++    boxes: list[Box]
++    model: str
++
++
++def _new_client(timeout: httpx.Timeout) -> httpx.Client:
++    """Factory seam for tests (patch this, not global ``httpx.Client``)."""
++    return httpx.Client(timeout=timeout)
++
++
++def _profile_cfg(profile: str) -> dict:
++    cfg = _PROFILES.get(profile)
++    if cfg is None:
++        raise ValueError(f"unknown faces profile: {profile!r}")
++    return cfg
++
++
++def _build_request(cfg, data_uri: str) -> tuple[str, dict[str, str], dict]:
++    base = (getattr(cfg, "url", None) or "").strip()
++    if not base:
++        raise EndpointError("unreachable", None, None)
++    try:
++        parsed = httpx.URL(base)
++    except httpx.InvalidURL as e:
++        raise EndpointError("unreachable", None, None) from e
++    if parsed.scheme not in ("http", "https"):
++        raise EndpointError("unreachable", None, None)
++
++    url = f"{base.rstrip('/')}/v1/faces"
++    payload: dict = {"input": data_uri, "with_embedding": False}
++    model = (getattr(cfg, "model", None) or "").strip()
++    if model:
++        payload["model"] = model
++    headers: dict[str, str] = {}
++    key = (getattr(cfg, "api_key", None) or "").strip()
++    if key:
++        headers["Authorization"] = f"Bearer {key}"
++    return url, headers, payload
++
++
++def _log_failure(
++    status: int | None,
++    kind: str,
++    check: str | None,
++    body: str,
++) -> None:
++    # Never log body content — endpoints may echo secrets in JSON-escaped form.
++    logger.warning(
++        "[ai_services.faces] status=%s kind=%s check=%s body_len=%s",
++        status,
++        kind,
++        check,
++        len(body or ""),
++    )
++
++
++def _send_with_retry(
++    client: httpx.Client,
++    url: str,
++    headers: dict[str, str],
++    payload: dict,
++    *,
++    retry_5xx: bool,
++    retry_timeout: bool,
++) -> httpx.Response:
++    resp: httpx.Response | None = None
++    for attempt in range(2):
++        try:
++            resp = client.post(url, headers=headers, json=payload)
++        except (httpx.LocalProtocolError, UnicodeEncodeError):
++            # Key with whitespace / non-ASCII → h11 rejects; str(e) contains the key.
++            _log_failure(None, "contract", "auth", "")
++            raise EndpointError("contract", "auth", None) from None
++        except httpx.TimeoutException as e:
++            if retry_timeout and attempt == 0:
++                continue
++            _log_failure(None, "unreachable", "timeout", "")
++            raise EndpointError("unreachable", "timeout", None) from e
++        except httpx.TransportError as e:
++            _log_failure(None, "unreachable", None, "")
++            raise EndpointError("unreachable", None, None) from e
++        except httpx.InvalidURL as e:
++            _log_failure(None, "unreachable", None, "")
++            raise EndpointError("unreachable", None, None) from e
++
++        if 500 <= resp.status_code < 600 and retry_5xx and attempt == 0:
++            continue
++        return resp
++
++    assert resp is not None
++    return resp
++
++
++def _finite_number(value) -> float | None:
++    if isinstance(value, bool) or not isinstance(value, (int, float)):
++        return None
++    try:
++        fx = float(value)
++    except (OverflowError, ValueError):
++        return None
++    if not math.isfinite(fx):
++        return None
++    return fx
++
++
++def _clamp01(v: float) -> float:
++    if v < 0.0:
++        return 0.0
++    if v > 1.0:
++        return 1.0
++    return v
++
++
++def _parse_box(entry: object, fail) -> Box:
++    if not isinstance(entry, dict):
++        fail("shape")
++    raw_box = entry.get("box")
++    if not isinstance(raw_box, list) or len(raw_box) != 4:
++        fail("box")
++    nums: list[float] = []
++    for v in raw_box:
++        fx = _finite_number(v)
++        if fx is None:
++            fail("box")
++        nums.append(_clamp01(fx))
++    score = _finite_number(entry.get("score"))
++    if score is None:
++        fail("score")
++    return Box(nums[0], nums[1], nums[2], nums[3], score)
++
++
++def _parse_response(resp: httpx.Response) -> FacesResult:
++    status = resp.status_code
++    body_text = ""
++    try:
++        body_text = resp.text or ""
++    except Exception:
++        body_text = ""
++
++    def _fail(check: str) -> None:
++        _log_failure(status, "contract", check, body_text)
++        raise EndpointError("contract", check, status)
++
++    if status in (401, 403):
++        _fail("auth")
++    if 400 <= status < 500:
++        _fail("http_4xx")
++    if 500 <= status < 600:
++        _fail("http_5xx")
++
++    try:
++        data = resp.json()
++    except Exception:
++        _log_failure(status, "contract", "not_json", body_text)
++        raise EndpointError("contract", "not_json", status) from None
++
++    if not isinstance(data, dict):
++        _fail("shape")
++
++    model = data.get("model")
++    if not isinstance(model, str) or model == "":
++        _fail("no_model")
++
++    faces_raw = data.get("faces")
++    if not isinstance(faces_raw, list):
++        _fail("shape")
++
++    boxes = [_parse_box(entry, _fail) for entry in faces_raw]
++    return FacesResult(boxes=boxes, model=model)
++
++
++def detect(cfg, data_uri: str, *, profile: str = "background") -> FacesResult:
++    """POST ``{base}/v1/faces``; return boxes + model.
++
++    Raises ``EndpointError`` on unreachable transport or contract mismatch.
++    """
++    pcfg = _profile_cfg(profile)
++    url, headers, payload = _build_request(cfg, data_uri)
++    with _new_client(pcfg["timeout"]) as client:
++        resp = _send_with_retry(
++            client,
++            url,
++            headers,
++            payload,
++            retry_5xx=pcfg["retry_5xx"],
++            retry_timeout=pcfg["retry_timeout"],
++        )
++    return _parse_response(resp)
+--- /dev/null
++++ b/core/ai_services/faces_config.py
+@@ -0,0 +1,11 @@
++"""Faces endpoint activation predicate (CD-187a-3). Stdlib-only."""
++
++from __future__ import annotations
++
++
++def active_in(cfg: dict) -> bool:
++    """True iff ``ai_services.faces.enabled`` and ``url.strip()`` are both set."""
++    faces = (cfg or {}).get("ai_services", {}).get("faces") or {}
++    if not faces.get("enabled"):
++        return False
++    return bool((faces.get("url") or "").strip())
+--- /dev/null
++++ b/core/ai_services/faces_detect.py
+@@ -0,0 +1,195 @@
++"""External faces detection entry (CD-187a-1 / -4 / -6 / -15).
++
++Never raises: unexpected errors log and return ``None`` (local path takes over).
++``None`` also means external not applicable (disabled / unreadable cover).
++"""
++
++from __future__ import annotations
++
++import os
++import threading
++from collections import OrderedDict
++from types import SimpleNamespace
++from typing import NamedTuple, Optional
++
++from core.ai_services import faces, faces_state
++from core.ai_services.embeddings import EndpointError
++from core.ai_services.faces_config import active_in
++from core.ai_services.image_prep import cover_to_faces_data_uri
++from core.config import load_config
++from core.focal.detector import select_focal_from_boxes
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++
++class ExternalResult(NamedTuple):
++    """External detect outcome. ``None`` from ``detect`` means not applicable."""
++
++    kind: str  # "FOUND" | "NO_FACE" | "FAILED"
++    focal: Optional[tuple[float, float]] = None
++    model: Optional[str] = None
++    failure: Optional[str] = None
++
++
++def observe_model(model: str) -> None:
++    """Report the endpoint model to the recompute job (lazy import: no module cycle)."""
++    try:
++        from core.ai_services import faces_recompute
++
++        faces_recompute.observe_model(model)
++    except Exception:
++        logger.exception("[faces_detect] observe_model failed")
++
++
++def _faces_cfg_object(cfg: dict) -> SimpleNamespace:
++    faces_cfg = (cfg.get("ai_services") or {}).get("faces") or {}
++    return SimpleNamespace(
++        url=(faces_cfg.get("url") or ""),
++        api_key=(faces_cfg.get("api_key") or ""),
++        model=(faces_cfg.get("model") or ""),
++    )
++
++
++def _prepare(fs_path: str) -> tuple[dict, str, tuple[int, int]] | None:
++    """Config + preprocess. ``None`` = external not applicable."""
++    cfg = load_config()
++    if not active_in(cfg):
++        return None
++    prepared = cover_to_faces_data_uri(fs_path)
++    if prepared is None:
++        return None
++    uri, size = prepared
++    return cfg, uri, size
++
++
++def _failure_label(err: EndpointError) -> str:
++    if err.kind == "unreachable" and err.check == "timeout":
++        return "external_timeout"
++    if err.kind == "unreachable":
++        return "external_unreachable"
++    return "external_contract"
++
++
++def _ask_endpoint(
++    cfg: dict, uri: str, profile: str
++) -> tuple[object, None] | tuple[None, EndpointError]:
++    """Call ``faces.detect``; return ``(FacesResult, None)`` or ``(None, EndpointError)``."""
++    try:
++        result = faces.detect(_faces_cfg_object(cfg), uri, profile=profile)
++        return result, None
++    except EndpointError as e:
++        return None, e
++
++
++def _to_external_result(
++    faces_result, work_w: int, work_h: int, ratio: float, profile: str
++) -> ExternalResult:
++    """Map boxes → FOUND/NO_FACE and update faces_state on the success path."""
++    focal = select_focal_from_boxes(faces_result.boxes, work_w, work_h, ratio)
++    model = faces_result.model
++    if focal is None:
++        kind = "NO_FACE"
++        out = ExternalResult(kind=kind, focal=None, model=model, failure=None)
++    else:
++        kind = "FOUND"
++        out = ExternalResult(kind=kind, focal=focal, model=model, failure=None)
++    if profile != "warmup":
++        faces_state.observe_success(model)
++        observe_model(model)
++    return out
++
++
++def _record_endpoint_error(
++    err: EndpointError, profile: str, *, notify: bool
++) -> ExternalResult:
++    faces_state.observe_failure(err.kind, err.check)
++    if notify and profile == "background" and faces_state.note_failure():
++        faces_state.emit_unreachable()
++    return ExternalResult(
++        kind="FAILED",
++        focal=None,
++        model=None,
++        failure=_failure_label(err),
++    )
++
++
++def detect(
++    fs_path: str,
++    ratio: float,
++    profile: str = "background",
++    *,
++    notify: bool = True,
++) -> ExternalResult | None:
++    """Ask the faces endpoint for a cover. Never raises.
++
++    Returns ``None`` when external is off or the cover cannot be read.
++    ``notify=False`` skips sidebar emit on failure (recompute path, CD-187a-15).
++    """
++    try:
++        prepared = _prepare(fs_path)
++        if prepared is None:
++            return None
++        cfg, uri, size = prepared
++        work_w, work_h = size
++        faces_result, err = _ask_endpoint(cfg, uri, profile)
++        if err is not None:
++            return _record_endpoint_error(err, profile, notify=notify)
++        return _to_external_result(faces_result, work_w, work_h, ratio, profile)
++    except Exception:
++        logger.exception("[faces_detect] unexpected error; falling back to local")
++        return None
++
++
++_DETECT_CACHE_MAX = 32
++_DETECT_CACHE: "OrderedDict[tuple, Optional[tuple[float, float]]]" = OrderedDict()
++_DETECT_CACHE_LOCK = threading.Lock()
++
++
++def _reset_detect_cache() -> None:
++    """Test helper: clear the focal-only LRU."""
++    with _DETECT_CACHE_LOCK:
++        _DETECT_CACHE.clear()
++
++
++def _detect_cache_key(fs_path: str, ratio: float, cfg: dict) -> Optional[tuple]:
++    try:
++        mtime = os.stat(fs_path).st_mtime
++    except OSError:
++        return None
++    faces_cfg = (cfg.get("ai_services") or {}).get("faces") or {}
++    url = (faces_cfg.get("url") or "").strip()
++    return (fs_path, mtime, url, faces_cfg.get("model") or "", ratio)
++
++
++def detect_focal_only(
++    fs_path: str, ratio: float, profile: str = "sync"
++) -> tuple[float, float] | None:
++    """Focal point only (avatar crop, CD-187a-17). Small LRU; never raises.
++
++    Caches FOUND (focal) and NO_FACE (``None``); FAILED / not-applicable are not cached.
++    """
++    try:
++        cfg = load_config()
++        if not active_in(cfg):
++            return None
++        key = _detect_cache_key(fs_path, ratio, cfg)
++        if key is not None:
++            with _DETECT_CACHE_LOCK:
++                if key in _DETECT_CACHE:
++                    _DETECT_CACHE.move_to_end(key)
++                    return _DETECT_CACHE[key]
++        result = detect(fs_path, ratio, profile=profile)
++        if result is None or result.kind == "FAILED":
++            return None
++        focal = result.focal if result.kind == "FOUND" else None
++        if key is not None:
++            with _DETECT_CACHE_LOCK:
++                _DETECT_CACHE[key] = focal
++                _DETECT_CACHE.move_to_end(key)
++                while len(_DETECT_CACHE) > _DETECT_CACHE_MAX:
++                    _DETECT_CACHE.popitem(last=False)
++        return focal
++    except Exception:
++        logger.exception("[faces_detect] detect_focal_only failed; fixed crop")
++        return None
+--- /dev/null
++++ b/core/ai_services/faces_recompute.py
+@@ -0,0 +1,367 @@
++"""全庫人臉焦點重算工作（187a-T4a，CD-187a-11／-12／-14／-15）。
++
++公開介面：``ensure``／``resume``／``start_rebuild``／``request_stop``／``status``。
++HTTP 入口在 T4b；這裡全是 core 邏輯。鎖／停止骨架抄 ``similar_index``，不做掃描承接。
++"""
++from __future__ import annotations
++
++import os
++import threading
++from types import SimpleNamespace
++from typing import Optional
++
++from core.ai_services import faces_detect, faces_state, samples
++from core.ai_services.faces_config import active_in
++from core.ai_services.job_shell import JobShell
++from core.config import load_config
++from core.database import VideoRepository
++from core.focal.detector import format_focal
++from core.focal.gate import requires_face_detection
++from core.logger import get_logger
++from core.path_utils import uri_to_local_fs_path
++
++logger = get_logger(__name__)
++
++THREAD_NAME = "faces-recompute"
++META_TARGET = "ai.faces.target_model"
++_DETECT_RATIO = 0.71
++
++_SHELL = JobShell()
++_unreadable: int = 0
++_stopped_reason: Optional[str] = None
++_stopped_kind: Optional[str] = None
++_stopped_check: Optional[str] = None
++
++
++# ── 鎖 ───────────────────────────────────────────────────────────────────────
++
++def _begin_job(kind: str) -> None:
++    global _unreadable, _stopped_reason, _stopped_kind, _stopped_check
++    _SHELL.begin_locked()
++    _unreadable = 0
++    _stopped_reason = _stopped_kind = _stopped_check = None
++    faces_state.job_begin(kind)
++
++
++def _release_job(outcome: str) -> None:
++    faces_state.job_end(outcome)
++    if _SHELL.is_running():
++        _SHELL.release_locked()
++
++
++def _release_unlaunched(outcome: str) -> None:
++    with _SHELL.state_lock:
++        _release_job(outcome)
++
++
++# ── 設定／候選 ───────────────────────────────────────────────────────────────
++
++def _faces_cfg_object(config: dict) -> SimpleNamespace:
++    raw = (config.get("ai_services") or {}).get("faces") or {}
++    return SimpleNamespace(
++        url=(raw.get("url") or ""),
++        api_key=(raw.get("api_key") or ""),
++        model=(raw.get("model") or ""),
++    )
++
++
++def _path_mappings(config: dict) -> dict:
++    return (config.get("gallery") or {}).get("path_mappings") or {}
++
++
++def _gated_rows(repo: VideoRepository) -> list:
++    """list_focal_recompute_rows 後 Python 側 gate 過濾（BE-SCRAPER-03）。"""
++    rows = repo.list_focal_recompute_rows()
++    return [
++        r for r in rows
++        if requires_face_detection(r[1] or "", r[2] or "")
++    ]
++
++
++def _is_done(row: tuple, target: str) -> bool:
++    """這部片對 target 已有結果：focal_model 相符且 has_result。"""
++    return row[4] == target and row[5]
++
++
++def _counts(repo: VideoRepository, target: Optional[str]) -> dict:
++    gated = _gated_rows(repo)
++    total = len(gated)
++    if not target:
++        processed = 0
++    else:
++        processed = sum(1 for r in gated if _is_done(r, target))
++    return {
++        "total": total,
++        "processed": processed,
++        "pending": total - processed,
++        "gated": gated,
++    }
++
++
++def _rebuild_count(repo: VideoRepository) -> int:
++    """gate 命中、auto、且已有結果（has_result）的片數（前端確認對話用）。"""
++    return sum(1 for r in _gated_rows(repo) if r[5])
++
++
++def _pending_rows(repo: VideoRepository, target: str) -> list:
++    return [r for r in _gated_rows(repo) if not _is_done(r, target)]
++
++
++def _failure_to_stop_reason(failure: Optional[str]) -> str:
++    if failure == "external_contract":
++        return "contract"
++    return "unreachable"
++
++
++# ── 公開介面 ─────────────────────────────────────────────────────────────────
++
++def ensure(model: str, kind: str = "model_change") -> bool:
++    """設 target＝model；待處理＝0 → 不開工；已在跑 → 只更新 target；否則起 thread。"""
++    faces_state.meta_set(META_TARGET, model)
++    repo = VideoRepository()
++    counts = _counts(repo, model)
++    if counts["pending"] == 0:
++        return False
++    with _SHELL.state_lock:
++        if not _SHELL.try_acquire():
++            return False  # 已在跑：target 已更新，迴圈每張重讀
++        _begin_job(kind)
++    _start_thread(kind)
++    return True
++
++
++def resume() -> dict:
++    """繼續未完成的重算（讀 app_meta target）。"""
++    target = faces_state.meta_get(META_TARGET)
++    if not target:
++        return {"started": False, "reason": "no_target"}
++    repo = VideoRepository()
++    if _counts(repo, target)["pending"] == 0:
++        return {"started": False, "reason": "nothing_pending"}
++    with _SHELL.state_lock:
++        if not _SHELL.try_acquire():
++            return {"started": False, "reason": "already_running"}
++        _begin_job("resume")
++    _start_thread("resume")
++    return {"started": True, "reason": "started"}
++
++
++def start_rebuild() -> dict:
++    """「刪除並重新對焦」：先測後清（CD-187a-14）。"""
++    with _SHELL.state_lock:
++        if not _SHELL.try_acquire():
++            return {"ok": False, "reason": "already_running"}
++        _begin_job("rebuild")
++    try:
++        return _start_rebuild_after_lock()
++    except BaseException:
++        _release_unlaunched("error")
++        raise
++
++
++def _start_rebuild_after_lock() -> dict:
++    test = _run_rebuild_test()
++    if not test.ok:
++        _release_unlaunched("test_failed")
++        return {
++            "ok": False,
++            "reason": "test_failed",
++            "kind": test.kind,
++            "check": test.check,
++        }
++    _clear_for_rebuild(test.model)
++    faces_state.meta_set(META_TARGET, test.model)
++    _start_thread("rebuild")
++    return {"ok": True, "reason": "started"}
++
++
++def _run_rebuild_test():
++    config = load_config()
++    cfg = _faces_cfg_object(config)
++    test = samples.run_faces_test(cfg)
++    if test.ok:
++        faces_state.observe_success(test.model or "")
++    else:
++        faces_state.observe_failure(test.kind, test.check)
++    return test
++
++
++def _gate_hit_paths_for_clear(repo: VideoRepository) -> list[str]:
++    """gate 命中且有封面的 path（**含 manual**）。
++
++    清焦點時把 manual 也放進 ``IN (...)``，讓 SQL 的
++    ``crop_mode != 'manual'`` 成為 I-G 的負載點（mutation 可證偽）。
++    """
++    conn = repo._get_connection()
++    try:
++        rows = conn.execute(
++            "SELECT path, number, maker, cover_path FROM videos "
++            "WHERE cover_path != '' ORDER BY path"
++        ).fetchall()
++    finally:
++        conn.close()
++    return [
++        p for p, number, maker, _cover in rows
++        if requires_face_detection(number or "", maker or "")
++    ]
++
++
++def _clear_for_rebuild(model: str) -> None:
++    repo = VideoRepository()
++    paths = _gate_hit_paths_for_clear(repo)
++    if paths:
++        repo.clear_auto_focal_for_paths(paths)
++
++
++def request_stop() -> dict:
++    _SHELL.request_stop()
++    return {"ok": True, "running": _SHELL.is_running()}
++
++
++def status() -> dict:
++    """純讀 DB＋記憶體，不打端點。"""
++    repo = VideoRepository()
++    target = faces_state.meta_get(META_TARGET)
++    counts = _counts(repo, target)
++    snap = faces_state.snapshot()
++    running = _SHELL.is_running()
++    return {
++        "running": running,
++        "job_kind": snap["job"]["kind"] if running else None,
++        "processed": counts["processed"],
++        "total": counts["total"],
++        "pending": counts["pending"],
++        "unreadable": _unreadable,
++        "stopped_reason": _stopped_reason,
++        "kind": _stopped_kind if _stopped_reason else snap["kind"],
++        "check": _stopped_check if _stopped_reason else snap["check"],
++        "target_model": target,
++        "rebuild_count": _rebuild_count(repo),
++    }
++
++
++def _start_thread(kind: str) -> None:
++    _SHELL.start_thread(
++        _worker_main, (kind,), name=THREAD_NAME,
++        on_failure=lambda: _release_unlaunched("error"))
++
++
++# ── 工作 thread ───────────────────────────────────────────────────────────────
++
++def _worker_main(kind: str) -> None:
++    outcome = "error"
++    try:
++        outcome = _work_loop()
++    except Exception:
++        logger.exception("[faces_recompute] worker crashed")
++    finally:
++        with _SHELL.state_lock:
++            if _SHELL.is_running():
++                _release_job(outcome)
++
++
++def _work_loop() -> str:
++    """多 pass：一 pass 結束後若 target 變了且仍有待處理 → 再跑。"""
++    while True:
++        target = faces_state.meta_get(META_TARGET)
++        if not target:
++            return "no_target"
++        pass_target = target
++        repo = VideoRepository()
++        pending = _pending_rows(repo, pass_target)
++        if not pending:
++            return "drained"
++        config = load_config()
++        mappings = _path_mappings(config)
++        for row in pending:
++            if _SHELL.stop.is_set():
++                return "stopped"
++            stop_reason = _process_one(repo, row, mappings)
++            if stop_reason is not None:
++                return "failed"
++            faces_state.job_progress()
++        # pass 結束：target 中途被改且仍有待處理 → 再跑
++        new_target = faces_state.meta_get(META_TARGET)
++        if new_target and new_target != pass_target:
++            if _pending_rows(repo, new_target):
++                continue
++        return "drained"
++
++
++def _process_one(repo: VideoRepository, row: tuple, mappings: dict) -> Optional[str]:
++    """處理一張。回 stop_reason 字串＝工作須停；None＝繼續。"""
++    global _unreadable, _stopped_reason, _stopped_kind, _stopped_check
++    path, _number, _maker, cover_path, _focal_model, _has_result = row
++    fs = uri_to_local_fs_path(cover_path, mappings)
++    if not fs or not os.path.exists(fs):
++        _unreadable += 1
++        return None
++
++    result = faces_detect.detect(
++        fs, _DETECT_RATIO, profile="background", notify=False
++    )
++    if result is None:
++        if not active_in(load_config()):
++            _stopped_reason = "disabled"
++            snap = faces_state.snapshot()
++            _stopped_kind, _stopped_check = snap["kind"], snap["check"]
++            return "disabled"
++        _unreadable += 1
++        return None
++
++    if result.kind == "FAILED":
++        _stopped_reason = _failure_to_stop_reason(result.failure)
++        snap = faces_state.snapshot()
++        _stopped_kind, _stopped_check = snap["kind"], snap["check"]
++        return _stopped_reason
++
++    focal_str = format_focal(result.focal)
++    model = result.model or "local-pigo"
++    repo.update_auto_focal(path, focal_str, cover_path, model=model)
++    return None
++
++
++# ── 自動觸發（187a-T4b，CD-12）──────────────────────────────────────────────
++
++_TARGET_CACHE_LOCK = threading.Lock()
++_target_cache: Optional[str] = None  # 不可變字串；僅作「同模型零成本」的快取
++
++
++def _remember_target(model: str) -> None:
++    global _target_cache
++    with _TARGET_CACHE_LOCK:
++        _target_cache = model
++
++
++def observe_model(model: str) -> None:
++    """外部偵測成功時回報模型：與 target 相同＝零成本；不同才 ``ensure``。
++
++    只呼叫 ``ensure``（對 ``_SHELL.job_lock`` 為 non-blocking），重算 thread 內呼叫不會死鎖。
++    ``ensure`` 回 False（已在跑／待處理＝0）不重試。
++    """
++    with _TARGET_CACHE_LOCK:
++        if model == _target_cache:
++            return
++    if faces_state.meta_get(META_TARGET) == model:
++        _remember_target(model)
++        return
++    ensure(model)
++    _remember_target(model)
++
++
++def on_settings_saved() -> bool:
++    """儲存人臉設定後：伺服器端自己再測一次；通過且有 ``focal_model != 回報 model``
++    的候選才 ``ensure``。沒過＝什麼都不做、不動 target。回傳是否起了工作。"""
++    config = load_config()
++    if not active_in(config):
++        return False
++    test = samples.run_faces_test(_faces_cfg_object(config))
++    if not test.ok or not test.model:
++        faces_state.observe_failure(test.kind, test.check)
++        return False
++    faces_state.observe_success(test.model)
++    if not _pending_rows(VideoRepository(), test.model):
++        return False
++    started = ensure(test.model)
++    _remember_target(test.model)
++    return started
+--- /dev/null
++++ b/core/ai_services/faces_state.py
+@@ -0,0 +1,116 @@
++"""Faces endpoint memory state + notification sink (CD-187a-15).
++
++Module-level: restart clears memory. ``last_success_at`` persistence is throttled
++(≤60s) into ``app_meta``; ``job`` tracks the current recompute pass.
++"""
++
++from __future__ import annotations
++
++import time
++from typing import Callable, Optional
++
++from core.ai_services import backfill_state
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++NOTIFY_KEY = "notif.ai_faces_unreachable"
++META_LAST_SUCCESS = "ai.faces.last_success_at"
++
++# monkeypatch seam for observe_success throttle tests (DoD 4)
++_monotonic = time.monotonic
++
++# 共用欄位（notified／last_success_at／job／鎖／sink／節流）在 ``_STATE``（189a-T8）；
++# ``degraded`` 語意是「任何失敗都設」，與 ``_STATE.unreachable`` 不同，留在模組層。
++_STATE = backfill_state.BackfillState(name="faces_state", task_type="ai_faces")
++
++observed_model: Optional[str] = None
++degraded: bool = False
++last_error_kind: Optional[str] = None
++last_error_check: Optional[str] = None
++
++
++def set_notification_sink(fn: Callable[..., None]) -> None:
++    """core cannot import web: web/app.py registers ``emit_notification`` (BE-LINT-09)."""
++    _STATE.set_sink(fn)
++
++
++def meta_get(key: str) -> Optional[str]:
++    """Read one ``app_meta`` value (None if absent)."""
++    return backfill_state.meta_get(key)
++
++
++def meta_set(key: str, value: str) -> None:
++    """Upsert one ``app_meta`` value."""
++    backfill_state.meta_set(key, value)
++
++
++def observe_success(model: str) -> None:
++    """External FOUND/NO_FACE: clear degraded, errors, notified; stamp success time.
++
++    Persist ``ai.faces.last_success_at`` at most once per 60s (first call immediate).
++    """
++    global observed_model, degraded, last_error_kind, last_error_check
++    now = time.time()
++    now_mono = _monotonic()
++    persist = False
++    with _STATE.lock:
++        observed_model = model
++        degraded = False
++        last_error_kind = last_error_check = None
++        _STATE.notified = False
++        _STATE.last_success_at = now
++        persist = _STATE.persist_due(now_mono)
++    if persist:
++        try:
++            meta_set(META_LAST_SUCCESS, repr(now))
++        except Exception:
++            logger.exception("[faces_state] persist last_success_at failed")
++
++
++def observe_failure(kind: Optional[str], check: Optional[str]) -> None:
++    """Any endpoint failure: mark degraded and record kind/check."""
++    global degraded, last_error_kind, last_error_check
++    with _STATE.lock:
++        degraded = True
++        last_error_kind, last_error_check = kind, check
++
++
++def note_failure() -> bool:
++    """Return True once per round (first background failure that should notify)."""
++    return _STATE.note_failure()
++
++
++def new_round() -> None:
++    """Scan-round reset: only clears the notification dedupe flag."""
++    _STATE.reset_notified()
++
++
++def emit_unreachable() -> None:
++    """Fire the sidebar notice via the registered sink (no-op if unset)."""
++    _STATE.emit(NOTIFY_KEY)
++
++
++def job_begin(kind: str) -> None:
++    _STATE.job_begin(kind)
++
++
++def job_progress() -> None:
++    _STATE.job_progress()
++
++
++def job_end(outcome: str) -> None:
++    _STATE.job_end(outcome)
++
++
++def snapshot() -> dict:
++    with _STATE.lock:
++        return {
++            "observed_model": observed_model,
++            "degraded": degraded,
++            "kind": last_error_kind,
++            "check": last_error_check,
++            "notified": _STATE.notified,
++            "last_success_at": _STATE.last_success_at,
++            "job": dict(_STATE.job),
++        }
+--- /dev/null
++++ b/core/ai_services/image_prep.py
+@@ -0,0 +1,183 @@
++"""Cover image → data URI prep for embeddings (CD-186-10) and faces (CD-187a-5)."""
++
++from __future__ import annotations
++
++import base64
++import io
++
++from PIL import Image, ImageOps
++
++from core.focal.detector import parse_focal
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++EMBED_MAX_EDGE = 448
++FACES_MAX_EDGE = 650
++
++
++def _encode_jpeg_data_uri(im: Image.Image, quality: int) -> str:
++    buf = io.BytesIO()
++    im.save(buf, format="JPEG", quality=quality)
++    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
++    return f"data:image/jpeg;base64,{b64}"
++
++
++def cover_to_data_uri(fs_path: str) -> str | None:
++    """Right-half crop, long edge ≤448, JPEG q=90 → data URI.
++
++    Unreadable path / non-image → ``None`` (never raises).
++    """
++    if not fs_path:
++        return None
++    try:
++        with Image.open(fs_path) as im:
++            im = im.convert("RGB")
++            w, h = im.size
++            if w <= 0 or h <= 0:
++                return None
++            # x ∈ [50%, 100%], full height
++            left = w // 2
++            im = im.crop((left, 0, w, h))
++            cw, ch = im.size
++            long_edge = max(cw, ch)
++            if long_edge > EMBED_MAX_EDGE:
++                scale = EMBED_MAX_EDGE / float(long_edge)
++                nw = max(1, int(round(cw * scale)))
++                nh = max(1, int(round(ch * scale)))
++                im = im.resize((nw, nh), Image.Resampling.LANCZOS)
++            return _encode_jpeg_data_uri(im, 90)
++    except Exception:
++        return None
++
++
++def cover_to_faces_data_uri(fs_path: str) -> tuple[str, tuple[int, int]] | None:
++    """Full frame, EXIF-transpose, long edge ≤650, JPEG q=90 → data URI + size.
++
++    Unreadable path / non-image → ``None`` (never raises).
++    """
++    if not fs_path:
++        return None
++    try:
++        with Image.open(fs_path) as im:
++            im = ImageOps.exif_transpose(im)
++            im = im.convert("RGB")
++            w, h = im.size
++            if w <= 0 or h <= 0:
++                return None
++            long_edge = max(w, h)
++            if long_edge > FACES_MAX_EDGE:
++                scale = FACES_MAX_EDGE / float(long_edge)
++                nw = max(1, int(round(w * scale)))
++                nh = max(1, int(round(h * scale)))
++                im = im.resize((nw, nh), Image.Resampling.LANCZOS)
++            size = im.size
++            uri = _encode_jpeg_data_uri(im, 90)
++    except Exception:
++        return None
++    return uri, size
++
++
++def read_exif_orientation(fs_path: str) -> int:
++    """EXIF Orientation (1-8) of the file; unreadable / absent / out of range → 1."""
++    try:
++        with Image.open(fs_path) as im:
++            value = int(im.getexif().get(0x0112, 1))
++    except Exception:
++        return 1
++    return value if 1 <= value <= 8 else 1
++
++
++def upright_focal_to_raw(
++    focal: tuple[float, float], orientation: int
++) -> tuple[float, float]:
++    """Normalized point on the EXIF-upright image → normalized point on the raw pixels.
++
++    The faces endpoint sees the transposed image (``cover_to_faces_data_uri``), so its
++    coordinates are upright; ``crop_to_poster`` crops raw pixels. Inverse of PIL's
++    ``ImageOps.exif_transpose`` for Orientation 1-8 (unknown → identity).
++    """
++    u, v = focal
++    if orientation == 2:
++        return (1 - u, v)
++    if orientation == 3:
++        return (1 - u, 1 - v)
++    if orientation == 4:
++        return (u, 1 - v)
++    if orientation == 5:
++        return (v, u)
++    if orientation == 6:
++        return (v, 1 - u)
++    if orientation == 7:
++        return (1 - v, 1 - u)
++    if orientation == 8:
++        return (1 - v, u)
++    return (u, v)
++
++
++POSTER_CROP_RATIO = 0.71   # 與 theme.css --poster-crop-ratio 同值（測試從 CSS 檔對帳）
++FOCAL_X_DEADZONE = 0.62    # 同 web/static/js/shared/focal.js
++TAGS_MAX_EDGE = 800
++
++
++def _usable_focal(crop_mode, auto_focal):
++    if crop_mode not in ("manual", "auto"):
++        return None
++    focal = parse_focal(auto_focal)
++    if focal is None:
++        return None
++    if crop_mode == "auto" and focal[0] >= FOCAL_X_DEADZONE:
++        return None
++    return focal
++
++
++def poster_crop_box(w, h, crop_mode, auto_focal):
++    win_w = round(POSTER_CROP_RATIO * h)
++    if w <= win_w:  # 直式：全寬、上下置中；y0 夾到 >=0
++        y0 = max(round((h - w / POSTER_CROP_RATIO) / 2), 0)
++        return (0, y0, w, h - y0)
++    x0 = w - win_w
++    focal = _usable_focal(crop_mode, auto_focal)
++    if focal is not None:
++        x0 = max(min(int(w * focal[0]) - win_w // 2, w - win_w), 0)
++    return (x0, 0, x0 + win_w, h)
++
++
++def poster_to_jpeg_bytes(fs_path, crop_mode, auto_focal):
++    if not fs_path:
++        return None
++    try:
++        with Image.open(fs_path) as im:
++            upright = ImageOps.exif_transpose(im)
++            upright = upright.convert("RGB")
++            w, h = upright.size
++            if w <= 0 or h <= 0:
++                return None
++            box = poster_crop_box(w, h, crop_mode, auto_focal)
++            x0, y0, x1, y1 = box
++            if x1 <= x0 or y1 <= y0:
++                return None
++            cropped = upright.crop(box)
++            cw, ch = cropped.size
++            long_edge = max(cw, ch)
++            if long_edge > TAGS_MAX_EDGE:
++                scale = TAGS_MAX_EDGE / float(long_edge)
++                nw = max(1, int(round(cw * scale)))
++                nh = max(1, int(round(ch * scale)))
++                cropped = cropped.resize((nw, nh), Image.Resampling.LANCZOS)
++            buf = io.BytesIO()
++            cropped.save(buf, format="JPEG", quality=90)
++            return buf.getvalue()
++    except FileNotFoundError:
++        return None
++    except Exception as e:
++        logger.warning("poster_to_jpeg_bytes failed for %s: %s", fs_path, e)
++        return None
++
++
++def poster_to_data_uri(fs_path, crop_mode="default", auto_focal=""):
++    jpeg = poster_to_jpeg_bytes(fs_path, crop_mode, auto_focal)
++    if jpeg is None:
++        return None
++    b64 = base64.b64encode(jpeg).decode("ascii")
++    return f"data:image/jpeg;base64,{b64}"
+--- /dev/null
++++ b/core/ai_services/job_shell.py
+@@ -0,0 +1,78 @@
++"""背景補跑 job 的共用鎖殼（189a-T9a，CD-189a-11②／-12）。
++
++一個 ``JobShell`` 實例收攏「工作鎖／狀態短鎖／停止旗標／承接旗標／起 thread」。本模組不 import
++任何功能模組、不放模組層單例；實例只活在各功能模組（``_SHELL = JobShell()``）。
++
++所有屬性與方法每次呼叫**當下**讀 ``self.<屬性>``，不快取、不存任何功能模組的函式（回呼由
++呼叫端現場建立並傳入），所以測試 ``setattr`` 換掉 ``state_lock``／``stop``／``job_lock``／
++``rerun`` 後下一次呼叫立即生效。「持 state_lock」＝呼叫端已在 ``with <shell>.state_lock:`` 內，
++殼內不再取；對 ``state_lock`` 只用 ``with``。
++"""
++from __future__ import annotations
++
++import threading
++from typing import Callable, Optional
++
++
++class JobShell:
++    def __init__(self) -> None:
++        self.job_lock = threading.Lock()
++        self.state_lock = threading.Lock()
++        self.stop = threading.Event()
++        self.rerun = False
++
++    def try_acquire(self) -> bool:
++        """持 state_lock。不阻塞取工作鎖。"""
++        return self.job_lock.acquire(blocking=False)
++
++    def schedule_handoff(self) -> bool:
++        """持 state_lock。取得工作鎖回 True（呼叫端自己開 job）；否則留承接旗標回 False。"""
++        if self.try_acquire():
++            return True
++        self.rerun = True
++        return False
++
++    def begin_locked(self) -> None:
++        """持 state_lock 且已取得 job_lock。"""
++        self.stop.clear()
++        self.rerun = False
++
++    def consume_handoff_locked(self) -> bool:
++        """持 state_lock。承接旗標為真 → 清掉並回 True。"""
++        if self.rerun:
++            self.rerun = False
++            return True
++        return False
++
++    def release_locked(self, before_release: Optional[Callable[[], None]] = None) -> None:
++        """持 state_lock 且持 job_lock。順序固定：清承接 → before_release → 放工作鎖。"""
++        self.rerun = False
++        if before_release is not None:
++            before_release()
++        self.job_lock.release()
++
++    def release_unlaunched(self, before_release: Optional[Callable[[], None]] = None) -> None:
++        with self.state_lock:
++            self.release_locked(before_release)
++
++    def abort_acquire(self) -> None:
++        """持 state_lock。取得工作鎖後、不開工時直接放掉（不碰承接旗標）。"""
++        self.job_lock.release()
++
++    def request_stop(self) -> None:
++        with self.state_lock:
++            self.stop.set()
++            self.rerun = False
++
++    def is_running(self) -> bool:
++        return self.job_lock.locked()
++
++    def start_thread(self, target: Callable[..., None], args: tuple = (), *,
++                     name: str, on_failure: Callable[[], None]) -> None:
++        """不持 state_lock 呼叫。``start()`` 失敗 → 先 ``on_failure()`` 再原樣外拋。"""
++        t = threading.Thread(target=target, args=args, name=name, daemon=True)
++        try:
++            t.start()
++        except BaseException:
++            on_failure()
++            raise
+--- /dev/null
++++ b/core/ai_services/samples.py
+@@ -0,0 +1,246 @@
++"""Consistency-test samples A/B and assertions (CD-186-7)."""
++
++from __future__ import annotations
++
++import base64
++import io
++import math
++import time
++from dataclasses import dataclass
++
++from PIL import Image, ImageDraw
++
++from core.ai_services.embeddings import EmbedResult, EndpointError, embed
++from core.ai_services.faces import FacesResult, detect
++from core.ai_services.image_prep import _encode_jpeg_data_uri
++
++SAME_MIN = 0.99
++DIFF_MAX = 0.9
++DIM_MIN = 128
++DIM_MAX = 4096
++
++FACES_EXPECT_CENTER = (0.5, 0.3)
++FACES_TOLERANCE = 0.1
++FACES_MIN_FACES = 1
++_cache_faces: str | None = None
++
++# Sample B: deterministic synthetic PNG — fixed size / bg / primitives, no RNG.
++# kind: "rect"(x0,y0,x1,y1,rgb) | "ellipse"(…) | "polygon"(points, rgb)
++B_SIZE = 448
++B_BG = (32, 48, 160)
++B_SHAPES: tuple = (
++    ("rect", 36, 36, 200, 200, (220, 48, 48)),
++    ("ellipse", 220, 180, 412, 412, (240, 220, 48)),
++    ("polygon", ((224, 24), (400, 168), (48, 168)), (48, 200, 72)),
++)
++B_PNG_COMPRESS_LEVEL = 6
++
++_cache_a: str | None = None
++_cache_b: str | None = None
++
++
++def _cosine(a: list[float], b: list[float]) -> float:
++    return math.sumprod(a, b)
++
++
++def check_consistency(
++    a1: EmbedResult, a2: EmbedResult, b: EmbedResult
++) -> tuple[bool, str | None]:
++    """Pure assertions over three embed results. Order fixed by CD-186-7."""
++    if not (
++        a1.dim == a2.dim == b.dim and DIM_MIN <= a1.dim <= DIM_MAX
++    ):
++        return False, "dim_mismatch"
++    same = _cosine(a1.vector, a2.vector)
++    if same < SAME_MIN:
++        return False, "unstable"
++    diff = _cosine(a1.vector, b.vector)
++    if not (diff < DIFF_MAX):
++        return False, "not_discriminative"
++    if not (a1.model == a2.model == b.model):
++        return False, "model_flapping"
++    return True, None
++
++
++def _render_sample_b_png_bytes() -> bytes:
++    img = Image.new("RGB", (B_SIZE, B_SIZE), B_BG)
++    draw = ImageDraw.Draw(img)
++    for shape in B_SHAPES:
++        kind = shape[0]
++        if kind == "rect":
++            _, x0, y0, x1, y1, fill = shape
++            draw.rectangle((x0, y0, x1, y1), fill=fill)
++        elif kind == "ellipse":
++            _, x0, y0, x1, y1, fill = shape
++            draw.ellipse((x0, y0, x1, y1), fill=fill)
++        elif kind == "polygon":
++            _, points, fill = shape
++            draw.polygon(list(points), fill=fill)
++        else:
++            raise ValueError(f"unknown shape kind: {kind}")
++    buf = io.BytesIO()
++    # Fixed save params (DoD 5): no optimize, no pnginfo, fixed compress_level.
++    img.save(
++        buf,
++        format="PNG",
++        compress_level=B_PNG_COMPRESS_LEVEL,
++        optimize=False,
++    )
++    return buf.getvalue()
++
++
++def sample_b_data_uri() -> str:
++    """Lazy module-level cache of synthetic sample B (PNG data URI)."""
++    global _cache_b
++    if _cache_b is None:
++        raw = _render_sample_b_png_bytes()
++        b64 = base64.b64encode(raw).decode("ascii")
++        _cache_b = f"data:image/png;base64,{b64}"
++    return _cache_b
++
++
++def sample_a_data_uri() -> str:
++    """Lazy module-level cache of deterministic synthetic sample A.
++
++    The mobile build intentionally ships no demo photos.  A fixed portrait-like
++    composition keeps the consistency test deterministic without restoring the
++    removed desktop demo assets.
++    """
++    global _cache_a
++    if _cache_a is None:
++        img = Image.new("RGB", (448, 448), (226, 218, 205))
++        draw = ImageDraw.Draw(img)
++        draw.ellipse((104, 40, 344, 330), fill=(220, 168, 132))
++        draw.polygon(((104, 110), (168, 22), (310, 28), (350, 124)),
++                     fill=(38, 30, 28))
++        draw.ellipse((156, 152, 194, 190), fill=(45, 42, 40))
++        draw.ellipse((254, 152, 292, 190), fill=(45, 42, 40))
++        draw.polygon(((214, 188), (234, 188), (226, 230)),
++                     fill=(190, 132, 102))
++        draw.arc((174, 218, 278, 292), 10, 170, fill=(120, 50, 50), width=7)
++        draw.rectangle((0, 330, 448, 448), fill=(48, 78, 118))
++        draw.ellipse((90, 334, 358, 500), fill=(238, 236, 230))
++        _cache_a = _encode_jpeg_data_uri(img, 90)
++    return _cache_a
++
++
++def get_sample_inputs() -> tuple[str, str]:
++    """Return cached (A, B) data URIs; builds on first call."""
++    return sample_a_data_uri(), sample_b_data_uri()
++
++
++@dataclass
++class ConsistencyResult:
++    ok: bool
++    kind: str | None = None
++    check: str | None = None
++    model: str | None = None
++    dim: int | None = None
++    cos_same: float | None = None
++    cos_diff: float | None = None
++    elapsed_ms: int = 0
++
++
++def run_consistency_test(cfg) -> ConsistencyResult:
++    """A (first=True) → A → B; stop on first EndpointError."""
++    t0 = time.perf_counter()
++    try:
++        a_uri, b_uri = get_sample_inputs()
++        a1 = embed(cfg, a_uri, first=True)
++        a2 = embed(cfg, a_uri, first=False)
++        b = embed(cfg, b_uri, first=False)
++    except EndpointError as e:
++        elapsed = int((time.perf_counter() - t0) * 1000)
++        return ConsistencyResult(
++            ok=False, kind=e.kind, check=e.check, elapsed_ms=elapsed
++        )
++
++    elapsed = int((time.perf_counter() - t0) * 1000)
++    ok, failed = check_consistency(a1, a2, b)
++    cos_same = cos_diff = None
++    if a1.dim == a2.dim == b.dim:
++        cos_same = _cosine(a1.vector, a2.vector)
++        cos_diff = _cosine(a1.vector, b.vector)
++    return ConsistencyResult(
++        ok=ok,
++        kind=None if ok else "contract",
++        check=failed,
++        model=a1.model,
++        dim=a1.dim,
++        cos_same=cos_same,
++        cos_diff=cos_diff,
++        elapsed_ms=elapsed,
++    )
++
++
++def sample_faces_data_uri() -> str:
++    """Lazy module-level cache of a deterministic face sample."""
++    global _cache_faces
++    if _cache_faces is None:
++        img = Image.new("RGB", (640, 650), (202, 214, 226))
++        draw = ImageDraw.Draw(img)
++        # The face is centred at the documented expectation (0.5, 0.3).
++        draw.ellipse((170, 28, 470, 362), fill=(224, 174, 140))
++        draw.pieslice((160, 8, 480, 220), 180, 360, fill=(42, 34, 30))
++        draw.ellipse((224, 146, 266, 188), fill=(44, 40, 38))
++        draw.ellipse((374, 146, 416, 188), fill=(44, 40, 38))
++        draw.polygon(((308, 186), (332, 186), (320, 242)),
++                     fill=(188, 128, 100))
++        draw.arc((252, 236, 388, 318), 12, 168, fill=(128, 56, 56), width=8)
++        draw.rectangle((0, 390, 640, 650), fill=(52, 82, 112))
++        draw.ellipse((118, 396, 522, 700), fill=(242, 240, 232))
++        _cache_faces = _encode_jpeg_data_uri(img, 90)
++    return _cache_faces
++
++
++def get_faces_sample_input() -> str:
++    """Return cached faces sample data URI; builds on first call."""
++    return sample_faces_data_uri()
++
++
++def check_faces_consistency(result: FacesResult) -> tuple[bool, str | None]:
++    """Pure assertions over a faces detect result. Order fixed by CD-187a-19."""
++    if len(result.boxes) < FACES_MIN_FACES:
++        return False, "no_face"
++    best = max(result.boxes, key=lambda b: b.score)
++    cx = best.x + best.w / 2.0
++    cy = best.y + best.h / 2.0
++    if abs(cx - FACES_EXPECT_CENTER[0]) > FACES_TOLERANCE or abs(cy - FACES_EXPECT_CENTER[1]) > FACES_TOLERANCE:
++        return False, "center_off"
++    if not isinstance(result.model, str) or result.model == "":
++        return False, "no_model"
++    return True, None
++
++
++@dataclass
++class FacesTestResult:
++    ok: bool
++    kind: str | None = None
++    check: str | None = None
++    model: str | None = None
++    elapsed_ms: int = 0
++    boxes: list | None = None
++
++
++def run_faces_test(cfg) -> FacesTestResult:
++    """Sample → detect(profile=warmup) → consistency; stop on EndpointError."""
++    t0 = time.perf_counter()
++    try:
++        uri = get_faces_sample_input()
++        result = detect(cfg, uri, profile="warmup")
++    except EndpointError as e:
++        elapsed = int((time.perf_counter() - t0) * 1000)
++        return FacesTestResult(
++            ok=False, kind=e.kind, check=e.check, elapsed_ms=elapsed
++        )
++
++    elapsed = int((time.perf_counter() - t0) * 1000)
++    ok, failed = check_faces_consistency(result)
++    return FacesTestResult(
++        ok=ok,
++        kind=None if ok else "contract",
++        check=failed,
++        model=result.model,
++        elapsed_ms=elapsed,
++        boxes=list(result.boxes),
++    )
+--- /dev/null
++++ b/core/ai_services/similar_index.py
+@@ -0,0 +1,376 @@
++"""圖片相似索引工作核心（186-T4a，CD-186-9／-10／-11／-12）。
++
++公開介面（T4b／T5 依賴）：``start_build()``、``request_stop()``、``schedule_incremental()``、
++``status()``、``set_notification_sink(fn)``、``index_one(video_uri)``（189a 單片入口，不取鎖）。入口（HTTP）在 T4b；這裡全是 core 邏輯。
++
++併發模型（不變式 I1／I5／I13 的承載）：
++
++- ``_SHELL.job_lock`` 以 ``acquire(blocking=False)`` 取得，最多一份工作（建立或增量）。
++- ``_SHELL.state_lock`` 是短暫的互斥：「取得／釋放工作鎖」與「承接旗標 ``_SHELL.rerun``」只在它裡面
++  動。工作結束前的最後一次檢查（待處理＝0、沒有被停止、沒有排隊中的承接）與釋放工作鎖
++  在**同一個** ``_SHELL.state_lock`` 區段內完成；掃描端的「嘗試取得，失敗就排隊承接」也在同一把
++  鎖內 ⇒ 掃描要嘛看到鎖已釋放（自己開新工作）、要嘛把旗標留給仍在跑的那份工作消化。
++- ``request_stop()`` 在同一把鎖內設停止旗標並清掉排隊中的承接；停止後工作不會自行重開。
++- 不在重啟時啟動任何 thread（I6）：模組載入不做任何事，``status()`` 只讀 DB。
++"""
++from __future__ import annotations
++
++from dataclasses import dataclass
++from types import SimpleNamespace
++from typing import Callable, Optional
++
++from core.ai_services import embeddings, samples, similar_state
++from core.ai_services.embeddings import EndpointError
++from core.ai_services.image_prep import cover_to_data_uri
++from core.ai_services.job_shell import JobShell
++from core.config import load_config
++from core.database import EmbeddingRepository, VideoRepository
++from core.database.embeddings import pack_vector
++from core.logger import get_logger
++from core.path_utils import uri_to_local_fs_path
++
++logger = get_logger(__name__)
++
++NOTIFY_KEY = "notif.ai_similar_unreachable"
++THREAD_NAME = "similar-index"
++
++_SHELL = JobShell()
++_notification_sink: Optional[Callable[..., None]] = None
++
++
++@dataclass
++class _Ctx:
++    """一份工作的不可變上下文；``repo`` 在工作開始當下建立並沿用（db_path 定死）。"""
++
++    kind: str  # "build" | "incremental"
++    repo: EmbeddingRepository
++    cfg: SimpleNamespace
++    path_mappings: dict
++    model: str
++    dim: int
++    first: bool = False
++    released: bool = False
++
++
++def set_notification_sink(fn: Callable[..., None]) -> None:
++    """core 不能 import web：由 web/app.py 註冊 ``emit_notification``（BE-LINT-09）。"""
++    global _notification_sink
++    _notification_sink = fn
++
++
++# ── 鎖與承接旗標（只在 _SHELL.state_lock 內動） ────────────────────────────────
++
++def _begin_job_locked(kind: str) -> None:
++    _SHELL.begin_locked()
++    similar_state.job_begin(kind)
++
++
++def _release_job_locked(ctx: Optional[_Ctx], outcome: str) -> None:
++    def _before_release() -> None:
++        similar_state.job_end(outcome)
++        if ctx is not None:
++            ctx.released = True
++
++    _SHELL.release_locked(before_release=_before_release)
++
++
++def _release_unlaunched(outcome: str) -> None:
++    _SHELL.release_unlaunched(before_release=lambda: similar_state.job_end(outcome))
++
++
++# ── 設定 ──────────────────────────────────────────────────────────────────────
++
++def _image_cfg(config: dict) -> dict:
++    return (config.get("ai_services") or {}).get("image_similar") or {}
++
++
++def _endpoint_cfg(raw: dict) -> SimpleNamespace:
++    return SimpleNamespace(
++        url=raw.get("url", ""), api_key=raw.get("api_key", ""), model=raw.get("model", "")
++    )
++
++
++def _path_mappings(config: dict) -> dict:
++    return (config.get("gallery") or {}).get("path_mappings") or {}
++
++
++def _start_thread(ctx: _Ctx) -> None:
++    _SHELL.start_thread(
++        _worker_main, (ctx,), name=THREAD_NAME,
++        on_failure=lambda: _release_unlaunched("error"))
++
++
++# ── 公開介面 ──────────────────────────────────────────────────────────────────
++
++def start_build() -> dict:
++    """建立／繼續／重建索引。同一次呼叫內先跑一致性測試（I2），過了才定模型並起 thread。
++
++    回傳 ``{"ok", "status": "started"|"already_running"|"test_failed", "kind"?, "check"?}``。
++    會阻塞到一致性測試結束（可達 90 秒以上）→ 呼叫端須 ``asyncio.to_thread``。
++    """
++    return _start(rebuild=False)
++
++
++def start_rebuild() -> dict:
++    """「刪除並重建」（CD-186-22）：與 ``start_build`` 同一條取鎖路徑與測試；測試通過後
++    才刪光全部向量並從 0 重算（測試沒過什麼都不動）。回傳形狀同 ``start_build``。"""
++    return _start(rebuild=True)
++
++
++def _start(rebuild: bool) -> dict:
++    with _SHELL.state_lock:
++        if not _SHELL.try_acquire():
++            return {"ok": False, "status": "already_running"}
++        _begin_job_locked("build")
++    try:
++        ctx, failure = _prepare_build(rebuild)
++    except BaseException:
++        _release_unlaunched("error")
++        raise
++    if ctx is None:
++        _release_unlaunched("test_failed")
++        return failure
++    _start_thread(ctx)
++    return {"ok": True, "status": "started"}
++
++
++def _prepare_build(rebuild: bool = False) -> tuple:
++    """跑一致性測試；過了才定模型（``begin_index``；重建＝``reset_index`` 刪光向量）。
++    回 ``(ctx, None)`` 或 ``(None, 失敗 dict)``。"""
++    config = load_config()
++    cfg = _endpoint_cfg(_image_cfg(config))
++    repo = EmbeddingRepository()
++    test = samples.run_consistency_test(cfg)
++    if not test.ok:
++        similar_state.observe_failure(test.kind, test.check)
++        return None, {"ok": False, "status": "test_failed", "kind": test.kind, "check": test.check}
++    similar_state.observe_success(test.model, test.dim)
++    if rebuild:
++        repo.reset_index(test.model, test.dim)
++        from core.ai_services.embedding_cache import EmbeddingMatrixCache
++        EmbeddingMatrixCache.invalidate()  # 刪除之後不可能再讀到舊矩陣（仍在 _SHELL.job_lock 內）
++    else:
++        repo.begin_index(test.model, test.dim)
++    repo.clear_unreadable(test.model)  # 使用者發起的工作：讀不到的片重試一次（增量不做）
++    return _Ctx("build", repo, cfg, _path_mappings(config), test.model, test.dim), None
++
++
++def index_one(video_uri: str) -> str:
++    """入庫後單片入口（189a-T3）：強制重算該片封面向量並覆寫。不取任何鎖、不查 enabled
++    （開關由呼叫端負責）、不發通知、不外拋。回 ``"indexed"``／``"unreadable"``／
++    ``"index_not_ready"``／``"model_changed"``／``"unreachable"``（端點連不上）／``"error"``。"""
++    try:
++        return _index_one(video_uri)
++    except EndpointError as e:
++        similar_state.observe_failure(e.kind, e.check)
++        return "unreachable" if e.kind == "unreachable" else "error"
++    except Exception:
++        logger.exception("[similar_index] index_one failed")
++        return "error"
++
++
++def _index_one(video_uri: str) -> str:
++    config = load_config()
++    repo = EmbeddingRepository()
++    state = repo.get_index_state()
++    if not _incremental_allowed(state):
++        built = state["model"] and state["dim"] is not None and state["complete"] == "1"
++        return "model_changed" if built else "index_not_ready"
++    video = VideoRepository().get_by_path(video_uri)
++    if video is None or not video.cover_path:
++        return "error"
++    ctx = _Ctx(
++        "incremental", repo, _endpoint_cfg(_image_cfg(config)), _path_mappings(config),
++        state["model"], state["dim"],
++    )
++    outcome = _embed_and_store(ctx, video.id, video.cover_path)
++    if outcome != "model_changed":  # 寫了 DB（含 unreadable 讓舊向量失效）才清星空快取
++        from core.ai_services.embedding_cache import EmbeddingMatrixCache
++        EmbeddingMatrixCache.invalidate()
++    return outcome
++
++
++def request_stop() -> dict:
++    """停止：最多再完成當下那一張。同時中止排隊中的承接（I13 例外）。"""
++    _SHELL.request_stop()
++    return {"ok": True, "running": _SHELL.is_running()}
++
++
++def schedule_incremental() -> None:
++    """掃描結束後呼叫：不拋例外。條件與承接見 I9／I13。
++    ``db_path`` 在呼叫當下定死（repository 建構時解析）。"""
++    try:
++        _schedule_incremental()
++    except Exception:
++        logger.exception("[similar_index] schedule_incremental failed")
++
++
++def _schedule_incremental() -> None:
++    config = load_config()
++    if not _image_cfg(config).get("enabled"):
++        return
++    repo = EmbeddingRepository()
++    with _SHELL.state_lock:
++        if not _SHELL.schedule_handoff():
++            return  # I13：有工作在跑（含收尾）→ 由它在邊界承接
++        try:
++            ctx = _prepare_incremental(repo, config)
++        except BaseException:
++            _SHELL.abort_acquire()  # 取得鎖之後任何例外都必須放掉，否則卡在「執行中」
++            raise
++        if ctx is None:
++            _SHELL.abort_acquire()
++            return
++    _start_thread(ctx)
++
++
++def _prepare_incremental(repo: EmbeddingRepository, config: dict) -> Optional[_Ctx]:
++    state = repo.get_index_state()
++    if not _incremental_allowed(state):
++        return None
++    _begin_job_locked("incremental")
++    return _Ctx(
++        "incremental", repo, _endpoint_cfg(_image_cfg(config)), _path_mappings(config),
++        state["model"], state["dim"], first=True,
++    )
++
++
++def _incremental_allowed(state: dict) -> bool:
++    """I9（含 2026-10-31 細化）：index_model 已設、索引已完成('1')、模型沒變。"""
++    if not state["model"] or state["dim"] is None or state["complete"] != "1":
++        return False
++    return not similar_state.model_changed(state["model"], state["dim"])
++
++
++def status() -> dict:
++    """進度與狀態（讀 DB＋記憶體觀察值；不依賴 thread-local 連線）。"""
++    repo = EmbeddingRepository()
++    state = repo.get_index_state()
++    counts = repo.counts(state["model"], state["dim"])
++    snap = similar_state.snapshot()
++    running = _SHELL.is_running()
++    return {
++        "running": running,
++        "job_kind": snap["job"]["kind"] if running else None,
++        "done": snap["job"]["done"],
++        "indexed": counts["indexed"],
++        "total": counts["total"],
++        "pending": counts["pending"],
++        "unreadable": counts["unreadable"],
++        "unreachable": snap["unreachable"],
++        "kind": snap["kind"],
++        "check": snap["check"],
++        "model": state["model"],
++        "last_success_at": state["last_success_at"],
++        "model_changed": similar_state.model_changed(state["model"], state["dim"]),
++        "complete": state["complete"] == "1",
++    }
++
++
++# ── 工作 thread ───────────────────────────────────────────────────────────────
++
++def _worker_main(ctx: _Ctx) -> None:
++    outcome = "error"
++    try:
++        outcome = _work_loop(ctx)
++    except Exception:
++        logger.exception("[similar_index] worker crashed")
++    finally:
++        from core.ai_services.embedding_cache import EmbeddingMatrixCache
++        EmbeddingMatrixCache.invalidate()
++        if not ctx.released:
++            with _SHELL.state_lock:
++                _release_job_locked(ctx, outcome)
++
++
++def _fetch_pending(ctx: _Ctx) -> list:
++    """取待處理清單（只有 ``(video_id, cover_path)``，I11）；測試靠這個名字插 barrier。"""
++    return ctx.repo.pending(ctx.model, ctx.dim)
++
++
++def _work_loop(ctx: _Ctx) -> str:
++    while True:
++        pending = _fetch_pending(ctx)
++        if pending:
++            outcome = _process_batch(ctx, pending)
++            if outcome != "ok":
++                return outcome
++            continue
++        finished = _finish_if_drained(ctx)
++        if finished is not None:
++            return finished
++
++
++def _finish_if_drained(ctx: _Ctx) -> Optional[str]:
++    """待處理＝0 的邊界：被停止 → 結束；有排隊的承接 → 回 None 再跑一輪；
++    否則（建立工作）寫 ``index_complete='1'`` 並在同一區段釋放工作鎖。"""
++    with _SHELL.state_lock:
++        if _SHELL.stop.is_set():
++            _release_job_locked(ctx, "stopped")
++            return "stopped"
++        if _SHELL.consume_handoff_locked():
++            return None
++        if ctx.kind == "build":
++            ctx.repo.mark_complete()
++        _release_job_locked(ctx, "drained")
++        return "drained"
++
++
++def _process_batch(ctx: _Ctx, pending: list) -> str:
++    for video_id, cover_path in pending:
++        if _SHELL.stop.is_set():
++            return "stopped"
++        outcome = _process_one(ctx, video_id, cover_path)
++        if outcome != "ok":
++            return outcome
++        similar_state.job_progress()
++    return "ok"
++
++
++def _cover_data_uri(ctx: _Ctx, cover_path: str) -> Optional[str]:
++    try:
++        return cover_to_data_uri(uri_to_local_fs_path(cover_path, ctx.path_mappings))
++    except Exception:
++        return None
++
++
++def _embed_and_store(ctx: _Ctx, video_id: int, cover_path: str) -> str:
++    """讀封面→embed→比對模型→寫向量／寫 unreadable（job 與 ``index_one`` 共用）。
++    回 ``"indexed"``／``"unreadable"``／``"model_changed"``；``EndpointError`` 原樣外拋。"""
++    uri = _cover_data_uri(ctx, cover_path)
++    if uri is None:  # 封面讀不到：本機檔案問題，不算端點錯誤（I7）
++        ctx.repo.write_unreadable(video_id, ctx.model, cover_path)
++        return "unreadable"
++    first, ctx.first = ctx.first, False
++    result = embeddings.embed(ctx.cfg, uri, first=first)
++    similar_state.observe_success(result.model, result.dim)
++    index_model, index_dim = ctx.model, ctx.dim
++    if result.model != index_model or result.dim != index_dim:
++        return "model_changed"
++    ctx.repo.write_vector(video_id, result.model, result.dim, pack_vector(result.vector), cover_path)
++    return "indexed"
++
++
++def _process_one(ctx: _Ctx, video_id: int, cover_path: str) -> str:
++    try:
++        outcome = _embed_and_store(ctx, video_id, cover_path)
++    except EndpointError as e:
++        return _on_endpoint_error(ctx, e)
++    return "model_changed" if outcome == "model_changed" else "ok"
++
++
++def _on_endpoint_error(ctx: _Ctx, err: EndpointError) -> str:
++    similar_state.observe_failure(err.kind, err.check)
++    if ctx.kind == "incremental" and err.kind == "unreachable":
++        _notify_unreachable()
++    return "error"
++
++
++def _notify_unreachable() -> None:
++    sink = _notification_sink
++    if sink is None:
++        return
++    try:
++        sink("warn", NOTIFY_KEY, task_type="ai_similar")
++    except Exception:
++        logger.exception("[similar_index] notification sink failed")
+--- /dev/null
++++ b/core/ai_services/similar_state.py
+@@ -0,0 +1,124 @@
++"""圖片相似的記憶體觀察值與「融合閘」狀態半（186-T4a，CD-186-11／-13）。
++
++只放「最近一次跟端點互動看到什麼」：``observed_model``／``observed_dim``（最後一次
++成功回應的模型）、``unreachable``、``last_error_*``、``job``（本輪索引工作進度）。
++全是記憶體、重啟即歸零；索引本身的真理在 DB（``EmbeddingRepository``）。
++向量矩陣屬 T5（``embedding_cache``），這裡只回「閘開不開」的 bool。
++"""
++from __future__ import annotations
++
++from pathlib import Path
++from typing import Optional
++
++from core.ai_services import backfill_state
++from core.database import EmbeddingRepository
++
++# 共用欄位（unreachable／job／鎖／入庫後掛勾旗標 hook_notified）在 ``_STATE``（189a-T8）。
++_STATE = backfill_state.BackfillState(name="similar_state")
++
++observed_model: Optional[str] = None
++observed_dim: Optional[int] = None
++last_error_kind: Optional[str] = None
++last_error_check: Optional[str] = None
++
++
++def observe_success(model: str, dim: int) -> None:
++    """端點回了合法向量：記下模型、解除 unreachable、清錯誤。"""
++    global observed_model, observed_dim, last_error_kind, last_error_check
++    with _STATE.lock:
++        observed_model, observed_dim = model, int(dim)
++        _STATE.unreachable = False
++        last_error_kind = last_error_check = None
++
++
++def observe_failure(kind: Optional[str], check: Optional[str]) -> None:
++    """端點出錯：``kind == 'unreachable'`` 才算連不上；契約不符只記 check。"""
++    global last_error_kind, last_error_check
++    with _STATE.lock:
++        _STATE.unreachable = kind == "unreachable"
++        last_error_kind, last_error_check = kind, check
++
++
++def note_failure() -> bool:
++    """每輪第一次回 True，之後 False（``new_round`` 重置）。"""
++    return _STATE.note_hook_failure()
++
++
++def new_round() -> None:
++    _STATE.new_hook_round()
++
++
++def snapshot() -> dict:
++    with _STATE.lock:
++        return {
++            "observed_model": observed_model,
++            "observed_dim": observed_dim,
++            "unreachable": _STATE.unreachable,
++            "kind": last_error_kind,
++            "check": last_error_check,
++            "job": dict(_STATE.job),
++        }
++
++
++def job_begin(kind: str) -> None:
++    _STATE.job_begin(kind)
++
++
++def job_progress() -> None:
++    _STATE.job_progress()
++
++
++def job_end(outcome: str) -> None:
++    _STATE.job_end(outcome)
++
++
++def model_changed(index_model: Optional[str], index_dim: Optional[int]) -> bool:
++    """觀察到的模型跟索引模型不同（觀察值或索引模型任一為空＝沒資訊，視為沒變）。"""
++    with _STATE.lock:
++        if observed_model is None or index_model is None:
++            return False
++        return (observed_model, observed_dim) != (index_model, index_dim)
++
++
++def fusion_gate_from_state(config: dict, state: dict) -> bool:
++    """CD-186-13 狀態半的純判斷：enabled ∧ model 已設 ∧ complete=='1' ∧ 觀察值相容。
++
++    ``state`` 須是呼叫端已讀好的 ``get_index_state()`` 結果；本函式不再讀 DB。
++    """
++    cfg = (config.get("ai_services") or {}).get("image_similar") or {}
++    if not cfg.get("enabled"):
++        return False
++    if not state["model"] or state["complete"] != "1":
++        return False
++    return not model_changed(state["model"], state["dim"])
++
++
++def fusion_gate_open(config: dict, db_path: Optional[Path] = None) -> bool:
++    """CD-186-13 的狀態半：enabled ∧ index_model 已設 ∧ index_complete=='1' ∧ 觀察值相容。"""
++    cfg = (config.get("ai_services") or {}).get("image_similar") or {}
++    if not cfg.get("enabled"):
++        return False
++    return fusion_gate_from_state(config, EmbeddingRepository(db_path).get_index_state())
++
++
++def format_similar_model_id(index_model: Optional[str] = None, *, fused: bool = False) -> str:
++    """CD-186-15：融合未參與＝``rule-based:v1``；參與＝``rule-based:v1+rrf:<model[:128]>``。"""
++    if fused and index_model:
++        return f"rule-based:v1+rrf:{index_model[:128]}"
++    return "rule-based:v1"
++
++
++def fusion_vectors(config: dict, db_path: Optional[Path] = None):
++    """CD-186-13：閘開時回 ``dict[int, array]``；否則 ``None``。
++
++    ``enabled`` 為假時必須在碰任何 DB 之前就回 ``None``。
++    索引狀態只讀一次：同一份 ``state`` 同時判斷閘與決定載哪個 (model, dim)。
++    """
++    cfg = (config.get("ai_services") or {}).get("image_similar") or {}
++    if not cfg.get("enabled"):
++        return None
++    state = EmbeddingRepository(db_path).get_index_state()
++    if not fusion_gate_from_state(config, state):
++        return None
++    from core.ai_services.embedding_cache import EmbeddingMatrixCache
++    return EmbeddingMatrixCache.get(state["model"], state["dim"], db_path)
+--- a/core/database/__init__.py
++++ b/core/database/__init__.py
+@@ -9,6 +9,7 @@
+     _migrate_old_aliases,
+ )
+ from .video import Video, VideoRepository
++from .embeddings import EmbeddingRepository
+ from .alias import AliasRecord, AliasRepository
+ from .tag_alias import TagAliasRecord, TagAliasRepository
+ from .actress import Actress, ActressRepository
+@@ -31,6 +32,7 @@
+     "_migrate_old_aliases",
+     "Video",
+     "VideoRepository",
++    "EmbeddingRepository",
+     "AliasRecord",
+     "AliasRepository",
+     "TagAliasRecord",
+--- /dev/null
++++ b/core/database/embeddings.py
+@@ -0,0 +1,207 @@
++"""core.database.embeddings — 圖片相似向量表與索引中繼（186-T4a，CD-186-9）。
++
++一部片一列（``video_embeddings.video_id`` 主鍵）；``app_meta`` 四個鍵記「現在用哪個
++模型建的索引」與是否建完。``dim == 0`` 且 ``vec == b''`` ＝封面讀不到、試過了。
++讀取一律 JOIN videos（孤兒列不清；id 因 AUTOINCREMENT 不重用）。
++
++連線慣例同 BE-DATA-01：每次呼叫 ``closing(get_connection(db_path))``，不加鎖。
++``db_path`` 在建構當下定死（工作 thread 用同一個 repository，不延遲解析）。
++"""
++from __future__ import annotations
++
++import struct
++import time
++from array import array
++from contextlib import closing
++from pathlib import Path
++from typing import Optional
++
++from . import connection
++
++META_MODEL = "ai.similar.index_model"
++META_DIM = "ai.similar.index_dim"
++META_COMPLETE = "ai.similar.index_complete"
++META_LAST_SUCCESS = "ai.similar.last_success_at"
++
++_PENDING_FROM = """
++    FROM videos v
++    LEFT JOIN video_embeddings e ON e.video_id = v.id
++    WHERE v.cover_path != ''
++      AND (e.video_id IS NULL
++               OR e.model != ? OR (e.dim != ? AND e.dim != 0) OR e.cover_path != v.cover_path)
++"""
++
++
++def pack_vector(vec) -> bytes:
++    """float 序列 → little-endian float32 bytes（呼叫端負責已 L2 正規化）。"""
++    return struct.pack("<%df" % len(vec), *vec)
++
++
++def unpack_vector(blob: bytes) -> array:
++    """little-endian float32 bytes → ``array('f')``。"""
++    n = len(blob) // 4
++    return array("f", struct.unpack("<%df" % n, blob))
++
++
++def _key(model: Optional[str], dim: Optional[int]) -> tuple[str, int]:
++    # 索引未建立時 (None, None) → 沒有任何列符合 → 全部待處理。
++    return (model or "", -1 if dim is None else int(dim))
++
++
++class EmbeddingRepository:
++    """``video_embeddings`` 與 ``ai.similar.*`` 中繼的存取層。"""
++
++    def __init__(self, db_path: Optional[Path] = None):
++        self.db_path = db_path or connection.get_db_path()
++
++    # ── app_meta ────────────────────────────────────────────────────────────
++
++    def get_index_state(self) -> dict:
++        """回 ``{model, dim, complete, last_success_at}``；未設的鍵為 None。"""
++        with closing(connection.get_connection(self.db_path)) as conn:
++            rows = dict(conn.execute(
++                "SELECT key, value FROM app_meta WHERE key IN (?, ?, ?, ?)",
++                (META_MODEL, META_DIM, META_COMPLETE, META_LAST_SUCCESS),
++            ).fetchall())
++        dim = rows.get(META_DIM)
++        last = rows.get(META_LAST_SUCCESS)
++        return {
++            "model": rows.get(META_MODEL),
++            "dim": int(dim) if dim not in (None, "") else None,
++            "complete": rows.get(META_COMPLETE),
++            "last_success_at": float(last) if last not in (None, "") else None,
++        }
++
++    def begin_index(self, model: str, dim: int) -> bool:
++        """通過一致性測試後定模型。換成新的 (model, dim) 時三鍵同一個 transaction 寫入
++        （含 ``complete='0'``，不出現「新模型＋舊 '1'」）。回 True＝換了模型；相同＝False。"""
++        with closing(connection.get_connection(self.db_path)) as conn:
++            cur = dict(conn.execute(
++                "SELECT key, value FROM app_meta WHERE key IN (?, ?)",
++                (META_MODEL, META_DIM),
++            ).fetchall())
++            if cur.get(META_MODEL) == model and cur.get(META_DIM) == str(int(dim)):
++                return False
++            conn.executemany(
++                "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
++                [(META_MODEL, model), (META_DIM, str(int(dim))), (META_COMPLETE, "0")],
++            )
++            conn.commit()
++        return True
++
++    def reset_index(self, model: str, dim: int) -> int:
++        """使用者要求「刪除並重建」：刪光全部向量列並定模型、``complete='0'``，同一個
++        transaction（不出現「列已刪、complete 仍 '1'」）。回刪除列數。"""
++        with closing(connection.get_connection(self.db_path)) as conn:
++            n = conn.execute("DELETE FROM video_embeddings").rowcount
++            conn.executemany(
++                "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
++                [(META_MODEL, model), (META_DIM, str(int(dim))), (META_COMPLETE, "0")],
++            )
++            conn.commit()
++        return n
++
++    def mark_complete(self) -> None:
++        with closing(connection.get_connection(self.db_path)) as conn:
++            conn.execute(
++                "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, '1')",
++                (META_COMPLETE,),
++            )
++            conn.commit()
++
++    # ── rows ────────────────────────────────────────────────────────────────
++
++    def write_vector(self, video_id: int, model: str, dim: int, vec: bytes,
++                     cover_path: str) -> None:
++        """寫（覆寫）一列，並在同一個 transaction 記 ``last_success_at``。"""
++        now = time.time()
++        with closing(connection.get_connection(self.db_path)) as conn:
++            conn.execute(
++                "INSERT OR REPLACE INTO video_embeddings "
++                "(video_id, model, dim, vec, cover_path, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
++                (video_id, model, int(dim), vec, cover_path, now),
++            )
++            conn.execute(
++                "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
++                (META_LAST_SUCCESS, repr(now)),
++            )
++            conn.commit()
++
++    def write_unreadable(self, video_id: int, model: str, cover_path: str) -> None:
++        """封面讀不到、試過了：``dim=0``、``vec=b''``（不算待處理、不進融合）。"""
++        with closing(connection.get_connection(self.db_path)) as conn:
++            conn.execute(
++                "INSERT OR REPLACE INTO video_embeddings "
++                "(video_id, model, dim, vec, cover_path, updated_at) VALUES (?, ?, 0, ?, ?, ?)",
++                (video_id, model, b"", cover_path, time.time()),
++            )
++            conn.commit()
++
++    def clear_unreadable(self, model: str) -> int:
++        """刪掉該模型下 ``dim=0``（封面讀不到、試過了）的列，讓它們回到待處理。
++        只給使用者發起的建立工作用（每次工作重試一次）；回刪除列數。"""
++        with closing(connection.get_connection(self.db_path)) as conn:
++            n = conn.execute(
++                "DELETE FROM video_embeddings WHERE model = ? AND dim = 0", (model,)
++            ).rowcount
++            conn.commit()
++        return n
++
++    def get_row(self, video_id: int) -> Optional[dict]:
++        with closing(connection.get_connection(self.db_path)) as conn:
++            row = conn.execute(
++                "SELECT model, dim, vec, cover_path FROM video_embeddings WHERE video_id = ?",
++                (video_id,),
++            ).fetchone()
++        if row is None:
++            return None
++        return {"model": row[0], "dim": row[1], "vec": row[2], "cover_path": row[3]}
++
++    def load_valid_vectors(self, model: str, dim: int) -> list[tuple[int, str, array]]:
++        """一次載入全部有效向量列（CD-186-13）：JOIN videos；
++        ``model== ∧ dim== ∧ dim>0 ∧ cover_path`` 相符。回 ``(video_id, number, array('f'))``。"""
++        with closing(connection.get_connection(self.db_path)) as conn:
++            rows = conn.execute(
++                "SELECT v.id, v.number, e.vec FROM videos v "
++                "JOIN video_embeddings e ON e.video_id = v.id "
++                "WHERE e.model = ? AND e.dim = ? AND e.dim > 0 "
++                "AND e.cover_path = v.cover_path AND v.cover_path != ''",
++                (model, int(dim)),
++            ).fetchall()
++        return [(r[0], r[1] or "", unpack_vector(r[2])) for r in rows]
++
++    # ── pending / counts ────────────────────────────────────────────────────
++
++    def pending(self, model: Optional[str], dim: Optional[int]) -> list[tuple[int, str]]:
++        """待處理清單，只取 ``(video_id, cover_path)``（I11）。"""
++        with closing(connection.get_connection(self.db_path)) as conn:
++            rows = conn.execute(
++                "SELECT v.id, v.cover_path" + _PENDING_FROM + " ORDER BY v.id",
++                _key(model, dim),
++            ).fetchall()
++        return [(r[0], r[1]) for r in rows]
++
++    def counts(self, model: Optional[str], dim: Optional[int]) -> dict:
++        """``{indexed, total, pending, unreadable}``（定義見 CD-186-9；
++        ``unreadable``＝封面讀不到、試過了的列數：model 相符、dim=0、cover_path 相符）。"""
++        m, d = _key(model, dim)
++        with closing(connection.get_connection(self.db_path)) as conn:
++            total = conn.execute(
++                "SELECT COUNT(*) FROM videos WHERE cover_path != ''"
++            ).fetchone()[0]
++            indexed = conn.execute(
++                "SELECT COUNT(*) FROM videos v JOIN video_embeddings e ON e.video_id = v.id "
++                "WHERE v.cover_path != '' AND e.model = ? AND e.dim = ? "
++                "AND e.cover_path = v.cover_path",
++                (m, d),
++            ).fetchone()[0]
++            unreadable = conn.execute(
++                "SELECT COUNT(*) FROM videos v JOIN video_embeddings e ON e.video_id = v.id "
++                "WHERE v.cover_path != '' AND e.model = ? AND e.dim = 0 "
++                "AND e.cover_path = v.cover_path",
++                (m,),
++            ).fetchone()[0]
++            pending = conn.execute(
++                "SELECT COUNT(*)" + _PENDING_FROM, (m, d)
++            ).fetchone()[0]
++        return {"indexed": indexed, "total": total, "pending": pending, "unreadable": unreadable}
+--- a/core/secret_fields.py
++++ b/core/secret_fields.py
+@@ -9,12 +9,15 @@
+ import copy
+ from typing import Any
+ 
+-# CD-114c-1: four opaque secrets. Single inventory for render_config_secrets.
++# Single inventory for opaque secrets rendered to the browser.
+ SECRET_FIELDS: tuple[str, ...] = (
+     "translate.gemini.api_key",
+     "translate.openai.api_key",
++    "translate.openai_official.api_key",
+     "translate.claude.api_key",
+     "metatube.token",
++    "ai_services.image_similar.api_key",
++    "ai_services.faces.api_key",
+ )
+ 
+ # CD-114c-2: U+2022 BULLET × 4 (not ASCII *, not U+25CF).
+--- a/core/similar/canonicalize.py
++++ b/core/similar/canonicalize.py
+@@ -99,3 +99,18 @@
+         seen.add(canonical)
+         result.append(canonical)
+     return result
++
++
++def canonical_video_tags(video) -> list[str]:
++    """刮削 tags 在前、user_tags 在後，經 canonicalize 去重／別名／停用詞。
++
++    只收 str 元素（AI／scrape 可能寫入 dict 等非字串）；其餘略過。
++    """
++    tags = [t for t in (video.tags or []) if isinstance(t, str)]
++    user_tags = [t for t in (video.user_tags or []) if isinstance(t, str)]
++    return canonicalize([*tags, *user_tags])
++
++
++def alias_key(name: str) -> str:
++    """只解析別名、不濾停用詞，與 canonicalize 同一份 map。"""
++    return _load_merged_map().get(name, name)
+--- a/core/similar/ranker.py
++++ b/core/similar/ranker.py
+@@ -6,12 +6,18 @@
+ from collections import defaultdict
+ from typing import TYPE_CHECKING
+ 
+-from core.similar.canonicalize import canonicalize
++from core.similar.canonicalize import canonical_video_tags
+ from core.similar.cast_bucket import cast_bucket
+ from core.similar.idf import build_idf, idf_jaccard, IDF_HOT_THRESHOLD  # noqa: F401
+ 
+ if TYPE_CHECKING:
+     from core.database import Video
++    from array import array as ArrayType
++
++# CD-186-14：RRF 融合權重（只此一處）
++RRF_K = 60
++RRF_RULE_WEIGHT = 1.0
++RRF_VECTOR_WEIGHT = 1.0
+ 
+ 
+ # CD-57a-5：番號 prefix 提取，支援多段 prefix（FC2-PPV 等）
+@@ -66,8 +72,8 @@
+     def __init__(self, corpus: list[Video]) -> None:
+         self._corpus: list[Video] = corpus
+         # CD-57a-3：建構期預先 canonicalize，rank() / _retrieve() 不重做
+-        self._canon_tags: list[list[str]] = [canonicalize(v.tags) for v in corpus]
+-        # CD-57a-9：IDF 只看 v.tags（_canon_tags），不含 user_tags
++        self._canon_tags: list[list[str]] = [canonical_video_tags(v) for v in corpus]
++        # CD-188a-1：IDF／倒排索引含 user_tags
+         self._idf_table: dict[str, float] = build_idf(self._canon_tags)
+         self._inverted_index: dict[str, list[int]] = {}
+         for i, tags in enumerate(self._canon_tags):
+@@ -101,8 +107,8 @@
+ 
+     # spec-57 §2.4：base + series/maker/year/duration/cast bonus + actress penalty（同系列例外）；不 clamp
+     def _score(self, target: Video, cand: Video) -> float:
+-        target_canon = set(canonicalize(target.tags))
+-        cand_canon = set(canonicalize(cand.tags))
++        target_canon = set(canonical_video_tags(target))
++        cand_canon = set(canonical_video_tags(cand))
+         rel = idf_jaccard(target_canon, cand_canon, self._idf_table)
+ 
+         if cand.series and cand.series == target.series:
+@@ -137,7 +143,7 @@
+ 
+     # Q-T6-1 方案 B：實時計算（per-call 微小成本）
+     def _useful_set(self, video) -> set[str]:
+-        return {t for t in canonicalize(video.tags) if self._idf_table.get(t, 0.0) > 0}
++        return {t for t in canonical_video_tags(video) if self._idf_table.get(t, 0.0) > 0}
+ 
+     # CD-57a-4：MMR similarity = actress jaccard * 0.7 + maker match * 0.3
+     def _sim(self, a: Video, b: Video) -> float:
+@@ -147,20 +153,27 @@
+         return actress_jac * 0.7 + maker_match * 0.3
+ 
+     # CD-57a-4：mmr = λ·rel − (1−λ)·max_sim；減號絕對不可變加號
+-    def _mmr_rerank(self, target: Video, candidates: list[Video], top_k: int = 12) -> list[Video]:
++    # CD-186-14：選填 rel（給定時取代 _score；鍵＝id(c)）
++    def _mmr_rerank(
++        self,
++        target: Video,
++        candidates: list[Video],
++        top_k: int = 12,
++        rel: dict[int, float] | None = None,
++    ) -> list[Video]:
+         if not candidates or top_k <= 0:
+             return []
+         lambda_ = 0.7
+-        rel_cache = {id(c): self._score(target, c) for c in candidates}
++        rel_cache = rel if rel is not None else {id(c): self._score(target, c) for c in candidates}
+         remaining = list(candidates)
+         selected: list[Video] = []
+         while remaining and len(selected) < top_k:
+             best = None
+             best_score = float('-inf')
+             for c in remaining:
+-                rel = rel_cache[id(c)]
++                rel_v = rel_cache[id(c)]
+                 max_sim = max((self._sim(c, s) for s in selected), default=0.0)
+-                mmr = lambda_ * rel - (1 - lambda_) * max_sim
++                mmr = lambda_ * rel_v - (1 - lambda_) * max_sim
+                 if mmr > best_score:
+                     best_score = mmr
+                     best = c
+@@ -230,34 +243,79 @@
+             return []
+         return random.sample(pool, min(fill_n, len(pool)))
+ 
+-    # spec-57 §2.4：Stage 1 retrieve → Stage 2 score → Stage 3 MMR → Tier 2/3/4 fallback
+-    def rank(self, target: Video, top_k: int = 12) -> list[Video]:
+-        if not self._corpus or top_k <= 0:
+-            return []
+-
+-        target_canon = canonicalize(target.tags)
++    def _rule_path_for_fusion(self, target: Video) -> list[Video]:
++        """融合規則路：_retrieve 前 100，剔 target，依 _score 降冪；不套 Tier1 ≥2 門檻。"""
++        retrieved = self._retrieve(canonical_video_tags(target), exclude=target, top_n=100)
++        target_key = self._stable_key(target)
++        rule = [c for c in retrieved if self._stable_key(c) != target_key]
++        rule.sort(key=lambda c: self._score(target, c), reverse=True)
++        return rule
++
++    def _vector_path_for_fusion(
++        self,
++        target: Video,
++        vectors: dict[int, ArrayType],
++    ) -> list[Video]:
++        """融合向量路：全量點積降冪後剔同女優非同系列，取前 30。"""
++        q = vectors[target.id]
++        scored: list[tuple[Video, float]] = []
++        for c in self._corpus:
++            if c.id is None or c.id == target.id or c.id not in vectors:
++                continue
++            scored.append((c, math.sumprod(q, vectors[c.id])))
++        scored.sort(key=lambda kv: kv[1], reverse=True)
++        vec: list[Video] = []
++        for c, _ in scored:
++            shares = set(target.actresses) & set(c.actresses)
++            same_series = c.series and c.series == target.series
++            if not (shares and not same_series):
++                vec.append(c)
++                if len(vec) >= 30:
++                    break
++        return vec
++
++    def _rrf_rel(
++        self,
++        rule: list[Video],
++        vec: list[Video],
++    ) -> tuple[list[Video], dict[int, float]]:
++        """RRF 合成候選列（規則路在前）與正規化 rel（鍵＝id(c)）。"""
++        rr = {id(c): r for r, c in enumerate(rule)}
++        vr = {id(c): r for r, c in enumerate(vec)}
++        pool: dict[int, Video] = {}
++        ordered: list[Video] = []
++        for c in rule + vec:
++            i = id(c)
++            if i in pool:
++                continue
++            pool[i] = c
++            ordered.append(c)
++        score = {
++            i: (
++                (RRF_RULE_WEIGHT / (RRF_K + rr[i]) if i in rr else 0.0)
++                + (RRF_VECTOR_WEIGHT / (RRF_K + vr[i]) if i in vr else 0.0)
++            )
++            for i in pool
++        }
++        mx = max(score.values()) if score else 1.0
++        if mx <= 0:
++            mx = 1.0
++        rel = {i: score[i] / mx for i in score}
++        ordered.sort(key=lambda c: rel[id(c)], reverse=True)
++        return ordered, rel
++
++    def _fill_fallbacks(
++        self,
++        target: Video,
++        top_k: int,
++        result: list[Video],
++        selected_keys: set[tuple],
++    ) -> list[Video]:
++        """Tier2／3／4 補位（融合與今天路徑共用）。"""
++        if len(result) >= top_k:
++            return result
++        target_canon = canonical_video_tags(target)
+         target_useful = {t for t in target_canon if self._idf_table.get(t, 0.0) > 0}
+-
+-        selected_keys: set[tuple] = {self._stable_key(target)}
+-        result: list[Video] = []
+-
+-        retrieved = self._retrieve(target_canon, exclude=target, top_n=100)
+-        # Codex P1 fix：DB 場景 target 可能是 corpus 內 row 的另一個 Python object
+-        # （`_retrieve` 的 `is` 排不掉），用 stable_key 兜底防 Tier 1 slot 被 target 副本占用
+-        target_key = self._stable_key(target)
+-        tier1_pool = [
+-            c for c in retrieved
+-            if self._stable_key(c) != target_key
+-            and len(target_useful & self._useful_set(c)) >= 2
+-        ]
+-        for c in self._mmr_rerank(target, tier1_pool, top_k=top_k):
+-            k = self._stable_key(c)
+-            if k in selected_keys:
+-                continue
+-            selected_keys.add(k)
+-            result.append(c)
+-            if len(result) >= top_k:
+-                return result
+ 
+         if len(result) < top_k:
+             for c in self._fallback_tier2(target, target_canon, target_useful, selected_keys, top_k - len(result)):
+@@ -290,3 +348,65 @@
+                     return result
+ 
+         return result
++
++    def _rank_fused(
++        self,
++        target: Video,
++        top_k: int,
++        vectors: dict[int, ArrayType],
++    ) -> list[Video]:
++        """CD-186-14：規則路 ∪ 向量路 → RRF → MMR(rel) → Tier2／3／4。"""
++        rule = self._rule_path_for_fusion(target)
++        vec = self._vector_path_for_fusion(target, vectors)
++        ordered, rel = self._rrf_rel(rule, vec)
++        selected_keys: set[tuple] = {self._stable_key(target)}
++        result: list[Video] = []
++        for c in self._mmr_rerank(target, ordered, top_k=top_k, rel=rel):
++            k = self._stable_key(c)
++            if k in selected_keys:
++                continue
++            selected_keys.add(k)
++            result.append(c)
++            if len(result) >= top_k:
++                return result
++        return self._fill_fallbacks(target, top_k, result, selected_keys)
++
++    # spec-57 §2.4：Stage 1 retrieve → Stage 2 score → Stage 3 MMR → Tier 2/3/4 fallback
++    # CD-186-14：vectors 閘——None 或不含 target.id → 今天路徑一行不變
++    def rank(
++        self,
++        target: Video,
++        top_k: int = 12,
++        vectors: dict[int, ArrayType] | None = None,
++    ) -> list[Video]:
++        if not self._corpus or top_k <= 0:
++            return []
++
++        if vectors is None or target.id not in vectors:
++            target_canon = canonical_video_tags(target)
++            target_useful = {t for t in target_canon if self._idf_table.get(t, 0.0) > 0}
++
++            selected_keys: set[tuple] = {self._stable_key(target)}
++            result: list[Video] = []
++
++            retrieved = self._retrieve(target_canon, exclude=target, top_n=100)
++            # Codex P1 fix：DB 場景 target 可能是 corpus 內 row 的另一個 Python object
++            # （`_retrieve` 的 `is` 排不掉），用 stable_key 兜底防 Tier 1 slot 被 target 副本占用
++            target_key = self._stable_key(target)
++            tier1_pool = [
++                c for c in retrieved
++                if self._stable_key(c) != target_key
++                and len(target_useful & self._useful_set(c)) >= 2
++            ]
++            for c in self._mmr_rerank(target, tier1_pool, top_k=top_k):
++                k = self._stable_key(c)
++                if k in selected_keys:
++                    continue
++                selected_keys.add(k)
++                result.append(c)
++                if len(result) >= top_k:
++                    return result
++
++            return self._fill_fallbacks(target, top_k, result, selected_keys)
++
++        return self._rank_fused(target, top_k, vectors)
+--- /dev/null
++++ b/web/routers/ai_services.py
+@@ -0,0 +1,293 @@
++"""AI services endpoints for embeddings samples and consistency test (186-T3 / 187-T1).
++
++- GET  /api/ai/sample/embeddings
++- POST /api/ai/similar/test
++- GET  /api/ai/similar/status      (186-T4b)
++- POST /api/ai/similar/index       (186-T4b)
++- POST /api/ai/similar/index/stop  (186-T4b)
++- GET  /api/ai/sample/faces        (187-T1)
++- POST /api/ai/faces/test          (187-T1)
++- GET  /api/ai/faces/status        (187a-T4b)
++- POST /api/ai/faces/recompute     (187a-T4b, resume)
++- POST /api/ai/faces/recompute/stop
++- POST /api/ai/faces/rebuild
++"""
++
++from __future__ import annotations
++
++import asyncio
++from types import SimpleNamespace
++from typing import Optional
++from urllib.parse import urlsplit
++
++from fastapi import APIRouter
++from pydantic import BaseModel
++
++from core.ai_services import faces_recompute, faces_state, similar_index, similar_state
++from core.ai_services.samples import (
++    DIFF_MAX,
++    DIM_MAX,
++    DIM_MIN,
++    FACES_EXPECT_CENTER,
++    FACES_MIN_FACES,
++    FACES_TOLERANCE,
++    SAME_MIN,
++    get_faces_sample_input,
++    get_sample_inputs,
++    run_consistency_test,
++    run_faces_test,
++)
++from core.ai_services.faces_config import active_in
++from core.config import load_config
++from core.logger import get_logger
++from core.secret_fields import read_secret, resolve_secret
++
++logger = get_logger(__name__)
++
++router = APIRouter(prefix="/api/ai", tags=["ai_services"])
++
++# Agent-facing steps for the same assertions the test button runs (docs land in T7).
++_SAMPLE_STEPS = [
++    "POST {base}/v1/embeddings with inputs[0] (allow cold-start; first call may be slow).",
++    "POST again with inputs[0]; cosine(v1, v2) must be >= expect.same_min.",
++    "POST with inputs[1]; cosine(v1, v_b) must be < expect.diff_max.",
++    "All three responses share the same model string and dim in [dim_min, dim_max].",
++]
++
++_FACES_SAMPLE_STEPS = [
++    "POST {base}/v1/faces with inputs[0] (allow cold-start; first call may be slow).",
++    "Response faces is an array; highest-score box center within expect.tolerance of expect.center per axis.",
++    "Response model is a non-empty string.",
++]
++
++
++class SimilarTestRequest(BaseModel):
++    """Optional overrides. Absent (None) → stored config; present → use given value."""
++
++    url: Optional[str] = None
++    api_key: Optional[str] = None
++    model: Optional[str] = None
++
++
++class FacesTestRequest(BaseModel):
++    """Optional overrides. Absent (None) → stored config; present → use given value."""
++
++    url: Optional[str] = None
++    api_key: Optional[str] = None
++    model: Optional[str] = None
++
++
++def _resolve_similar_cfg(body: SimilarTestRequest, config: dict) -> SimpleNamespace:
++    stored = (config.get("ai_services") or {}).get("image_similar") or {}
++    url = stored.get("url", "") if body.url is None else body.url
++    model = stored.get("model", "") if body.model is None else body.model
++    stored_key = read_secret(config, "ai_services.image_similar.api_key")
++    if body.api_key is None:
++        api_key = stored_key
++    else:
++        api_key = resolve_secret(body.api_key, stored_key)
++    return SimpleNamespace(url=url or "", api_key=api_key or "", model=model or "")
++
++
++def _resolve_faces_cfg(body: FacesTestRequest, config: dict) -> SimpleNamespace:
++    stored = (config.get("ai_services") or {}).get("faces") or {}
++    url = stored.get("url", "") if body.url is None else body.url
++    model = stored.get("model", "") if body.model is None else body.model
++    stored_key = read_secret(config, "ai_services.faces.api_key")
++    if body.api_key is None:
++        api_key = stored_key
++    else:
++        api_key = resolve_secret(body.api_key, stored_key)
++    return SimpleNamespace(url=url or "", api_key=api_key or "", model=model or "")
++
++def _norm_url(url: str) -> str:
++    """比對用正規化：去空白、scheme／host 小寫、去尾端 ``/``（path 大小寫保留）。"""
++    parts = urlsplit((url or "").strip())
++    return parts._replace(
++        scheme=parts.scheme.lower(), netloc=parts.netloc.lower(), path=parts.path.rstrip("/")
++    ).geturl()
++
++
++def _is_stored_target(cfg: SimpleNamespace, config: dict) -> bool:
++    """受測的 url＋model 是否等於已存設定（body 缺席的欄位即用已存值，故視為相同）。"""
++    stored = (config.get("ai_services") or {}).get("image_similar") or {}
++    return (
++        _norm_url(cfg.url) == _norm_url(stored.get("url", "") or "")
++        and (cfg.model or "").strip() == (stored.get("model", "") or "").strip()
++    )
++
++
++def _observe_test_result(result) -> None:
++    """測試結果 → 記憶體觀察值（不寫 DB／設定）。成功記模型並解除 unreachable；失敗記 kind／check。"""
++    if result.ok and result.model is not None and result.dim is not None:
++        similar_state.observe_success(result.model, result.dim)
++    elif not result.ok:
++        similar_state.observe_failure(result.kind, result.check)
++
++
++def _is_stored_faces_target(cfg: SimpleNamespace, config: dict) -> bool:
++    """受測 url＋model 是否等於已存人臉設定（api_key 不比；body 缺席即用已存值）。"""
++    stored = (config.get("ai_services") or {}).get("faces") or {}
++    return (
++        _norm_url(cfg.url) == _norm_url(stored.get("url", "") or "")
++        and (cfg.model or "").strip() == (stored.get("model", "") or "").strip()
++    )
++
++
++def _observe_faces_test_result(result) -> None:
++    """記憶體觀察值（不寫 DB／設定、不觸發重算）。成功清 degraded／通知旗標。"""
++    if result.ok and result.model:
++        faces_state.observe_success(result.model)
++    elif not result.ok:
++        faces_state.observe_failure(result.kind, result.check)
++
++
++def _faces_status() -> dict:
++    """純讀：DB＋記憶體＋app_meta，不打端點。"""
++    config = load_config()
++    out = faces_recompute.status()
++    snap = faces_state.snapshot()
++    active = active_in(config)
++    last = snap["last_success_at"]
++    if last is None:
++        raw = faces_state.meta_get(faces_state.META_LAST_SUCCESS)
++        try:
++            last = float(raw) if raw else None
++        except ValueError:
++            last = None
++    degraded = bool(snap["degraded"])
++    out["using"] = "external" if (active and not degraded) else "local"
++    out["observed"] = snap["observed_model"] is not None or last is not None
++    out["last_success_at"] = last
++    if active and degraded:
++        out["degraded"] = True
++        out["degraded_kind"] = snap["kind"]
++        out["degraded_check"] = snap["check"]
++    return out
++
++
++@router.get("/sample/embeddings")
++async def sample_embeddings():
++    """Return preprocessed sample A/B data URIs plus expect thresholds and steps."""
++    a, b = await asyncio.to_thread(get_sample_inputs)
++    return {
++        "inputs": [a, b],
++        "expect": {
++            "same_min": SAME_MIN,
++            "diff_max": DIFF_MAX,
++            "dim_min": DIM_MIN,
++            "dim_max": DIM_MAX,
++        },
++        "steps": list(_SAMPLE_STEPS),
++    }
++
++
++@router.post("/similar/test")
++async def similar_test(body: SimilarTestRequest | None = None):
++    """Run consistency test against stored or overridden endpoint settings.
++
++    Does not write DB or config (CD-186-7). Only when the tested url+model equal
++    the stored settings does the result update the in-memory observation (CD-186-11).
++    """
++    req = body or SimilarTestRequest()
++    config = await asyncio.to_thread(load_config)
++    cfg = _resolve_similar_cfg(req, config)
++    result = await asyncio.to_thread(run_consistency_test, cfg)
++    if _is_stored_target(cfg, config):
++        await asyncio.to_thread(_observe_test_result, result)
++    out: dict = {"ok": result.ok, "elapsed_ms": result.elapsed_ms}
++    if result.kind is not None:
++        out["kind"] = result.kind
++    if result.check is not None:
++        out["check"] = result.check
++    if result.model is not None:
++        out["model"] = result.model
++    if result.dim is not None:
++        out["dim"] = result.dim
++    return out
++
++
++@router.get("/similar/status")
++async def similar_status():
++    """索引進度與狀態（讀 DB＋記憶體觀察值）。"""
++    return await asyncio.to_thread(similar_index.status)
++
++
++@router.post("/similar/index")
++async def similar_index_start():
++    """建立／繼續／重建索引；內含一致性測試（可達 90 秒以上），業務失敗在 body、HTTP 200。"""
++    return await asyncio.to_thread(similar_index.start_build)
++
++
++@router.post("/similar/index/rebuild")
++async def similar_index_rebuild():
++    """刪除並重建索引：先跑一致性測試（可達 90 秒以上），沒過什麼都不刪；業務失敗在 body、HTTP 200。"""
++    return await asyncio.to_thread(similar_index.start_rebuild)
++
++
++@router.post("/similar/index/stop")
++async def similar_index_stop():
++    """停止索引工作（閒置時為 no-op）。"""
++    return await asyncio.to_thread(similar_index.request_stop)
++
++
++@router.get("/sample/faces")
++async def sample_faces():
++    """Return preprocessed faces sample data URI plus expect thresholds and steps."""
++    uri = await asyncio.to_thread(get_faces_sample_input)
++    return {
++        "inputs": [uri],
++        "expect": {
++            "center": list(FACES_EXPECT_CENTER),
++            "tolerance": FACES_TOLERANCE,
++            "min_faces": FACES_MIN_FACES,
++        },
++        "steps": list(_FACES_SAMPLE_STEPS),
++    }
++
++
++@router.post("/faces/test")
++async def faces_test(body: FacesTestRequest | None = None):
++    """Run faces consistency test against stored or overridden endpoint settings.
++
++    Does not write DB or config (CD-187a-19). Only when url+model equal the stored settings
++    does the result update the in-memory observation; never triggers a recompute (NC-4).
++    """
++    req = body or FacesTestRequest()
++    config = await asyncio.to_thread(load_config)
++    cfg = _resolve_faces_cfg(req, config)
++    result = await asyncio.to_thread(run_faces_test, cfg)
++    if _is_stored_faces_target(cfg, config):
++        await asyncio.to_thread(_observe_faces_test_result, result)
++    out: dict = {"ok": result.ok, "elapsed_ms": result.elapsed_ms}
++    if result.kind is not None:
++        out["kind"] = result.kind
++    if result.check is not None:
++        out["check"] = result.check
++    if result.model is not None:
++        out["model"] = result.model
++    return out
++
++
++@router.get("/faces/status")
++async def faces_status():
++    """重新對焦進度＋端點使用狀態（純讀，不打端點）。"""
++    return await asyncio.to_thread(_faces_status)
++
++
++@router.post("/faces/recompute")
++async def faces_recompute_resume():
++    """繼續未完成的重新對焦（不重算已算的）。"""
++    return await asyncio.to_thread(faces_recompute.resume)
++
++
++@router.post("/faces/recompute/stop")
++async def faces_recompute_stop():
++    """停止重新對焦（閒置時為 no-op）。"""
++    return await asyncio.to_thread(faces_recompute.request_stop)
++
++
++@router.post("/faces/rebuild")
++async def faces_rebuild():
++    """刪除並重新對焦：先跑一致性測試，沒過什麼都不刪；業務失敗在 body、HTTP 200。"""
++    return await asyncio.to_thread(faces_recompute.start_rebuild)
+--- a/web/routers/similar.py
++++ b/web/routers/similar.py
+@@ -15,6 +15,8 @@
+ 
+ from fastapi import APIRouter, HTTPException, Query
+ 
++from core.ai_services.embedding_cache import EmbeddingMatrixCache
++from core.ai_services.similar_state import format_similar_model_id, fusion_vectors
+ from core.config import load_config
+ from core.database import VideoRepository
+ from core.logger import get_logger
+@@ -71,8 +73,13 @@
+     if target is None:
+         raise HTTPException(status_code=404, detail="找不到影片")
+ 
++    # CD-186-14：融合向量要在 rank 前取；設定提前載入（同一物件沿用）
++    config = load_config()
++    vectors = fusion_vectors(config)
++    fused = vectors is not None and target.id in vectors
++
+     ranker = SimilarRankerCache.get()
+-    results_videos = ranker.rank(target, top_k=limit)
++    results_videos = ranker.rank(target, top_k=limit, vectors=vectors)
+ 
+     # Codex PR#105 P2 修復：ranker.rank() 可能回 SimilarRankerCache 快取的 Video 物件（非
+     # fresh DB row）。update_auto_focal()/update_manual_focal() 刻意不 invalidate 整個 ranker
+@@ -81,10 +88,14 @@
+     focal_crop_map = repo.get_focal_crop_map([v.path for v in results_videos])
+ 
+     # feature/71 T4：讀一次 thumbnail_cache flag，套用於 query_video + 每個 result
+-    config = load_config()
+     gallery_config = config.get('gallery', {})
+     path_mappings = gallery_config.get('path_mappings', {})
+     enabled = config.get('thumbnail_cache_enabled', False)
++
++    index_model = None
++    if fused:
++        from core.database import EmbeddingRepository
++        index_model = EmbeddingRepository().get_index_state().get("model")
+ 
+     results = []
+     for v in results_videos:
+@@ -105,7 +116,7 @@
+ 
+     return {
+         "video_id": video_id,
+-        "model_id": "rule-based:v1",
++        "model_id": format_similar_model_id(index_model, fused=fused),
+         "query_video": {
+             "video_id": target.id,
+             "number": target.number,
+@@ -163,4 +174,14 @@
+     warm-up 命中 → A 的 await 變 ~10ms invisible；warm-up 來不及 → A 仍正確（只是慢）。
+     """
+     SimilarRankerCache.get()
+-    return {"ok": True}
++    config = load_config()
++    vectors = fusion_vectors(config)
++    if vectors is None:
++        boosted_numbers: list[str] = []
++    else:
++        from core.database import EmbeddingRepository
++        state = EmbeddingRepository().get_index_state()
++        boosted_numbers = EmbeddingMatrixCache.boosted_numbers(
++            state["model"], state["dim"],
++        )
++    return {"ok": True, "boosted_numbers": boosted_numbers}
+--- /dev/null
++++ b/web/static/js/pages/settings/ai-backfill-controls.js
+@@ -0,0 +1,236 @@
++/**
++ * ai-backfill-controls.js — 三個 AI 補跑分頁共用的補跑 mixin（TASK-189a-T11a）
++ *
++ * 用法：面板工廠的回傳物件最前面展開 `...aiBackfillControls(adapter, hooks)`。
++ * 這不是新元件：不進 mergeState、不註冊 Alpine.data；鍵名固定 bf 前綴，不帶功能名。
++ * 生命週期由面板自己掛：面板的初始化方法末行呼叫 bfOnInit()，銷毀方法呼叫 bfOnDestroy()
++ *（mixin 本身不定義這兩個生命週期方法）。
++ *
++ * 外求（面板 this 上由父層提供）只有 aiTab、isDirty；功能獨有的讀取（開關、表單、toast）經 hooks 傳 vm。
++ * hooks（皆收 vm＝面板 this）：enabled(vm)（缺省 true）、testPassed(vm)（缺省 false）、
++ *   blocked(vm)（缺省 null）、afterPost(vm, kind, {ok, data, failed})（缺省不做事；kind ∈ 'start'|'rebuild'）。
++ * 可選尾巴 hooks（缺省＝無尾巴／沿用 adapter，行為逐字不變）：progressSuffix(vm)（接在進度行尾，僅進度行非空時）、
++ *   pendingSuffix(vm)（接在「還有 N 部沒跑」尾，僅該行非空時）、rebuildConfirm(vm, view)（回 {key, params} 覆寫
++ *   adapter.rebuildConfirm；回 null 沿用 adapter）。
++ *
++ * 輪詢世代守衛：每次 bfRefresh 先 ++bfGen，await 後世代不符或已銷毀就丟棄回應（用計數，不比物件身分）。
++ */
++
++import {
++    normalizeStatus,
++    actionOf,
++    extraActionOf,
++    rebuildVisible,
++    progressLine,
++    pendingLine,
++} from './ai-backfill-logic.js';
++
++const POLL_MS = 1000;
++/** 補完中 status 連續失敗上限（約 30 秒）後才停輪詢。 */
++const POLL_FAIL_MAX = 30;
++
++function syncTaskKeepAlive(owner, running) {
++    const bridge = window.__openaverTaskKeepAlive;
++    if (!bridge) return;
++    if (running) bridge.start(owner);
++    else bridge.stop(owner);
++}
++
++function callHook(hooks, name, vm, fallback) {
++    const fn = hooks && hooks[name];
++    return typeof fn === 'function' ? fn(vm) : fallback;
++}
++
++/** 描述子 { key, params, extra } → 文字；null 回 ''。 */
++function descText(desc) {
++    if (!desc || !desc.key) return '';
++    let text = window.t(desc.key, desc.params);
++    if (desc.extra) text += window.t(desc.extra, desc.params);
++    return text;
++}
++
++export function aiBackfillControls(adapter, hooks = {}) {
++    return {
++        bfStatus: null,
++        bfBusy: false,
++        bfGen: 0,
++        bfFailCount: 0,
++        bfPollTimer: null,
++        bfDestroyed: false,
++
++        /** 統一視角（每次重算，不存進 state）。 */
++        bfView() {
++            return normalizeStatus(adapter, this.bfStatus);
++        },
++
++        bfCtx() {
++            return {
++                enabled: Boolean(callHook(hooks, 'enabled', this, true)),
++                dirty: Boolean(this.isDirty),
++                busy: this.bfBusy,
++                blocked: callHook(hooks, 'blocked', this, null) ?? null,
++                testPassed: Boolean(callHook(hooks, 'testPassed', this, false)),
++            };
++        },
++
++        bfAction() {
++            return actionOf(adapter, this.bfView(), this.bfCtx());
++        },
++
++        bfExtraAction() {
++            return extraActionOf(adapter, this.bfView(), this.bfCtx());
++        },
++
++        bfRebuildVisible() {
++            return rebuildVisible(adapter, this.bfView(), this.bfCtx());
++        },
++
++        bfRebuildDisabled() {
++            return Boolean(this.bfBusy || this.isDirty || callHook(hooks, 'blocked', this, null));
++        },
++
++        bfProgressText() {
++            const text = descText(progressLine(this.bfView()));
++            return text ? text + (callHook(hooks, 'progressSuffix', this, '') || '') : '';
++        },
++
++        bfPendingText() {
++            const text = descText(pendingLine(this.bfView()));
++            return text ? text + (callHook(hooks, 'pendingSuffix', this, '') || '') : '';
++        },
++
++        bfOnInit() {
++            this.$watch('aiTab', (val) => {
++                if (this.bfDestroyed) return;
++                if (val === adapter.tab) {
++                    this.bfRefresh();
++                } else {
++                    this._bfStopPoll();
++                }
++            });
++            if (this.aiTab === adapter.tab) {
++                this.bfRefresh();
++            }
++        },
++
++        bfOnDestroy() {
++            this._bfStopPoll();
++            this.bfDestroyed = true;
++            this.bfGen++;
++        },
++
++        _bfStopPoll() {
++            if (this.bfPollTimer !== null) {
++                clearTimeout(this.bfPollTimer);
++                this.bfPollTimer = null;
++            }
++        },
++
++        /** 鏈式 setTimeout：上一次 status 處理完才排下一次（間隔 POLL_MS）。 */
++        _bfEnsurePoll() {
++            if (this.bfPollTimer !== null) return;
++            this.bfPollTimer = setTimeout(() => {
++                this.bfPollTimer = null;
++                if (this.bfDestroyed || this.aiTab !== adapter.tab) {
++                    this._bfStopPoll();
++                    return;
++                }
++                this.bfRefresh();
++            }, POLL_MS);
++        },
++
++        async bfRefresh() {
++            if (this.bfDestroyed) return;
++            if (this.aiTab !== adapter.tab) {
++                this._bfStopPoll();
++                return;
++            }
++            const gen = ++this.bfGen;
++            let data = null;
++            try {
++                const res = await fetch(adapter.urls.status);
++                data = res.ok ? await res.json() : null;
++            } catch {
++                data = null;
++            }
++            if (gen !== this.bfGen || this.bfDestroyed) return;
++            if (!data) {
++                // 補完中短暫斷線：保留舊狀態，繼續排下一次；連續失敗滿 POLL_FAIL_MAX 才停
++                if (this.bfStatus?.running && this.aiTab === adapter.tab) {
++                    this.bfFailCount += 1;
++                    if (this.bfFailCount < POLL_FAIL_MAX) {
++                        this._bfEnsurePoll();
++                        return;
++                    }
++                }
++                this._bfStopPoll();
++                return;
++            }
++            this.bfFailCount = 0;
++            this.bfStatus = data;
++            syncTaskKeepAlive(`ai-backfill:${adapter.tab}`, Boolean(data.running));
++            // 請求在途時離開分頁：只更新狀態，不再排下一次
++            if (data.running && this.aiTab === adapter.tab) {
++                this._bfEnsurePoll();
++            } else {
++                this._bfStopPoll();
++            }
++        },
++
++        /** start／rebuild 共用單一出口：POST → bfBusy 歸位 → afterPost hook → bfRefresh。 */
++        async _bfPost(kind) {
++            const url = kind === 'rebuild' ? adapter.urls.rebuild : adapter.urls.start;
++            let result = { ok: false, data: null, failed: true };
++            this.bfBusy = true;
++            try {
++                const res = await fetch(url, { method: 'POST' });
++                let data = null;
++                try { data = await res.json(); } catch { data = null; }
++                result = { ok: res.ok, data, failed: false };
++            } catch {
++                result = { ok: false, data: null, failed: true };
++            } finally {
++                this.bfBusy = false;
++            }
++            if (result.ok && kind === 'start') {
++                syncTaskKeepAlive(`ai-backfill:${adapter.tab}`, true);
++            }
++            if (hooks && typeof hooks.afterPost === 'function') hooks.afterPost(this, kind, result);
++            await this.bfRefresh();
++        },
++
++        /** 「補完全庫」與「繼續」是同一個端點，後端自己承接。 */
++        async bfStart() {
++            const a = this.bfAction();
++            if (a.disabled || (a.action !== 'start' && a.action !== 'continue')) return;
++            await this._bfPost('start');
++        },
++
++        async bfRetry() {
++            const a = this.bfExtraAction();
++            if (a.disabled || a.action !== 'retry') return;
++            await this._bfPost('start');
++        },
++
++        async bfStop() {
++            try {
++                await fetch(adapter.urls.stop, { method: 'POST' });
++            } catch {
++                /* 靜默；接著 refresh */
++            }
++            await this.bfRefresh();
++        },
++
++        async bfRebuild() {
++            if (this.bfRebuildDisabled()) return;
++            const view = this.bfView();
++            if (!view) return;
++            const over = hooks && typeof hooks.rebuildConfirm === 'function'
++                ? hooks.rebuildConfirm(this, view) : null;
++            const desc = over || adapter.rebuildConfirm(view);
++            // eslint-disable-next-line no-alert -- 全庫重建費用確認，與 rebuildIndex 的 confirm 同形
++            if (!confirm(window.t(desc.key, desc.params))) return;
++            await this._bfPost('rebuild');
++        },
++    };
++}
+--- /dev/null
++++ b/web/static/js/pages/settings/ai-backfill-logic.js
+@@ -0,0 +1,98 @@
++/**
++ * ai-backfill-logic.js — 三個 AI 補跑分頁（圖片相似／人臉／AI 標籤）共用純函式（TASK-189a-T10）
++ *
++ * normalizeStatus／actionOf／extraActionOf／rebuildVisible／progressLine／pendingLine。
++ * 簽名一律 adapter 在前：adapter 由各 ai-*-logic.js 匯出，負責「功能獨有的那一半」。
++ * 純函式：不碰頁面節點、不碰前端框架、不查翻譯表；描述子只放 key。
++ *
++ * view ＝ adapter.normalize(raw) 的回傳：
++ *   { running, processed, total, pending, resumable, lastSuccessAt, unreachable, stopReason, raw }
++ *
++ * 舊 → 新動作映射表（測試以此表驅動）
++ *   功能  舊函式回傳         新 actionOf  新 extraAction  新通用 rebuildVisible
++ *   相似  indexAction null    null          null            ＝舊 rebuildVisible
++ *         'stop'              'stop'        null            false
++ *         'continue'          resumable? 'continue' : 'start'  null  ＝舊 rebuildVisible
++ *         'build'             'start'       null            ＝舊 rebuildVisible
++ *         'retry'             null          'retry'         ＝舊 rebuildVisible
++ *         'rebuild'           null          null            true
++ *   人臉  recomputeAction 'stop'    'stop'      null        false
++ *         'resume'            resumable? 'continue' : 'start'  null  ＝舊 deleteRebuildVisible
++ *         'none'              null          null            ＝舊 deleteRebuildVisible
++ *   只有中途停下（view.resumable）才叫 'continue'；沒在中途停下但有待補一律 'start'。
++ *   標籤  backfillAction {action,disabled,reason}  整物件相同  null  enabled ∧ !running ∧ total>0
++ */
++
++/** unix 秒 → 本地 HH:MM；無效回 ''。 */
++function formatHm(epochSec) {
++    if (typeof epochSec !== 'number' || !Number.isFinite(epochSec)) return '';
++    const d = new Date(epochSec * 1000);
++    if (Number.isNaN(d.getTime())) return '';
++    const p2 = (n) => String(n).padStart(2, '0');
++    return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
++}
++
++/** 補齊 ctx 預設值（不 mutate 傳入物件）。 */
++function fullCtx(ctx) {
++    const c = ctx || {};
++    const { enabled = true, dirty = false, busy = false, blocked = null, testPassed = false } = c;
++    return { enabled, dirty, busy, blocked, testPassed };
++}
++
++/** 意圖 → { action, disabled, reason }。stop 永不鎖。 */
++function gate(intent, c) {
++    if (!intent) return { action: null, disabled: true, reason: null };
++    if (intent === 'stop') return { action: 'stop', disabled: false, reason: null };
++    if (!c.enabled) return { action: intent, disabled: true, reason: 'not_enabled' };
++    if (c.dirty) return { action: intent, disabled: true, reason: 'dirty' };
++    if (c.busy) return { action: intent, disabled: true, reason: 'busy' };
++    if (typeof c.blocked === 'string' && c.blocked) {
++        return { action: intent, disabled: true, reason: c.blocked };
++    }
++    return { action: intent, disabled: false, reason: null };
++}
++
++/** raw 狀態 → view；raw 為 null／undefined 回 null。 */
++export function normalizeStatus(adapter, raw) {
++    if (raw === null || raw === undefined) return null;
++    return adapter.normalize(raw);
++}
++
++/** 主動作：{ action: 'stop'|'start'|'continue'|null, disabled, reason }。 */
++export function actionOf(adapter, view, ctx) {
++    if (!view) return { action: null, disabled: true, reason: null };
++    const c = fullCtx(ctx);
++    return gate(adapter.actionOf(view, c), c);
++}
++
++/** 副動作（目前只有相似的 'retry'）：{ action: 'retry'|null, disabled, reason }。 */
++export function extraActionOf(adapter, view, ctx) {
++    if (!view) return { action: null, disabled: true, reason: null };
++    const c = fullCtx(ctx);
++    return gate(adapter.extraAction(view, c), c);
++}
++
++/** 「刪除並重建」鈕可見：共同前綴（有狀態、沒在跑、功能已開）∧ 功能獨有條件。 */
++export function rebuildVisible(adapter, view, ctx) {
++    if (!view || view.running) return false;
++    const c = fullCtx(ctx);
++    if (c.enabled === false) return false;
++    return Boolean(adapter.rebuildVisible(view, c));
++}
++
++/** 進行中進度列描述子；非進行中回 null。 */
++export function progressLine(view) {
++    if (!view || !view.running) return null;
++    const time = formatHm(view.lastSuccessAt);
++    return {
++        key: 'settings.ai.backfill.progress_running',
++        params: { n: view.processed, m: view.total, time },
++        extra: time ? 'settings.ai.backfill.progress_last_success' : null,
++    };
++}
++
++/** 「還有 N 部沒跑」描述子；進行中或沒有待補回 null。 */
++export function pendingLine(view) {
++    if (!view || view.running || !(view.pending > 0)) return null;
++    return { key: 'settings.ai.backfill.pending_line', params: { n: view.pending } };
++}
+--- /dev/null
++++ b/web/static/js/pages/settings/ai-faces-logic.js
+@@ -0,0 +1,167 @@
++/**
++ * ai-faces-logic.js — 人臉分頁純函式（TASK-187a-T5）
++ *
++ * panelMode／statusLine／recomputeLine／recomputeAction／deleteRebuildVisible＋CHECK_KEYS。
++ * 無 DOM、無 Alpine、無 window.t。
++ */
++
++/** check 值 → i18n key（含未知值的通用文案）。 */
++export const CHECK_KEYS = {
++    auth: 'settings.ai.faces.check_auth',
++    http_4xx: 'settings.ai.faces.check_http_4xx',
++    http_5xx: 'settings.ai.faces.check_http_5xx',
++    not_json: 'settings.ai.faces.check_not_json',
++    shape: 'settings.ai.faces.check_shape',
++    no_model: 'settings.ai.faces.check_no_model',
++    no_face: 'settings.ai.faces.check_no_face',
++    center_off: 'settings.ai.faces.check_center_off',
++    unknown: 'settings.ai.faces.check_unknown',
++};
++
++/** 開關決定 empty／fields；網址空仍為 fields。 */
++export function panelMode(form) {
++    return form.aiFacesEnabled ? 'fields' : 'empty';
++}
++
++/** 重算鈕動作：stop／resume／none。target_model 空時不顯示繼續（後端會 no_target）。 */
++export function recomputeAction(status) {
++    if (!status) return 'none';
++    if (status.running) return 'stop';
++    if ((status.pending || 0) > 0 && status.target_model) return 'resume';
++    return 'none';
++}
++
++/** 「刪除並重新對焦」鈕可見：開關開 ∧ rebuild_count>0 ∧ 沒有工作在跑。 */
++export function deleteRebuildVisible(status, enabled) {
++    if (!enabled || !status || status.running) return false;
++    return (status.rebuild_count || 0) > 0;
++}
++
++/** unix 秒 → 本地 HH:MM；無效回 ''。 */
++function formatHm(epochSec) {
++    if (typeof epochSec !== 'number' || !Number.isFinite(epochSec)) return '';
++    const d = new Date(epochSec * 1000);
++    if (Number.isNaN(d.getTime())) return '';
++    const p2 = (n) => String(n).padStart(2, '0');
++    return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
++}
++
++/**
++ * 「目前使用」狀態列。回傳 { key, params, extra }；函式不呼叫 window.t。
++ * 模型名取 target_model（T4b 實作欄位；無 observed_model）。
++ */
++export function statusLine(status) {
++    if (!status) {
++        return { key: 'settings.ai.faces.status_local', params: {}, extra: null };
++    }
++    if (status.degraded) {
++        return {
++            key: 'settings.ai.faces.status_local_degraded',
++            params: { time: formatHm(status.last_success_at) },
++            extra: null,
++        };
++    }
++    if (status.using === 'external') {
++        if (!status.observed) {
++            return {
++                key: 'settings.ai.faces.status_external_unobserved',
++                params: {},
++                extra: null,
++            };
++        }
++        return {
++            key: 'settings.ai.faces.status_external',
++            params: {
++                model: status.target_model || '',
++                time: formatHm(status.last_success_at),
++            },
++            extra: null,
++        };
++    }
++    return { key: 'settings.ai.faces.status_local', params: {}, extra: null };
++}
++
++/**
++ * 重算進度列。無事可報回 null；stopped_reason 優先於「未完成」。
++ */
++export function recomputeLine(status) {
++    if (!status) return null;
++    if (status.running) {
++        // 跑中：進度行已有「已處理 n／m」，這裡不重述（params 保留供對照）
++        return {
++            key: null,
++            params: { n: status.processed || 0, m: status.total || 0 },
++            extra: null,
++        };
++    }
++    // 尚未有目標模型（開關剛開未存）時 pending 會是全部候選——不顯示未完成／已停止。
++    if (!status.target_model) return null;
++    // 只有 contract／unreachable 顯示「已停止」句；disabled（使用者關端點）走下方未完成。
++    if (status.stopped_reason === 'contract') {
++        return {
++            key: 'settings.ai.faces.recompute_stopped_contract',
++            params: {},
++            extra: null,
++        };
++    }
++    if (status.stopped_reason === 'unreachable') {
++        return {
++            key: 'settings.ai.faces.recompute_stopped_unreachable',
++            params: {},
++            extra: null,
++        };
++    }
++    if ((status.pending || 0) > 0) {
++        const unreadable = status.unreadable || 0;
++        // 閒置未完成：「還有 N 部沒跑」已表示待處理，這裡只留非重述的「封面讀不到」
++        return {
++            key: null,
++            params: { n: status.pending || 0, k: unreadable },
++            extra: unreadable > 0 ? 'settings.ai.faces.recompute_unreadable_extra' : null,
++        };
++    }
++    return null;
++}
++
++/** 補跑共用層 adapter（TASK-189a-T10）：只放功能獨有的那一半。 */
++export const adapter = {
++    tab: 'faces',
++    urls: {
++        status: '/api/ai/faces/status',
++        start: '/api/ai/faces/recompute',
++        rebuild: '/api/ai/faces/rebuild',
++        stop: '/api/ai/faces/recompute/stop',
++    },
++    normalize(raw) {
++        const pending = raw.target_model ? (raw.pending || 0) : 0;
++        return {
++            running: Boolean(raw.running),
++            processed: raw.processed || 0,
++            total: raw.total || 0,
++            pending,
++            // 上一輪因失敗／被關閉而停下（stopped_reason 在下一輪開工前一直保留）且還有待處理
++            resumable: pending > 0 && Boolean(raw.target_model) && Boolean(raw.stopped_reason),
++            lastSuccessAt: raw.last_success_at ?? null,
++            unreachable: Boolean(raw.unreachable),
++            stopReason: raw.stopped_reason ?? null,
++            raw,
++        };
++    },
++    actionOf(view) {
++        if (view.running) return 'stop';
++        if (view.pending > 0) return view.resumable ? 'continue' : 'start';
++        return null;
++    },
++    extraAction() {
++        return null;
++    },
++    rebuildVisible(view) {
++        return (view.raw.rebuild_count || 0) > 0;
++    },
++    rebuildConfirm(view) {
++        return {
++            key: 'settings.ai.faces.rebuild_confirm',
++            params: { n: view.raw.rebuild_count || 0 },
++        };
++    },
++};
+--- /dev/null
++++ b/web/static/js/pages/settings/ai-faces-panel.js
+@@ -0,0 +1,203 @@
++/**
++ * ai-faces-panel.js — 人臉分頁獨立 Alpine 元件（TASK-187a-T5；補跑邏輯 189a-T11b 起改走共用 mixin）
++ *
++ * Alpine.data('aiFacesPanel')；面板獨有 key 一律 aiFaces 前綴、補跑 key 一律 bf 前綴（展開自 ai-backfill-controls.js）；
++ * 不進 mergeState。外求：form／isDirty／showToast／aiTab（不複製父層 key）。
++ * 存檔後補查留在面板；輪詢由 mixin 負責。兩個 $watch('aiTab') 並存是對的。
++ */
++
++import { aiBackfillControls } from './ai-backfill-controls.js';
++import {
++    adapter as FACES_ADAPTER,
++    panelMode,
++    statusLine,
++    recomputeLine,
++    CHECK_KEYS,
++} from './ai-faces-logic.js';
++
++const TEST_URL = '/api/ai/faces/test';
++
++/** 補跑 mixin 的面板端 hooks：開關、POST 後 toast／回填（不提供 testPassed／blocked）。 */
++const FACES_HOOKS = {
++    enabled: (vm) => Boolean(vm.form && vm.form.aiFacesEnabled),
++    afterPost(vm, kind, { ok, data, failed }) {
++        if (kind === 'start') {
++            if (failed || !ok) {
++                vm.showToast(window.t('settings.ai.faces.recompute_http_error'), 'error');
++            }
++            return;
++        }
++        if (kind === 'rebuild') {
++            if (failed || !ok) {
++                vm.showToast(window.t('settings.ai.faces.recompute_http_error'), 'error');
++            } else if (data && data.reason === 'test_failed') {
++                vm.aiFacesTestPassed = false;
++                vm.aiFacesTestResultHtml = vm._formatTestResult({
++                    ok: false,
++                    kind: data.kind,
++                    check: data.check,
++                });
++            } else if (data && (data.reason === 'started' || data.reason === 'already_running')) {
++                /* 結束後統一 bfRefresh */
++            } else {
++                vm.showToast(window.t('settings.ai.faces.recompute_http_error'), 'error');
++            }
++        }
++    },
++};
++
++export function aiFacesPanel() {
++    return {
++        ...aiBackfillControls(FACES_ADAPTER, FACES_HOOKS),
++        aiFacesTestPassed: false,
++        aiFacesTestResultHtml: '',
++        aiFacesTestBusy: false,
++        aiFacesSaveRefreshTimer: null,
++
++        init() {
++            // 離開人臉分頁時清存檔後補查；輪詢停止由 mixin 的 $watch('aiTab') 負責
++            this.$watch('aiTab', (val) => {
++                if (this.bfDestroyed) return;
++                if (val !== 'faces') {
++                    this._aiFacesClearSaveRefresh();
++                }
++            });
++            // 存檔成功（isDirty true→false）後後端可能先暖機測試再開工；
++            // 立刻取一次，若尚未 running 則每 1.5s 補查，最多 8 次（約 12s）。
++            this.$watch('isDirty', (dirty, prev) => {
++                if (this.bfDestroyed) return;
++                if (dirty || prev !== true) return;
++                if (this.aiTab !== 'faces') return;
++                this._aiFacesAfterSaveRefresh();
++            });
++            this.bfOnInit();
++        },
++
++        destroy() {
++            this._aiFacesClearSaveRefresh();
++            this.bfOnDestroy();
++        },
++
++        _aiFacesClearSaveRefresh() {
++            if (this.aiFacesSaveRefreshTimer !== null) {
++                clearTimeout(this.aiFacesSaveRefreshTimer);
++                this.aiFacesSaveRefreshTimer = null;
++            }
++        },
++
++        async _aiFacesAfterSaveRefresh() {
++            this._aiFacesClearSaveRefresh();
++            await this.bfRefresh();
++            if (this.bfDestroyed || this.aiTab !== 'faces') return;
++            if (this.bfStatus?.running) return;
++            this._aiFacesScheduleSaveRefresh(1);
++        },
++
++        /** 存檔後補查：每 1.5s 一次，最多 8 次；見 running 交既有輪詢並停。 */
++        _aiFacesScheduleSaveRefresh(attempt) {
++            if (attempt > 8) return;
++            this.aiFacesSaveRefreshTimer = setTimeout(async () => {
++                this.aiFacesSaveRefreshTimer = null;
++                if (this.bfDestroyed || this.aiTab !== 'faces') return;
++                await this.bfRefresh();
++                if (this.bfDestroyed || this.aiTab !== 'faces') return;
++                if (this.bfStatus?.running) return;
++                this._aiFacesScheduleSaveRefresh(attempt + 1);
++            }, 1500);
++        },
++
++        panelMode() {
++            return panelMode(this.form || {});
++        },
++
++        testDisabled() {
++            if (this.aiFacesTestBusy) return true;
++            const url = (this.form && this.form.aiFacesUrl) || '';
++            return !String(url).trim();
++        },
++
++        statusLineText() {
++            const desc = statusLine(this.bfStatus);
++            if (!desc || !desc.key) return '';
++            let text = window.t(desc.key, desc.params || {});
++            if (desc.key === 'settings.ai.faces.status_local_degraded'
++                && !(desc.params && desc.params.time)) {
++                text = window.t('settings.ai.faces.status_local_degraded_no_time');
++            }
++            if (desc.key === 'settings.ai.faces.status_external'
++                && !(desc.params && desc.params.time)) {
++                text = window.t('settings.ai.faces.status_external_no_time', desc.params || {});
++            }
++            return text;
++        },
++
++        recomputeLineText() {
++            const desc = recomputeLine(this.bfStatus);
++            if (!desc) return '';
++            // key 為 null（跑中／閒置未完成）：只留 extra，去掉前導「・」
++            if (!desc.key) {
++                return desc.extra ? window.t(desc.extra, desc.params || {}).replace(/^\u30FB/, '') : '';
++            }
++            let text = window.t(desc.key, desc.params || {});
++            if (desc.extra) {
++                text = text + window.t(desc.extra, desc.params || {});
++            }
++            return text;
++        },
++
++        _formatTestResult(data) {
++            if (!data) {
++                return window.t('settings.ai.faces.test_failed_generic');
++            }
++            if (data.ok) {
++                return window.t('settings.ai.faces.test_ok', {
++                    model: data.model || '',
++                });
++            }
++            if (data.kind === 'unreachable') {
++                return window.t('settings.ai.faces.test_unreachable');
++            }
++            if (data.kind === 'contract') {
++                const checkKey = CHECK_KEYS[data.check] ?? CHECK_KEYS.unknown;
++                const checkText = window.t(checkKey);
++                return window.t('settings.ai.faces.test_contract') + '\n' + checkText;
++            }
++            return window.t('settings.ai.faces.test_failed_generic');
++        },
++
++        async runTest() {
++            if (this.testDisabled()) return;
++            this.aiFacesTestBusy = true;
++            this.aiFacesTestResultHtml = '';
++            try {
++                const body = {
++                    url: String(this.form.aiFacesUrl || '').trim(),
++                    api_key: this.form.aiFacesApiKey || '',
++                    model: this.form.aiFacesModel || '',
++                };
++                const res = await fetch(TEST_URL, {
++                    method: 'POST',
++                    headers: { 'Content-Type': 'application/json' },
++                    body: JSON.stringify(body),
++                });
++                let data = null;
++                try { data = await res.json(); } catch { data = null; }
++                if (!res.ok) {
++                    this.aiFacesTestPassed = false;
++                    this.aiFacesTestResultHtml = window.t('settings.ai.faces.test_failed_generic');
++                    this.showToast(window.t('settings.ai.faces.test_http_error'), 'error');
++                } else {
++                    this.aiFacesTestPassed = Boolean(data && data.ok);
++                    this.aiFacesTestResultHtml = this._formatTestResult(data);
++                }
++            } catch {
++                this.aiFacesTestPassed = false;
++                this.aiFacesTestResultHtml = window.t('settings.ai.faces.test_unreachable');
++            } finally {
++                this.aiFacesTestBusy = false;
++            }
++            await this.bfRefresh();
++        },
++
++    };
++}
+--- /dev/null
++++ b/web/static/js/pages/settings/ai-services-card.js
+@@ -0,0 +1,38 @@
++/**
++ * ai-services-card.js — 設定頁「AI 功能」卡分頁殼（TASK-186-T2）
++ *
++ * 獨立 Alpine 元件（Alpine.data('aiServicesCard')），不進 mergeState。
++ * 自有 key 僅 aiTab／selectAiTab；外求 0。localStorage 鍵 settings_ai_tab。
++ */
++
++const KEY = 'settings_ai_tab';
++const AI_TABS = ['translate', 'similar', 'faces'];
++
++function readAiTab() {
++    try {
++        const v = localStorage.getItem(KEY);
++        return AI_TABS.includes(v) ? v : 'translate';
++    } catch {
++        return 'translate';
++    }
++}
++
++function writeAiTab(name) {
++    try {
++        localStorage.setItem(KEY, name);
++    } catch {
++        /* 隱私模式等：記憶失敗不影響切分頁 */
++    }
++}
++
++export function aiServicesCard() {
++    return {
++        aiTab: readAiTab(),
++
++        selectAiTab(name) {
++            if (!AI_TABS.includes(name)) return;
++            this.aiTab = name;
++            writeAiTab(name);
++        },
++    };
++}
+--- /dev/null
++++ b/web/static/js/pages/settings/ai-similar-logic.js
+@@ -0,0 +1,174 @@
++/**
++ * ai-similar-logic.js — 圖片相似分頁純函式（TASK-186-T6）
++ *
++ * panelMode／indexAction／statusLine／rebuildVisible／rebuildOutcome＋CHECK_KEYS。無 DOM、無 Alpine、無 window.t。
++ */
++
++/** check 值 → i18n key（含未知值的通用文案）。 */
++export const CHECK_KEYS = {
++    auth: 'settings.ai.similar.check_auth',
++    http_4xx: 'settings.ai.similar.check_http_4xx',
++    http_5xx: 'settings.ai.similar.check_http_5xx',
++    not_json: 'settings.ai.similar.check_not_json',
++    shape: 'settings.ai.similar.check_shape',
++    no_model: 'settings.ai.similar.check_no_model',
++    not_numeric: 'settings.ai.similar.check_not_numeric',
++    dim_range: 'settings.ai.similar.check_dim_range',
++    zero_norm: 'settings.ai.similar.check_zero_norm',
++    dim_mismatch: 'settings.ai.similar.check_dim_mismatch',
++    unstable: 'settings.ai.similar.check_unstable',
++    not_discriminative: 'settings.ai.similar.check_not_discriminative',
++    model_flapping: 'settings.ai.similar.check_model_flapping',
++    unknown: 'settings.ai.similar.check_unknown',
++};
++
++/** 開關決定 empty／fields；網址空仍為 fields。 */
++export function panelMode(form) {
++    return form.aiSimilarEnabled ? 'fields' : 'empty';
++}
++
++/** 索引鈕動作：stop／rebuild／continue／build／retry／null。 */
++export function indexAction(status, testPassedThisSession) {
++    if (!status) return null;
++    if (status.running) return 'stop';
++    if (status.model_changed) return 'rebuild';
++    const hasModel = Boolean(status.model);
++    if (hasModel && (status.pending > 0 || !status.complete)) return 'continue';
++    if (!hasModel && testPassedThisSession) return 'build';
++    // 已完成但有讀不到的封面：NAS 接回後可重試（後端會清 unreadable 再算）
++    if (hasModel && status.unreadable > 0) return 'retry';
++    return null;
++}
++
++/** 「刪除並重建」鈕可見：開關開 ∧ 已有向量或讀不到的片 ∧ 沒有工作在跑。 */
++export function rebuildVisible(status, enabled) {
++    if (!enabled || !status || status.running) return false;
++    return (status.indexed || 0) + (status.unreadable || 0) > 0;
++}
++
++/** 重建回應對應：started／busy（already_running）／test_failed／error。 */
++export function rebuildOutcome(httpOk, data) {
++    if (!httpOk || !data) return 'error';
++    if (data.status === 'started') return 'started';
++    if (data.status === 'already_running') return 'busy';
++    if (data.status === 'test_failed') return 'test_failed';
++    return 'error';
++}
++
++/** unix 秒 → 本地 HH:MM；無效回 ''。 */
++function formatHm(epochSec) {
++    if (typeof epochSec !== 'number' || !Number.isFinite(epochSec)) return '';
++    const d = new Date(epochSec * 1000);
++    if (Number.isNaN(d.getTime())) return '';
++    const p2 = (n) => String(n).padStart(2, '0');
++    return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
++}
++
++/**
++ * 狀態列文案描述。回傳 { key, params, extra }；函式不呼叫 window.t。
++ * now 保留簽名（CD-186-17）但不使用。
++ */
++export function statusLine(status, now) {
++    void now;
++    if (!status) {
++        return { key: 'settings.ai.similar.status_none', params: {}, extra: null };
++    }
++    if (status.model_changed) {
++        return { key: 'settings.ai.similar.status_model_changed', params: {}, extra: null };
++    }
++    if (status.running) {
++        const n = (status.indexed || 0) + (status.unreadable || 0);
++        // 跑中：進度行已有「已處理 n／m」，這裡不重述（params 保留供對照）
++        return {
++            key: null,
++            params: { n, m: status.total || 0 },
++            extra: null,
++        };
++    }
++    if (status.unreachable) {
++        const time = formatHm(status.last_success_at);
++        const unreadable = status.unreadable || 0;
++        return {
++            key: 'settings.ai.similar.status_unreachable',
++            params: { time, k: unreadable },
++            extra: unreadable > 0 ? 'settings.ai.similar.status_unreadable_extra' : null,
++        };
++    }
++    const hasModel = Boolean(status.model);
++    if (hasModel && (status.pending > 0 || !status.complete)) {
++        const unreadable = status.unreadable || 0;
++        // 閒置未完成：「還有 N 部沒跑」已表示待處理，這裡只留非重述的「封面讀不到」
++        return {
++            key: null,
++            params: { n: status.pending || 0, k: unreadable },
++            extra: unreadable > 0 ? 'settings.ai.similar.status_unreadable_extra' : null,
++        };
++    }
++    if (hasModel) {
++        const unreadable = status.unreadable || 0;
++        return {
++            key: 'settings.ai.similar.status_ready',
++            params: {
++                n: status.indexed || 0,
++                m: status.total || 0,
++                model: status.model,
++                time: formatHm(status.last_success_at),
++                k: unreadable,
++            },
++            extra: unreadable > 0 ? 'settings.ai.similar.status_unreadable_extra' : null,
++        };
++    }
++    return { key: 'settings.ai.similar.status_none', params: {}, extra: null };
++}
++
++/** 補跑共用層 adapter（TASK-189a-T10）：只放功能獨有的那一半。 */
++export const adapter = {
++    tab: 'similar',
++    urls: {
++        status: '/api/ai/similar/status',
++        start: '/api/ai/similar/index',
++        rebuild: '/api/ai/similar/index/rebuild',
++        stop: '/api/ai/similar/index/stop',
++    },
++    normalize(raw) {
++        return {
++            running: Boolean(raw.running),
++            processed: (raw.indexed || 0) + (raw.unreadable || 0),
++            total: raw.total || 0,
++            pending: raw.model_changed ? 0 : (raw.pending || 0),
++            // 上一輪建索引中途停下：已定模型、索引未 complete（begin/reset 寫 '0'、跑完才 '1'）、已有進度
++            resumable: Boolean(raw.model) && !raw.complete && !raw.model_changed
++                && (raw.indexed || 0) + (raw.unreadable || 0) > 0,
++            lastSuccessAt: raw.last_success_at ?? null,
++            unreachable: Boolean(raw.unreachable),
++            stopReason: null,
++            raw,
++        };
++    },
++    actionOf(view, ctx) {
++        const s = view.raw;
++        if (view.running) return 'stop';
++        if (s.model_changed) return null;
++        const hasModel = Boolean(s.model);
++        if (hasModel && (s.pending > 0 || !s.complete)) return view.resumable ? 'continue' : 'start';
++        if (!hasModel && ctx.testPassed) return 'start';
++        return null;
++    },
++    extraAction(view) {
++        const s = view.raw;
++        if (view.running || s.model_changed || !s.model) return null;
++        if ((s.pending || 0) > 0 || !s.complete) return null;
++        return (s.unreadable || 0) > 0 ? 'retry' : null;
++    },
++    rebuildVisible(view) {
++        const s = view.raw;
++        return Boolean(s.model_changed) || (s.indexed || 0) + (s.unreadable || 0) > 0;
++    },
++    rebuildConfirm(view) {
++        const s = view.raw;
++        return {
++            key: 'settings.ai.similar.rebuild_confirm',
++            params: { n: (s.indexed || 0) + (s.unreadable || 0) },
++        };
++    },
++};
+--- /dev/null
++++ b/web/static/js/pages/settings/ai-similar-panel.js
+@@ -0,0 +1,148 @@
++/**
++ * ai-similar-panel.js — 圖片相似分頁獨立 Alpine 元件（TASK-186-T6；補跑邏輯 189a-T11b 起改走共用 mixin）
++ *
++ * Alpine.data('aiSimilarPanel')；面板獨有 key 一律 aiSim 前綴、補跑 key 一律 bf 前綴（展開自 ai-backfill-controls.js）；
++ * 不進 mergeState。外求：form／isDirty／showToast／aiTab（不複製父層 key）。
++ */
++
++import { aiBackfillControls } from './ai-backfill-controls.js';
++import {
++    adapter as SIMILAR_ADAPTER,
++    panelMode,
++    statusLine,
++    rebuildOutcome,
++    CHECK_KEYS,
++} from './ai-similar-logic.js';
++
++const TEST_URL = '/api/ai/similar/test';
++
++/** 補跑 mixin 的面板端 hooks：開關、網址空擋、本次測試通過、POST 後 toast／回填。 */
++const SIMILAR_HOOKS = {
++    enabled: (vm) => Boolean(vm.form && vm.form.aiSimilarEnabled),
++    testPassed: (vm) => vm.aiSimTestPassed,
++    blocked: (vm) => (String((vm.form && vm.form.aiSimilarUrl) || '').trim() ? null : 'no_url'),
++    afterPost(vm, kind, { ok, data, failed }) {
++        if (kind === 'start') {
++            if (failed || !ok) {
++                vm.showToast(window.t('settings.ai.similar.index_http_error'), 'error');
++            } else if (data && (data.status === 'started' || data.status === 'already_running')) {
++                /* 結束後統一 bfRefresh */
++            } else if (data && data.status === 'test_failed') {
++                vm.aiSimTestPassed = false;
++                vm.aiSimTestResultHtml = vm._formatTestResult(data);
++            } else {
++                vm.showToast(window.t('settings.ai.similar.index_http_error'), 'error');
++            }
++            return;
++        }
++        if (kind === 'rebuild') {
++            const outcome = rebuildOutcome(ok, data);
++            if (outcome === 'error') {
++                vm.showToast(window.t('settings.ai.similar.index_http_error'), 'error');
++            } else if (outcome === 'test_failed') {
++                vm.aiSimTestPassed = false;
++                vm.aiSimTestResultHtml = vm._formatTestResult(data);
++            }
++        }
++    },
++};
++
++export function aiSimilarPanel() {
++    return {
++        ...aiBackfillControls(SIMILAR_ADAPTER, SIMILAR_HOOKS),
++        aiSimTestPassed: false,
++        aiSimTestResultHtml: '',
++        aiSimTestBusy: false,
++
++        init() {
++            this.bfOnInit();
++        },
++
++        destroy() {
++            this.bfOnDestroy();
++        },
++
++        panelMode() {
++            return panelMode(this.form || {});
++        },
++
++        testDisabled() {
++            if (this.aiSimTestBusy) return true;
++            const url = (this.form && this.form.aiSimilarUrl) || '';
++            return !String(url).trim();
++        },
++
++        statusLineText() {
++            const desc = statusLine(this.bfStatus, Date.now());
++            if (!desc) return '';
++            // key 為 null（跑中／閒置未完成）：只留 extra，去掉前導「・」
++            if (!desc.key) {
++                return desc.extra ? window.t(desc.extra, desc.params || {}).replace(/^\u30FB/, '') : '';
++            }
++            let text = window.t(desc.key, desc.params || {});
++            if (desc.key === 'settings.ai.similar.status_unreachable' && !(desc.params && desc.params.time)) {
++                text = window.t('settings.ai.similar.status_unreachable_no_time');
++            }
++            if (desc.extra) {
++                text = text + window.t(desc.extra, desc.params || {});
++            }
++            return text;
++        },
++
++        _formatTestResult(data) {
++            if (!data) {
++                return window.t('settings.ai.similar.test_failed_generic');
++            }
++            if (data.ok) {
++                return window.t('settings.ai.similar.test_ok', {
++                    model: data.model || '',
++                    dim: data.dim ?? '',
++                });
++            }
++            if (data.kind === 'unreachable') {
++                return window.t('settings.ai.similar.test_unreachable');
++            }
++            if (data.kind === 'contract') {
++                const checkKey = CHECK_KEYS[data.check] ?? CHECK_KEYS.unknown;
++                const checkText = window.t(checkKey);
++                return window.t('settings.ai.similar.test_contract') + '\n' + checkText;
++            }
++            return window.t('settings.ai.similar.test_failed_generic');
++        },
++
++        async runTest() {
++            if (this.testDisabled()) return;
++            this.aiSimTestBusy = true;
++            this.aiSimTestResultHtml = '';
++            try {
++                const body = {
++                    url: String(this.form.aiSimilarUrl || '').trim(),
++                    api_key: this.form.aiSimilarApiKey || '',
++                    model: this.form.aiSimilarModel || '',
++                };
++                const res = await fetch(TEST_URL, {
++                    method: 'POST',
++                    headers: { 'Content-Type': 'application/json' },
++                    body: JSON.stringify(body),
++                });
++                let data = null;
++                try { data = await res.json(); } catch { data = null; }
++                if (!res.ok) {
++                    this.aiSimTestPassed = false;
++                    this.aiSimTestResultHtml = window.t('settings.ai.similar.test_failed_generic');
++                    this.showToast(window.t('settings.ai.similar.test_http_error'), 'error');
++                } else {
++                    this.aiSimTestPassed = Boolean(data && data.ok);
++                    this.aiSimTestResultHtml = this._formatTestResult(data);
++                }
++            } catch {
++                this.aiSimTestPassed = false;
++                this.aiSimTestResultHtml = window.t('settings.ai.similar.test_unreachable');
++            } finally {
++                this.aiSimTestBusy = false;
++            }
++            await this.bfRefresh();
++        },
++
++    };
++}
+--- /dev/null
++++ b/web/templates/_macros/ai_backfill_controls.html
+@@ -0,0 +1,48 @@
++{# Shared controls for image-similarity and face backfill panels. #}
++{% macro ai_backfill_controls(idp, css, retry=false) %}
++<p class="settings-hint {{ css }}-status" id="{{ idp }}ProgressLine"
++   x-show="bfProgressText()"
++   x-text="bfProgressText()"></p>
++<div class="{{ css }}-index-row">
++    <button type="button" class="btn btn-sm btn-outline"
++            id="{{ idp }}StopBtn"
++            x-show="bfAction().action === 'stop'"
++            @click="bfStop()">
++        <span x-text="window.t('settings.ai.backfill.btn_stop')"></span>
++    </button>
++    <button type="button" class="btn btn-sm btn-primary"
++            id="{{ idp }}RunBtn"
++            x-show="bfAction().action === 'start' || bfAction().action === 'continue'"
++            :data-action="bfAction().action"
++            @click="bfStart()"
++            :disabled="bfAction().disabled">
++        <span x-show="bfBusy" class="loading loading-spinner loading-sm"></span>
++        <span x-show="!bfBusy && bfAction().action === 'start'"
++              x-text="window.t('settings.ai.backfill.btn_start')"></span>
++        <span x-show="!bfBusy && bfAction().action === 'continue'"
++              x-text="window.t('settings.ai.backfill.btn_continue')"></span>
++    </button>
++    {% if retry %}
++    <button type="button" class="btn btn-sm btn-outline"
++            id="{{ idp }}RetryBtn"
++            x-show="bfExtraAction().action === 'retry'"
++            @click="bfRetry()"
++            :disabled="bfExtraAction().disabled">
++        <span x-text="window.t('settings.ai.similar.btn_retry_unreadable', { n: bfStatus?.unreadable || 0 })"></span>
++    </button>
++    {% endif %}
++    <button type="button" class="btn btn-sm btn-ghost"
++            id="{{ idp }}RebuildBtn"
++            x-show="bfRebuildVisible()"
++            @click="bfRebuild()"
++            :disabled="bfRebuildDisabled()">
++        <span x-text="window.t('settings.ai.backfill.btn_rebuild')"></span>
++    </button>
++    <span class="settings-hint ai-backfill-pending" id="{{ idp }}PendingLine"
++          x-show="bfPendingText()"
++          x-text="bfPendingText()"></span>
++    <span class="settings-hint {{ css }}-save-first"
++          x-show="isDirty && (bfAction().action === 'start' || bfAction().action === 'continue' || bfExtraAction().action === 'retry' || bfRebuildVisible())"
++          x-text="window.t('settings.ai.backfill.save_first')"></span>
++</div>
++{% endmacro %}

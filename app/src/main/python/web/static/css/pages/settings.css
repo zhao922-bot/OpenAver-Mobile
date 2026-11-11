@@ -262,6 +262,11 @@
     border-bottom: 1px solid var(--stroke-subtle);  /* 視覺分隔線 */
 }
 
+#settings-components .settings-quick-toggle-row--embedded {
+    margin-bottom: 0.9rem;
+    padding-top: 0;
+}
+
 /* 內含的 settings-form-group 維持 flex-col，不需覆蓋 */
 #settings-components .settings-quick-toggle-row .settings-form-group {
     flex-shrink: 0;                    /* 避免被 flex container 縮小 */
@@ -271,6 +276,7 @@
 
 .settings-header {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
@@ -283,13 +289,16 @@
     margin-bottom: 0.5rem;
     /* 64b-1: sticky header（tab-bar 移除後，header 接管釘頂；z-index 31 > 舊 tab-bar 30）*/
     position: sticky;
-    top: 0;
+    top: var(--mobile-topbar-height, 0px);
     z-index: 31;
 }
 
 .settings-header-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
     gap: 0.75rem;
 }
 
@@ -1901,7 +1910,8 @@ html.theme-transition-active::view-transition-new(root) {
     font-size: 0.8rem;
     font-weight: 700;
     line-height: 1.2;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     transition:
         color var(--fluent-duration-fast) var(--fluent-ease-standard),
         background var(--fluent-duration-fast) var(--fluent-ease-standard),
@@ -1954,28 +1964,66 @@ html.theme-transition-active::view-transition-new(root) {
 }
 
 @media (max-width: 768px) {
-    #settings-components .settings-tabs {
-        grid-template-columns: repeat(5, minmax(6.4rem, 1fr));
-        overflow-x: auto;
-        overscroll-behavior-inline: contain;
-        scroll-snap-type: inline proximity;
-        scrollbar-width: none;
-        position: sticky;
-        top: calc(var(--mobile-topbar-height) + 112px);
-        z-index: 24;
+    #settings-components .settings-header {
+        align-items: flex-start;
+        gap: 0.65rem;
+        padding-bottom: 0.75rem;
     }
 
-    #settings-components .settings-tabs::-webkit-scrollbar {
-        display: none;
+    #settings-components .settings-header-left,
+    #settings-components .settings-header-actions {
+        width: 100%;
+    }
+
+    #settings-components .settings-header-actions {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.55rem;
+    }
+
+    #settings-components .settings-appearance-controls {
+        width: 100%;
+        justify-content: center;
+    }
+
+    #settings-components .settings-tabs {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        overflow: visible;
+        position: relative;
+        z-index: auto;
+        gap: 0.2rem;
+        padding: 0.25rem;
     }
 
     #settings-components .settings-tab {
-        scroll-snap-align: center;
         flex-direction: column;
         gap: 0.2rem;
-        min-height: 3.35rem;
-        padding: 0.45rem 0.55rem;
-        font-size: 0.72rem;
+        min-height: 3.5rem;
+        padding: 0.4rem 0.2rem;
+        font-size: 0.68rem;
+        line-height: 1.25;
+        text-align: center;
+    }
+
+    #settings-components .settings-tab span {
+        display: block;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+    }
+
+    #settings-components .card-body {
+        padding: 1rem;
+    }
+
+    #settings-components .settings-form-row > *,
+    #settings-components .settings-form-row .flex-1 {
+        min-width: 0;
+    }
+
+    #settings-components .settings-form-row input,
+    #settings-components .settings-form-row select,
+    #settings-components .settings-form-row .variable-input-group {
+        max-width: 100%;
     }
 
     #settingsForm {
@@ -2025,6 +2073,27 @@ html.theme-transition-active::view-transition-new(root) {
 }
 
 @media (max-width: 480px) {
+    #settingsForm {
+        padding-inline: 0.75rem;
+    }
+
+    #settings-components .settings-header {
+        padding-inline: 0.75rem;
+    }
+
+    #settings-components .settings-tab {
+        min-height: 3.65rem;
+        font-size: 0.63rem;
+    }
+
+    #settings-components .settings-tab i {
+        font-size: 0.9rem;
+    }
+
+    #settings-components .card-body {
+        padding: 0.85rem;
+    }
+
     #settings-components .save-btn-wrapper {
         gap: 0.5rem;
     }
@@ -2036,4 +2105,101 @@ html.theme-transition-active::view-transition-new(root) {
     #settings-components .save-btn {
         padding-inline: 0.9rem;
     }
+
+    #settings-components .ai-similar-fields .variable-input-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #settings-components .ai-similar-fields .variable-input-group > .btn {
+        width: 100%;
+    }
+}
+
+/* ==================== Remote AI services ==================== */
+
+#settings-components .ai-card-intro {
+    margin-bottom: 1rem;
+}
+
+#settings-components .settings-tab-desc {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+#settings-components .ai-tabs-row {
+    margin-bottom: 1rem;
+}
+
+#settings-components .ai-tabs-row .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+}
+
+#settings-components .ai-tabs-row .tab {
+    min-width: 0;
+    padding-inline: 0.5rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+#settings-components .ai-tabs-row .tabs-border > .tab.tab-active,
+#settings-components .ai-tabs-row .tabs-border > .tab[aria-selected="true"] {
+    color: var(--accent);
+    --tab-border-color: var(--accent);
+}
+
+#settings-components .ai-similar-empty-desc {
+    margin: 0.75rem 0;
+}
+
+#settings-components .ai-similar-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+#settings-components .ai-similar-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin: 0.75rem 0 1rem;
+}
+
+#settings-components .ai-similar-status {
+    margin: 0.25rem 0 0;
+    overflow-wrap: anywhere;
+}
+
+#settings-components .ai-similar-index-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#settings-components .ai-similar-save-first {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+#settings-components .ai-similar-test-result {
+    margin: 0.25rem 0 0;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--fluent-radius-sm);
+    background: var(--surface-2);
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: inherit;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+#settings-components .ai-backfill-pending {
+    color: var(--text-secondary);
 }

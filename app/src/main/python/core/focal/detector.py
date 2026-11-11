@@ -353,6 +353,20 @@ def _cluster_and_select_2d(width, height, faces, axis):
     return x_ratio, y_ratio
 
 
+def select_focal_from_boxes(boxes, work_w, work_h, ratio):
+    """Map normalized remote face boxes into the local focal clustering path."""
+    if not boxes:
+        return None
+    faces = []
+    for box in boxes:
+        x, y, w, h, score = box.x, box.y, box.w, box.h, box.score
+        col = min(max((x + w / 2) * work_w, 0.0), float(work_w))
+        row = min(max((y + h / 2) * work_h, 0.0), float(work_h))
+        faces.append((row, col, w * work_w, score))
+    axis = _dominant_axis_by_ratio(work_w, work_h, ratio)
+    return _cluster_and_select_2d(work_w, work_h, faces, axis)
+
+
 def find_primary_face_axis_ratio(img, ratio, advanced, work_width=MAX_IMAGE_WIDTH):
     """detector.go FindPrimaryFaceAxisRatio.
 

@@ -1,7 +1,7 @@
 """core.database.video — Video 資料模型與 VideoRepository（spec-87 子模組）。"""
 import sqlite3
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields
 from pathlib import Path
 from typing import NamedTuple, Optional, List, Tuple
 from datetime import datetime
@@ -233,6 +233,10 @@ class Video:
             if isinstance(data['updated_at'], str):
                 data['updated_at'] = datetime.fromisoformat(data['updated_at'])
 
+        # DB-only migration columns (focal_model, ai tags, plot flags, etc.)
+        # must not be forwarded to the dataclass constructor.
+        allowed = {f.name for f in fields(cls)}
+        data = {key: value for key, value in data.items() if key in allowed}
         return cls(**data)
 
 
@@ -1828,7 +1832,13 @@ class VideoRepository:
         finally:
             conn.close()
 
-    def update_auto_focal(self, path: str, focal: str, expected_cover_path: str) -> bool:
+    def update_auto_focal(
+        self,
+        path: str,
+        focal: str,
+        expected_cover_path: str,
+        model: str = "local-pigo",
+    ) -> bool:
         """安全更新 auto_focal 欄位（不碰其他欄位，CD-98a-6 mutator，鏡射 update_user_tags）。
 
         同時蓋章 focal_attempted_at = CURRENT_TIMESTAMP（單條 UPDATE 原子寫，Codex PR#105
@@ -1868,13 +1878,57 @@ class VideoRepository:
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "UPDATE videos SET auto_focal = ?, focal_attempted_at = CURRENT_TIMESTAMP, "
+                "UPDATE videos SET auto_focal = ?, focal_model = ?, "
+                "focal_attempted_at = CURRENT_TIMESTAMP, "
                 "updated_at = CURRENT_TIMESTAMP WHERE path = ? AND crop_mode != 'manual' "
                 "AND cover_path = ?",
-                (focal, path, expected_cover_path)
+                (focal, model, path, expected_cover_path)
             )
             conn.commit()
             return cursor.rowcount > 0
+        finally:
+            conn.close()
+
+    def list_focal_recompute_rows(
+        self,
+    ) -> List[Tuple[str, Optional[str], str, str, str, bool]]:
+        """Return non-manual rows with covers for external-face recomputation."""
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                "SELECT path, number, maker, cover_path, focal_model, "
+                "(auto_focal != '' OR focal_attempted_at IS NOT NULL) AS has_result "
+                "FROM videos WHERE crop_mode != 'manual' AND cover_path != '' "
+                "ORDER BY path"
+            ).fetchall()
+            return [
+                (path, number, maker or "", cover or "",
+                 focal_model or "local-pigo", bool(has_result))
+                for path, number, maker, cover, focal_model, has_result in rows
+            ]
+        finally:
+            conn.close()
+
+    def clear_auto_focal_for_paths(self, paths: List[str]) -> int:
+        """Clear auto focal results while preserving manually adjusted crops."""
+        if not paths:
+            return 0
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        total = 0
+        try:
+            for start in range(0, len(paths), 900):
+                chunk = paths[start:start + 900]
+                placeholders = ",".join("?" for _ in chunk)
+                cursor.execute(
+                    "UPDATE videos SET auto_focal = '', focal_attempted_at = NULL, "
+                    "focal_model = 'local-pigo', updated_at = CURRENT_TIMESTAMP "
+                    f"WHERE crop_mode != 'manual' AND path IN ({placeholders})",
+                    chunk,
+                )
+                total += cursor.rowcount
+            conn.commit()
+            return total
         finally:
             conn.close()
 

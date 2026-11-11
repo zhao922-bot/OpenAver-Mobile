@@ -13,7 +13,9 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
+from core.ai_services.faces_config import active_in
 from core.config import load_config, mutate_config
+from core.focal import subprocess_runner
 from core.focal.subprocess_runner import RunnerOutcome
 from core.logger import get_logger
 from core.version import VERSION
@@ -34,8 +36,8 @@ def set_notification_sink(fn: Callable[..., None]) -> None:
     _notification_sink = fn
 
 
-def is_disabled_in(cfg: dict) -> bool:
-    """Same rule as is_disabled(), answered from a config dict the caller already holds.
+def local_disabled_in(cfg: dict) -> bool:
+    """Local-device disabled rule, answered from an existing config snapshot.
 
     Exists so the disabled-read rule has exactly one implementation. Callers that
     already loaded the config (e.g. a page handler that got it from
@@ -56,9 +58,21 @@ def is_disabled_in(cfg: dict) -> bool:
     return bool(fd.get("disabled", False)) and fd.get("judged_at_version", "") == VERSION
 
 
+def is_disabled_in(cfg: dict) -> bool:
+    """External faces active → never disabled; otherwise use local state."""
+    if active_in(cfg):
+        return False
+    return local_disabled_in(cfg)
+
+
 def is_disabled() -> bool:
     """True when focal is disabled under the is_disabled_in() read rule."""
     return is_disabled_in(load_config())
+
+
+def local_is_disabled() -> bool:
+    """Local-only probe used by the external-to-local fallback path."""
+    return local_disabled_in(load_config())
 
 
 def _apply_outcome_core(
@@ -169,8 +183,14 @@ def classify_manual_reason(outcome: RunnerOutcome, just_disabled: bool) -> str:
     never from a pre-spawn snapshot.
     """
     if outcome.kind in ("FOUND", "NO_FACE"):
+        if getattr(outcome, "external_failure", None):
+            return "endpoint_down"
         return ""
     if outcome.kind == "ABANDONED":
+        if outcome.reason == "skipped_disabled" and getattr(
+            outcome, "external_failure", None
+        ):
+            return "endpoint_down"
         if outcome.reason == "skipped_disabled":
             return "device_disabled"
         if outcome.reason == "detect_timeout":
@@ -199,3 +219,6 @@ def set_disabled_by_user(disabled: bool) -> None:
         fd["set_by_user"] = True
 
     mutate_config(mutator)
+
+
+subprocess_runner.set_local_disabled_probe(local_is_disabled)

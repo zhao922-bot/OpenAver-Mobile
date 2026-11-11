@@ -10,7 +10,9 @@ export const SETTINGS_TABS = Object.freeze([
 
 const LEGACY_SECTIONS = Object.freeze({
     'sec-search': 'sources',
+    'sec-naming': 'naming',
     'sec-gallery': 'gallery',
+    'sec-ai': 'ai',
     'sec-system': 'system',
 });
 

@@ -49,6 +49,16 @@ export function stateConfig() {
             claudeApiKey: '',
             claudeModel: 'claude-haiku-5-5',
 
+            // Remote AI services (mobile only connects to user-provided HTTP services)
+            aiSimilarEnabled: false,
+            aiSimilarUrl: '',
+            aiSimilarApiKey: '',
+            aiSimilarModel: '',
+            aiFacesEnabled: false,
+            aiFacesUrl: '',
+            aiFacesApiKey: '',
+            aiFacesModel: '',
+
             // Scraper
             createFolder: true,
             focalAutoEnabled: true,
@@ -660,6 +670,16 @@ export function stateConfig() {
                     this.form.claudeModel = config.translate.claude?.model || 'claude-haiku-5-5';
                     this.claudeModels = [this.form.claudeModel];
 
+                    // Remote AI services
+                    this.form.aiSimilarEnabled = config.ai_services?.image_similar?.enabled === true;
+                    this.form.aiSimilarUrl = config.ai_services?.image_similar?.url || '';
+                    this.form.aiSimilarApiKey = config.ai_services?.image_similar?.api_key || '';
+                    this.form.aiSimilarModel = config.ai_services?.image_similar?.model || '';
+                    this.form.aiFacesEnabled = config.ai_services?.faces?.enabled === true;
+                    this.form.aiFacesUrl = config.ai_services?.faces?.url || '';
+                    this.form.aiFacesApiKey = config.ai_services?.faces?.api_key || '';
+                    this.form.aiFacesModel = config.ai_services?.faces?.model || '';
+
                     // 自動測試 Gemini（如果有 API Key 且是 gemini provider）
                     if (config.translate.gemini?.api_key && config.translate.provider === 'gemini') {
                         setTimeout(() => this.testGeminiConnection(), 100);
@@ -991,6 +1011,26 @@ export function stateConfig() {
                         api_key: this.form.claudeApiKey,
                         model: this.form.claudeModel || 'claude-haiku-5-5'
                     }
+                };
+
+                // Preserve the future AI-tags subtree; the mobile settings UI does not expose it.
+                config.ai_services = {
+                    ...(config.ai_services || {}),
+                    image_similar: {
+                        ...(config.ai_services?.image_similar || {}),
+                        enabled: this.form.aiSimilarEnabled,
+                        url: this.form.aiSimilarUrl.trim(),
+                        api_key: this.form.aiSimilarApiKey,
+                        model: this.form.aiSimilarModel.trim(),
+                    },
+                    faces: {
+                        ...(config.ai_services?.faces || {}),
+                        enabled: this.form.aiFacesEnabled,
+                        url: this.form.aiFacesUrl.trim(),
+                        api_key: this.form.aiFacesApiKey,
+                        model: this.form.aiFacesModel.trim(),
+                    },
+                    tags: { ...(config.ai_services?.tags || {}) },
                 };
 
                 // 更新 gallery
