@@ -168,7 +168,9 @@
       "query": "番号、女優名またはファイルをドロップ...",
       "query_mobile": "番号・女優名を検索...",
       "tag": "タグ名",
-      "actors": "女優名（、，, で複数区切り可）"
+      "actors": "女優名（、，, で複数区切り可）",
+      "number": "品番",
+      "maker": "メーカー名"
     },
     "auto_pill": {
       "tooltip": "クリックしてソースを選択"
@@ -193,6 +195,8 @@
       "translate_ai": "AI 翻訳",
       "edit_chinese_title": "中国語タイトルを編集",
       "edit_actors": "女優を編集",
+      "edit_number": "品番を編集",
+      "edit_maker": "メーカーを編集",
       "switch_source": "バージョン切替",
       "open_source_url": "ソースページを開く",
       "open_folder": "フォルダを開く",
@@ -215,7 +219,10 @@
       "config_failed": "操作に失敗しました。しばらくしてからもう一度お試しください"
     },
     "maker_latest": {
-      "title": "メーカー最新作"
+      "title": "新作検索"
+    },
+    "recent_actresses": {
+      "label": "最近よく保存する女優"
     },
     "empty": {
       "hint": "番号を入力して検索、またはファイルを追加",
@@ -241,6 +248,10 @@
       "tag_nfo_write_blocked": "タグは保存されましたが、NFO への書き込み権限がありません",
       "no_data": "データが見つかりません",
       "maker_not_found": "「{maker}」の作品ページが見つかりません",
+      "recent_region_empty": "DMM から結果が返りませんでした。地域によっては日本 IP が必要です。",
+      "recent_none": "結果が見つかりません",
+      "recent_unreachable": "DMM に一時的に接続できません",
+      "recent_region_link": "設定でプロキシを構成",
       "search_failed": "検索に失敗しました",
       "network_error": "ネットワークエラーです。再試行してください",
       "no_translation_needed": "この作品は翻訳不要です",
@@ -300,6 +311,8 @@
       "unknown_title": "タイトル不明"
     },
     "cover": {
+      "upload": "カバーをアップロード",
+      "replace": "カバーを変更",
       "alt": "カバー",
       "load_failed": "カバーの読み込みに失敗しました"
     },
@@ -336,7 +349,7 @@
       "actress": "あいまい検索",
       "keyword": "全文検索",
       "uncensored": "無修正検索",
-      "maker": "メーカー最新作"
+      "maker": "新作検索"
     },
     "filelist": {
       "search_all_title": "未検索のファイルをすべて一括検索",
@@ -373,6 +386,8 @@
       "no_searchable_files": "検索するファイルがありません",
       "search_complete": "一括検索完了：成功 {success}、失敗 {failed}",
       "no_scrapable_files": "整理するファイルがありません",
+      "number_required": "先に品番を入力してください",
+      "cover_upload_failed": "カバーのアップロードに失敗しました。別の画像をお試しください。",
       "scrape_complete": "一括整理完了：成功 {success}、失敗 {failed}",
       "scrape_complete_dup": "一括整理完了：成功 {success}、失敗 {failed}、重複 {duplicate}",
       "no_search_results": "このファイルの検索結果がありません",
@@ -735,6 +750,7 @@
       "cover_badges_label": "カバーの属性バッジ",
       "cover_badges_note": "カバーの左上に「字幕」「無修正」「4K」などのバッジを表示します（表示のみ。タグ自体は変更しません）",
       "cover_badges_legend": "＊AI：AI による無修正化、LEAK：無修正マスターの流出",
+      "cover_badges_legend_ltx": "LTX：ファイル名が LTX と明示された作品では AI の代わりに表示します。",
       "cover_badges_help_aria": "カバー属性バッジの説明",
       "show_table_list_label": "表とリスト表示",
       "show_table_list_note": "オンにすると、ブラウズページ右上に表とリストの2つの表示形式が追加されます。デフォルトでは表紙とポスターのみです。",
@@ -742,6 +758,7 @@
       "cover_badge": {
         "subtitle": "中国語字幕",
         "cracked": "AI 無修正化",
+        "ltx": "LTX",
         "leaked": "無修正マスター流出",
         "4k": "4K",
         "vr": "VR"
@@ -1415,6 +1432,7 @@
       "mdate": "更新日時",
       "random": "ランダム",
       "actress": {
+        "recent": "最近よく保存",
         "video_count": "作品数",
         "name": "名前",
         "added_at": "追加日時",
@@ -2477,6 +2495,11 @@
       "video_out_of_scope_detect": "この動画はコレクション範囲外のため、フォーカスを検出できません",
       "video_out_of_scope_save": "この動画はコレクション範囲外のため、フォーカス設定を保存できません",
       "cover_not_found": "カバーファイルが見つかりません",
+      "cover_upload_expired": "アップロードしたカバーの有効期限が切れました。もう一度アップロードしてください。",
+      "cover_upload_failed": "カバーのアップロードに失敗しました。しばらくしてから再試行してください。",
+      "cover_image_too_large": "画像が大きすぎます（最大 10 MB または 5000 万画素）。",
+      "cover_image_unsupported": "対応していない画像形式です。",
+      "cover_token_not_found": "アップロードしたカバーが見つかりません。",
       "focal_detect_failed": "フォーカス検出に失敗しました",
       "focal_invalid": "フォーカス座標の形式が無効です",
       "focal_save_failed": "フォーカス設定の保存に失敗しました",

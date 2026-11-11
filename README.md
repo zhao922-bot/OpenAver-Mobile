@@ -3,9 +3,9 @@
 [![Build APK](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml/badge.svg)](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml)
 
 OpenAver Mobile 是 [OpenAver](https://github.com/slive777/OpenAver) 的非官方
-Android 移植版。当前移动端新版本线为 `v0.18.17-android-r1`，首批对齐上游
-`v0.18.17` 的补完性能、批次搜索和来源修复；尚未移植的上游功能会按
-[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)在后续 `r2`～`r6` 完成。
+Android 移植版。当前移动端新版本线为 `v0.18.17-android-r2`，已对齐上游
+`v0.18.17` 的补完性能、批次搜索、来源修复和片库浏览体验；尚未移植的上游
+功能会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)在后续 `r3`～`r6` 完成。
 内嵌代码基线仍为上游 `v0.17.18` 加本仓库补丁。
 
 App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，不需要
@@ -15,13 +15,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r1-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r2-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.18.17-android-r1-arm64-v8a.apk`
+- 文件名：`openaver-v0.18.17-android-r2-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.18.17-r1`（versionCode `18001`）
+- 版本：`0.18.17-r2`（versionCode `18002`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -282,6 +282,12 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - v0.18.17-r1：修复 MetaTube 新来源可用性、JavDB 冷门番号高级搜索和 jav321
   标题尾部污染；移动端同步“片库管理”“更新片库”“待整理”等名称，继续保留
   Jable、分段视频按 1 部计数及现有标题/NFO 写回逻辑
+- v0.18.17-r2：查不到资料时会显示可编辑空白卡，可改番号、指定来源重查，也可
+  手填标题、番号、片商、演员、标签并上传本地封面后整理入库
+- v0.18.17-r2：搜索页新增“常收女优”近 90 天新片入口，女优墙默认按最近常收
+  排序；Graphis 每轮优先返回两张照片，换图时排除本轮已看过的候选
+- v0.18.17-r2：文件名含 LTX 时自动补充“LTX”和“無碼破解”标签；灯箱用户标签
+  可直接点击筛选，纯数字搜索后点击演员、片商、标签等资料会自动清空数字
 
 ## 限制
 

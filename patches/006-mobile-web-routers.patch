@@ -366,6 +366,16 @@
          logger.error("測試 Ollama 模型失敗: %s", e)
 -        return {"success": False, "error": "測試模型失敗"}
 +        return {"success": False, "error": _config_text("ollama_test_failed", locale)}
+--- a/web/routers/cover_badges.py
++++ b/web/routers/cover_badges.py
+@@ -21,6 +21,7 @@
+     match_aliases: List[str]
+     display_order: int
+     i18n_key: str
++    supersedes: List[str] = []
+ 
+ 
+ @router.get("/manifest", response_model=List[CoverBadgeRule])
 --- /dev/null
 +++ b/web/routers/database_backup.py
 @@ -0,0 +1,406 @@
@@ -881,6 +891,17 @@
 +            ),
              extra_script='\n    <script type="module" src="/static/js/pages/player.js"></script>',
          ))
+ 
+--- a/web/routers/insights.py
++++ b/web/routers/insights.py
+@@ -75,7 +75,7 @@
+ def _merge_badge_alias_manifest(
+     tag_lookup: dict[str, tuple[str, list[str]]],
+ ) -> dict[str, tuple[str, list[str]]]:
+-    """將 cover-badge 的 5 組別名合併進 tag_lookup（CD-156-11 使用者別名群組優先權）。"""
++    """將 cover-badge 的別名合併進 tag_lookup（CD-156-11 使用者別名群組優先權）。"""
+     user_tag_lookup = dict(tag_lookup)
+     merged: dict[str, tuple[str, list[str]]] = dict(tag_lookup)
  
 --- a/web/routers/scanner.py
 +++ b/web/routers/scanner.py
@@ -5554,7 +5575,7 @@
      if sources:
 --- a/web/routers/scraper.py
 +++ b/web/routers/scraper.py
-@@ -12,9 +12,10 @@
+@@ -12,20 +12,28 @@
  import json
  import os
  from dataclasses import asdict
@@ -5562,11 +5583,14 @@
  from urllib.parse import urlparse
  
 -from fastapi import APIRouter, HTTPException
-+from fastapi import APIRouter, HTTPException, Request
- from fastapi.responses import StreamingResponse
+-from fastapi.responses import StreamingResponse
++from fastapi import APIRouter, File, HTTPException, Request, UploadFile
++from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
  from pydantic import BaseModel
  from typing import Any, Dict, List, Literal, Optional
-@@ -22,10 +23,15 @@
+ 
++from core import cover_upload
++from core.actress_photo import CONTENT_TYPE_MAP
  from core.database import VideoRepository, organize_failures
  from core.db_inflow import try_inflow_upsert
  from core.focal_trigger import maybe_submit_video_focal
@@ -5583,7 +5607,7 @@
  from core.scraper import (
      search_jav, search_jav_single_source, access_error_info,
      search_javlib_versions, fetch_javlib_by_detail_url, internal_nfo_carriers,
-@@ -40,6 +46,8 @@
+@@ -40,6 +48,8 @@
  from core.scrapers.javlibrary import JAVLIBRARY_ORIGIN
  from core.logger import get_logger
  from core.config import load_config, STEM_IMAGE_MODES
@@ -5592,7 +5616,7 @@
  from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
  from core.readonly_paths import resolve_owning_output_root
  from core.readonly_producer import (
-@@ -53,6 +61,12 @@
+@@ -53,6 +63,12 @@
  from core.wishlist_reconcile import reconcile_wishlist, format_wishlist_removed_message
  
  logger = get_logger(__name__)
@@ -5605,7 +5629,7 @@
  
  # 互動 CF 的 site → origin 查表。值來自各 scraper 模組的公開常數（CD-118a-12）。
  # 新增 manual_only CF 來源時必須同步這張表（F-1 parity 測試會擋漂移）。
-@@ -77,16 +91,17 @@
+@@ -77,16 +93,17 @@
      return "cf_needed"
  
  
@@ -5626,15 +5650,20 @@
          "cf_needed": True,
          "cf_source": source,
      }
-@@ -122,19 +137,14 @@
+@@ -120,21 +137,17 @@
+     number: Optional[str] = None
+     # 前端可直接傳入 metadata，避免重新搜尋
      metadata: Optional[dict] = None
- 
- 
+-
+-
 -# 唯讀來源 guard 的錯誤訊息（單一真理來源；sync helper 與 batch async loop 共用）。
 -_READONLY_SOURCE_ERROR_MSG = (
 -    "此來源路徑為唯讀（readonly），無法搬移或重新命名檔案。"
 -    "請改用掃描頁『產生』生成本地媒體庫，或確認你對此路徑有寫入權限。"
 -)
++    cover_upload_token: Optional[str] = None
++
++
 +# 唯讀來源 guard 的錯誤訊息 key（單一真理來源；sync helper 與 batch async loop 共用）。
 +_READONLY_SOURCE_ERROR_MSG = "readonly_source_write_denied"
  
@@ -5649,7 +5678,7 @@
  
  # P1 revert + reject (round-3 review 2026-07-21，owner-confirmed)：Codex PR#113
  # round-3 threaded a write_nfo=false skip-NFO gate into the readonly produce
-@@ -146,9 +156,7 @@
+@@ -146,9 +159,7 @@
  # db_to_sidecar above (both are granular flags the holistic produce model
  # doesn't support), instead of threading a skip flag down into
  # _produce_one/_write_movie_assets.
@@ -5660,7 +5689,7 @@
  
  
  def _readonly_source_error(file_path: str) -> Optional[dict]:
-@@ -171,13 +179,15 @@
+@@ -171,14 +182,77 @@
      路由（如 batch_enrich）須改為「入口一次載入 config → readonly_source_prefixes 算一次
      → 逐項 is_path_readonly 純比對」，勿在 event loop 上裸呼叫本 helper（async-offload 守衛）。
      """
@@ -5676,9 +5705,71 @@
 -        return {"success": False, "error": _READONLY_SOURCE_ERROR_MSG}
 +        return {"success": False, "error": _api_text(_locale, _READONLY_SOURCE_ERROR_MSG)}
      return None
++
++
++_COVER_UPLOAD_FILE_PARAM = File(...)
++
++
++@router.post("/scrape-cover/upload")
++async def upload_scrape_cover(file: UploadFile = _COVER_UPLOAD_FILE_PARAM):
++    """Validate, normalize and temporarily store a manually uploaded cover."""
++    locale = await asyncio.to_thread(get_config_locale)
++    try:
++        if file.size is not None and file.size > cover_upload.MAX_BYTES:
++            return JSONResponse(
++                status_code=413,
++                content={"error": _api_text(locale, "cover_image_too_large")},
++            )
++        data = await file.read()
++        if len(data) > cover_upload.MAX_BYTES:
++            return JSONResponse(
++                status_code=413,
++                content={"error": _api_text(locale, "cover_image_too_large")},
++            )
++        if file.content_type not in CONTENT_TYPE_MAP:
++            return JSONResponse(
++                status_code=415,
++                content={"error": _api_text(locale, "cover_image_unsupported")},
++            )
++        jpeg, err = await asyncio.to_thread(
++            cover_upload.validate_and_normalize_cover, data
++        )
++        if err is not None:
++            key = "cover_image_too_large" if err[0] == 413 else "cover_image_unsupported"
++            return JSONResponse(
++                status_code=err[0],
++                content={"error": _api_text(locale, key)},
++            )
++        await asyncio.to_thread(cover_upload.sweep_expired_covers)
++        token = await asyncio.to_thread(cover_upload.store_cover, jpeg)
++        return {"token": token, "url": f"/api/scrape-cover/{token}"}
++    except Exception:
++        logger.exception("[scraper] 上传封面失败")
++        return JSONResponse(
++            status_code=500,
++            content={"error": _api_text(locale, "cover_upload_failed")},
++        )
++
++
++@router.get("/scrape-cover/{token}")
++def get_scrape_cover(token: str):
++    """Return a temporary uploaded cover; malformed or expired tokens return 404."""
++    path = cover_upload.resolve_cover_token(token)
++    if path is None:
++        locale = get_config_locale()
++        return JSONResponse(
++            status_code=404,
++            content={"error": _api_text(locale, "cover_token_not_found")},
++        )
++    return FileResponse(
++        path,
++        media_type="image/jpeg",
++        headers={"Cache-Control": "no-store"},
++    )
  
  
-@@ -196,6 +206,8 @@
+ @router.post("/scrape-single")
+@@ -196,6 +270,8 @@
      auto_organize_state.mark_manual_activity()
      file_path = request.file_path
      number = request.number
@@ -5687,7 +5778,23 @@
  
      # U7 readonly guard：只依 file_path 判斷所屬來源是否唯讀（readonly）。
      # 是 → 不搬檔、不刮削、不解析番號，回既有錯誤形狀 plain dict。
-@@ -212,11 +224,9 @@
+@@ -204,6 +280,15 @@
+     if _err:
+         return _err
+ 
++    uploaded_cover = None
++    if request.cover_upload_token:
++        uploaded_cover = cover_upload.resolve_cover_token(request.cover_upload_token)
++        if uploaded_cover is None:
++            return {
++                "success": False,
++                "error": _api_text(locale, "cover_upload_expired"),
++            }
++
+     # 如果沒有提供番號，嘗試從檔名提取
+     if not number:
+         from core.scraper import extract_number
+@@ -212,11 +297,9 @@
      if not number:
          return {
              "success": False,
@@ -5700,7 +5807,7 @@
      scraper_config = config.get('scraper', {})
      path_mappings = config.get('gallery', {}).get('path_mappings', {})
  
-@@ -235,7 +245,7 @@
+@@ -235,14 +318,21 @@
          if not metadata:
              return {
                  "success": False,
@@ -5709,7 +5816,22 @@
              }
          metadata['number'] = number
  
-@@ -348,6 +358,7 @@
+     logger.debug(f"[scraper] cover URL: {metadata.get('cover', 'NO COVER')}")
+ 
+     # 執行整理（scraper_config 已包含 suffix_keywords，organize_file 自行偵測）
+-    result = organize_file(file_path, metadata, scraper_config)
++    result = organize_file(
++        file_path,
++        metadata,
++        scraper_config,
++        uploaded_cover=uploaded_cover,
++    )
++    if result.get('success') and request.cover_upload_token:
++        cover_upload.discard_cover_token(request.cover_upload_token)
+ 
+     # 覆蓋保護：目標路徑已存在時回傳 duplicate 狀態（不覆蓋）
+     if result.get('duplicate'):
+@@ -348,6 +438,7 @@
      metadata: Optional[Dict[str, Any]] = None
      allow_number_change: bool = False
      preserve_title: bool = False
@@ -5717,7 +5839,7 @@
  
  
  class BatchEnrichItem(BaseModel):
-@@ -355,6 +366,20 @@
+@@ -355,6 +446,20 @@
      number: str
      source: Optional[str] = None       # per-item override（優先於 batch default）
      javbus_lang: Optional[str] = None  # per-item override
@@ -5738,7 +5860,7 @@
  
  
  class BatchEnrichRequest(BaseModel):
-@@ -371,6 +396,7 @@
+@@ -371,6 +476,7 @@
  class RescrapePreviewRequest(BaseModel):
      number: str
      source: str = "auto"
@@ -5746,7 +5868,7 @@
  
  
  @router.post("/rescrape/preview")
-@@ -382,10 +408,11 @@
+@@ -382,10 +488,11 @@
      回傳成功 dict + success:True；not-found（None）→ 200 {success:False}。
      不下載 cover（cover 是遠端 URL，原樣回前端，無 SSRF 面）。
      """
@@ -5759,7 +5881,7 @@
          if request.source == 'javlibrary':
              versions = search_javlib_versions(request.number)  # Cf* 例外由外層 except 接
              if not versions:
-@@ -396,12 +423,12 @@
+@@ -396,12 +503,12 @@
          elif request.source == "auto":
              result = search_jav(
                  request.number,
@@ -5774,7 +5896,7 @@
              )
  
          if result is None:
-@@ -410,27 +437,27 @@
+@@ -410,27 +517,27 @@
      except CfChallengeRequired:
          outcome = _begin_solve_for_source(request.source)
          if outcome is None:
@@ -5812,7 +5934,7 @@
      """Fetch a javlibrary detail_url candidate for the readonly gear-rescrape
      branch (TASK-104-T3). Reuses the exact SSRF guard + CfChallengeRequired/
      CfTransportUnavailable handling as `enrich_single_endpoint`'s own (non-
-@@ -445,9 +472,10 @@
+@@ -445,9 +552,10 @@
      `scraper_data` is the `to_legacy_dict()` + `internal_nfo_carriers()` merge
      and `error_response` is None.
      """
@@ -5824,7 +5946,7 @@
      try:
          video = fetch_javlib_by_detail_url(request.detail_url, request.number)
      except CfChallengeRequired:
-@@ -462,7 +490,7 @@
+@@ -462,7 +570,7 @@
      except CfTransportUnavailable:
          return None, {"success": False, "cf_unavailable": True}
      if video is None:
@@ -5833,7 +5955,7 @@
      # to_legacy_dict 省略 _summary/_rating 內部 carrier；補回以對齊既有 javlibrary
      # 重刮的 NFO 輸出（search_jav 走 internal_nfo_carriers 注入同組，PR #89 Codex P2）
      scraper_data = video.to_legacy_dict()
-@@ -488,8 +516,9 @@
+@@ -488,8 +596,9 @@
  METADATA_ALLOWED_FIELDS = METADATA_WHITELIST_STR | METADATA_WHITELIST_LIST_STR | {"duration", "_rating"}
  
  
@@ -5844,7 +5966,7 @@
      whitelist_str = METADATA_WHITELIST_STR
      whitelist_list_str = METADATA_WHITELIST_LIST_STR
      ignored_keys = METADATA_IGNORED_KEYS
-@@ -507,77 +536,99 @@
+@@ -507,77 +616,99 @@
              # test_cover_canonical_contract 整份契約表的前提（PR #167 Codex P2）。
              if k == "source":
                  if not isinstance(v, str):
@@ -5966,7 +6088,7 @@
  
  
  def _clean_metadata_for_scraper_data(metadata: dict) -> dict:
-@@ -615,14 +666,21 @@
+@@ -615,14 +746,21 @@
          _emit_notif("warn", "notif.wishlist_reconcile_failed", task_type="wishlist_reconcile")
          return
      if _wl_removed:
@@ -5990,7 +6112,7 @@
      # CD-62-4 分裂陷阱智慧防呆：refresh_full + overwrite=false 時，若這組設定不會寫出任何
      # sidecar（NFO/cover）卻仍 _db_upsert，就是純分裂。一個 sidecar「會寫」需 write 旗標開 + 檔案缺
      # （此分支 overwrite 已為 false，既有檔不覆寫）。兩者皆不會寫 → 擋；任一會寫則放行（quick-enrich
-@@ -667,13 +725,14 @@
+@@ -667,13 +805,14 @@
          if not will_write_nfo and not will_write_cover and not will_write_external:
              raise HTTPException(
                  status_code=400,
@@ -6006,7 +6128,7 @@
      # TASK-91-T3：讀取端 path_mappings，供 resolve_nfo_cover_paths / uri_to_local_fs_path /
      # enrich_single 共用一次算好的同一組值（避免重複 .get() chain）。
      path_mappings = config.get("gallery", {}).get("path_mappings", {})
-@@ -687,7 +746,7 @@
+@@ -687,7 +826,7 @@
      canonical = coerce_to_file_uri(request.file_path, path_mappings)  # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
      owning = resolve_owning_output_root(canonical, config)
      action = (request.readonly_action or ('rescrape' if request.metadata is not None else 'ingest')) if owning is not None else None
@@ -6015,7 +6137,7 @@
      if owning is not None:
          source, output_root, output_uri = owning
          # Codex PR#113 one-pass alignment (2026-07-21): readonly branch now returns
-@@ -705,7 +764,7 @@
+@@ -705,7 +844,7 @@
          # EnrichResult rather than silently doing a full ingest/rescrape instead
          # (this branch otherwise ignores request.mode entirely).
          if request.mode == 'db_to_sidecar':
@@ -6024,7 +6146,7 @@
          # P1 revert + reject (round-3 review 2026-07-21): readonly produce is
          # holistic (a library entry always has an NFO) — write_nfo=false is
          # rejected the same way db_to_sidecar is above, rather than threading
-@@ -713,16 +772,16 @@
+@@ -713,16 +852,16 @@
          # _READONLY_NO_NFO_ERROR_MSG). The frontend never sends
          # write_nfo=false, so this is zero UI impact.
          if not request.write_nfo:
@@ -6045,7 +6167,7 @@
              if _cand_err:
                  return _cand_err
              if request.metadata is not None:
-@@ -744,7 +803,9 @@
+@@ -744,7 +883,9 @@
                  scraper_data=scraper_data, scrape_source=request.source,
                  javbus_lang=request.javbus_lang, write_cover=resolved_write_cover,
                  overwrite_existing=request.overwrite_existing, preserve_title=request.preserve_title,
@@ -6055,7 +6177,7 @@
              )
              if result.success:
                  _reconcile_wishlist_after_write()
-@@ -753,15 +814,15 @@
+@@ -753,15 +894,15 @@
              # F-0：完整 EnrichResult 形狀 ＋ additive cf_needed/cf_source（不得回 partial dict）
              outcome = _begin_solve_for_source(request.source)
              if outcome is None:
@@ -6077,7 +6199,7 @@
  
      try:
          scraper_data = None
-@@ -769,7 +830,7 @@
+@@ -769,7 +910,7 @@
              # SSRF guard：拒絕非 javlibrary origin 的 detail_url（不 fetch、不洩 URL）
              if not _is_javlibrary_url(request.detail_url):
                  logger.warning("enrich_single: 拒絕非法 detail_url origin")
@@ -6086,7 +6208,7 @@
              try:
                  video = fetch_javlib_by_detail_url(request.detail_url, request.number)
              except CfChallengeRequired:
-@@ -784,13 +845,13 @@
+@@ -784,13 +925,13 @@
              except CfTransportUnavailable:
                  return {"success": False, "cf_unavailable": True}
              if video is None:
@@ -6102,7 +6224,7 @@
              if _cand_err:
                  return _cand_err
          if request.metadata is not None:
-@@ -808,6 +869,8 @@
+@@ -808,6 +949,8 @@
              javbus_lang=request.javbus_lang,
              scraper_data=scraper_data,
              path_mappings=path_mappings, preserve_title=request.preserve_title,
@@ -6111,7 +6233,7 @@
          )
          # feature/71 T8: 換封面成功 → 失效舊縮圖（下次進畫面時重生，CD-9 / spec 2.A.7）。
          # request.file_path 已是 DB 的 file:/// URI（前端送 currentLightboxVideo.path /
-@@ -822,7 +885,7 @@
+@@ -822,7 +965,7 @@
      except CfChallengeRequired:
          outcome = _begin_solve_for_source(request.source)
          if outcome is None:
@@ -6120,7 +6242,7 @@
          if outcome == "cf_unavailable":
              return {"success": False, "cf_unavailable": True}
          return {"success": False, "cf_needed": True, "cf_source": request.source}
-@@ -830,7 +893,7 @@
+@@ -830,7 +973,7 @@
          return {"success": False, "cf_unavailable": True}
      except Exception:
          logger.exception("enrich_single_endpoint 失敗")
@@ -6129,7 +6251,7 @@
  
  
  class FetchSamplesRequest(BaseModel):
-@@ -838,9 +901,110 @@
+@@ -838,9 +981,110 @@
      number: str
  
  
@@ -6240,7 +6362,7 @@
      # TASK-91-T3：站台5 outer to_file_uri 補傳 path_mappings（inner uri_to_fs_path 維持不變，
      # 見 TASK-91-T3.md 站台5 inner/outer 分析結論）。
      path_mappings = config.get("gallery", {}).get("path_mappings", {})
-@@ -853,96 +1017,214 @@
+@@ -853,96 +1097,214 @@
      owning = resolve_owning_output_root(canonical, config)
      if owning is not None:
          source, output_root, output_uri = owning
@@ -6501,7 +6623,7 @@
  
      # 90c-T1 唯讀 guard（async-safe）：config 已於上方 to_thread 載入，這裡從既載入的
      # config 算一次唯讀前綴集（純比對、無 I/O），逐項用 is_path_readonly 純比對——不可在
-@@ -955,7 +1237,7 @@
+@@ -955,7 +1317,7 @@
      # 去重（按 file_path）
      seen_paths: set = set()
      deduped_items = []
@@ -6510,7 +6632,7 @@
          if item.file_path not in seen_paths:
              seen_paths.add(item.file_path)
              deduped_items.append(item)
-@@ -968,7 +1250,7 @@
+@@ -968,7 +1330,7 @@
          # 53b-T3: 補完開始通知
          _emit_notif(
              "info", "notif.batch_enrich_started",
@@ -6519,7 +6641,7 @@
              task_type="batch_enrich",
          )
          # scraper cache：只對 refresh_full 生效（100% 需要 scraper data）
-@@ -978,7 +1260,11 @@
+@@ -978,7 +1340,11 @@
  
          try:
              for idx, item in enumerate(deduped_items, start=1):
@@ -6532,7 +6654,7 @@
                  _custom_refused = effective_source.startswith('custom:')
                  # 未知 / 非法 source guard：不靜默轉成無效 cache_key，退回 'auto'（最小驚訝）。
                  if not _custom_refused and effective_source != "auto" and not validate_source_id(effective_source):
-@@ -987,7 +1273,10 @@
+@@ -987,7 +1353,10 @@
                          effective_source, item.number,
                      )
                      effective_source = "auto"
@@ -6544,7 +6666,7 @@
  
                  # progress 事件
                  yield f"data: {json.dumps({'type': 'progress', 'current': idx, 'total': total, 'number': item.number})}\n\n"
-@@ -995,7 +1284,7 @@
+@@ -995,7 +1364,7 @@
                  if _custom_refused:
                      # spec §8：自訂來源不參與批次補完（含已驗收已啟用者）；純字串判斷，不抓取不寫入
                      failed_count += 1
@@ -6553,7 +6675,7 @@
                      continue
  
                  # TASK-104-T3 (CD-104-5)：唯讀項不再拒絕，改道 output_dir（action 固定
-@@ -1007,29 +1296,40 @@
+@@ -1007,29 +1376,40 @@
                  # item/canonical 用預設參數綁定，避免 for-loop 變數 late-binding
                  # （同既有 :559 lambda 慣例）。
                  # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
@@ -6606,7 +6728,7 @@
                          # TASK-109-T3: 產出核心（URI→FS 轉換到組 EnrichResult 為止）薄搬移進
                          # core.readonly_producer.enrich_one_readonly；closure 只保留三個刻意
                          # 缺口——reject guard + output_dir 解析（上方已做，C3）、javlib 預抓
-@@ -1047,25 +1347,41 @@
+@@ -1047,25 +1427,41 @@
                          # （scraper.py:899-938，改前 main 67ebb620），與單片相反（單片
                          # compute 先，見 entry docstring 該參數段）。不傳＝預設 False 會悄悄
                          # 套用單片順序，翻轉這條既有行為——顯式傳 True 找回來。
@@ -6667,7 +6789,7 @@
  
                      try:
                          loop = asyncio.get_running_loop()
-@@ -1076,7 +1392,7 @@
+@@ -1076,7 +1472,7 @@
                              # 其他 mode 維持 success（refresh_full 可能只更新 DB）。⚠️ 前端
                              # didEnrichSomething() 沒有這道 mode 閘，多出 refresh_full 呼叫端時兩邊一起補。
                              # 今天 fill_missing 零行為變化（readonly nfo_written=True 無條件）；縮圖失效仍掛 ok。
@@ -6676,7 +6798,7 @@
                                  success_count += 1
                              else:
                                  failed_count += 1
-@@ -1084,13 +1400,16 @@
+@@ -1084,13 +1480,16 @@
                              # OSError）——失敗不可讓外層 except 捕獲，否則同一成功項會
                              # success+failed 雙記、done 匯總 success+failed > total（誤報
                              # 成失敗）。故各自 try/except 吞掉，不影響主結果。
@@ -6700,7 +6822,7 @@
                              # feature/109 T3: closure 呼叫的共用入口
                              # `enrich_one_readonly` 已回傳完整的 `EnrichResult`（payload
                              # 本身），不再需要在此手動重建 enrich_success(...)——直接
-@@ -1119,7 +1438,7 @@
+@@ -1119,7 +1518,7 @@
                              reason = 'not_found' if status == 'no_scrape' else 'error'
                              result_item = {
                                  'type': 'result-item', 'number': item.number, 'file_path': item.file_path,
@@ -6709,7 +6831,7 @@
                              }
                              yield f"data: {json.dumps(result_item)}\n\n"
                      except Exception:
-@@ -1136,7 +1455,7 @@
+@@ -1136,7 +1535,7 @@
                          failed_count += 1
                          result_item = {
                              'type': 'result-item', 'number': item.number, 'file_path': item.file_path,
@@ -6718,7 +6840,7 @@
                          }
                          yield f"data: {json.dumps(result_item)}\n\n"
                      continue
-@@ -1144,9 +1463,11 @@
+@@ -1144,9 +1543,11 @@
                  try:
                      loop = asyncio.get_running_loop()
  
@@ -6732,7 +6854,7 @@
                          cache_key = (item.number.upper(), effective_source, effective_lang)
                          if cache_key not in scraper_cache:
                              _pf_ctx = contextvars.copy_context()
-@@ -1160,29 +1481,53 @@
+@@ -1160,29 +1561,53 @@
                              scraper_cache[cache_key] = fetched if fetched else {}
                          cached_data = scraper_cache[cache_key]
  
@@ -6803,7 +6925,7 @@
                              success_count += 1
                          else:
                              failed_count += 1
-@@ -1191,40 +1536,50 @@
+@@ -1191,40 +1616,50 @@
                          # （同 enrich-single，PR #60 Codex P2）。
                          # PR#114 P2: unlink 可拋 OSError → best-effort try/except 吞掉，避免被
                          # 外層 except 捕獲導致同一成功項 success+failed 雙記 + 誤報失敗。
@@ -6886,10 +7008,16 @@
  from core.favorite_scan import resolve_favorite_folder
  from core.proxy_policy import proxy_kwargs
  from web import auto_organize_scheduler
-@@ -67,6 +70,15 @@
+@@ -63,8 +66,19 @@
+ from core.query_intent import classify_query
+ from core.maker_names import known_makers
+ from core.search_providers.relay import maker_capsule_policy
++from core.recent_actresses import recent_actresses_available, search_recent_actresses
++from core.recent_rules import RECENT_ACTRESSES_KEY
+ 
  router = APIRouter(prefix="/api", tags=["search"])
- 
- 
++
++
 +def _search_text(key: str, locale: str | None = None, **params) -> str:
 +    """Return a search-API message in the active UI language."""
 +    return i18n_t(
@@ -6897,12 +7025,10 @@
 +        locale=locale or get_config_locale(),
 +        **params,
 +    )
-+
-+
- # 168d：指定來源搜尋的 CF 錯誤句主詞。javlibrary 與舊版逐字相同（含站名後的空格）；其餘來源中性。
- _CF_ERROR_SUBJECT = {"javlibrary": "JavLibrary ", "fc-javten": "FC2-javten "}
  
-@@ -78,7 +90,7 @@
+ 
+ # 168d：指定來源搜尋的 CF 錯誤句主詞。javlibrary 與舊版逐字相同（含站名後的空格）；其餘來源中性。
+@@ -78,7 +92,7 @@
  
  # ── 173：片商最新作品（容量端點 ＋ stream／REST 的 maker 分支）──
  
@@ -6911,7 +7037,33 @@
  
  
  def _since_twelve_months_ago(today: datetime.date) -> str:
-@@ -203,10 +215,13 @@
+@@ -135,6 +149,16 @@
+         return {"success": False}
+ 
+ 
++@router.get("/search/recent-actresses")
++def get_recent_actresses_availability() -> dict:
++    """搜尋頁「常收女優」膠囊該不該顯示（DMM 開著＋有分數 > 0 的收藏女優）與其保留鍵。"""
++    try:
++        return {"success": True, "available": recent_actresses_available(), "key": RECENT_ACTRESSES_KEY}
++    except Exception:
++        logger.exception("recent-actresses availability failed")
++        return {"success": False}
++
++
+ def _maker_param_error(maker_key: str, spellings, offset: int) -> Optional[str]:
+     """maker 分支入口驗證；回 None 表示通過。"""
+     if not 1 <= len(maker_key) <= 200:
+@@ -168,6 +192,8 @@
+     """解析＋列表（由呼叫端放進背景執行緒）；未預期例外一律當連不上，不當找不到。"""
+     label = maker or maker_key
+     try:
++        if maker_key == RECENT_ACTRESSES_KEY:
++            return search_recent_actresses(status_callback=status_callback, result_callback=result_callback)
+         db_path = get_db_path()
+         init_db(db_path)
+         titles = _library_titles(db_path)
+@@ -203,10 +229,13 @@
      return extras
  
  
@@ -6927,7 +7079,7 @@
      meta: dict = {}
      result = _run_maker_search(maker_key, maker, spellings, offset, cursor=cursor, meta=meta)
      extras = _maker_result_extras(maker_key, result.results, result)
-@@ -217,13 +232,23 @@
+@@ -217,13 +246,23 @@
              "actress_profile": None, **extras, **_cursor_fields(meta),
          }
      return {
@@ -6954,7 +7106,7 @@
  
  # 載入片商前綴對照表（啟動時一次性載入）
  _MAKER_MAPPING = load_prefix_mapping()
-@@ -331,6 +356,10 @@
+@@ -331,6 +370,10 @@
      maker: Optional[str] = Query(None, description="片商顯示名"),
      spellings: Annotated[Optional[List[str]], Query(description="片商的片庫寫法（可重複）")] = None,
      cursor: CursorParam = None,
@@ -6965,7 +7117,7 @@
  ) -> dict:
      """
      搜尋 JAV 資訊
-@@ -350,31 +379,40 @@
+@@ -350,31 +393,40 @@
      - **limit**: 每頁結果數（預設 20，最大 50）
      - **offset**: 跳過前 N 個結果，用於載入更多
      """
@@ -7013,7 +7165,7 @@
      uncensored_mode = is_uncensored_mode_effective(config)
  
      # discovery 僅在明確指定 actress/partial/prefix 模式時生效
-@@ -401,6 +439,7 @@
+@@ -401,6 +453,7 @@
              try:
                  data = search_jav_single_source(
                      q, source, surface_access_errors=True,
@@ -7021,7 +7173,7 @@
                  )
              # CD-70c-4: search entry does NOT wire the interactive CF flow (no begin_solve,
              # no cf_needed). The JavLibrary pill is hidden in search context when
-@@ -412,7 +451,11 @@
+@@ -412,7 +465,11 @@
                  logger.warning("search: CfChallengeRequired for source=%s q=%s", source, q)
                  return {
                      "success": False,
@@ -7034,7 +7186,7 @@
                      "data": [],
                      "total": 0,
                      "mode": "exact",
-@@ -423,7 +466,11 @@
+@@ -423,7 +480,11 @@
                  logger.warning("search: CfTransportUnavailable for source=%s q=%s", source, q)
                  return {
                      "success": False,
@@ -7047,7 +7199,7 @@
                      "data": [],
                      "total": 0,
                      "mode": "exact",
-@@ -435,7 +482,7 @@
+@@ -435,7 +496,7 @@
                  logger.warning("search: parse_empty source=%s q=%s", source, q)
                  return {
                      "success": False,
@@ -7056,7 +7208,7 @@
                      "custom_error": "parse_empty",
                      "source": source,
                      "data": [],
-@@ -445,7 +492,7 @@
+@@ -445,7 +506,7 @@
                      "actress_profile": None,
                  }
              except (SourceBlocked, SourceUnreachable) as e:
@@ -7065,7 +7217,7 @@
                  logger.warning("search: %s source=%s q=%s", info["access_error"], source, q)
                  return {
                      "success": False,
-@@ -509,7 +556,7 @@
+@@ -509,7 +570,7 @@
  
      base_response = {
          "success": False,
@@ -7074,7 +7226,7 @@
          "data": [],
          "total": 0,
          "mode": detected_mode,
-@@ -721,10 +768,16 @@
+@@ -721,10 +782,16 @@
      ))
  
      if not numbers:
@@ -7093,7 +7245,7 @@
  
      results = {}
  
-@@ -779,18 +832,19 @@
+@@ -779,18 +846,19 @@
      """
      mark_manual_activity()
      cursor = _cursor_arg(cursor)
@@ -7117,7 +7269,7 @@
      uncensored_mode = is_uncensored_mode_effective(config)
  
      status_queue = Queue()
-@@ -917,7 +971,7 @@
+@@ -917,7 +985,7 @@
  
              except Exception as e:
                  logger.error("串流搜尋失敗: %s", e)
@@ -7126,7 +7278,7 @@
  
      return StreamingResponse(event_generator(), media_type="text/event-stream")
  
-@@ -925,24 +979,29 @@
+@@ -925,24 +993,29 @@
  @router.get("/search/sources")
  async def get_sources() -> dict:
      """取得可用的搜尋來源"""
@@ -7165,7 +7317,7 @@
      for source_id in switchable_ids:
          sources.append({
              "id": source_id,
-@@ -974,6 +1033,7 @@
+@@ -974,6 +1047,7 @@
      from core.favorite_scan import list_favorite_video_files, resolve_favorite_folder
  
      config = load_config()
@@ -7173,7 +7325,7 @@
      original_folder = config.get('search', {}).get('favorite_folder', '').strip()
  
      # 處理資料夾路徑
-@@ -983,7 +1043,7 @@
+@@ -983,7 +1057,7 @@
          logger.error("路徑轉換失敗: %s", e)
          return {
              "success": False,
@@ -7182,7 +7334,7 @@
              "folder": original_folder
          }
  
-@@ -994,7 +1054,11 @@
+@@ -994,7 +1068,11 @@
      if not folder_path.exists():
          return {
              "success": False,
@@ -7195,7 +7347,7 @@
              "folder": original_folder or folder
          }
  
-@@ -1004,14 +1068,14 @@
+@@ -1004,14 +1082,14 @@
      except PermissionError:
          return {
              "success": False,
@@ -7212,7 +7364,7 @@
              "folder": folder
          }
  
-@@ -1173,7 +1237,17 @@
+@@ -1173,7 +1251,17 @@
  
      Returns:
          {
@@ -7231,7 +7383,7 @@
              "ABW-001": { "exists": false }
          }
  
-@@ -1195,23 +1269,72 @@
+@@ -1195,23 +1283,72 @@
      init_db()  # 確保 DB 存在
      repo = VideoRepository()
      videos_by_number = repo.get_by_numbers(number_list)

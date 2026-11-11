@@ -15,11 +15,13 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Any, Dict, List, Literal, Optional
 
+from core import cover_upload
+from core.actress_photo import CONTENT_TYPE_MAP
 from core.database import VideoRepository, organize_failures
 from core.db_inflow import try_inflow_upsert
 from core.focal_trigger import maybe_submit_video_focal
@@ -135,6 +137,7 @@ class ScrapeRequest(BaseModel):
     number: Optional[str] = None
     # 前端可直接傳入 metadata，避免重新搜尋
     metadata: Optional[dict] = None
+    cover_upload_token: Optional[str] = None
 
 
 # 唯讀來源 guard 的錯誤訊息 key（單一真理來源；sync helper 與 batch async loop 共用）。
@@ -191,6 +194,67 @@ def _readonly_source_error(file_path: str) -> Optional[dict]:
     return None
 
 
+_COVER_UPLOAD_FILE_PARAM = File(...)
+
+
+@router.post("/scrape-cover/upload")
+async def upload_scrape_cover(file: UploadFile = _COVER_UPLOAD_FILE_PARAM):
+    """Validate, normalize and temporarily store a manually uploaded cover."""
+    locale = await asyncio.to_thread(get_config_locale)
+    try:
+        if file.size is not None and file.size > cover_upload.MAX_BYTES:
+            return JSONResponse(
+                status_code=413,
+                content={"error": _api_text(locale, "cover_image_too_large")},
+            )
+        data = await file.read()
+        if len(data) > cover_upload.MAX_BYTES:
+            return JSONResponse(
+                status_code=413,
+                content={"error": _api_text(locale, "cover_image_too_large")},
+            )
+        if file.content_type not in CONTENT_TYPE_MAP:
+            return JSONResponse(
+                status_code=415,
+                content={"error": _api_text(locale, "cover_image_unsupported")},
+            )
+        jpeg, err = await asyncio.to_thread(
+            cover_upload.validate_and_normalize_cover, data
+        )
+        if err is not None:
+            key = "cover_image_too_large" if err[0] == 413 else "cover_image_unsupported"
+            return JSONResponse(
+                status_code=err[0],
+                content={"error": _api_text(locale, key)},
+            )
+        await asyncio.to_thread(cover_upload.sweep_expired_covers)
+        token = await asyncio.to_thread(cover_upload.store_cover, jpeg)
+        return {"token": token, "url": f"/api/scrape-cover/{token}"}
+    except Exception:
+        logger.exception("[scraper] 上传封面失败")
+        return JSONResponse(
+            status_code=500,
+            content={"error": _api_text(locale, "cover_upload_failed")},
+        )
+
+
+@router.get("/scrape-cover/{token}")
+def get_scrape_cover(token: str):
+    """Return a temporary uploaded cover; malformed or expired tokens return 404."""
+    path = cover_upload.resolve_cover_token(token)
+    if path is None:
+        locale = get_config_locale()
+        return JSONResponse(
+            status_code=404,
+            content={"error": _api_text(locale, "cover_token_not_found")},
+        )
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @router.post("/scrape-single")
 def scrape_single(request: ScrapeRequest) -> dict:
     """
@@ -215,6 +279,15 @@ def scrape_single(request: ScrapeRequest) -> dict:
     _err = _readonly_source_error(file_path)
     if _err:
         return _err
+
+    uploaded_cover = None
+    if request.cover_upload_token:
+        uploaded_cover = cover_upload.resolve_cover_token(request.cover_upload_token)
+        if uploaded_cover is None:
+            return {
+                "success": False,
+                "error": _api_text(locale, "cover_upload_expired"),
+            }
 
     # 如果沒有提供番號，嘗試從檔名提取
     if not number:
@@ -252,7 +325,14 @@ def scrape_single(request: ScrapeRequest) -> dict:
     logger.debug(f"[scraper] cover URL: {metadata.get('cover', 'NO COVER')}")
 
     # 執行整理（scraper_config 已包含 suffix_keywords，organize_file 自行偵測）
-    result = organize_file(file_path, metadata, scraper_config)
+    result = organize_file(
+        file_path,
+        metadata,
+        scraper_config,
+        uploaded_cover=uploaded_cover,
+    )
+    if result.get('success') and request.cover_upload_token:
+        cover_upload.discard_cover_token(request.cover_upload_token)
 
     # 覆蓋保護：目標路徑已存在時回傳 duplicate 狀態（不覆蓋）
     if result.get('duplicate'):

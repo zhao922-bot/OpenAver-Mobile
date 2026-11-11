@@ -168,7 +168,9 @@
       "query": "搜尋番號、女優或拖入檔案...",
       "query_mobile": "搜尋番號或女優...",
       "tag": "標籤名稱",
-      "actors": "演員名稱（可用、，,分隔多人）"
+      "actors": "演員名稱（可用、，,分隔多人）",
+      "number": "番號",
+      "maker": "片商名稱"
     },
     "auto_pill": {
       "tooltip": "點擊挑選來源"
@@ -193,6 +195,8 @@
       "translate_ai": "AI 翻譯",
       "edit_chinese_title": "編輯中文片名",
       "edit_actors": "編輯演員",
+      "edit_number": "編輯番號",
+      "edit_maker": "編輯片商",
       "switch_source": "切換版本",
       "open_source_url": "開啟來源頁面",
       "open_folder": "開啟資料夾",
@@ -215,7 +219,10 @@
       "config_failed": "操作失敗，請稍後再試"
     },
     "maker_latest": {
-      "title": "片商最新作品"
+      "title": "新片查詢"
+    },
+    "recent_actresses": {
+      "label": "常收女優"
     },
     "empty": {
       "hint": "輸入番號搜尋，或加入影片檔案",
@@ -241,6 +248,10 @@
       "tag_nfo_write_blocked": "標籤已存，但沒有權限寫入 NFO",
       "no_data": "找不到資料",
       "maker_not_found": "找不到「{maker}」的作品頁",
+      "recent_region_empty": "DMM 沒有回傳結果，部分地區需要日本 IP",
+      "recent_none": "找不到結果",
+      "recent_unreachable": "暫時無法連上 DMM",
+      "recent_region_link": "到設定頁調整 Proxy",
       "search_failed": "搜尋失敗",
       "network_error": "網路錯誤，請重試",
       "no_translation_needed": "當前片無需翻譯",
@@ -300,6 +311,8 @@
       "unknown_title": "未知標題"
     },
     "cover": {
+      "upload": "上傳封面",
+      "replace": "更換封面",
       "alt": "封面",
       "load_failed": "封面載入失敗"
     },
@@ -336,7 +349,7 @@
       "actress": "模糊搜尋",
       "keyword": "全文搜尋",
       "uncensored": "無碼搜尋",
-      "maker": "片商最新作品"
+      "maker": "新片查詢"
     },
     "filelist": {
       "search_all_title": "搜尋所有尚未搜尋的檔案",
@@ -373,6 +386,8 @@
       "no_searchable_files": "沒有需要搜尋的檔案",
       "search_complete": "批次搜尋完成：成功 {success}，失敗 {failed}",
       "no_scrapable_files": "沒有可整理的檔案",
+      "number_required": "請先填入番號",
+      "cover_upload_failed": "封面上傳失敗，請換一張圖片再試",
       "scrape_complete": "批次整理完成：成功 {success}，失敗 {failed}",
       "scrape_complete_dup": "批次整理完成：成功 {success}，失敗 {failed}，重複 {duplicate}",
       "no_search_results": "此檔案沒有搜尋結果",
@@ -735,6 +750,7 @@
       "cover_badges_label": "封面屬性標籤",
       "cover_badges_note": "在封面左上角顯示中文字幕／無碼／4K 等標籤（只影響顯示，不改標籤本身）",
       "cover_badges_legend": "＊AI：無碼破解（AI 演算法去碼），LEAK：無碼流出（母帶外流）",
+      "cover_badges_legend_ltx": "LTX：檔名明確標註 LTX 時顯示 LTX，不再重複顯示 AI。",
       "cover_badges_help_aria": "封面屬性標籤說明",
       "show_table_list_label": "顯示表格與清單",
       "show_table_list_note": "開啟後，瀏覽頁右上角會多出表格與清單兩種呈現。預設只有封面與海報。",
@@ -742,6 +758,7 @@
       "cover_badge": {
         "subtitle": "中文字幕",
         "cracked": "無碼破解（AI 演算法去馬）",
+        "ltx": "LTX",
         "leaked": "無碼流出（母帶外流）",
         "4k": "4K",
         "vr": "VR"
@@ -1415,6 +1432,7 @@
       "mdate": "修改時間",
       "random": "隨機",
       "actress": {
+        "recent": "最近常收",
         "video_count": "作品數",
         "name": "姓名",
         "added_at": "收藏時間",
@@ -2477,6 +2495,11 @@
       "video_out_of_scope_detect": "此影片不在收藏範圍，無法偵測焦點",
       "video_out_of_scope_save": "此影片不在收藏範圍，無法存入焦點",
       "cover_not_found": "找不到封面檔案",
+      "cover_upload_expired": "封面暫存已失效，請重新上傳封面",
+      "cover_upload_failed": "上傳封面失敗，請稍後再試",
+      "cover_image_too_large": "圖片過大（檔案上限 10MB、尺寸上限 5000 萬像素）",
+      "cover_image_unsupported": "不支援的圖片格式",
+      "cover_token_not_found": "找不到上傳的封面",
       "focal_detect_failed": "偵測焦點失敗",
       "focal_invalid": "無效的焦點座標格式",
       "focal_save_failed": "存入手動焦點失敗",

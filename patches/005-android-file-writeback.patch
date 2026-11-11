@@ -250,6 +250,192 @@
      except BaseException:
          # 路徑 1：區塊內使用者程式碼拋例外；路徑 2：os.replace 自己拋例外
          # （BE-ENV-01：Windows 防毒/縮圖快取會擋，不是必成功）。
+--- a/core/cover_attributes.py
++++ b/core/cover_attributes.py
+@@ -1,6 +1,6 @@
+ """檔名後綴 → 屬性 tag 的單一資料來源，加上合併／去重純函式。
+ 
+-表是 5 個 id，`-UC` 不是獨立列：id 為 subtitle / cracked / leaked / 4k / vr，
++表的列數不固定，`-UC` 不是獨立列：id 有 subtitle / cracked / ltx / leaked / 4k / vr，
+ `-UC` / `-CU` 是 subtitle 與 cracked 共用的 token。
+ 「無碼」（片商本身無碼）不在本表。
+ """
+@@ -26,6 +26,10 @@
+     i18n_key: str
+     source: str
+     tokens: tuple[str, ...] = ()
++    supersedes: tuple[str, ...] = ()
++
++
++_LTX_TOKENS = ("-ltx", "_ltx", ".ltx")
+ 
+ 
+ ATTRIBUTE_TABLE: tuple[AttributeRule, ...] = (
+@@ -47,7 +51,18 @@
+         display_order=2,
+         i18n_key="settings.gallery.cover_badge.cracked",
+         source="filename_token",
+-        tokens=("-U", "_U", "umr", "破解", "克破", "-UC", "-CU"),
++        tokens=("-U", "_U", "umr", "破解", "克破", "-UC", "-CU") + _LTX_TOKENS,
++    ),
++    AttributeRule(
++        id="ltx",
++        canonical_tag="LTX",
++        display_name="LTX",
++        match_aliases=("LTX",),
++        display_order=2,
++        i18n_key="settings.gallery.cover_badge.ltx",
++        source="filename_token",
++        tokens=_LTX_TOKENS,
++        supersedes=("cracked",),
+     ),
+     AttributeRule(
+         id="leaked",
+@@ -84,7 +99,7 @@
+ 
+ def _compile_token(token: str) -> re.Pattern[str]:
+     escaped = re.escape(token.lower())
+-    if token[:1] in "-_":
++    if token[:1] in "-_.":
+         return re.compile(escaped + _PREFIXED_RIGHT)
+     return re.compile(_BARE_LEFT + escaped + _BARE_RIGHT)
+ 
+@@ -108,6 +123,7 @@
+     "match_aliases",
+     "display_order",
+     "i18n_key",
++    "supersedes",
+ )
+ 
+ 
+--- /dev/null
++++ b/core/cover_upload.py
+@@ -0,0 +1,125 @@
++"""cover_upload.py — 空白卡封面上傳的暫存模組（TASK-183-T5a / CD-183-7）。
++
++流程：upload 端點 → validate_and_normalize_cover（驗證＋正規化成 JPEG）→ store_cover
++（寫進資料根 tmp/cover-upload/<token>.jpg，回 token）→ scrape-single 憑 token
++resolve_cover_token 取得伺服器端路徑 → 整理成功後 discard_cover_token。
++
++純函式、無 class、不 import web。信任邊界：token 是 client 字串，只有 `_token_path`
++會把它轉成路徑，且第一步就用 fullmatch 驗格式；絕不把 client 字串拼進路徑。
++"""
++import re
++import time
++import uuid
++from io import BytesIO
++from pathlib import Path
++from typing import Optional, Tuple
++
++from PIL import Image
++
++from core.atomic_write import atomic_write
++from core.data_root import get_data_root
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++# 同 web/routers/actress.py 上傳常數（不 import actress.py，router 層模組）
++MAX_BYTES = 10 * 1024 * 1024
++MAX_PIXELS = 50_000_000
++ERR_TOO_LARGE = "圖片太大（檔案上限 10MB、尺寸上限 50M 像素）"
++ERR_UNSUPPORTED_FORMAT = "不支援的圖片格式"
++
++_TOKEN_RE = re.compile(r"[0-9a-f]{32}")
++_TTL_SECONDS = 24 * 3600
++_JPEG_QUALITY = 95
++
++
++def validate_and_normalize_cover(data: bytes) -> Tuple[Optional[bytes], Optional[Tuple[int, str]]]:
++    """像素上限＋真實格式驗證，並正規化成 JPEG。同步（PIL），呼叫端須經 to_thread。
++
++    Returns:
++        (jpeg_bytes, None) 或 (None, (status, message))。訊息固定中文，不含 str(e)。
++    """
++    try:
++        img = Image.open(BytesIO(data))
++        w, h = img.size  # header-only，不解碼像素
++        if w * h > MAX_PIXELS:
++            return None, (413, ERR_TOO_LARGE)
++        img.verify()
++        fmt = img.format
++        if fmt not in ("JPEG", "PNG", "WEBP", "GIF"):
++            return None, (415, ERR_UNSUPPORTED_FORMAT)
++        if fmt == "JPEG":
++            return data, None
++        # verify() 之後 Image 物件不可再用，必須重新 open 才能 convert
++        out = BytesIO()
++        Image.open(BytesIO(data)).convert("RGB").save(out, format="JPEG", quality=_JPEG_QUALITY)
++        return out.getvalue(), None
++    except Exception:
++        logger.warning("[cover_upload] 圖片驗證失敗（回 415）", exc_info=True)
++        return None, (415, ERR_UNSUPPORTED_FORMAT)
++
++
++def _upload_dir() -> Path:
++    """暫存目錄；只組路徑，不建目錄（store_cover 才延遲建立）。"""
++    return get_data_root() / "tmp" / "cover-upload"
++
++
++def _token_path(token) -> Optional[Path]:
++    """token → 暫存檔路徑；本模組唯一把 token 轉成路徑的地方。格式不合回 None。"""
++    if not isinstance(token, str) or _TOKEN_RE.fullmatch(token) is None:
++        return None
++    return _upload_dir() / f"{token}.jpg"
++
++
++def store_cover(jpeg_bytes: bytes) -> str:
++    """把已正規化的 JPEG 位元組原子寫進暫存目錄，回 token（32 hex）。"""
++    upload_dir = _upload_dir()
++    upload_dir.mkdir(parents=True, exist_ok=True)
++    token = uuid.uuid4().hex
++    with atomic_write(upload_dir / f"{token}.jpg", suffix=".tmp") as f:
++        f.write(jpeg_bytes)
++    return token
++
++
++def resolve_cover_token(token) -> Optional[str]:
++    """token 有效（格式合法、檔存在、未逾 TTL）回伺服器端路徑字串，否則 None。"""
++    path = _token_path(token)
++    if path is None:
++        return None
++    try:
++        if time.time() - path.stat().st_mtime > _TTL_SECONDS:
++            return None
++    except OSError:
++        return None
++    return str(path)
++
++
++def discard_cover_token(token) -> None:
++    """best-effort 刪暫存檔；失敗只 log。"""
++    path = _token_path(token)
++    if path is None:
++        return
++    try:
++        path.unlink(missing_ok=True)
++    except OSError:
++        logger.warning("[cover_upload] 刪除暫存封面失敗 %s", path, exc_info=True)
++
++
++def sweep_expired_covers() -> None:
++    """best-effort 清掉逾期的 <32hex>.jpg 與殘留 *.tmp；任何 OSError 只 log。"""
++    upload_dir = _upload_dir()
++    now = time.time()
++    try:
++        entries = list(upload_dir.iterdir()) if upload_dir.is_dir() else []
++    except OSError:
++        logger.warning("[cover_upload] 讀取暫存目錄失敗", exc_info=True)
++        return
++    for p in entries:
++        is_cover = p.suffix == ".jpg" and _TOKEN_RE.fullmatch(p.stem) is not None
++        if not (is_cover or p.suffix == ".tmp"):
++            continue
++        try:
++            if now - p.stat().st_mtime > _TTL_SECONDS:
++                p.unlink(missing_ok=True)
++        except OSError:
++            logger.warning("[cover_upload] 清除逾期暫存失敗 %s", p, exc_info=True)
 --- a/core/database/actress.py
 +++ b/core/database/actress.py
 @@ -118,18 +118,22 @@
@@ -298,9 +484,42 @@
          finally:
              conn.close()
  
+@@ -334,6 +339,27 @@
+     def count_videos_for_actress(self, name: str) -> int:
+         """Count videos featuring this actress (backward-compatible single-name wrapper)."""
+         return self.count_videos_for_actress_names({name})
++
++    def get_video_actress_mtime_pairs(self) -> List[tuple]:
++        """回傳全部 (videos.rowid, actress_name, videos.mtime)，供 actress_library 算
++        「最近常收」分數（spec-184 CD-184-3 ①）。骨架同 get_video_actress_pairs。
++
++        OperationalError → log 後回 []（刻意與 get_video_actress_pairs 往上拋不同：
++        分數只影響排序，不該讓女優清單端點 500）。
++        """
++        conn = self._get_connection()
++        try:
++            cursor = conn.execute(
++                """SELECT videos.rowid, json_each.value, videos.mtime
++                   FROM videos, json_each(videos.actresses)
++                   WHERE json_valid(videos.actresses)"""
++            )
++            return cursor.fetchall()
++        except sqlite3.OperationalError:
++            logger.exception("get_video_actress_mtime_pairs json_each failed")
++            return []
++        finally:
++            conn.close()
+ 
+     def get_video_actress_pairs(self) -> List[tuple]:
+         """回傳全部 (videos.rowid, actress_name) 配對，供上層（core.database.actress_library）
 --- a/core/database/actress_library.py
 +++ b/core/database/actress_library.py
-@@ -9,6 +9,10 @@
+@@ -5,10 +5,16 @@
+ `actress.py` 與 `alias.py` 之間仍然零依賴，這個模組才是組合點。分組是領域邏輯
+ （「誰跟誰是同一人、算幾片」），不是 HTTP 關注點，所以不放 router 層。
+ """
++import time
+ from typing import List
  
  from .actress import ActressRepository
  from .alias import AliasRepository
@@ -308,10 +527,11 @@
 +from core.config import load_config
 +from core.multipart_group import group_rows
 +from core.path_utils import uri_to_local_fs_path
++from core.recent_rules import FavStat, effective_score, video_weight
  
  
  def get_library_actresses() -> List[dict]:
-@@ -21,7 +25,9 @@
+@@ -21,7 +27,9 @@
        - name → (primary_name, names[]) 由 AliasRepository().get_all() 建一次 lookup dict
          （primary_name 與每個 alias 都指向同一組 (primary_name, [primary_name]+aliases)）；
          lookup miss 時 group_key = name 本身，names = [name]。
@@ -322,7 +542,7 @@
        - is_favorite：`favorite_names = {a.name for a in ActressRepository().get_all()}`
          建一次集合，判定 `any(n in favorite_names for n in names)`——讀 `actresses` 表同一欄，
          不查 alias 表是否存在該 group（迴圈內不得逐一呼叫 exists()，Opus 裁決 ②）。
-@@ -50,10 +56,25 @@
+@@ -50,10 +58,25 @@
      排除 0 片（AC-2.7）天然成立：group 只可能由 pairs（有片子的名字）建立，不
      outer join 收藏表。
  
@@ -350,7 +570,7 @@
  
      # name -> (primary_name, names_list)；names_list 對同一 group 內每個名字共用同一物件
      lookup: dict = {}
-@@ -64,14 +85,16 @@
+@@ -64,14 +87,16 @@
  
      favorite_names = {a.name for a in ActressRepository().get_all()}
  
@@ -370,7 +590,7 @@
  
      result = []
      for primary_name, group in groups.items():
-@@ -85,7 +108,7 @@
+@@ -85,9 +110,82 @@
              {
                  "primary_name": display_name,
                  "names": names_list,
@@ -379,6 +599,81 @@
                  "is_favorite": any(n in favorite_names for n in names_list),
              }
          )
+     result.sort(key=lambda g: (-g["video_count"], g["primary_name"]))
+     return result
++
++
++def _alias_name_sets(alias_repo) -> dict:
++    """Map every saved and alias name to its complete alias group."""
++    records = alias_repo.get_all()
++    lookup: dict = {}
++    for record in records:
++        group = {record.primary_name} | set(record.aliases)
++        for alias in record.aliases:
++            lookup[alias] = group
++    for record in records:
++        lookup[record.primary_name] = {record.primary_name} | set(record.aliases)
++    return lookup
++
++
++def get_favorite_actress_stats(now=None, *, actress_repo=None, alias_repo=None) -> dict:
++    """Return logical-video counts and recent scores for every favorite actress.
++
++    Mobile treats a complete multipart release as one video. Scores therefore use
++    the newest member mtime once per logical group instead of physical rows.
++    """
++    if now is None:
++        now = time.time()
++    actress_repo = actress_repo or ActressRepository()
++    alias_repo = alias_repo or AliasRepository()
++    pairs = actress_repo.get_video_actress_mtime_pairs()
++    lookup = _alias_name_sets(alias_repo)
++    favorites = [actress.name for actress in actress_repo.get_all()]
++
++    videos = VideoRepository().get_all()
++    path_mappings = (
++        load_config().get("gallery", {}).get("path_mappings", {})
++    )
++    logical_groups = group_rows(
++        videos,
++        fs_path_of=lambda video: uri_to_local_fs_path(
++            video.path, path_mappings
++        ),
++    )
++    logical_id_by_rowid: dict = {}
++    group_mtime_by_id: dict = {}
++    for logical_id, group in enumerate(logical_groups):
++        mtimes = []
++        for video in group.members:
++            logical_id_by_rowid[video.id] = logical_id
++            if isinstance(video.mtime, (int, float)):
++                mtimes.append(video.mtime)
++        group_mtime_by_id[logical_id] = max(mtimes) if mtimes else None
++
++    logical_ids_by_name: dict = {}
++    for rowid, name, mtime in pairs:
++        logical_id = logical_id_by_rowid.get(rowid)
++        if logical_id is None:
++            continue
++        logical_ids_by_name.setdefault(name, set()).add(logical_id)
++        if group_mtime_by_id.get(logical_id) is None and isinstance(mtime, (int, float)):
++            group_mtime_by_id[logical_id] = mtime
++
++    stats: dict = {}
++    for favorite in favorites:
++        logical_ids = set()
++        for name in lookup.get(favorite, {favorite}):
++            logical_ids.update(logical_ids_by_name.get(name, ()))
++        raw_score = sum(
++            video_weight(group_mtime_by_id.get(logical_id), now)
++            for logical_id in logical_ids
++        )
++        stats[favorite] = FavStat(
++            favorite,
++            len(logical_ids),
++            effective_score(raw_score),
++        )
++    return stats
 --- a/core/database/connection.py
 +++ b/core/database/connection.py
 @@ -4,6 +4,7 @@
@@ -3420,7 +3715,7 @@
              f.write(nfo_content)
          return True
      except Exception as e:
-@@ -1107,6 +1109,204 @@
+@@ -1107,10 +1109,238 @@
      return '目標路徑超出允許範圍，請確認命名格式設定'
  
  
@@ -3435,7 +3730,7 @@
 +    """Choose the translated, extracted, or original title for organizing."""
 +    original_title = metadata.get('title', '')
 +    translated_title = metadata.get('translated_title', '')
-+    extracted_title = extract_chinese_title(original_filename, number, actors)
++    extracted_title = None if metadata.get('manual_entry') else extract_chinese_title(original_filename, number, actors)
 +
 +    # 剝除 extracted_title 尾端的 VR cluster（含可選 bracket/paren 包裝）。
 +    if vr_cluster and extracted_title:
@@ -3622,10 +3917,45 @@
 +    return target_dir, filename_base, target_path
 +
 +
++def _acquire_cover(
++    base_stem: str,
++    ext_mode: str,
++    metadata: Dict[str, Any],
++    uploaded_cover: Optional[str],
++) -> Optional[str]:
++    """Place the uploaded cover or download the source cover next to the video."""
++    if uploaded_cover:
++        cover_path = resolve_cover_target(base_stem, ext_mode)
++        try:
++            shutil.copyfile(uploaded_cover, cover_path)
++        except Exception:
++            logger.warning("上传封面复制失败 %s", uploaded_cover, exc_info=True)
++            return None
++        return cover_path
++
++    img_url = metadata.get('cover', '')
++    if not img_url:
++        return None
++    cover_path = resolve_cover_target(base_stem, ext_mode)
++    preview_cover = metadata.get('preview_cover_url') or ''
++    cover_ok = (
++        download_image(img_url, cover_path, fallback_url=preview_cover)
++        if preview_cover
++        else download_image(img_url, cover_path)
++    )
++    return cover_path if cover_ok else None
++
++
  def organize_file(  # noqa: C901 — 整理主流程；Phase 2（110b）會在其中加 containment 防線，加的是「呼叫一個新的小函式」，不得讓本函式本身更複雜（見 plan-110b）
      file_path: str,
      metadata: Dict[str, Any],
-@@ -1170,94 +1370,34 @@
+-    config: Dict[str, Any]
++    config: Dict[str, Any],
++    uploaded_cover: Optional[str] = None,
+ ) -> Dict[str, Any]:
+     """
+     整理單個檔案
+@@ -1170,94 +1400,34 @@
      part_match = _detect_multipart_token(original_filename) if ext_mode != 'off' else None
      part_tail = f'-{part_match[0]}' if part_match else ''   # e.g. '-cd1'；off 模式恆 ''
  
@@ -3741,7 +4071,7 @@
  
      # 字幕偵測：先看 metadata，再補檔案系統級偵測
      has_subtitle = metadata.get('has_subtitle')
-@@ -1274,68 +1414,14 @@
+@@ -1274,68 +1444,14 @@
          _base_tags.append('VR')
      metadata['tags'] = effective_tags(original_filename, _base_tags)
  
@@ -3818,7 +4148,7 @@
  
      try:
          # 建立資料夾
-@@ -1345,8 +1431,8 @@
+@@ -1345,8 +1461,8 @@
                  result['error'] = containment_error
                  return result
              try:
@@ -3829,7 +4159,40 @@
                  result['error'] = _permission_error_message()
                  return result
              result['new_folder'] = target_dir
-@@ -1423,7 +1509,7 @@
+@@ -1381,24 +1497,14 @@
+ 
+         result['new_filename'] = target_path
+ 
+-        # 下載封面（檔名跟隨影片命名）
+-        img_url = metadata.get('cover', '')
+-        if img_url:
+-            cover_path = resolve_cover_target(os.path.join(target_dir, filename_base), ext_mode)
+-            # CD-126-3（owner 2026-08-23 裁決納入）：原址優先，取不到才退 metatube 代理。
+-            # 後端重刮與前端整理（`buildOrganizeMetadata()`）**兩條都有值**——Codex PR
+-            # review P2-1 之後前端不再剝除 preview 欄位。113c-T3b 的不變式是「代理網址
+-            # 不落磁碟」，剝除只是當時採用的手段；改由 TestT6PreviewNotPersisted 直接
+-            # 斷言 NFO／new_folder 下所有文字檔都不含代理 URL 來守。
+-            # 讀不到（非 metatube 來源）就跟今天完全一樣，不需要 if-else 去分辨來源。
+-            preview_cover = metadata.get('preview_cover_url') or ''
+-            cover_ok = (
+-                download_image(img_url, cover_path, fallback_url=preview_cover)
+-                if preview_cover
+-                else download_image(img_url, cover_path)
+-            )
+-            if cover_ok:
+-                result['cover_path'] = cover_path
++        cover_path = _acquire_cover(
++            os.path.join(target_dir, filename_base),
++            ext_mode,
++            metadata,
++            uploaded_cover,
++        )
++        if cover_path:
++            result['cover_path'] = cover_path
+ 
+         # 外部管理器模式：依 ext_mode 決定 poster/fanart 命名規則（ext_mode 已在早偵測層定義）
+         # jellyfin/emby 與 kodi 均使用 stem 長格式（{stem}-poster.jpg / {stem}-fanart.jpg），
+@@ -1423,7 +1529,7 @@
                  # 同上：逐張 index 配對（不用裸 zip，長度不等不得截斷下載張數）
                  sample_previews = metadata.get('preview_sample_images') or []
                  try:
@@ -3838,6 +4201,223 @@
                      for i, url in enumerate(sample_images, 1):
                          try:
                              dest = os.path.join(extrafanart_dir, f'fanart{i}.jpg')
+--- /dev/null
++++ b/core/recent_actresses.py
+@@ -0,0 +1,130 @@
++"""core.recent_actresses — 「常收女優」新片流程（spec-184 §4.2–§4.5，CD-184-8／-9／-10）。
++
++收藏女優依「最近常收」分數取前 TOP_N → 各自 resolve 成 DMM 女優 → 一次 OR 查詢逐頁列出
++「近 90 天＋預購、女優 ≤4 人」的片 → 全部列完才補詳情並串流。只走 DMM，不接力（不呼叫 relay）。
++錯誤碼三種互斥：連不上 ⇒ maker_unreachable；沒解析到人或第一頁就空 ⇒ recent_region_empty；
++有列但全被過濾 ⇒ recent_none。絕不回 maker_not_found。
++頂層不得 import core.database／core.scraper（BE-PY-08）。
++"""
++
++from __future__ import annotations
++
++from datetime import datetime, timezone
++
++from core.logger import get_logger
++from core.recent_rules import MAX_PAGES, TOP_N, rank_recent
++from core.search_providers.pipeline import run_window
++from core.search_providers.types import Kind, MakerSearchResult, Window
++
++logger = get_logger(__name__)
++
++PAGE_LIMIT = 100
++
++
++def _fail(code: str) -> MakerSearchResult:
++    return MakerSearchResult([], False, code)
++
++
++def _default_provider():
++    """預設路徑：設定頁關掉 DMM ⇒ None（呼叫端回 maker_unreachable）。"""
++    from core.search_providers import registry
++
++    if not _dmm_enabled():
++        return None
++    return registry.new_provider("dmm")
++
++
++def _default_stats() -> dict:
++    from core.database.actress_library import get_favorite_actress_stats
++
++    return get_favorite_actress_stats()
++
++
++def _dmm_enabled() -> bool:
++    from core import scraper
++
++    return bool(scraper.is_source_enabled("dmm"))
++
++
++def recent_actresses_available() -> bool:
++    """搜尋頁該不該顯示「常收女優」：DMM 開著、資料庫存在、且有至少一位分數 > 0 的收藏女優。"""
++    from core.database import get_db_path
++    from core.database.actress_library import get_favorite_actress_stats
++
++    if not _dmm_enabled():
++        return False
++    if not get_db_path().exists():
++        return False
++    return bool(rank_recent(get_favorite_actress_stats().values(), 1))
++
++
++def _top_names(stats) -> list[str]:
++    values = stats.values() if isinstance(stats, dict) else stats
++    return [s.name for s in rank_recent(values, TOP_N)]
++
++
++def _resolve_refs(provider, names) -> list:
++    """前 TOP_N 名用收藏名 resolve；回 None 的略過、不補位。例外原樣往外丟。"""
++    refs = (provider.resolve(Kind.ACTOR, name) for name in names)
++    return [ref for ref in refs if ref is not None]
++
++
++def _region_empty(names) -> MakerSearchResult:
++    """被擋地區 DMM 回 200＋空，resolve 會把空結果存進行程內快取；清掉這批名字，設好 Proxy 再點才會重查。"""
++    from core.search_providers.dmm import forget_probes
++
++    forget_probes(names)
++    return _fail("recent_region_empty")
++
++
++def _list_all(provider, refs, now):
++    """逐頁列出；回 (items, first_page_empty)。停止：整頁都過了切點／沒有下一頁／頁數到 MAX_PAGES。"""
++    items, seen, first = [], set(), True
++    for page_no in range(MAX_PAGES):
++        page = provider.list_actors_page(refs, Window(page_no * PAGE_LIMIT, PAGE_LIMIT), now, seen)
++        if first and page.raw_count == 0:
++            return [], True
++        first = False
++        items.extend(page.items)
++        if page.reached_cutoff or not page.has_next:
++            return items, False
++    logger.warning("recent actresses: stopped at MAX_PAGES=%d", MAX_PAGES)
++    return items, False
++
++
++def _stream(provider, items, result_callback) -> list[dict]:
++    res = run_window(provider, items, None, result_callback=result_callback,
++                     on_fail="degrade", delay=0, breaker=False, guard=False)
++    for card in res.cards:
++        card["_source"] = "dmm"
++    return res.cards
++
++
++def search_recent_actresses(*, now=None, status_callback=None, result_callback=None,
++                            provider=None, stats=None) -> MakerSearchResult:
++    """前 TOP_N 名常收女優的近期新片。provider／stats 注入時不讀設定頁開關與資料庫。"""
++    if now is None:
++        now = datetime.now(timezone.utc)
++    if provider is None:
++        provider = _default_provider()
++        if provider is None:
++            return _fail("maker_unreachable")
++    if status_callback:
++        status_callback("dmm", "searching")
++    try:
++        names = _top_names(_default_stats() if stats is None else stats)
++        refs = _resolve_refs(provider, names)
++        if not refs:
++            return _region_empty(names)
++        items, first_empty = _list_all(provider, refs, now)
++    except Exception as err:
++        logger.warning("recent actresses failed (%s)", type(err).__name__)
++        return _fail("maker_unreachable")
++    if first_empty:
++        return _region_empty(names)
++    if not items:
++        return _fail("recent_none")
++    cards = _stream(provider, items, result_callback)
++    if status_callback:
++        status_callback("done", f"found:{len(cards)}")
++    return MakerSearchResult(cards, False, None)
+--- /dev/null
++++ b/core/recent_rules.py
+@@ -0,0 +1,81 @@
++"""core.recent_rules — 「最近常收」分數的 DB-free 純函式（spec-184，CD-184-1／-2）。
++
++頂層不得 import 資料庫或爬蟲層模組（BE-PY-08）。
++"""
++import math
++from dataclasses import dataclass
++from datetime import datetime, timedelta
++from typing import NamedTuple
++
++HALF_LIFE_DAYS = 120
++SCORE_FLOOR = 0.125
++TOP_N = 10
++WINDOW_DAYS = 90
++MAX_CO_ACTORS = 4
++MAX_PAGES = 10
++RECENT_ACTRESSES_KEY = "__recent_actresses__"
++FUTURE_TOLERANCE_SECONDS = 86400
++_SECONDS_PER_DAY = 86400.0
++
++
++class FavStat(NamedTuple):
++    """單一收藏女優的聚合結果：video_count 為去重片數，score 已套 effective_score。"""
++    name: str
++    video_count: int
++    score: float
++
++
++def _usable_mtime(mtime) -> bool:
++    if isinstance(mtime, bool) or not isinstance(mtime, (int, float)):
++        return False
++    return math.isfinite(mtime) and mtime > 0
++
++
++def video_weight(mtime, now: float) -> float:
++    """單片權重：半衰期 HALF_LIFE_DAYS 天。異常 mtime 回 0.0（片數仍由呼叫端計入）。"""
++    if not _usable_mtime(mtime):
++        return 0.0
++    if mtime > now + FUTURE_TOLERANCE_SECONDS:
++        return 0.0
++    age_days = max(0.0, (now - mtime) / _SECONDS_PER_DAY)
++    return 0.5 ** (age_days / HALF_LIFE_DAYS)
++
++
++def effective_score(raw: float) -> float:
++    """門檻：小而舊的片庫（<= SCORE_FLOOR）歸 0.0。"""
++    return 0.0 if raw <= SCORE_FLOOR else raw
++
++
++# ---------------------------------------------------------------- 「常收女優」新片範圍（CD-184-6／-9）
++@dataclass(frozen=True)
++class RecentRow:
++    """列表一列的我方形狀：when 為 None＝發行日缺／無法解析；upcoming＝預購或發行日在未來。"""
++    content_id: str
++    when: datetime | None
++    upcoming: bool
++    actress_count: int
++
++
++def rank_recent(stats, n: int = TOP_N) -> list[FavStat]:
++    """前 n 名：只收 score > 0；分數降冪、作品數降冪、名字升冪（決定性）。"""
++    eligible = [s for s in stats if s.score > 0]
++    return sorted(eligible, key=lambda s: (-s.score, -s.video_count, s.name))[:n]
++
++
++def _in_range(row: RecentRow, now: datetime) -> bool:
++    """預購，或發行日不早於 now 往前 WINDOW_DAYS 天。"""
++    return row.upcoming or (row.when is not None and row.when >= now - timedelta(days=WINDOW_DAYS))
++
++
++def select_recent(rows, now: datetime, seen: set) -> tuple[list[RecentRow], bool]:
++    """逐列過濾 → (kept, reached_cutoff)。seen 跨頁共用，收下的 id 會加進去。
++    reached_cutoff＝本頁沒有任何一列在範圍內（只看日期／預購，不看人數或重複）。"""
++    rows = list(rows)
++    kept: list[RecentRow] = []
++    for row in rows:
++        if row.content_id in seen or row.actress_count > MAX_CO_ACTORS or not _in_range(row, now):
++            continue
++        seen.add(row.content_id)
++        kept.append(row)
++    reached_cutoff = not any(_in_range(r, now) for r in rows)
++    return kept, reached_cutoff
 --- a/core/readonly_assets.py
 +++ b/core/readonly_assets.py
 @@ -33,8 +33,19 @@
@@ -6732,6 +7312,266 @@
 +                float(update.get("nfo_mtime_old") or 0),
 +                str(update.get("nfo_path_new") or ""),
 +            ))
+--- /dev/null
++++ b/core/scrapers/actress/graphis_pool.py
+@@ -0,0 +1,257 @@
++"""Graphis 照片池（185）：T1 純規則（名字比對、網址白名單、候選 id、exclude、挑選）＋
++T2 抓取層（搜尋／條目頁快取、池組裝、目前那張的大小比對、時間預算）。
++"""
++import hashlib
++import random
++import re
++import threading
++import time
++from concurrent.futures import ThreadPoolExecutor, wait
++from urllib.parse import quote
++
++import requests
++from bs4 import BeautifulSoup
++
++from core.database.alias import AliasRepository
++from core.logger import get_logger
++from core.proxy_policy import proxy_kwargs
++
++logger = get_logger(__name__)
++
++_BASE = "https://data.graphis.ne.jp/free/model/"
++_EXCLUDE_TOKEN_RE = re.compile(r"^[0-9a-f]{8}$")
++_EXCLUDE_MAX = 500
++
++
++def match_entries(pairs, names):
++    """回傳 jp_name 與 names 任一完全相同的 entry_id（依原順序、去重）。"""
++    seen = set()
++    out = []
++    for entry_id, jp_name in pairs:
++        if jp_name in names and entry_id not in seen:
++            seen.add(entry_id)
++            out.append(entry_id)
++    return out
++
++
++def entry_base_urls(entry_id):
++    return [f"{_BASE}{entry_id}/prof.jpg", f"{_BASE}{entry_id}/model.jpg"]
++
++
++def is_collectible_url(url, entry_id):
++    if url in entry_base_urls(entry_id):
++        return True
++    pat = rf"^{re.escape(_BASE)}{re.escape(entry_id)}/photo/\d{{3}}/pic\.jpg$"
++    return re.match(pat, url) is not None
++
++
++def candidate_id(url):
++    return hashlib.sha1(url.encode("utf-8")).hexdigest()[:8]
++
++
++def parse_exclude(raw):
++    """只收前 500 個合法 8-hex token；永不拋例外。"""
++    out = set()
++    if not raw or not isinstance(raw, str):
++        return out
++    n = 0
++    for tok in raw.split(","):
++        tok = tok.strip()
++        if _EXCLUDE_TOKEN_RE.match(tok):
++            out.add(tok)
++            n += 1
++            if n >= _EXCLUDE_MAX:
++                break
++    return out
++
++
++def select_next(pool, exclude_ids, k):
++    return [u for u in pool if candidate_id(u) not in exclude_ids][:k]
++
++
++# ---- T2：抓取層 ----
++
++_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
++_TTL = 3600
++_LIMITS = (128, 256)
++_K = 6
++_LOCK = threading.Lock()
++_SEARCH_CACHE = {}  # query -> (ts, [(entry_id, jp_name)])，只存成功（含 0 條目）
++_ENTRY_CACHE = {}   # entry_id -> (ts, [photo_url])，條目頁失敗不存
++_PROF_RE = re.compile(r"/model/([^/]+)/prof\.jpg")
++
++
++def _now():
++    return time.time()
++
++
++def _remaining(deadline, cap):
++    return min(cap, deadline - _now())
++
++
++def _cache_get(cache, key):
++    """純讀；過期視為沒有（清理只在寫入端）。"""
++    with _LOCK:
++        hit = cache.get(key)
++    if hit and _now() - hit[0] < _TTL:
++        return hit[1]
++    return None
++
++
++def _cache_put(cache, key, value):
++    limit = _LIMITS[0] if cache is _SEARCH_CACHE else _LIMITS[1]
++    now = _now()
++    with _LOCK:
++        for k in [k for k, v in cache.items() if now - v[0] >= _TTL]:
++            del cache[k]
++        while len(cache) >= limit and key not in cache:
++            del cache[min(cache, key=lambda k: cache[k][0])]
++        cache[key] = (now, value)
++
++
++def _search_entries(query, timeout):
++    """回 [(entry_id, jp_name)]；成功但 0 條目回 []；失敗（網路／配對長度不等）回 None。"""
++    try:
++        resp = requests.get(f"https://graphis.ne.jp/monthly/?K={quote(query)}", headers=_UA,
++                            timeout=timeout, **proxy_kwargs('actress'))
++        resp.raise_for_status()
++    except requests.RequestException:
++        return None
++    soup = BeautifulSoup(resp.text, 'html.parser')
++    imgs = soup.select('div.gp-model-box ul li a img')
++    names = [e.get_text(strip=True) for e in soup.select('li.name-jp span')]
++    if len(imgs) != len(names):
++        return None
++    out = []
++    for img, name in zip(imgs, names, strict=True):
++        m = _PROF_RE.search(img.get('src', ''))
++        if m:
++            out.append((m.group(1), name))
++    return out
++
++
++def _fetch_entry_photos(entry_id, timeout):
++    """回條目頁上通過白名單的圖；失敗回 None。"""
++    try:
++        resp = requests.get(f"https://graphis.ne.jp/monthly/model.php?ID={quote(entry_id)}",
++                            headers=_UA, timeout=timeout, **proxy_kwargs('actress'))
++        resp.raise_for_status()
++    except requests.RequestException:
++        return None
++    soup = BeautifulSoup(resp.text, 'html.parser')
++    urls = (img.get('src', '') for img in soup.find_all('img'))
++    return list(dict.fromkeys(u for u in urls if is_collectible_url(u, entry_id)))
++
++
++def _head_content_length(url, timeout):
++    try:
++        resp = requests.head(url, headers=_UA, timeout=timeout, allow_redirects=False,
++                             **proxy_kwargs('actress'))
++        return int(resp.headers["Content-Length"])
++    except (requests.RequestException, KeyError, ValueError):
++        return None
++
++
++def _names_for(person_key, query_name):
++    return AliasRepository().resolve(person_key) | {person_key, query_name}
++
++
++def _local_photo_size(person_key):
++    from core.actress_photo import get_local_photo_path
++    path = get_local_photo_path(person_key)
++    return path.stat().st_size if path else None
++
++
++def _live_search(query, deadline):
++    timeout = _remaining(deadline, 2.5)
++    if timeout <= 0:
++        return None
++    pairs = _search_entries(query, timeout)
++    if pairs is not None:
++        _cache_put(_SEARCH_CACHE, query, pairs)
++    return pairs
++
++
++def _load_entry(entry_id, timeout):
++    photos = _fetch_entry_photos(entry_id, timeout)
++    if photos is not None:
++        _cache_put(_ENTRY_CACHE, entry_id, photos)
++    return photos
++
++
++def _parallel(fn, items, timeout, workers=6):
++    """並行跑 fn(item)；逾時未完成的丟給背景（不取消），回 {item: 結果}（只含已完成）。"""
++    if not items or timeout <= 0:
++        return {}
++    ex = ThreadPoolExecutor(max_workers=workers)
++    futs = {ex.submit(fn, it): it for it in items}
++    done, _ = wait(futs, timeout=timeout)
++    ex.shutdown(wait=False)
++    return {futs[f]: f.result() for f in done if f.exception() is None}
++
++
++def _assemble_pool(query_name, names, deadline, rng):
++    """None＝搜尋失敗；否則為隨機排序後的 URL 池（URL 唯一）。"""
++    search_names = [query_name, *sorted(names - {query_name})]
++    entry_ids = []
++    for name in search_names:
++        pairs = _cache_get(_SEARCH_CACHE, name)
++        if pairs is None and name == query_name:
++            pairs = _live_search(name, deadline)
++            if pairs is None:
++                return None
++        entry_ids.extend(match_entries(pairs or [], names))
++    entry_ids = list(dict.fromkeys(entry_ids))
++    missing = [e for e in entry_ids if _cache_get(_ENTRY_CACHE, e) is None]
++    t = _remaining(deadline, 3.0)
++    _parallel(lambda e: _load_entry(e, max(t, 0.1)), missing, t)
++    pool = []
++    for e in entry_ids:
++        pool += dict.fromkeys(entry_base_urls(e) + (_cache_get(_ENTRY_CACHE, e) or []))
++    return rng.sample(pool, len(pool))
++
++
++def _resolve_current_excluded(picks, size, deadline):
++    """HEAD 的 Content-Length 等於目前那張大小者 → 其 candidate_id；任何失敗不排除。"""
++    t = _remaining(deadline, 2.0)
++    lengths = _parallel(lambda u: _head_content_length(u, max(t, 0.1)), picks, t)
++    return {candidate_id(u) for u, n in lengths.items() if n == size}
++
++
++def _select_excluding_current(pool, exclude_ids, person_key, deadline):
++    exclude = set(exclude_ids)
++    picks = select_next(pool, exclude, _K)
++    try:
++        size = _local_photo_size(person_key) if _remaining(deadline, 1) > 0 else None
++    except OSError:
++        size = None
++    for _ in range(2 if size else 0):
++        if _remaining(deadline, 1) <= 0:
++            break
++        hits = _resolve_current_excluded(picks, size, deadline)
++        if not hits:
++            break
++        exclude |= hits
++        picks = select_next(pool, exclude, _K)
++    return picks
++
++
++def graphis_candidates(person_key, query_name, photo_source, exclude_ids, *, budget_s=4.0, rng=None):
++    """最多 6 個 Graphis 候選 URL；任何失敗回 []（不丟）。"""
++    try:
++        deadline = _now() + budget_s
++        try:
++            names = _names_for(person_key, query_name) if _remaining(deadline, 1) > 0 else None
++        except Exception as e:
++            logger.warning(f"[graphis_pool] alias resolve failed: {e}")
++            names = None
++        names = names or {person_key, query_name}
++        pool = _assemble_pool(query_name, names, deadline, rng or random.Random())
++        if not pool:
++            return []
++        if photo_source != 'graphis':
++            return select_next(pool, exclude_ids, _K)
++        return _select_excluding_current(pool, exclude_ids, person_key, deadline)
++    except Exception as e:
++        logger.warning(f"[graphis_pool] candidates failed for {person_key}: {e}")
++        return []
 --- a/core/source_config.py
 +++ b/core/source_config.py
 @@ -9,7 +9,8 @@

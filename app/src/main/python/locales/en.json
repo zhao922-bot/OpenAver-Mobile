@@ -168,7 +168,9 @@
       "query": "Search ID, actress or drop files...",
       "query_mobile": "Search ID or actress...",
       "tag": "Tag name",
-      "actors": "Actor names (separate with 、, or ,)"
+      "actors": "Actor names (separate with 、, or ,)",
+      "number": "ID",
+      "maker": "Studio name"
     },
     "auto_pill": {
       "tooltip": "Click to select source"
@@ -193,6 +195,8 @@
       "translate_ai": "AI Translate",
       "edit_chinese_title": "Edit Chinese Title",
       "edit_actors": "Edit actors",
+      "edit_number": "Edit ID",
+      "edit_maker": "Edit studio",
       "switch_source": "Switch Version",
       "open_source_url": "Open Source Page",
       "open_folder": "Open Folder",
@@ -215,7 +219,10 @@
       "config_failed": "Action failed, please try again later"
     },
     "maker_latest": {
-      "title": "Latest from Makers"
+      "title": "New Releases"
+    },
+    "recent_actresses": {
+      "label": "Recently Collected Actresses"
     },
     "empty": {
       "hint": "Enter an ID to search, or add video files",
@@ -241,6 +248,10 @@
       "tag_nfo_write_blocked": "Tag saved, but there's no permission to write the NFO",
       "no_data": "No data found",
       "maker_not_found": "Couldn't find a works page for \"{maker}\"",
+      "recent_region_empty": "DMM returned no results. Some regions require a Japanese IP.",
+      "recent_none": "No results found",
+      "recent_unreachable": "DMM is temporarily unavailable",
+      "recent_region_link": "Configure a proxy in Settings",
       "search_failed": "Search failed",
       "network_error": "Network error, please retry",
       "no_translation_needed": "No translation needed for this title",
@@ -300,6 +311,8 @@
       "unknown_title": "Unknown Title"
     },
     "cover": {
+      "upload": "Upload cover",
+      "replace": "Replace cover",
       "alt": "Cover",
       "load_failed": "Failed to load cover"
     },
@@ -336,7 +349,7 @@
       "actress": "Fuzzy Search",
       "keyword": "Full-text Search",
       "uncensored": "Uncensored Search",
-      "maker": "Latest from Maker"
+      "maker": "New Releases"
     },
     "filelist": {
       "search_all_title": "Search all files not yet searched",
@@ -373,6 +386,8 @@
       "no_searchable_files": "No files to search",
       "search_complete": "Batch search complete: {success} succeeded, {failed} failed",
       "no_scrapable_files": "No files to organize",
+      "number_required": "Enter an ID first",
+      "cover_upload_failed": "Cover upload failed. Try another image.",
       "scrape_complete": "Batch organize complete: {success} succeeded, {failed} failed",
       "scrape_complete_dup": "Batch organize complete: {success} succeeded, {failed} failed, {duplicate} duplicates",
       "no_search_results": "No search results for this file",
@@ -735,6 +750,7 @@
       "cover_badges_label": "Cover attribute badges",
       "cover_badges_note": "Show badges such as Subtitled / Uncensored / 4K in the top-left corner of covers (display only — your tags are not changed)",
       "cover_badges_legend": "* AI: AI-decensored, LEAK: leaked uncensored master",
+      "cover_badges_legend_ltx": "LTX: filename explicitly marked LTX and shown instead of AI.",
       "cover_badges_help_aria": "About cover attribute badges",
       "show_table_list_label": "Table & list views",
       "show_table_list_note": "When enabled, the Showcase page's top-right corner gains table and list views in addition to the defaults (cover and poster only).",
@@ -742,6 +758,7 @@
       "cover_badge": {
         "subtitle": "Subtitled",
         "cracked": "AI-decensored",
+        "ltx": "LTX",
         "leaked": "Leaked uncensored",
         "4k": "4K",
         "vr": "VR"
@@ -1415,6 +1432,7 @@
       "mdate": "Modified",
       "random": "Random",
       "actress": {
+        "recent": "Recently Collected",
         "video_count": "Film Count",
         "name": "Name",
         "added_at": "Date Added",
@@ -2477,6 +2495,11 @@
       "video_out_of_scope_detect": "This video is outside the configured library, so focal detection is unavailable",
       "video_out_of_scope_save": "This video is outside the configured library, so the focal setting cannot be saved",
       "cover_not_found": "Cover file not found",
+      "cover_upload_expired": "The uploaded cover expired. Upload it again.",
+      "cover_upload_failed": "Cover upload failed. Try again later.",
+      "cover_image_too_large": "The image is too large (maximum 10 MB or 50 megapixels).",
+      "cover_image_unsupported": "Unsupported image format.",
+      "cover_token_not_found": "Uploaded cover not found.",
       "focal_detect_failed": "Focal detection failed",
       "focal_invalid": "Invalid focal coordinates",
       "focal_save_failed": "Failed to save the focal setting",

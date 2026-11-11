@@ -421,6 +421,9 @@
                             <i class="bi bi-funnel"></i>
                         </button>
                         <div class="toolbar-dropdown" x-show="actressSortOpen" x-transition.opacity.duration.150ms @click.stop>
+                            <a href="#" class="dropdown-item" :class="{ 'active': actressSort === 'recent' }"
+                               @click.prevent="actressSort = 'recent'; onActressSortChange(); actressSortOpen = false">
+                                <i class="bi bi-clock-history"></i> {{ t('showcase.sort.actress.recent') }}</a>
                             <a href="#" class="dropdown-item" :class="{ 'active': actressSort === 'video_count' }"
                                @click.prevent="actressSort = 'video_count'; onActressSortChange(); actressSortOpen = false">
                                 <i class="bi bi-film"></i> {{ t('showcase.sort.actress.video_count') }}</a>
@@ -1364,7 +1367,7 @@
                                 <!-- User tag badges with × remove button -->
                                 <template x-for="tag in (currentLightboxVideo?.user_tags || [])" :key="tag">
                                     <span class="lb-user-tag">
-                                        <span x-text="tag"></span>
+                                        <a href="#" class="lb-user-tag-link" @click.prevent="searchFromMetadata(tag, 'tag')"><span x-text="tag"></span></a>
                                         <button class="lb-tag-remove"
                                                 @click.stop="removeLbUserTag(tag)"
                                                 :title="tag">×</button>

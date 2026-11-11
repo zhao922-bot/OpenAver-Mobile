@@ -168,7 +168,9 @@
       "query": "搜索番号、女优或拖入文件...",
       "query_mobile": "搜索番号或女优...",
       "tag": "标签名称",
-      "actors": "演员名称（可用、，,分隔多人）"
+      "actors": "演员名称（可用、，,分隔多人）",
+      "number": "番号",
+      "maker": "片商名称"
     },
     "auto_pill": {
       "tooltip": "点击选择来源"
@@ -193,6 +195,8 @@
       "translate_ai": "AI 翻译",
       "edit_chinese_title": "编辑中文片名",
       "edit_actors": "编辑演员",
+      "edit_number": "编辑番号",
+      "edit_maker": "编辑片商",
       "switch_source": "切换版本",
       "open_source_url": "打开来源页面",
       "open_folder": "打开文件夹",
@@ -215,7 +219,10 @@
       "config_failed": "操作失败，请稍后再试"
     },
     "maker_latest": {
-      "title": "片商最新作品"
+      "title": "新片查询"
+    },
+    "recent_actresses": {
+      "label": "常收女优"
     },
     "empty": {
       "hint": "输入番号搜索，或加入视频文件",
@@ -241,6 +248,10 @@
       "tag_nfo_write_blocked": "标签已保存，但没有权限写入 NFO",
       "no_data": "找不到数据",
       "maker_not_found": "找不到「{maker}」的作品页",
+      "recent_region_empty": "DMM 没有返回结果，部分地区需要日本 IP",
+      "recent_none": "找不到结果",
+      "recent_unreachable": "暂时无法连接 DMM",
+      "recent_region_link": "到设置页调整代理",
       "search_failed": "搜索失败",
       "network_error": "网络错误，请重试",
       "no_translation_needed": "当前影片无需翻译",
@@ -300,6 +311,8 @@
       "unknown_title": "未知标题"
     },
     "cover": {
+      "upload": "上传封面",
+      "replace": "更换封面",
       "alt": "封面",
       "load_failed": "封面加载失败"
     },
@@ -336,7 +349,7 @@
       "actress": "模糊搜索",
       "keyword": "全文搜索",
       "uncensored": "无码搜索",
-      "maker": "片商最新作品"
+      "maker": "新片查询"
     },
     "filelist": {
       "search_all_title": "搜索所有尚未搜索的文件",
@@ -373,6 +386,8 @@
       "no_searchable_files": "没有需要搜索的文件",
       "search_complete": "批量搜索完成：成功 {success}，失败 {failed}",
       "no_scrapable_files": "没有可整理的文件",
+      "number_required": "请先填入番号",
+      "cover_upload_failed": "封面上传失败，请换一张图片再试",
       "scrape_complete": "批量整理完成：成功 {success}，失败 {failed}",
       "scrape_complete_dup": "批量整理完成：成功 {success}，失败 {failed}，重复 {duplicate}",
       "no_search_results": "此文件没有搜索结果",
@@ -735,6 +750,7 @@
       "cover_badges_label": "封面属性标签",
       "cover_badges_note": "在封面左上角显示中文字幕／无码／4K 等标签（只影响显示，不改标签本身）",
       "cover_badges_legend": "＊AI：无码破解（AI 算法去码），LEAK：无码流出（母带外流）",
+      "cover_badges_legend_ltx": "LTX：文件名明确标注 LTX 时显示 LTX，不再重复显示 AI。",
       "cover_badges_help_aria": "封面属性标签说明",
       "show_table_list_label": "显示表格与清单",
       "show_table_list_note": "开启后，浏览页右上角会多出表格与清单两种呈现。默认只有封面与海报。",
@@ -742,6 +758,7 @@
       "cover_badge": {
         "subtitle": "中文字幕",
         "cracked": "无码破解（AI 算法去码）",
+        "ltx": "LTX",
         "leaked": "无码流出（母带外流）",
         "4k": "4K",
         "vr": "VR"
@@ -1415,6 +1432,7 @@
       "mdate": "修改时间",
       "random": "随机",
       "actress": {
+        "recent": "最近常收",
         "video_count": "作品数",
         "name": "姓名",
         "added_at": "收藏时间",
@@ -2477,6 +2495,11 @@
       "video_out_of_scope_detect": "此影片不在收藏范围，无法检测焦点",
       "video_out_of_scope_save": "此影片不在收藏范围，无法保存焦点",
       "cover_not_found": "找不到封面文件",
+      "cover_upload_expired": "封面暂存已失效，请重新上传封面",
+      "cover_upload_failed": "上传封面失败，请稍后再试",
+      "cover_image_too_large": "图片过大（文件上限 10MB、尺寸上限 5000 万像素）",
+      "cover_image_unsupported": "不支持的图片格式",
+      "cover_token_not_found": "找不到上传的封面",
       "focal_detect_failed": "焦点检测失败",
       "focal_invalid": "无效的焦点坐标格式",
       "focal_save_failed": "保存焦点失败",

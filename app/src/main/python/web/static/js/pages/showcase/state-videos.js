@@ -10,10 +10,13 @@ import { SHOWCASE_MAX_SERVER_PAGE_SIZE, _videos, _filteredVideos, _nameToGroup, 
 import { applyCellFocal } from '@/shared/focal-cell.js';
 import { openLocal } from '@/shared/open-local.js';
 import { normalizePillValue, buildPillPredicate } from '@/shared/pill-filter.js';
+import { isDigitsOnlySearch } from '@/shared/digits-only-search.js';
 // TASK-124a-T2：發售日 pill 浮層狀態機直接呼叫的 T1 六支純函式中的五支
 // （matchesReleasePill 屬 pill-filter.js 內部使用，state 層不直接呼叫）。
 import { parseReleaseKey, parseEndpoint, expandPill, composeEndpoint, videoYearRange } from '@/shared/release-window.js';
 
+// TASK-195-T9（195d／CD-195-16）：純數字搜尋自動清除的白名單，不含 pick。
+const CLEAR_SEARCH_DIMS = ['actress', 'maker', 'series', 'director', 'label', 'tag'];
 // TASK-124a-T2：鏡射 state-actress.js 的 _trimOrNull（模組私有，無法 import，各自一份）。
 function _trimOrNull(v) {
     if (v == null) return null;
@@ -295,6 +298,7 @@ export function stateVideos() {
             var exists = this.pills.some(p => p.dim + '::' + normalizePillValue(p.value) === key);
             if (exists) return;  // 靜默去重：不重跑 _animateFilter/_reconcileHeroCard
             this.pills = [...this.pills, { dim: dim, value: value }];  // value 存原始字面（CD-3）
+            if (CLEAR_SEARCH_DIMS.includes(dim)) this._clearDigitsOnlySearch();
             this._animateFilter();
             this._reconcileHeroCard();
         },
@@ -497,10 +501,16 @@ export function stateVideos() {
 
         // 入口 adapter（燈箱 metadata 點擊 / searchFromMetadata 分派用）：dateStr 切前 7 字
         // （與 parseReleaseKey() 內部 RELEASE_KEY_RE 判定「解析得出」的同一段字元，不會有落差）。
+        _clearDigitsOnlySearch() {
+            if (isDigitsOnlySearch(this.search)) this.search = '';
+        },
         _setReleasePillFromDate(dateStr) {
             var key = parseReleaseKey(dateStr);
             if (key == null) return;                       // 解析不出年月：不產生 pill（spec §4.4）
-            this._setReleasePill({ dim: 'release', op: '=', value: dateStr.slice(0, 7) });
+            var month = dateStr.slice(0, 7);
+            var same = this.pills.some(function (p) { return p.dim === 'release' && p.op === '=' && p.value === month; });
+            if (!same) this._clearDigitsOnlySearch();      // 同值＝沒新增：不清，仍照常委派（動畫 1 次，與今天相同）
+            this._setReleasePill({ dim: 'release', op: '=', value: month });
         },
 
         // 跨切面 teardown 唯一實作（四個呼叫點：state-base.js 斷點 handler ×2、

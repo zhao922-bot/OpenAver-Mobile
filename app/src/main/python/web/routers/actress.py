@@ -34,6 +34,12 @@ from core.database import (
     ActressRepository, AliasRepository, VideoRepository, Actress, init_db,
     get_library_actresses,
 )
+from core.database.actress_library import get_favorite_actress_stats
+from core.scrapers.actress.graphis_pool import (
+    candidate_id,
+    graphis_candidates,
+    parse_exclude,
+)
 from core.actress_photo import (
     download_actress_photo, get_local_photo_path, delete_local_photo,
     crop_video_cover, GFRIENDS_DIR, CONTENT_TYPE_MAP, validate_photo_url,
@@ -220,7 +226,29 @@ def _flatten_aliases(raw) -> list:
     return [a.get("ja", "") if isinstance(a, dict) else str(a) for a in raw]
 
 
-def _actress_to_response(actress: Actress, video_count: int = 0) -> dict:
+def _safe_recent_score(name: str, repo, alias_repo) -> float:
+    """Return a favorite's recent score without letting it block the save."""
+    try:
+        stat = get_favorite_actress_stats(
+            actress_repo=repo,
+            alias_repo=alias_repo,
+        ).get(name)
+        return stat.score if stat else 0.0
+    except Exception:
+        logger.warning(
+            "[actress] recent_score calculation failed name=%s",
+            name,
+            exc_info=True,
+        )
+        return 0.0
+
+
+def _actress_to_response(
+    actress: Actress,
+    video_count: int = 0,
+    *,
+    recent_score: float = 0.0,
+) -> dict:
     """將 Actress dataclass 轉為 API response dict"""
     local_path = get_local_photo_path(actress.name)
     if local_path is not None:
@@ -254,6 +282,7 @@ def _actress_to_response(actress: Actress, video_count: int = 0) -> dict:
         "crop_mode": actress.crop_mode,
         "created_at": actress.created_at.isoformat() if actress.created_at else None,
         "video_count": video_count,
+        "recent_score": round(recent_score, 6),
         "is_favorite": True,
     }
 
@@ -431,11 +460,16 @@ def add_favorite(req: FavoriteRequest):
     # 寫回 actress_aliases 表，聯集只存在於這次 HTTP 回應（CD-117-9）。
     sync_primary = sync_result["primary_name"]
     covered_names = alias_repo.resolve(sync_primary) | {name}
+    recent_score = _safe_recent_score(actress.name, repo, alias_repo)
     return JSONResponse(
         status_code=200,
         content={
             "success": True,
-            "actress": _actress_to_response(actress, video_count),
+            "actress": _actress_to_response(
+                actress,
+                video_count,
+                recent_score=recent_score,
+            ),
             "photo_downloaded": photo_downloaded,
             "skipped_aliases": skipped_aliases,
             "covered_names": sorted(covered_names),
@@ -681,14 +715,21 @@ def list_actresses():
     """
     init_db()
     repo = ActressRepository()
-    alias_repo = AliasRepository()
     actresses = repo.get_all()
+    stats = get_favorite_actress_stats(
+        actress_repo=repo,
+        alias_repo=AliasRepository(),
+    )
     result = []
     for actress in actresses:
-        video_count = _count_logical_actress_videos(
-            alias_repo.resolve(actress.name)
+        stat = stats.get(actress.name)
+        result.append(
+            _actress_to_response(
+                actress,
+                stat.video_count if stat else 0,
+                recent_score=stat.score if stat else 0.0,
+            )
         )
-        result.append(_actress_to_response(actress, video_count))
     return JSONResponse(
         status_code=200,
         content={
@@ -754,7 +795,29 @@ def _fetch_single_source(name: str, source: str) -> Optional[str]:
         return None
 
 
-def _get_random_videos_with_covers(actress_name: str, count: int) -> list:
+_GRAPHIS_TIMEOUT_S = 5.0
+
+
+def local_crop_url(video) -> str:
+    """Build a local crop candidate URL from a video's cover, if usable."""
+    cover_fs_path = (
+        uri_to_fs_path(str(video.cover_path))
+        if video.cover_path
+        else ""
+    )
+    if not cover_fs_path:
+        return ""
+    return (
+        "/api/actresses/actress-crop"
+        f"?path={quote(cover_fs_path)}&spec=v1"
+    )
+
+
+def _get_random_videos_with_covers(
+    actress_name: str,
+    count: int,
+    exclude_ids=frozenset(),
+) -> list:
     """
     取得女優隨機影片（有封面的）。
 
@@ -773,7 +836,18 @@ def _get_random_videos_with_covers(actress_name: str, count: int) -> list:
         videos = repo.get_videos_by_actress_names(names)
         with_covers = [v for v in videos if v.cover_path]
         random.shuffle(with_covers)
-        return with_covers[:count]
+        picked = []
+        picked_ids = set(exclude_ids)
+        for video in with_covers:
+            url = local_crop_url(video)
+            cid = candidate_id(url)
+            if not url or cid in picked_ids:
+                continue
+            picked_ids.add(cid)
+            picked.append(video)
+            if len(picked) >= count:
+                break
+        return picked
     except Exception as e:
         logger.warning("[actress] _get_random_videos_with_covers 失敗: %s", e)
         return []
@@ -785,15 +859,21 @@ def _get_random_videos_with_covers(actress_name: str, count: int) -> list:
 # ---------------------------------------------------------------------------
 
 @router.get("/{name}/photo-candidates")
-async def list_photo_candidates(name: str, attempt: int = Query(0, ge=0)):
+async def list_photo_candidates(
+    name: str,
+    attempt: int = Query(0, ge=0),
+    exclude: str = Query(""),
+):
     """
     SSE 串流回傳女優候選照片（最多 6 張）。
-    雲端 0–3 張並行抓取 + 本機影片封面 crop 補足至 6 張。
+    Graphis 固定先送 2 張、本機封面補位，仍有空位才由 Graphis 其餘照片補足。
     actress 不存在 → JSONResponse 404。
 
     attempt（TASK-102b-T1，spec-102 Part B）：optional 輪替序號，stateless。
     0/省略＝請求 name；N>0＝依 alias 穩定排序輪替雲端查詢名，只影響雲端 4 源，
     本機補位與 current_source 排除邏輯不受影響（CD-7）。
+
+    exclude：逗號分隔的候選 id，用來略過本次換照片已看過的圖片。
     """
     _, actress = await asyncio.to_thread(_load_actress, name)
     if actress is None:
@@ -803,7 +883,12 @@ async def list_photo_candidates(name: str, attempt: int = Query(0, ge=0)):
         )
 
     current_source = actress.photo_source
-    cloud_sources = [s for s in ["graphis", "gfriends", "wiki", "xcity"] if s != current_source]
+    cloud_sources = [
+        source
+        for source in ["gfriends", "wiki", "xcity"]
+        if source != current_source
+    ]
+    exclude_ids = parse_exclude(exclude)
 
     def _resolve_query_names(n: str) -> list:
         # CD-2：序位 0 = 請求的 name（URL path param），不是 record.primary_name。
@@ -826,11 +911,18 @@ async def list_photo_candidates(name: str, attempt: int = Query(0, ge=0)):
         "[actress] photo-candidates attempt=%d query_name=%s", attempt, query_name
     )  # CD-10(b)：不對此行寫斷言
 
+    def _event(payload: dict) -> str:
+        return (
+            "event: candidate\n"
+            f"data: {json.dumps({**payload, 'id': candidate_id(payload['full_url'])})}\n\n"
+        )
+
     async def generate():
+        seen_ids = set()
         total = 0
         max_cloud = 3
+        cloud_count = 0
 
-        # 雲端並行抓取
         async def fetch_source(src: str):
             try:
                 url = await asyncio.wait_for(
@@ -841,50 +933,119 @@ async def list_photo_candidates(name: str, attempt: int = Query(0, ge=0)):
             except Exception:
                 return (src, None)
 
-        if cloud_sources:
-            tasks = [asyncio.ensure_future(fetch_source(src)) for src in cloud_sources]
-            for coro in asyncio.as_completed(tasks):
-                src, url = await coro
-                if url and total < max_cloud:
-                    event_data = json.dumps({
-                        "source": src,
+        async def fetch_graphis():
+            try:
+                urls = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        graphis_candidates,
+                        actress.name,
+                        query_name,
+                        actress.photo_source,
+                        exclude_ids,
+                    ),
+                    timeout=_GRAPHIS_TIMEOUT_S,
+                )
+                return [
+                    url
+                    for url in (urls or [])
+                    if isinstance(url, str) and url
+                ]
+            except Exception as exc:
+                logger.warning("[actress] graphis_candidates failed: %s", exc)
+                return []
+
+        def take_graphis(urls):
+            events = []
+            for url in urls:
+                cid = candidate_id(url)
+                if cid in exclude_ids or cid in seen_ids:
+                    continue
+                seen_ids.add(cid)
+                events.append(
+                    _event(
+                        {
+                            "source": "graphis",
+                            "thumb_url": url,
+                            "full_url": url,
+                        }
+                    )
+                )
+            return events
+
+        graphis_task = asyncio.ensure_future(fetch_graphis())
+        source_tasks = [
+            asyncio.ensure_future(fetch_source(source))
+            for source in cloud_sources
+        ]
+        pending = set(source_tasks) | {graphis_task}
+        graphis_picks = []
+        while pending:
+            done, pending = await asyncio.wait(
+                pending,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in done:
+                if task is graphis_task:
+                    graphis_picks = task.result()
+                    for event in take_graphis(graphis_picks[:2]):
+                        yield event
+                        total += 1
+                    continue
+                source, url = task.result()
+                if not url or cloud_count >= max_cloud:
+                    continue
+                cid = candidate_id(url)
+                if cid in exclude_ids or cid in seen_ids:
+                    continue
+                seen_ids.add(cid)
+                yield _event(
+                    {
+                        "source": source,
                         "thumb_url": url,
                         "full_url": url,
-                    })
-                    yield f"event: candidate\ndata: {event_data}\n\n"
-                    total += 1
+                    }
+                )
+                cloud_count += 1
+                total += 1
 
-        # 本機 crop 補足
         needed = 6 - total
         if needed > 0:
             local_videos = await asyncio.to_thread(
-                _get_random_videos_with_covers, name, needed
+                _get_random_videos_with_covers,
+                name,
+                needed,
+                exclude_ids,
             )
             for video in local_videos:
-                # Fix 1 (T2): cover_path 在 DB 存 file:/// URI，crop endpoint 需要 FS path
-                cover_fs_path = uri_to_fs_path(str(video.cover_path)) if video.cover_path else ""  # uri-no-reverse: URL identifier stays canonical; actress_crop reverse-maps at disk I/O
-                if not cover_fs_path:
-                    # skip broken candidate，避免送空路徑的 URL
+                crop_url = local_crop_url(video)
+                if not crop_url:
                     continue
-                encoded_path = quote(cover_fs_path)
-                crop_url = f"/api/actresses/actress-crop?path={encoded_path}&spec=v1"
-                # Fix 2 (T2): video.path 在 DB 已是 file:/// URI（gallery_scanner.scan_file 透過 to_file_uri 寫入）
-                # 若萬一是 FS path（legacy / 異常），coerce_to_file_uri 做 idempotent 轉換
+                cid = candidate_id(crop_url)
+                if cid in exclude_ids or cid in seen_ids:
+                    continue
+                seen_ids.add(cid)
                 try:
                     video_path_uri = coerce_to_file_uri(str(video.path))  # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
                 except Exception as e:
                     logger.warning("[actress] coerce_to_file_uri 失敗 path=%s: %s", video.path, e)
                     video_path_uri = str(video.path)
-                event_data = json.dumps({
-                    "source": "local_crop",
-                    "video_path": video_path_uri,
-                    "thumb_url": crop_url,
-                    "full_url": crop_url,
-                })
-                yield f"event: candidate\ndata: {event_data}\n\n"
+                yield _event(
+                    {
+                        "source": "local_crop",
+                        "video_path": video_path_uri,
+                        "thumb_url": crop_url,
+                        "full_url": crop_url,
+                    }
+                )
                 total += 1
 
-        # done event
+        if graphis_picks and total < 6:
+            for event in take_graphis(graphis_picks[2:]):
+                yield event
+                total += 1
+                if total >= 6:
+                    break
+
         done_data = json.dumps({"total": total})
         yield f"event: done\ndata: {done_data}\n\n"
 

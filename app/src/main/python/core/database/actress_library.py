@@ -5,6 +5,7 @@
 `actress.py` 與 `alias.py` 之間仍然零依賴，這個模組才是組合點。分組是領域邏輯
 （「誰跟誰是同一人、算幾片」），不是 HTTP 關注點，所以不放 router 層。
 """
+import time
 from typing import List
 
 from .actress import ActressRepository
@@ -13,6 +14,7 @@ from .video import VideoRepository
 from core.config import load_config
 from core.multipart_group import group_rows
 from core.path_utils import uri_to_local_fs_path
+from core.recent_rules import FavStat, effective_score, video_weight
 
 
 def get_library_actresses() -> List[dict]:
@@ -114,3 +116,76 @@ def get_library_actresses() -> List[dict]:
         )
     result.sort(key=lambda g: (-g["video_count"], g["primary_name"]))
     return result
+
+
+def _alias_name_sets(alias_repo) -> dict:
+    """Map every saved and alias name to its complete alias group."""
+    records = alias_repo.get_all()
+    lookup: dict = {}
+    for record in records:
+        group = {record.primary_name} | set(record.aliases)
+        for alias in record.aliases:
+            lookup[alias] = group
+    for record in records:
+        lookup[record.primary_name] = {record.primary_name} | set(record.aliases)
+    return lookup
+
+
+def get_favorite_actress_stats(now=None, *, actress_repo=None, alias_repo=None) -> dict:
+    """Return logical-video counts and recent scores for every favorite actress.
+
+    Mobile treats a complete multipart release as one video. Scores therefore use
+    the newest member mtime once per logical group instead of physical rows.
+    """
+    if now is None:
+        now = time.time()
+    actress_repo = actress_repo or ActressRepository()
+    alias_repo = alias_repo or AliasRepository()
+    pairs = actress_repo.get_video_actress_mtime_pairs()
+    lookup = _alias_name_sets(alias_repo)
+    favorites = [actress.name for actress in actress_repo.get_all()]
+
+    videos = VideoRepository().get_all()
+    path_mappings = (
+        load_config().get("gallery", {}).get("path_mappings", {})
+    )
+    logical_groups = group_rows(
+        videos,
+        fs_path_of=lambda video: uri_to_local_fs_path(
+            video.path, path_mappings
+        ),
+    )
+    logical_id_by_rowid: dict = {}
+    group_mtime_by_id: dict = {}
+    for logical_id, group in enumerate(logical_groups):
+        mtimes = []
+        for video in group.members:
+            logical_id_by_rowid[video.id] = logical_id
+            if isinstance(video.mtime, (int, float)):
+                mtimes.append(video.mtime)
+        group_mtime_by_id[logical_id] = max(mtimes) if mtimes else None
+
+    logical_ids_by_name: dict = {}
+    for rowid, name, mtime in pairs:
+        logical_id = logical_id_by_rowid.get(rowid)
+        if logical_id is None:
+            continue
+        logical_ids_by_name.setdefault(name, set()).add(logical_id)
+        if group_mtime_by_id.get(logical_id) is None and isinstance(mtime, (int, float)):
+            group_mtime_by_id[logical_id] = mtime
+
+    stats: dict = {}
+    for favorite in favorites:
+        logical_ids = set()
+        for name in lookup.get(favorite, {favorite}):
+            logical_ids.update(logical_ids_by_name.get(name, ()))
+        raw_score = sum(
+            video_weight(group_mtime_by_id.get(logical_id), now)
+            for logical_id in logical_ids
+        )
+        stats[favorite] = FavStat(
+            favorite,
+            len(logical_ids),
+            effective_score(raw_score),
+        )
+    return stats
