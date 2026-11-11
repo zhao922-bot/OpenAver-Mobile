@@ -665,6 +665,35 @@ _TOOLS: list[dict] = [
         "_example_template": "curl -o cover.jpg '{base}/api/proxy-image?url=https://pics.dmm.co.jp/digital/video/ssis00221/ssis00221pl.jpg'",
     },
     {
+        "name": "image_search_number",
+        "description": (
+            "用影片截圖或封面圖查番號，回傳最多 5 個 avscan.cc 候選與片庫命中狀態。"
+            "圖片會送往第三方網站，呼叫前必須取得使用者明確同意；沒有 clear_hit 時不得自動整理或搬檔。"
+            "只支援 JPG、PNG、WEBP，單檔上限 8MB；同一時間只允許一張，兩次請求至少間隔 5 秒。"
+        ),
+        "method": "POST",
+        "path": "/api/image-search",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file": {"type": "string", "format": "binary", "description": "multipart 欄位，一張 JPG/PNG/WEBP 圖片"},
+            },
+            "required": ["file"],
+        },
+        "output_schema": {
+            "success": "boolean",
+            "source": "固定 avscan",
+            "clear_hit": "第一名至少領先第二名 8 分時為 true",
+            "lead": "number|null",
+            "candidates": "[{rank, code, number, searchable, similarity, match, in_library}]",
+        },
+        "side_effect": False,
+        "confirmation_required": True,
+        "retry_safe": True,
+        "rate_limit_hint": "全域每 5 秒最多送 1 張；429 時依 retry_after 重試",
+        "_example_template": "curl -F file=@shot.jpg {base}/api/image-search",
+    },
+    {
         "name": "user_tags",
         "description": (
             "管理用戶自訂標籤（評分、書籤、分類等）。存入 DB + NFO <user_tag> 元素，不被 scraper refresh 覆蓋。"

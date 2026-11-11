@@ -3,9 +3,9 @@
 [![Build APK](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml/badge.svg)](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml)
 
 OpenAver Mobile 是 [OpenAver](https://github.com/slive777/OpenAver) 的非官方
-Android 移植版。当前移动端新版本线为 `v0.18.17-android-r3`，已对齐上游
+Android 移植版。当前移动端新版本线为 `v0.18.17-android-r4`，已对齐上游
 `v0.18.17` 的补完性能、批次搜索、来源修复和片库浏览体验；尚未移植的上游
-功能会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)在后续 `r4`～`r6` 完成。
+功能会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)在后续 `r5`～`r6` 完成。
 内嵌代码基线仍为上游 `v0.17.18` 加本仓库补丁。
 
 App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，不需要
@@ -15,13 +15,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r3-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r4-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.18.17-android-r3-arm64-v8a.apk`
+- 文件名：`openaver-v0.18.17-android-r4-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.18.17-r3`（versionCode `18003`）
+- 版本：`0.18.17-r4`（versionCode `18004`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -295,6 +295,10 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   表单，切页不会丢失未保存内容；直接访问或刷新可恢复当前分页
 - v0.18.17-r3：手机说明页整理为片库、整理与改名、排错与手动操作三个页签，并兼容
   旧版说明页锚点；新手引导缩短为四步，手机端直接指向右侧菜单
+- v0.18.17-r4：搜索页新增图片查番号，支持本地选择、格式/大小校验、首次第三方
+  隐私确认、候选相似度与片库命中状态，并可将结果带入普通搜索
+- v0.18.17-r4：新增 OpenAI 官方翻译接口，可查询模型、测试翻译并参与现有标题
+  补翻译；灯箱简介支持按需读取 NFO `<plot>`、原文/译文切换、翻译写回与撤销
 
 ## 限制
 

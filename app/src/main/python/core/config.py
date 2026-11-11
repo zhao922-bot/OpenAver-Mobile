@@ -148,6 +148,12 @@ class ClaudeConfig(BaseModel):
     model: str = "claude-haiku-5-5"
 
 
+class OpenAIOfficialConfig(BaseModel):
+    """OpenAI 官方翻譯配置；base URL 由程式固定。"""
+    api_key: str = ""
+    model: str = ""
+
+
 class MetatubeConfig(BaseModel):
     """串接結構：Metatube HTTP server 配置（CD-63b-3）"""
     enabled: bool = False  # 使用者在 Settings › Advanced 啟用 metatube（CD-63b-3）
@@ -158,13 +164,14 @@ class MetatubeConfig(BaseModel):
 
 class TranslateConfig(BaseModel):
     enabled: bool = False
-    provider: str = "ollama"  # "ollama" | "gemini" | "openai" | "claude"
+    provider: str = "ollama"  # "ollama" | "gemini" | "openai" | "claude" | "openai_official"
     batch_size: int = 10  # 批次翻譯大小
 
     # 嵌套結構
     ollama: OllamaConfig = OllamaConfig()
     gemini: GeminiConfig = GeminiConfig()
     openai: OpenAIConfig = OpenAIConfig()
+    openai_official: OpenAIOfficialConfig = OpenAIOfficialConfig()
     claude: ClaudeConfig = ClaudeConfig()
 
     # 舊字段（保留向後兼容）
@@ -487,6 +494,15 @@ def _migrate_legacy_sections(raw_config: dict) -> bool:
             }
             need_save = True
             logger.info("[Config] 遷移配置：添加 OpenAI Compatible 支持")
+
+        # OpenAI 官方翻譯：base URL 固定，只持久化 key 與模型。
+        if 'openai_official' not in translate:
+            translate['openai_official'] = {
+                'api_key': '',
+                'model': ''
+            }
+            need_save = True
+            logger.info("[Config] 遷移配置：添加 OpenAI Official 支持")
 
         # TASK-170-T2：確保 claude 嵌套存在（Claude 支援遷移）
         if 'claude' not in translate:

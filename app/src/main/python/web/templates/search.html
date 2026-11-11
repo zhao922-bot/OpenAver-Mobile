@@ -483,6 +483,23 @@
         </form>
     </div>
 
+    <div class="image-search-entry"
+         x-show="!hasContent && pageState !== 'loading'"
+         x-cloak>
+        <button type="button"
+                class="image-search-entry-btn"
+                @click="imgSearchPickFile()"
+                :disabled="imgSearchPhase === 'querying'">
+            <i class="bi bi-image" aria-hidden="true"></i>
+            <span x-text="t('search.image.btn_title')"></span>
+        </button>
+        <input type="file"
+               x-ref="imgSearchFile"
+               class="image-search-file"
+               accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+               @change="imgSearchOnFilePicked($event)">
+    </div>
+
     <!-- 結果區域 -->
     <div class="result-area">
         <div class="ui-partial-banner"
@@ -1437,6 +1454,97 @@
             </div>
         </div>
     </div>
+
+    <dialog class="modal fluent-modal image-search-modal"
+            :class="{ 'modal-open': imgSearchPrivacyOpen }"
+            @cancel.prevent="imgSearchDeclinePrivacy()">
+        <div class="modal-box fluent-modal-box">
+            <h3 class="fluent-modal-title">
+                <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                {{ t('search.image.privacy_title') }}
+            </h3>
+            <p class="fluent-modal-body">{{ t('search.image.privacy_body') }}</p>
+            <div class="modal-action">
+                <button type="button" class="btn btn-sm" @click="imgSearchDeclinePrivacy()">
+                    {{ t('search.image.privacy_cancel') }}
+                </button>
+                <button type="button" class="btn btn-sm btn-primary" @click="imgSearchAcceptPrivacy()">
+                    {{ t('search.image.privacy_accept') }}
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog class="modal fluent-modal image-search-modal"
+            :class="{ 'modal-open': imgSearchResultsOpen }"
+            @cancel.prevent="imgSearchCancel()">
+        <div class="modal-box fluent-modal-box image-search-results-box">
+            <div class="image-search-results-head">
+                <h3 class="fluent-modal-title">
+                    <i class="bi bi-images" aria-hidden="true"></i>
+                    {{ t('search.image.results_title') }}
+                </h3>
+                <button type="button"
+                        class="btn btn-ghost btn-sm btn-circle"
+                        @click="imgSearchCancel()"
+                        :aria-label="t('common.close')">
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="image-search-preview">
+                <img :src="imgSearchPreviewUrl"
+                     :alt="t('search.image.thumb_alt')"
+                     x-show="!!imgSearchPreviewUrl">
+                <div class="image-search-loading"
+                     x-show="imgSearchPhase === 'querying'">
+                    <span class="loading loading-spinner loading-md"></span>
+                    <span x-text="t('search.image.searching')"></span>
+                </div>
+            </div>
+            <p class="image-search-error"
+               x-show="imgSearchPhase !== 'querying' && !!imgSearchError"
+               x-text="imgSearchErrorText()"></p>
+            <p class="image-search-hint"
+               x-show="imgSearchPhase !== 'querying' && !imgSearchError && !imgSearchClearHit">
+                {{ t('search.image.match.no_clear_hit') }}
+            </p>
+            <div class="image-search-candidates"
+                 x-show="imgSearchPhase !== 'querying' && !imgSearchError">
+                <template x-for="candidate in imgSearchCandidates" :key="candidate.rank + ':' + candidate.code">
+                    <button type="button"
+                            class="image-search-candidate"
+                            :disabled="!candidate.searchable"
+                            @click="imgSearchUseCandidate(candidate)"
+                            :title="candidate.searchable ? t('search.image.use_candidate') : t('search.image.not_searchable')">
+                        <span class="image-search-rank" x-text="'#' + candidate.rank"></span>
+                        <span class="image-search-candidate-main">
+                            <strong x-text="candidate.number || candidate.code"></strong>
+                            <small>
+                                <span x-text="t('search.image.match.title') + ': ' + imgSearchCandidateSimilarity(candidate)"></span>
+                                <span> · </span>
+                                <span x-text="imgSearchCandidateMatch(candidate)"></span>
+                            </small>
+                        </span>
+                        <span class="image-search-library"
+                              :class="{ 'is-owned': candidate.in_library === true }"
+                              x-text="imgSearchCandidateLibrary(candidate)"></span>
+                        <i class="bi"
+                           :class="candidate.searchable ? 'bi-arrow-right' : 'bi-slash-circle'"
+                           aria-hidden="true"></i>
+                    </button>
+                </template>
+            </div>
+            <p class="image-search-hint"
+               x-show="imgSearchPhase !== 'querying' && !imgSearchError && imgSearchCandidates.length === 0">
+                {{ t('search.image.match.retry_hint') }}
+            </p>
+            <div class="modal-action">
+                <button type="button" class="btn btn-sm" @click="imgSearchCancel()">
+                    {{ t('common.close') }}
+                </button>
+            </div>
+        </div>
+    </dialog>
 
     <!-- T6b: 統一 Toast 組件（固定位置，Alpine 管理） -->
     {{ state_toast() }}

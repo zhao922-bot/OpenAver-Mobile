@@ -419,6 +419,32 @@
       "instruction": "<strong>설정 → 정리 및 명명 → 버전 태그</strong>로 이동하여 키워드를 추가하고 파일 명명 형식에 <code class=\"badge badge-sm\">{suffix}</code> 변수가 포함되어 있는지 확인하십시오.",
       "acknowledge": "알겠습니다",
       "go_settings": "설정으로 이동"
+    },
+    "image": {
+      "too_large": "이미지가 너무 큽니다 (최대 8MB)",
+      "unsupported": "JPG, PNG, WEBP 이미지만 지원합니다",
+      "unreachable": "avscan에 현재 연결할 수 없습니다",
+      "rate_limited": "avscan에서 잠시 기다려 달라고 요청했습니다. 약 {seconds}초 후 다시 시도할 수 있습니다",
+      "btn_title": "영상 캡처나 커버로 번호 찾기 (avscan.cc)",
+      "no_candidates": "후보 번호를 찾지 못했습니다. 더 선명한 캡처나 커버로 다시 시도해 주세요.",
+      "match": {
+        "title": "유사도",
+        "cover": "커버",
+        "frame": "영상 프레임",
+        "no_clear_hit": "명확한 일치 결과가 없습니다. 후보를 직접 확인해 주세요",
+        "retry_hint": "더 선명하고 워터마크가 없는 영상 캡처나 커버로 다시 시도해 보세요"
+      },
+      "in_library": "라이브러리에 있음",
+      "not_in_library": "라이브러리에 없음",
+      "privacy_title": "이미지 검색 개인정보 안내",
+      "privacy_body": "이미지는 번호 식별을 위해 제3자 사이트 avscan.cc로 전송됩니다. OpenAver는 이미지를 저장하지 않습니다. 계속하시겠습니까?",
+      "privacy_cancel": "취소",
+      "privacy_accept": "동의하고 계속",
+      "results_title": "이미지 검색 결과",
+      "thumb_alt": "검색할 이미지",
+      "searching": "avscan으로 번호를 찾는 중…",
+      "use_candidate": "이 번호로 검색",
+      "not_searchable": "이 결과는 번호로 검색할 수 없습니다"
     }
   },
   "settings": {
@@ -667,7 +693,9 @@
       "openai_custom_model": "사용자 지정...",
       "claude_cloud": "(Anthropic 클라우드)",
       "claude_api_key_hint": "Anthropic 콘솔에서 API 키(sk-ant-로 시작)를 생성하세요. Claude 구독 플랜 로그인 정보는 여기에 직접 사용할 수 없습니다.",
-      "claude_api_key_placeholder": "sk-ant-..."
+      "claude_api_key_placeholder": "sk-ant-...",
+      "openai_official": "OpenAI (공식)",
+      "openai_official_hint": "고정된 OpenAI 공식 API(https://api.openai.com/v1)를 사용합니다. API 키를 입력하고 모델을 선택하세요."
     },
     "scraper": {
       "suffix_keywords_label": "버전 태그",
@@ -880,7 +908,18 @@
       "gemini_connection_timeout": "연결 시간 초과",
       "gemini_http_error": "HTTP 요청 실패",
       "gemini_translate_failed": "번역 테스트 실패",
-      "gemini_blocked": "이 테스트 문구는 서비스 제공업체의 콘텐츠 검열에 의해 차단되었습니다. 모델을 변경해도 보통 소용이 없으니 다른 번역 서비스를 사용해 보세요."
+      "gemini_blocked": "이 테스트 문구는 서비스 제공업체의 콘텐츠 검열에 의해 차단되었습니다. 모델을 변경해도 보통 소용이 없으니 다른 번역 서비스를 사용해 보세요.",
+      "openai_official_auth_failed": "인증 실패, API 키를 확인해 주세요",
+      "openai_official_forbidden": "접근 권한이 없습니다",
+      "openai_official_not_found": "모델이 존재하지 않습니다. '테스트'를 눌러 다시 선택해 주세요",
+      "openai_official_rate_limited": "할당량이 부족하거나 요청이 너무 잦습니다",
+      "openai_official_http_error": "HTTP 요청 실패",
+      "openai_official_connection_timeout": "연결 시간 초과",
+      "openai_official_connection_failed": "연결 실패",
+      "openai_official_translate_failed": "번역 테스트 실패",
+      "openai_official_missing_model": "먼저 모델을 선택해 주세요",
+      "openai_official_missing_key": "인증 실패, API 키를 확인해 주세요",
+      "openai_official_blocked": "이 테스트 제목은 서비스 제공업체의 콘텐츠 검토에 의해 차단되었습니다. 모델을 변경해도 소용이 없을 수 있으니 다른 번역 서비스를 사용해 보세요"
     }
   },
   "scanner": {
@@ -1548,7 +1587,21 @@
       "cover_unavailable": "이 영상의 커버를 읽을 수 없습니다. 파일 위치에 접근할 수 없거나 커버 파일 자체가 없는 것일 수 있습니다.",
       "cover_escape_hint": "커버를 찾을 수 없습니다. 이미지를 영상 파일 이름으로 변경하여 영상 옆에 두세요 (예: `ABC-123.mp4` → `ABC-123.jpg`). 미디어 라이브러리 관리 페이지에서 '라이브러리 업데이트'를 한 번 누르면 가져올 수 있습니다. 또는 ⚙을 눌러 수동으로 번호를 지정하여 다시 스캔하세요.",
       "mask_confirm": "크롭 위치 확인",
-      "mask_cancel": "크롭 조정 취소"
+      "mask_cancel": "크롭 조정 취소",
+      "plot_tooltip": "줄거리",
+      "plot_face_title": "줄거리",
+      "plot_close": "줄거리 닫기",
+      "plot_unavailable": "이 영화의 줄거리를 읽을 수 없습니다",
+      "plot_translate_tooltip": "줄거리 번역",
+      "plot_retranslate_tooltip": "다시 번역",
+      "plot_show_original_tooltip": "원문 보기",
+      "plot_show_translated_tooltip": "번역문 보기",
+      "plot_already_target": "줄거리는 이미 현재 언어로 작성되어 있습니다",
+      "plot_write_failed": "줄거리 쓰기에 실패했습니다. 다시 시도해 주세요",
+      "plot_no_nfo": "이 영상에는 NFO가 없어 줄거리를 쓸 수 없습니다",
+      "plot_translate_done": "줄거리 번역 완료",
+      "plot_translate_undo": "실행 취소",
+      "plot_translate_undone": "줄거리를 복원했습니다"
     },
     "pick": {
       "add_aria": "엄선작에 추가",

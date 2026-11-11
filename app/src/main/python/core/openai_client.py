@@ -8,6 +8,7 @@ OpenAI 相容 chat/completions 請求／解析／錯誤分類（OpenAI 翻譯唯
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any
 
 import httpx
@@ -25,6 +26,62 @@ _MAX_ATTEMPTS = 2
 _DEFAULT_RETRY_DELAY = 0.8
 _MAX_RETRY_DELAY = 8.0
 logger = get_logger(__name__)
+
+OPENAI_OFFICIAL_BASE_URL = "https://api.openai.com/v1"
+OPENAI_NON_CHAT_TOKENS = (
+    "embedding",
+    "tts",
+    "whisper",
+    "audio",
+    "transcribe",
+    "realtime",
+    "image",
+    "dall-e",
+    "moderation",
+    "search",
+    "codex",
+)
+_DATE_SUFFIX_RE = re.compile(r"-(?:\d{4}-\d{2}-\d{2}|\d{8})$")
+
+
+def pick_official_models(models: list[tuple[str, int | None]]) -> list[str]:
+    """Return chat-capable luna/terra/mini models without dated duplicates."""
+    candidates: list[tuple[str, int | None]] = []
+    for model_id_raw, created in models:
+        model_id = (model_id_raw or "").lower()
+        if not (
+            any(token in model_id for token in ("luna", "terra", "mini"))
+            and "nano" not in model_id
+        ):
+            continue
+        if any(token in model_id for token in OPENAI_NON_CHAT_TOKENS):
+            continue
+        candidates.append((model_id_raw, created))
+
+    ids_lower = {model_id.lower() for model_id, _ in candidates}
+    filtered: list[tuple[str, int | None]] = []
+    for model_id_raw, created in candidates:
+        model_id = model_id_raw.lower()
+        match = _DATE_SUFFIX_RE.search(model_id)
+        if match is not None and model_id[: match.start()] in ids_lower:
+            continue
+        filtered.append((model_id_raw, created))
+
+    filtered.sort(
+        key=lambda item: (item[1] is None, -(item[1] or 0), item[0].lower())
+    )
+    return [model_id for model_id, _ in filtered]
+
+
+def default_official_model(models: list[str]) -> str:
+    """Prefer luna, then mini; return an empty string when neither exists."""
+    for model_id in models:
+        if "luna" in model_id.lower():
+            return model_id
+    for model_id in models:
+        if "mini" in model_id.lower():
+            return model_id
+    return ""
 
 
 def build_headers(api_key: str) -> dict[str, str]:
@@ -75,6 +132,7 @@ def classify_http_error(resp: httpx.Response) -> TranslateError:
     """依狀態碼與 error 欄位分類；非 JSON 本體仍回 TranslateError。"""
     status = resp.status_code
     err_type = ""
+    err_code = ""
     message = ""
     has_reasons = False
     try:
@@ -82,11 +140,13 @@ def classify_http_error(resp: httpx.Response) -> TranslateError:
         err = body.get("error") if isinstance(body, dict) else None
         if isinstance(err, dict):
             err_type = str(err.get("type") or "")
+            err_code = str(err.get("code") or "")
             message = str(err.get("message") or "")
             meta = err.get("metadata")
             has_reasons = isinstance(meta, dict) and "reasons" in meta
     except Exception:
         err_type = ""
+        err_code = ""
         message = getattr(resp, "reason_phrase", "") or ""
 
     if status == 401:
@@ -96,6 +156,11 @@ def classify_http_error(resp: httpx.Response) -> TranslateError:
         if has_reasons or "moderation" in lowered or "flagged" in lowered:
             return build_error(TAG, "blocked", status, err_type, message)
         return build_error(TAG, "forbidden", status, err_type, message)
+    if status == 400 and (
+        err_code == "content_policy_violation"
+        or "safety system" in message.lower()
+    ):
+        return build_error(TAG, "blocked", status, err_type, message)
     if status == 404:
         return build_error(TAG, "not_found", status, err_type, message)
     if status in (429, 402):

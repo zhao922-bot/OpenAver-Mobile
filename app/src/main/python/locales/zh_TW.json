@@ -419,6 +419,32 @@
       "instruction": "請到 <strong>設定 → 進階刮削設定 → 版本標記</strong>，新增關鍵字並確認檔案命名格式包含 <code class=\"badge badge-sm\">{suffix}</code> 變數。",
       "acknowledge": "瞭解",
       "go_settings": "前往設定"
+    },
+    "image": {
+      "too_large": "圖片過大（上限 8MB）",
+      "unsupported": "僅支援 JPG、PNG、WEBP 圖片",
+      "unreachable": "目前無法連線 avscan",
+      "rate_limited": "avscan 要求稍等，約 {seconds} 秒後可重試",
+      "btn_title": "用影片截圖或封面查詢番號（avscan.cc）",
+      "no_candidates": "沒有找到候選番號，換一張更清晰的截圖或封面再試",
+      "match": {
+        "title": "相似度",
+        "cover": "封面",
+        "frame": "影片截圖",
+        "no_clear_hit": "沒有明確命中，請自行核對候選結果",
+        "retry_hint": "換一張更清晰、沒有浮水印的影片截圖或封面再試"
+      },
+      "in_library": "片庫已有",
+      "not_in_library": "片庫沒有",
+      "privacy_title": "圖片查詢隱私說明",
+      "privacy_body": "圖片會傳送到第三方網站 avscan.cc 用於識別番號；OpenAver 不會儲存這張圖片。確定繼續？",
+      "privacy_cancel": "取消",
+      "privacy_accept": "同意並繼續",
+      "results_title": "圖片查詢結果",
+      "thumb_alt": "待查詢圖片",
+      "searching": "正在使用 avscan 查詢番號…",
+      "use_candidate": "使用此番號搜尋",
+      "not_searchable": "這個結果無法作為番號搜尋"
     }
   },
   "settings": {
@@ -667,7 +693,9 @@
       "openai_api_key_placeholder": "留空 = 不送 Authorization header",
       "openai_api_key_hint": "本地 LLM 可留空，雲端服務需填入 API Key",
       "openai_model_placeholder": "e.g. gpt-4o-mini",
-      "openai_custom_model": "自訂..."
+      "openai_custom_model": "自訂...",
+      "openai_official": "OpenAI（官方）",
+      "openai_official_hint": "固定連線 OpenAI 官方 API（https://api.openai.com/v1），只需填寫 API Key 並選擇模型。"
     },
     "scraper": {
       "suffix_keywords_label": "版本標記",
@@ -880,7 +908,18 @@
       "gemini_http_error": "HTTP 請求失敗",
       "gemini_translate_failed": "翻譯測試失敗",
       "gemini_blocked": "這個測試片名被服務商的內容審查擋下了；換模型通常沒用，可改用其他翻譯服務",
-      "ja_skip": "日文模式：跳過翻譯"
+      "ja_skip": "日文模式：跳過翻譯",
+      "openai_official_auth_failed": "認證失敗，請檢查 API Key",
+      "openai_official_forbidden": "無存取權限",
+      "openai_official_not_found": "模型不存在，請按『測試』重新選擇",
+      "openai_official_rate_limited": "額度不足或請求太頻繁",
+      "openai_official_http_error": "HTTP 請求失敗",
+      "openai_official_connection_timeout": "連線逾時",
+      "openai_official_connection_failed": "連線失敗",
+      "openai_official_translate_failed": "翻譯測試失敗",
+      "openai_official_missing_model": "請先選擇模型",
+      "openai_official_missing_key": "認證失敗，請檢查 API Key",
+      "openai_official_blocked": "這個測試片名被服務商的內容審查擋下了；換模型通常沒用，可改用其他翻譯服務"
     }
   },
   "scanner": {
@@ -1548,7 +1587,21 @@
       "cover_unavailable": "這部片的封面現在讀不到——可能是檔案位置目前無法存取，或者封面檔本身不見了",
       "cover_escape_hint": "找不到封面。可以把圖片用影片檔名命名放在影片旁邊（例：`ABC-123.mp4` → `ABC-123.jpg`），回掃描頁按一次「產生網頁」就會收進來；或按 ⚙ 手動指定番號重新刮。",
       "mask_confirm": "確認裁切位置",
-      "mask_cancel": "取消裁切調整"
+      "mask_cancel": "取消裁切調整",
+      "plot_tooltip": "簡介",
+      "plot_face_title": "簡介",
+      "plot_close": "關閉簡介",
+      "plot_unavailable": "讀不到這部片的簡介",
+      "plot_translate_tooltip": "翻譯簡介",
+      "plot_retranslate_tooltip": "重新翻譯",
+      "plot_show_original_tooltip": "看原文",
+      "plot_show_translated_tooltip": "看譯文",
+      "plot_already_target": "簡介已是目前語言",
+      "plot_write_failed": "簡介寫入失敗，請重試",
+      "plot_no_nfo": "這部片沒有 NFO，無法寫入簡介",
+      "plot_translate_done": "已翻譯簡介",
+      "plot_translate_undo": "復原",
+      "plot_translate_undone": "已復原簡介"
     },
     "pick": {
       "add_aria": "加入精選",

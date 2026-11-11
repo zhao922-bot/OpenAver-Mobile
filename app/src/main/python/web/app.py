@@ -271,6 +271,7 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # ============ 註冊 API 路由 ============
 from web.routers import search as search_router
+from web.routers import image_search as image_search_router
 from web.routers import database_backup as database_backup_router
 from web.routers import config as config_router
 from web.routers import scraper as scraper_router
@@ -282,6 +283,7 @@ from web.routers import openai_translate as openai_translate_router
 from web.routers import claude_translate as claude_translate_router
 from web.routers import filename as filename_router
 from web.routers import showcase as showcase_router
+from web.routers import showcase_plot as showcase_plot_router
 from web.routers import capabilities as capabilities_router
 from web.routers import collection as collection_router
 from web.routers import actress as actress_router
@@ -314,6 +316,7 @@ from web.routers import custom_sources as custom_sources_router
 # correct use-site binding (TASK-63e-1; function-local import would defeat patch).
 from web.routers.settings_metatube import startup_reconnect, _fire_probe  # noqa: E402, PLC2701 — 既有註解（TASK-63e-1）已明講：module-level import 是為了讓 patch("web.app._fire_probe") 打中呼叫端 binding，函式內 import 會讓 patch 失效；_fire_probe 是 metatube 重連探測的內部 primitive，尚未升格為公開 API
 app.include_router(search_router.router)
+app.include_router(image_search_router.router)
 app.include_router(database_backup_router.router)
 app.include_router(config_router.router)
 app.include_router(scraper_router.router)
@@ -325,6 +328,7 @@ app.include_router(openai_translate_router.router)
 app.include_router(claude_translate_router.router)
 app.include_router(filename_router.router)
 app.include_router(showcase_router.router)
+app.include_router(showcase_plot_router.router)
 app.include_router(capabilities_router.router)
 app.include_router(collection_router.router)
 app.include_router(collection_router.user_tags_router)

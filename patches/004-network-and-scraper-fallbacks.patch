@@ -178,7 +178,7 @@
              if on_progress is not None:
 --- a/core/proxy_policy.py
 +++ b/core/proxy_policy.py
-@@ -18,6 +18,8 @@
+@@ -18,13 +18,15 @@
  
  import requests
  from pydantic import BaseModel, ConfigDict, field_validator
@@ -187,6 +187,16 @@
  
  from core.desktop_env import desktop_kind
  from core.loopback import is_loopback_host
+ 
+-Conn = str  # 'source_query' | 'image' | 'actress'
+-
+-_ALL_SCOPE_CONNS = frozenset({'source_query', 'image', 'actress'})
++Conn = str  # 'source_query' | 'image' | 'actress' | 'image_search'
++
++_ALL_SCOPE_CONNS = frozenset({'source_query', 'image', 'actress', 'image_search'})
+ 
+ 
+ class ProxySettings(BaseModel):
 @@ -119,13 +121,36 @@
          return super().request(method, url, **kwargs)
  

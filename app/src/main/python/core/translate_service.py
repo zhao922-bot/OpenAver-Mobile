@@ -617,6 +617,17 @@ def create_translate_service(config: Dict, target_language: str = "zh-CN") -> Tr
         openai_config = config.get("openai", {})
         return OpenAICompatibleTranslateService(openai_config, target_language)
 
+    elif provider == "openai_official":
+        official_config = config.get("openai_official", {}) or {}
+        return OpenAICompatibleTranslateService(
+            {
+                "base_url": openai_client.OPENAI_OFFICIAL_BASE_URL,
+                "api_key": official_config.get("api_key", ""),
+                "model": official_config.get("model", ""),
+            },
+            target_language,
+        )
+
     elif provider == "claude":
         claude_config = config.get("claude", {})
         return ClaudeTranslateService(claude_config, target_language)

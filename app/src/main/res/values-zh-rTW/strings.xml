@@ -30,7 +30,7 @@
     <string name="local_step3_title">本機掃描與播放</string>
     <string name="local_step3_body">網頁生成、中繼資料搜尋、NFO/封面寫入和播放都在手機上完成。只有你啟用的中繼資料來源會使用網路。</string>
     <string name="privacy_note">Python 服務、SQLite 資料庫、日誌和生成資料都保存在 App 私有目錄；影片仍留在手機原資料夾中。</string>
-    <string name="disclaimer">非官方 Android 建置 · OpenAver Mobile v0.18.17-r3 · MIT 授權</string>
+    <string name="disclaimer">非官方 Android 建置 · OpenAver Mobile v0.18.17-r4 · MIT 授權</string>
     <string name="starting_local">正在啟動本機 OpenAver…</string>
     <string name="starting_python">正在初始化 Python 環境…</string>
     <string name="loading_openaver_service">正在載入 OpenAver 服務…</string>

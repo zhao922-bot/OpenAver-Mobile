@@ -24,9 +24,9 @@ from urllib3.util.retry import Retry
 from core.desktop_env import desktop_kind
 from core.loopback import is_loopback_host
 
-Conn = str  # 'source_query' | 'image' | 'actress'
+Conn = str  # 'source_query' | 'image' | 'actress' | 'image_search'
 
-_ALL_SCOPE_CONNS = frozenset({'source_query', 'image', 'actress'})
+_ALL_SCOPE_CONNS = frozenset({'source_query', 'image', 'actress', 'image_search'})
 
 
 class ProxySettings(BaseModel):

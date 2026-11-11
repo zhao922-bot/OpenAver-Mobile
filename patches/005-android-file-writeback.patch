@@ -1,4 +1,318 @@
 --- /dev/null
++++ b/core/avscan/__init__.py
+@@ -0,0 +1 @@
++"""avscan 純規則：番號對應、明確命中、影格名解析、縮圖白名單、送出前縮圖。"""
+--- /dev/null
++++ b/core/avscan/client.py
+@@ -0,0 +1,155 @@
++"""avscan 以圖查番號 client（CD-193-1／2／9／10）：全 repo 唯一對站方送圖的出口，也是唯一含站台網址的檔。
++
++只回「站方原料＋解析後的 match＋thumb_url」；rank／number／searchable／in_library／clear_hit
++由 router 組。log 只記候選數、耗時、固定短詞與例外類別名。
++"""
++import math
++import time
++
++import requests
++
++from core.avscan import rules
++from core.avscan.gate import AVSCAN_MAX_PENALTY_SECONDS, AVSCAN_MIN_GAP_SECONDS, get_gate
++from core.logger import get_logger
++from core.proxy_policy import proxy_kwargs
++from core.scrapers.utils import DEFAULT_HEADERS
++
++logger = get_logger(__name__)
++
++AVSCAN_ORIGIN = "https://avscan.cc"
++AVSCAN_SEARCH_URL = AVSCAN_ORIGIN + "/search"
++MAX_CANDIDATES = 5
++
++
++class AvscanError(Exception):
++    pass
++
++
++class AvscanRateLimited(AvscanError):
++    def __init__(self, retry_after: int):
++        super().__init__("rate_limited")
++        self.retry_after = retry_after
++
++
++class AvscanUnreachable(AvscanError):
++    pass
++
++
++class AvscanUnparseable(AvscanError):
++    pass
++
++
++class AvscanInvalidImage(AvscanError):
++    pass
++
++
++def _is_number(x) -> bool:
++    return isinstance(x, (int, float)) and not isinstance(x, bool)
++
++
++def _parse_item(item) -> dict:
++    if not isinstance(item, dict):
++        raise AvscanUnparseable("item")
++    code, sim, frames, thumb = item.get("video_code"), item.get("best_similarity"), item.get("frames"), None
++    if not (isinstance(code, str) and code and _is_number(sim)):
++        raise AvscanUnparseable("item")
++    if not (isinstance(frames, list) and frames and isinstance(frames[0], dict)):
++        raise AvscanUnparseable("frames")
++    name, thumb = frames[0].get("image_name"), frames[0].get("thumb")
++    if not isinstance(name, str) or not (thumb is None or isinstance(thumb, str)):
++        raise AvscanUnparseable("frame")
++    kind, cover_part, time_seconds, time_text = rules.parse_frame_name(name)
++    return {
++        "code": code,
++        "similarity": float(sim),
++        "match": {
++            "kind": kind,
++            "cover_part": cover_part,
++            "time_seconds": time_seconds,
++            "time_text": time_text,
++            "thumb_url": AVSCAN_ORIGIN + thumb if rules.safe_thumb_path(thumb) else None,
++        },
++    }
++
++
++def parse_response(data) -> list[dict]:
++    if not isinstance(data, dict) or not isinstance(data.get("results"), list):
++        raise AvscanUnparseable("shape")
++    return [_parse_item(item) for item in data["results"][:MAX_CANDIDATES]]
++
++
++def _retry_seconds(resp) -> float:
++    try:
++        body = resp.json()
++    except ValueError:
++        return AVSCAN_MIN_GAP_SECONDS
++    value = body.get("retry_after") if isinstance(body, dict) else None
++    if _is_number(value) and math.isfinite(value) and value > 0:
++        return value
++    return AVSCAN_MIN_GAP_SECONDS
++
++
++def _is_invalid_image(resp) -> bool:
++    try:
++        return resp.json() == {"detail": "invalid image"}
++    except ValueError:
++        return False
++
++
++def _fail(reason: str, exc_type, started: float):
++    logger.warning("avscan lookup failed: %s (%d ms)", reason, int((time.monotonic() - started) * 1000))
++    return exc_type(reason)
++
++
++def _handle_response(resp, started: float) -> list[dict]:
++    status = resp.status_code
++    if status == 429:
++        seconds = _retry_seconds(resp)
++        get_gate().penalize(seconds)
++        logger.warning("avscan lookup failed: rate_limited")
++        wait = min(max(seconds, AVSCAN_MIN_GAP_SECONDS), AVSCAN_MAX_PENALTY_SECONDS)
++        raise AvscanRateLimited(math.ceil(wait))
++    if status == 400 and _is_invalid_image(resp):
++        raise _fail("invalid_image", AvscanInvalidImage, started)
++    if 300 <= status < 400:
++        raise _fail("redirect", AvscanUnreachable, started)
++    if status != 200:
++        raise _fail(f"status={status}", AvscanUnreachable, started)
++    try:
++        data = resp.json()
++    except ValueError:
++        raise _fail("non_json", AvscanUnreachable, started) from None
++    try:
++        candidates = parse_response(data)
++    except AvscanUnparseable:
++        logger.warning("avscan lookup failed: AvscanUnparseable")
++        raise
++    logger.info("avscan lookup ok: %d candidates (%d ms)", len(candidates), int((time.monotonic() - started) * 1000))
++    return candidates
++
++
++def lookup(image_bytes: bytes) -> list[dict]:
++    proxies = proxy_kwargs("image_search")
++    ok, retry_after = get_gate().try_acquire()
++    if not ok:
++        raise AvscanRateLimited(retry_after)
++    started = time.monotonic()
++    try:
++        try:
++            resp = requests.post(
++                AVSCAN_SEARCH_URL,
++                files={"file": ("q.jpg", image_bytes)},
++                headers=DEFAULT_HEADERS,
++                timeout=(5, 15),
++                allow_redirects=False,
++                **proxies,
++            )
++        except requests.Timeout:
++            raise _fail("timeout", AvscanUnreachable, started) from None
++        except requests.ConnectionError:
++            raise _fail("connection", AvscanUnreachable, started) from None
++        except requests.RequestException:
++            raise _fail("request_error", AvscanUnreachable, started) from None
++        return _handle_response(resp, started)
++    finally:
++        get_gate().release()
+--- /dev/null
++++ b/core/avscan/gate.py
+@@ -0,0 +1,50 @@
++"""站方送圖閘（CD-193-2）：同一時刻最多一張在途、兩張之間至少 AVSCAN_MIN_GAP_SECONDS 秒。
++
++閘不碰網路、不認識呼叫者；只回答「現在能不能送」。
++"""
++import math
++import threading
++import time
++
++AVSCAN_MIN_GAP_SECONDS = 5
++AVSCAN_MAX_PENALTY_SECONDS = 300
++
++
++class AvscanGate:
++    def __init__(self, clock=time.monotonic, min_gap=AVSCAN_MIN_GAP_SECONDS):
++        self._clock = clock
++        self._min_gap = min_gap
++        self._lock = threading.Lock()
++        self._in_flight = False
++        self._next_allowed = float("-inf")
++
++    def _retry_after(self, now: float, floor: float = 0) -> int:
++        return max(1, math.ceil(max(self._next_allowed - now, floor)))
++
++    def try_acquire(self) -> tuple[bool, int]:
++        with self._lock:
++            now = self._clock()
++            if self._in_flight:
++                return False, self._retry_after(now, self._min_gap)
++            if now < self._next_allowed:
++                return False, self._retry_after(now)
++            self._in_flight = True
++            self._next_allowed = now + self._min_gap
++            return True, 0
++
++    def release(self) -> None:
++        with self._lock:
++            self._in_flight = False
++
++    def penalize(self, seconds: float) -> None:
++        seconds = min(seconds, AVSCAN_MAX_PENALTY_SECONDS)
++        with self._lock:
++            now = self._clock()
++            self._next_allowed = max(self._next_allowed, now + seconds, now + self._min_gap)
++
++
++_GATE = AvscanGate()
++
++
++def get_gate() -> AvscanGate:
++    return _GATE
+--- /dev/null
++++ b/core/avscan/image_prep.py
+@@ -0,0 +1,43 @@
++import struct
++from io import BytesIO
++
++from PIL import Image, ImageOps
++
++from core.cover_upload import MAX_PIXELS
++
++MAX_EDGE = 1024
++JPEG_QUALITY = 85
++
++
++class ImageTooLarge(ValueError):
++    pass
++
++
++class ImageUnsupported(ValueError):
++    pass
++
++
++def prepare_image(data: bytes) -> bytes:
++    try:
++        img = Image.open(BytesIO(data))
++        w, h = img.size
++        if w * h > MAX_PIXELS:
++            raise ImageTooLarge(f"image {w}x{h} exceeds pixel limit")
++    except ImageTooLarge:
++        raise
++    except Image.DecompressionBombError as e:
++        raise ImageTooLarge("image exceeds pixel limit") from e
++    except (OSError, ValueError) as e:
++        raise ImageUnsupported("cannot open image") from e
++    if max(w, h) <= MAX_EDGE:
++        return data
++    try:
++        img = ImageOps.exif_transpose(img)
++        img.thumbnail((MAX_EDGE, MAX_EDGE), Image.LANCZOS)
++        out = BytesIO()
++        img.convert("RGB").save(out, "JPEG", quality=JPEG_QUALITY)
++        return out.getvalue()
++    except Image.DecompressionBombError as e:
++        raise ImageTooLarge("image exceeds pixel limit") from e
++    except (OSError, ValueError, SyntaxError, EOFError, struct.error) as e:
++        raise ImageUnsupported("cannot decode or resize image") from e
+--- /dev/null
++++ b/core/avscan/rules.py
+@@ -0,0 +1,50 @@
++import os
++import re
++
++from core.query_intent import classify_query
++from core.scrapers.utils import is_uncensored_route, normalize_number_impl, resolve_route_target
++
++CLEAR_HIT_LEAD = 8
++
++_SEG = r"[A-Za-z0-9._-]+"
++_FRAME_RE = re.compile(rf"/thumb/{_SEG}/{_SEG}/{_SEG}\.webp")
++_COVER_RE = re.compile(rf"/thumb/{_SEG}/covers/{_SEG}\.webp")
++_COVER_NAME_RE = re.compile(r"^(.+)_cover_(full|left|right)$")
++_TIME_RE = re.compile(r"^\d+-\d{2}-\d{2}$")
++
++
++def map_code(code: str) -> tuple[str, bool]:
++    number = normalize_number_impl(code)
++    searchable = classify_query(number).mode == "exact" or is_uncensored_route(resolve_route_target(number))
++    if searchable:
++        return number, True
++    return code, False
++
++
++def is_clear_hit(sims: list[float]) -> tuple[bool, float | None]:
++    if len(sims) < 2:
++        return False, None
++    lead = round(sims[0] - sims[1], 2)
++    return lead >= CLEAR_HIT_LEAD, lead
++
++
++def parse_frame_name(name: str) -> tuple[str, str | None, int | None, str | None]:
++    stem, _ = os.path.splitext(name)
++    m = _COVER_NAME_RE.fullmatch(stem)
++    if m:
++        return "cover", m.group(2), None, None
++    if "_" not in stem:
++        return "frame", None, None, None
++    seg = stem.rsplit("_", 1)[1]
++    if not _TIME_RE.fullmatch(seg):
++        return "frame", None, None, None
++    h, mi, s = seg.split("-")
++    return "frame", None, int(h) * 3600 + int(mi) * 60 + int(s), seg.replace("-", ":")
++
++
++def safe_thumb_path(path: object) -> bool:
++    if not isinstance(path, str):
++        return False
++    if ".." in path:
++        return False
++    return bool(_FRAME_RE.fullmatch(path) or _COVER_RE.fullmatch(path))
+--- /dev/null
 +++ b/core/android_storage.py
 @@ -0,0 +1,152 @@
 +"""Fallback writes through the Android Storage Access Framework.
@@ -1410,7 +1724,28 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress_names json_each failed for %d names (returning [])",
-@@ -1566,7 +2037,7 @@
+@@ -1193,6 +1664,20 @@
+             cursor.execute(
+                 "UPDATE videos SET title = ?, original_title = ?, nfo_mtime = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?",
+                 (title, original_title, nfo_mtime, path)
++            )
++            conn.commit()
++            return cursor.rowcount > 0
++        finally:
++            conn.close()
++
++    def update_nfo_mtime(self, path: str, nfo_mtime: float) -> bool:
++        """Refresh only the cached sidecar mtime after a non-title NFO write."""
++        conn = self._get_connection()
++        cursor = conn.cursor()
++        try:
++            cursor.execute(
++                "UPDATE videos SET nfo_mtime = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?",
++                (nfo_mtime, path),
+             )
+             conn.commit()
+             return cursor.rowcount > 0
+@@ -1566,7 +2051,7 @@
                  """,
                  (escaped + '%', escaped + '%/%'),
              )
@@ -4248,6 +4583,122 @@
                      for i, url in enumerate(sample_images, 1):
                          try:
                              dest = os.path.join(extrafanart_dir, f'fanart{i}.jpg')
+--- /dev/null
++++ b/core/plot_writeback.py
+@@ -0,0 +1,113 @@
++"""Read and update ``<plot>`` / ``<originalplot>`` in an existing NFO.
++
++Only these two elements are changed.  The write goes through the shared atomic
++writer so Android external-storage failures cannot truncate the original NFO.
++"""
++
++from __future__ import annotations
++
++import xml.etree.ElementTree as ET
++from pathlib import Path
++from typing import Optional, Tuple, Union
++
++from core.atomic_write import atomic_write
++from core.nfo_updater import set_element_text
++from core.nfo_utils import sanitize_nfo_bytes
++from core.title_writeback import (
++    NfoNotFoundError,
++    NfoParseError,
++    strip_illegal_xml_chars,
++)
++
++
++class PlotEmptyError(Exception):
++    """NFO has no non-empty ``<plot>`` element."""
++
++
++def read_nfo_plots(nfo_path: Union[str, Path]) -> Tuple[str, str]:
++    """Return ``(plot, original_plot)`` while preserving internal newlines."""
++    path = Path(nfo_path)
++    if not path.exists():
++        raise NfoNotFoundError(str(nfo_path))
++    raw = sanitize_nfo_bytes(path.read_bytes())
++    try:
++        root = ET.fromstring(raw)
++    except ET.ParseError as exc:
++        raise NfoParseError(str(exc)) from exc
++    plot = (root.findtext("plot") or "").strip()
++    original = (root.findtext("originalplot") or "").strip()
++    return plot, original
++
++
++def rewrite_nfo_plot(
++    nfo_path: Union[str, Path],
++    *,
++    new_plot: str,
++    new_original: Optional[str],
++) -> bytes:
++    """Rewrite plot fields and return the serialized XML.
++
++    ``new_original`` uses three states: ``None`` keeps the existing value,
++    ``""`` removes ``<originalplot>``, and a non-empty string replaces it.
++    """
++    path = Path(nfo_path)
++    if not path.exists():
++        raise NfoNotFoundError(str(nfo_path))
++
++    new_plot = strip_illegal_xml_chars(new_plot)
++    if new_original is not None:
++        new_original = strip_illegal_xml_chars(new_original)
++
++    raw = sanitize_nfo_bytes(path.read_bytes())
++    try:
++        root = ET.fromstring(raw)
++    except ET.ParseError as exc:
++        raise NfoParseError(str(exc)) from exc
++
++    plot_elem = root.find("plot")
++    if plot_elem is None or not (plot_elem.text or "").strip():
++        raise PlotEmptyError(str(nfo_path))
++
++    old_plot = plot_elem.text or ""
++    old_original_elem = root.find("originalplot")
++    old_original = (
++        old_original_elem.text or ""
++        if old_original_elem is not None
++        else None
++    )
++
++    plot_same = old_plot == new_plot
++    if new_original is None:
++        original_same = True
++    elif new_original == "":
++        original_same = old_original_elem is None
++    else:
++        original_same = (
++            old_original_elem is not None and old_original == new_original
++        )
++    if plot_same and original_same:
++        return raw
++
++    set_element_text(root, "plot", new_plot)
++    if new_original is None:
++        pass
++    elif new_original == "":
++        if old_original_elem is not None:
++            root.remove(old_original_elem)
++    else:
++        set_element_text(
++            root,
++            "originalplot",
++            new_original,
++            after_tag="plot",
++        )
++
++    out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
++    with atomic_write(
++        path,
++        mode="wb",
++        suffix=".nfo.tmp",
++        mobile_fallback=True,
++    ) as handle:
++        handle.write(out)
++    return out
 --- /dev/null
 +++ b/core/recent_actresses.py
 @@ -0,0 +1,130 @@

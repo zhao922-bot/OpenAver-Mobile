@@ -419,6 +419,32 @@
       "instruction": "Go to <strong>Settings → Advanced Scrape Settings → Version Tags</strong>, add keywords and make sure the file naming format includes the <code class=\"badge badge-sm\">{suffix}</code> variable.",
       "acknowledge": "Got it",
       "go_settings": "Go to Settings"
+    },
+    "image": {
+      "too_large": "Image is too large (max 8MB)",
+      "unsupported": "Only JPG, PNG and WEBP images are supported",
+      "unreachable": "Can't reach avscan right now",
+      "rate_limited": "avscan asks you to wait. Try again in about {seconds} seconds",
+      "btn_title": "Find the ID from a video screenshot or cover (avscan.cc)",
+      "no_candidates": "No candidate IDs found. Try a clearer screenshot or cover.",
+      "match": {
+        "title": "Similarity",
+        "cover": "Cover",
+        "frame": "Video frame",
+        "no_clear_hit": "No clear match — please check the candidates yourself",
+        "retry_hint": "Try again with a clearer video screenshot or cover without watermarks"
+      },
+      "in_library": "In library",
+      "not_in_library": "Not in library",
+      "privacy_title": "Image Search Privacy",
+      "privacy_body": "The image will be sent to the third-party site avscan.cc to identify the ID. OpenAver does not save the image. Continue?",
+      "privacy_cancel": "Cancel",
+      "privacy_accept": "Agree and continue",
+      "results_title": "Image Search Results",
+      "thumb_alt": "Image to search",
+      "searching": "Looking up the ID with avscan…",
+      "use_candidate": "Search with this ID",
+      "not_searchable": "This result cannot be searched as an ID"
     }
   },
   "settings": {
@@ -667,7 +693,9 @@
       "openai_custom_model": "Custom...",
       "claude_cloud": "(Anthropic cloud)",
       "claude_api_key_hint": "Create an API Key in the Anthropic Console (starts with sk-ant-). A Claude subscription login cannot be used here.",
-      "claude_api_key_placeholder": "sk-ant-..."
+      "claude_api_key_placeholder": "sk-ant-...",
+      "openai_official": "OpenAI (official)",
+      "openai_official_hint": "Uses the fixed official OpenAI API (https://api.openai.com/v1). Enter an API Key and select a model."
     },
     "scraper": {
       "suffix_keywords_label": "Version Tags",
@@ -880,7 +908,18 @@
       "gemini_connection_timeout": "Connection timed out",
       "gemini_http_error": "HTTP request failed",
       "gemini_translate_failed": "Translation test failed",
-      "claude_missing_model": "Please select a model first"
+      "claude_missing_model": "Please select a model first",
+      "openai_official_auth_failed": "Authentication failed, check API Key",
+      "openai_official_forbidden": "Access forbidden",
+      "openai_official_not_found": "Model not found. Click \"Test\" to choose again",
+      "openai_official_rate_limited": "Quota exceeded or too many requests",
+      "openai_official_http_error": "HTTP request failed",
+      "openai_official_connection_timeout": "Connection timed out",
+      "openai_official_connection_failed": "Connection failed",
+      "openai_official_translate_failed": "Translation test failed",
+      "openai_official_missing_model": "Please choose a model first",
+      "openai_official_missing_key": "Authentication failed, check API Key",
+      "openai_official_blocked": "This test title was blocked by the provider's content filter. Switching models usually won't help — try another translation service"
     }
   },
   "scanner": {
@@ -1548,7 +1587,21 @@
       "cover_unavailable": "This cover can’t be loaded right now — the file location may be unreachable, or the cover file may be missing",
       "cover_escape_hint": "Cover not found. You can name an image after the video's filename and place it next to the video (e.g. `ABC-123.mp4` → `ABC-123.jpg`), then go back to the Library Manager page and click \"Update Library\" once to pick it up — or click ⚙ to manually specify the ID and re-scrape.",
       "mask_confirm": "Confirm crop position",
-      "mask_cancel": "Cancel crop adjustment"
+      "mask_cancel": "Cancel crop adjustment",
+      "plot_tooltip": "Plot",
+      "plot_face_title": "Plot",
+      "plot_close": "Close plot",
+      "plot_unavailable": "Can't read this video's plot",
+      "plot_translate_tooltip": "Translate plot",
+      "plot_retranslate_tooltip": "Translate again",
+      "plot_show_original_tooltip": "Show original",
+      "plot_show_translated_tooltip": "Show translation",
+      "plot_already_target": "Plot is already in the target language",
+      "plot_write_failed": "Couldn't save the plot. Please try again",
+      "plot_no_nfo": "This video has no NFO, so the plot can't be saved",
+      "plot_translate_done": "Plot translated",
+      "plot_translate_undo": "Undo",
+      "plot_translate_undone": "Plot restored"
     },
     "pick": {
       "add_aria": "Add to picks",

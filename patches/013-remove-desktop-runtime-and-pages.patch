@@ -2835,23 +2835,25 @@
      Alpine.data('scanner', () => mergeState(
 --- a/web/static/js/pages/search/main.js
 +++ b/web/static/js/pages/search/main.js
-@@ -13,6 +13,7 @@
+@@ -13,6 +13,8 @@
  import { searchStateWishlist }    from '@/search/state/wishlist.js';
  import { searchStateEmptyExplainer } from '@/search/state/empty-explainer.js';
  import { searchStateMakerLatest }    from '@/search/state/maker-latest.js';
 +import { searchStateBlankCard }      from '@/search/state/blank-card.js';
++import { searchStateImageSearch }    from '@/search/state/image-search.js';
  import { mergeState }              from '@/shared/merge-state.js';
  
  let _dragTimeoutHandle = null;
-@@ -39,6 +40,7 @@
+@@ -39,6 +41,8 @@
          searchStateWishlist(),
          searchStateEmptyExplainer(),
          searchStateMakerLatest(),
 +        searchStateBlankCard(),
++        searchStateImageSearch(),
          {
              // ===== 頁面組裝層 lifecycle（從 state/index.js 搬移）=====
              _armDragHeartbeat(e) {
-@@ -57,9 +59,7 @@
+@@ -57,9 +61,7 @@
                  clearTimeout(_dragTimeoutHandle);
                  _dragTimeoutHandle = null;
                  if (this.dragActive) this.dragActive = false;
@@ -2862,7 +2864,7 @@
              },
  
              _initDragEvents() {
-@@ -86,6 +86,7 @@
+@@ -86,6 +88,7 @@
                  // 3. 還原 sessionStorage 狀態
                  this.restoreState();
                  this.loadMakerCapsules();   // 不 await：吞錯在方法內，膠囊晚到不擋 init
@@ -2870,18 +2872,23 @@
  
                  // 4. 載入書籤數量（badge；失敗不擋後續 init）
                  await this.loadWishlistCount();
-@@ -114,10 +115,6 @@
+@@ -109,14 +112,11 @@
+                         },
+                         cleanup: () => {
+                             this.cleanupForNavigation();  // 關 SSE + abort fallback + requestId++
++                            this.imgSearchCloseResults();
+                             this._lightboxGeneration++;   // B19: invalidate pending $nextTick lightbox callbacks
+                             if (this.lightboxCloseTimer) {
                                  clearTimeout(this.lightboxCloseTimer);
                                  this.lightboxCloseTimer = null;
-                             }
+-                            }
 -                            // T2(40b): 移除 window listeners
 -                            if (this._pywebviewFilesHandler) {
 -                                window.removeEventListener('pywebview-files', this._pywebviewFilesHandler);
--                            }
+                             }
                              if (this._resizeHandler) {
                                  window.removeEventListener('resize', this._resizeHandler);
-                             }
-@@ -125,11 +122,7 @@
+@@ -125,11 +125,7 @@
                      });
                  }
  

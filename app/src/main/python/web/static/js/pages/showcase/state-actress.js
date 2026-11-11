@@ -200,6 +200,7 @@ export function stateActress() {
         // $watch 姊妹 watcher 是非同步 effect flush，對掛載那一幀擋不住）。
         _setActressLightboxIndex(idx) {
             this._resetMask();
+            this._lbPlotReset?.();
             this.actressLightboxIndex = idx;
             this.currentLightboxActress = (idx >= 0 && idx < _filteredActresses.length)
                 ? _filteredActresses[idx] : null;

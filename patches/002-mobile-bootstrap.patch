@@ -396,7 +396,7 @@
  
      try:
          app.state.auto_organize_task.cancel()
-@@ -286,13 +263,15 @@
+@@ -286,13 +263,16 @@
  
  # 靜態檔案
  app.mount("/static", NoCacheStaticFiles(directory=STATIC_DIR), name="static")
@@ -409,19 +409,21 @@
  
  # ============ 註冊 API 路由 ============
  from web.routers import search as search_router
++from web.routers import image_search as image_search_router
 +from web.routers import database_backup as database_backup_router
  from web.routers import config as config_router
  from web.routers import scraper as scraper_router
  from web.routers import translate as translate_router
-@@ -303,7 +282,6 @@
+@@ -303,7 +283,7 @@
  from web.routers import claude_translate as claude_translate_router
  from web.routers import filename as filename_router
  from web.routers import showcase as showcase_router
 -from web.routers import motion_lab as motion_lab_router
++from web.routers import showcase_plot as showcase_plot_router
  from web.routers import capabilities as capabilities_router
  from web.routers import collection as collection_router
  from web.routers import actress as actress_router
-@@ -324,10 +302,9 @@
+@@ -324,10 +304,9 @@
  from web.routers import scraper_sources as scraper_sources_router
  from web.routers import settings_metatube as settings_metatube_router
  from web.routers import cf as cf_router
@@ -433,23 +435,25 @@
  from web.routers import wishlist as wishlist_router
  from web.routers import insights as insights_router
  from web.routers import source_probe as source_probe_router
-@@ -337,6 +314,7 @@
+@@ -337,6 +316,8 @@
  # correct use-site binding (TASK-63e-1; function-local import would defeat patch).
  from web.routers.settings_metatube import startup_reconnect, _fire_probe  # noqa: E402, PLC2701 — 既有註解（TASK-63e-1）已明講：module-level import 是為了讓 patch("web.app._fire_probe") 打中呼叫端 binding，函式內 import 會讓 patch 失效；_fire_probe 是 metatube 重連探測的內部 primitive，尚未升格為公開 API
  app.include_router(search_router.router)
++app.include_router(image_search_router.router)
 +app.include_router(database_backup_router.router)
  app.include_router(config_router.router)
  app.include_router(scraper_router.router)
  app.include_router(translate_router.router)
-@@ -347,7 +325,6 @@
+@@ -347,7 +328,7 @@
  app.include_router(claude_translate_router.router)
  app.include_router(filename_router.router)
  app.include_router(showcase_router.router)
 -app.include_router(motion_lab_router.router)
++app.include_router(showcase_plot_router.router)
  app.include_router(capabilities_router.router)
  app.include_router(collection_router.router)
  app.include_router(collection_router.user_tags_router)
-@@ -363,10 +340,9 @@
+@@ -363,10 +344,9 @@
  app.include_router(scraper_sources_router.router)
  app.include_router(settings_metatube_router.router)
  app.include_router(cf_router.router)
@@ -461,7 +465,7 @@
  app.include_router(wishlist_router.router)
  app.include_router(insights_router.router)
  app.include_router(source_probe_router.router)
-@@ -375,9 +351,13 @@
+@@ -375,9 +355,13 @@
  
  @app.exception_handler(RequestValidationError)
  async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -476,7 +480,7 @@
      )
  
  
-@@ -405,12 +385,6 @@
+@@ -405,12 +389,6 @@
  _VERIFY_ENDPOINT = ("POST", "/api/access/verify")
  _HEALTH_ENDPOINT = ("GET", "/api/health")
  _AUTH_ALLOWLIST = frozenset({_VERIFY_ENDPOINT, _HEALTH_ENDPOINT})
@@ -489,7 +493,7 @@
  
  def render_access_gate_page(request: Request):
      """偽裝頁：獨立完整 HTML，不透露任何真實內容存在與否。
-@@ -525,10 +499,6 @@
+@@ -525,10 +503,6 @@
          # 登入入口本身，永遠可達，不比對 authed。
          return await call_next(request)
  
@@ -500,7 +504,7 @@
      if (method, path) == _HEALTH_ENDPOINT:
          if authed:
              return await call_next(request)
-@@ -553,41 +523,6 @@
+@@ -553,41 +527,6 @@
      return render_access_gate_page(request)
  
  
@@ -542,7 +546,7 @@
  @app.middleware("http")
  async def lan_access_gate(request: Request, call_next):
      """
-@@ -597,7 +532,7 @@
+@@ -597,7 +536,7 @@
      """
      client = request.client
      client_host = client.host if client else None
@@ -551,7 +555,7 @@
      if client_host in _LOOPBACK_HOSTS:
          return await call_next(request)
      # 非 loopback：讀 config 後委派決策核心（測得即所跑）
-@@ -607,64 +542,9 @@
+@@ -607,64 +546,9 @@
      return PlainTextResponse("Forbidden", status_code=403)
  
  
@@ -618,7 +622,7 @@
      token = cf_handoff.current_key.set(shell_key(request))
      try:
          return await call_next(request)
-@@ -673,54 +553,25 @@
+@@ -673,54 +557,25 @@
  
  
  def _is_loopback_host(host):
@@ -680,7 +684,7 @@
      config = load_config()
  
      # Font size mapping
-@@ -748,6 +599,7 @@
+@@ -748,6 +603,7 @@
              mutate_config(_persist_locale)
          except Exception as e:
              logger.warning("[i18n] 首次偵測語系寫入 config 失敗: %s", e)
@@ -688,7 +692,7 @@
  
      merged_translations = get_merged_translations(locale)
  
-@@ -788,15 +640,12 @@
+@@ -788,15 +644,12 @@
      # 在 web/shell_identity.py::cf_availability_here，SSR 與 /api/cf/availability 共用。
      _cf_avail = cf_availability_here(request)
  
@@ -704,7 +708,7 @@
          "theme": config.get('general', {}).get('theme', 'light'),
          "sidebar_collapsed": config.get('general', {}).get('sidebar_collapsed', False),
          "font_size": font_size,
-@@ -805,11 +654,7 @@
+@@ -805,11 +658,7 @@
          "locale": locale,
          "merged_translations": merged_translations,
          "t": _t_bound,
@@ -717,7 +721,7 @@
          "is_synology": is_synology(),
      }
  
-@@ -850,22 +695,6 @@
+@@ -850,22 +699,6 @@
      return templates.TemplateResponse(request, "search.html", context)
  
  
@@ -740,7 +744,7 @@
  @app.get("/scanner")
  async def scanner_page(request: Request):
      """Scanner 頁面"""
-@@ -894,16 +723,6 @@
+@@ -894,16 +727,6 @@
      context = get_common_context(request)
      context["page"] = "insights"
      return templates.TemplateResponse(request, "insights.html", context)
@@ -757,7 +761,7 @@
  
  
  @app.get("/settings")
-@@ -923,6 +742,7 @@
+@@ -923,6 +746,7 @@
      """使用說明頁面"""
      context = get_common_context(request)
      context["page"] = "help"
@@ -765,7 +769,7 @@
      # 81b-T5 + Codex P2：僅桌面主機（loopback）覆寫成可分享 LAN URL；
      # 遠端裝置走自身 request.base_url（已是可分享位址，nas.local / 反向代理皆保留）。
      lan_ip = context.get("lan_ip")
-@@ -953,15 +773,7 @@
+@@ -953,15 +777,7 @@
      if show_agent_auth:
          context["agent_token"] = snap.agent_token
  
@@ -782,7 +786,7 @@
  
  
  # ============ API 路由（稍後移到 routers/）============
-@@ -976,113 +788,3 @@
+@@ -976,113 +792,3 @@
  async def get_version():
      """取得應用程式版本"""
      return {"success": True, "version": VERSION}

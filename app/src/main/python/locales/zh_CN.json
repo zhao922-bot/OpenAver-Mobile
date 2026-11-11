@@ -419,6 +419,32 @@
       "instruction": "请到 <strong>设置 → 高级刮削设置 → 版本标记</strong>，新增关键字并确认文件命名格式包含 <code class=\"badge badge-sm\">{suffix}</code> 变量。",
       "acknowledge": "了解",
       "go_settings": "前往设置"
+    },
+    "image": {
+      "too_large": "图片过大（上限 8MB）",
+      "unsupported": "仅支持 JPG、PNG、WEBP 图片",
+      "unreachable": "暂时无法连接 avscan",
+      "rate_limited": "avscan 要求稍等，约 {seconds} 秒后可重试",
+      "btn_title": "用视频截图或封面查询番号（avscan.cc）",
+      "no_candidates": "没有找到候选番号，换一张更清晰的截图或封面再试",
+      "match": {
+        "title": "相似度",
+        "cover": "封面",
+        "frame": "视频截图",
+        "no_clear_hit": "没有明确命中，请自行核对候选结果",
+        "retry_hint": "换一张更清晰、没有水印的视频截图或封面再试"
+      },
+      "in_library": "片库已有",
+      "not_in_library": "片库没有",
+      "privacy_title": "图片查询隐私说明",
+      "privacy_body": "图片会发送到第三方网站 avscan.cc 用于识别番号；OpenAver 不会保存这张图片。确定继续？",
+      "privacy_cancel": "取消",
+      "privacy_accept": "同意并继续",
+      "results_title": "图片查询结果",
+      "thumb_alt": "待查询图片",
+      "searching": "正在使用 avscan 查询番号…",
+      "use_candidate": "使用此番号搜索",
+      "not_searchable": "这个结果无法作为番号搜索"
     }
   },
   "settings": {
@@ -667,7 +693,9 @@
       "openai_custom_model": "自定义...",
       "claude_cloud": "（Anthropic 云端）",
       "claude_api_key_hint": "到 Anthropic Console 创建 API Key（sk-ant- 开头）。Claude 订阅套餐的登录不能直接用在这里。",
-      "claude_api_key_placeholder": "sk-ant-..."
+      "claude_api_key_placeholder": "sk-ant-...",
+      "openai_official": "OpenAI（官方）",
+      "openai_official_hint": "固定连接 OpenAI 官方 API（https://api.openai.com/v1），只需填写 API Key 并选择模型。"
     },
     "scraper": {
       "suffix_keywords_label": "版本标记",
@@ -880,7 +908,18 @@
       "gemini_connection_timeout": "连接超时",
       "gemini_http_error": "HTTP 请求失败",
       "gemini_translate_failed": "翻译测试失败",
-      "gemini_blocked": "这个测试片名被服务商的内容审查拦下了；换模型通常没用，可改用其他翻译服务"
+      "gemini_blocked": "这个测试片名被服务商的内容审查拦下了；换模型通常没用，可改用其他翻译服务",
+      "openai_official_auth_failed": "认证失败，请检查 API Key",
+      "openai_official_forbidden": "无访问权限",
+      "openai_official_not_found": "模型不存在，请点『测试』重新选择",
+      "openai_official_rate_limited": "额度不足或请求太频繁",
+      "openai_official_http_error": "HTTP 请求失败",
+      "openai_official_connection_timeout": "连接超时",
+      "openai_official_connection_failed": "连接失败",
+      "openai_official_translate_failed": "翻译测试失败",
+      "openai_official_missing_model": "请先选择模型",
+      "openai_official_missing_key": "认证失败，请检查 API Key",
+      "openai_official_blocked": "这个测试片名被服务商的内容审查拦下了；换模型通常没用，可改用其他翻译服务"
     }
   },
   "scanner": {
@@ -1548,7 +1587,21 @@
       "cover_unavailable": "这部视频的封面现在读不到——可能是文件位置目前无法访问，或者封面文件本身不见了",
       "cover_escape_hint": "找不到封面。可以把图片用视频文件名命名放在视频旁边（例：`ABC-123.mp4` → `ABC-123.jpg`），回片库管理页按一次「更新片库」就会收进来；或按 ⚙ 手动指定番号重新刮。",
       "mask_confirm": "确认裁切位置",
-      "mask_cancel": "取消裁切调整"
+      "mask_cancel": "取消裁切调整",
+      "plot_tooltip": "简介",
+      "plot_face_title": "简介",
+      "plot_close": "关闭简介",
+      "plot_unavailable": "读不到这部片的简介",
+      "plot_translate_tooltip": "翻译简介",
+      "plot_retranslate_tooltip": "重新翻译",
+      "plot_show_original_tooltip": "看原文",
+      "plot_show_translated_tooltip": "看译文",
+      "plot_already_target": "简介已是当前语言",
+      "plot_write_failed": "简介写入失败，请重试",
+      "plot_no_nfo": "这部片没有 NFO，无法写入简介",
+      "plot_translate_done": "已翻译简介",
+      "plot_translate_undo": "撤销",
+      "plot_translate_undone": "已撤销简介"
     },
     "pick": {
       "add_aria": "加入精选",

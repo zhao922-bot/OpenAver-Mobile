@@ -190,6 +190,7 @@ export function stateLightbox() {
             // 123-T4b：GSAP 呼叫收斂進 animations.js（TestMotionInfra 守衛，見該檔
             // killPickStarTweens 註解）。不清 --pick-fill（沿用搬移前行為）。
             window.ShowcaseAnimations?.killPickStarTweens?.({ clearTransform: true });
+            this._lbPlotReset?.();
             this.lightboxIndex = idx;
             this.currentLightboxVideo = (idx >= 0 && idx < _filteredVideos.length)
                 ? _filteredVideos[idx] : null;
@@ -338,6 +339,7 @@ export function stateLightbox() {
         openHeroCardLightbox() {
             if (this._lightboxAnimating) return;
             if (!this._matchedActress) return;
+            this._lbPlotReset?.();
             this._actressChipsExpanded = { aliases: false, info: false };
             // ★ 直接賦值（不走 _setLightboxIndex(-1)）
             this.lightboxIndex = -1;
@@ -380,6 +382,7 @@ export function stateLightbox() {
                 clearTimeout(this.lightboxCloseTimer);
                 this.lightboxCloseTimer = null;
             }
+            this._lbPlotReset?.();
 
             // 49b T4 fix: 若 picker 開啟中，先關閉 picker
             if (this._pickerOpen) {
@@ -578,6 +581,7 @@ export function stateLightbox() {
                 // 掛載），必須在賦值前同步 _resetMask()——姊妹 $watch 是非同步 effect flush，
                 // 對掛載那一幀擋不住（gotchas-frontend §8b／T1 CDP 2/2 重現）。
                 this._resetMask();
+                this._lbPlotReset?.();
                 this.currentLightboxActress = this._matchedActress;
                 this.currentLightboxVideo = null;
                 this.addingLbTag = false;

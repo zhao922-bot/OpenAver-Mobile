@@ -1670,6 +1670,20 @@ class VideoRepository:
         finally:
             conn.close()
 
+    def update_nfo_mtime(self, path: str, nfo_mtime: float) -> bool:
+        """Refresh only the cached sidecar mtime after a non-title NFO write."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "UPDATE videos SET nfo_mtime = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?",
+                (nfo_mtime, path),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        finally:
+            conn.close()
+
     def set_user_rating(self, path: str, value: int) -> bool:
         """安全更新 user_rating 欄位（不碰其他欄位，鏡射 update_user_tags）。
 

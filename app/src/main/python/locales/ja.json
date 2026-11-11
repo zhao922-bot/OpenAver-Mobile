@@ -419,6 +419,32 @@
       "instruction": "<strong>設定 → 高度なスクレイプ設定 → バージョンマーク</strong> でキーワードを追加し、ファイル命名形式に <code class=\"badge badge-sm\">{suffix}</code> 変数が含まれていることを確認してください。",
       "acknowledge": "了解",
       "go_settings": "設定へ"
+    },
+    "image": {
+      "too_large": "画像が大きすぎます（上限 8MB）",
+      "unsupported": "対応形式は JPG、PNG、WEBP のみです",
+      "unreachable": "avscan に現在接続できません",
+      "rate_limited": "avscan から少し待つよう求められました。約 {seconds} 秒後に再試行できます",
+      "btn_title": "動画のスクリーンショットやカバーから品番を調べる（avscan.cc）",
+      "no_candidates": "候補の品番が見つかりません。より鮮明なスクリーンショットかカバーで再試行してください",
+      "match": {
+        "title": "類似度",
+        "cover": "カバー",
+        "frame": "動画フレーム",
+        "no_clear_hit": "はっきりした一致はありません。候補をご自身で確認してください",
+        "retry_hint": "より鮮明で透かしのない動画のスクリーンショットかカバーに替えて、もう一度お試しください"
+      },
+      "in_library": "ライブラリにあり",
+      "not_in_library": "ライブラリになし",
+      "privacy_title": "画像検索のプライバシー",
+      "privacy_body": "画像は品番識別のため第三者のサイト avscan.cc に送信されます。OpenAver は画像を保存しません。続行しますか？",
+      "privacy_cancel": "キャンセル",
+      "privacy_accept": "同意して続行",
+      "results_title": "画像検索結果",
+      "thumb_alt": "検索する画像",
+      "searching": "avscan で品番を調べています…",
+      "use_candidate": "この品番で検索",
+      "not_searchable": "この結果は品番として検索できません"
     }
   },
   "settings": {
@@ -667,7 +693,9 @@
       "openai_custom_model": "カスタム...",
       "claude_cloud": "（Anthropic クラウド）",
       "claude_api_key_hint": "Anthropic Console で API Key を作成してください（sk-ant- で始まります）。Claude のサブスクリプションのログインはここでは使えません。",
-      "claude_api_key_placeholder": "sk-ant-..."
+      "claude_api_key_placeholder": "sk-ant-...",
+      "openai_official": "OpenAI（公式）",
+      "openai_official_hint": "OpenAI 公式 API（https://api.openai.com/v1）に固定接続します。API Key を入力し、モデルを選択してください。"
     },
     "scraper": {
       "suffix_keywords_label": "バージョンマーク",
@@ -880,7 +908,18 @@
       "gemini_connection_timeout": "接続がタイムアウトしました",
       "gemini_http_error": "HTTP リクエストに失敗しました",
       "gemini_translate_failed": "翻訳テストに失敗しました",
-      "gemini_blocked": "このテスト用タイトルはサービス提供元のコンテンツ審査でブロックされました。モデルを変えても効果がないことが多いため、他の翻訳サービスをお試しください"
+      "gemini_blocked": "このテスト用タイトルはサービス提供元のコンテンツ審査でブロックされました。モデルを変えても効果がないことが多いため、他の翻訳サービスをお試しください",
+      "openai_official_auth_failed": "認証失敗、API Key を確認してください",
+      "openai_official_forbidden": "アクセス権限がありません",
+      "openai_official_not_found": "モデルが存在しません。「テスト」を押して選び直してください",
+      "openai_official_rate_limited": "利用枠が不足しているか、リクエストが多すぎます",
+      "openai_official_http_error": "HTTP リクエストに失敗しました",
+      "openai_official_connection_timeout": "接続がタイムアウトしました",
+      "openai_official_connection_failed": "接続に失敗しました",
+      "openai_official_translate_failed": "翻訳テストに失敗しました",
+      "openai_official_missing_model": "先にモデルを選択してください",
+      "openai_official_missing_key": "認証失敗、API Key を確認してください",
+      "openai_official_blocked": "このテスト用タイトルはサービス提供元のコンテンツ審査でブロックされました。モデルを変えても解決しないことが多いので、別の翻訳サービスをお試しください"
     }
   },
   "scanner": {
@@ -1548,7 +1587,21 @@
       "cover_unavailable": "このカバー画像を読み込めません。ファイルの場所にアクセスできないか、カバー画像自体が失われている可能性があります",
       "cover_escape_hint": "カバーが見つかりません。動画ファイル名と同じ名前で画像を動画の横に置くことができます（例：`ABC-123.mp4` → `ABC-123.jpg`）。「ライブラリ管理」ページに戻って「ライブラリを更新」を一度押せば取り込まれます。または ⚙ で品番を手動指定して再スクレイプしてください。",
       "mask_confirm": "切り抜き位置を確定",
-      "mask_cancel": "切り抜き調整をキャンセル"
+      "mask_cancel": "切り抜き調整をキャンセル",
+      "plot_tooltip": "あらすじ",
+      "plot_face_title": "あらすじ",
+      "plot_close": "あらすじを閉じる",
+      "plot_unavailable": "この作品のあらすじを読み込めません",
+      "plot_translate_tooltip": "あらすじを翻訳",
+      "plot_retranslate_tooltip": "再翻訳",
+      "plot_show_original_tooltip": "原文を表示",
+      "plot_show_translated_tooltip": "訳文を表示",
+      "plot_already_target": "あらすじはすでに現在の言語です",
+      "plot_write_failed": "あらすじの書き込みに失敗しました。もう一度お試しください",
+      "plot_no_nfo": "この作品には NFO がないため、あらすじを書き込めません",
+      "plot_translate_done": "あらすじを翻訳しました",
+      "plot_translate_undo": "元に戻す",
+      "plot_translate_undone": "あらすじを元に戻しました"
     },
     "pick": {
       "add_aria": "★を付ける",

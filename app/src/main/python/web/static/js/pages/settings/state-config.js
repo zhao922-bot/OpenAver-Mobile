@@ -44,6 +44,8 @@ export function stateConfig() {
             openaiBaseUrl: '',
             openaiApiKey: '',
             openaiModel: 'gpt-4o-mini',
+            openaiOfficialApiKey: '',
+            openaiOfficialModel: '',
             claudeApiKey: '',
             claudeModel: 'claude-haiku-5-5',
 
@@ -646,6 +648,13 @@ export function stateConfig() {
                     this.form.openaiModel = config.translate.openai?.model || 'gpt-4o-mini';
                     this.openaiUseCustomModel = config.translate.openai?.use_custom_model || false;
 
+                    // OpenAI Official
+                    this.form.openaiOfficialApiKey = config.translate.openai_official?.api_key || '';
+                    this.form.openaiOfficialModel = config.translate.openai_official?.model || '';
+                    if (config.translate.openai_official?.model) {
+                        this.openaiOfficialModels = [config.translate.openai_official.model];
+                    }
+
                     // Claude
                     this.form.claudeApiKey = config.translate.claude?.api_key || '';
                     this.form.claudeModel = config.translate.claude?.model || 'claude-haiku-5-5';
@@ -780,6 +789,12 @@ export function stateConfig() {
                     const ollamaModel = config.translate.ollama?.model || config.translate.ollama_model;
                     if (ollamaUrl && config.translate.provider === 'ollama') {
                         this.loadOllamaModels(ollamaUrl, ollamaModel);  // 不 await
+                    }
+                    if (
+                        config.translate.provider === 'openai_official'
+                        && this.form.openaiOfficialApiKey
+                    ) {
+                        this.fetchOpenAIOfficialModels({ source: 'auto' });
                     }
                 } else {
                     this._configError = result.error || window.t('ui_state.error_title');
@@ -967,6 +982,10 @@ export function stateConfig() {
                         api_key: this.form.openaiApiKey,
                         model: this.form.openaiModel.trim() || 'gpt-4o-mini',
                         use_custom_model: this.openaiUseCustomModel
+                    },
+                    openai_official: {
+                        api_key: this.form.openaiOfficialApiKey,
+                        model: this.form.openaiOfficialModel.trim()
                     },
                     claude: {
                         api_key: this.form.claudeApiKey,
