@@ -33,7 +33,6 @@ class ClientLogPayload(BaseModel):
     user_agent: Optional[str] = None
     importmap_supported: Optional[bool] = None
     alpine_version: Optional[str] = None
-    pywebview_api: Optional[bool] = None
     path: Optional[str] = None
 
 

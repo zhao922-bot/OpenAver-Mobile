@@ -1,10 +1,5 @@
 import { ChipEditor } from '@/settings/chip-editor.js';
 import { normalizeFolderLayers, buildNamingPreview, buildNfoTitlePreview } from '@/shared/naming-preview.js';
-import { whenBridgeReady, callBridge } from '@/shared/shell-client.js';
-import {
-    applyServerLocalFields, buildLocalPatch, localDiff, mergeLocalIntoForm,
-    combineSaveOutcome, resolveLocalMachine,
-} from '@/settings/local-machine.js';
 
 // 同時啟用來源數上限（前端鏡像；後端真理來源 core/source_config.py:MAX_ENABLED_SOURCES）
 const MAX_ENABLED_SOURCES = 10;
@@ -61,66 +56,23 @@ export function stateConfig() {
             strmRules: [],   // strm 路徑映射編輯狀態（array of {local, remote}）；load/save 兩端與 dict 對稱轉換
 
             // Gallery
-            avlistMode: 'image',
             avlistSort: 'date',
             avlistOrder: 'descending',
             avlistItemsPerPage: 90,
             avlistMinSize: 0,
-            avlistOutputDir: '',
-            avlistOutputFilename: 'gallery_output.html',
             coverBadgesEnabled: false,
             coverBadgeItems: {},
             showTableList: false,
 
-            // Showcase
-            viewerPlayer: '',
-
             // General
             defaultPage: 'search',
-            closeAction: 'ask',
             theme: 'light',
             fontSize: 'md',
             locale: (window.__locale || 'zh-CN')
         },
 
-        // GET /api/config 的 response-only 解析值（不入 saveConfig payload）
-        // 預設 '' 避免 :placeholder hydrate 前出現 undefined（FE-TIMING-07）
-        resolvedGalleryOutputPath: '',
-
-        // PUT/GET /api/config 回應頂層欄位（response-only，不入 form／saveConfig payload）：
-        // 儲存後 JavLibrary／FC2-javten 驗證視窗要重開 OpenAver 才會改走新代理設定
-        cfWindowProxyRestartNeeded: false,
-
         // ===== i18n State =====
         locale: (window.__locale || 'zh-CN'),
-
-        // ===== Server Mode State (80a-T3) =====
-        isAndroid: false,
-        serverMode: false,
-        lanIp: '',
-        // 168c-T4：「這台電腦」兩格（viewerPlayer／closeAction）的讀寫路由。
-        // localMachineState：off（非 client）／legacy（舊殼）／unavailable（讀不到）／ready。
-        shellMode: '',
-        localMachineState: 'off',
-        _localSaved: { viewerPlayer: '', closeAction: 'ask' },
-        lanPort: null,
-        publicExposure: false,
-
-        // ===== 存取密碼保護 State（114a-T5）=====
-        accessAuthEnabled: false,      // 勾選框當前值（load 後由 GET 覆寫）＝**未提交草稿**
-        accessAuthPin: '',             // PIN 輸入框當前值（load 後由 GET 覆寫）
-        // 後端已生效的值。與上面那個草稿分開，是因為畫面上有兩處會**對使用者做安全宣稱**
-        // （「?」說明與伺服器模式切換確認框都會說「其他裝置需要輸入密碼才能連入」）。
-        // 那兩處只准讀這個欄位：草稿在使用者勾下去的當下就變 true，但後端此刻還沒有任何
-        // 保護；若儲存又失敗（磁碟寫入失敗、或從手機按存檔吃到 403），草稿會一路停在
-        // true 直到重新整理，使用者看到的是一句「有密碼擋著」的假話，實際上整個區網都
-        // 進得來。單純「失敗時 revert」不夠：那修不到「還沒按存檔就已經在說謊」的視窗，
-        // 而且會把使用者剛打的 PIN 一起丟掉。（Codex PR#129 review P2）
-        accessAuthEnabledSaved: false,
-        accessAuthPinRevealed: false,  // 伺服器旗標：這個瀏覽器能不能看到真值（loopback 才 true）
-        accessAuthCanEdit: false,      // GET 完成前保守鎖住 PIN 與儲存鈕
-        accessAuthPinVisible: false,   // 前端顯示旗標：眼睛按鈕目前是否顯示明碼（純 UI，不影響資料）
-        accessAuthSaving: false,       // Save 按鈕 in-flight 旗標，防雙擊送出
 
         // ===== 全域模式切換破壞性 confirm State (90c-T5) =====
         switchModeConfirmOpen: false,
@@ -388,10 +340,6 @@ export function stateConfig() {
                 this._gsapCtx = window.OpenAver.motion.createContext(this.$el);
             }
 
-            // 80a-T3: 讀 data-lan-ip attribute（T2 注入 template context）
-            this.lanIp = this.$el?.dataset?.lanIp || '';
-            this.shellMode = this.$el?.dataset?.shellMode || '';
-            this.isAndroid = this.$el?.dataset?.isAndroid === 'true';
             this.form.focalAutoEnabled =
                 this.$el?.dataset?.focalAutoEnabled !== 'false';
 
@@ -446,76 +394,6 @@ export function stateConfig() {
             this.locale = next;
         },
 
-        // 80a-T3: Server Mode methods ─────────────────────────────────────────
-
-        serverUrl() {
-            if (!this.lanIp || !this.lanPort) return null;
-            return `http://${this.lanIp}:${this.lanPort}`;
-        },
-
-        // 81b-T1: 顯示用（無 http）；複製仍走 serverUrl() 完整網址
-        serverUrlDisplay() {
-            if (!this.lanIp || !this.lanPort) return null;
-            return `${this.lanIp}:${this.lanPort}`;
-        },
-
-        accessAuthPinDisabled() {
-            return !this.serverMode || this.accessAuthSaving || !this.accessAuthCanEdit;
-        },
-
-        accessAuthSaveDisabled() {
-            return !this.serverMode || this.accessAuthSaving || !this.accessAuthCanEdit
-                || (this.accessAuthEnabled && !/^[0-9A-Za-z]{4}$/.test(this.accessAuthPin));
-        },
-
-        accessAuthStatusHintKey() {
-            if (!this.serverMode) return '';  // 單機模式密碼開關停用，不提示「可以在這裡設定」
-            if (!this.accessAuthEnabledSaved) return 'settings.access_auth.unset_hint';
-            if (!this.accessAuthCanEdit) return 'settings.access_auth.need_login_hint';
-            return '';
-        },
-
-        requestServerModeChange(val) {
-            if (this.serverMode === val) return;  // 同模式不觸發確認
-            this.serverModeConfirmValue = val;
-            this.serverModeConfirmOpen = true;
-        },
-        async confirmServerModeChange() {
-            const val = this.serverModeConfirmValue;  // capture before clearing（防 await 期間再次觸發覆蓋）
-            this.serverModeConfirmOpen = false;
-            this.serverModeConfirmValue = null;
-            await this.setServerMode(val);
-        },
-        cancelServerModeChange() {
-            this.serverModeConfirmOpen = false;
-            this.serverModeConfirmValue = null;
-        },
-        async setServerMode(val) {
-            try {
-                const resp = await fetch('/api/config/general/server_mode', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ value: !!val })
-                });
-                const result = await resp.json();
-                if (result.success) {
-                    this.serverMode = !!val;
-                    this.lanPort = result.lan_port ?? null;
-                    this.lanIp = result.lan_ip ?? null;
-                    this.publicExposure = result.public_exposure ?? false;
-                } else {
-                    console.warn('[serverMode] setServerMode failed:', result.error);
-                    // 遠端被拒（loopback 守衛）給專屬訊息，不用「請稍後再試」（重試無用）
-                    const failKey = result.reason === 'remote_forbidden'
-                        ? 'settings.server_info.remote_only'
-                        : (val ? 'settings.server_info.toggle_failed' : 'settings.server_info.disable_failed');
-                    this.showToast(window.t(failKey), 'error');
-                }
-            } catch (e) {
-                console.warn('[serverMode] setServerMode error:', e);
-                this.showToast(window.t(val ? 'settings.server_info.toggle_failed' : 'settings.server_info.disable_failed'), 'error');
-            }
-        },
         async _saveFocalDeviceDisabled(disabled, notifyOnError = true) {
             try {
                 const resp = await fetch('/api/config/focal-device/disabled', {
@@ -537,40 +415,6 @@ export function stateConfig() {
             }
             return false;
         },
-        async saveAccessAuth() {
-            this.accessAuthSaving = true;
-            // 在 await 之前把送出的值抓成快照（Codex PR#129 round-3 P2）：事後
-            // 推進「已生效」時必須記**這一次真的送出去的值**，不是回應到達當下的
-            // 草稿。模板已把勾選框與 PIN 欄一起鎖在 accessAuthSaving 上，理論上
-            // 兩者不會分岔——但這個函式的正確性不該建立在「模板記得鎖」上面。
-            const submittedEnabled = this.accessAuthEnabled;
-            try {
-                const resp = await fetch('/api/access/settings', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled: submittedEnabled, pin: this.accessAuthPin })
-                });
-                const result = await resp.json();
-                if (result.success) {
-                    // 只有這裡能推進「已生效」——每一條失敗路徑都刻意不動它，讓安全
-                    // 宣稱維持在後端的真實狀態上（草稿保留使用者輸入，不強制還原）。
-                    this.accessAuthEnabledSaved = submittedEnabled;
-                    this.showToast(window.t('settings.access_auth.saved'), 'success');
-                } else if (result.reason === 'invalid_pin') {
-                    this.showToast(window.t('settings.access_auth.pin_invalid'), 'error');
-                } else if (result.reason === 'remote_forbidden') {
-                    this.showToast(window.t('settings.server_info.remote_only'), 'error');
-                } else {
-                    this.showToast(window.t('settings.access_auth.save_failed'), 'error');
-                }
-            } catch (e) {
-                console.warn('[accessAuth] saveAccessAuth error:', e);
-                this.showToast(window.t('settings.access_auth.save_failed'), 'error');
-            } finally {
-                this.accessAuthSaving = false;
-            }
-        },
-
         // 90c-T5: 全域模式切換破壞性 confirm ─────────────────────────────────────
         // 攔截 external_manager segmented button：即時 fetch 判離線來源 → 有則跳破壞性
         // confirm（消費 T4 POST /api/config/switch-external-manager）→ 成功後同步三處。
@@ -675,21 +519,6 @@ export function stateConfig() {
             this.pendingRewriteCount = 0;
         },
 
-        async copyServerUrl() {
-            if (!this.serverUrl()) return;
-            if (!navigator.clipboard?.writeText) {
-                this.showToast(window.t('settings.server_info.copy'), 'info');
-                return;
-            }
-            try {
-                await navigator.clipboard?.writeText(this.serverUrl());
-                this.showToast(window.t('settings.server_info.copied'), 'success');
-            } catch (e) {
-                console.warn('[serverMode] copyServerUrl: clipboard not available', e);
-                this.showToast(window.t('settings.server_info.copy'), 'info');
-            }
-        },
-
         async loadConfig() {
             // 鎖定表單（載入期間不可操作）
             this._configLoading = true;
@@ -713,7 +542,6 @@ export function stateConfig() {
                 const resp = await fetch('/api/config');
                 const result = await resp.json();
                 if (result.success) {
-                    this.cfWindowProxyRestartNeeded = result.cf_window_proxy_restart_needed === true;
                     const config = result.data;
 
                     // Search
@@ -799,24 +627,15 @@ export function stateConfig() {
                         .map(([local, remote]) => ({ local, remote }));
 
                     // Gallery
-                    this.form.avlistMode = config.gallery?.default_mode || 'image';
                     this.form.avlistSort = config.gallery?.default_sort || 'date';
                     this.form.avlistOrder = config.gallery?.default_order || 'descending';
                     // T3.2 P2 fix: `??` 而非 `||` — items_per_page=0 是 "全部" 合法選項，
                     // 用 `||` 會把 0 吞掉變 90，導致存檔後重開 settings 顯示錯誤。
                     this.form.avlistItemsPerPage = config.gallery?.items_per_page ?? 90;
                     this.form.avlistMinSize = config.gallery?.min_size_mb || 0;
-                    // 空字串＝跟著資料根走；用 ?? 保留合法空值，不可再用 || 'output'（FE-JS-01）
-                    this.form.avlistOutputDir = config.gallery?.output_dir ?? '';
-                    this.form.avlistOutputFilename = config.gallery?.output_filename || 'gallery_output.html';
                     this.form.coverBadgesEnabled = config.gallery?.cover_badges?.enabled === true;
                     this.form.coverBadgeItems = { ...(config.gallery?.cover_badges?.items || {}) };
                     this.form.showTableList = config.gallery?.show_table_list === true;
-                    // response-only：後端解析出的實際輸出路徑，供 placeholder 顯示
-                    this.resolvedGalleryOutputPath = result.resolved?.data_root || '';
-
-                    // Showcase
-                    this.form.viewerPlayer = config.showcase?.player || '';
 
                     // General
                     this.form.theme = config.general?.theme || 'light';
@@ -829,44 +648,7 @@ export function stateConfig() {
                     let defaultPage = config.general?.default_page || 'search';
                     if (defaultPage === 'gallery') defaultPage = 'scanner';  // 向後兼容
                     this.form.defaultPage = defaultPage;
-                    this.form.closeAction = config.general?.close_action || 'ask';
                     // sidebar_collapsed 已移除（由 Alpine $persist + localStorage 驅動）
-
-                    if (!this.isAndroid) {
-                        // 80a-T3: Server Mode（?? false：缺 key→false；不用 ||，守 CD#3 慣例）
-                        this.serverMode = config.general?.server_mode ?? false;
-                        if (this.serverMode) {
-                            try {
-                                const r = await fetch('/api/config/general/lan-port');
-                                const j = await r.json();
-                                this.lanPort = j.lan_port ?? null;
-                                this.lanIp = j.lan_ip ?? null;
-                                this.publicExposure = j.public_exposure ?? false;
-                            } catch (_e) {
-                                this.lanPort = null;
-                                this.publicExposure = false;
-                            }
-                        } else {
-                            this.lanPort = null;
-                            this.publicExposure = false;
-                        }
-
-                        // 114a-T5: 存取密碼保護 —— GET 無 loopback 限制，無論 serverMode 開關都嘗試讀取
-                        // （spec §2.6：PIN 設定與已通行裝置在 server_mode 關閉時仍要保留、仍要顯示）
-                        try {
-                            const authResp = await fetch('/api/access/settings');
-                            const authResult = await authResp.json();
-                            if (authResult.success) {
-                                this.accessAuthEnabled = authResult.enabled;
-                                this.accessAuthEnabledSaved = authResult.enabled;
-                                this.accessAuthPin = authResult.pin;
-                                this.accessAuthPinRevealed = authResult.pin_revealed;
-                                this.accessAuthCanEdit = authResult.can_edit;
-                            }
-                        } catch (e) {
-                            console.warn('[accessAuth] loadConfig: GET /api/access/settings failed:', e);
-                        }
-                    }
 
                     // Sources（61c-2）：讀 config.sources 段填入 unified scope。
                     // FIELD-NAME TRAP：後端用 display_name_key / display_name_raw；
@@ -894,8 +676,6 @@ export function stateConfig() {
                     // 建立初始快照（dirty check 基準）— 必須在解鎖前建立
                     this.savedState = JSON.parse(JSON.stringify(this.form));
                     this.savedOpenaiUseCustomModel = this.openaiUseCustomModel;
-                    // 168c-T4：client 模式下兩格改讀這台電腦（表單此時仍 inert）
-                    await this._applyLocalMachine();
                     // 解鎖表單（config hydrate 完成）
                     this._configLoading = false;
 
@@ -965,74 +745,13 @@ export function stateConfig() {
             }
         },
 
-        // 168c-T4：解析「這台電腦」四態並（ready 時）覆寫兩格。非 client 直接 return，不碰 window.pywebview。
-        async _applyLocalMachine() {
-            if (this.shellMode !== 'client') return;
-            const res = await resolveLocalMachine(this.shellMode, {
-                whenBridgeReady,
-                callBridge,
-                getBridge: () => (window.pywebview && window.pywebview.api) || null,
-            });
-            this.localMachineState = res.state;
-            if (res.state !== 'ready') return;
-            const merged = mergeLocalIntoForm(this.form, this.savedState, res.local);
-            for (const k of ['viewerPlayer', 'closeAction']) {
-                this.form[k] = merged.form[k];
-                this.savedState[k] = merged.savedState[k];
-            }
-            this._localSaved = {
-                viewerPlayer: merged.savedState.viewerPlayer,
-                closeAction: merged.savedState.closeAction,
-            };
-        },
-
-        // 168c-T4：伺服器 + 這台電腦各存各的；互不阻擋。
         async saveConfig() {
             if (this._configSaving) return false;
             this._configSaving = true;
             try {
-                const localChanged = this.localMachineState === 'ready'
-                    && localDiff(this.form, this._localSaved).length > 0;
-                const patch = localChanged ? buildLocalPatch(this.form) : null;
                 const previousLocale = this.savedState?.locale;
                 const previousFontSize = this.savedState?.fontSize;
-                const serverOk = await this._saveServerConfig();
-                if (!localChanged) {
-                    if (
-                        serverOk
-                        && (
-                            (previousLocale && previousLocale !== this.form.locale)
-                            || (previousFontSize && previousFontSize !== this.form.fontSize)
-                        )
-                        && !this.pendingNavigationUrl
-                    ) {
-                        setTimeout(() => location.reload(), 250);
-                    }
-                    return serverOk;
-                }
-                const reply = await callBridge('local_settings_save', patch);
-                const localOk = !!reply && reply.ok === true;
-                if (localOk) {
-                    this._localSaved = { viewerPlayer: patch.player, closeAction: patch.close_action };
-                } else if (serverOk && this.savedState) {
-                    // 伺服器存好但這台失敗：savedState 兩格還原成這台已存的值，讓畫面仍顯示未儲存
-                    this.savedState.viewerPlayer = this._localSaved.viewerPlayer;
-                    this.savedState.closeAction = this._localSaved.closeAction;
-                }
-                const key = combineSaveOutcome({ serverOk, localChanged, localOk });
-                let msg = null;
-                switch (key) {
-                    case 'settings.toast.config_saved_with_local':
-                        msg = window.t('settings.toast.config_saved_with_local'); break;
-                    case 'settings.toast.local_failed_server_saved':
-                        msg = window.t('settings.toast.local_failed_server_saved'); break;
-                    case 'settings.toast.local_saved_server_failed':
-                        msg = window.t('settings.toast.local_saved_server_failed'); break;
-                    case 'settings.toast.local_failed_server_failed':
-                        msg = window.t('settings.toast.local_failed_server_failed'); break;
-                }
-                if (msg) this.showToast(msg, serverOk && localOk ? 'success' : 'error');
-                const saved = serverOk && localOk;
+                const saved = await this._saveServerConfig();
                 if (
                     saved
                     && (
@@ -1184,14 +903,10 @@ export function stateConfig() {
                 // 更新 gallery
                 config.gallery = {
                     ...config.gallery,
-                    default_mode: this.form.avlistMode,
                     default_sort: this.form.avlistSort,
                     default_order: this.form.avlistOrder,
                     items_per_page: this.form.avlistItemsPerPage,
                     min_size_mb: this.form.avlistMinSize || 0,
-                    // 空字串原樣送出（跟著資料根走）；不可再用 || 'output'（FE-JS-01）
-                    output_dir: this.form.avlistOutputDir.trim(),
-                    output_filename: this.form.avlistOutputFilename.trim() || 'gallery_output.html',
                     show_table_list: this.form.showTableList,
                     cover_badges: {
                         enabled: this.form.coverBadgesEnabled,
@@ -1209,9 +924,6 @@ export function stateConfig() {
                     // Settings appearance controls are live previews; this PUT is
                     // their only persistence path while the settings page is open.
                 };
-
-                // 168c-T4：showcase.player／general.close_action 依四態決定寫 form 還是保留 GET 原值
-                config = applyServerLocalFields(config, this.form, this.localMachineState);
 
                 // 更新 metatube enabled（CD-63b-3）：保留 url/token（GET 載入的），只更新 enabled。
                 config.metatube = { ...(config.metatube || {}), enabled: this.metatubeEnabled };
@@ -1239,7 +951,6 @@ export function stateConfig() {
                 if (result.success) {
                     focalNeedsRevert = false;
                     saved = true;
-                    this.cfWindowProxyRestartNeeded = result.cf_window_proxy_restart_needed === true;
                     this.showToast(window.t('settings.toast.config_saved'), 'success');
                     // 更新快照（避免儲存後仍為 dirty）
                     this.savedState = JSON.parse(JSON.stringify(this.form));
@@ -1808,8 +1519,8 @@ export function stateConfig() {
         },
         onDragEnd() { this.draggingId = null; this.dropTargetId = null; },
         onDragOver(e, id) {
-            // PyWebView 內 dragover 必須 preventDefault（模板 @dragover.prevent），
-            // 否則 drop 不觸發（gotchas）。
+            // WebView 的 dragover 必須 preventDefault（模板 @dragover.prevent），
+            // 否則 drop 不會觸發。
             if (!this.draggingId || this.draggingId === id) return;
             const target = this.sources.find(x => x.id === id);
             if (!target || !this.isDraggable(target)) return;

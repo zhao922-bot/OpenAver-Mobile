@@ -10,16 +10,181 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_android_settings_guard_desktop_only_controls():
+def test_android_settings_have_no_desktop_only_controls():
     template = (
         ROOT
         / "app/src/main/python/web/templates/settings.html"
     ).read_text(encoding="utf-8")
+    state = (
+        ROOT
+        / "app/src/main/python/web/static/js/pages/settings/state-config.js"
+    ).read_text(encoding="utf-8")
 
-    assert 'data-is-android="{{ \'true\' if is_android else \'false\' }}"' in template
-    assert "{% if not is_android %}" in template
-    assert "C:\\Program Files\\DAUM\\PotPlayer" in template
-    assert "{% if not is_android %}" in template
+    for forbidden in (
+        "{% if not is_android %}",
+        "C:\\Program Files\\DAUM\\PotPlayer",
+        "shell-client",
+        "local-machine",
+        "localMachineState",
+        "shellMode",
+        "serverModeConfirmOpen",
+    ):
+        assert forbidden not in template
+    for forbidden in (
+        "@/shared/shell-client.js",
+        "@/settings/local-machine.js",
+        "localMachineState",
+        "shellMode",
+        "window.pywebview",
+    ):
+        assert forbidden not in state
+
+
+def test_desktop_shell_routes_and_pages_are_removed():
+    app = (
+        ROOT
+        / "app/src/main/python/web/app.py"
+    ).read_text(encoding="utf-8")
+
+    for forbidden in (
+        "from web.routers import client",
+        "from web.routers import cf_shell",
+        "client_router.router",
+        "cf_shell_router.router",
+        '@app.get("/connect")',
+        '@app.get("/updater")',
+        '@app.get("/scraper")',
+        "/api/check-update",
+        "/api/install-context",
+        "/api/trigger-update",
+    ):
+        assert forbidden not in app
+
+    for relative in (
+        "web/routers/client.py",
+        "web/routers/cf_shell.py",
+        "web/templates/connect.html",
+        "web/templates/help.html",
+        "web/templates/updater.html",
+        "web/templates/scraper.html",
+        "web/static/js/pages/help.js",
+        "web/static/js/pages/connect/main.js",
+        "web/static/js/pages/connect/connect-logic.js",
+        "web/static/css/pages/connect.css",
+        "web/static/js/shared/shell-client.js",
+        "web/static/js/shared/shell-notice.js",
+        "web/static/js/shared/shell-reload.js",
+        "web/static/js/shared/conn-state.js",
+        "web/static/js/shared/bridge-notify.js",
+        "web/static/js/pages/settings/local-machine.js",
+        "core/client_connect.py",
+        "core/client_settings.py",
+        "core/client_sources.py",
+        "core/path_translate.py",
+        "core/self_update.py",
+    ):
+        assert not (ROOT / "app/src/main/python" / relative).exists(), relative
+
+    assert not (
+        ROOT / "app/src/main/java/dev/openaver/mobile/ServerProbe.java"
+    ).exists()
+    assert not (
+        ROOT / "app/src/main/java/dev/openaver/mobile/CfShellAgent.java"
+    ).exists()
+    assert (
+        ROOT / "app/src/main/python/web/routers/cf_mobile.py"
+    ).exists()
+    assert "web.routers import cf_mobile" in app
+    assert (
+        ROOT / "app/src/main/java/dev/openaver/mobile/CfMobileAgent.java"
+    ).exists()
+
+
+def test_patch_generator_records_desktop_removals():
+    generator = (
+        ROOT / "tools/generate_patches.py"
+    ).read_text(encoding="utf-8")
+
+    assert "013-remove-desktop-runtime-and-pages.patch" in generator
+    for relative in (
+        "core/client_connect.py",
+        "core/client_settings.py",
+        "core/client_sources.py",
+        "core/path_translate.py",
+        "core/self_update.py",
+        "web/routers/client.py",
+        "web/routers/cf_shell.py",
+        "web/templates/connect.html",
+        "web/templates/help.html",
+        "web/templates/scraper.html",
+        "web/templates/updater.html",
+        "web/static/js/pages/connect/main.js",
+        "web/static/js/pages/help.js",
+        "web/static/js/pages/settings/local-machine.js",
+        "web/static/js/shared/shell-client.js",
+        "web/static/js/shared/shell-notice.js",
+        "web/static/js/shared/shell-reload.js",
+        "web/static/js/shared/conn-state.js",
+        "web/static/js/shared/bridge-notify.js",
+    ):
+        assert f'"{relative}"' in generator
+
+
+def test_pages_do_not_load_desktop_shell_assets_or_shell_state():
+    base = (
+        ROOT
+        / "app/src/main/python/web/templates/base.html"
+    ).read_text(encoding="utf-8")
+    bootstrap = (
+        ROOT
+        / "app/src/main/python/web/templates/_advanced_search_bootstrap.html"
+    ).read_text(encoding="utf-8")
+    rescrape = (
+        ROOT
+        / "app/src/main/python/web/static/js/shared/state-rescrape.js"
+    ).read_text(encoding="utf-8")
+
+    for forbidden in (
+        "shell-notice.js",
+        "shell-reload.js",
+        "conn-state.js",
+        "@/connect/",
+        "nav-link--conn",
+        "oa_shell",
+        "oa_mode",
+    ):
+        assert forbidden not in base
+    assert "in_shell" not in bootstrap
+    assert "inShell" not in rescrape
+
+
+def test_no_untracked_pywebview_residue_in_mobile_web_or_java():
+    roots = (
+        ROOT / "app/src/main/python/web",
+        ROOT / "app/src/main/java",
+    )
+    forbidden = (
+        "pywebview",
+        "shell-client",
+        "local-machine",
+        "shell-notice",
+        "shell-reload",
+        "conn-state",
+    )
+    findings = []
+    for root in roots:
+        for path in root.rglob("*"):
+            if not path.is_file() or "vendor" in path.parts:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            lowered = text.lower()
+            for needle in forbidden:
+                if needle in lowered:
+                    findings.append(f"{path.relative_to(ROOT)}: {needle}")
+    assert findings == []
 
 
 def test_android_video_launcher_uses_native_scheme():
@@ -275,7 +440,7 @@ def test_cloudflare_webviews_are_created_lazily():
     assert "private SiteView requireSite" in transport
     assert "SITE_CREATE_TIMEOUT_MS" in transport
     assert activity.index('openLocalPath("/scanner");') < activity.index(
-        "startCfShell();",
+        "startCfMobile();",
         activity.index("applyLocalAuthCookie"),
     )
 

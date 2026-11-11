@@ -329,7 +329,7 @@ export function searchStateFileList() {
         var hasNfoMap = {};
         var skipMap = {};
         // P2-T6（功能 D）：宣告在 try 外——空列表檢查（下方）在同 try 內須看得到（Codex 三審#1）。
-        // 桌面 pywebview 拖入未掛載/UNC/無權限檔時，filter-files 回 rejected.inaccessible，
+        // 拖入未掛載、無權限或無法讀取的檔案時，filter-files 會回 rejected.inaccessible，
         // 表面化為 path_inaccessible 並中止，取代誤導的「無法識別番號」。
         let hadInaccessible = false;
         try {
@@ -545,38 +545,15 @@ export function searchStateFileList() {
     },
 
     async addFiles() {
-        if (typeof window.pywebview === 'undefined' || !window.pywebview.api) {
-            this.openBrowseDir('search', async (files) => {
-                if (files && files.length > 0) await this.setFileList(files);
-            }, { expandVideos: true });
-            return;
-        }
-        try {
-            const paths = await window.pywebview.api.select_files();
-            if (paths && paths.length > 0) {
-                await this.setFileList(paths);
-            }
-        } catch (e) {
-            console.error('選取檔案失敗:', e);
-        }
+        this.openBrowseDir('search', async (files) => {
+            if (files && files.length > 0) await this.setFileList(files);
+        }, { expandVideos: true });
     },
 
     async addFolder() {
-        if (typeof window.pywebview === 'undefined' || !window.pywebview.api) {
-            this.openBrowseDir('search', async (files) => {
-                if (files && files.length > 0) await this.setFileList(files);
-            }, { expandVideos: true });
-            return;
-        }
-        try {
-            const result = await window.pywebview.api.select_folder();
-            const paths = result?.files || result;
-            if (paths && paths.length > 0) {
-                await this.setFileList(paths);
-            }
-        } catch (e) {
-            console.error('選取資料夾失敗:', e);
-        }
+        this.openBrowseDir('search', async (files) => {
+            if (files && files.length > 0) await this.setFileList(files);
+        }, { expandVideos: true });
     },
 
     async loadFavorite() {

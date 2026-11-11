@@ -80,16 +80,15 @@ def test_mobile_touch_targets_and_title_clamps_are_declared():
     assert "prefers-reduced-motion" in css
 
 
-def test_tag_alias_ai_hint_is_desktop_only():
+def test_tag_alias_desktop_ai_hint_is_not_shipped():
     template = read(PYTHON_WEB / "templates/scanner.html")
     header = template.split('id="tagAliasCard"', 1)[1].split(
         '<div class="actress-alias-body"',
         1,
     )[0]
 
-    assert "{% if not is_android %}" in header
-    assert "tag-alias-ai-hint-wrap" in header
-    assert "scanner.tag_alias.ai_hint.tooltip" in header
+    assert "tag-alias-ai-hint-wrap" not in header
+    assert "scanner.tag_alias.ai_hint.tooltip" not in header
 
 
 def test_search_mobile_layout_does_not_overflow_and_uses_short_placeholder():

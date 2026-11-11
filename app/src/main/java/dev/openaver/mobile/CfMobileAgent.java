@@ -14,16 +14,15 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Android counterpart of windows/cf_shell.py.
+ * Android WebView CF transport worker.
  *
- * <p>The server owns the job broker.  This agent long-polls the same loopback
- * endpoint as the desktop shell, executes jobs on the WebView transport, and
- * posts the result back.  It is intentionally started only after the embedded
- * Python server is healthy.</p>
+ * <p>The server owns the job broker. This agent long-polls the mobile-only
+ * loopback endpoint, executes jobs on the WebView transport, and posts the
+ * result back after the embedded Python server is healthy.</p>
  */
-public final class CfShellAgent {
-    private static final String POLL_PATH = "/api/cf/shell/poll";
-    private static final String RESULT_PATH = "/api/cf/shell/result";
+public final class CfMobileAgent {
+    private static final String POLL_PATH = "/api/cf/mobile/poll";
+    private static final String RESULT_PATH = "/api/cf/mobile/result";
     private static final int HOLD_SECONDS = 20;
     private static final int POLL_TIMEOUT_MS = 35_000;
     private static final int RESULT_TIMEOUT_MS = 10_000;
@@ -34,7 +33,7 @@ public final class CfShellAgent {
     private volatile boolean stopped;
     private Thread thread;
 
-    public CfShellAgent(String baseUrl, String authToken, AndroidCfTransport transport) {
+    public CfMobileAgent(String baseUrl, String authToken, AndroidCfTransport transport) {
         this.baseUrl = baseUrl;
         this.authToken = authToken;
         this.transport = transport;
@@ -45,7 +44,7 @@ public final class CfShellAgent {
             return;
         }
         stopped = false;
-        thread = new Thread(this::runLoop, "openaver-cf-shell");
+        thread = new Thread(this::runLoop, "openaver-cf-mobile");
         thread.setDaemon(true);
         thread.start();
     }
@@ -81,14 +80,11 @@ public final class CfShellAgent {
 
     private JSONObject pollBody() throws Exception {
         JSONObject body = new JSONObject();
-        body.put("shell", "windows");
         JSONArray sites = new JSONArray();
         sites.put(AndroidCfTransport.SITE_JAVLIBRARY);
         sites.put(AndroidCfTransport.SITE_FC2_JAVTEN);
         sites.put(AndroidCfTransport.SITE_JABLE);
         body.put("sites", sites);
-        body.put("applied_proxy", JSONObject.NULL);
-        body.put("server_remote", false);
         body.put("preparing", new JSONArray());
         body.put("hold", HOLD_SECONDS);
         return body;

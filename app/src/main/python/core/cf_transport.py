@@ -10,10 +10,10 @@ DI chain (plan-168d CD-168d-1):
   core/cf_handoff.py            →  HandoffCfTransport implements CfTransport;
                                     the server process (web/app.py) registers it
                                     at import time, so get_cf_transport() is never
-                                    None there. It hands each call to the shell
-                                    (desktop client / local shell) of the request.
-  windows/cf_transport_impl.py  →  the real WebView backend, lives in the shell
-                                    side agent, not registered on the server.
+                                    None there. It hands each call to the Android
+                                    WebView worker associated with the request.
+  AndroidCfTransport.java       →  the real WebView backend, polled by the
+                                    native worker through /api/cf/mobile/*.
   dev launcher / tests          →  may never register → get returns None
                                     → scraper raises CfTransportUnavailable
 """
@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 class CfTransportUnavailable(RuntimeError):
     """CF transport is not initialised in this environment (dev/server).
 
-    User-visible meaning: JavLibrary 僅限桌面應用程式（standalone）可用。
+    User-visible meaning: the Android WebView worker is not available.
     Scrapers should catch this and surface a friendly message rather than a
     raw traceback.
     """
@@ -44,8 +44,8 @@ class CfChallengeRequired(RuntimeError):
 class CfTransport(Protocol):
     """Structural protocol for a Cloudflare-capable transport backend.
 
-    Implementations live in ``windows/`` and must not be imported from
-    ``core/``.  Consumers depend on this Protocol only.
+    Implementations live outside ``core/`` and must not be imported from
+    ``core/``. Consumers depend on this Protocol only.
     """
 
     def begin_solve(self, origin_url: str, cache_key: str) -> None:
@@ -56,18 +56,15 @@ class CfTransport(Protocol):
         must not hold a thread waiting for the solution) is unchanged.
 
         It is NOT, however, strictly instantaneous: an implementation may spend a
-        short, bounded wait on navigation transitions before returning (the
-        pywebview one bounces the window off ``about:blank`` first for sites where
-        WebView2 otherwise stops completing repeat navigations — TASK-118a-T6/F-2,
-        bounded by ``NAV_RESET_TIMEOUT_S``, ~0.1s in practice). Call it from a
-        threadpool/sync path, not directly from an asyncio event loop.
+        short, bounded wait on navigation transitions before returning. Call it
+        from a threadpool/sync path, not directly from an asyncio event loop.
 
         *cache_key* selects which per-site transport window to target (e.g.
         ``'javlibrary'`` or ``'fc-javten'``); each site owns its own hidden
         window, dead-flag, and remembered CF URL internally (see
-        ``windows/cf_transport_impl.py``) — this Protocol's registration
-        model stays a single global transport object regardless of how many
-        sites it serves.
+        ``AndroidCfTransport.java``) — this Protocol's registration model
+        stays a single global transport object regardless of how many sites
+        it serves.
         """
         ...
 
@@ -99,7 +96,7 @@ class CfTransport(Protocol):
 
     def navigate_and_settle(self, url: str, cache_key: str) -> str:
         """**Blocking (bounded)**: navigate the *cache_key* site's transport
-        window to *url*, wait for pywebview's JS bridge to become ready
+        window to *url*, wait for the WebView JavaScript bridge to become ready
         (bounded timeout), then return the settled final URL.
 
         Exists for sites whose search step cannot use a same-origin

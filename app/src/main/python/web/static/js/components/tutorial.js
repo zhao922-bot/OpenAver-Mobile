@@ -263,7 +263,7 @@ class SpotlightTutorial {
 
     async complete(markComplete = true) {
         if (markComplete) {
-            // 寫入後端（持久化，PyWebView 環境）
+            // 寫入後端，讓完成狀態跨頁面持久化。
             try {
                 await fetch('/api/tutorial-completed', { method: 'POST' });
             } catch (e) {

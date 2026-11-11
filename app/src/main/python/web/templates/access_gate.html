@@ -69,18 +69,6 @@
 (function () {
   var el = document.getElementById('v');
   var sent = false;
-  document.addEventListener('keydown', function (e) {
-    if (!window.pywebview) {
-      return;
-    }
-    var isF5 = e.key === 'F5';
-    var isCtrlR = (e.ctrlKey || e.metaKey) && typeof e.key === 'string' && e.key.toLowerCase() === 'r';
-    if (!isF5 && !isCtrlR) {
-      return;
-    }
-    e.preventDefault();
-    location.reload();
-  });
   el.addEventListener('input', function () {
     if (sent) {
       return;

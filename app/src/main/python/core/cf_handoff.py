@@ -3,8 +3,9 @@
 CF 轉交 broker（plan-168d CD-168d-1/2/4/5/8/10）。
 
 伺服器行程永遠註冊 ``HandoffCfTransport``：scraper 呼叫同步的 ``CfTransport`` 方法，
-內部把「抓頁／導航／開驗證視窗」當 job 交給**同一把 key** 的殼（輪詢領走），
-有界地等結果（claim 10 s ＋ exec 最長 60 s；無殼立即失敗）。
+內部把「抓頁／導航／開驗證視窗」當 job 交給**同一把 key** 的 Android
+原生 WebView（透過 /api/cf/mobile/* 輪詢領走），有界地等結果
+（claim 10 s ＋ exec 最長 60 s；無工作端立即失敗）。
 
 時序類只守不變式（I-H1～I-H5、I-R），由 ``tests/unit/test_cf_handoff.py`` 驗證：
 所有阻塞等待一律 ``Event.wait(timeout=…)``；時鐘 ``_now``、事件工廠 ``_event_factory``、
@@ -42,7 +43,7 @@ CF_SITE_ORIGINS = {
     'fc-javten': JAVTEN_ORIGIN,
     'jable': JABLE_ORIGIN,
 }
-# 殼端白名單（windows/cf_shell.check_job）：netloc 整串精確屬於集合；scheme 取 CF_SITE_ORIGINS 的。
+# Android WebView 白名單：netloc 整串精確屬於集合；scheme 取 CF_SITE_ORIGINS 的。
 # javten 站方會落地 www.，引用 fc2_javten 既有常數不複製。
 CF_SITE_NETLOCS = {
     'javlibrary': frozenset({urlsplit(JAVLIBRARY_ORIGIN).netloc.lower()}),

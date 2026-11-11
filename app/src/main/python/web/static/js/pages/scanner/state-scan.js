@@ -13,7 +13,6 @@ export function stateScan() {
         dirPath,
         // ===== Data State =====
         directories: [],
-        shellMode: '',
         config: {},
         configDirty: false,
 
@@ -407,14 +406,6 @@ export function stateScan() {
 
         // ===== Lifecycle =====
         async init() {
-            // 168e-T5: 殼模式由 SSR data-shell-mode 提供；init() 內 $el 才是根節點（點擊 handler 內是按鈕）
-            this.shellMode = this.$el?.dataset?.shellMode || '';
-            // 覆蓋全域函數為 Alpine 版本
-            const self = this;
-
-            // 暴露 PyWebView 回調
-            window.addScannerFolder = (path) => self.addFolderPath(path);
-
             // T5.1: 接入統一 page lifecycle
             // 提前到所有 await 之前註冊：closure 讀的都是 this.* runtime state，
             // 提前註冊不改變行為；但避免 loadConfig fetch 卡住時離頁 dirty-guard /
@@ -731,27 +722,7 @@ export function stateScan() {
 
         // ===== Folder Management =====
         async selectFolder() {
-            if (this.shellMode === 'client' || typeof window.pywebview === 'undefined' || !window.pywebview.api) {
-                this.openBrowseDir('scanner', (path) => { this.addFolderPath(path); });
-                return;
-            }
-
-            try {
-                const result = await window.pywebview.api.select_folder();
-
-                if (result && result.folder) {
-                    this.addFolderPath(result.folder);
-                } else if (Array.isArray(result) && result.length > 0) {
-                    const firstFile = result[0];
-                    const lastSep = Math.max(firstFile.lastIndexOf('\\'), firstFile.lastIndexOf('/'));
-                    const folderPath = lastSep > 0 ? firstFile.substring(0, lastSep) : null;
-                    if (folderPath) {
-                        this.addFolderPath(folderPath);
-                    }
-                }
-            } catch (e) {
-                console.error('[AVList] 選取資料夾失敗:', e);
-            }
+            this.openBrowseDir('scanner', (path) => { this.addFolderPath(path); });
         },
 
         addFolderPath(folderPath) {
@@ -812,8 +783,6 @@ export function stateScan() {
             clearTimeout(_dragTimeoutHandle);
             _dragTimeoutHandle = null;
             if (this.showDragOverlay) this.showDragOverlay = false;
-            // 桌面版由 pywebview 端的 window.handleFolderDrop 接手（見 main.js），這裡不插手
-            if (typeof window.pywebview !== 'undefined' && window.pywebview.api) return;
             this.showToast(window.t('scanner.toast.browse_dir_fallback'), 'info');
             this.openBrowseDir('scanner', (path) => { this.addFolderPath(path); });
         },

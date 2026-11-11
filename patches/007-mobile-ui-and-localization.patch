@@ -13231,22 +13231,17 @@
      renderLabel();  // 初始「第 1／N 段」
 +    renderParts();
  });
---- a/web/static/js/pages/connect/main.js
-+++ b/web/static/js/pages/connect/main.js
-@@ -335,7 +335,9 @@
-             if (this.mode !== 'client' || !this.lastOk) return '';
-             const when = new Date(this.lastOk);
-             if (Number.isNaN(when.getTime())) return '';
--            return window.t('connect.last_ok', { time: when.toLocaleString() });
-+            return window.t('connect.last_ok', {
-+                time: when.toLocaleString(window.__locale || document.documentElement.lang || 'zh-CN')
-+            });
-         },
- 
-         dotName() {
 --- a/web/static/js/pages/scanner/state-scan.js
 +++ b/web/static/js/pages/scanner/state-scan.js
-@@ -33,6 +33,7 @@
+@@ -13,7 +13,6 @@
+         dirPath,
+         // ===== Data State =====
+         directories: [],
+-        shellMode: '',
+         config: {},
+         configDirty: false,
+ 
+@@ -33,6 +32,7 @@
          statsVisible: false,
          statTotal: 0,
          statLastRun: '',
@@ -13254,7 +13249,7 @@
          clearCacheModalOpen: false,
          clearCacheLoading: false,
  
-@@ -45,12 +46,25 @@
+@@ -45,12 +45,25 @@
          copyFailDump: '',
  
          // ===== T7b: State Machine =====
@@ -13281,7 +13276,7 @@
  
          // ===== T7b: Log System =====
          logHtml: '',           // 日誌 HTML（用於 restoreLogs）
-@@ -60,6 +74,7 @@
+@@ -60,6 +73,7 @@
          // ===== T7d: Log Terminal 增強 =====
          logEntries: [],        // [{level, message, timestamp}] 結構化陣列
          logFilter: 'all',      // 'all' | 'error' | 'warn' 篩選條件
@@ -13289,7 +13284,7 @@
  
          // ===== T7b: Done Actions =====
          outputPath: '',        // 輸出路徑（供複製）
-@@ -69,6 +84,23 @@
+@@ -69,6 +83,23 @@
          nfoUpdatePaths: [],
          nfoUpdateItems: [],
          nfoUpdateVisible: false,
@@ -13313,7 +13308,7 @@
  
          // ===== T6d: Jellyfin Image Update =====
          jellyfinImageCount: 0,
-@@ -102,9 +134,129 @@
+@@ -102,9 +133,129 @@
              return (this.progressCurrent / this.progressTotal) * 100;
          },
  
@@ -13444,7 +13439,7 @@
          },
  
          get isBusy() {
-@@ -119,6 +271,88 @@
+@@ -119,6 +270,88 @@
  
          get doneActionsVisible() {
              return this.state === 'done' && this.outputPath !== '';
@@ -13533,7 +13528,22 @@
          },
  
          get generateButtonText() {
-@@ -212,13 +446,18 @@
+@@ -173,14 +406,6 @@
+ 
+         // ===== Lifecycle =====
+         async init() {
+-            // 168e-T5: 殼模式由 SSR data-shell-mode 提供；init() 內 $el 才是根節點（點擊 handler 內是按鈕）
+-            this.shellMode = this.$el?.dataset?.shellMode || '';
+-            // 覆蓋全域函數為 Alpine 版本
+-            const self = this;
+-
+-            // 暴露 PyWebView 回調
+-            window.addScannerFolder = (path) => self.addFolderPath(path);
+-
+             // T5.1: 接入統一 page lifecycle
+             // 提前到所有 await 之前註冊：closure 讀的都是 this.* runtime state，
+             // 提前註冊不改變行為；但避免 loadConfig fetch 卡住時離頁 dirty-guard /
+@@ -212,13 +437,18 @@
                      },
                      onBeforeUnload: () => {
                          const guard = this.shouldWarnBeforeLeave();
@@ -13553,7 +13563,7 @@
                          // T2(40c): abort jellyfin check fetch
                          if (this._jellyfinCheckController) {
                              this._jellyfinCheckController.abort();
-@@ -233,6 +472,10 @@
+@@ -233,6 +463,10 @@
                              this._enrichAbortController.abort();
                              this._enrichAbortController = null;
                          }
@@ -13564,7 +13574,7 @@
                          // TASK-94 Codex P1：離頁時清最後一片 flush dwell timer，避免 timer 事後
                          // 觸發 finalize（checkMissing fetch / state 變更）clobber 已離頁狀態。
                          if (this._flushTimer) {
-@@ -246,6 +489,7 @@
+@@ -246,6 +480,7 @@
              // 初始載入
              await this.loadConfig();
              this.loadStats();
@@ -13572,7 +13582,7 @@
  
              // T7b: 恢復日誌（logOutput 為 scanner.html 靜態 x-ref 元素，
              // init 時早已 mount，直接同步還原、無需等 $nextTick）
-@@ -305,6 +549,14 @@
+@@ -305,6 +540,14 @@
                  if (result.success) {
                      this.config = result.data;
                      this.directories = this.config.gallery?.directories || [];
@@ -13587,7 +13597,7 @@
                      // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                      this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
  
-@@ -358,7 +610,8 @@
+@@ -358,7 +601,8 @@
  
                          if (stats.last_run) {
                              const lastRun = new Date(stats.last_run);
@@ -13597,7 +13607,7 @@
                                  month: 'numeric',
                                  day: 'numeric',
                                  hour: '2-digit',
-@@ -377,6 +630,25 @@
+@@ -377,6 +621,25 @@
              }
          },
  
@@ -13623,7 +13633,7 @@
          async clearCache() {
              this.clearCacheLoading = true;
              try {
-@@ -387,6 +659,10 @@
+@@ -387,6 +650,10 @@
                      this.statTotal = 0;
                      this.statsVisible = false;
                      this.nfoUpdateVisible = false;
@@ -13634,7 +13644,45 @@
                      this.jellyfinImageVisible = false;
                      this.jellyfinCheckState = 'idle';
                      this.clearCacheModalOpen = false;
-@@ -636,6 +912,9 @@
+@@ -455,27 +722,7 @@
+ 
+         // ===== Folder Management =====
+         async selectFolder() {
+-            if (this.shellMode === 'client' || typeof window.pywebview === 'undefined' || !window.pywebview.api) {
+-                this.openBrowseDir('scanner', (path) => { this.addFolderPath(path); });
+-                return;
+-            }
+-
+-            try {
+-                const result = await window.pywebview.api.select_folder();
+-
+-                if (result && result.folder) {
+-                    this.addFolderPath(result.folder);
+-                } else if (Array.isArray(result) && result.length > 0) {
+-                    const firstFile = result[0];
+-                    const lastSep = Math.max(firstFile.lastIndexOf('\\'), firstFile.lastIndexOf('/'));
+-                    const folderPath = lastSep > 0 ? firstFile.substring(0, lastSep) : null;
+-                    if (folderPath) {
+-                        this.addFolderPath(folderPath);
+-                    }
+-                }
+-            } catch (e) {
+-                console.error('[AVList] 選取資料夾失敗:', e);
+-            }
++            this.openBrowseDir('scanner', (path) => { this.addFolderPath(path); });
+         },
+ 
+         addFolderPath(folderPath) {
+@@ -536,8 +783,6 @@
+             clearTimeout(_dragTimeoutHandle);
+             _dragTimeoutHandle = null;
+             if (this.showDragOverlay) this.showDragOverlay = false;
+-            // 桌面版由 pywebview 端的 window.handleFolderDrop 接手（見 main.js），這裡不插手
+-            if (typeof window.pywebview !== 'undefined' && window.pywebview.api) return;
+             this.showToast(window.t('scanner.toast.browse_dir_fallback'), 'info');
+             this.openBrowseDir('scanner', (path) => { this.addFolderPath(path); });
+         },
+@@ -636,6 +881,9 @@
          addLog(level, message) {
              // T7d: 加入結構化陣列
              this.logEntries.push({ level, message, timestamp: Date.now() });
@@ -13644,7 +13692,7 @@
  
              const cls = level === 'error' ? 'log-error' :
                          level === 'warn' ? 'log-warn' : 'log-info';
-@@ -662,13 +941,30 @@
+@@ -662,13 +910,30 @@
  
              // 儲存到 localStorage
              localStorage.setItem('avlist_logs', this.logHtml);
@@ -13675,7 +13723,7 @@
              const wasGenerating = localStorage.getItem('avlist_generating') === 'true';
  
              if (savedLogs) {
-@@ -709,14 +1005,27 @@
+@@ -709,14 +974,27 @@
  
          clearLogs() {
              localStorage.removeItem('avlist_logs');
@@ -13703,7 +13751,7 @@
          clearLogsDisplay() {
              this.logHtml = '';
              this.logEntries = [];
-@@ -758,7 +1067,11 @@
+@@ -758,7 +1036,11 @@
          },
  
          confirmClearAll() {
@@ -13716,7 +13764,7 @@
              if (!hasLogs) {
                  this.showToast(window.t('scanner.toast.no_logs'), 'info');
                  return;
-@@ -768,6 +1081,154 @@
+@@ -768,6 +1050,154 @@
              if (confirm(window.t('scanner.toast.confirm_clear_logs'))) {
                  this.clearLogs();
                  this.showToast(window.t('scanner.toast.logs_cleared'), 'success');
@@ -13871,7 +13919,7 @@
              }
          },
  
-@@ -792,9 +1253,7 @@
+@@ -792,9 +1222,7 @@
  
              // 重置狀態
              this.state = 'generating';
@@ -13882,7 +13930,7 @@
              this.outputPath = '';
              this.nfoUpdateVisible = false;
              this.clearLogs();
-@@ -812,19 +1271,24 @@
+@@ -812,19 +1240,24 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -13910,7 +13958,7 @@
                          localStorage.removeItem('avlist_state');  // 清除 viewer 狀態
  
                          // 處理 NFO 更新提示
-@@ -868,6 +1332,15 @@
+@@ -868,6 +1301,15 @@
                              this.showToast(window.t('scanner.toast.generate_success', { count: data.video_count }), 'success');
                          }
  
@@ -13926,7 +13974,7 @@
                          // a5: Windows 長路徑警告
                          if (data.long_paths && data.long_paths.length > 0) {
                              this.showToast(
-@@ -890,24 +1363,24 @@
+@@ -890,24 +1332,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -13955,7 +14003,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] generate error:', e);
                  this.showToast(window.t('scanner.toast.generate_error'), 'error', 4000);
-@@ -915,26 +1388,63 @@
+@@ -915,26 +1357,63 @@
          },
  
          // ===== T7b: NFO Update Flow =====
@@ -14025,7 +14073,7 @@
  
                  this.eventSource.onmessage = (event) => {
                      const data = JSON.parse(event.data);
-@@ -943,55 +1453,288 @@
+@@ -943,55 +1422,288 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -14326,7 +14374,7 @@
          // ===== T6d: Jellyfin Image Update Flow =====
          async runJellyfinImageUpdate() {
              if (this.isGenerating) return;
-@@ -1002,9 +1745,7 @@
+@@ -1002,9 +1714,7 @@
              }
  
              this.state = 'jellyfinUpdating';
@@ -14337,7 +14385,7 @@
              this.clearLogs();
  
              localStorage.setItem('avlist_generating', 'true');
-@@ -1019,14 +1760,13 @@
+@@ -1019,14 +1729,13 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -14354,7 +14402,7 @@
                          // TASK-111 P2-b 後續（codex delta review）：done 不再必然代表「全數完成」——
                          // 批次跑到一半若把 external_manager 切成 off，後端會在下一部片 break 並送
                          // done(updated=已完成筆數)。這裡若無條件補滿 progressTotal，UI 會顯示 3/3
-@@ -1035,9 +1775,14 @@
+@@ -1035,9 +1744,14 @@
                          this.progressCurrent = (typeof data.updated === 'number')
                              ? data.updated
                              : this.progressTotal;
@@ -14370,7 +14418,7 @@
  
                          // T3(40c) Codex fix: update 完成後重設 jellyfin check 狀態，讓觸發列重新出現
                          this.jellyfinImageVisible = false;
-@@ -1045,7 +1790,13 @@
+@@ -1045,7 +1759,13 @@
                          this.jellyfinItems = [];
                          this.jellyfinCheckState = 'idle';
  
@@ -14385,7 +14433,7 @@
                          if (data.message) {
                              this.addLog('info', data.message);
                          }
-@@ -1053,24 +1804,24 @@
+@@ -1053,24 +1773,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -14414,7 +14462,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] runJellyfinImageUpdate error:', e);
                  this.showToast(window.t('scanner.toast.jellyfin_update_error'), 'error', 4000);
-@@ -1078,6 +1829,21 @@
+@@ -1078,6 +1798,21 @@
          },
  
          // ===== T7b: Utility =====
@@ -14436,7 +14484,7 @@
          copyOutputPath() {
              if (!this.outputPath) return;
  
-@@ -1097,5 +1863,6 @@
+@@ -1097,5 +1832,6 @@
                  }
              });
          },
@@ -15168,7 +15216,18 @@
                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
 --- a/web/static/js/pages/settings/state-config.js
 +++ b/web/static/js/pages/settings/state-config.js
-@@ -46,6 +46,7 @@
+@@ -1,10 +1,5 @@
+ import { ChipEditor } from '@/settings/chip-editor.js';
+ import { normalizeFolderLayers, buildNamingPreview, buildNfoTitlePreview } from '@/shared/naming-preview.js';
+-import { whenBridgeReady, callBridge } from '@/shared/shell-client.js';
+-import {
+-    applyServerLocalFields, buildLocalPatch, localDiff, mergeLocalIntoForm,
+-    combineSaveOutcome, resolveLocalMachine,
+-} from '@/settings/local-machine.js';
+ 
+ // 同時啟用來源數上限（前端鏡像；後端真理來源 core/source_config.py:MAX_ENABLED_SOURCES）
+ const MAX_ENABLED_SOURCES = 10;
+@@ -46,6 +41,7 @@
  
              // Scraper
              createFolder: true,
@@ -15176,31 +15235,75 @@
              // 資料夾層級：{id,value}[] 動態清單（外→內，上到下）。load 時 slice(0,3) 正規化
              // （後端只用前 3 層，CD-95a-7/12）。id 走 naming.layerSeq，x-for :key="layer.id"。
              folderLayerList: [],
-@@ -76,7 +77,10 @@
+@@ -60,62 +56,23 @@
+             strmRules: [],   // strm 路徑映射編輯狀態（array of {local, remote}）；load/save 兩端與 dict 對稱轉換
  
+             // Gallery
+-            avlistMode: 'image',
+             avlistSort: 'date',
+             avlistOrder: 'descending',
+             avlistItemsPerPage: 90,
+             avlistMinSize: 0,
+-            avlistOutputDir: '',
+-            avlistOutputFilename: 'gallery_output.html',
+             coverBadgesEnabled: false,
+             coverBadgeItems: {},
+             showTableList: false,
+ 
+-            // Showcase
+-            viewerPlayer: '',
+-
              // General
              defaultPage: 'search',
 -            closeAction: 'ask'
-+            closeAction: 'ask',
+-        },
+-
+-        // GET /api/config 的 response-only 解析值（不入 saveConfig payload）
+-        // 預設 '' 避免 :placeholder hydrate 前出現 undefined（FE-TIMING-07）
+-        resolvedGalleryOutputPath: '',
+-
+-        // PUT/GET /api/config 回應頂層欄位（response-only，不入 form／saveConfig payload）：
+-        // 儲存後 JavLibrary／FC2-javten 驗證視窗要重開 OpenAver 才會改走新代理設定
+-        cfWindowProxyRestartNeeded: false,
 +            theme: 'light',
 +            fontSize: 'md',
 +            locale: (window.__locale || 'zh-CN')
-         },
- 
-         // GET /api/config 的 response-only 解析值（不入 saveConfig payload）
-@@ -88,9 +92,10 @@
-         cfWindowProxyRestartNeeded: false,
++        },
  
          // ===== i18n State =====
 -        locale: (window.__locale || 'zh-TW'),
+-
+-        // ===== Server Mode State (80a-T3) =====
+-        serverMode: false,
+-        lanIp: '',
+-        // 168c-T4：「這台電腦」兩格（viewerPlayer／closeAction）的讀寫路由。
+-        // localMachineState：off（非 client）／legacy（舊殼）／unavailable（讀不到）／ready。
+-        shellMode: '',
+-        localMachineState: 'off',
+-        _localSaved: { viewerPlayer: '', closeAction: 'ask' },
+-        lanPort: null,
+-        publicExposure: false,
+-
+-        // ===== 存取密碼保護 State（114a-T5）=====
+-        accessAuthEnabled: false,      // 勾選框當前值（load 後由 GET 覆寫）＝**未提交草稿**
+-        accessAuthPin: '',             // PIN 輸入框當前值（load 後由 GET 覆寫）
+-        // 後端已生效的值。與上面那個草稿分開，是因為畫面上有兩處會**對使用者做安全宣稱**
+-        // （「?」說明與伺服器模式切換確認框都會說「其他裝置需要輸入密碼才能連入」）。
+-        // 那兩處只准讀這個欄位：草稿在使用者勾下去的當下就變 true，但後端此刻還沒有任何
+-        // 保護；若儲存又失敗（磁碟寫入失敗、或從手機按存檔吃到 403），草稿會一路停在
+-        // true 直到重新整理，使用者看到的是一句「有密碼擋著」的假話，實際上整個區網都
+-        // 進得來。單純「失敗時 revert」不夠：那修不到「還沒按存檔就已經在說謊」的視窗，
+-        // 而且會把使用者剛打的 PIN 一起丟掉。（Codex PR#129 review P2）
+-        accessAuthEnabledSaved: false,
+-        accessAuthPinRevealed: false,  // 伺服器旗標：這個瀏覽器能不能看到真值（loopback 才 true）
+-        accessAuthCanEdit: false,      // GET 完成前保守鎖住 PIN 與儲存鈕
+-        accessAuthPinVisible: false,   // 前端顯示旗標：眼睛按鈕目前是否顯示明碼（純 UI，不影響資料）
+-        accessAuthSaving: false,       // Save 按鈕 in-flight 旗標，防雙擊送出
 +        locale: (window.__locale || 'zh-CN'),
  
-         // ===== Server Mode State (80a-T3) =====
-+        isAndroid: false,
-         serverMode: false,
-         lanIp: '',
-         // 168c-T4：「這台電腦」兩格（viewerPlayer／closeAction）的讀寫路由。
-@@ -130,9 +135,13 @@
+         // ===== 全域模式切換破壞性 confirm State (90c-T5) =====
+         switchModeConfirmOpen: false,
+@@ -130,9 +87,13 @@
  
          // ===== Dirty Check State =====
          savedState: null,
@@ -15214,7 +15317,7 @@
          // 95a-T8: filename 膠囊編輯器收斂式 hydrate 就緒旗標（響應式鏡像，供 x-effect 追蹤；
          // naming.ready 是 closure 布林、非響應式，x-effect 追不到）。loadConfig 開頭重設 false、
          // form 設妥後翻 true；由 hydrateFilenameEditor() 讀取觸發 reactive 補載。
-@@ -204,11 +213,41 @@
+@@ -204,11 +165,41 @@
          },
  
          // ===== Computed Properties =====
@@ -15257,7 +15360,7 @@
          },
  
          // 命名預覽（依 data 套範例值）。誠實反映後端空值行為（U-A2）：空變數 → 空字串，
-@@ -299,7 +338,7 @@
+@@ -299,7 +290,7 @@
              const censored = this.sources.filter(s => this.CENSORED_SOURCES.includes(s.id));
              return censored.length > 0 && censored.every(s => !s.enabled);
          },
@@ -15266,7 +15369,7 @@
          // setter(false) = NO-OP + transient hint（EC-2：off 不自動重開有碼，由使用者手動重啟任一有碼 pill）。
          set uncensoredMode(v) {
              if (v === true) {
-@@ -308,7 +347,6 @@
+@@ -308,7 +299,6 @@
                          s.enabled = false;
                      }
                  });
@@ -15274,17 +15377,19 @@
              } else {
                  this._flashUncensoredOffHint();
              }
-@@ -353,6 +391,9 @@
-             // 80a-T3: 讀 data-lan-ip attribute（T2 注入 template context）
-             this.lanIp = this.$el?.dataset?.lanIp || '';
-             this.shellMode = this.$el?.dataset?.shellMode || '';
-+            this.isAndroid = this.$el?.dataset?.isAndroid === 'true';
+@@ -350,9 +340,8 @@
+                 this._gsapCtx = window.OpenAver.motion.createContext(this.$el);
+             }
+ 
+-            // 80a-T3: 讀 data-lan-ip attribute（T2 注入 template context）
+-            this.lanIp = this.$el?.dataset?.lanIp || '';
+-            this.shellMode = this.$el?.dataset?.shellMode || '';
 +            this.form.focalAutoEnabled =
 +                this.$el?.dataset?.focalAutoEnabled !== 'false';
  
              this.loadConfig().then(() => {
                  // B1: init scanner link state after config loaded
-@@ -389,29 +430,20 @@
+@@ -389,108 +378,23 @@
          },
  
          // ===== Methods =====
@@ -15321,15 +15426,78 @@
 -            } catch (e) {
 -                console.error('[i18n] cycleLocale error:', e);
 -            }
-+            this.form.locale = next;
-+            this.locale = next;
-         },
- 
-         // 80a-T3: Server Mode methods ─────────────────────────────────────────
-@@ -484,13 +516,7 @@
-                 this.showToast(window.t(val ? 'settings.server_info.toggle_failed' : 'settings.server_info.disable_failed'), 'error');
-             }
-         },
+-        },
+-
+-        // 80a-T3: Server Mode methods ─────────────────────────────────────────
+-
+-        serverUrl() {
+-            if (!this.lanIp || !this.lanPort) return null;
+-            return `http://${this.lanIp}:${this.lanPort}`;
+-        },
+-
+-        // 81b-T1: 顯示用（無 http）；複製仍走 serverUrl() 完整網址
+-        serverUrlDisplay() {
+-            if (!this.lanIp || !this.lanPort) return null;
+-            return `${this.lanIp}:${this.lanPort}`;
+-        },
+-
+-        accessAuthPinDisabled() {
+-            return !this.serverMode || this.accessAuthSaving || !this.accessAuthCanEdit;
+-        },
+-
+-        accessAuthSaveDisabled() {
+-            return !this.serverMode || this.accessAuthSaving || !this.accessAuthCanEdit
+-                || (this.accessAuthEnabled && !/^[0-9A-Za-z]{4}$/.test(this.accessAuthPin));
+-        },
+-
+-        accessAuthStatusHintKey() {
+-            if (!this.serverMode) return '';  // 單機模式密碼開關停用，不提示「可以在這裡設定」
+-            if (!this.accessAuthEnabledSaved) return 'settings.access_auth.unset_hint';
+-            if (!this.accessAuthCanEdit) return 'settings.access_auth.need_login_hint';
+-            return '';
+-        },
+-
+-        requestServerModeChange(val) {
+-            if (this.serverMode === val) return;  // 同模式不觸發確認
+-            this.serverModeConfirmValue = val;
+-            this.serverModeConfirmOpen = true;
+-        },
+-        async confirmServerModeChange() {
+-            const val = this.serverModeConfirmValue;  // capture before clearing（防 await 期間再次觸發覆蓋）
+-            this.serverModeConfirmOpen = false;
+-            this.serverModeConfirmValue = null;
+-            await this.setServerMode(val);
+-        },
+-        cancelServerModeChange() {
+-            this.serverModeConfirmOpen = false;
+-            this.serverModeConfirmValue = null;
+-        },
+-        async setServerMode(val) {
+-            try {
+-                const resp = await fetch('/api/config/general/server_mode', {
+-                    method: 'PUT',
+-                    headers: { 'Content-Type': 'application/json' },
+-                    body: JSON.stringify({ value: !!val })
+-                });
+-                const result = await resp.json();
+-                if (result.success) {
+-                    this.serverMode = !!val;
+-                    this.lanPort = result.lan_port ?? null;
+-                    this.lanIp = result.lan_ip ?? null;
+-                    this.publicExposure = result.public_exposure ?? false;
+-                } else {
+-                    console.warn('[serverMode] setServerMode failed:', result.error);
+-                    // 遠端被拒（loopback 守衛）給專屬訊息，不用「請稍後再試」（重試無用）
+-                    const failKey = result.reason === 'remote_forbidden'
+-                        ? 'settings.server_info.remote_only'
+-                        : (val ? 'settings.server_info.toggle_failed' : 'settings.server_info.disable_failed');
+-                    this.showToast(window.t(failKey), 'error');
+-                }
+-            } catch (e) {
+-                console.warn('[serverMode] setServerMode error:', e);
+-                this.showToast(window.t(val ? 'settings.server_info.toggle_failed' : 'settings.server_info.disable_failed'), 'error');
+-            }
+-        },
 -        // 不用 base.html configSync：那是外觀同步（debounce/keepalive/吞錯）；這一顆是有行為後果的決定，失敗必須把 checkbox 撥回。
 -        async setFocalDeviceDisabled(event) {
 -            // checked = 啟用；端點 value = disabled → 取反
@@ -15337,11 +15505,15 @@
 -            // 失敗要退回按之前，所以回滾寫 !submittedChecked，不是 submittedChecked。
 -            const submittedChecked = event.target.checked;
 -            const disabled = !submittedChecked;
++            this.form.locale = next;
++            this.locale = next;
++        },
++
 +        async _saveFocalDeviceDisabled(disabled, notifyOnError = true) {
              try {
                  const resp = await fetch('/api/config/focal-device/disabled', {
                      method: 'PUT',
-@@ -498,16 +524,18 @@
+@@ -498,51 +402,19 @@
                      body: JSON.stringify({ value: disabled })
                  });
                  const result = await resp.json();
@@ -15358,16 +15530,69 @@
 -                this.showToast(window.t('settings.scraper.focal_toggle_failed'), 'error');
 -                event.target.checked = !submittedChecked;
 -            }
+-        },
+-        async saveAccessAuth() {
+-            this.accessAuthSaving = true;
+-            // 在 await 之前把送出的值抓成快照（Codex PR#129 round-3 P2）：事後
+-            // 推進「已生效」時必須記**這一次真的送出去的值**，不是回應到達當下的
+-            // 草稿。模板已把勾選框與 PIN 欄一起鎖在 accessAuthSaving 上，理論上
+-            // 兩者不會分岔——但這個函式的正確性不該建立在「模板記得鎖」上面。
+-            const submittedEnabled = this.accessAuthEnabled;
+-            try {
+-                const resp = await fetch('/api/access/settings', {
+-                    method: 'PUT',
+-                    headers: { 'Content-Type': 'application/json' },
+-                    body: JSON.stringify({ enabled: submittedEnabled, pin: this.accessAuthPin })
+-                });
+-                const result = await resp.json();
+-                if (result.success) {
+-                    // 只有這裡能推進「已生效」——每一條失敗路徑都刻意不動它，讓安全
+-                    // 宣稱維持在後端的真實狀態上（草稿保留使用者輸入，不強制還原）。
+-                    this.accessAuthEnabledSaved = submittedEnabled;
+-                    this.showToast(window.t('settings.access_auth.saved'), 'success');
+-                } else if (result.reason === 'invalid_pin') {
+-                    this.showToast(window.t('settings.access_auth.pin_invalid'), 'error');
+-                } else if (result.reason === 'remote_forbidden') {
+-                    this.showToast(window.t('settings.server_info.remote_only'), 'error');
+-                } else {
+-                    this.showToast(window.t('settings.access_auth.save_failed'), 'error');
 +                console.warn('[focalDevice] save error:', e);
 +                if (notifyOnError) {
 +                    this.showToast(window.t('settings.scraper.focal_toggle_failed'), 'error');
-+                }
+                 }
+-            } catch (e) {
+-                console.warn('[accessAuth] saveAccessAuth error:', e);
+-                this.showToast(window.t('settings.access_auth.save_failed'), 'error');
+-            } finally {
+-                this.accessAuthSaving = false;
+-            }
+-        },
+-
 +            }
 +            return false;
++        },
+         // 90c-T5: 全域模式切換破壞性 confirm ─────────────────────────────────────
+         // 攔截 external_manager segmented button：即時 fetch 判離線來源 → 有則跳破壞性
+         // confirm（消費 T4 POST /api/config/switch-external-manager）→ 成功後同步三處。
+@@ -647,26 +519,13 @@
+             this.pendingRewriteCount = 0;
          },
-         async saveAccessAuth() {
-             this.accessAuthSaving = true;
-@@ -665,8 +693,10 @@
+ 
+-        async copyServerUrl() {
+-            if (!this.serverUrl()) return;
+-            if (!navigator.clipboard?.writeText) {
+-                this.showToast(window.t('settings.server_info.copy'), 'info');
+-                return;
+-            }
+-            try {
+-                await navigator.clipboard?.writeText(this.serverUrl());
+-                this.showToast(window.t('settings.server_info.copied'), 'success');
+-            } catch (e) {
+-                console.warn('[serverMode] copyServerUrl: clipboard not available', e);
+-                this.showToast(window.t('settings.server_info.copy'), 'info');
+-            }
+-        },
+-
          async loadConfig() {
              // 鎖定表單（載入期間不可操作）
              this._configLoading = true;
@@ -15378,8 +15603,36 @@
              // 95a-T8: 對稱重設 hydrate 旗標（reset 設定 / 重跑 loadConfig 時需重新 hydrate，
              // 否則 one-shot 會擋住 filename editor 的重新載入）。
              this.namingConfigReady = false;
-@@ -789,44 +819,53 @@
-                     this.form.viewerPlayer = config.showcase?.player || '';
+@@ -683,7 +542,6 @@
+                 const resp = await fetch('/api/config');
+                 const result = await resp.json();
+                 if (result.success) {
+-                    this.cfWindowProxyRestartNeeded = result.cf_window_proxy_restart_needed === true;
+                     const config = result.data;
+ 
+                     // Search
+@@ -769,65 +627,28 @@
+                         .map(([local, remote]) => ({ local, remote }));
+ 
+                     // Gallery
+-                    this.form.avlistMode = config.gallery?.default_mode || 'image';
+                     this.form.avlistSort = config.gallery?.default_sort || 'date';
+                     this.form.avlistOrder = config.gallery?.default_order || 'descending';
+                     // T3.2 P2 fix: `??` 而非 `||` — items_per_page=0 是 "全部" 合法選項，
+                     // 用 `||` 會把 0 吞掉變 90，導致存檔後重開 settings 顯示錯誤。
+                     this.form.avlistItemsPerPage = config.gallery?.items_per_page ?? 90;
+                     this.form.avlistMinSize = config.gallery?.min_size_mb || 0;
+-                    // 空字串＝跟著資料根走；用 ?? 保留合法空值，不可再用 || 'output'（FE-JS-01）
+-                    this.form.avlistOutputDir = config.gallery?.output_dir ?? '';
+-                    this.form.avlistOutputFilename = config.gallery?.output_filename || 'gallery_output.html';
+                     this.form.coverBadgesEnabled = config.gallery?.cover_badges?.enabled === true;
+                     this.form.coverBadgeItems = { ...(config.gallery?.cover_badges?.items || {}) };
+                     this.form.showTableList = config.gallery?.show_table_list === true;
+-                    // response-only：後端解析出的實際輸出路徑，供 placeholder 顯示
+-                    this.resolvedGalleryOutputPath = result.resolved?.data_root || '';
+-
+-                    // Showcase
+-                    this.form.viewerPlayer = config.showcase?.player || '';
  
                      // General
 +                    this.form.theme = config.general?.theme || 'light';
@@ -15392,9 +15645,9 @@
                      let defaultPage = config.general?.default_page || 'search';
                      if (defaultPage === 'gallery') defaultPage = 'scanner';  // 向後兼容
                      this.form.defaultPage = defaultPage;
-                     this.form.closeAction = config.general?.close_action || 'ask';
+-                    this.form.closeAction = config.general?.close_action || 'ask';
                      // sidebar_collapsed 已移除（由 Alpine $persist + localStorage 驅動）
- 
+-
 -                    // 80a-T3: Server Mode（?? false：缺 key→false；不用 ||，守 CD#3 慣例）
 -                    this.serverMode = config.general?.server_mode ?? false;
 -                    if (this.serverMode) {
@@ -15405,24 +15658,9 @@
 -                            this.lanIp = j.lan_ip ?? null;
 -                            this.publicExposure = j.public_exposure ?? false;
 -                        } catch (_e) {
-+                    if (!this.isAndroid) {
-+                        // 80a-T3: Server Mode（?? false：缺 key→false；不用 ||，守 CD#3 慣例）
-+                        this.serverMode = config.general?.server_mode ?? false;
-+                        if (this.serverMode) {
-+                            try {
-+                                const r = await fetch('/api/config/general/lan-port');
-+                                const j = await r.json();
-+                                this.lanPort = j.lan_port ?? null;
-+                                this.lanIp = j.lan_ip ?? null;
-+                                this.publicExposure = j.public_exposure ?? false;
-+                            } catch (_e) {
-+                                this.lanPort = null;
-+                                this.publicExposure = false;
-+                            }
-+                        } else {
-                             this.lanPort = null;
-                             this.publicExposure = false;
-                         }
+-                            this.lanPort = null;
+-                            this.publicExposure = false;
+-                        }
 -                    } else {
 -                        this.lanPort = null;
 -                        this.publicExposure = false;
@@ -15439,28 +15677,14 @@
 -                            this.accessAuthPin = authResult.pin;
 -                            this.accessAuthPinRevealed = authResult.pin_revealed;
 -                            this.accessAuthCanEdit = authResult.can_edit;
-+
-+                        // 114a-T5: 存取密碼保護 —— GET 無 loopback 限制，無論 serverMode 開關都嘗試讀取
-+                        // （spec §2.6：PIN 設定與已通行裝置在 server_mode 關閉時仍要保留、仍要顯示）
-+                        try {
-+                            const authResp = await fetch('/api/access/settings');
-+                            const authResult = await authResp.json();
-+                            if (authResult.success) {
-+                                this.accessAuthEnabled = authResult.enabled;
-+                                this.accessAuthEnabledSaved = authResult.enabled;
-+                                this.accessAuthPin = authResult.pin;
-+                                this.accessAuthPinRevealed = authResult.pin_revealed;
-+                                this.accessAuthCanEdit = authResult.can_edit;
-+                            }
-+                        } catch (e) {
-+                            console.warn('[accessAuth] loadConfig: GET /api/access/settings failed:', e);
-                         }
+-                        }
 -                    } catch (e) {
 -                        console.warn('[accessAuth] loadConfig: GET /api/access/settings failed:', e);
-                     }
+-                    }
  
                      // Sources（61c-2）：讀 config.sources 段填入 unified scope。
-@@ -850,6 +889,7 @@
+                     // FIELD-NAME TRAP：後端用 display_name_key / display_name_raw；
+@@ -850,12 +671,11 @@
                              available: s.available ?? (s.type !== 'metatube'),  // builtins default available; metatube waits for /status
                          }))
                          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -15468,7 +15692,13 @@
  
                      // 建立初始快照（dirty check 基準）— 必須在解鎖前建立
                      this.savedState = JSON.parse(JSON.stringify(this.form));
-@@ -875,6 +915,7 @@
+                     this.savedOpenaiUseCustomModel = this.openaiUseCustomModel;
+-                    // 168c-T4：client 模式下兩格改讀這台電腦（表單此時仍 inert）
+-                    await this._applyLocalMachine();
+                     // 解鎖表單（config hydrate 完成）
+                     this._configLoading = false;
+ 
+@@ -875,6 +695,7 @@
  
                      // Hydrate metatube fields from config + /status (CD-63b-3)
                      this.metatubeEnabled = config.metatube?.enabled || false;
@@ -15476,7 +15706,7 @@
                      this.metatubeServerUrl = config.metatube?.url || '';
                      this.metatubeToken = config.metatube?.token || '';
                      this.metatubeLanMode = !!config.metatube?.allow_lan;   // hydrate LAN opt-in so re-connect doesn't fail SSRF (Codex P2)
-@@ -886,9 +927,12 @@
+@@ -886,9 +707,12 @@
                      if (ollamaUrl && config.translate.provider === 'ollama') {
                          this.loadOllamaModels(ollamaUrl, ollamaModel);  // 不 await
                      }
@@ -15489,9 +15719,32 @@
              } finally {
                  this._configLoading = false;
              }
-@@ -944,37 +988,71 @@
+@@ -921,60 +745,33 @@
+             }
+         },
  
-         // 168c-T4：伺服器 + 這台電腦各存各的；互不阻擋。
+-        // 168c-T4：解析「這台電腦」四態並（ready 時）覆寫兩格。非 client 直接 return，不碰 window.pywebview。
+-        async _applyLocalMachine() {
+-            if (this.shellMode !== 'client') return;
+-            const res = await resolveLocalMachine(this.shellMode, {
+-                whenBridgeReady,
+-                callBridge,
+-                getBridge: () => (window.pywebview && window.pywebview.api) || null,
+-            });
+-            this.localMachineState = res.state;
+-            if (res.state !== 'ready') return;
+-            const merged = mergeLocalIntoForm(this.form, this.savedState, res.local);
+-            for (const k of ['viewerPlayer', 'closeAction']) {
+-                this.form[k] = merged.form[k];
+-                this.savedState[k] = merged.savedState[k];
+-            }
+-            this._localSaved = {
+-                viewerPlayer: merged.savedState.viewerPlayer,
+-                closeAction: merged.savedState.closeAction,
+-            };
+-        },
+-
+-        // 168c-T4：伺服器 + 這台電腦各存各的；互不阻擋。
          async saveConfig() {
 -            const localChanged = this.localMachineState === 'ready'
 -                && localDiff(this.form, this._localSaved).length > 0;
@@ -15523,48 +15776,9 @@
 +            if (this._configSaving) return false;
 +            this._configSaving = true;
 +            try {
-+                const localChanged = this.localMachineState === 'ready'
-+                    && localDiff(this.form, this._localSaved).length > 0;
-+                const patch = localChanged ? buildLocalPatch(this.form) : null;
 +                const previousLocale = this.savedState?.locale;
 +                const previousFontSize = this.savedState?.fontSize;
-+                const serverOk = await this._saveServerConfig();
-+                if (!localChanged) {
-+                    if (
-+                        serverOk
-+                        && (
-+                            (previousLocale && previousLocale !== this.form.locale)
-+                            || (previousFontSize && previousFontSize !== this.form.fontSize)
-+                        )
-+                        && !this.pendingNavigationUrl
-+                    ) {
-+                        setTimeout(() => location.reload(), 250);
-+                    }
-+                    return serverOk;
-+                }
-+                const reply = await callBridge('local_settings_save', patch);
-+                const localOk = !!reply && reply.ok === true;
-+                if (localOk) {
-+                    this._localSaved = { viewerPlayer: patch.player, closeAction: patch.close_action };
-+                } else if (serverOk && this.savedState) {
-+                    // 伺服器存好但這台失敗：savedState 兩格還原成這台已存的值，讓畫面仍顯示未儲存
-+                    this.savedState.viewerPlayer = this._localSaved.viewerPlayer;
-+                    this.savedState.closeAction = this._localSaved.closeAction;
-+                }
-+                const key = combineSaveOutcome({ serverOk, localChanged, localOk });
-+                let msg = null;
-+                switch (key) {
-+                    case 'settings.toast.config_saved_with_local':
-+                        msg = window.t('settings.toast.config_saved_with_local'); break;
-+                    case 'settings.toast.local_failed_server_saved':
-+                        msg = window.t('settings.toast.local_failed_server_saved'); break;
-+                    case 'settings.toast.local_saved_server_failed':
-+                        msg = window.t('settings.toast.local_saved_server_failed'); break;
-+                    case 'settings.toast.local_failed_server_failed':
-+                        msg = window.t('settings.toast.local_failed_server_failed'); break;
-+                }
-+                if (msg) this.showToast(msg, serverOk && localOk ? 'success' : 'error');
-+                const saved = serverOk && localOk;
++                const saved = await this._saveServerConfig();
 +                if (
 +                    saved
 +                    && (
@@ -15588,7 +15802,7 @@
              try {
                  // 先載入現有設定
                  const currentResp = await fetch('/api/config');
-@@ -987,6 +1065,13 @@
+@@ -987,6 +784,13 @@
                  // 71-T5: 存檔前的「已持久化」縮圖快取狀態（authoritative：剛從 server GET 的 config.json）。
                  // 用來在 PUT 成功後判定「這次儲存是否剛把它從開變關」→ 才清空 output/thumb/（現在只有 disable 半在用）。
                  const prevThumbEnabled = config.thumbnail_cache_enabled === true;
@@ -15602,7 +15816,22 @@
                  // 90c-T6: 存前「已持久化」的 strm 映射（authoritative：剛 GET 的 config.json）。
                  // PUT 成功後與新映射比對，判定「這次儲存是否改動了路徑規則」→ 才提示改寫既有 strm。
                  const prevStrmMappings = JSON.stringify(config.scraper?.strm_path_mappings || {});
-@@ -1118,8 +1203,11 @@
+@@ -1099,14 +903,10 @@
+                 // 更新 gallery
+                 config.gallery = {
+                     ...config.gallery,
+-                    default_mode: this.form.avlistMode,
+                     default_sort: this.form.avlistSort,
+                     default_order: this.form.avlistOrder,
+                     items_per_page: this.form.avlistItemsPerPage,
+                     min_size_mb: this.form.avlistMinSize || 0,
+-                    // 空字串原樣送出（跟著資料根走）；不可再用 || 'output'（FE-JS-01）
+-                    output_dir: this.form.avlistOutputDir.trim(),
+-                    output_filename: this.form.avlistOutputFilename.trim() || 'gallery_output.html',
+                     show_table_list: this.form.showTableList,
+                     cover_badges: {
+                         enabled: this.form.coverBadgesEnabled,
+@@ -1118,12 +918,12 @@
                  config.general = {
                      ...config.general,
                      default_page: this.form.defaultPage,
@@ -15614,15 +15843,19 @@
 +                    // Settings appearance controls are live previews; this PUT is
 +                    // their only persistence path while the settings page is open.
                  };
+-
+-                // 168c-T4：showcase.player／general.close_action 依四態決定寫 form 還是保留 GET 原值
+-                config = applyServerLocalFields(config, this.form, this.localMachineState);
  
-                 // 168c-T4：showcase.player／general.close_action 依四態決定寫 form 還是保留 GET 原值
-@@ -1149,12 +1237,18 @@
+                 // 更新 metatube enabled（CD-63b-3）：保留 url/token（GET 載入的），只更新 enabled。
+                 config.metatube = { ...(config.metatube || {}), enabled: this.metatubeEnabled };
+@@ -1149,12 +949,17 @@
                  });
                  const result = await resp.json();
                  if (result.success) {
 +                    focalNeedsRevert = false;
                      saved = true;
-                     this.cfWindowProxyRestartNeeded = result.cf_window_proxy_restart_needed === true;
+-                    this.cfWindowProxyRestartNeeded = result.cf_window_proxy_restart_needed === true;
                      this.showToast(window.t('settings.toast.config_saved'), 'success');
                      // 更新快照（避免儲存後仍為 dirty）
                      this.savedState = JSON.parse(JSON.stringify(this.form));
@@ -15635,7 +15868,7 @@
                      // 71b-T2: 縮圖快取「剛被關閉」(persisted true → 現在 false) 才清空 output/thumb/。
                      // 必在 PUT 成功之後——先存才清（config.json 已寫 false）。confirmThumbCacheDisable
                      // 自身不 POST clear，統一收斂於此。
-@@ -1185,21 +1279,30 @@
+@@ -1185,21 +990,30 @@
                              this.showToast(window.t('settings.scraper.strm_mapping.rewrite_failed'), 'error');
                          }
                      }
@@ -15677,7 +15910,7 @@
                  this.showToast(window.t('settings.toast.save_failed', { error: e.message }), 'error');
                  return saved;
              }
-@@ -1249,9 +1352,9 @@
+@@ -1249,9 +1063,9 @@
          },
  
          // ===== Thumbnail Cache Toggle Handler + Disable Modal (71b-T2) =====
@@ -15689,7 +15922,7 @@
          async onThumbCacheToggleChange() {
              // x-model 已先翻值 → 進來時 form.thumbnailCacheEnabled 已是使用者撥到的新值。
              if (this.form.thumbnailCacheEnabled !== true) {
-@@ -1267,10 +1370,8 @@
+@@ -1267,10 +1081,8 @@
              }
              // persisted 已 true（未存的 OFF 後撥回 ON）：不開 modal，讓 toggle 照常變 true。
              if (this.savedState?.thumbnailCacheEnabled === true) return;
@@ -15701,7 +15934,7 @@
          },
  
          // 71b-T2: 關閉確認取消 → 關 modal、toggle 維持 true（保持啟用）；不存檔、不清快取。
-@@ -1278,13 +1379,10 @@
+@@ -1278,13 +1090,10 @@
              this.thumbCacheDisableConfirmOpen = false;
          },
  
@@ -15716,7 +15949,7 @@
          },
  
          // ===== 命名區膠囊編輯器（feature/95 Part A）=====
-@@ -1518,7 +1616,7 @@
+@@ -1518,7 +1327,7 @@
          },
  
          // Builtin：原地翻轉 enabled（膠囊留 Active Row、停用 = inline 刪除線）。
@@ -15725,7 +15958,7 @@
          toggleBuiltin(id) {
              const s = this.sources.find(x => x.id === id);
              if (!s || s.type !== 'builtin') return;
-@@ -1527,7 +1625,6 @@
+@@ -1527,7 +1336,6 @@
                  return;
              }
              s.enabled = !s.enabled;
@@ -15733,7 +15966,7 @@
          },
  
          // Promote：Parts Bin → Active Row（enabled=true）。cap 檢查。splice 移到陣列末尾
-@@ -1555,7 +1652,6 @@
+@@ -1555,7 +1363,6 @@
                  const [moved] = this.sources.splice(idx, 1);
                  this.sources.push(moved);
              }
@@ -15741,7 +15974,7 @@
          },
  
          // Demote：Active Row → Parts Bin（enabled=false）。
-@@ -1563,7 +1659,6 @@
+@@ -1563,7 +1370,6 @@
              const s = this.sources.find(x => x.id === id);
              if (!s || s.type !== 'metatube') return;
              s.enabled = false;
@@ -15749,7 +15982,7 @@
          },
  
          // 斷線 metatube 點擊：toast 提示重連，無 state mutation（EC-9）。
-@@ -1682,41 +1777,6 @@
+@@ -1682,41 +1488,6 @@
              }
          },
  
@@ -15791,7 +16024,7 @@
          // 全開：builtin 先（依序），到 cap 即 break；不碰 metatube / manual_only。
          enableAllToCap() {
              for (const s of this.sources) {
-@@ -1725,7 +1785,6 @@
+@@ -1725,7 +1496,6 @@
                  if (this.enabledCount >= MAX_ENABLED_SOURCES) break;
                  s.enabled = true;
              }
@@ -15799,7 +16032,18 @@
          },
  
          _flashCapAlert() {
-@@ -1771,7 +1830,6 @@
+@@ -1749,8 +1519,8 @@
+         },
+         onDragEnd() { this.draggingId = null; this.dropTargetId = null; },
+         onDragOver(e, id) {
+-            // PyWebView 內 dragover 必須 preventDefault（模板 @dragover.prevent），
+-            // 否則 drop 不觸發（gotchas）。
++            // WebView 的 dragover 必須 preventDefault（模板 @dragover.prevent），
++            // 否則 drop 不會觸發。
+             if (!this.draggingId || this.draggingId === id) return;
+             const target = this.sources.find(x => x.id === id);
+             if (!target || !this.isDraggable(target)) return;
+@@ -1771,7 +1541,6 @@
              const insertAt = srcIdx < tgtIdx ? tgtIdx - 1 : tgtIdx;
              this.sources.splice(insertAt, 0, moved);
              this.onDragEnd();
@@ -15807,7 +16051,7 @@
          },
  
          // ═══════════════════════════════════════════════════════════════
-@@ -1785,9 +1843,8 @@
+@@ -1785,9 +1554,8 @@
              if (!src) return;
              if (!this.isDraggable(src)) { this.clickActiveRowPill(src); return; }
              if (this._grabbedId === src.id) {
@@ -15818,7 +16062,7 @@
              } else {
                  this._grabbedId = src.id;
              }
-@@ -1807,11 +1864,10 @@
+@@ -1807,11 +1575,10 @@
              this.sources.splice(targetIdx, 0, moved);
          },
  
@@ -16135,7 +16379,7 @@
                      _recomputeCardActorAges(video);
 --- a/web/static/js/pages/showcase/state-videos.js
 +++ b/web/static/js/pages/showcase/state-videos.js
-@@ -6,7 +6,7 @@
+@@ -6,10 +6,9 @@
   * 從 state-base.js import 共用大陣列（F1：移出 Alpine reactive scope）。
   */
  
@@ -16143,8 +16387,11 @@
 +import { SHOWCASE_MAX_SERVER_PAGE_SIZE, _videos, _filteredVideos, _nameToGroup, _tagToGroup, _setVideos, _setFilteredVideos, _recomputeAllBadges, _recomputeCardActorAges } from '@/showcase/state-base.js';
  import { applyCellFocal } from '@/shared/focal-cell.js';
  import { openLocal } from '@/shared/open-local.js';
- import { notifyOpenResult } from '@/shared/bridge-notify.js';
-@@ -30,6 +30,10 @@
+-import { notifyOpenResult } from '@/shared/bridge-notify.js';
+ import { normalizePillValue, buildPillPredicate } from '@/shared/pill-filter.js';
+ // TASK-124a-T2：發售日 pill 浮層狀態機直接呼叫的 T1 六支純函式中的五支
+ // （matchesReleasePill 屬 pill-filter.js 內部使用，state 層不直接呼叫）。
+@@ -30,6 +29,10 @@
      return { has: t != null, raw: t };
  }
  
@@ -16155,7 +16402,7 @@
  export function stateVideos() {
      return {
  
-@@ -38,61 +42,222 @@
+@@ -38,61 +41,222 @@
          // gotcha：naturalWidth 在 decode 完成前恆為 0，reactive binding 不會因 load 事件重跑）---
          applyCellFocal,
  
@@ -16390,7 +16637,7 @@
              this.updatePagination();
              // Settle: retry 也用 settle（不碰 opacity → 不閃）
              if (this.mode === 'grid' && !this.error) {
-@@ -107,6 +272,13 @@
+@@ -107,6 +271,13 @@
  
          // --- 互動邏輯 ---
          onSearchChange() {
@@ -16404,7 +16651,7 @@
              // B8: 透過 _animateFilter 觸發篩選動畫
              this._animateFilter();
              // TASK-115-T8：改走單一判斷點（CD-8），無 pill 時行為逐位元組不變
-@@ -370,6 +542,7 @@
+@@ -370,6 +541,7 @@
              } else {
                  this.search = '';
                  this.pills = [];
@@ -16412,7 +16659,7 @@
                  this._animateFilter();            // 影片格：CD-2 步驟 7-9（唯一一次），內含 applyFilterAndSort() + saveState()
                  this._reconcileHeroCard();        // TASK-115-T8 / RULING 3：清 hero 狀態的單一判斷點
              }
-@@ -443,7 +616,7 @@
+@@ -443,7 +615,7 @@
           * B7/B15: 排序動畫共用 helper — flip-guard → capture → change → Flip reorder
           * @param {Function} changeFn - 執行 data change 的函數
           */
@@ -16421,7 +16668,7 @@
              var savedPage = this.page;
              var grid = null;
              var positionMap = null;
-@@ -455,6 +628,14 @@
+@@ -455,6 +627,14 @@
                      grid.classList.add('flip-guard');
                      void grid.offsetHeight;  // force reflow
                      positionMap = window.ShowcaseAnimations?.capturePositions?.(grid) || null;
@@ -16436,7 +16683,7 @@
                  }
              }
  
-@@ -495,7 +676,7 @@
+@@ -495,7 +675,7 @@
           * B8/B15: 篩選動畫共用 helper — flip-guard → capture → change → Flip filter
           * onSearchChange() 和 searchFromMetadata() 共用
           */
@@ -16445,7 +16692,7 @@
              var grid = null;
              var state = null;
  
-@@ -517,6 +698,17 @@
+@@ -517,6 +697,17 @@
                      grid.classList.add('flip-guard');
                      void grid.offsetHeight;  // force reflow
                      state = window.ShowcaseAnimations?.captureFlipState?.(grid) || null;
@@ -16463,7 +16710,7 @@
                  }
              }
  
-@@ -555,7 +747,7 @@
+@@ -555,7 +746,7 @@
           * @param {string} direction - 'next' | 'prev'
           * @param {number} [targetPage] - 目標頁碼（goToPage 用，prevPage/nextPage 不傳）
           */
@@ -16472,7 +16719,7 @@
              // 清理可能殘留的 flip-guard（sort/filter 動畫被翻頁打斷時）
              var grid = document.querySelector('.showcase-grid');
              if (grid) grid.classList.remove('flip-guard');
-@@ -566,9 +758,16 @@
+@@ -566,9 +757,16 @@
                  newPage = direction === 'next' ? this.page + 1 : this.page - 1;
              }
  
@@ -16492,7 +16739,7 @@
              this.saveState();
              window.scrollTo(0, 0);
  
-@@ -724,6 +923,14 @@
+@@ -724,6 +922,14 @@
              // --- Stage 1: pill 精準比對（TASK-115-T2, CD-6）---
              var pillPredicate = buildPillPredicate(this.pills, _nameToGroup, _tagToGroup);
              var pillFiltered = _videos.filter(pillPredicate);
@@ -16507,7 +16754,7 @@
  
              // --- Stage 2: 自由文字模糊比對 (M4a)（現況邏輯，body 逐字保留，僅改輸入來源陣列）---
              if (this.search && this.search.trim()) {
-@@ -842,7 +1049,21 @@
+@@ -842,7 +1048,21 @@
              if (parseInt(this.perPage) === 0 && this.mode === 'grid') {
                  this.perPage = 120;
              }
@@ -16530,11 +16777,22 @@
              var slice;
              if (perPage === 0) {
                  slice = _filteredVideos.slice();
-@@ -867,7 +1088,20 @@
+@@ -866,17 +1086,23 @@
+             (this.paginatedVideos || []).forEach(_recomputeCardActorAges);
          },
  
-         // --- 播放影片 (PyWebView 整合) ---
+-        // --- 播放影片 (PyWebView 整合) ---
 -        playVideo(path) {
+-            if (window.pywebview && window.pywebview.api) {
+-                window.pywebview.api.open_file(path)
+-                    .then(result => {
+-                        if (!notifyOpenResult(this.showToast.bind(this), result, 'file')) return;
+-                    })
+-                    .catch(err => {
+-                        console.error('Failed to open file:', err);
+-                        this.showToast(window.t('showcase.video.play_failed'), 'error');
+-                    });
++        // --- 播放影片 ---
 +        playVideo(videoOrPath) {
 +            const video = (
 +                videoOrPath && typeof videoOrPath === 'object'
@@ -16549,19 +16807,12 @@
 +            const labels = Array.isArray(video?.part_tokens)
 +                ? video.part_tokens
 +                : [];
-             if (window.pywebview && window.pywebview.api) {
-                 window.pywebview.api.open_file(path)
-                     .then(result => {
-@@ -877,6 +1111,8 @@
-                         console.error('Failed to open file:', err);
-                         this.showToast(window.t('showcase.video.play_failed'), 'error');
-                     });
-+            } else if (window.openVideoPlayer) {
++            if (window.openVideoPlayer) {
 +                window.openVideoPlayer(path, { parts, labels });
              } else {
                  window.open('/api/gallery/player?path=' + encodeURIComponent(path), '_blank');
              }
-@@ -884,6 +1120,9 @@
+@@ -884,11 +1110,14 @@
  
          // 工具方法：從 paginatedVideos 的 index 映射到 filteredVideos 的 index
          getCurrentFilteredIndex(paginatedIndex) {
@@ -16571,6 +16822,12 @@
              const perPage = parseInt(this.perPage);
              return perPage === 0 ? paginatedIndex : (this.page - 1) * perPage + paginatedIndex;
          },
+ 
+-        // 開啟資料夾（複製路徑到剪貼簿 + PyWebView 桌面模式額外開啟資料夾）
++        // 複製資料夾路徑到剪貼簿
+         openLocal,
+ 
+     };
 --- a/web/static/js/pages/showcase/state-base.js
 +++ b/web/static/js/pages/showcase/state-base.js
 @@ -13,6 +13,9 @@
@@ -17173,6 +17430,15 @@
  
  <head>
      <meta charset="UTF-8">
+@@ -48,7 +53,7 @@
+         function _sendPostAlpine(){
+           if (_postAlpineSent) return;
+           _postAlpineSent = true;
+-          _clog({phase:'post_alpine', message:'post_alpine', alpine_version: (window.Alpine && window.Alpine.version) || null, pywebview_api: !!(window.pywebview && window.pywebview.api), path: location.pathname});
++          _clog({phase:'post_alpine', message:'post_alpine', alpine_version: (window.Alpine && window.Alpine.version) || null, path: location.pathname});
+         }
+         document.addEventListener('alpine:init', _sendPostAlpine);
+         setTimeout(_sendPostAlpine, 5000);
 @@ -60,6 +65,9 @@
        function configSync(field) {
          var tid, ctrl;
@@ -17201,7 +17467,7 @@
      <!-- Rotating Border Effect -->
      <link href="/static/css/components/rotating-border.css" rel="stylesheet">
      <!-- Help Popover -->
-@@ -136,7 +143,7 @@
+@@ -136,11 +143,11 @@
      <link href="/static/css/components/browse-dir-modal.css" rel="stylesheet">
      <!-- 從片庫加入女優面板（117-T3；同為 modal 元件，緊接 rescrape-modal） -->
      <link href="/static/css/components/actress-add-panel.css" rel="stylesheet">
@@ -17210,6 +17476,11 @@
      <link href="/static/css/components/cover-badge.css" rel="stylesheet">
  
      <style>
+-        /* 啟用文字選取（PyWebView 預設禁用）*/
++        /* 啟用文字選取，供複製路徑、日誌與編號使用。 */
+         * {
+             user-select: text !important;
+             -webkit-user-select: text !important;
 @@ -332,6 +339,38 @@
              height: var(--mobile-topbar-height);
          }
@@ -17278,7 +17549,67 @@
          }
  
          .offcanvas-nav .nav-link i,
-@@ -460,10 +514,13 @@
+@@ -400,59 +454,6 @@
+         .sidebar .nav-link__unread-dot.is-warn    { background: var(--color-warning); }
+         .sidebar .nav-link__unread-dot.is-error   { background: var(--color-error); }
+ 
+-        /* 168e-T12: 常駐更新標記（殼送 update_marker 才解除 hidden）。不得設 display，否則蓋過 UA 的 [hidden] */
+-        .sidebar .nav-link--help,
+-        .offcanvas-nav .nav-link--help {
+-            position: relative;
+-        }
+-        .sidebar .nav-link__update-dot,
+-        .offcanvas-nav .nav-link__update-dot {
+-            position: absolute;
+-            top: 8px;
+-            left: 28px;
+-            width: 8px;
+-            height: 8px;
+-            border-radius: 50%;
+-            background: var(--color-info);
+-            border: 1.5px solid var(--sidebar-bg, transparent);
+-        }
+-
+-        /* 168b-T3: connection plug (local = inherited grey; client ok = green + dot; client down = red + broken shape) */
+-        .sidebar .nav-link--conn,
+-        .offcanvas-nav .nav-link--conn {
+-            position: relative;
+-        }
+-        .sidebar .nav-link--conn svg,
+-        .offcanvas-nav .nav-link--conn svg {
+-            display: none;
+-        }
+-        .sidebar .nav-link--conn[data-conn-mode="client"][data-conn-state="down"] svg,
+-        .offcanvas-nav .nav-link--conn[data-conn-mode="client"][data-conn-state="down"] svg {
+-            display: inline-block;
+-        }
+-        .sidebar .nav-link--conn[data-conn-mode="client"][data-conn-state="down"] i,
+-        .offcanvas-nav .nav-link--conn[data-conn-mode="client"][data-conn-state="down"] i {
+-            display: none;
+-        }
+-        .sidebar .nav-link--conn[data-conn-mode="client"][data-conn-state="ok"]:not(.active),
+-        .offcanvas-nav .nav-link--conn[data-conn-mode="client"][data-conn-state="ok"]:not(.active) {
+-            color: var(--color-success);
+-        }
+-        .sidebar .nav-link--conn[data-conn-mode="client"][data-conn-state="down"]:not(.active),
+-        .offcanvas-nav .nav-link--conn[data-conn-mode="client"][data-conn-state="down"]:not(.active) {
+-            color: var(--color-error);
+-        }
+-        .sidebar .nav-link--conn[data-conn-mode="client"][data-conn-state="ok"]::after {
+-            content: "";
+-            position: absolute;
+-            top: 8px;
+-            left: 28px;
+-            width: 8px;
+-            height: 8px;
+-            border-radius: 50%;
+-            background: var(--color-success);
+-            border: 1.5px solid var(--sidebar-bg, transparent);
+-        }
+     </style>
+ 
+     {% block extra_css %}{% endblock %}
+@@ -460,10 +461,13 @@
           Placed after extra_css expansion so source-order beats page-specific CSS (CD-A2).
           Do NOT move into the component link block above — it would be overridden. -->
      <link href="/static/css/components/fluent-materials.css" rel="stylesheet">
@@ -17293,7 +17624,32 @@
        window.__i18n = {{ merged_translations|default({})|tojson }};
        window.t = function(key, params) {
            params = params || {};
-@@ -571,18 +628,54 @@
+@@ -484,24 +488,12 @@
+ <body x-data="{
+     sidebarCollapsed: {{ sidebar_collapsed|default(false)|tojson }},
+     mobileMenuOpen: false,
+-    connState: 'ok',
+     handleNavClick(event, href) {
+         // 開新分頁（Ctrl/Cmd-click, 中鍵）不觸發清理{# cjk-exempt(開新分頁|中鍵|不觸發清理): JS 行內註解非 UI copy，x-data 屬性內嵌 JS，模板掃描器不解析屬性內容（CD-12R） #}
+         if (event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0) return;
+         if (window.__leavePage && !window.__leavePage(href)) {
+             event.preventDefault();
+             return;
+-        }
+-        const conn = window.OpenAver && window.OpenAver.conn;
+-        const plug = document.querySelector('a.nav-link--conn');
+-        const bridge = window.pywebview && window.pywebview.api;
+-        if (conn && plug && conn.shouldInterceptNav({
+-            state: this.connState,
+-            mode: plug.dataset.connMode,
+-            hasOfflineBridge: !!bridge && typeof bridge.connect_show_offline === 'function'
+-        })) {
+-            event.preventDefault();
+-            bridge.connect_show_offline(href);
+         }
+     },
+     sampleGalleryOpen: false, sampleGalleryImages: [], sampleGalleryIndex: 0,
+@@ -571,18 +563,54 @@
          await this._pollNotifications();
      },
      formatTimestamp(ts) {
@@ -17350,7 +17706,7 @@
      <!-- 頂部導航列（僅小螢幕顯示）-->
      <nav class="navbar bg-base-200 lg:hidden fixed top-0 left-0 right-0 z-50 h-14 top-navbar fluent-acrylic border-b border-base-300" x-show="!mobileMenuOpen">
          <div class="navbar-start">
-@@ -591,8 +684,9 @@
+@@ -591,8 +619,9 @@
              </button>
          </div>
          <div class="navbar-center">
@@ -17362,7 +17718,7 @@
              </span>
          </div>
          <div class="navbar-end">
-@@ -610,7 +704,7 @@
+@@ -610,7 +639,7 @@
                      @click.stop="toggleDrawer($refs.mobileBellBtn)"
                      type="button"
                      class="btn btn-ghost btn-sm relative"
@@ -17371,7 +17727,7 @@
                      aria-haspopup="true"
                      :aria-expanded="notifBell.drawerOpen.toString()">
                  <i :class="notifBell.unreadCount > 0 ? 'bi bi-bell-fill' : 'bi bi-bell'" class="text-xl"></i>
-@@ -658,7 +752,7 @@
+@@ -658,7 +687,7 @@
              <button type="button"
                      class="btn btn-sm btn-circle btn-ghost"
                      @click="mobileMenuOpen = false"
@@ -17380,7 +17736,36 @@
                  <i class="bi bi-x text-xl"></i>
              </button>
          </div>
-@@ -779,12 +873,12 @@
+@@ -695,18 +724,8 @@
+                     <a class="nav-link nav-link--help {% if page == 'help' %}active{% endif %}" href="/help"
+                        @click="handleNavClick($event, $el.href)">
+                         <i class="bi bi-question-circle"></i> {{ t('nav.help') }}
+-                        <span class="nav-link__update-dot" data-shell-update hidden aria-hidden="true"></span>
+                     </a>
+                 </li>
+-                {% if is_desktop %}
+-                <li class="nav-item">
+-                    <a class="nav-link nav-link--conn {% if page == 'connect' %}active{% endif %}" href="/connect" data-conn-mode="{{ shell_mode or 'local' }}" :data-conn-state="connState"
+-                       :title="connState === 'ok' ? (($el.dataset.connMode === 'client') ? window.t('nav.connect_ok_title', { host: location.hostname }) : window.t('nav.connect_title')) : (($el.dataset.connMode === 'client') ? window.t('nav.connect_down_title', { host: location.hostname }) : window.t('nav.connect_title'))"
+-                       @click="handleNavClick($event, $el.href)">
+-                        <i class="bi bi-plug"></i><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6 0a.5.5 0 0 1 .5.5V3h3V.5a.5.5 0 0 1 1 0V3H12a1 1 0 0 1 1 1v3a4.5 4.5 0 0 1-3.5 4.4V13h-1v-1.6A4.5 4.5 0 0 1 4.9 7H4V4a1 1 0 0 1 1-1h.5V.5A.5.5 0 0 1 6 0M2.15 1.85a.5.5 0 1 1 .7-.7l12 12a.5.5 0 0 1-.7.7z"/></svg> {{ t('nav.connect') }}
+-                    </a>
+-                </li>
+-                {% endif %}
+                 <li class="nav-item">
+                     <a class="nav-link {% if page == 'settings' %}active{% endif %}" href="/settings"
+                        @click="handleNavClick($event, $el.href)">
+@@ -772,19 +791,19 @@
+                     <span class="nav-text">{{ t('nav.insights') }}</span>
+                 </a>
+             </li>
+-            <!-- 53b-T7: desktop 鈴鐺在底部組最上方（mt-auto 推至底，Bell → Help → Settings） -->
++            <!-- 通知鈴鐺固定在側欄底部操作組最上方。 -->
+             <li class="nav-item mt-auto">
+-                <button x-ref="desktopBellBtn"
+-                        @click.stop="toggleDrawer($refs.desktopBellBtn)"
++                <button x-ref="notificationBellBtn"
++                        @click.stop="toggleDrawer($refs.notificationBellBtn)"
                          type="button"
                          class="nav-link nav-link--bell relative"
                          :class="{ 'is-open': notifBell.drawerOpen }"
@@ -17396,7 +17781,35 @@
                      <template x-if="notifBell.highestLevel">
                          <span class="nav-link__unread-dot"
                                :class="{
-@@ -846,30 +940,50 @@
+@@ -801,20 +820,9 @@
+                 <a class="nav-link nav-link--help {% if page == 'help' %}active{% endif %}" href="/help" title="{{ t('nav.help_title') }}"
+                    @click="handleNavClick($event, $el.href)">
+                     <i class="bi bi-question-circle"></i>
+-                    <span class="nav-link__update-dot" data-shell-update hidden aria-hidden="true"></span>
+                     <span class="nav-text">{{ t('nav.help') }}</span>
+                 </a>
+             </li>
+-            {% if is_desktop %}
+-            <li class="nav-item">
+-                <a class="nav-link nav-link--conn {% if page == 'connect' %}active{% endif %}" href="/connect" data-conn-mode="{{ shell_mode or 'local' }}" :data-conn-state="connState"
+-                       :title="connState === 'ok' ? (($el.dataset.connMode === 'client') ? window.t('nav.connect_ok_title', { host: location.hostname }) : window.t('nav.connect_title')) : (($el.dataset.connMode === 'client') ? window.t('nav.connect_down_title', { host: location.hostname }) : window.t('nav.connect_title'))"
+-                       @click="handleNavClick($event, $el.href)">
+-                    <i class="bi bi-plug"></i><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6 0a.5.5 0 0 1 .5.5V3h3V.5a.5.5 0 0 1 1 0V3H12a1 1 0 0 1 1 1v3a4.5 4.5 0 0 1-3.5 4.4V13h-1v-1.6A4.5 4.5 0 0 1 4.9 7H4V4a1 1 0 0 1 1-1h.5V.5A.5.5 0 0 1 6 0M2.15 1.85a.5.5 0 1 1 .7-.7l12 12a.5.5 0 0 1-.7.7z"/></svg>
+-                    <span class="nav-text">{{ t('nav.connect') }}</span>
+-                </a>
+-            </li>
+-            {% endif %}
+             <li class="nav-item">
+                 <a class="nav-link {% if page == 'settings' %}active{% endif %}" href="/settings" title="{{ t('nav.settings') }}"
+                    @click="handleNavClick($event, $el.href)">
+@@ -840,48 +848,66 @@
+         "@/scanner/":    "/static/js/pages/scanner/",
+         "@/settings/":   "/static/js/pages/settings/",
+         "@/search/":     "/static/js/pages/search/",
+-        "@/insights/":   "/static/js/pages/insights/",
+-        "@/connect/":    "/static/js/pages/connect/"
++        "@/insights/":   "/static/js/pages/insights/"
+       }
      }
      </script>
  
@@ -17447,14 +17860,14 @@
 +    {% endif %}
      <!-- Toast store — Alpine.store('toast')（131b-T3） -->
 -    <script type="module" src="/static/js/components/toast-store.js"></script>
+-    <!-- Bridge notify — window.handleBridgeUncovered hook（168a-T4；所有頁面都要有） -->
+-    <script type="module" src="/static/js/shared/bridge-notify.js"></script>
+-    <!-- 168c-T5: 殼 → 頁面的「這台電腦有新版」提醒 hook -->
+-    <script type="module" src="/static/js/shared/shell-notice.js"></script>
+-    <!-- 168e-T6: shell reload hook -->
+-    <script type="module" src="/static/js/shared/shell-reload.js"></script>
+-    <script type="module" src="/static/js/shared/conn-state.js"></script>
 +    <script type="module" src="/static/js/components/toast-store.js?v=17035-2"></script>
-     <!-- Bridge notify — window.handleBridgeUncovered hook（168a-T4；所有頁面都要有） -->
-     <script type="module" src="/static/js/shared/bridge-notify.js"></script>
-     <!-- 168c-T5: 殼 → 頁面的「這台電腦有新版」提醒 hook -->
-@@ -877,11 +991,17 @@
-     <!-- 168e-T6: shell reload hook -->
-     <script type="module" src="/static/js/shared/shell-reload.js"></script>
-     <script type="module" src="/static/js/shared/conn-state.js"></script>
 +    {% if page in ['settings', 'scanner'] %}
      <!-- Help Popover — 說明浮層共用元件（131b-T4） -->
      <script type="module" src="/static/js/components/help-popover.js"></script>
@@ -17469,7 +17882,7 @@
  
      {% block pre_alpine_module %}{% endblock %}
  
-@@ -915,9 +1035,8 @@
+@@ -915,9 +941,8 @@
      <script defer src="/static/vendor/alpine/anchor.min.js"></script>
      <!-- Alpine Core -->
      <script defer src="/static/vendor/alpine/alpine.min.js"></script>
@@ -17481,7 +17894,7 @@
      {% block extra_js %}{% endblock %}
  
      <!-- 53b-T4: 通知抽屜（單例，fixed 浮動，anchor 由 toggleDrawer 決定） -->
-@@ -936,17 +1055,17 @@
+@@ -936,17 +961,17 @@
           class="w-80 bg-base-100 border border-base-300 rounded-xl shadow-lg notification-drawer"
           style="z-index: 1010; position: fixed;"
           role="dialog"
@@ -17503,20 +17916,6 @@
              </template>
              <template x-for="item in notifBell.items" :key="item.id">
                  <div class="px-4 py-3 border-b border-base-200"
---- a/web/templates/help.html
-+++ b/web/templates/help.html
-@@ -36,11 +36,6 @@
-                     {{ t('help.hero.privacy') }}
-                 </p>
-                 <div class="flex flex-wrap items-center gap-2">
--                    <!-- 主 CTA -->
--                    <button class="btn btn-primary btn-sm"
--                            @click="window.location.href = '/scanner?tutorial=restart'">
--                        <i class="bi bi-play-circle"></i> {{ t('help.hero.btn_tutorial') }}
--                    </button>
-                     <!-- 次 CTA -->
-                     <button class="btn btn-outline btn-neutral btn-sm"
-                             @click="checkUpdate()"
 --- /dev/null
 +++ b/web/templates/help_mobile.html
 @@ -0,0 +1,264 @@
@@ -17991,13 +18390,13 @@
  
  {% block title %}{{ t('scanner.page_title') }} - OpenAver{% endblock %}
  
-@@ -13,11 +14,12 @@
+@@ -13,11 +14,11 @@
  
  {% block content %}
  <div class="page-layer">
 -<div class="avlist-container ds-gallery-composition" x-data="scanner"
+-     data-shell-mode="{{ shell_mode or '' }}"
 +<div id="scannerPage" class="avlist-container ds-gallery-composition" x-data="scanner"
-      data-shell-mode="{{ shell_mode or '' }}"
 +     data-is-android="{{ 'true' if is_android else 'false' }}"
       @dragover.document.prevent="handleDragOver($event)"
       @drop.document.prevent="handleDrop($event)"
@@ -18006,7 +18405,7 @@
      <!-- Drag Overlay (must be inside x-data scope) -->
      <div class="drag-overlay" id="dragOverlay" :class="{ active: showDragOverlay }">
          <div class="drag-overlay-content">
-@@ -97,14 +99,32 @@
+@@ -97,14 +98,32 @@
          </div>
  
          <!-- Output Info -->
@@ -18046,7 +18445,7 @@
          </div>
  
          <!-- 跨機器路徑提醒（media-server 風味）：strm 內寫本機路徑，播放端在別機須認得，可到設定設路徑替換規則 -->
-@@ -120,12 +140,14 @@
+@@ -120,12 +139,14 @@
          </div>
  
          <!-- Action Buttons -->
@@ -18062,7 +18461,7 @@
              <!-- Done Actions (hidden until complete) -->
              <div id="doneActions" class="done-actions" :style="{ display: doneActionsVisible ? 'flex' : 'none' }">
                  <button class="btn-hero btn-hero-secondary" id="btnCopyPath"
-@@ -137,37 +159,57 @@
+@@ -137,37 +158,57 @@
      </div>
  
      <!-- Mini Terminal (hidden by default) -->
@@ -18150,7 +18549,7 @@
              </div>
          </div>
  
-@@ -207,27 +249,143 @@
+@@ -207,27 +248,143 @@
              <span class="enrich-card-badge" x-show="enrichBadgeCount > 0" x-text="enrichBadgeCount"></span>
          </div>
  
@@ -18309,7 +18708,7 @@
              <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
                  <i class="bi bi-exclamation-circle"></i>
                  {{ t('scanner.stats.nfo_prefix') }}
-@@ -238,14 +396,78 @@
+@@ -238,14 +395,78 @@
                  {{ t('scanner.stats.nfo_suffix') }}
                  {{ number_drilldown_panel() }}
              </span>
@@ -18390,7 +18789,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -294,8 +516,47 @@
+@@ -294,8 +515,47 @@
              </button>
          </div>
  
@@ -18439,7 +18838,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-arrow-repeat"></i>
                  <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-@@ -313,7 +574,7 @@
+@@ -313,7 +573,7 @@
  
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
          <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
@@ -18448,7 +18847,7 @@
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +600,7 @@
+@@ -339,7 +599,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -18457,7 +18856,7 @@
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +635,8 @@
+@@ -374,6 +634,8 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
@@ -18466,23 +18865,34 @@
          </div>
      </div>
  
-@@ -520,6 +783,7 @@
+@@ -519,26 +781,6 @@
+              @keydown.space.prevent="toggleTagAliasCard()">
              <div class="title">
                  <i class="bi bi-tags"></i> <span>{{ t('scanner.tag_alias.section_title') }}</span>
+-            </div>
+-            <!-- (?) AI hint icon + popover — @click.stop 避免觸發 collapse -->
+-            <div class="tag-alias-ai-hint-wrap" @click.stop x-data="helpPopover">
+-                <button type="button"
+-                        class="help-popover-btn"
+-                        :title="window.t('scanner.tag_alias.ai_hint.icon_title')"
+-                        :aria-label="window.t('scanner.tag_alias.ai_hint.icon_title')"
+-                        @click.stop.prevent="toggle()"
+-                        @keydown.enter.stop
+-                        @keydown.space.stop>
+-                    <i class="bi bi-question-circle"></i>
+-                </button>
+-                <div class="help-popover tag-alias-ai-hint-popover"
+-                     x-show="open"
+-                     x-transition.opacity
+-                     @click.outside="close()"
+-                     x-cloak>
+-                    <p class="help-popover__body"
+-                       x-text="window.t('scanner.tag_alias.ai_hint.tooltip')"></p>
+-                </div>
              </div>
-+            {% if not is_android %}
-             <!-- (?) AI hint icon + popover — @click.stop 避免觸發 collapse -->
-             <div class="tag-alias-ai-hint-wrap" @click.stop x-data="helpPopover">
-                 <button type="button"
-@@ -540,6 +804,7 @@
-                        x-text="window.t('scanner.tag_alias.ai_hint.tooltip')"></p>
-                 </div>
-             </div>
-+            {% endif %}
              <span class="btn-collapse" aria-hidden="true">
                  <i class="bi" :class="tagAliasCardCollapsed ? 'bi-chevron-down' : 'bi-chevron-up'"></i>
-             </span>
-@@ -782,6 +1047,212 @@
+@@ -782,6 +1024,212 @@
          </div>
      </dialog>
  
@@ -18695,7 +19105,7 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -805,26 +1276,150 @@
+@@ -805,26 +1253,150 @@
          </div>
      </dialog>
  
@@ -19023,6 +19433,32 @@
  
      <!-- Fix-1: 覆蓋警告 Modal (Alpine state-driven) -->
      <dialog class="modal fluent-modal"
+@@ -1408,25 +1407,6 @@
+ {% endblock %}
+ 
+ {% block extra_js %}
+-<script>
+-    // === 全域函數：供 PyWebView Python 端呼叫 ===
+-
+-    /**
+-     * PyWebView 拖放回調（由 Python 端呼叫）
+-     * @param {string|string[]} paths - WSL 格式的檔案路徑（單一或陣列）
+-     */
+-    window.handlePyWebViewDrop = function (paths) {
+-        // 統一轉為陣列
+-        const pathList = Array.isArray(paths) ? paths : [paths];
+-
+-        // 觸發自定義事件，讓主程式處理
+-        window.dispatchEvent(new CustomEvent('pywebview-files', {
+-            detail: { paths: pathList }
+-        }));
+-    };
+-
+-    // === 主程式已移至 /static/js/pages/search/ ===
+-</script>
+ <script src="/static/js/shared/grid-motion.js"></script>
+ <!-- T5: 動畫模組（GSAP 已在 base.html defer 載入）-->
+ <script src="/static/js/pages/search/animations.js"></script>
 --- a/web/templates/settings.html
 +++ b/web/templates/settings.html
 @@ -1,4 +1,5 @@
@@ -19031,39 +19467,29 @@
  
  {% block title %}{{ t('settings.page_title') }} - OpenAver{% endblock %}
  
-@@ -7,13 +8,14 @@
+@@ -7,194 +8,106 @@
  {% endblock %}
  
  {% block content %}
 -<div id="settings-components" class="page-layer" x-data="settings" data-lan-ip="{{ lan_ip or '' }}" data-shell-mode="{{ shell_mode or '' }}">
-+<div id="settings-components" class="page-layer" x-data="settings" data-lan-ip="{{ lan_ip or '' }}" data-shell-mode="{{ shell_mode or '' }}" data-is-android="{{ 'true' if is_android else 'false' }}" data-focal-auto-enabled="{{ 'true' if focal_auto_enabled else 'false' }}">
++<div id="settings-components" class="page-layer" x-data="settings" data-focal-auto-enabled="{{ 'true' if focal_auto_enabled else 'false' }}">
      <div class="settings-header">
-         <!-- 81b-T1: 左 cluster 包標題 + 膠囊 + 連線 inline 區塊；flex 樣式由 T2 補 -->
+-        <!-- 81b-T1: 左 cluster 包標題 + 膠囊 + 連線 inline 區塊；flex 樣式由 T2 補 -->
          <div class="settings-header-left">
              <h4 class="mb-0">
                  <i class="bi bi-gear"></i> {{ t('settings.header.title') }}
              </h4>
-+            {% if not is_android %}
-             <!-- Server Mode Toggle (80a-T3) — 81b-T1: 從 actions 末尾搬到標題側 -->
-             {% if not is_synology %}
-             <div class="settings-server-mode">
-@@ -153,48 +155,101 @@
-                     <span>{{ t('settings.server_info.public_exposure') }}</span>
-                 </div>
-             </div>
-+            {% endif %}
-         </div>
-         <div class="settings-header-actions">
--            <!-- Font Size Control -->
--            <div class="font-size-control">
--                <template x-for="s in [{k:'xs',l:'A'},{k:'sm',l:'A'},{k:'md',l:'A'},{k:'lg',l:'A'},{k:'xl',l:'A'}]">
+-            <!-- Server Mode Toggle (80a-T3) — 81b-T1: 從 actions 末尾搬到標題側 -->
+-            {% if not is_synology %}
+-            <div class="settings-server-mode">
+-                <div class="settings-sources-segmented" role="group" :aria-label="window.t('settings.mode.label')">
 -                    <button type="button"
--                            class="font-size-btn"
--                            :class="{ active: fontSize === s.k }"
--                            :style="'font-size:' + {xs:'0.7rem',sm:'0.8rem',md:'0.9rem',lg:'1.05rem',xl:'1.2rem'}[s.k]"
--                            @click="fontSize = s.k"
--                            :title="window.t('settings.header.font_size_prefix') + ': ' + s.k"
--                            x-text="s.l">
+-                            data-mode="local"
+-                            :class="{ 'is-on': !serverMode }"
+-                            @click="requestServerModeChange(false)"
+-                            x-text="window.t('settings.mode.local')">
++        </div>
++        <div class="settings-header-actions">
 +            <div class="settings-appearance-controls">
 +                <!-- Font Size Control -->
 +                <div class="font-size-control">
@@ -19086,7 +19512,11 @@
 +                            @click="cycleLocale()"
 +                            :title="window.t('settings.header.locale_prefix') + ': ' + locale">
                      </button>
--                </template>
+-                    <button type="button"
+-                            data-mode="server"
+-                            :class="{ 'is-on': serverMode }"
+-                            @click="requestServerModeChange(true)"
+-                            x-text="window.t('settings.mode.server')">
 +                </div>
 +                <!-- Theme Toggle -->
 +                <div class="settings-theme-toggle">
@@ -19095,9 +19525,152 @@
 +                            :title="theme === 'light' ? window.t('settings.header.switch_dark') : window.t('settings.header.switch_light')"
 +                            type="button">
 +                        <i class="bi" :class="theme === 'light' ? 'bi-moon-stars' : 'bi-sun'"></i>
-+                    </button>
-+                </div>
+                     </button>
+                 </div>
              </div>
+-            {% endif %}
+-            <!-- T5: 存取密碼保護（114a）-->
+-            <div class="settings-access-auth">
+-                <label class="settings-access-auth-checkbox-row">
+-                    <input type="checkbox"
+-                           class="toggle toggle-sm toggle-primary"
+-                           x-model="accessAuthEnabled"
+-                           {# accessAuthSaving 與 PIN 欄同步鎖住（Codex PR#129 round-3 P2）：
+-                              兩者本來就該一起鎖，T5 只鎖了 PIN 欄是不一致。不鎖的話，
+-                              使用者可以在請求還在飛的時候把勾選框改掉，於是「送出去的值」
+-                              與「事後記成已生效的值」不是同一個。 #}
+-                           :disabled="!serverMode || accessAuthSaving">
+-                    <span x-text="window.t('settings.access_auth.label')"></span>
+-                </label>
+-                <div class="settings-access-auth-pin-row" x-show="accessAuthEnabled" x-cloak>
+-                    <span class="settings-access-auth-pin-prefix"
+-                          x-text="window.t('settings.access_auth.pin_prefix')"></span>
+-                    {# T7fix: 可見文字只留「密碼」，長度與字元集由四格欄位本身表達。
+-                       完整說明搬到 aria-label／title——原本那個 <span> 沒有 for/id
+-                       關聯，螢幕閱讀器讀不到欄位名稱，搬過去是淨改善。
+-                       autocapitalize=off 是必要的，不是保險：比對區分大小寫，手機
+-                       鍵盤自動大寫首字母會讓 abcd 變 Abcd。
+-
+-                       @input 的 NFKC 折疊要與後端同步（Codex Stage-2 P2）：後端存與
+-                       比對都折，前端若只認 ASCII，中文輸入法全形模式打出的 ａＢ９２
+-                       會讓儲存鈕永遠不亮、且不說明原因——與 T7fix 修掉的「打英文得到
+-                       一顆灰按鈕」是同一個病。折在 input 上而不是只放寬 disabled 判斷：
+-                       這樣欄位顯示的就是實際會存進去的值，不會出現「打的是全形、存的
+-                       是半形、之後按眼睛看到的又不一樣」。 #}
+-                    <input class="settings-access-auth-pin-input"
+-                           :type="accessAuthPinVisible ? 'text' : 'password'"
+-                           maxlength="4"
+-                           autocomplete="off"
+-                           autocapitalize="off"
+-                           autocorrect="off"
+-                           spellcheck="false"
+-                           :aria-label="window.t('settings.access_auth.pin_label')"
+-                           :title="window.t('settings.access_auth.pin_label')"
+-                           x-model="accessAuthPin"
+-                           @input="accessAuthPin = accessAuthPin.normalize('NFKC')"
+-                           :disabled="accessAuthPinDisabled()">
+-                    <button type="button"
+-                            class="settings-access-auth-reveal-btn"
+-                            :disabled="!accessAuthPinRevealed"
+-                            :title="window.t('settings.access_auth.reveal')"
+-                            :aria-label="window.t('settings.access_auth.reveal')"
+-                            @click="accessAuthPinVisible = !accessAuthPinVisible">
+-                        <i class="bi" :class="accessAuthPinVisible ? 'bi-eye-slash' : 'bi-eye'"></i>
+-                    </button>
++            <div class="settings-mobile-save"
++                 :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving, 'is-error': !!_configError }">
++                <div class="save-state" role="status" aria-live="polite">
++                    <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
++                    <i x-show="!_configSaving" class="bi"
++                       :class="_configError ? 'bi-x-circle' : (isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle')"></i>
++                    <span x-text="saveStatusText"></span>
+                 </div>
+-                <button type="button"
+-                        class="settings-access-auth-save-btn btn btn-sm btn-outline"
+-                        :disabled="accessAuthSaveDisabled()"
+-                        @click="saveAccessAuth()">
+-                    <span x-show="accessAuthSaving" class="loading loading-spinner loading-sm"></span>
+-                    <template x-if="!accessAuthSaving">
+-                        <i class="bi bi-check-lg"></i>
+-                    </template>
+-                    <span x-text="accessAuthSaving ? '' : ' ' + window.t('settings.access_auth.save')"></span>
+-                </button>
+-                <div class="settings-access-auth-status-hint"
+-                     x-show="accessAuthStatusHintKey()" x-cloak
+-                     x-text="window.t(accessAuthStatusHintKey())"></div>
+-            </div>
+-            <!-- 81b-T1: 連線資訊 inline 區塊（ip:port + 複製 icon + ? popover）；
+-                 x-cloak 防 Alpine boot 前 FOUC（同原第二排 .settings-server-info 理由）-->
+-            <div class="settings-server-inline" x-show="serverMode" x-cloak>
+-                <template x-if="serverUrl()">
+-                    <div class="settings-server-info-row">
+-                        <span class="settings-server-url" x-text="serverUrlDisplay()"></span>
+-                        <button type="button"
+-                                class="settings-server-copy-btn"
+-                                @click="copyServerUrl()"
+-                                :title="window.t('settings.server_info.copy')"
+-                                :aria-label="window.t('settings.server_info.copy')">
+-                            <i class="bi bi-clipboard"></i>
+-                        </button>
+-                    </div>
+-                </template>
+-                <!-- lanIp 在但 lanPort 缺（listener 未啟動，如重啟 auto-start 失敗）→ 指向正確問題，非「取不到 IP」 -->
+-                <template x-if="!serverUrl() && lanIp">
+-                    <div class="settings-server-no-ip" x-text="window.t('settings.server_info.listener_down')"></div>
+-                </template>
+-                <!-- IP 抓不到但 listener 已開（lanPort 已知）→ 顯示 port，否則用戶湊不出 IP:port -->
+-                <template x-if="!serverUrl() && !lanIp && lanPort">
+-                    <div class="settings-server-no-ip" x-text="window.t('settings.server_info.no_lan_ip_with_port', { port: lanPort })"></div>
+-                </template>
+-                <!-- 連 lanIp、lanPort 都沒有 → 真的是區網 IP 偵測失敗（也無 port） -->
+-                <template x-if="!serverUrl() && !lanIp && !lanPort">
+-                    <div class="settings-server-no-ip" x-text="window.t('settings.server_info.no_lan_ip')"></div>
+-                </template>
+-                <!-- ? 警語 popover（沿用 .help-popover disclosure 模式，與「下載劇照」等一致；
+-                     81b-T1 直接落地完整互動＝既有 pattern verbatim copy，T3 收為 verify-only）-->
+-                <div class="settings-server-warning-anchor popover-anchor" x-data="helpPopover">
+-                    <button type="button" class="help-popover-btn"
+-                            @click.prevent="toggle()"
+-                            :aria-expanded="open">
+-                        <i class="bi bi-question-circle"></i>
+-                    </button>
+-                    <div x-show="open" x-cloak x-transition
+-                         @click.outside="close()"
+-                         class="help-popover">
+-                        {# 讀 accessAuthEnabledSaved 而非草稿 accessAuthEnabled：這句話對
+-                           使用者做安全宣稱（「其他裝置需要輸入密碼才能連線」），只能反映
+-                           後端已生效的狀態。讀草稿的話，勾下去還沒存檔就開始說謊，存檔
+-                           失敗更會一路說到重新整理為止。（Codex PR#129 P2）#}
+-                        <small class="help-popover__body"
+-                               x-text="accessAuthEnabledSaved
+-                                   ? window.t('settings.server_info.warning_auth')
+-                                   : window.t('settings.server_info.warning')"></small>
+-                    </div>
+-                </div>
+-                <div class="settings-server-public-warn"
+-                     x-show="publicExposure"
+-                     x-cloak
+-                     role="status"
+-                     aria-live="polite">
+-                    <i class="bi bi-exclamation-triangle-fill"></i>
+-                    <span>{{ t('settings.server_info.public_exposure') }}</span>
+-                </div>
+-            </div>
+-        </div>
+-        <div class="settings-header-actions">
+-            <!-- Font Size Control -->
+-            <div class="font-size-control">
+-                <template x-for="s in [{k:'xs',l:'A'},{k:'sm',l:'A'},{k:'md',l:'A'},{k:'lg',l:'A'},{k:'xl',l:'A'}]">
+-                    <button type="button"
+-                            class="font-size-btn"
+-                            :class="{ active: fontSize === s.k }"
+-                            :style="'font-size:' + {xs:'0.7rem',sm:'0.8rem',md:'0.9rem',lg:'1.05rem',xl:'1.2rem'}[s.k]"
+-                            @click="fontSize = s.k"
+-                            :title="window.t('settings.header.font_size_prefix') + ': ' + s.k"
+-                            x-text="s.l">
+-                    </button>
+-                </template>
+-            </div>
 -            <!-- Locale Toggle -->
 -            <div class="settings-locale-toggle">
 -                <button class="locale-toggle-btn"
@@ -19114,14 +19687,6 @@
 -                        :title="theme === 'light' ? window.t('settings.header.switch_dark') : window.t('settings.header.switch_light')"
 -                        type="button">
 -                    <i class="bi" :class="theme === 'light' ? 'bi-moon-stars' : 'bi-sun'"></i>
-+            <div class="settings-mobile-save"
-+                 :class="{ 'is-dirty': isDirty, 'is-saving': _configSaving, 'is-error': !!_configError }">
-+                <div class="save-state" role="status" aria-live="polite">
-+                    <span x-show="_configSaving" class="loading loading-spinner loading-xs"></span>
-+                    <i x-show="!_configSaving" class="bi"
-+                       :class="_configError ? 'bi-x-circle' : (isDirty ? 'bi-exclamation-circle' : 'bi-check2-circle')"></i>
-+                    <span x-text="saveStatusText"></span>
-+                </div>
 +                <button type="submit"
 +                        form="settingsForm"
 +                        class="btn btn-primary save-btn settings-mobile-save-btn"
@@ -19177,7 +19742,7 @@
  
          <!-- ── quick-toggle 列（CD-64-B8）：下載劇照 + 進階搜尋，header 下 section 上 ── -->
          <div class="settings-quick-toggle-row">
-@@ -282,6 +337,8 @@
+@@ -282,6 +195,8 @@
                                  <span x-show="srcProbeStatus !== 'running'">{{ t('settings.sources.probe_btn') }}</span>
                                  <span x-show="srcProbeStatus === 'running'">{{ t('settings.status.testing') }}</span>
                              </button>
@@ -19186,7 +19751,22 @@
                              <small class="settings-sources-probe-summary" aria-live="polite"
                                     x-show="srcProbeSummary.total > 0" x-cloak
                                     x-text="window.t('settings.sources.probe_summary', { ok: srcProbeSummary.ok, total: srcProbeSummary.total })"></small>
-@@ -512,8 +569,7 @@
+@@ -497,13 +412,8 @@
+                                 {{ t('settings.search.proxy_scope_dmm_hint') }}
+                             </small>
+                             <small class="settings-hint" x-show="form.proxyScope === 'all'">
+-                                {% if is_mac_desktop %}{{ t('settings.search.proxy_scope_all_hint_mac') }}{% else %}{{ t('settings.search.proxy_scope_all_hint') }}{% endif %}
++                                {{ t('settings.search.proxy_scope_all_hint') }}
+                             </small>
+-                            {% if is_windows_desktop %}
+-                            <small class="settings-hint" x-show="cfWindowProxyRestartNeeded">
+-                                {{ t('settings.search.proxy_restart_hint') }}
+-                            </small>
+-                            {% endif %}
+                         </div>
+                     </div>
+ 
+@@ -512,8 +422,7 @@
                          <label class="settings-label">
                              <input type="checkbox" class="toggle toggle-primary"
                                     id="metatubeEnableToggle"
@@ -19196,23 +19776,48 @@
                              <span class="label-text">{{ t('settings.sources.mt_enable_label') }}</span>
                          </label>
                          <small class="settings-hint">{{ t('settings.sources.mt_enable_help') }}</small>
-@@ -1248,6 +1304,7 @@
+@@ -649,7 +558,7 @@
+                             <div class="variable-input-group" style="position:relative;">
+                                 <input type="text" class="input input-bordered input-sm flex-1" id="searchFavoriteFolder"
+                                     x-model="form.searchFavoriteFolder"
+-                                    placeholder="{{ t('settings.search.favorite_folder_placeholder') if is_desktop else t('settings.search.favorite_folder_placeholder_server') }}">
++                                    placeholder="{{ t('settings.search.favorite_folder_placeholder_server') }}">
+                                 <button type="button"
+                                     class="btn btn-sm btn-outline"
+                                     :title="t('settings.favorite_folder.pick_from_scanner')"
+@@ -1244,30 +1153,10 @@
+ 
+                         <div class="settings-form-row">
+                             <label class="row-label" for="maxFilenameLength">{{ t('settings.scraper.max_filename_length_label') }}</label>
+-                            <div class="input-group-inline popover-anchor" x-data="helpPopover">
++                            <div class="input-group-inline">
                                  <input type="number" class="input input-bordered input-sm" id="maxFilenameLength"
                                      x-model.number="form.maxFilenameLength" min="50" max="255">
                                  <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
-+                                {% if not is_android %}
-                                 <button type="button" class="help-popover-btn"
-                                         @click="toggle()"
-                                         :aria-expanded="open"
-@@ -1268,6 +1325,7 @@
-                                         {{ t('settings.scraper.path_length_help_line4') }}
-                                     </small>
-                                 </div>
-+                                {% endif %}
+-                                <button type="button" class="help-popover-btn"
+-                                        @click="toggle()"
+-                                        :aria-expanded="open"
+-                                        aria-controls="pathLengthHelp"
+-                                        aria-label="{{ t('settings.scraper.path_length_help_aria') }}">
+-                                    <i class="bi bi-question-circle"></i>
+-                                </button>
+-                                <div id="pathLengthHelp" x-show="open" x-cloak x-transition
+-                                     @click.outside="close()"
+-                                     class="help-popover">
+-                                    <small class="help-popover__body">
+-                                        {{ t('settings.scraper.path_length_help_line1') }}<br>
+-                                        {{ t('settings.scraper.path_length_help_line2') | safe }}
+-                                    </small>
+-                                    <pre class="help-popover__code"><code>Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -Value 1</code></pre>
+-                                    <small class="help-popover__body">
+-                                        {{ t('settings.scraper.path_length_help_line3') }}<br>
+-                                        {{ t('settings.scraper.path_length_help_line4') }}
+-                                    </small>
+-                                </div>
                              </div>
                          </div>
  
-@@ -1280,12 +1338,11 @@
+@@ -1280,12 +1169,11 @@
                              </div>
                          </div>
  
@@ -19227,39 +19832,81 @@
                                  <span class="label-text">{{ t('settings.scraper.focal_pill_label') }}</span>
                                  <button type="button" class="help-popover-btn"
                                          @click.prevent="toggle()"
-@@ -1438,6 +1495,7 @@
+@@ -1438,56 +1326,6 @@
                          </div>
                      </div>
  
-+                    {% if not is_android %}
-                     <!-- ── 進階摺疊：離線 HTML 匯出（galleryExport，預設收合 G-B1）── -->
-                     <button class="collapsible-trigger" type="button" @click="galleryExport = !galleryExport"
-                             :aria-expanded="galleryExport.toString()">
-@@ -1487,6 +1545,7 @@
-                         </div>
- 
-                     </div><!-- /collapsible-content galleryExport -->
-+                    {% endif %}
- 
+-                    <!-- ── 進階摺疊：離線 HTML 匯出（galleryExport，預設收合 G-B1）── -->
+-                    <button class="collapsible-trigger" type="button" @click="galleryExport = !galleryExport"
+-                            :aria-expanded="galleryExport.toString()">
+-                        <span class="collapsible-title"><i class="bi bi-sliders"></i> {{ t('settings.gallery.export_section') }}</span>
+-                        <span class="btn-icon-collapse" aria-hidden="true"><i class="bi bi-chevron-down" :class="{ 'rotate-180': galleryExport }"></i></span>
+-                    </button>
+-                    <div x-show="galleryExport" x-collapse class="collapsible-content">
+-
+-                        <!-- Windows 說明條（克制樣式 T3；export_notice 含 <code> 故 | safe，G-B5/CD-95b-6） -->
+-                        <p class="settings-export-notice">
+-                            <i class="bi bi-info-circle" aria-hidden="true"></i>
+-                            <span>{{ t('settings.gallery.export_notice') | safe }}</span>
+-                        </p>
+-
+-                        <!-- 顯示模式 avlistMode（僅影響離線匯出 G-B3/CD-95b-4） -->
+-                        <div class="settings-form-row">
+-                            <label class="row-label">{{ t('settings.gallery.default_mode_label') }}</label>
+-                            <div class="flex-1 flex flex-col gap-1">
+-                                <select class="select select-bordered select-sm" id="avlistMode"
+-                                    x-model="form.avlistMode">
+-                                    <option value="image">{{ t('settings.gallery.mode_image') }}</option>
+-                                    <option value="detail">{{ t('settings.gallery.mode_detail') }}</option>
+-                                    <option value="text">{{ t('settings.gallery.mode_text') }}</option>
+-                                </select>
+-                                <small class="settings-note-inline">{{ t('settings.gallery.mode_export_only_note') }}</small>
+-                            </div>
+-                        </div>
+-
+-                        <!-- 輸出目錄 avlistOutputDir（含 selectOutputFolder）搬入摺疊 -->
+-                        <div class="settings-form-row">
+-                            <label class="row-label">{{ t('settings.gallery.output_dir_label') }}</label>
+-                            <div class="variable-input-group">
+-                                <input type="text" class="input input-bordered input-sm flex-1" id="avlistOutputDir"
+-                                    x-model="form.avlistOutputDir" :placeholder="resolvedGalleryOutputPath">
+-                                <button class="btn btn-sm btn-outline btn-neutral" type="button"
+-                                    @click="selectOutputFolder()" title="{{ t('settings.gallery.select_folder_title') }}">
+-                                    <i class="bi bi-folder"></i>
+-                                </button>
+-                            </div>
+-                        </div>
+-
+-                        <!-- 輸出檔名 avlistOutputFilename 搬入摺疊 -->
+-                        <div class="settings-form-row">
+-                            <label class="row-label">{{ t('settings.gallery.output_filename_label') }}</label>
+-                            <input type="text" class="input input-bordered input-sm" id="avlistOutputFilename"
+-                                x-model="form.avlistOutputFilename" placeholder="gallery_output.html">
+-                        </div>
+-
+-                    </div><!-- /collapsible-content galleryExport -->
+-
              </div>
            </div>
-@@ -1518,6 +1577,7 @@
-                         {% if shell_mode == 'client' %}<small class="settings-hint local-machine-unavailable" x-show="localMachineState === 'unavailable'" x-cloak x-text="window.t('settings.system.this_computer_unavailable')"></small>{% endif %}
+         </section><!-- /sec-gallery -->
+@@ -1506,26 +1344,34 @@
+                             <option value="showcase">{{ t('nav.showcase') }}</option>
+                         </select>
                      </div>
-                     {% endif %}
-+                    {% if not is_android %}
-                     <div class="settings-form-row">
-                         <label class="row-label">{{ t('settings.system.player_label') }}{{ local_machine_tag() }}</label>
-                         <div class="flex-1 flex flex-col gap-1">
-@@ -1527,7 +1587,39 @@
-                             <small class="settings-hint">{{ t('settings.system.player_hint_prefix') }} C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe</small>
-                         </div>
-                     </div>
-+                    {% endif %}
-                     <hr class="my-3">
+-                    {% macro local_machine_tag() %}{% if shell_mode == 'client' %}<span class="badge badge-ghost badge-sm local-machine-tag">{{ t('settings.system.this_computer') }}</span><small class="settings-hint">{{ t('settings.system.this_computer_hint') }}</small>{% endif %}{% endmacro %}
+-                    {% if is_windows_desktop %}
++                    <hr class="my-3">
 +
-+                    {% if is_android %}
-+                    <div class="settings-form-row">
+                     <div class="settings-form-row">
+-                        <label class="row-label">{{ t('settings.system.close_action_label') }}{{ local_machine_tag() }}</label>
+-                        <select class="select select-bordered select-sm" id="closeAction" x-model="form.closeAction" :disabled="localMachineState === 'unavailable'">
+-                            <option value="ask">{{ t('settings.system.close_action_ask') }}</option>
+-                            <option value="tray">{{ t('settings.system.close_action_tray') }}</option>
+-                            <option value="exit">{{ t('settings.system.close_action_exit') }}</option>
+-                        </select>
+-                        {% if shell_mode == 'client' %}<small class="settings-hint local-machine-unavailable" x-show="localMachineState === 'unavailable'" x-cloak x-text="window.t('settings.system.this_computer_unavailable')"></small>{% endif %}
+-                    </div>
+-                    {% endif %}
 +                        <label class="row-label">
 +                            {{ t('settings.system.database_backup_label') }}
 +                            <small class="settings-hint">{{ t('settings.system.database_backup_hint') }}</small>
@@ -19271,7 +19918,14 @@
 +                            {{ t('settings.system.database_backup_action') }}
 +                        </a>
 +                    </div>
-+                    <div class="settings-form-row">
+                     <div class="settings-form-row">
+-                        <label class="row-label">{{ t('settings.system.player_label') }}{{ local_machine_tag() }}</label>
+-                        <div class="flex-1 flex flex-col gap-1">
+-                            <input type="text" class="input input-bordered input-sm" id="viewerPlayer"
+-                                x-model="form.viewerPlayer" :disabled="localMachineState === 'unavailable'" placeholder="{{ t('settings.system.player_placeholder') }}">
+-                            {% if shell_mode == 'client' %}<small class="settings-hint local-machine-unavailable" x-show="localMachineState === 'unavailable'" x-cloak x-text="window.t('settings.system.this_computer_unavailable')"></small>{% endif %}
+-                            <small class="settings-hint">{{ t('settings.system.player_hint_prefix') }} C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe</small>
+-                        </div>
 +                        <label class="row-label">
 +                            {{ t('settings.system.database_restore_label') }}
 +                            <small class="settings-hint">{{ t('settings.system.database_restore_hint') }}</small>
@@ -19285,13 +19939,10 @@
 +                            <i x-show="!restoringDatabase" class="bi bi-database-up"></i>
 +                            {{ t('settings.system.database_restore_action') }}
 +                        </button>
-+                    </div>
-+                    <hr class="my-3">
-+                    {% endif %}
+                     </div>
+                     <hr class="my-3">
  
-                     <!-- 重置按鈕 -->
-                     <div class="settings-form-row">
-@@ -1543,14 +1635,30 @@
+@@ -1543,14 +1389,30 @@
              </div>
            </div>
          </section><!-- /sec-system -->
@@ -19329,23 +19980,46 @@
  
      <!-- Dirty Check Modal -->
      <dialog class="modal fluent-modal"
-@@ -1629,6 +1737,7 @@
+@@ -1629,38 +1491,6 @@
          </div>
      </dialog>
  
-+    {% if not is_android %}
-     <!-- T4: 伺服器模式切換 Confirm Modal -->
-     <dialog class="modal fluent-modal"
-             :class="{ 'modal-open': serverModeConfirmOpen }"
-@@ -1660,6 +1769,7 @@
-             </div>
-         </div>
-     </dialog>
-+    {% endif %}
- 
+-    <!-- T4: 伺服器模式切換 Confirm Modal -->
+-    <dialog class="modal fluent-modal"
+-            :class="{ 'modal-open': serverModeConfirmOpen }"
+-            @click.self="cancelServerModeChange()"
+-            @keydown.escape.window="serverModeConfirmOpen && cancelServerModeChange()">
+-        <div class="modal-box fluent-modal-box">
+-            <h3 class="fluent-modal-title">
+-                <i class="bi bi-wifi"></i>
+-                <span x-text="serverModeConfirmValue
+-                    ? window.t('settings.server_mode_confirm.title_on')
+-                    : window.t('settings.server_mode_confirm.title')"></span>
+-            </h3>
+-            {# 同「?」說明：這段也在做安全宣稱（「已設定密碼保護」），只准讀後端已生效的
+-               accessAuthEnabledSaved，不可讀未提交草稿 accessAuthEnabled。（Codex PR#129 P2）#}
+-            <p class="fluent-modal-body"
+-               x-text="serverModeConfirmValue
+-                   ? (accessAuthEnabledSaved
+-                       ? window.t('settings.server_mode_confirm.body_on_auth')
+-                       : window.t('settings.server_mode_confirm.body_on'))
+-                   : window.t('settings.server_mode_confirm.body_off')"></p>
+-            <div class="modal-action fluent-modal-actions">
+-                <button type="button" class="btn btn-ghost" @click="cancelServerModeChange()">
+-                    {{ t('common.action.cancel') }}
+-                </button>
+-                <button type="button" class="btn btn-primary" @click="confirmServerModeChange()"
+-                        x-text="serverModeConfirmValue
+-                            ? window.t('settings.server_mode_confirm.confirm_on')
+-                            : window.t('settings.server_mode_confirm.confirm')"></button>
+-            </div>
+-        </div>
+-    </dialog>
+-
      <!-- 90c-T5: 全域模式切換（破壞性重設）Confirm Modal -->
      <dialog class="modal fluent-modal"
-@@ -1709,20 +1819,13 @@
+             :class="{ 'modal-open': switchModeConfirmOpen }"
+@@ -1709,20 +1539,13 @@
      </dialog>
  
  <!-- Toast 容器（Alpine controlled）-->

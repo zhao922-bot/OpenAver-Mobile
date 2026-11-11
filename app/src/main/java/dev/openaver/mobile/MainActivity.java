@@ -123,7 +123,7 @@ public final class MainActivity extends Activity {
     private TextView loadingText;
     private FrameLayout fullscreenContainer;
     private AndroidCfTransport cfTransport;
-    private CfShellAgent cfShell;
+    private CfMobileAgent cfMobile;
 
     private Runnable pageLoadTimeout;
     private ValueCallback<Uri[]> filePathCallback;
@@ -489,7 +489,7 @@ public final class MainActivity extends Activity {
                         openLocalPath("/scanner");
                         // Keep the CF poller available, but do not put WebView
                         // construction on the page's startup critical path.
-                        startCfShell();
+                        startCfMobile();
                     });
                 });
             } catch (Throwable error) {
@@ -910,13 +910,13 @@ public final class MainActivity extends Activity {
         mainHandler.postDelayed(pageLoadTimeout, PAGE_LOAD_TIMEOUT_MS);
     }
 
-    private void startCfShell() {
-        if (cfShell != null) {
+    private void startCfMobile() {
+        if (cfMobile != null) {
             return;
         }
         cfTransport = new AndroidCfTransport(this, root);
-        cfShell = new CfShellAgent(localBaseUrl(), localAuthToken, cfTransport);
-        cfShell.start();
+        cfMobile = new CfMobileAgent(localBaseUrl(), localAuthToken, cfTransport);
+        cfMobile.start();
     }
 
     private void showPageError() {
@@ -1413,9 +1413,9 @@ public final class MainActivity extends Activity {
                     localAuthCookieName + "=; Max-Age=0; Path=/"
             );
         }
-        if (cfShell != null) {
-            cfShell.stop();
-            cfShell = null;
+        if (cfMobile != null) {
+            cfMobile.stop();
+            cfMobile = null;
         }
         if (cfTransport != null) {
             cfTransport.destroy();

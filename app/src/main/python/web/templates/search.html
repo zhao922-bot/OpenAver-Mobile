@@ -1407,25 +1407,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
-    // === 全域函數：供 PyWebView Python 端呼叫 ===
-
-    /**
-     * PyWebView 拖放回調（由 Python 端呼叫）
-     * @param {string|string[]} paths - WSL 格式的檔案路徑（單一或陣列）
-     */
-    window.handlePyWebViewDrop = function (paths) {
-        // 統一轉為陣列
-        const pathList = Array.isArray(paths) ? paths : [paths];
-
-        // 觸發自定義事件，讓主程式處理
-        window.dispatchEvent(new CustomEvent('pywebview-files', {
-            detail: { paths: pathList }
-        }));
-    };
-
-    // === 主程式已移至 /static/js/pages/search/ ===
-</script>
 <script src="/static/js/shared/grid-motion.js"></script>
 <!-- T5: 動畫模組（GSAP 已在 base.html defer 載入）-->
 <script src="/static/js/pages/search/animations.js"></script>

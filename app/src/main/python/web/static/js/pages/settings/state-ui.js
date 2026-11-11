@@ -8,7 +8,6 @@ export function stateUI() {
 
         // 64b-1: 進階摺疊開關（x-collapse 驅動）
         scraperAdvanced: false,
-        galleryExport: false,   // 95b-T2: 離線 HTML 匯出摺疊（預設收合，CD-95b-7）
 
         // Dirty Check Modal State
         dirtyCheckModalOpen: false,
@@ -20,31 +19,10 @@ export function stateUI() {
         // 71b-T2: 關閉封面縮圖快取 Confirm Modal State
         thumbCacheDisableConfirmOpen: false,
 
-        // T4: 伺服器模式切換 Confirm Modal State
-        serverModeConfirmOpen: false,
-        serverModeConfirmValue: null,
-
         // B1: Scanner directory link state
         favoriteScannerLink: null,   // null=隱藏, {linked, matched_directory}=已查
         showDirDropdown: false,
         scannerDirectories: [],
-
-        // ===== Methods =====
-        async selectOutputFolder() {
-            if (this.shellMode === 'client' || typeof window.pywebview === 'undefined' || !window.pywebview.api) {
-                this.openBrowseDir('settings', (path) => { this.form.avlistOutputDir = path; });
-                return;
-            }
-
-            try {
-                const result = await window.pywebview.api.select_folder();
-                if (result && result.folder) {
-                    this.form.avlistOutputDir = result.folder;
-                }
-            } catch (e) {
-                console.error('選擇資料夾失敗:', e);
-            }
-        },
 
         // Dirty check modal — 儲存更改後離開
         async dirtyCheckSave() {

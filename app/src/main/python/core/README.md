@@ -214,34 +214,17 @@ scrapers/
 - **刻意不在這裡**：上鎖、刪同名舊檔、把失敗轉成 `False`、決定 `dest` 在哪——全部留在呼叫端。清舊檔一律排在 `os.replace` 成功**之後**（`os.replace` 在 Windows 不保證成功，見 `gotchas-backend.md` BE-ENV-01）。
 - ⚠️ 模組內對 `os.replace` / `tempfile.mkstemp` **必須用屬性存取**（禁 `from os import replace`），否則測試端 `patch("core.atomic_write.os.replace")` 會失效——由 `tests/unit/test_atomic_write_boundary_guard.py` 的 AST 守衛鎖住。
 
-### `client_settings.py`（這台電腦的設定）
-**`windows/` 讀「這台電腦的設定」（播放器、關閉行為、托盤語系等）的唯一入口（spec-168a）**
-- 檔案是 `<資料根>/client.json`；**歸屬清單以 `client_settings.LOCAL_MACHINE_KEYS` 為準**，這裡不列鍵名（避免兩處分岔）。
-- 本機模式（沒有 `client.json`）：讀取結果與升級前逐字相同，仍來自 `config.json`。
-- 桌面區塊跟著殼走（不再看伺服器平台）；bridge 只在信任 origin 的頁面動作，並以 `window.expose` 白名單暴露函式；`open_file` 限影片副檔名。
-- `windows/` 不得自己碰 config API；唯一例外是 `standalone.py` 的 `_maybe_autostart_lan_listener`（讀伺服器端的 `server_mode`）。由 `scripts/static_guard_lint.mjs` 的 `[168a-T7-*]` 規則守住。
-- `client.json` 的寫入出口只有一個：`_rmw`（整段讀改寫在同一把鎖內，網路 I/O 不得放進鎖內）；具名函式與鍵值型寫入 `update_local_settings` 都經它落檔。`windows/`、`web/` 不得直接呼叫 `save_client_settings`（lint `[168b-T8-no-save-client-settings-in-*]`），`client_settings.py` 內也只准 `_rmw` 一處呼叫（lint `[168c-T1-client-json-single-write-funnel]`）。
-- `MIN_SERVER_VERSION` 是「連線功能首次出貨版」，必須 ≤ `core/version.py` 的版本（`tests/unit/test_client_settings.py` 守）。
-- `client_connect.py` 負責桌面版與伺服器的版本相容判定，以及向伺服器取影片副檔名（`fetch_video_extensions`）；`client_sources.py` 負責來源清單（連線頁路徑對照用）。
-
 ### `cf_handoff.py`（驗證視窗轉交）
-**Cloudflare 驗證視窗的轉交 broker：讓伺服器端的重刮，能請「發出請求的那台電腦的殼」彈出驗證視窗（spec-168d）**
-- 伺服器行程永遠註冊 `HandoffCfTransport`（`web/app.py` module level）；殼不註冊任何 transport，只經 `/api/cf/shell/poll`／`result` 領 job、回結果。
-- job 以「請求所屬殼」的 key 配對；沒有對應的殼時立即失敗，有殼時是有界等待，不會無限卡住。
-- `core` 不 import `web`／`windows`；殼端的建窗在 `windows/cf_windows.py`（單一 builder），殼端輪詢在 `windows/cf_shell.py`。時序常數不在此列，以程式為準。
+**Cloudflare 驗證 job 的轉交 broker：讓 Python 刮削流程使用 Android 內嵌 WebView（spec-168d）**
+- 伺服器行程註冊 `HandoffCfTransport`（`web/app.py` module level）；Android 原生工作端經 `/api/cf/mobile/poll`／`result` 領取 job、回傳結果。
+- job 以「請求所屬行動端身分」的 key 配對；沒有對應工作端時立即失敗，有工作端時是有界等待，不會無限卡住。
+- `core` 不 import `web` 或 Android Java 實作；WebView 實作在 `CfMobileAgent.java`／`AndroidCfTransport.java`。時序常數不在此列，以程式為準。
 - 守衛：lint `[168d-T2-handoff-registered-in-app]`、`[168d-T4-*]`。
 
 ### `loopback.py`
 **「host 是不是這台電腦」判斷的共用入口（spec-168d）**
 - `is_loopback_host` 是本機判斷的共用入口;`web.app._is_loopback_host` 與 `core.proxy_policy` 委派它。既有例外(如 `web/routers/config.py` 的 `update_general_field`)見 `tests/unit/test_loopback_delegation_guard.py` 帳本。
 - 由 `tests/unit/test_loopback_delegation_guard.py` 守。
-
-### `self_update.py`
-**「更新到最新版」的共用核心（spec-168c）：伺服器端點與桌面殼 bridge 共用同一份安裝指令**
-- 伺服器的 `get_install_context`／`trigger_update` 與桌面殼 bridge 的 `update_run` 共用同一份安裝指令與安裝路徑推導；`install.ps1`／`install.sh` 字面只准出現在這支（lint `[168c-T1-installer-command-single-source]`，`web/`、`windows/`、`core/` 其餘 `.py` 連註解都不得寫出）。
-- `check_latest`：向 `GITHUB_LATEST_API` 查最新版；失敗不丟例外，回 `{ok: False, reason: timeout|network|bad_response}`。
-- `is_newer`：只比版號（tuple 比較）；版號解析失敗回布林 `False`，不丟例外。
-- 模組內 `httpx`／`subprocess`／`sys` **一律屬性存取**（`httpx.Client`、`subprocess.Popen`、`sys.platform`），既有測試才能從 `web.app.subprocess.Popen` 等路徑 patch 命中。
 
 ### `image_host_policy.py`
 **圖片 host registry ＋ 代理放行判準（單一所有權，spec-113 F-6；167 縮表）**

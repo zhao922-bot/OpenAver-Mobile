@@ -1,0 +1,4528 @@
+--- a/core/README.md
++++ b/core/README.md
+@@ -214,34 +214,17 @@
+ - **刻意不在這裡**：上鎖、刪同名舊檔、把失敗轉成 `False`、決定 `dest` 在哪——全部留在呼叫端。清舊檔一律排在 `os.replace` 成功**之後**（`os.replace` 在 Windows 不保證成功，見 `gotchas-backend.md` BE-ENV-01）。
+ - ⚠️ 模組內對 `os.replace` / `tempfile.mkstemp` **必須用屬性存取**（禁 `from os import replace`），否則測試端 `patch("core.atomic_write.os.replace")` 會失效——由 `tests/unit/test_atomic_write_boundary_guard.py` 的 AST 守衛鎖住。
+ 
+-### `client_settings.py`（這台電腦的設定）
+-**`windows/` 讀「這台電腦的設定」（播放器、關閉行為、托盤語系等）的唯一入口（spec-168a）**
+-- 檔案是 `<資料根>/client.json`；**歸屬清單以 `client_settings.LOCAL_MACHINE_KEYS` 為準**，這裡不列鍵名（避免兩處分岔）。
+-- 本機模式（沒有 `client.json`）：讀取結果與升級前逐字相同，仍來自 `config.json`。
+-- 桌面區塊跟著殼走（不再看伺服器平台）；bridge 只在信任 origin 的頁面動作，並以 `window.expose` 白名單暴露函式；`open_file` 限影片副檔名。
+-- `windows/` 不得自己碰 config API；唯一例外是 `standalone.py` 的 `_maybe_autostart_lan_listener`（讀伺服器端的 `server_mode`）。由 `scripts/static_guard_lint.mjs` 的 `[168a-T7-*]` 規則守住。
+-- `client.json` 的寫入出口只有一個：`_rmw`（整段讀改寫在同一把鎖內，網路 I/O 不得放進鎖內）；具名函式與鍵值型寫入 `update_local_settings` 都經它落檔。`windows/`、`web/` 不得直接呼叫 `save_client_settings`（lint `[168b-T8-no-save-client-settings-in-*]`），`client_settings.py` 內也只准 `_rmw` 一處呼叫（lint `[168c-T1-client-json-single-write-funnel]`）。
+-- `MIN_SERVER_VERSION` 是「連線功能首次出貨版」，必須 ≤ `core/version.py` 的版本（`tests/unit/test_client_settings.py` 守）。
+-- `client_connect.py` 負責桌面版與伺服器的版本相容判定，以及向伺服器取影片副檔名（`fetch_video_extensions`）；`client_sources.py` 負責來源清單（連線頁路徑對照用）。
+-
+ ### `cf_handoff.py`（驗證視窗轉交）
+-**Cloudflare 驗證視窗的轉交 broker：讓伺服器端的重刮，能請「發出請求的那台電腦的殼」彈出驗證視窗（spec-168d）**
+-- 伺服器行程永遠註冊 `HandoffCfTransport`（`web/app.py` module level）；殼不註冊任何 transport，只經 `/api/cf/shell/poll`／`result` 領 job、回結果。
+-- job 以「請求所屬殼」的 key 配對；沒有對應的殼時立即失敗，有殼時是有界等待，不會無限卡住。
+-- `core` 不 import `web`／`windows`；殼端的建窗在 `windows/cf_windows.py`（單一 builder），殼端輪詢在 `windows/cf_shell.py`。時序常數不在此列，以程式為準。
++**Cloudflare 驗證 job 的轉交 broker：讓 Python 刮削流程使用 Android 內嵌 WebView（spec-168d）**
++- 伺服器行程註冊 `HandoffCfTransport`（`web/app.py` module level）；Android 原生工作端經 `/api/cf/mobile/poll`／`result` 領取 job、回傳結果。
++- job 以「請求所屬行動端身分」的 key 配對；沒有對應工作端時立即失敗，有工作端時是有界等待，不會無限卡住。
++- `core` 不 import `web` 或 Android Java 實作；WebView 實作在 `CfMobileAgent.java`／`AndroidCfTransport.java`。時序常數不在此列，以程式為準。
+ - 守衛：lint `[168d-T2-handoff-registered-in-app]`、`[168d-T4-*]`。
+ 
+ ### `loopback.py`
+ **「host 是不是這台電腦」判斷的共用入口（spec-168d）**
+ - `is_loopback_host` 是本機判斷的共用入口;`web.app._is_loopback_host` 與 `core.proxy_policy` 委派它。既有例外(如 `web/routers/config.py` 的 `update_general_field`)見 `tests/unit/test_loopback_delegation_guard.py` 帳本。
+ - 由 `tests/unit/test_loopback_delegation_guard.py` 守。
+-
+-### `self_update.py`
+-**「更新到最新版」的共用核心（spec-168c）：伺服器端點與桌面殼 bridge 共用同一份安裝指令**
+-- 伺服器的 `get_install_context`／`trigger_update` 與桌面殼 bridge 的 `update_run` 共用同一份安裝指令與安裝路徑推導；`install.ps1`／`install.sh` 字面只准出現在這支（lint `[168c-T1-installer-command-single-source]`，`web/`、`windows/`、`core/` 其餘 `.py` 連註解都不得寫出）。
+-- `check_latest`：向 `GITHUB_LATEST_API` 查最新版；失敗不丟例外，回 `{ok: False, reason: timeout|network|bad_response}`。
+-- `is_newer`：只比版號（tuple 比較）；版號解析失敗回布林 `False`，不丟例外。
+-- 模組內 `httpx`／`subprocess`／`sys` **一律屬性存取**（`httpx.Client`、`subprocess.Popen`、`sys.platform`），既有測試才能從 `web.app.subprocess.Popen` 等路徑 patch 命中。
+ 
+ ### `image_host_policy.py`
+ **圖片 host registry ＋ 代理放行判準（單一所有權，spec-113 F-6；167 縮表）**
+--- a/core/cf_transport.py
++++ b/core/cf_transport.py
+@@ -10,10 +10,10 @@
+   core/cf_handoff.py            →  HandoffCfTransport implements CfTransport;
+                                     the server process (web/app.py) registers it
+                                     at import time, so get_cf_transport() is never
+-                                    None there. It hands each call to the shell
+-                                    (desktop client / local shell) of the request.
+-  windows/cf_transport_impl.py  →  the real WebView backend, lives in the shell
+-                                    side agent, not registered on the server.
++                                    None there. It hands each call to the Android
++                                    WebView worker associated with the request.
++  AndroidCfTransport.java       →  the real WebView backend, polled by the
++                                    native worker through /api/cf/mobile/*.
+   dev launcher / tests          →  may never register → get returns None
+                                     → scraper raises CfTransportUnavailable
+ """
+@@ -27,7 +27,7 @@
+ class CfTransportUnavailable(RuntimeError):
+     """CF transport is not initialised in this environment (dev/server).
+ 
+-    User-visible meaning: JavLibrary 僅限桌面應用程式（standalone）可用。
++    User-visible meaning: the Android WebView worker is not available.
+     Scrapers should catch this and surface a friendly message rather than a
+     raw traceback.
+     """
+@@ -44,8 +44,8 @@
+ class CfTransport(Protocol):
+     """Structural protocol for a Cloudflare-capable transport backend.
+ 
+-    Implementations live in ``windows/`` and must not be imported from
+-    ``core/``.  Consumers depend on this Protocol only.
++    Implementations live outside ``core/`` and must not be imported from
++    ``core/``. Consumers depend on this Protocol only.
+     """
+ 
+     def begin_solve(self, origin_url: str, cache_key: str) -> None:
+@@ -56,18 +56,15 @@
+         must not hold a thread waiting for the solution) is unchanged.
+ 
+         It is NOT, however, strictly instantaneous: an implementation may spend a
+-        short, bounded wait on navigation transitions before returning (the
+-        pywebview one bounces the window off ``about:blank`` first for sites where
+-        WebView2 otherwise stops completing repeat navigations — TASK-118a-T6/F-2,
+-        bounded by ``NAV_RESET_TIMEOUT_S``, ~0.1s in practice). Call it from a
+-        threadpool/sync path, not directly from an asyncio event loop.
++        short, bounded wait on navigation transitions before returning. Call it
++        from a threadpool/sync path, not directly from an asyncio event loop.
+ 
+         *cache_key* selects which per-site transport window to target (e.g.
+         ``'javlibrary'`` or ``'fc-javten'``); each site owns its own hidden
+         window, dead-flag, and remembered CF URL internally (see
+-        ``windows/cf_transport_impl.py``) — this Protocol's registration
+-        model stays a single global transport object regardless of how many
+-        sites it serves.
++        ``AndroidCfTransport.java``) — this Protocol's registration model
++        stays a single global transport object regardless of how many sites
++        it serves.
+         """
+         ...
+ 
+@@ -99,7 +96,7 @@
+ 
+     def navigate_and_settle(self, url: str, cache_key: str) -> str:
+         """**Blocking (bounded)**: navigate the *cache_key* site's transport
+-        window to *url*, wait for pywebview's JS bridge to become ready
++        window to *url*, wait for the WebView JavaScript bridge to become ready
+         (bounded timeout), then return the settled final URL.
+ 
+         Exists for sites whose search step cannot use a same-origin
+--- a/core/client_connect.py
++++ /dev/null
+@@ -1,220 +0,0 @@
+-"""core/client_connect.py — 桌面殼「連線頁」的遠端 I/O（握手探測／登入／來源／相容判定）。
+-
+-httpx 同步、純 Python；不 import web／windows／webview。
+-token 只回呼叫端；log 只寫 ``token=<set>``／``<none>``，PIN 不進 log。
+-"""
+-import re
+-import ssl
+-from typing import NamedTuple, Optional
+-
+-import httpx
+-
+-from core import client_settings
+-from core.logger import get_logger
+-from core.proxy_policy import settings_from_config
+-from core.version import VERSION as LOCAL_VERSION
+-from core.video_extensions import normalize_extensions
+-
+-logger = get_logger(__name__)
+-
+-_VERSION_RE = re.compile(r"^\s*(\d+)\.(\d+)\.(\d+)")
+-_CONNECTABLE = ("ok", "patch_diff")
+-
+-
+-class Compat(NamedTuple):
+-    status: str
+-    hint: str
+-
+-
+-class Preflight(NamedTuple):
+-    status: str
+-    reason: Optional[str]
+-    probe: dict
+-
+-
+-def _new_client(transport=None, timeout=3.0) -> httpx.Client:
+-    # trust_env=False：主機在區網，系統／環境代理對它沒有意義（168e CD-1）
+-    return httpx.Client(timeout=httpx.Timeout(timeout), transport=transport, trust_env=False)
+-
+-
+-def _parse_version(v):
+-    m = _VERSION_RE.match(v) if isinstance(v, str) else None
+-    return tuple(int(x) for x in m.groups()) if m else None
+-
+-
+-def check_compat(local: str, server: str) -> Compat:
+-    lv, sv = _parse_version(local), _parse_version(server)
+-    if lv is None or sv is None:
+-        return Compat("unparseable", "")
+-    if sv[:2] != lv[:2]:
+-        return Compat("server_old", "upgrade_server") if sv[:2] < lv[:2] else Compat("client_old", "upgrade_client")
+-    if sv[:2] == lv[:2] and sv < client_settings.MIN_SERVER_VERSION:
+-        return Compat("server_old", "upgrade_server")
+-    if sv[2] != lv[2]:
+-        return Compat("patch_diff", "")
+-    return Compat("ok", "")
+-
+-
+-def is_connectable(compat: Compat) -> bool:
+-    return compat.status in _CONNECTABLE
+-
+-
+-def _origin(url):
+-    return client_settings.canonical_server_url(url)
+-
+-
+-def _exc_reason(exc: Exception) -> str:
+-    if isinstance(exc, httpx.TimeoutException):
+-        return "timeout"
+-    cause = exc
+-    while cause is not None:
+-        if isinstance(cause, ssl.SSLError):
+-            return "tls"
+-        cause = cause.__cause__ or cause.__context__
+-    return "unreachable"
+-
+-
+-def _result(ok=False, reason=None, version="", kind="", auth_required=False, authed=False, compat=None) -> dict:
+-    return {"ok": ok, "reason": reason, "version": version, "kind": kind,
+-            "auth_required": auth_required, "authed": authed,
+-            "compat": compat or Compat("unparseable", "")}
+-
+-
+-def _json(resp):
+-    try:
+-        data = resp.json()
+-    except ValueError:
+-        return None
+-    return data if isinstance(data, dict) else None
+-
+-
+-def _legacy_health_version(client, origin):
+-    try:
+-        data = _json(client.get(f"{origin}/api/health"))
+-    except httpx.HTTPError:
+-        return None
+-    version = data.get("version") if data else None
+-    return version if _parse_version(version) else None
+-
+-
+-def probe(url, token=None) -> dict:
+-    origin = _origin(url)
+-    if origin is None:
+-        return _result(reason="unreachable")
+-    headers = {"Authorization": f"Bearer {token}"} if token else {}
+-    logger.debug(f"[client_connect] probe {origin} token={'<set>' if token else '<none>'}")
+-    with _new_client() as client:
+-        try:
+-            resp = client.get(f"{origin}/api/client/hello", headers=headers)
+-        except httpx.HTTPError as e:
+-            return _result(reason=_exc_reason(e))
+-        data = _json(resp)
+-        if resp.status_code == 403 and data is None:
+-            return _result(reason="lan_forbidden")
+-        if data is None or data.get("app") != "openaver":
+-            legacy = _legacy_health_version(client, origin)
+-            if legacy is None:
+-                return _result(reason="not_openaver")
+-            # 沒有 hello 端點＝一定是舊伺服器，不論 health 版本多少都固定提示升級伺服器
+-            return _result(version=legacy, compat=Compat("server_old", "upgrade_server"))
+-    version = str(data.get("version") or "")
+-    return _result(ok=True, version=version, kind=str(data.get("kind") or ""),
+-                   auth_required=bool(data.get("auth_required")), authed=bool(data.get("authed")),
+-                   compat=check_compat(LOCAL_VERSION, version))
+-
+-
+-def login(url, pin) -> dict:
+-    origin = _origin(url)
+-    if origin is None:
+-        return {"ok": False, "reason": "unreachable", "token": None}
+-    with _new_client() as client:
+-        try:
+-            resp = client.post(f"{origin}/api/client/token", json={"pin": pin})
+-        except httpx.HTTPError as e:
+-            return {"ok": False, "reason": _exc_reason(e), "token": None}
+-    data = _json(resp) or {}
+-    if resp.status_code == 200 and data.get("success"):
+-        logger.debug(f"[client_connect] login ok token={'<set>' if data.get('token') else '<none>'}")
+-        return {"ok": True, "reason": None, "token": data.get("token")}
+-    if resp.status_code == 403:
+-        return {"ok": False, "reason": "lan_forbidden", "token": None}
+-    return {"ok": False, "reason": str(data.get("reason") or "bad_pin"), "token": None}
+-
+-
+-def fetch_sources(url, token) -> dict:
+-    origin = _origin(url)
+-    if origin is None:
+-        return {"ok": False, "reason": "unreachable", "sources": []}
+-    headers = {"Authorization": f"Bearer {token}"} if token else {}
+-    with _new_client(timeout=10.0) as client:
+-        try:
+-            resp = client.get(f"{origin}/api/client/sources", headers=headers)
+-        except httpx.HTTPError as e:
+-            return {"ok": False, "reason": _exc_reason(e), "sources": []}
+-    data = _json(resp)
+-    if resp.status_code == 200 and data and data.get("success") and isinstance(data.get("sources"), list):
+-        return {"ok": True, "reason": None, "sources": data["sources"]}
+-    return {"ok": False, "reason": "unauthorized" if resp.status_code in (401, 403) else "bad_response",
+-            "sources": []}
+-
+-
+-def fetch_video_extensions(url, token) -> dict:
+-    """從伺服器 ``/api/config`` 抓副檔名清單；任何失敗 ``ok:False``，絕不回預設清單。
+-
+-    空清單 ``[]`` 是合法回應（伺服器存空 ＝ 用預設），回 ``ok:True, extensions:[]``。
+-    """
+-    origin = _origin(url)
+-    if origin is None:
+-        return {"ok": False, "reason": "unreachable", "extensions": []}
+-    headers = {"Authorization": f"Bearer {token}"} if token else {}
+-    logger.debug(f"[client_connect] fetch_video_extensions {origin} token={'<set>' if token else '<none>'}")
+-    with _new_client() as client:
+-        try:
+-            resp = client.get(f"{origin}/api/config", headers=headers)
+-        except httpx.HTTPError as e:
+-            return {"ok": False, "reason": _exc_reason(e), "extensions": []}
+-    if resp.status_code in (401, 403):
+-        return {"ok": False, "reason": "unauthorized", "extensions": []}
+-    data = _json(resp)
+-    inner = data.get("data") if data is not None and resp.status_code == 200 else None
+-    scraper = inner.get("scraper") if isinstance(inner, dict) else None
+-    exts = scraper.get("video_extensions") if isinstance(scraper, dict) else None
+-    if not isinstance(exts, list) or not all(isinstance(e, str) for e in exts):
+-        return {"ok": False, "reason": "bad_response", "extensions": []}
+-    return {"ok": True, "reason": None, "extensions": sorted(normalize_extensions(exts))}
+-
+-
+-def fetch_proxy_settings(url, token) -> dict:
+-    """從伺服器 ``/api/config`` 抓代理設定；任何失敗 ``ok:False``、``settings=None``，絕不回預設設定。"""
+-    origin = _origin(url)
+-    if origin is None:
+-        return {"ok": False, "reason": "unreachable", "settings": None}
+-    headers = {"Authorization": f"Bearer {token}"} if token else {}
+-    logger.debug(f"[client_connect] fetch_proxy_settings {origin} token={'<set>' if token else '<none>'}")
+-    with _new_client() as client:
+-        try:
+-            resp = client.get(f"{origin}/api/config", headers=headers)
+-        except httpx.HTTPError as e:
+-            return {"ok": False, "reason": _exc_reason(e), "settings": None}
+-    if resp.status_code in (401, 403):
+-        return {"ok": False, "reason": "unauthorized", "settings": None}
+-    data = _json(resp)
+-    inner = data.get("data") if data is not None and resp.status_code == 200 else None
+-    if not isinstance(inner, dict):
+-        return {"ok": False, "reason": "bad_response", "settings": None}
+-    return {"ok": True, "reason": None, "settings": settings_from_config(inner)}
+-
+-
+-def preflight(url, token) -> Preflight:
+-    """啟動前檢查：至多一次 hello（帶 Bearer），不碰 token／sources 端點（I-B）。"""
+-    p = probe(url, token or None)
+-    reason = p["reason"]
+-    if reason in ("timeout", "tls", "unreachable"):
+-        return Preflight("offline", "unreachable", p)
+-    if reason == "lan_forbidden":
+-        return Preflight("offline", "lan_forbidden", p)
+-    if reason == "not_openaver" or not p["ok"] or not is_connectable(p["compat"]):
+-        return Preflight("offline", "incompatible", p)
+-    if p["auth_required"] and (not token or not p["authed"]):
+-        return Preflight("offline", "relogin", p)
+-    return Preflight("ok", None, p)
+--- a/core/client_settings.py
++++ /dev/null
+@@ -1,512 +0,0 @@
+-"""core/client_settings.py — 「這台電腦的設定」的家（桌面殼用）。
+-
+-檔案 = ``<資料根>/client.json``（每次呼叫現算路徑，``OPENAVER_DATA_DIR`` 才能被測試覆寫）。
+-``mode()`` 為 ``'client'`` 若且唯若該檔存在、可解析為 dict、``version == 1``、
+-``server.url`` 為非空 http(s) URL；其餘一律 ``'local'``。
+-
+-本機模式：accessors 逐字沿用今天的讀取方式（``config.json``），**永不建立 client.json**。
+-連線模式：只讀 client.json，缺鍵用內建預設，**不回頭讀本機 config.json**。
+-
+-純函式、無 class；不 import web／windows／webview。
+-"""
+-import ipaddress
+-import json
+-import re
+-import sys
+-import threading
+-from datetime import datetime, timezone
+-from pathlib import Path
+-from urllib.parse import quote, urlparse
+-
+-import core.config as core_config
+-from core.atomic_write import atomic_write
+-from core.data_root import get_data_root
+-from core.i18n import FALLBACK_LOCALE, SUPPORTED_LOCALES
+-from core.logger import get_logger
+-from core.path_translate import strip_wrapping_quotes
+-from core.video_extensions import (
+-    DEFAULT_VIDEO_EXTENSIONS,
+-    get_video_extensions,
+-    normalize_extensions,
+-)
+-
+-logger = get_logger(__name__)
+-
+-CLIENT_FILE_NAME = "client.json"
+-CLIENT_VERSION = 1
+-# 本 branch 期間佔位（＝當時 VERSION，真機驗收才連得上自己）；pre-merge 填實際出貨版
+-MIN_SERVER_VERSION = (0, 17, 7)
+-_DEFAULT_PORTS = {"http": 80, "https": 443}
+-_CLOSE_ACTIONS = ("ask", "tray", "exit")
+-
+-# (key, 本機讀取來源, client 讀取來源, accessor 名)
+-LOCAL_MACHINE_KEYS = (
+-    ("server.url", "（無；本機模式即本機伺服器）", "client.json server.url", "server_url"),
+-    ("path_map", "（無；本機模式不翻譯路徑）", "client.json path_map", "path_map"),
+-    ("player", "config.json showcase.player", "client.json player", "player_path"),
+-    ("video_extensions", "config.json scraper.video_extensions", "client.json video_extensions", "video_extensions"),
+-    ("close_action", "config.json general.close_action", "client.json close_action", "close_action"),
+-    ("tray_locale", "config.json general.locale", "client.json tray_locale", "tray_locale"),
+-    ("auto_check_update", "config.json general.auto_check_update", "client.json auto_check_update", "auto_check_update"),
+-)
+-
+-SERVER_OWNED_NOTE = (
+-    "歸伺服器管、不屬這台電腦：general.server_mode、gallery.*、所有爬蟲設定（scraper.*，"
+-    "含伺服器掃描用的 scraper.video_extensions；這台電腦 bridge 用的副檔名清單是另一份，見 video_extensions）。"
+-    "general.auto_check_update／last_notified_update_version 在 client 模式屬這台電腦（見 auto_check_update）。"
+-)
+-_PLAYER_MAX = 1024
+-_VERSION_STR_RE = re.compile(r"^\d+(\.\d+)*$")
+-# 單一寫入出口：所有 client.json 讀改寫都經 _rmw，整段在此鎖內（網路 I/O 不得放進鎖內）
+-_write_lock = threading.RLock()
+-
+-
+-def _client_path() -> Path:
+-    return get_data_root() / CLIENT_FILE_NAME
+-
+-
+-def _valid_url(url) -> bool:
+-    if not isinstance(url, str) or not url.strip():
+-        return False
+-    return normalize_origin(url) is not None
+-
+-
+-def _load_valid():
+-    """回傳有效的 client.json dict；無效（不存在／壞檔／版本不符／url 無效）回 None。"""
+-    path = _client_path()
+-    if not path.exists():
+-        return None
+-    try:
+-        with open(path, "r", encoding="utf-8") as f:
+-            data = json.load(f)
+-    except Exception as e:
+-        logger.warning(f"[client_settings] {path} 無法解析：{e}；視為本機模式")
+-        return None
+-    if not isinstance(data, dict):
+-        logger.warning(f"[client_settings] {path} 頂層不是物件；視為本機模式")
+-        return None
+-    if data.get("version") != 1:
+-        logger.warning(f"[client_settings] {path} version 非 1；視為本機模式")
+-        return None
+-    server = data.get("server")
+-    if not isinstance(server, dict) or not _valid_url(server.get("url")):
+-        return None
+-    return data
+-
+-
+-def _load_raw():
+-    """讀 client.json 但**不要求 url 有效**（clear_connection 後 url 為空，保留鍵不可被洗掉）。
+-
+-    檔不存在／壞檔／version 非 1／頂層非 dict → None。
+-    """
+-    path = _client_path()
+-    if not path.exists():
+-        return None
+-    try:
+-        with open(path, "r", encoding="utf-8") as f:
+-            data = json.load(f)
+-    except Exception as e:
+-        logger.warning(f"[client_settings] {path} 無法解析：{e}")
+-        return None
+-    if not isinstance(data, dict) or data.get("version") != CLIENT_VERSION:
+-        return None
+-    return data
+-
+-
+-def _client_data() -> dict:
+-    data = _load_valid()
+-    return data if data is not None else {}
+-
+-
+-def _read_raw_config():
+-    """讀本機 config.json 原始 JSON；檔不存在回 None，壞 JSON 往外丟。"""
+-    if core_config.CONFIG_PATH.exists():
+-        with open(core_config.CONFIG_PATH, "r", encoding="utf-8") as f:
+-            return json.load(f)
+-    return None
+-
+-
+-def mode() -> str:
+-    return "client" if _load_valid() is not None else "local"
+-
+-
+-def server_url() -> str:
+-    server = _client_data().get("server")
+-    return str(server.get("url") or "").strip() if isinstance(server, dict) else ""
+-
+-
+-def server_pair() -> tuple:
+-    """(url, token) 取自同一次讀檔；無有效設定回 ("", "")。"""
+-    server = _client_data().get("server")
+-    server = server if isinstance(server, dict) else {}
+-    return str(server.get("url") or "").strip(), str(server.get("token") or "")
+-
+-
+-def path_map() -> list:
+-    pm = _client_data().get("path_map")
+-    return pm if isinstance(pm, list) else []
+-
+-
+-def saved_path_map() -> list:
+-    """client.json 裡保留的對照表（不看 mode；切回本機後仍在）。只給連線頁預填用，換算請用 path_map()。"""
+-    pm = (_load_raw() or {}).get("path_map")
+-    return pm if isinstance(pm, list) else []
+-
+-
+-def player_path():
+-    if mode() == "local":
+-        try:
+-            config = _read_raw_config()
+-            if config is not None:
+-                return config.get("showcase", {}).get("player", "")
+-        except Exception as e:
+-            logger.warning(f"[client_settings] player_path failed to read config: {e}; falling back to empty string (OS default player)")
+-        return ""
+-    return str(_client_data().get("player") or "")
+-
+-
+-def video_extensions() -> set:
+-    if mode() == "local":
+-        try:
+-            config = _read_raw_config()
+-            if config is not None:
+-                return get_video_extensions(config)
+-        except Exception as e:
+-            logger.warning(f"[client_settings] video_extensions failed to read config: {e}; falling back to DEFAULT_VIDEO_EXTENSIONS")
+-        return set(DEFAULT_VIDEO_EXTENSIONS)
+-    exts = _client_data().get("video_extensions")
+-    if isinstance(exts, list) and exts:
+-        return normalize_extensions([e for e in exts if isinstance(e, str)])
+-    return set(DEFAULT_VIDEO_EXTENSIONS)
+-
+-
+-def close_action() -> str:
+-    if mode() == "local":
+-        return core_config.load_config().get("general", {}).get("close_action", "ask")
+-    value = _client_data().get("close_action")
+-    return value if value in _CLOSE_ACTIONS else "ask"
+-
+-
+-def tray_locale() -> str:
+-    if mode() == "local":
+-        return core_config.load_config().get("general", {}).get("locale", FALLBACK_LOCALE)
+-    return _client_data().get("tray_locale") or FALLBACK_LOCALE
+-
+-
+-def auto_check_update() -> bool:
+-    if mode() == "local":
+-        value = core_config.load_config().get("general", {}).get("auto_check_update", True)
+-    else:
+-        value = _client_data().get("auto_check_update", True)
+-    return value if isinstance(value, bool) else True
+-
+-
+-def last_notified_update_version() -> str:
+-    value = _client_data().get("last_notified_update_version")
+-    return value if isinstance(value, str) else ""
+-
+-
+-def save_client_settings(d: dict) -> None:
+-    """原子寫入 client.json（0600）。僅供測試與開發者手改輔助。"""
+-    path = _client_path()
+-    path.parent.mkdir(parents=True, exist_ok=True)
+-    with atomic_write(path, mode="w", encoding="utf-8") as f:
+-        json.dump(d, f, indent=2, ensure_ascii=False)
+-    try:
+-        path.chmod(0o600)
+-    except OSError:
+-        pass
+-
+-
+-def set_close_action(action: str) -> None:
+-    """寫入關閉行為。本機寫 config.json（同今天 mutator）；連線模式只寫 client.json。"""
+-    if mode() == "local":
+-        def _mutator(cfg):
+-            cfg.setdefault("general", {})["close_action"] = action
+-        core_config.mutate_config(_mutator)
+-    else:
+-        _rmw(lambda d: d.__setitem__("close_action", action))
+-
+-
+-def normalize_origin(url: str):
+-    """URL → 瀏覽器 ``location.origin`` 形狀（純函式、無 I/O）。
+-
+-    scheme／host 小寫、IPv6 加回方括號、去掉 http:80／https:443、其他埠保留；
+-    非 http(s) 或無 host 回 None。
+-    """
+-    try:
+-        parsed = urlparse(url.strip())
+-        scheme = parsed.scheme.lower()
+-        host = parsed.hostname
+-        port = parsed.port
+-    except (ValueError, AttributeError):
+-        return None
+-    if scheme not in _DEFAULT_PORTS or not host:
+-        return None
+-    if ":" in host:
+-        host = f"[{host}]"
+-    if port is None or port == _DEFAULT_PORTS[scheme]:
+-        return f"{scheme}://{host}"
+-    return f"{scheme}://{host}:{port}"
+-
+-
+-def server_origin(local_origin: str) -> str:
+-    """連線模式回 ``normalize_origin(server.url)``；本機模式原樣回傳 local_origin。"""
+-    if mode() == "local":
+-        return local_origin
+-    return normalize_origin(server_url())
+-
+-
+-def shell_kind() -> str:
+-    return "windows" if sys.platform == "win32" else "mac"
+-
+-
+-def client_entry_url(origin: str, shell_kind: str, token=None) -> str:
+-    """連線模式入口網址（純函式，不讀任何設定）。``token`` 非空才附 ``oa_token``。"""
+-    url = f"{origin}/?oa_shell={shell_kind}&oa_mode=client"
+-    if token:
+-        url += f"&oa_token={quote(str(token), safe='')}"
+-    return url
+-
+-
+-def shell_entry_url(local_origin: str, shell_kind: str, token=None) -> str:
+-    """入口網址。``oa_mode`` 取 ``mode()``；``token`` 只在連線模式且非空時附 ``oa_token``。"""
+-    if mode() == "client":
+-        return client_entry_url(server_origin(local_origin), shell_kind, token)
+-    return f"{server_origin(local_origin)}/?oa_shell={shell_kind}&oa_mode=local"
+-
+-
+-def _canonical(raw: str):
+-    s = raw.strip()
+-    if not s or any(c.isspace() for c in s):
+-        return None
+-    if "://" not in s:
+-        s = "http://" + s
+-    parsed = urlparse(s)
+-    scheme = parsed.scheme.lower()
+-    host = parsed.hostname
+-    port = parsed.port
+-    if scheme not in _DEFAULT_PORTS or not host:
+-        return None
+-    if parsed.username is not None or parsed.password is not None or "@" in parsed.netloc:
+-        return None
+-    if ":" in host:
+-        host = f"[{ipaddress.ip_address(host).compressed}]"
+-    if port is None or port == _DEFAULT_PORTS[scheme]:
+-        return f"{scheme}://{host}"
+-    return f"{scheme}://{host}:{port}"
+-
+-
+-def canonical_server_url(raw):
+-    """使用者輸入 → 存檔用的規範網址（只留 scheme://host[:port]）；不合法回 None。"""
+-    if not isinstance(raw, str):
+-        return None
+-    try:
+-        return _canonical(raw)
+-    except ValueError:
+-        return None
+-
+-
+-def display_host(url: str, with_port: bool = False) -> str:
+-    """已存網址 → 顯示用主機（IPv6 加方括號）；``with_port`` 且非預設埠才附埠。"""
+-    try:
+-        parsed = urlparse(url)
+-        host = parsed.hostname or ""
+-        port = parsed.port
+-    except ValueError:
+-        return ""
+-    if ":" in host:
+-        host = f"[{host}]"
+-    if with_port and port is not None and port != _DEFAULT_PORTS.get(parsed.scheme.lower()):
+-        return f"{host}:{port}"
+-    return host
+-
+-
+-def _server_section(d: dict) -> dict:
+-    server = d.get("server")
+-    return server if isinstance(server, dict) else {}
+-
+-
+-def server_token() -> str:
+-    return str(_server_section(_client_data()).get("token") or "")
+-
+-
+-def server_last_ok():
+-    return _server_section(_client_data()).get("last_ok") or None
+-
+-
+-def touch_last_ok() -> None:
+-    if mode() == "local":
+-        return
+-    now = datetime.now(timezone.utc).isoformat()
+-    _rmw(lambda d: d.__setitem__("server", {**_server_section(d), "last_ok": now}))
+-
+-
+-def _rmw(mutator, *, create: bool = False) -> bool:
+-    """client.json 唯一讀改寫出口。回 True＝有寫檔。
+-
+-    檔不存在／壞檔：``create`` 才從 ``{}`` 起建，否則回 False 不建檔。
+-    mutator 原地改 d；回 dict＝以它取代；回 False＝沒變、不寫；回 None＝照寫。
+-    """
+-    with _write_lock:
+-        d = _load_raw()
+-        if d is None:
+-            if not create:
+-                return False
+-            d = {}
+-        result = mutator(d)
+-        if result is False:
+-            return False
+-        if isinstance(result, dict):
+-            d = result
+-        save_client_settings(d)
+-        return True
+-
+-
+-def _is_blank(v) -> bool:
+-    return v is None or v == "" or v == []
+-
+-
+-def migrate_local_settings(d: dict) -> dict:
+-    """把本機 config.json 的五項「這台電腦設定」補進 d 缺的鍵（已有值不覆蓋）；回新 dict。"""
+-    out = dict(d)
+-    try:
+-        config = _read_raw_config()
+-    except Exception as e:
+-        logger.warning(f"[client_settings] migrate: config.json 讀不到：{e}；略過遷移")
+-        return out
+-    if not isinstance(config, dict):
+-        return out
+-
+-    def _section(name):
+-        sec = config.get(name)
+-        return sec if isinstance(sec, dict) else {}
+-
+-    candidates = (
+-        ("player", _section("showcase").get("player")),
+-        ("video_extensions", _section("scraper").get("video_extensions")),
+-        ("close_action", _section("general").get("close_action")),
+-        ("tray_locale", _section("general").get("locale")),
+-        ("auto_check_update", _section("general").get("auto_check_update")),
+-    )
+-    for key, value in candidates:
+-        if not _is_blank(out.get(key)) or _is_blank(value):
+-            continue
+-        if key == "video_extensions":
+-            if isinstance(value, list):
+-                out[key] = list(value)
+-        elif key == "auto_check_update":
+-            if isinstance(value, bool):
+-                out[key] = value
+-        elif isinstance(value, str):
+-            out[key] = value
+-    return out
+-
+-
+-def apply_connection(url_canonical: str, token, path_map_rules) -> None:
+-    """寫入連線設定。只在**呼叫當下**為本機模式時一次性搬本機舊設定；不碰 config.json。"""
+-    url = canonical_server_url(url_canonical)
+-    if url is None:
+-        raise ValueError(f"invalid server url: {url_canonical!r}")
+-
+-    def _mutator(d):
+-        was_local = mode() == "local"
+-        d["version"] = CLIENT_VERSION
+-        if was_local:
+-            d = migrate_local_settings(d)
+-        old_url = _server_section(d).get("url")  # 須在覆寫 d["server"] 之前讀
+-        d["server"] = {**_server_section(d), "url": url, "token": token or ""}
+-        if path_map_rules is not None:
+-            d["path_map"] = list(path_map_rules)
+-        elif isinstance(old_url, str) and old_url.strip() and canonical_server_url(old_url) != url:
+-            d["path_map"] = []  # E42 換主機清空
+-        elif not isinstance(d.get("path_map"), list):
+-            d["path_map"] = []
+-        return d
+-
+-    _rmw(_mutator, create=True)
+-
+-
+-def clear_connection() -> None:
+-    """切回本機：只清 server.url／token，其餘保留。檔不存在不建檔。"""
+-    _rmw(lambda d: d.__setitem__("server", {**_server_section(d), "url": "", "token": ""}))
+-
+-
+-def save_path_map(rules) -> None:
+-    if mode() == "local":
+-        return
+-    clean = []
+-    for r in rules or []:
+-        if not isinstance(r, dict):
+-            continue
+-        srv, loc = r.get("server"), r.get("local")
+-        if isinstance(srv, str) and isinstance(loc, str) and srv.strip() and strip_wrapping_quotes(loc):
+-            clean.append({"server": srv, "local": strip_wrapping_quotes(loc)})
+-    _rmw(lambda d: d.__setitem__("path_map", clean))
+-
+-
+-_BAD = object()
+-
+-
+-def _validate_local_value(key: str, value):
+-    """回正規化後的值；不合法回 _BAD。"""
+-    if key == "player":
+-        if not isinstance(value, str) or len(value.strip()) > _PLAYER_MAX:
+-            return _BAD
+-        return value.strip()
+-    if key == "close_action":
+-        return value if isinstance(value, str) and value in _CLOSE_ACTIONS else _BAD
+-    if key == "auto_check_update":
+-        return value if isinstance(value, bool) else _BAD
+-    if key == "video_extensions":  # [] 合法：＝用預設（讀取端 fallback）
+-        if not isinstance(value, list) or not all(isinstance(e, str) for e in value):
+-            return _BAD
+-        return sorted(normalize_extensions([e for e in value if e.strip()]))
+-    if key == "tray_locale":
+-        return value if isinstance(value, str) and value in SUPPORTED_LOCALES else _BAD
+-    # last_notified_update_version
+-    return value if isinstance(value, str) and _VERSION_STR_RE.match(value) else _BAD
+-
+-
+-_LOCAL_WRITER_KEYS = ("player", "close_action", "auto_check_update", "video_extensions",
+-                      "tray_locale", "last_notified_update_version")
+-
+-
+-def update_local_settings(patch: dict) -> dict:
+-    """client 模式下改「這台電腦」的設定（整份驗證、全過才寫）。
+-
+-    回 ``{"ok": True, "changed": [...]}`` 或 ``{"ok": False, "reason": not_client|bad_key|bad_value}``。
+-    沒有任何鍵變動就不寫檔。寫檔 OSError 往外丟。
+-    """
+-    if mode() != "client":
+-        return {"ok": False, "reason": "not_client"}
+-    if not isinstance(patch, dict) or any(k not in _LOCAL_WRITER_KEYS for k in patch):
+-        return {"ok": False, "reason": "bad_key"}
+-    clean = {}
+-    for key, value in patch.items():
+-        v = _validate_local_value(key, value)
+-        if v is _BAD:
+-            return {"ok": False, "reason": "bad_value"}
+-        clean[key] = v
+-    changed = []
+-    not_client = []
+-
+-    def _mutator(d):
+-        # 鎖內以讀到的資料再判一次：與 clear_connection 交錯時不寫已停用的檔
+-        not_client.clear()
+-        changed.clear()
+-        if not _valid_url(_server_section(d).get("url")):
+-            not_client.append(True)
+-            return False
+-        for key, v in clean.items():
+-            if key in d and d[key] == v and type(d[key]) is type(v):
+-                continue
+-            d[key] = v
+-            changed.append(key)
+-        if not changed:
+-            return False
+-
+-    _rmw(_mutator)
+-    if not_client:
+-        return {"ok": False, "reason": "not_client"}
+-    return {"ok": True, "changed": list(changed)}
+--- a/core/client_sources.py
++++ /dev/null
+@@ -1,93 +0,0 @@
+-"""伺服器掃描來源清單（TASK-168b-T2 / CD-168b-10），給桌面版「連線」頁的對照表左欄。
+-
+-I-L：`path` 逐字是設定裡的字串（不 lower、不翻譯、不 expand）；`sample` 若非 None，
+-必在 `path` 之下。
+-"""
+-from __future__ import annotations
+-
+-import os
+-import time
+-from collections import deque
+-
+-from core.config import iter_gallery_sources
+-from core.path_utils import file_uri_to_server_path
+-from core.video_extensions import get_video_extensions
+-
+-_MAX_ENTRIES = 200
+-_MAX_DEPTH = 3
+-_MAX_SECONDS = 1.5
+-
+-
+-def _is_video_file(entry, exts: set) -> bool:
+-    if os.path.splitext(entry.name)[1].lower() not in exts:
+-        return False
+-    return entry.is_file()
+-
+-
+-def _is_under(candidate: str, root: str) -> bool:
+-    """candidate 是否在 root 之下（前綴邊界）。兩邊的 `\\` 先視為 `/`、root 尾端分隔符去掉再比
+-    （Windows 路徑兩種都合法）；不改回傳的 path 字串。"""
+-    stem = root.replace("\\", "/").rstrip("/")
+-    cand = candidate.replace("\\", "/")
+-    return cand[: len(stem)] == stem and cand[len(stem):len(stem) + 1] == "/"
+-
+-
+-def _find_sample(root: str, exts: set) -> str | None:
+-    """有界掃描取第一個影片檔絕對路徑；找不到或任何失敗＝None。"""
+-    deadline = time.monotonic() + _MAX_SECONDS
+-    budget = _MAX_ENTRIES
+-    queue = deque([(root, 0)])
+-    while queue:
+-        current, depth = queue.popleft()
+-        try:
+-            with os.scandir(current) as it:
+-                for entry in it:
+-                    budget -= 1
+-                    found = _inspect_entry(entry, exts, depth, queue)
+-                    if found is not None and _is_under(found, root):
+-                        return found
+-                    if budget <= 0 or time.monotonic() > deadline:
+-                        return None
+-        except OSError:
+-            continue
+-    return None
+-
+-
+-def _inspect_entry(entry, exts: set, depth: int, queue: deque) -> str | None:
+-    """單一 entry 處理；壞 symlink 等拋 OSError 一律當作略過（BE-ENV-07）。"""
+-    try:
+-        if entry.is_dir(follow_symlinks=False):
+-            if depth < _MAX_DEPTH:
+-                queue.append((entry.path, depth + 1))
+-            return None
+-        if _is_video_file(entry, exts):
+-            os.stat(entry.path)
+-            return entry.path
+-    except OSError:
+-        return None
+-    return None
+-
+-
+-def list_sources(config: dict) -> list[dict]:
+-    """directories（含 readonly）＋ favorite_folder，去重（保留 directory）。"""
+-    exts = get_video_extensions(config)
+-    out: list[dict] = []
+-    seen: set[str] = set()
+-    for src in iter_gallery_sources(config.get("gallery")):
+-        # file:/// URI 來源轉成伺服器裸路徑（與 client to_local 收到的 sample 同形）；
+-        # 一般路徑 file_uri_to_server_path 逐字原樣返回（I-L）。
+-        path = file_uri_to_server_path(src.path)
+-        if path in seen:
+-            continue
+-        seen.add(path)
+-        out.append({
+-            "path": path,
+-            "kind": "directory",
+-            "readonly": bool(src.readonly),
+-            "sample": _find_sample(path, exts),
+-        })
+-    fav = (config.get("search") or {}).get("favorite_folder")
+-    fav = file_uri_to_server_path(fav.strip()) if isinstance(fav, str) else ""
+-    if fav and fav not in seen:
+-        out.append({"path": fav, "kind": "favorite", "readonly": False, "sample": _find_sample(fav, exts)})
+-    return out
+--- a/core/path_translate.py
++++ /dev/null
+@@ -1,123 +0,0 @@
+-"""client 模式路徑對照表換算（feature/168a T1b，純函式模組）。
+-
+-伺服器路徑 <-> 這台電腦的本機路徑，依使用者設定的對照表（PathMap）換算。
+-
+-設計約束：
+-- 純字串、無 I/O；不 import web／webview／core.database，也不依當前環境。
+-- 對不到任何規則回 Uncovered，絕不回原字串（否則伺服器路徑會被當本機路徑開出去）。
+-- 只收純路徑；URI 剝離不在這層。
+-"""
+-import re
+-from dataclasses import dataclass
+-from typing import Union
+-
+-from core.logger import get_logger
+-
+-logger = get_logger(__name__)
+-
+-_DRIVE_RE = re.compile(r"^[A-Za-z]:(/|$)")
+-
+-
+-@dataclass(frozen=True)
+-class Mapped:
+-    path: str
+-    rule_index: int
+-
+-
+-@dataclass(frozen=True)
+-class Uncovered:
+-    pass
+-
+-
+-Translation = Union[Mapped, Uncovered]
+-
+-
+-@dataclass(frozen=True)
+-class PathMap:
+-    rules: tuple[tuple[str, str], ...] = ()
+-
+-    @classmethod
+-    def from_rules(cls, rules) -> "PathMap":
+-        kept = []
+-        for raw in rules or ():
+-            server = raw.get("server") if isinstance(raw, dict) else None
+-            local = raw.get("local") if isinstance(raw, dict) else None
+-            if isinstance(local, str):
+-                local = strip_wrapping_quotes(local)
+-            if isinstance(server, str) and isinstance(local, str) and server and local:
+-                kept.append((server, local))
+-            else:
+-                logger.warning("path_translate: skip incomplete rule %r", raw)
+-        return cls(rules=tuple(kept))
+-
+-
+-def strip_wrapping_quotes(value):
+-    """去頭尾空白；頭尾為成對的雙引號就去掉那一對（Win11「複製為路徑」會帶引號）。"""
+-    s = value.strip()
+-    if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+-        return s[1:-1].strip()
+-    return s
+-
+-
+-def _norm(value: str) -> str:
+-    """收斂成比對形：正斜線、去尾分隔符。"""
+-    return value.replace("\\", "/").rstrip("/")
+-
+-
+-def _is_windows_style(norm: str) -> bool:
+-    """比對形是否為 Windows 風格（磁碟機 X: 或 UNC //）。"""
+-    return bool(_DRIVE_RE.match(norm)) or norm.startswith("//")
+-
+-
+-def _match_tail(value_n: str, prefix_n: str):
+-    """命中回前綴之後的剩餘（可為空字串），否則 None。"""
+-    fold = _is_windows_style(prefix_n)
+-    head = value_n[: len(prefix_n)]
+-    same = head.casefold() == prefix_n.casefold() if fold else head == prefix_n
+-    if not same:
+-        return None
+-    tail = value_n[len(prefix_n):]
+-    if tail and not tail.startswith("/"):
+-        return None
+-    return tail
+-
+-
+-def _build(dest: str, tail: str) -> str:
+-    """目的前綴（去尾分隔符）＋剩餘；分隔符依目的前綴風格。"""
+-    dest_n = _norm(dest)
+-    out = dest_n + tail
+-    if _is_windows_style(dest_n):
+-        out = out.replace("/", "\\")
+-        if _DRIVE_RE.match(out) and len(out) == 2:
+-            out += "\\"
+-    elif not out:
+-        out = "/"
+-    return out
+-
+-
+-def _translate(value, pmap: PathMap, src: int, dst: int) -> Translation:
+-    pairs = enumerate(pmap.rules) if isinstance(value, str) and value else ()
+-    value_n = _norm(value) if isinstance(value, str) else ""
+-    best = None
+-    best_len = -1
+-    for index, rule in pairs:
+-        prefix_n = _norm(rule[src])
+-        tail = _match_tail(value_n, prefix_n)
+-        if tail is None:
+-            continue
+-        if best is None or len(prefix_n) > best_len:
+-            best = Mapped(_build(rule[dst], tail), index)
+-            best_len = len(prefix_n)
+-    if best is not None:
+-        return best
+-    return Uncovered()
+-
+-
+-def to_local(value: str, pmap: PathMap) -> Translation:
+-    """伺服器路徑 -> 本機路徑。"""
+-    return _translate(value, pmap, 0, 1)
+-
+-
+-def to_server(value: str, pmap: PathMap) -> Translation:
+-    """本機路徑 -> 伺服器路徑。"""
+-    return _translate(value, pmap, 1, 0)
+--- a/core/platform_info.py
++++ b/core/platform_info.py
+@@ -1,7 +1,5 @@
+ """core/platform_info.py — 平台環境訊號偵測模組（TASK-159-T3）"""
+ import os
+-
+-from core.desktop_env import desktop_kind
+ 
+ DSM_PERMISSION_HINT = "片庫是 DSM 共用資料夾：控制台 → 共用資料夾 → 編輯 → 權限 → 系統內部使用者帳號 → openaver-svc 勾可讀寫；片庫是掛載的遠端資料夾：除了上面那步，也要到提供分享的那台機器確認權限"
+ 
+@@ -12,8 +10,3 @@
+     讀取由 start-stop-status 腳本設定的 OPENAVER_SYNOLOGY 環境變數。
+     """
+     return os.environ.get("OPENAVER_SYNOLOGY") == "1"
+-
+-
+-def server_kind() -> str:
+-    """伺服器種類，供 /api/client/hello 回報：synology／windows／mac／linux。"""
+-    return "synology" if is_synology() else (desktop_kind() or "linux")
+--- a/core/self_update.py
++++ /dev/null
+@@ -1,108 +0,0 @@
+-"""core/self_update.py — 查 GitHub 有沒有新版、開終端機跑官方安裝腳本（伺服器端點與桌面殼共用）。
+-
+-純 Python；不 import web／webview。httpx／subprocess／sys／Path 一律屬性存取，
+-讓既有 ``mock.patch("web.app.subprocess.Popen")``、``monkeypatch.setattr(sys, ...)`` 繼續命中。
+-"""
+-import re
+-import subprocess
+-import sys
+-from pathlib import Path
+-
+-import httpx
+-
+-from core.logger import get_logger
+-from core.version import VERSION
+-
+-logger = get_logger(__name__)
+-
+-GITHUB_LATEST_API = "https://api.github.com/repos/slive777/OpenAver/releases/latest"
+-INSTALL_PS1_URL = "https://raw.githubusercontent.com/slive777/OpenAver/main/install.ps1"
+-INSTALL_SH_URL = "https://raw.githubusercontent.com/slive777/OpenAver/main/install.sh"
+-
+-_VER_RE = re.compile(r"(\d+(?:\.\d+)*)")
+-
+-
+-def parse_version(v) -> tuple:
+-    """'0.10.0-rc1' → (0, 10, 0)；無法解析丟 ValueError（含非字串）。"""
+-    m = _VER_RE.match(v) if isinstance(v, str) else None
+-    if not m:
+-        raise ValueError(f"Cannot parse version: {v!r}")
+-    return tuple(int(x) for x in m.group(1).split("."))
+-
+-
+-def is_newer(latest, current) -> bool:
+-    """語意版本比較（tuple，避免 '0.10.0' < '0.9.0'）；解析失敗 False。"""
+-    try:
+-        lt, ct = parse_version(latest), parse_version(current)
+-    except ValueError:
+-        return False
+-    return lt > ct
+-
+-
+-def check_latest(current=None, *, transport=None) -> dict:
+-    """同步查 GitHub 最新 release。
+-
+-    成功 ``{ok:True, has_update, current_version[, latest_version, download_url]}``；
+-    失敗 ``{ok:False, reason: timeout|network|bad_response}``。
+-    """
+-    current = VERSION if current is None else current
+-    try:
+-        with httpx.Client(timeout=httpx.Timeout(5.0), transport=transport) as client:
+-            resp = client.get(GITHUB_LATEST_API, headers={"Accept": "application/vnd.github.v3+json"})
+-    except httpx.TimeoutException:
+-        return {"ok": False, "reason": "timeout"}
+-    except httpx.HTTPError as e:
+-        logger.warning("檢查更新連線失敗: %s", e)
+-        return {"ok": False, "reason": "network"}
+-    if resp.status_code == 404:
+-        return {"ok": True, "has_update": False, "current_version": current}
+-    if not 200 <= resp.status_code < 300:
+-        return {"ok": False, "reason": "bad_response"}
+-    try:
+-        data = resp.json()
+-    except ValueError:
+-        return {"ok": False, "reason": "bad_response"}
+-    if not isinstance(data, dict):
+-        return {"ok": False, "reason": "bad_response"}
+-    latest = str(data.get("tag_name") or "").lstrip("v")
+-    return {
+-        "ok": True,
+-        "has_update": is_newer(latest, current),
+-        "current_version": current,
+-        "latest_version": latest,
+-        "download_url": data.get("html_url", ""),
+-    }
+-
+-
+-def install_dir():
+-    """目前 Python 所在的安裝根目錄（darwin 上三層、其餘兩層）。"""
+-    exe = Path(sys.executable)
+-    if sys.platform == "darwin":
+-        return exe.parent.parent.parent  # python/bin/python3 → OpenAver/
+-    return exe.parent.parent  # python\pythonw.exe → OpenAver\
+-
+-
+-def is_default_install() -> bool:
+-    """安裝在預設位置 ``~/OpenAver``？偵測失敗視為 True（保守）。"""
+-    try:
+-        return install_dir() == Path.home() / "OpenAver"
+-    except Exception:
+-        return True
+-
+-
+-def installer_argv(platform=None) -> list:
+-    platform = sys.platform if platform is None else platform
+-    if platform == "win32":
+-        return ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile",
+-                "-Command", f"irm {INSTALL_PS1_URL} | iex"]
+-    return ["osascript", "-e",
+-            "tell application \"Terminal\" to do script "
+-            f"\"curl -fsSL {INSTALL_SH_URL} | bash\""]
+-
+-
+-def launch_installer() -> None:
+-    """開外部終端機跑官方安裝腳本。Popen 例外往外丟。"""
+-    if sys.platform == "win32":
+-        subprocess.Popen(installer_argv("win32"), creationflags=subprocess.CREATE_NEW_CONSOLE)
+-    else:
+-        subprocess.Popen(installer_argv(sys.platform))
+--- /dev/null
++++ b/web/routers/cf_mobile.py
+@@ -0,0 +1,91 @@
++"""Android 內嵌 WebView 的 CF transport 工作端點。
++
++Python 程序持有 job broker；Android 原生端長輪詢此端點，使用 WebView
++完成 Cloudflare 驗證與頁面抓取。端點只接受 loopback 上的內嵌工作端。
++"""
++from __future__ import annotations
++
++import asyncio
++from typing import Literal, Optional, Union
++
++from fastapi import APIRouter, Depends, HTTPException, Request
++from pydantic import BaseModel, Field, StrictBool
++
++from core import cf_handoff
++from core.loopback import is_loopback_host
++from web.shell_identity import shell_key
++
++router = APIRouter(prefix="/api/cf/mobile", tags=["cf_mobile"])
++
++_POLL_INTERVAL_S = 0.25
++
++
++def _reject_browser_request(request: Request) -> None:
++    if "origin" in request.headers or "sec-fetch-site" in request.headers:
++        raise HTTPException(status_code=403, detail="Forbidden")
++
++
++def _require_key(request: Request) -> str:
++    host = request.client.host if request.client else None
++    if not is_loopback_host(host):
++        raise HTTPException(status_code=403, detail="Forbidden")
++    key = shell_key(request)
++    if key is None:
++        raise HTTPException(status_code=403, detail="Forbidden")
++    return key
++
++
++class PollBody(BaseModel):
++    sites: list[str] = Field(default_factory=list)
++    preparing: list[str] = Field(default_factory=list)
++    hold: int = Field(0, ge=0, le=20)
++
++
++class ResultBody(BaseModel):
++    id: str
++    ok: bool
++    value: Optional[Union[StrictBool, str]] = None
++    error: Optional[Literal["challenge", "unavailable", "timeout", "error"]] = None
++    message: str = ""
++
++
++@router.post("/poll", dependencies=[Depends(_reject_browser_request)])
++async def poll(body: PollBody, request: Request) -> dict:
++    key = _require_key(request)
++    broker = cf_handoff.get_broker()
++    sites = [s for s in body.sites if s in cf_handoff.CF_SITE_ORIGINS]
++    preparing = [s for s in body.preparing if s in cf_handoff.CF_SITE_ORIGINS]
++    broker.register_shell(
++        key,
++        sites,
++        applied_proxy=None,
++        shell="mobile",
++        server_remote=False,
++        preparing=preparing,
++    )
++    if body.hold <= 0:
++        return {"ok": True, "job": None}
++
++    loop = asyncio.get_running_loop()
++    deadline = loop.time() + body.hold
++    while True:
++        job = broker.claim(key)
++        if job is not None:
++            return {"ok": True, "job": job}
++        if loop.time() >= deadline or await request.is_disconnected():
++            return {"ok": True, "job": None}
++        await asyncio.sleep(_POLL_INTERVAL_S)
++
++
++@router.post("/result", dependencies=[Depends(_reject_browser_request)])
++async def result(body: ResultBody, request: Request) -> dict:
++    key = _require_key(request)
++    accepted = cf_handoff.get_broker().complete(
++        key,
++        body.id,
++        body.ok,
++        value=body.value,
++        error=body.error,
++        message=body.message,
++    )
++    return {"ok": True, "accepted": accepted}
+--- a/web/routers/cf_shell.py
++++ /dev/null
+@@ -1,88 +0,0 @@
+-"""桌面殼領 CF 工作的端點（TASK-168d-T2 / CD-168d-3、4）。
+-
+-殼（Windows／Mac 桌面 client 或本機殼）背景呼叫：
+-  POST /api/cf/shell/poll   登記／刷新殼，並（hold>0 時）長輪詢領取屬於自己的工作
+-  POST /api/cf/shell/result 回報工作結果
+-
+-殼內部管線，**不對外揭露**（同 CD-168b-1 先例）。身分一律由 `shell_key(request)`
+-推出；只看「有沒有帶」票據，不驗票據（閘門是 access_gate 的事）。
+-"""
+-from __future__ import annotations
+-
+-import asyncio
+-from typing import Literal, Optional, Union
+-
+-from fastapi import APIRouter, Depends, HTTPException, Request
+-from pydantic import BaseModel, Field, StrictBool
+-
+-from core import cf_handoff
+-from web.shell_identity import shell_key
+-
+-router = APIRouter(prefix="/api/cf/shell", tags=["cf_shell"])
+-
+-# 輪詢間隔：呼叫時才解析（模組屬性），測試可縮短（BE-TEST-01/18/38/39）。
+-_POLL_INTERVAL_S = 0.25
+-
+-
+-def _reject_browser_request(request: Request) -> None:
+-    """殼的 httpx 不帶 Origin／Sec-Fetch-Site，瀏覽器一定帶 ⇒ 帶了就是網頁在冒充殼（CD-168d-4）。"""
+-    if "origin" in request.headers or "sec-fetch-site" in request.headers:
+-        raise HTTPException(status_code=403, detail="Forbidden")
+-
+-
+-def _require_key(request: Request) -> str:
+-    key = shell_key(request)
+-    if key is None:
+-        raise HTTPException(status_code=403, detail="Forbidden")
+-    return key
+-
+-
+-class PollBody(BaseModel):
+-    shell: Literal["windows", "mac"] = "windows"
+-    sites: list[str] = Field(default_factory=list)
+-    applied_proxy: Optional[str] = None
+-    server_remote: bool = False
+-    preparing: list[str] = Field(default_factory=list)
+-    hold: int = Field(0, ge=0, le=20)
+-
+-
+-class ResultBody(BaseModel):
+-    id: str
+-    ok: bool
+-    value: Optional[Union[StrictBool, str]] = None
+-    error: Optional[Literal["challenge", "unavailable", "timeout", "error"]] = None
+-    message: str = ""
+-
+-
+-@router.post("/poll", dependencies=[Depends(_reject_browser_request)])
+-async def poll(body: PollBody, request: Request) -> dict:
+-    """登記／刷新殼；hold=0 只登記（job 恆 null），hold>0 才輪詢領工作。
+-
+-    async body 內只有記憶體操作、`asyncio.sleep`、`request.is_disconnected()`（BE-ASYNC-01）。
+-    """
+-    key = _require_key(request)
+-    broker = cf_handoff.get_broker()  # 請求當下解析，不在 module level 綁定
+-    sites = [s for s in body.sites if s in cf_handoff.CF_SITE_ORIGINS]
+-    preparing = [s for s in body.preparing if s in cf_handoff.CF_SITE_ORIGINS]
+-    broker.register_shell(key, sites, body.applied_proxy, body.shell, body.server_remote, preparing=preparing)
+-    if body.hold <= 0:
+-        return {"ok": True, "job": None}
+-
+-    loop = asyncio.get_running_loop()
+-    deadline = loop.time() + body.hold
+-    while True:
+-        job = broker.claim(key)
+-        if job is not None:
+-            return {"ok": True, "job": job}
+-        if loop.time() >= deadline or await request.is_disconnected():
+-            return {"ok": True, "job": None}
+-        await asyncio.sleep(_POLL_INTERVAL_S)
+-
+-
+-@router.post("/result", dependencies=[Depends(_reject_browser_request)])
+-async def result(body: ResultBody, request: Request) -> dict:
+-    key = _require_key(request)
+-    accepted = cf_handoff.get_broker().complete(
+-        key, body.id, body.ok, value=body.value, error=body.error, message=body.message,
+-    )
+-    return {"ok": True, "accepted": accepted}
+--- a/web/routers/client.py
++++ /dev/null
+@@ -1,93 +0,0 @@
+-"""桌面 client 連線用端點（TASK-168b-T2 / CD-168b-1）。
+-
+-`hello`、`token` 是握手端點（`web.app._CLIENT_HANDSHAKE_ALLOWLIST`，未登入可達，
+-只洩漏版本／種類／是否需要密碼）；`sources` 走一般閘門。不揭露進 capabilities。
+-"""
+-from __future__ import annotations
+-
+-import asyncio
+-
+-from fastapi import APIRouter, Request
+-from fastapi.responses import JSONResponse
+-
+-from core.access_auth import attempt_pin, ensure_schema, snapshot, verify_ticket
+-from core.client_sources import list_sources
+-from core.config import load_config
+-from core.logger import get_logger
+-from core.platform_info import server_kind
+-from core.version import VERSION
+-from web.routers import access as access_router
+-
+-logger = get_logger(__name__)
+-
+-router = APIRouter(prefix="/api/client", tags=["client"])
+-
+-_BAD_PIN = {"success": False, "reason": "bad_pin"}
+-
+-
+-async def _auth_snapshot():
+-    """取認證快取；冷時照 access_gate 寫法 to_thread 載入（BE-ASYNC-01），失敗回 None。"""
+-    snap = snapshot()
+-    if snap is not None:
+-        return snap
+-    try:
+-        await asyncio.to_thread(ensure_schema)
+-    except Exception:
+-        logger.exception("client: cold-load ensure_schema() failed")
+-        return None
+-    return snapshot()
+-
+-
+-@router.get("/hello")
+-async def hello(request: Request) -> dict:
+-    from web.app import _bearer_token  # noqa: PLC2701 — 延遲 import 避免循環，與 access router 同先例
+-
+-    snap = await _auth_snapshot()
+-    if snap is None:
+-        auth_required, authed = True, False
+-    elif not snap.enabled:
+-        auth_required, authed = False, True
+-    else:
+-        auth_required, authed = True, verify_ticket(_bearer_token(request))
+-    return {
+-        "success": True,
+-        "app": "openaver",
+-        "version": VERSION,
+-        "kind": server_kind(),
+-        "auth_required": auth_required,
+-        "authed": authed,
+-    }
+-
+-
+-@router.post("/token")
+-async def token(request: Request):
+-    await access_router._fixed_delay()
+-
+-    snap = await _auth_snapshot()
+-    if snap is None:
+-        return JSONResponse(_BAD_PIN, status_code=401)
+-    if not snap.enabled:
+-        return {"success": True, "token": None, "auth_required": False}
+-
+-    content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+-    if content_type != "application/json":
+-        return JSONResponse(_BAD_PIN, status_code=401)
+-    try:
+-        data = await request.json()
+-    except Exception:
+-        data = None
+-    candidate = data.get("pin") if isinstance(data, dict) else None
+-
+-    try:
+-        ticket = await asyncio.to_thread(attempt_pin, candidate)
+-    except Exception:
+-        logger.exception("client token: attempt_pin failed, fail-closed")
+-        ticket = None
+-    if ticket is None:
+-        return JSONResponse(_BAD_PIN, status_code=401)
+-    return {"success": True, "token": ticket}
+-
+-
+-@router.get("/sources")
+-def sources() -> dict:
+-    return {"success": True, "sources": list_sources(load_config())}
+--- a/web/routers/diagnostics.py
++++ b/web/routers/diagnostics.py
+@@ -33,7 +33,6 @@
+     user_agent: Optional[str] = None
+     importmap_supported: Optional[bool] = None
+     alpine_version: Optional[str] = None
+-    pywebview_api: Optional[bool] = None
+     path: Optional[str] = None
+ 
+ 
+--- a/web/shell_identity.py
++++ b/web/shell_identity.py
+@@ -33,12 +33,11 @@
+     return "ip:" + host
+ 
+ 
+-def cf_availability_here(request: Request) -> dict:
++def cf_availability_here(_request: Request) -> dict:
+     """這個請求所屬的殼，CF 來源現在可不可用（SSR 與 `/api/cf/availability` 共用的唯一規則，168d-fix-T2 CD-3）。
+ 
+     回 `{available, sites, preparing}`：
+-    - available：`cf_available_here()` 且〔key 為 loopback 或請求自稱桌面殼（oa_shell）〕——同機 localhost
+-      瀏覽器與本機殼同為 loopback key 不要求 oa_shell；非 loopback 才用 oa_shell 區分同 IP 的殼與區網瀏覽器。
++    - available：`cf_available_here()` 且請求可對應到本機或已驗證的行動端身分。
+     - sites：`get_cf_available_sites()`，可為 None（transport 判不出，前端 fail-open）；不可用時 `[]`。
+     - preparing：殼回報還在準備的站；不可用時一律 `[]`。
+     純記憶體讀取，不派工給殼（不得呼叫 is_ready／submit）。
+@@ -47,10 +46,11 @@
+     from core.cf_transport import cf_available_here, get_cf_available_sites
+ 
+     key = cf_handoff.current_key.get()
+-    available = bool(
+-        cf_available_here()
+-        and (key == "loopback" or getattr(request.state, "shell_kind", None) is not None)
++    has_transport_identity = (
++        key == "loopback"
++        or (isinstance(key, str) and key.startswith(("t:", "ip:")))
+     )
++    available = bool(cf_available_here() and has_transport_identity)
+     if not available:
+         return {"available": False, "sites": [], "preparing": []}
+     return {
+--- a/web/static/css/components/fluent-materials.css
++++ b/web/static/css/components/fluent-materials.css
+@@ -215,7 +215,7 @@
+  * Technique: owner-approved poc-settings-glass-v3.css recipe, tokenized.
+  * - background: gradient + fill (direction-light over translucent fill)
+  * - backdrop-filter: blur(--fluent-blur-light) saturate(--glass-shell-saturate)
+- *   always double-written with -webkit-backdrop-filter (macOS WebKit / PyWebView)
++ *   always double-written with -webkit-backdrop-filter for WebView compatibility
+  * - border edges: recolor existing hard border to --glass-shell-border (soft hairline)
+  * - edge highlights: box-shadow inset ONLY (no ::after, no position:relative,
+  *   no background-image edge gradients) — orientation-appropriate:
+@@ -699,8 +699,8 @@
+  * Technique: padding-box/border-box dual background + transparent border.
+  *   EVERY rule using this technique MUST have `border: 1px solid transparent`
+  *   otherwise the border-box area does not exist and border gradient is invisible.
+- * backdrop-filter ALWAYS double-written with -webkit-backdrop-filter (macOS
+- *   PyWebView WKWebView requires -webkit- prefix).
++ * backdrop-filter ALWAYS double-written with -webkit-backdrop-filter because
++ *   Android WebView variants may require the prefixed form.
+  * !important ONLY on .scanner-dir-dropdown (inline style override).
+  * Source: TASK-77b-T2.md T2–T9.
+  * ========================================================================== */
+--- a/web/static/css/pages/connect.css
++++ /dev/null
+@@ -1,170 +0,0 @@
+-/* ========== Connect page (168b-T6a) ========== */
+-
+-.connect-container {
+-    max-width: 44rem;
+-    margin: 0 auto;
+-    padding: 1rem;
+-}
+-
+-.connect-stack {
+-    display: flex;
+-    flex-direction: column;
+-    gap: 1rem;
+-}
+-
+-.connect-card {
+-    border-radius: var(--radius-lg);
+-    overflow: visible;
+-    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
+-    border: 1px solid var(--stroke-default);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-4);
+-}
+-
+-.connect-card-header {
+-    background: color-mix(in oklch, var(--color-base-content) 2%, transparent);
+-    border-bottom: 1px solid var(--stroke-subtle);
+-    font-weight: 600;
+-    padding: 1rem 1.25rem;
+-}
+-
+-.connect-card-header i {
+-    color: var(--accent);
+-    margin-right: 0.5rem;
+-}
+-
+-.connect-card-header .connect-title {
+-    font-size: inherit;
+-    font-weight: inherit;
+-    margin: 0;
+-}
+-
+-.connect-card .card-body {
+-    padding: 1.25rem;
+-    gap: 0;
+-}
+-
+-[data-theme="dim"] .connect-card {
+-    background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
+-}
+-
+-[data-theme="dim"] .connect-card-header {
+-    background: var(--glass-panel-header-tint);
+-    border-bottom-color: var(--glass-panel-header-border);
+-}
+-
+-.connect-title {
+-    font-size: 1rem;
+-    font-weight: 600;
+-    margin-bottom: 0.5rem;
+-}
+-
+-.connect-line {
+-    font-size: 0.875rem;
+-    color: var(--text-secondary);
+-    margin-top: 0.5rem;
+-}
+-
+-.connect-error {
+-    font-size: 0.875rem;
+-    color: var(--color-error);
+-    margin-top: 0.5rem;
+-}
+-
+-.connect-nobridge {
+-    color: var(--text-secondary);
+-}
+-
+-.connect-row {
+-    display: flex;
+-    flex-wrap: wrap;
+-    align-items: center;
+-    gap: 0.5rem;
+-    margin-top: 0.5rem;
+-}
+-
+-.connect-url {
+-    flex: 1 1 16rem;
+-    min-width: 0;
+-}
+-
+-.connect-pin {
+-    width: 8rem;
+-}
+-
+-.connect-probe-dot {
+-    cursor: default;
+-}
+-
+-/* ========== Path-map table (168b-T6b) ========== */
+-
+-.connect-map {
+-    margin-top: 1rem;
+-}
+-
+-.connect-map-list {
+-    display: flex;
+-    flex-direction: column;
+-    gap: 0.5rem;
+-    margin-top: 0.5rem;
+-}
+-
+-.connect-map-row {
+-    display: flex;
+-    flex-wrap: wrap;
+-    align-items: center;
+-    gap: 0.5rem;
+-}
+-
+-.connect-map-server {
+-    flex: 1 1 10rem;
+-    min-width: 0;
+-    font-size: 0.875rem;
+-    overflow-wrap: anywhere;
+-    word-break: break-all;
+-}
+-
+-.connect-map-tag {
+-    margin-left: 0.5rem;
+-    font-size: 0.75rem;
+-    color: var(--text-secondary);
+-}
+-
+-.connect-map-arrow {
+-    color: var(--text-secondary);
+-}
+-
+-.connect-row-local {
+-    flex: 1 1 12rem;
+-    min-width: 0;
+-}
+-
+-.connect-row-result {
+-    display: inline-flex;
+-    align-items: center;
+-    min-width: 1.5rem;
+-}
+-
+-.connect-row-fail {
+-    display: inline-flex;
+-    align-items: center;
+-    gap: 0.25rem;
+-    font-size: 0.875rem;
+-}
+-
+-@media (max-width: 639px) {
+-    .connect-map-row {
+-        flex-direction: column;
+-        align-items: stretch;
+-    }
+-
+-    .connect-map-arrow {
+-        display: none;
+-    }
+-
+-    .connect-map-server,
+-    .connect-row-local {
+-        flex: 0 0 auto;
+-    }
+-}
+--- a/web/static/js/components/tutorial.js
++++ b/web/static/js/components/tutorial.js
+@@ -263,7 +263,7 @@
+ 
+     async complete(markComplete = true) {
+         if (markComplete) {
+-            // 寫入後端（持久化，PyWebView 環境）
++            // 寫入後端，讓完成狀態跨頁面持久化。
+             try {
+                 await fetch('/api/tutorial-completed', { method: 'POST' });
+             } catch (e) {
+--- a/web/static/js/pages/connect/connect-logic.js
++++ /dev/null
+@@ -1,188 +0,0 @@
+-// 168b-T6a: connect page pure logic. No DOM, Alpine, window or i18n; returns codes, not copy.
+-
+-const CONNECTABLE = ['ok', 'patch_diff'];
+-const KNOWN_KINDS = ['synology', 'linux', 'windows', 'mac'];
+-const REASON_CODES = ['unreachable', 'timeout', 'tls', 'lan_forbidden', 'not_openaver'];
+-const BLOCKED_CODES = ['server_old', 'client_old', 'unparseable', 'not_openaver'];
+-
+-function isConnectableStatus(compat) {
+-    return !!compat && CONNECTABLE.includes(compat.status);
+-}
+-
+-/** The single source of truth for which buttons and fields are enabled (I-U). */
+-export function connectActions(s) {
+-    const probe = s.probe || null;
+-    const fresh = !!probe && typeof s.probedText === 'string' && s.probedText === String(s.urlText || '').trim();
+-    const live = fresh ? probe : null;
+-    const ready = s.bridge === 'ready' && !s.busy && !s.restarting;
+-    const connectable = fresh && probe.ok === true && isConnectableStatus(probe.compat);
+-
+-    let passwordField = 'hidden';
+-    if (live && !(live.ok === false && live.reason)) {
+-        if (!connectable) passwordField = 'disabled';
+-        else passwordField = live.auth_required === true ? 'input' : 'none';
+-    }
+-
+-    const authOk = connectable && (probe.auth_required !== true || probe.authed === true || s.phase === 'authed');
+-    const canLogin = ready && passwordField === 'input' && typeof s.pin === 'string' && s.pin !== '';
+-    const changed = String(s.urlText || '').trim() !== String(s.savedUrl || '');
+-    const canApply = ready && authOk
+-        && (s.mode === 'local' || (s.mode === 'client' && (changed || s.phase === 'authed')));
+-    const canSwitchLocal = s.mode === 'client' && ready;
+-    const probeUrl = probe ? probe.url : undefined;
+-    const tableOk = s.sourcesState === 'ok' && s.sourcesFor === probeUrl;
+-    const sameServer = probeUrl === s.savedUrl;
+-    const dirty = tableOk && Array.isArray(s.rows) && isRowsDirty(s.rows, s.rowsSnapshot);
+-    const canSaveRows = s.mode === 'client' && ready && tableOk && sameServer && dirty;
+-    const canReloadSources = authOk && s.sourcesState === 'error' && !s.busy;
+-    const canProbe = s.bridge === 'ready' && !s.busy && !s.restarting && String(s.urlText || '').trim() !== '';
+-
+-    const showRetryCf = s.bridge === 'ready' && cfView(s.cf, s.shellKind).state === 'not_ready';
+-    const canRetryCf = showRetryCf && ready && !s.cfBusy;
+-
+-    return {
+-        probeFresh: fresh,
+-        connectable,
+-        authOk,
+-        canProbe,
+-        passwordField,
+-        canLogin,
+-        canApply,
+-        applyKind: s.mode === 'local' ? 'switch' : 'apply',
+-        canSwitchLocal,
+-        tableVisible: authOk,
+-        canSaveRows,
+-        canReloadSources,
+-        showRetryCf,
+-        canRetryCf,
+-    };
+-}
+-
+-/** connect_probe reply -> code. */
+-export function probeCode(probe) {
+-    if (!probe) return 'unreachable';
+-    const status = probe.compat && probe.compat.status;
+-    if (probe.ok === false && probe.reason) return REASON_CODES.includes(probe.reason) ? probe.reason : 'unreachable';
+-    if (status === 'patch_diff' || status === 'server_old' || status === 'client_old' || status === 'unparseable') return status;
+-    return probe.ok === true ? 'ok' : 'unreachable';
+-}
+-
+-/** code -> ok | blocked | unreachable (status dot). */
+-export function dotState(code) {
+-    if (code === 'ok' || code === 'patch_diff') return 'ok';
+-    if (BLOCKED_CODES.includes(code)) return 'blocked';
+-    return 'unreachable';
+-}
+-
+-export function kindCode(kind) {
+-    return KNOWN_KINDS.includes(kind) ? kind : null;
+-}
+-
+-const FORGOT_MAP = {
+-    synology: 'synology',
+-    linux: 'linux',
+-    windows: 'desktop',
+-    mac: 'desktop',
+-};
+-
+-export function forgotCode(kind) {
+-    return Object.hasOwn(FORGOT_MAP, kind) ? FORGOT_MAP[kind] : null;
+-}
+-
+-// ---------- path-map table (T6b) ----------
+-
+-function toRow(server, kind, readonly, sample, local, stale) {
+-    return {
+-        server, kind, readonly, sample, local, local_path: '', state: null, testing: false, testGen: 0, removed: false, stale,
+-    };
+-}
+-
+-/** One row per server source; local is prefilled from a saved rule whose server string is identical. */
+-export function mergeRows(sources, savedRules) {
+-    const saved = Array.isArray(savedRules) ? savedRules : [];
+-    return (Array.isArray(sources) ? sources : []).map((src) => {
+-        const hit = saved.find((r) => r.server === src.path);
+-        return toRow(src.path, src.kind, src.readonly === true, src.sample === undefined ? null : src.sample,
+-            hit ? String(hit.local) : '', false);
+-    });
+-}
+-
+-/** Saved rules whose server is no longer offered: kept (and flagged) so they are not silently lost. */
+-export function staleRows(sources, savedRules) {
+-    const paths = new Set((Array.isArray(sources) ? sources : []).map((src) => src.path));
+-    const saved = Array.isArray(savedRules) ? savedRules : [];
+-    const toStaleRow = (r) => toRow(r.server, 'saved_only', false, null, String(r.local), true);
+-    return saved.filter((r) => !paths.has(r.server)).map(toStaleRow);
+-}
+-
+-/** Same rule as core.path_translate.strip_wrapping_quotes: trim, then drop one wrapping pair of double quotes. */
+-export function stripWrappingQuotes(value) {
+-    const s = String(value).trim();
+-    if (s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"') return s.slice(1, -1).trim();
+-    return s;
+-}
+-
+-/** Rules to persist: skip removed rows and rows with an empty side. */
+-export function rulesForSave(rows) {
+-    const out = [];
+-    for (const row of rows) {
+-        if (row.removed === true) continue;
+-        const server = String(row.server).trim();
+-        const local = stripWrappingQuotes(row.local);
+-        if (server === '' || local === '') continue;
+-        out.push({ server: row.server, local });
+-    }
+-    return out;
+-}
+-
+-export function isRowsDirty(rows, snapshot) {
+-    return JSON.stringify(rulesForSave(rows)) !== snapshot;
+-}
+-
+-const ROW_RESULT_MAP = {
+-    ok: 'ok',
+-    not_found: 'fail',
+-    uncovered: 'fail',
+-    timeout: 'slow',
+-    no_sample: 'note',
+-};
+-
+-/** Row test state code -> ok | fail | slow | note | none. */
+-export function rowResultView(state) {
+-    return typeof state === 'string' && Object.hasOwn(ROW_RESULT_MAP, state) ? ROW_RESULT_MAP[state] : 'none';
+-}
+-
+-/** Rules sent with apply; null means "leave the stored map alone" (sources not loaded for this server). */
+-export function pathMapForApply(s) {
+-    if (s.sourcesState !== 'ok' || s.sourcesFor !== (s.probe && s.probe.url)) return null;
+-    return rulesForSave(s.rows);
+-}
+-
+-// ---------- CF line (168d-T6) ----------
+-
+-const CF_STATES = ['ready', 'not_ready', 'unsupported'];
+-const CF_REASONS = ['starting', 'no_windows', 'proxy_unusable', 'server_old', 'unreachable', 'unauthorized', 'offline_boot', 'webview2_failed', 'shell_old'];
+-const CF_PROXY = ['applied', 'server_local_direct'];
+-
+-function proxyCode(note) {
+-    return CF_PROXY.includes(note) ? note : null;
+-}
+-
+-/** connect_get_state `cf` -> { state, reason, proxy } codes. Bad shape (old shell) degrades to not_ready/shell_old. */
+-export function cfView(cf, shellKind) {
+-    if (!cf || typeof cf !== 'object') return { state: 'not_ready', reason: 'shell_old', proxy: null };
+-    if (!CF_STATES.includes(cf.state)) return { state: 'not_ready', reason: 'shell_old', proxy: null };
+-    if (cf.state === 'unsupported') return { state: 'unsupported', reason: null, proxy: null };
+-    const proxy = shellKind === 'mac' ? null : proxyCode(cf.proxy_note);
+-    if (cf.state === 'ready') return { state: 'ready', reason: null, proxy };
+-    const reason = CF_REASONS.includes(cf.reason) ? cf.reason : 'shell_old';
+-    return { state: 'not_ready', reason, proxy };
+-}
+-
+-/** cf_retry reply -> busy | unavailable | failed (only called for a reply that is not a usable ok+cf). */
+-export function cfRetryErrorCode(reply) {
+-    const reason = reply && reply.reason;
+-    if (reason === 'busy') return 'busy';
+-    if (reason === 'unavailable' || reason === 'no_bridge') return 'unavailable';
+-    return 'failed';
+-}
+--- a/web/static/js/pages/connect/main.js
++++ /dev/null
+@@ -1,445 +0,0 @@
+-// 168b-T6a: connect page (single standalone Alpine component). All remote I/O goes through the shell bridge.
+-import { PROBE_ICON_MAP } from '../settings/source-probe-logic.js';
+-import {
+-    connectActions, cfRetryErrorCode, probeCode, dotState, kindCode, forgotCode, cfView,
+-    mergeRows, staleRows, rulesForSave, stripWrappingQuotes, rowResultView, pathMapForApply as buildPathMap,
+-} from './connect-logic.js';
+-
+-export function connectPage() {
+-    return {
+-        // --- contract state (read by connect-logic.js) ---
+-        bridge: 'pending',
+-        mode: 'local',
+-        busy: null,
+-        restarting: false,
+-        urlText: '',
+-        savedUrl: '',
+-        probedText: '',
+-        probe: null,
+-        phase: 'idle',
+-        pin: '',
+-        sourcesState: 'idle',
+-        sourcesFor: '',
+-        rows: [],
+-        rowsSnapshot: '',
+-        savedRules: [],
+-        // --- free state ---
+-        localVersion: '',
+-        savedHost: '',
+-        savedReach: 'unknown',
+-        savedVersion: '',
+-        savedKind: '',
+-        lastOk: '',
+-        shellKind: 'windows',
+-        cf: null,
+-        cfBusy: false, // read by connect-logic.js (canRetryCf)
+-        cfRetryError: '',
+-        actionError: '',
+-        pinError: '',
+-        _started: false,
+-        _kindSeen: false,
+-        _retried: false,
+-
+-        init() {
+-            const ds = (this.$el && this.$el.dataset) || {};
+-            this.mode = ds.mode === 'client' ? 'client' : 'local';
+-            this.shellKind = ds.shellKind === 'mac' ? 'mac' : 'windows';
+-            window.addEventListener('oabridgeready', () => { this._kindSeen = true; this._tryStart(); });
+-            window.addEventListener('pywebviewready', () => this._tryStart());
+-            setTimeout(() => {
+-                if (this.bridge === 'pending' && !window.pywebview) this.bridge = 'unavailable';
+-            }, 8000);
+-            this._tryStart();
+-        },
+-
+-        // 168b-T9a: first bridge call waits for the shell's "page kind decided" signal (never earlier)
+-        _tryStart() {
+-            const api = window.pywebview && window.pywebview.api;
+-            if (!this._kindSeen && !window.__oaBridgeKind) return;
+-            if (api && typeof api.connect_get_state === 'function') this.start();
+-        },
+-
+-        async start() {
+-            if (this._started) return;
+-            this._started = true;
+-            const state = await this.call('connect_get_state');
+-            if (state && state.reason === 'untrusted' && !this._retried) {
+-                this._retried = true;
+-                this._started = false;
+-                this._kindSeen = false;
+-                window.__oaBridgeKind = undefined;
+-                return;
+-            }
+-            if (!state || typeof state.mode !== 'string') {
+-                this.bridge = 'unavailable';
+-                return;
+-            }
+-            this.mode = state.mode === 'client' ? 'client' : 'local';
+-            this.localVersion = String(state.version || '');
+-            this.lastOk = typeof state.last_ok === 'string' ? state.last_ok : '';
+-            this.savedUrl = this.mode === 'client' ? String(state.url || '') : '';
+-            this.savedHost = this.mode === 'client' ? String(state.host || '') : '';
+-            this.savedRules = Array.isArray(state.path_map) ? state.path_map : [];
+-            this.urlText = this.savedUrl;
+-            this.cf = state.cf ?? null;
+-            this.bridge = 'ready';
+-            if (this.mode === 'client' && this.savedUrl) await this.testConnection();
+-            await this._syncSources();
+-        },
+-
+-        async call(name, ...args) {
+-            const api = window.pywebview && window.pywebview.api;
+-            if (!api || typeof api[name] !== 'function') return { ok: false, reason: 'no_bridge' };
+-            let reply;
+-            try {
+-                reply = await api[name](...args);
+-            } catch {
+-                return { ok: false, reason: 'error' };
+-            }
+-            if (reply && reply.reason === 'untrusted' && (name !== 'connect_get_state' || this._retried)) this.bridge = 'unavailable';
+-            return reply;
+-        },
+-
+-        actions() {
+-            return connectActions(this);
+-        },
+-
+-        async testConnection() {
+-            if (!this.actions().canProbe) return;
+-            const asked = this.urlText.trim();
+-            this.busy = 'probe';
+-            this.phase = 'probing';
+-            this.actionError = '';
+-            const reply = await this.call('connect_probe', asked);
+-            this.busy = null;
+-            if (this.bridge === 'unavailable') return;
+-            if (!reply || typeof reply.ok !== 'boolean') {
+-                this.probe = null;
+-                this.phase = 'idle';
+-                this.actionError = 'failed';
+-                return;
+-            }
+-            this.probe = reply;
+-            this.probedText = asked;
+-            this.phase = 'probed';
+-            this.pinError = '';
+-            if (this.mode === 'client' && asked === this.savedUrl) {
+-                this.savedReach = dotState(probeCode(reply)) === 'ok' ? 'ok' : 'down';
+-                this.savedVersion = String(reply.version || '');
+-                this.savedKind = String(reply.kind || '');
+-            }
+-            await this._syncSources();
+-        },
+-
+-        async login() {
+-            if (!this.actions().canLogin) return;
+-            const pin = this.pin;
+-            const url = this.probe.url;
+-            this.busy = 'login';
+-            this.phase = 'logging_in';
+-            this.actionError = '';
+-            const reply = await this.call('connect_login', url, pin);
+-            this.pin = '';
+-            this.busy = null;
+-            this.phase = 'probed';
+-            if (reply && reply.ok === true) this.phase = 'authed';
+-            this.pinError = reply && reply.ok === true ? '' : (reply && reply.reason) || 'failed';
+-            await this._syncSources();
+-        },
+-
+-        // null means the Python side keeps the stored path map.
+-        pathMapForApply() {
+-            return buildPathMap(this);
+-        },
+-
+-        // --- path-map table ---
+-        async _syncSources() {
+-            if (!this.actions().tableVisible) return;
+-            if (this.sourcesState === 'loading' || this.rowsReady()) return;
+-            await this.loadSources();
+-        },
+-
+-        async loadSources() {
+-            if (!this.probe || this.busy) return;
+-            const url = this.probe.url;
+-            this.sourcesState = 'loading';
+-            const reply = await this.call('connect_sources', url);
+-            if (this.bridge === 'unavailable') return;
+-            if (!this.probe || this.probe.url !== url) {
+-                this.sourcesState = 'idle';
+-                await this._syncSources();
+-                return;
+-            }
+-            if (!reply || reply.ok !== true || !Array.isArray(reply.sources)) {
+-                this.sourcesFor = '';
+-                this.sourcesState = 'error';
+-                return;
+-            }
+-            const rows = [...mergeRows(reply.sources, this.savedRules), ...staleRows(reply.sources, this.savedRules)];
+-            this.rows = rows;
+-            this.rowsSnapshot = JSON.stringify(rulesForSave(rows));
+-            this.sourcesFor = url;
+-            this.sourcesState = 'ok';
+-        },
+-
+-        rowsReady() {
+-            return this.sourcesState === 'ok' && !!this.probe && this.sourcesFor === this.probe.url;
+-        },
+-
+-        rowsLoading() {
+-            return !this.rowsReady() && this.sourcesState !== 'error';
+-        },
+-
+-        canTestRow(row) {
+-            return this.bridge === 'ready' && !this.restarting && !row.testing && row.local.trim() !== '';
+-        },
+-
+-        async testRow(row) {
+-            if (!this.canTestRow(row)) return;
+-            const gen = ++row.testGen;
+-            row.testing = true;
+-            const reply = await this.call('connect_test_row', row.server, row.local.trim(), row.sample);
+-            if (row.testGen !== gen) return;
+-            row.testing = false;
+-            if (this.bridge === 'unavailable') return;
+-            row.state = reply && typeof reply.state === 'string' ? reply.state : 'timeout';
+-            row.local_path = reply && typeof reply.local_path === 'string' ? reply.local_path : '';
+-        },
+-
+-        onLocalInput(row) {
+-            row.state = null;
+-            row.local_path = '';
+-            row.testing = false;
+-            row.testGen++;
+-        },
+-
+-        removeStale(row) {
+-            row.removed = true;
+-        },
+-
+-        async saveRows() {
+-            if (!this.actions().canSaveRows) return;
+-            const rules = rulesForSave(this.rows);
+-            this.busy = 'save';
+-            const reply = await this.call('connect_save_path_map', rules);
+-            this.busy = null;
+-            if (this.bridge === 'unavailable') return;
+-            if (reply && reply.ok === true) {
+-                this.savedRules = rules;
+-                for (const row of this.rows) row.local = stripWrappingQuotes(row.local);   // CD-9 ③：顯示值與存的一致
+-                this.rowsSnapshot = JSON.stringify(rules);
+-                Alpine.store('toast').show(window.t('connect.rows.saved'), 'success');
+-                return;
+-            }
+-            Alpine.store('toast').show(window.t('connect.rows.save_failed'), 'error');
+-        },
+-
+-        // --- table copy ---
+-        placeholderText() {
+-            return this.shellKind === 'mac'
+-                ? window.t('connect.rows.placeholder_mac')
+-                : window.t('connect.rows.placeholder_windows');
+-        },
+-
+-        rowTag(row) {
+-            if (row.readonly) return window.t('connect.rows.readonly');
+-            if (row.kind === 'favorite') return window.t('connect.rows.favorite');
+-            return '';
+-        },
+-
+-        rowFailText(row) {
+-            if (row.local_path) return window.t('connect.rows.not_found_path', { path: row.local_path });
+-            return window.t('connect.rows.not_found');
+-        },
+-
+-        rowResult(row) {
+-            return row.testing ? 'none' : rowResultView(row.state);
+-        },
+-
+-        okIcon() {
+-            return PROBE_ICON_MAP.ok;
+-        },
+-
+-        failIcon() {
+-            return PROBE_ICON_MAP.unreachable;
+-        },
+-
+-        async applyRestart() {
+-            if (!this.actions().canApply) return;
+-            this.busy = 'apply';
+-            this.actionError = '';
+-            const reply = await this.call('connect_apply_restart', this.probe.url, this.pathMapForApply());
+-            this.finishRestart(reply);
+-        },
+-
+-        async switchLocal() {
+-            if (!this.actions().canSwitchLocal) return;
+-            this.busy = 'switch';
+-            this.actionError = '';
+-            const reply = await this.call('connect_switch_local_restart');
+-            this.finishRestart(reply);
+-        },
+-
+-        finishRestart(reply) {
+-            this.busy = null;
+-            if (reply && reply.ok === true) {
+-                this.restarting = true;
+-                return;
+-            }
+-            this.actionError = (reply && reply.reason) || 'failed';
+-        },
+-
+-        async retryCf() {
+-            if (!this.actions().canRetryCf) return;
+-            this.cfBusy = true;
+-            this.cfRetryError = '';
+-            const reply = await this.call('cf_retry');
+-            this.cfBusy = false;
+-            if (this.bridge === 'unavailable') return;
+-            if (reply && reply.ok === true && reply.cf && typeof reply.cf === 'object') {
+-                this.cf = reply.cf;
+-                return;
+-            }
+-            this.cfRetryError = cfRetryErrorCode(reply);
+-        },
+-
+-        // --- copy ---
+-        kindLabel(kind) {
+-            switch (kindCode(kind)) {
+-                case 'synology': return window.t('connect.kind_synology');
+-                case 'linux': return window.t('connect.kind_linux');
+-                case 'windows': return window.t('connect.kind_windows');
+-                case 'mac': return window.t('connect.kind_mac');
+-                default: return '';
+-            }
+-        },
+-
+-        versionLine(version, kind) {
+-            const label = this.kindLabel(kind);
+-            if (!label) return window.t('connect.version_only', { version });
+-            return window.t('connect.version_line', { version, kind: label });
+-        },
+-
+-        statusLine() {
+-            if (this.mode === 'local') return window.t('connect.status_local');
+-            if (this.savedReach === 'down') return window.t('connect.status_down', { host: this.savedHost });
+-            return window.t('connect.status_connected', { host: this.savedHost });
+-        },
+-
+-        statusVersionLine() {
+-            if (this.mode === 'local') return this.localVersion ? this.versionLine(this.localVersion, '') : '';
+-            return this.savedVersion ? this.versionLine(this.savedVersion, this.savedKind) : '';
+-        },
+-
+-        lastOkText() {
+-            if (this.mode !== 'client' || !this.lastOk) return '';
+-            const when = new Date(this.lastOk);
+-            if (Number.isNaN(when.getTime())) return '';
+-            return window.t('connect.last_ok', { time: when.toLocaleString() });
+-        },
+-
+-        dotName() {
+-            return this.actions().probeFresh ? dotState(probeCode(this.probe)) : 'unreachable';
+-        },
+-
+-        dotIcon() {
+-            return PROBE_ICON_MAP[this.dotName()];
+-        },
+-
+-        resultText() {
+-            const p = this.probe;
+-            switch (probeCode(p)) {
+-                case 'ok': return this.versionLine(p.version, p.kind);
+-                case 'patch_diff':
+-                    return window.t('connect.result_patch_diff', { server: p.version, local: this.localVersion });
+-                case 'server_old': return window.t('connect.result_server_old');
+-                case 'client_old': return window.t('connect.result_client_old');
+-                case 'unparseable': return window.t('connect.result_unparseable');
+-                case 'timeout': return window.t('connect.result_timeout');
+-                case 'tls': return window.t('connect.result_tls');
+-                case 'lan_forbidden': return window.t('connect.result_lan_forbidden');
+-                case 'not_openaver': return window.t('connect.result_not_openaver');
+-                default: return window.t('connect.result_unreachable');
+-            }
+-        },
+-
+-        resultVersionText() {
+-            const p = this.probe;
+-            if (!p || p.ok !== true || probeCode(p) === 'ok') return '';
+-            return this.versionLine(p.version, p.kind);
+-        },
+-
+-        forgotText() {
+-            switch (forgotCode(this.probe && this.probe.kind)) {
+-                case 'synology': return window.t('connect.forgot_synology');
+-                case 'linux': return window.t('connect.forgot_linux');
+-                case 'desktop': return window.t('connect.forgot_desktop');
+-                default: return '';
+-            }
+-        },
+-
+-        pinErrorText() {
+-            if (!this.pinError) return '';
+-            if (this.pinError === 'bad_pin') return window.t('connect.pin_bad');
+-            return window.t('connect.pin_failed');
+-        },
+-
+-        actionErrorText() {
+-            return this.actionError ? window.t('connect.error_generic') : '';
+-        },
+-
+-        applyLabel() {
+-            return this.actions().applyKind === 'switch'
+-                ? window.t('connect.apply_switch')
+-                : window.t('connect.apply_apply');
+-        },
+-
+-        applyHint() {
+-            return this.mode === 'local'
+-                ? window.t('connect.apply_hint_local')
+-                : window.t('connect.apply_hint_client');
+-        },
+-
+-        cfText() {
+-            const v = cfView(this.cf, this.shellKind);
+-            if (v.state === 'ready') return window.t('connect.cf_ready');
+-            if (v.state === 'unsupported') return window.t('connect.cf_mac');
+-            return window.t('connect.cf_not_ready', { reason: this.cfReasonText(v.reason) });
+-        },
+-
+-        cfReasonText(reason) {
+-            switch (reason) {
+-                case 'starting': return window.t('connect.cf_reason_starting');
+-                case 'no_windows': return window.t('connect.cf_reason_no_windows');
+-                case 'proxy_unusable': return window.t('connect.cf_reason_proxy_unusable');
+-                case 'server_old': return window.t('connect.cf_reason_server_old');
+-                case 'unreachable': return window.t('connect.cf_reason_unreachable');
+-                case 'unauthorized': return window.t('connect.cf_reason_unauthorized');
+-                case 'offline_boot': return window.t('connect.cf_reason_offline_boot');
+-                case 'webview2_failed': return window.t('connect.cf_reason_webview2_failed');
+-                default: return window.t('connect.cf_reason_shell_old');
+-            }
+-        },
+-
+-        cfRetryErrorText() {
+-            switch (this.cfRetryError) {
+-                case 'busy': return window.t('connect.cf_retry_busy');
+-                case 'unavailable': return window.t('connect.cf_retry_unavailable');
+-                case 'failed': return window.t('connect.error_generic');
+-                default: return '';
+-            }
+-        },
+-
+-        cfNoteText() {
+-            switch (cfView(this.cf, this.shellKind).proxy) {
+-                case 'applied': return window.t('connect.cf_proxy_applied');
+-                case 'server_local_direct': return window.t('connect.cf_proxy_local_direct');
+-                default: return '';
+-            }
+-        },
+-    };
+-}
+-
+-document.addEventListener('alpine:init', () => {
+-    Alpine.data('connectPage', connectPage);
+-});
+--- a/web/static/js/pages/help.js
++++ /dev/null
+@@ -1,334 +0,0 @@
+-// Help 頁面 Alpine.js 元件
+-import { toastState } from '../shared/state-toast.js';
+-import { whenBridgeReady, callBridge, clientRouting } from '../shared/shell-client.js';
+-
+-// 168c-T5: 桌面殼 client 模式下，說明頁的更新功能走這台電腦的 bridge；缺任一個（舊殼）就退回伺服器端點。
+-const HELP_BRIDGE_METHODS = ['update_check', 'update_context', 'update_run'];
+-
+-export function helpPage() {
+-    return {
+-        ...toastState(),
+-        // State
+-        appVersion: '',
+-        curlCopied: false,
+-        checkUpdateLoading: false,
+-        hasUpdate: false,
+-        latestVersion: '',
+-        downloadUrl: '',
+-        errorMsg: '',
+-        checkDone: false,
+-        showUpdateModal: false,
+-        isDefaultPath: true,
+-        updateLoading: false,
+-        autoCheckUpdate: false,
+-        _autoCheckSaving: false,
+-        _isDesktop: false,
+-
+-        // 168c-T5: client 模式選路（FE-ALPINE-06：無條件宣告初值）。
+-        _shellMode: '',
+-        _bridgeMode: false,
+-        _bridgeUnavailable: false,  // 新殼但未就緒：這台讀不到，也不改送伺服器（同設定頁 unavailable）
+-        _routingReady: null,     // 選路決定的 promise（client 模式才有）
+-        _clientInitDone: null,   // client 模式 init 後半段（版本／自動檢查）的 promise
+-
+-        // TASK-114b-T4：agent token 顯示區塊。對應 DOM 只在 show_agent_auth 為真時
+-        // 才會存在（Jinja {% if %}），但依 FE-ALPINE-06 仍必須無條件在此宣告初值。
+-        agentToken: '',             // 真值；init() 從 .help-agent-token-panel 的 dataset 讀入，
+-                                     // 此後全部讀寫只走這個欄位。
+-        agentTokenVisible: false,   // 眼睛切換：true=顯示真值，false=顯示遮罩
+-        agentTokenCopied: false,    // 複製 token 按鈕的 ✓ 微回饋（比照 curlCopied）
+-        maskedTokenDisplay: 'oav_••••••••',  // 固定遮罩字串（不依真值長度計算）
+-
+-        init() {
+-            this._shellMode = this.$el.dataset.shellMode || '';
+-            if (this._shellMode === 'client') { this._initClient(); return; }
+-            this.loadVersion();
+-            this._isDesktop = this.$el.dataset.isDesktop === 'true';
+-            this.autoCheckUpdate = this.$el.dataset.autoCheckUpdate === 'true';
+-            if (this._isDesktop && this.autoCheckUpdate) this.checkUpdate();
+-            this.agentToken = document.querySelector('.help-agent-token-panel')?.dataset.agentToken || '';
+-        },
+-
+-        // client 模式：先等 bridge 就緒再決定走橋或走伺服器（BE-WEBVIEW-06），決定前不打任何伺服器端點。
+-        _initClient() {
+-            this._isDesktop = this.$el.dataset.isDesktop === 'true';
+-            this.autoCheckUpdate = this.$el.dataset.autoCheckUpdate === 'true';
+-            this.agentToken = document.querySelector('.help-agent-token-panel')?.dataset.agentToken || '';
+-            this._routingReady = this._decideRoute();
+-            const ssrAutoCheck = this.autoCheckUpdate;
+-            this._clientInitDone = this._routingReady.then(() => this._finishClientInit(ssrAutoCheck));
+-        },
+-
+-        async _decideRoute() {
+-            const ready = await whenBridgeReady();
+-            const bridge = window.pywebview?.api ?? null;
+-            const newShell = clientRouting('client', bridge, HELP_BRIDGE_METHODS) === 'bridge';
+-            this._bridgeMode = ready && newShell;
+-            this._bridgeUnavailable = !ready && newShell;
+-        },
+-
+-        async _finishClientInit(ssrAutoCheck) {
+-            if (this._bridgeUnavailable) { this.appVersion = window.t('help.js.version_load_failed'); return; }
+-            let initialAutoCheck = ssrAutoCheck;  // 自動檢查依「初始化讀到的值」且須使用者最終仍開著
+-            if (!this._bridgeMode) {
+-                this.loadVersion();
+-            } else {
+-                const ctx = await callBridge('update_context');
+-                // 這台的版本讀不到就顯示未知，不拿伺服器版本冒充
+-                this.appVersion = ctx.ok === true && ctx.current_version
+-                    ? `v${ctx.current_version}`
+-                    : window.t('help.js.version_load_failed');
+-                const local = await callBridge('local_settings_get');
+-                // 等待期間使用者若已切換開關，以使用者的值為準，不被舊回覆蓋掉
+-                if (this.autoCheckUpdate === ssrAutoCheck
+-                    && local.ok === true && typeof local.auto_check_update === 'boolean') {
+-                    this.autoCheckUpdate = local.auto_check_update;
+-                    initialAutoCheck = local.auto_check_update;
+-                }
+-            }
+-            if (this._isDesktop && initialAutoCheck && this.autoCheckUpdate) this.checkUpdate();
+-        },
+-
+-        async saveAutoCheckUpdate() {
+-            // x-model 已先把 autoCheckUpdate 翻到 desired；PUT 失敗必須還原本地狀態，
+-            // 否則 UI 顯示「關」但 config 仍「開」→ 下次啟動仍自動查 GitHub，違反 opt-out
+-            // （比照 settings state-config.js setServerMode 的 success-then-commit / fail-revert）。
+-            const desired = this.autoCheckUpdate;
+-            if (this._shellMode === 'client') {
+-                this._autoCheckSaving = true;  // 選路／初始化等待期間就上鎖，擋並行儲存
+-                await this._routingReady;
+-                await this._clientInitDone;    // 初始化的覆寫先發生，之後以 desired 為準
+-            }
+-            if (this._bridgeUnavailable) {
+-                this.autoCheckUpdate = !desired;
+-                this._autoCheckSaving = false;
+-                this.showToast(window.t('help.hero.this_computer_unavailable'), 'error');
+-                return;
+-            }
+-            if (this._bridgeMode) return this._saveAutoCheckUpdateBridge(desired);
+-            this._autoCheckSaving = true;  // 擋 checkbox，防兩次快速切換同時有 PUT in-flight
+-            // （server 寫入順序若被打亂，config 會與最後可見的 toggle 狀態相反——兩次 PUT 都
+-            // success:true，既有 revert-on-failure 邏輯抓不到，見 107 P2 Codex review）
+-            try {
+-                const resp = await fetch('/api/config/general/auto_check_update', {
+-                    method: 'PUT',
+-                    headers: { 'Content-Type': 'application/json' },
+-                    body: JSON.stringify({ value: desired }),
+-                });
+-                const result = await resp.json();
+-                if (!result.success) {
+-                    this.autoCheckUpdate = !desired;  // 還原，UI 不與持久化背離
+-                    this.showToast(window.t('help.hero.auto_check_save_failed'), 'error');
+-                }
+-            } catch (e) {
+-                this.autoCheckUpdate = !desired;  // 還原（離線/HTTP 錯）
+-                this.showToast(window.t('help.hero.auto_check_save_failed'), 'error');
+-            } finally {
+-                this._autoCheckSaving = false;
+-            }
+-        },
+-
+-        async loadVersion() {
+-            try {
+-                const resp = await fetch('/api/version');
+-                const data = await resp.json();
+-                if (data.success) this.appVersion = `v${data.version}`;
+-            } catch (e) {
+-                this.appVersion = window.t('help.js.version_load_failed');
+-            }
+-        },
+-
+-        copyCurlCommand() {
+-            const base = document.querySelector('.hero-terminal')?.dataset.capabilitiesBase || window.location.origin;
+-            const cmd = this.agentToken
+-                ? `curl -s -H "Authorization: Bearer ${this.agentToken}" ${base}/api/capabilities`
+-                : `curl -s ${base}/api/capabilities`;
+-            const onSuccess = () => {
+-                this.curlCopied = true;
+-                setTimeout(() => this.curlCopied = false, 800);
+-            };
+-            if (navigator.clipboard?.writeText) {
+-                navigator.clipboard.writeText(cmd).then(onSuccess).catch(() => this._fallbackCopy(cmd, onSuccess));
+-            } else {
+-                this._fallbackCopy(cmd, onSuccess);
+-            }
+-        },
+-
+-        curlDisplayText() {
+-            const base = document.querySelector('.hero-terminal')?.dataset.capabilitiesBase || '';
+-            if (!this.agentToken) return `curl -s ${base}/api/capabilities`;
+-            const shown = this.agentTokenVisible ? this.agentToken : this.maskedTokenDisplay;
+-            return `curl -s -H "Authorization: Bearer ${shown}" ${base}/api/capabilities`;
+-        },
+-
+-        copyAgentToken() {
+-            const onSuccess = () => {
+-                this.agentTokenCopied = true;
+-                setTimeout(() => this.agentTokenCopied = false, 800);
+-            };
+-            if (navigator.clipboard?.writeText) {
+-                navigator.clipboard.writeText(this.agentToken).then(onSuccess).catch(() => this._fallbackCopy(this.agentToken, onSuccess));
+-            } else {
+-                this._fallbackCopy(this.agentToken, onSuccess);
+-            }
+-        },
+-
+-        toggleAgentTokenVisible() {
+-            this.agentTokenVisible = !this.agentTokenVisible;
+-        },
+-
+-        // `onSuccess` 可省略——省略時維持既有（改寫前）行為：標記 curlCopied。
+-        // Opus 裁定：泛化必須向後相容，既有呼叫端／既有測試的行為不可變。
+-        _fallbackCopy(text, onSuccess) {
+-            const ta = document.createElement('textarea');
+-            ta.value = text;
+-            ta.style.cssText = 'position:fixed;top:-9999px';
+-            document.body.appendChild(ta);
+-            ta.select();
+-            try {
+-                document.execCommand('copy');
+-                if (onSuccess) {
+-                    onSuccess();
+-                } else {
+-                    this.curlCopied = true;
+-                    setTimeout(() => this.curlCopied = false, 800);
+-                }
+-            } catch (e) {}
+-            ta.remove();
+-        },
+-
+-        async _saveAutoCheckUpdateBridge(desired) {
+-            this._autoCheckSaving = true;
+-            try {
+-                const r = await callBridge('local_settings_save', { auto_check_update: desired });
+-                if (r.ok === true) {
+-                    this.autoCheckUpdate = desired;
+-                } else {
+-                    this.autoCheckUpdate = !desired;
+-                    this.showToast(window.t('help.hero.auto_check_save_failed'), 'error');
+-                }
+-            } finally {
+-                this._autoCheckSaving = false;
+-            }
+-        },
+-
+-        async _checkUpdateBridge() {
+-            this.checkUpdateLoading = true;
+-            this.checkDone = false;
+-            this.errorMsg = '';
+-            try {
+-                const r = await callBridge('update_check');
+-                if (r.ok === true && !r.reason) {
+-                    this.hasUpdate = !!r.has_update;
+-                    this.latestVersion = r.latest_version || '';
+-                    this.downloadUrl = r.download_url || '';
+-                } else {
+-                    this.errorMsg = window.t('help.js.check_update_failed');
+-                }
+-            } catch (e) {
+-                this.errorMsg = window.t('help.js.check_update_failed');
+-            } finally {
+-                this.checkUpdateLoading = false;
+-                this.checkDone = true;
+-            }
+-        },
+-
+-        async _triggerUpdateBridge() {
+-            const r = await callBridge('update_context');
+-            this.isDefaultPath = r.ok === true ? r.is_default_path !== false : true;
+-            this.showUpdateModal = true;
+-        },
+-
+-        async _confirmUpdateBridge() {
+-            this.updateLoading = true;
+-            try {
+-                const r = await callBridge('update_run');
+-                this._showHelpToast(window.t(r.ok === true
+-                    ? 'help.update_modal.toast_success'
+-                    : 'help.update_modal.toast_error'));
+-            } finally {
+-                this.updateLoading = false;
+-                this.showUpdateModal = false;
+-            }
+-        },
+-
+-        async checkUpdate() {
+-            if (this._shellMode === 'client') await this._routingReady;
+-            if (this._bridgeMode) return this._checkUpdateBridge();
+-            if (this._bridgeUnavailable) {
+-                this.errorMsg = window.t('help.hero.this_computer_unavailable');
+-                this.checkDone = true;
+-                return;
+-            }
+-            this.checkUpdateLoading = true;
+-            this.checkDone = false;
+-            this.errorMsg = '';
+-            try {
+-                const resp = await fetch('/api/check-update');
+-                const data = await resp.json();
+-                if (data.success) {
+-                    this.hasUpdate = data.has_update;
+-                    this.latestVersion = data.latest_version || '';
+-                    this.downloadUrl = data.download_url || '';
+-                } else {
+-                    this.errorMsg = window.t('help.js.check_update_failed');
+-                }
+-            } catch (e) {
+-                this.errorMsg = window.t('help.js.check_update_network_error');
+-            } finally {
+-                this.checkUpdateLoading = false;
+-                this.checkDone = true;
+-            }
+-        },
+-
+-        async triggerUpdate() {
+-            if (this._shellMode === 'client') await this._routingReady;
+-            if (this._bridgeMode) return this._triggerUpdateBridge();
+-            if (this._bridgeUnavailable) return;
+-            // fetch install-context to determine default path scenario
+-            try {
+-                const resp = await fetch('/api/install-context');
+-                const data = await resp.json();
+-                this.isDefaultPath = data.is_default_path !== false;  // fallback true
+-            } catch (e) {
+-                this.isDefaultPath = true;  // 保守 fallback
+-            }
+-            this.showUpdateModal = true;
+-        },
+-
+-        async confirmUpdate() {
+-            if (this._shellMode === 'client') await this._routingReady;
+-            if (this._bridgeMode) return this._confirmUpdateBridge();
+-            if (this._bridgeUnavailable) { this.showUpdateModal = false; return; }
+-            this.updateLoading = true;
+-            try {
+-                const resp = await fetch('/api/trigger-update', {
+-                    method: 'POST',
+-                    headers: { 'X-OpenAver-Desktop-Action': 'trigger-update' },
+-                });
+-                if (resp.ok) {
+-                    this._showHelpToast(window.t('help.update_modal.toast_success'));
+-                } else {
+-                    this._showHelpToast(window.t('help.update_modal.toast_error'));
+-                }
+-            } catch (e) {
+-                this._showHelpToast(window.t('help.update_modal.toast_error'));
+-            } finally {
+-                this.updateLoading = false;
+-                this.showUpdateModal = false;
+-            }
+-        },
+-
+-        cancelUpdate() {
+-            this.showUpdateModal = false;
+-        },
+-
+-        _showHelpToast(msg) {
+-            this.showToast(msg, 'info');
+-        },
+-    };
+-}
+-
+-document.addEventListener('alpine:init', () => {
+-    Alpine.data('helpPage', helpPage);
+-});
+--- a/web/static/js/pages/scanner/main.js
++++ b/web/static/js/pages/scanner/main.js
+@@ -5,22 +5,6 @@
+ import { browseDirState } from '@/shared/state-browse-dir.js';
+ import { toastState } from '@/shared/state-toast.js';
+ import { mergeState } from '@/shared/merge-state.js';
+-
+-// PyWebView 拖曳橋接（從 scanner.js L1528–L1542 搬移）
+-window.handleFolderDrop = function (folderPaths) {
+-    if (!folderPaths || folderPaths.length === 0) {
+-        return;
+-    }
+-
+-    if (typeof window.addScannerFolder !== 'function') {
+-        console.error('[AVList] Alpine not ready, addScannerFolder not available');
+-        return;
+-    }
+-
+-    for (const folderPath of folderPaths) {
+-        window.addScannerFolder(folderPath);
+-    }
+-};
+ 
+ document.addEventListener('alpine:init', () => {
+     Alpine.data('scanner', () => mergeState(
+--- a/web/static/js/pages/search/main.js
++++ b/web/static/js/pages/search/main.js
+@@ -57,9 +57,7 @@
+                 clearTimeout(_dragTimeoutHandle);
+                 _dragTimeoutHandle = null;
+                 if (this.dragActive) this.dragActive = false;
+-                if (typeof window.pywebview === 'undefined') {
+-                    this.handleFileDrop(e.dataTransfer.files);
+-                }
++                this.handleFileDrop(e.dataTransfer.files);
+             },
+ 
+             _initDragEvents() {
+@@ -114,10 +112,6 @@
+                                 clearTimeout(this.lightboxCloseTimer);
+                                 this.lightboxCloseTimer = null;
+                             }
+-                            // T2(40b): 移除 window listeners
+-                            if (this._pywebviewFilesHandler) {
+-                                window.removeEventListener('pywebview-files', this._pywebviewFilesHandler);
+-                            }
+                             if (this._resizeHandler) {
+                                 window.removeEventListener('resize', this._resizeHandler);
+                             }
+@@ -125,11 +119,7 @@
+                     });
+                 }
+ 
+-                // 8. T1d: 監聽 pywebview-files 事件
+-                this._pywebviewFilesHandler = async (e) => { await this.setFileList(e.detail.paths); };
+-                window.addEventListener('pywebview-files', this._pywebviewFilesHandler);
+-
+-                // 9. Issue-2: resize / 導航時更新封面高度 CSS variable
++                // 8. Issue-2: resize / 導航時更新封面高度 CSS variable
+                 this._resizeHandler = () => this._updateCoverHeight();
+                 window.addEventListener('resize', this._resizeHandler);
+                 this.$watch('currentIndex', () => {
+--- a/web/static/js/pages/search/state/base.js
++++ b/web/static/js/pages/search/state/base.js
+@@ -118,7 +118,6 @@
+         _timers: {},  // Timer registry：{ [key: string]: number }（setTimeout ID）
+         _batchCheckInterval: null,      // T1(40b): batch searchAll 暫停等待 interval ref
+         _translateCheckInterval: null,  // T1(40b): translateAll 暫停等待 interval ref
+-        _pywebviewFilesHandler: null,  // T2(40b): pywebview-files listener ref
+         _resizeHandler: null,          // T2(40b): resize listener ref
+         _abortControllers: {},  // Fetch AbortController registry：{ [key: string]: AbortController }（T4.3）
+ 
+--- a/web/static/js/pages/search/state/file-list.js
++++ b/web/static/js/pages/search/state/file-list.js
+@@ -329,7 +329,7 @@
+         var hasNfoMap = {};
+         var skipMap = {};
+         // P2-T6（功能 D）：宣告在 try 外——空列表檢查（下方）在同 try 內須看得到（Codex 三審#1）。
+-        // 桌面 pywebview 拖入未掛載/UNC/無權限檔時，filter-files 回 rejected.inaccessible，
++        // 拖入未掛載、無權限或無法讀取的檔案時，filter-files 會回 rejected.inaccessible，
+         // 表面化為 path_inaccessible 並中止，取代誤導的「無法識別番號」。
+         let hadInaccessible = false;
+         try {
+@@ -545,38 +545,15 @@
+     },
+ 
+     async addFiles() {
+-        if (typeof window.pywebview === 'undefined' || !window.pywebview.api) {
+-            this.openBrowseDir('search', async (files) => {
+-                if (files && files.length > 0) await this.setFileList(files);
+-            }, { expandVideos: true });
+-            return;
+-        }
+-        try {
+-            const paths = await window.pywebview.api.select_files();
+-            if (paths && paths.length > 0) {
+-                await this.setFileList(paths);
+-            }
+-        } catch (e) {
+-            console.error('選取檔案失敗:', e);
+-        }
++        this.openBrowseDir('search', async (files) => {
++            if (files && files.length > 0) await this.setFileList(files);
++        }, { expandVideos: true });
+     },
+ 
+     async addFolder() {
+-        if (typeof window.pywebview === 'undefined' || !window.pywebview.api) {
+-            this.openBrowseDir('search', async (files) => {
+-                if (files && files.length > 0) await this.setFileList(files);
+-            }, { expandVideos: true });
+-            return;
+-        }
+-        try {
+-            const result = await window.pywebview.api.select_folder();
+-            const paths = result?.files || result;
+-            if (paths && paths.length > 0) {
+-                await this.setFileList(paths);
+-            }
+-        } catch (e) {
+-            console.error('選取資料夾失敗:', e);
+-        }
++        this.openBrowseDir('search', async (files) => {
++            if (files && files.length > 0) await this.setFileList(files);
++        }, { expandVideos: true });
+     },
+ 
+     async loadFavorite() {
+--- a/web/static/js/pages/search/state/result-card.js
++++ b/web/static/js/pages/search/state/result-card.js
+@@ -475,17 +475,7 @@
+     openSourceUrl(url) {
+         if (!url || typeof url !== 'string') return;
+         if (!url.startsWith('http://') && !url.startsWith('https://')) return;
+-        if (window.pywebview?.api?.open_url) {
+-            window.pywebview.api.open_url(url).then(ok => {
+-                if (ok) {
+-                    this.showToast(window.t('search.toast.browser_opened'), 'success');
+-                } else {
+-                    window.open(url, '_blank', 'noopener,noreferrer');
+-                }
+-            }).catch(() => window.open(url, '_blank', 'noopener,noreferrer'));
+-        } else {
+-            window.open(url, '_blank', 'noopener,noreferrer');
+-        }
++        window.open(url, '_blank', 'noopener,noreferrer');
+     },
+ 
+     // ===== T1c: Cover Error =====
+--- a/web/static/js/pages/settings/local-machine.js
++++ /dev/null
+@@ -1,56 +0,0 @@
+-// 168c-T4: 設定頁「這台電腦」兩格的純函式（無 DOM／Alpine／window）。
+-import { clientRouting } from '@/shared/shell-client.js';
+-
+-const REQUIRED = ['local_settings_get', 'local_settings_save'];
+-
+-// 伺服器 PUT payload 的兩欄：ready／unavailable 保留 GET 回來的原值（不刪鍵，BE-CONFIG-05），
+-// off／legacy 與 0.17.7 相同寫 form 值。就地修改並回傳同一物件。
+-export function applyServerLocalFields(config, form, localMachineState) {
+-    if (localMachineState === 'ready' || localMachineState === 'unavailable') return config;
+-    config.showcase = { ...config.showcase, player: form.viewerPlayer.trim() };
+-    config.general = { ...config.general, close_action: form.closeAction };
+-    return config;
+-}
+-
+-export function buildLocalPatch(form) {
+-    return { player: form.viewerPlayer.trim(), close_action: form.closeAction };
+-}
+-
+-// 逐欄值比較（FE-ALPINE-14）；回變動欄位名。
+-export function localDiff(form, saved) {
+-    const changed = [];
+-    if (form.viewerPlayer.trim() !== String(saved.viewerPlayer ?? '').trim()) changed.push('viewerPlayer');
+-    if (form.closeAction !== saved.closeAction) changed.push('closeAction');
+-    return changed;
+-}
+-
+-// 回新 form／新 savedState（兩者對應鍵同值），不改輸入。
+-export function mergeLocalIntoForm(form, savedState, local) {
+-    const player = local.player || '';
+-    const closeAction = local.close_action || 'ask';
+-    return {
+-        form: { ...form, viewerPlayer: player, closeAction },
+-        savedState: { ...savedState, viewerPlayer: player, closeAction },
+-    };
+-}
+-
+-export function combineSaveOutcome({ serverOk, localChanged, localOk }) {
+-    if (!localChanged) return null;
+-    if (serverOk && localOk) return 'settings.toast.config_saved_with_local';
+-    if (serverOk) return 'settings.toast.local_failed_server_saved';
+-    if (localOk) return 'settings.toast.local_saved_server_failed';
+-    return 'settings.toast.local_failed_server_failed';
+-}
+-
+-// deps = { whenBridgeReady, callBridge, getBridge }。非 client 零 deps 呼叫。
+-export async function resolveLocalMachine(shellMode, deps) {
+-    if (shellMode !== 'client') return { state: 'off' };
+-    const ready = await deps.whenBridgeReady();
+-    const bridge = deps.getBridge();
+-    if (!bridge) return { state: 'legacy' };
+-    if (clientRouting(shellMode, bridge, REQUIRED) === 'server') return { state: 'legacy' };
+-    if (!ready) return { state: 'unavailable' };
+-    const reply = await deps.callBridge('local_settings_get');
+-    if (reply && reply.ok === true) return { state: 'ready', local: reply };
+-    return { state: 'unavailable' };
+-}
+--- a/web/static/js/pages/settings/state-ui.js
++++ b/web/static/js/pages/settings/state-ui.js
+@@ -8,7 +8,6 @@
+ 
+         // 64b-1: 進階摺疊開關（x-collapse 驅動）
+         scraperAdvanced: false,
+-        galleryExport: false,   // 95b-T2: 離線 HTML 匯出摺疊（預設收合，CD-95b-7）
+ 
+         // Dirty Check Modal State
+         dirtyCheckModalOpen: false,
+@@ -20,31 +19,10 @@
+         // 71b-T2: 關閉封面縮圖快取 Confirm Modal State
+         thumbCacheDisableConfirmOpen: false,
+ 
+-        // T4: 伺服器模式切換 Confirm Modal State
+-        serverModeConfirmOpen: false,
+-        serverModeConfirmValue: null,
+-
+         // B1: Scanner directory link state
+         favoriteScannerLink: null,   // null=隱藏, {linked, matched_directory}=已查
+         showDirDropdown: false,
+         scannerDirectories: [],
+-
+-        // ===== Methods =====
+-        async selectOutputFolder() {
+-            if (this.shellMode === 'client' || typeof window.pywebview === 'undefined' || !window.pywebview.api) {
+-                this.openBrowseDir('settings', (path) => { this.form.avlistOutputDir = path; });
+-                return;
+-            }
+-
+-            try {
+-                const result = await window.pywebview.api.select_folder();
+-                if (result && result.folder) {
+-                    this.form.avlistOutputDir = result.folder;
+-                }
+-            } catch (e) {
+-                console.error('選擇資料夾失敗:', e);
+-            }
+-        },
+ 
+         // Dirty check modal — 儲存更改後離開
+         async dirtyCheckSave() {
+--- a/web/static/js/shared/bridge-notify.js
++++ /dev/null
+@@ -1,87 +0,0 @@
+-/**
+- * bridge-notify.js — PyWebView bridge 回傳 dict 的使用者通知（168a-T4）
+- *
+- * bridge（open_file / open_folder）回 {ok, reason, local_path, server_path}。
+- * 本模組把 reason 轉成 toast 文案；路徑一律取 Python 給的欄位，JS 不剝 URI、不換算。
+- * 刻意不 import `@/…` 別名，node:test 零 loader 可測。
+- *
+- * 也提供 Python→JS 全域 hook：window.handleBridgeUncovered(paths, kind)
+- * （形狀照 scanner/main.js 的 window.handleFolderDrop）。
+- *
+- * 每個 key 必須寫成字面 window.t('…')（i18n_lint 靠字面找消費點）；
+- * 不用 t(k) || fallback（FE-JS-06：查無 key 回 '[key]' 是 truthy）。
+- */
+-
+-/**
+- * 具名原因（not_found / not_video / uncovered）的文案；其餘（failed／untrusted／
+- * 缺 reason／非物件／所需路徑欄位缺值）回 null，由呼叫端走 fallback。
+- *
+- * @param {*} result bridge 回傳
+- * @returns {string|null}
+- */
+-export function bridgeReasonMessage(result) {
+-  if (!result || typeof result !== 'object') return null;
+-  switch (result.reason) {
+-    case 'not_found':
+-      if (!result.local_path) return null;
+-      return window.t('common.bridge.file_not_found', { path: result.local_path });
+-    case 'not_video':
+-      if (!result.local_path) return null;
+-      return window.t('common.bridge.not_video', { path: result.local_path });
+-    case 'uncovered':
+-      if (!result.server_path) return null;
+-      return window.t('common.bridge.path_uncovered_local', { path: result.server_path });
+-    default:
+-      return null;
+-  }
+-}
+-
+-/**
+- * 失敗時顯示 error toast；回傳 result.ok 是否為 true。
+- *
+- * @param {(msg: string, type: string) => void} showToast
+- * @param {*} result bridge 回傳
+- * @param {'file'|'folder'} kind 決定 fallback 文案
+- * @returns {boolean}
+- */
+-export function notifyOpenResult(showToast, result, kind) {
+-  if (result && typeof result === 'object' && result.ok === true) return true;
+-  let msg = bridgeReasonMessage(result);
+-  if (msg === null) {
+-    msg = kind === 'folder'
+-      ? window.t('common.open_local.folder_open_failed')
+-      : window.t('showcase.video.play_failed');
+-  }
+-  showToast(msg, 'error');
+-  return false;
+-}
+-
+-/**
+- * Python 側呼叫：本機選到／拖入伺服器看不到的路徑。多筆合併成一則 toast。
+- *
+- * @param {string[]} paths 本機輸入原樣（不經 pathToDisplay）
+- * @param {'file'|'folder'|'any'} [kind] 被擋的對象種類（Python 決定）；缺值／未知值走 any
+- */
+-export function handleBridgeUncovered(paths, kind) {
+-  if (!Array.isArray(paths) || paths.length === 0) return;
+-  if (typeof Alpine === 'undefined' || !Alpine || typeof Alpine.store !== 'function') {
+-    console.warn('handleBridgeUncovered: Alpine not ready');
+-    return;
+-  }
+-  const path = paths.join('、');
+-  const message = (() => {
+-    switch (kind) {
+-      case 'file':
+-        return window.t('common.bridge.path_uncovered_server_file', { path });
+-      case 'folder':
+-        return window.t('common.bridge.path_uncovered_server_folder', { path });
+-      default:
+-        return window.t('common.bridge.path_uncovered_server_any', { path });
+-    }
+-  })();
+-  Alpine.store('toast').show(message, 'error');
+-}
+-
+-if (typeof window !== 'undefined') {
+-  window.handleBridgeUncovered = handleBridgeUncovered;
+-}
+--- a/web/static/js/shared/clipboard.js
++++ b/web/static/js/shared/clipboard.js
+@@ -1,25 +1,13 @@
+ /**
+- * clipboard.js — 剪貼簿三層降級（168b-T7）
++ * clipboard.js — 剪貼簿雙層降級（168b-T7）
+  *
+  * copyText(text) -> Promise<boolean>：
+- *   ① PyWebView bridge copy_text（回 {ok:true} 才算成功）
+- *   ② navigator.clipboard 的非同步寫入
+- *   ③ execCommand 備援
++ *   ① navigator.clipboard 的非同步寫入
++ *   ② execCommand 備援
+  * 成功即停（不碰後面層）；全失敗回 false；永不丟例外。
+  * 零 import；navigator／window／document 一律在呼叫當下讀。
+  * 不在此顯示 toast，由呼叫端決定文案。
+  */
+-
+-async function tryBridge(text) {
+-    try {
+-        const fn = window.pywebview?.api?.copy_text;
+-        if (typeof fn !== 'function') return false;
+-        const result = await fn(text);
+-        return result?.ok === true;
+-    } catch (e) {
+-        return false;
+-    }
+-}
+ 
+ async function tryNavigatorClipboard(text) {
+     try {
+@@ -59,7 +47,6 @@
+ }
+ 
+ export async function copyText(text) {
+-    if (await tryBridge(text)) return true;
+     if (await tryNavigatorClipboard(text)) return true;
+     if (tryExecCommand(text)) return true;
+     return false;
+--- a/web/static/js/shared/conn-state.js
++++ /dev/null
+@@ -1,28 +0,0 @@
+-// 168b-T3: pure helpers for the sidebar plug (connection state) and nav interception.
+-// Zero imports so node:test can load it directly.
+-
+-/**
+- * Next connection state after one notification poll.
+- * @param {'ok'|'down'} prev
+- * @param {'ok'|'error'|'bad_body'|'not_ok'} outcome  error = fetch threw; bad_body = 2xx but body is not the notifications JSON (e.g. password page); not_ok = non-2xx response
+- * @returns {'ok'|'down'}
+- */
+-export function nextConnState(prev, outcome) {
+-  if (outcome === 'ok') return 'ok';
+-  if (outcome === 'error' || outcome === 'bad_body') return 'down';
+-  return prev;
+-}
+-
+-/**
+- * Whether a sidebar navigation click should be intercepted (shell offline page).
+- * @param {{state: string, mode: string, hasOfflineBridge: boolean}} args
+- * @returns {boolean}
+- */
+-export function shouldInterceptNav({ state, mode, hasOfflineBridge }) {
+-  return state === 'down' && mode === 'client' && hasOfflineBridge === true;
+-}
+-
+-if (typeof window !== 'undefined') {
+-  window.OpenAver = window.OpenAver || {};
+-  window.OpenAver.conn = { nextConnState, shouldInterceptNav };
+-}
+--- a/web/static/js/shared/open-local.js
++++ b/web/static/js/shared/open-local.js
+@@ -1,10 +1,7 @@
+ /**
+- * open-local.js — 共用「開啟資料夾」純函式（shared ESM，T4）
++ * open-local.js — 共用「複製資料夾路徑」純函式（shared ESM，T4）
+  *
+- * openLocal：從檔案路徑萃取所在資料夾。PyWebView 桌面模式呼叫 open_folder
+- * 開啟資料夾，僅在 bridge 回報成功時才複製 bridge 回的 local_path 所在資料夾
+- * （這台電腦的路徑；失敗一律不動剪貼簿）；純瀏覽器模式複製顯示用路徑。
+- * 各結果分支對應不同 toast 文案（key 沿用，不新增）。
++ * Android 與一般瀏覽器都複製顯示用資料夾路徑。
+  *
+  * 必須用一般 function 宣告（非 arrow）：函式體內以 this.showToast(...)
+  * 存取呼叫端 Alpine component 的方法，this 綁定由呼叫時機決定，arrow
+@@ -18,7 +15,6 @@
+  */
+ 
+ import { pathToDisplay } from '@/components/path-utils.js';
+-import { bridgeReasonMessage } from '@/shared/bridge-notify.js';
+ import { copyText } from '@/shared/clipboard.js';
+ 
+ /** 取檔案路徑所在資料夾（Windows 反斜線與 POSIX 斜線都認）。 */
+@@ -28,8 +24,7 @@
+ }
+ 
+ /**
+- * 開啟本地資料夾。bridge 模式：開成功才複製這台電腦的資料夾路徑；
+- * 純瀏覽器模式：複製顯示用路徑。
++ * 複製檔案所在資料夾的顯示路徑。
+  * this 綁定於呼叫端的 Alpine component（需要 this.showToast）。
+  *
+  * @param {string} path 檔案路徑
+@@ -40,28 +35,12 @@
+   const folder = folderOf(path);
+   const displayPath = pathToDisplay(folder);
+ 
+-  if (window.pywebview?.api?.open_folder) {
+-    window.pywebview.api.open_folder(path)
+-      .then(async (result) => {
+-        // 168a-T4：bridge 回 dict；具名原因（not_found／not_video／uncovered）贏過其他分支
+-        const named = result && result.ok === true ? null : bridgeReasonMessage(result);
+-        if (named !== null) {
+-          this.showToast(named, 'error');
+-        } else if (result && result.ok === true && !(typeof result.local_path === 'string' && result.local_path)) {
+-          this.showToast(window.t('common.open_local.folder_opened'), 'success');
+-        } else if (result && result.ok === true) {
+-          const copied = await copyText(folderOf(result.local_path));
+-          this.showToast(copied ? window.t('common.open_local.folder_opened_copied') : window.t('common.open_local.folder_opened'), 'success');
+-        } else {
+-          this.showToast(window.t('common.open_local.folder_open_failed'), 'error');
+-        }
+-      })
+-      .catch(() => {
+-        this.showToast(window.t('common.open_local.folder_open_failed'), 'error');
+-      });
+-  } else {
+-    copyText(displayPath).then(ok => {
+-      this.showToast(ok ? window.t('common.open_local.path_copied', { path: displayPath }) : window.t('common.open_local.copy_failed'), ok ? 'success' : 'error');
+-    });
+-  }
++  copyText(displayPath).then(ok => {
++    this.showToast(
++      ok
++        ? window.t('common.open_local.path_copied', { path: displayPath })
++        : window.t('common.open_local.copy_failed'),
++      ok ? 'success' : 'error',
++    );
++  });
+ }
+--- a/web/static/js/shared/shell-client.js
++++ /dev/null
+@@ -1,49 +0,0 @@
+-// 168c-T4: 桌面殼 bridge 的共用小工具（設定頁與說明頁共用）。ES module，無頂層 window 存取。
+-
+-// 殼說「頁面種類已判定」才可呼叫 bridge（BE-WEBVIEW-06）。window 在呼叫時才解析。
+-export function whenBridgeReady(timeoutMs = 3000) {
+-    const w = globalThis.window;
+-    if (!w) return Promise.resolve(false);
+-    if (w.__oaBridgeKind) return Promise.resolve(true);
+-    return new Promise((resolve) => {
+-        let done = false;
+-        const finish = (ok) => {
+-            if (done) return;
+-            done = true;
+-            clearTimeout(timer);
+-            w.removeEventListener('oabridgeready', onReady);
+-            resolve(ok);
+-        };
+-        const onReady = () => finish(true);
+-        const timer = setTimeout(() => finish(false), timeoutMs);
+-        w.addEventListener('oabridgeready', onReady);
+-    });
+-}
+-
+-async function callOnce(name, args) {
+-    const api = globalThis.window && globalThis.window.pywebview && globalThis.window.pywebview.api;
+-    if (!api || typeof api[name] !== 'function') return { ok: false, reason: 'no_bridge' };
+-    try {
+-        const reply = await api[name](...args);
+-        return reply && typeof reply === 'object' ? reply : { ok: false, reason: 'error' };
+-    } catch (e) {
+-        return { ok: false, reason: 'error' };
+-    }
+-}
+-
+-// 永不外丟。reason:'untrusted' 時照連線頁行為重試一次：清旗標、再等一次就緒。
+-export async function callBridge(name, ...args) {
+-    let reply = await callOnce(name, args);
+-    if (reply && reply.reason === 'untrusted') {
+-        if (globalThis.window) globalThis.window.__oaBridgeKind = undefined;
+-        await whenBridgeReady();
+-        reply = await callOnce(name, args);
+-    }
+-    return reply;
+-}
+-
+-// 'bridge'：client 模式、bridge 存在、requiredMethods 每個都是 function；否則 'server'。
+-export function clientRouting(shellMode, bridge, requiredMethods) {
+-    if (shellMode !== 'client' || !bridge) return 'server';
+-    return requiredMethods.every((m) => typeof bridge[m] === 'function') ? 'bridge' : 'server';
+-}
+--- a/web/static/js/shared/shell-notice.js
++++ /dev/null
+@@ -1,43 +0,0 @@
+-/**
+- * shell-notice.js — 桌面殼 → 頁面的提醒 hook（168c-T5）
+- * window.handleShellNotice(payload)：回 boolean，true 代表「提醒真的顯示了」（殼靠它記帳）。
+- * 形狀照 bridge-notify.js；模組頂層不碰 document / Alpine（node 可 import）。
+- */
+-// 各頁 toast 容器沒有共通 id，只有三種穩定 class；都沒有的頁面（連線頁等）顯示不出來。
+-const TOAST_CONTAINER_SELECTOR = '.toast, .fluent-toast-container, .search-toast-container';
+-const DOT_SELECTOR = '[data-shell-update]';
+-const VERSION_PATTERN = /^\d+(\.\d+)*$/;
+-
+-function hasToastContainer() {
+-  return document.querySelector(TOAST_CONTAINER_SELECTOR) !== null;
+-}
+-
+-// 常駐小圓點：純 DOM，不依賴 Alpine／toast 容器（連線頁等沒有提醒容器的頁也要看得到）
+-function showUpdateMarker(version) {
+-  const dots = document.querySelectorAll(DOT_SELECTOR);
+-  if (!dots || dots.length === 0) return false;
+-  const title = window.t('common.shell.update_marker_title', { version });
+-  for (const el of dots) {
+-    el.title = title;
+-    el.hidden = false;
+-  }
+-  return true;
+-}
+-
+-export function handleShellNotice(payload) {
+-  if (!payload || typeof payload !== 'object') return false;
+-  const { kind, version } = payload;
+-  if (kind !== 'update_available' && kind !== 'update_marker') return false;
+-  if (typeof version !== 'string' || !VERSION_PATTERN.test(version)) return false;
+-  if (kind === 'update_marker') return showUpdateMarker(version);
+-  if (typeof Alpine === 'undefined' || !Alpine || typeof Alpine.store !== 'function') return false;
+-  const store = Alpine.store('toast');
+-  if (!store || typeof store.show !== 'function') return false;
+-  if (!hasToastContainer()) return false;
+-  store.show(window.t('common.shell.update_available', { version }), 'info', 10000);
+-  return true;
+-}
+-
+-if (typeof window !== 'undefined') {
+-  window.handleShellNotice = handleShellNotice;
+-}
+--- a/web/static/js/shared/shell-reload.js
++++ /dev/null
+@@ -1,16 +0,0 @@
+-/**
+- * shell-reload.js — 桌面殼內 F5 / Ctrl+R / Cmd+R 重新整理（168e-T6, E36）
+- * 殼的 WebView 預設關掉瀏覽器快捷鍵，所以自己接；一般瀏覽器沒有 window.pywebview，完全不攔。
+- * 形狀照 shell-notice.js：模組頂層只在 document 存在時才碰 document（node 可 import）。
+- */
+-export function onShellReloadKey(e) {
+-  if (typeof window === 'undefined' || !window.pywebview) return false;
+-  const isF5 = e.key === 'F5';
+-  const isCtrlR = (e.ctrlKey || e.metaKey) && typeof e.key === 'string' && e.key.toLowerCase() === 'r';
+-  if (!isF5 && !isCtrlR) return false;
+-  e.preventDefault();
+-  location.reload();
+-  return true;
+-}
+-
+-if (typeof document !== 'undefined') document.addEventListener('keydown', onShellReloadKey);
+--- a/web/static/js/shared/state-rescrape.js
++++ b/web/static/js/shared/state-rescrape.js
+@@ -50,7 +50,6 @@
+         available: !!adv.cf_transport_available,
+         sites: Array.isArray(adv.cf_sites) ? adv.cf_sites : null,
+         preparing: Array.isArray(adv.cf_preparing) ? adv.cf_preparing : [],
+-        inShell: !!adv.in_shell,
+     };
+ }
+ 
+@@ -91,7 +90,7 @@
+         // 否則膠囊顯示 raw id（'javbus'）而非顯示名（'JavBus'）。openRescrape 仍每次重灌（belt-and-suspenders）。
+         rescrapeSources: (window.__ADVANCED_SEARCH__ && window.__ADVANCED_SEARCH__.sources) || [],
+         // 168e-T11：CF 可用性分片（window.__ADVANCED_SEARCH__ 只當 SSR seed；onCfPillClick 重查成功後整物件重賦值，
+-        // 讓 :class／:title 立即重算）。inShell 本 task 只 seed、不消費。
++        // 讓 :class／:title 立即重算）。
+         rescrapeCfAvail: _seedCfAvail(),
+         rescrapeLoadingSource: null,       // string | null（明確，:disabled 純 boolean）
+         rescrapePreview: null,             // transient（CD-62-2）
+@@ -280,8 +279,7 @@
+             // 168d-fix-T2：殼回報這個站的視窗「還在準備」→ 請稍候，不是請重開（站名用 includes，FE-ALPINE-14）。
+             if (siteId && Array.isArray(adv.preparing) && adv.preparing.includes(siteId)) return 'showcase.rescrape.cf_window_preparing';
+             if (adv.available) return 'showcase.rescrape.cf_window_restart';
+-            if (adv.inShell) return 'showcase.rescrape.cf_window_not_built';
+-            return 'showcase.rescrape.jl_desktop_only';
++            return 'showcase.rescrape.cf_window_not_built';
+         },
+ 
+         /**
+@@ -296,7 +294,7 @@
+                 if (!resp.ok) throw new Error('availability ' + resp.status);
+                 const data = await resp.json();
+                 // 168e-T11：整物件重賦值（Alpine 響應式），全域 __ADVANCED_SEARCH__ 只當 seed、不再被寫
+-                this.rescrapeCfAvail = { available: !!data.available, sites: data.sites, preparing: data.preparing || [], inShell: this.rescrapeCfAvail.inShell };
++                this.rescrapeCfAvail = { available: !!data.available, sites: data.sites, preparing: data.preparing || [] };
+             } catch (_e) {
+                 // 逾時或任何錯誤：沿用快照判斷（含 cf_preparing）
+             }
+--- a/web/templates/_advanced_search_bootstrap.html
++++ b/web/templates/_advanced_search_bootstrap.html
+@@ -5,7 +5,6 @@
+     sources: {{ (config.sources or [])|tojson|safe }},
+     cf_transport_available: {{ cf_transport_available|default(false)|tojson|safe }},
+     cf_sites: {{ cf_sites|default(none)|tojson|safe }},
+-    cf_preparing: {{ cf_preparing|default([])|tojson|safe }},
+-    in_shell: {{ in_shell|default(false)|tojson|safe }}
++    cf_preparing: {{ cf_preparing|default([])|tojson|safe }}
+ };
+ </script>
+--- a/web/templates/access_gate.html
++++ b/web/templates/access_gate.html
+@@ -69,18 +69,6 @@
+ (function () {
+   var el = document.getElementById('v');
+   var sent = false;
+-  document.addEventListener('keydown', function (e) {
+-    if (!window.pywebview) {
+-      return;
+-    }
+-    var isF5 = e.key === 'F5';
+-    var isCtrlR = (e.ctrlKey || e.metaKey) && typeof e.key === 'string' && e.key.toLowerCase() === 'r';
+-    if (!isF5 && !isCtrlR) {
+-      return;
+-    }
+-    e.preventDefault();
+-    location.reload();
+-  });
+   el.addEventListener('input', function () {
+     if (sent) {
+       return;
+--- a/web/templates/connect.html
++++ /dev/null
+@@ -1,202 +0,0 @@
+-{% extends "base.html" %}
+-
+-{% block title %}{{ t('nav.connect') }} - OpenAver{% endblock %}
+-
+-{% block extra_css %}
+-<link href="/static/css/pages/connect.css" rel="stylesheet">
+-{% endblock %}
+-
+-{% block content %}
+-<div class="connect-container page-layer" x-data="connectPage"
+-     data-mode="{{ shell_mode or 'local' }}"
+-     data-shell-kind="{{ 'mac' if is_mac_desktop else 'windows' }}">
+-
+-    <p id="connect-nobridge" class="connect-nobridge" x-show="bridge === 'unavailable'" x-cloak>{{ t('connect.nobridge') }}</p>
+-
+-    <div class="connect-stack" x-show="bridge === 'ready'" x-cloak>
+-
+-        <section id="connect-status-card" class="card connect-card">
+-            <div class="connect-card-header">
+-                <h2 class="connect-title"><i class="bi bi-hdd-network"></i> <span x-text="statusLine()"></span></h2>
+-            </div>
+-            <div class="card-body">
+-                <p class="connect-line" x-show="statusVersionLine() !== ''" x-text="statusVersionLine()"></p>
+-                <p class="connect-line" x-show="lastOkText() !== ''" x-text="lastOkText()"></p>
+-            </div>
+-        </section>
+-
+-        <section class="card connect-card">
+-            <div class="connect-card-header">
+-                <h2 class="connect-title"><i class="bi bi-plug"></i> {{ t('connect.change_title') }}</h2>
+-            </div>
+-            <div class="card-body">
+-
+-                <div class="connect-row">
+-                    <input id="connect-url" type="text" class="input input-bordered input-sm connect-url"
+-                           placeholder="{{ t('connect.url_placeholder') }}"
+-                           autocomplete="off" spellcheck="false"
+-                           x-model="urlText"
+-                           @keydown.enter.prevent="testConnection()">
+-                    <button type="button" class="btn btn-sm btn-outline" id="connect-test-btn"
+-                            @click="testConnection()"
+-                            :disabled="!actions().canProbe">
+-                        <span x-show="busy === 'probe'" class="loading loading-spinner loading-sm"></span>
+-                        <span x-show="busy !== 'probe'">{{ t('connect.test_btn') }}</span>
+-                    </button>
+-                </div>
+-
+-                <div id="connect-probe-result" class="connect-row connect-result" aria-live="polite"
+-                     x-show="actions().probeFresh" x-cloak>
+-                    <span class="source-pill-probe connect-probe-dot" :data-state="dotName()"><i :class="dotIcon()"></i></span>
+-                    <span x-text="resultText()"></span>
+-                    <span class="connect-line" x-show="resultVersionText() !== ''" x-text="resultVersionText()"></span>
+-                </div>
+-
+-                <div class="connect-password"
+-                     x-show="actions().passwordField === 'input' || actions().passwordField === 'disabled'" x-cloak>
+-                    <label class="connect-line" for="connect-pin">{{ t('connect.password_label') }}</label>
+-                    <div class="connect-row">
+-                        <input id="connect-pin" type="password" inputmode="numeric" autocomplete="off"
+-                               class="input input-bordered input-sm connect-pin"
+-                               x-model="pin"
+-                               @keydown.enter.prevent="login()"
+-                               :disabled="actions().passwordField === 'disabled'">
+-                        <button type="button" class="btn btn-sm btn-outline" id="connect-login-btn"
+-                                @click="login()"
+-                                :disabled="!actions().canLogin">
+-                            {{ t('connect.login_btn') }}
+-                        </button>
+-                    </div>
+-                    <p id="connect-pin-error" class="connect-error" x-show="pinErrorText() !== ''" x-text="pinErrorText()"></p>
+-                    <p id="connect-forgot" class="connect-line"
+-                       x-show="actions().passwordField === 'input' && forgotText() !== ''" x-text="forgotText()"></p>
+-                </div>
+-
+-                <p id="connect-nopassword" class="connect-line" x-show="actions().passwordField === 'none'" x-cloak>{{ t('connect.nopassword') }}</p>
+-
+-                <template x-if="actions().tableVisible">
+-                    <div id="connect-rows" class="connect-map">
+-                        <h3 class="connect-title">{{ t('connect.rows.title') }}</h3>
+-                        <p class="connect-line">{{ t('connect.rows.intro') }}</p>
+-
+-                        <p id="connect-rows-loading" class="connect-line" x-show="rowsLoading()" x-cloak>{{ t('connect.rows.loading') }}</p>
+-
+-                        <div x-show="sourcesState === 'error'" x-cloak>
+-                            <p id="connect-rows-error" class="connect-error">{{ t('connect.rows.load_failed') }}</p>
+-                            <button type="button" class="btn btn-xs btn-outline" id="connect-rows-reload"
+-                                    @click="loadSources()"
+-                                    :disabled="!actions().canReloadSources">
+-                                {{ t('connect.rows.reload_btn') }}
+-                            </button>
+-                        </div>
+-
+-                        <p id="connect-rows-empty" class="connect-line" x-show="rowsReady() && rows.length === 0" x-cloak>{{ t('connect.rows.empty') }}</p>
+-
+-                        <template x-if="rowsReady()">
+-                            <div class="connect-map-list">
+-                                <template x-for="row in rows" :key="row.server">
+-                                    <div class="connect-map-row" data-row
+-                                         :data-server="row.server"
+-                                         :data-stale="row.stale ? 'true' : null"
+-                                         x-show="!row.removed">
+-                                        <div class="connect-map-server">
+-                                            <code x-text="row.server"></code>
+-                                            <span class="connect-map-tag" x-show="rowTag(row) !== ''" x-text="rowTag(row)"></span>
+-                                            <span class="connect-map-tag" x-show="row.stale">{{ t('connect.rows.stale') }}</span>
+-                                        </div>
+-                                        <span class="connect-map-arrow" aria-hidden="true">→</span>
+-                                        <input type="text" class="input input-bordered input-sm connect-row-local"
+-                                               autocomplete="off" spellcheck="false"
+-                                               x-model="row.local"
+-                                               @input="onLocalInput(row)"
+-                                               :placeholder="placeholderText()">
+-                                        <button type="button" class="btn btn-xs btn-outline connect-row-test"
+-                                                @click="testRow(row)"
+-                                                :disabled="!canTestRow(row)">{{ t('connect.rows.test_btn') }}</button>
+-                                        <span class="connect-row-result" aria-live="polite">
+-                                            <template x-if="rowResult(row) === 'ok'">
+-                                                <span class="source-pill-probe" data-state="ok" role="img"
+-                                                      :aria-label="window.t('connect.rows.found')"><i :class="okIcon()"></i></span>
+-                                            </template>
+-                                            <template x-if="rowResult(row) === 'fail'">
+-                                                <span class="connect-row-fail">
+-                                                    <span class="source-pill-probe" data-state="unreachable"><i :class="failIcon()"></i></span>
+-                                                    <span x-text="rowFailText(row)"></span>
+-                                                </span>
+-                                            </template>
+-                                            <template x-if="rowResult(row) === 'slow'">
+-                                                <span class="connect-line">{{ t('connect.rows.slow') }}</span>
+-                                            </template>
+-                                            <template x-if="rowResult(row) === 'note'">
+-                                                <span class="connect-line">{{ t('connect.rows.no_sample') }}</span>
+-                                            </template>
+-                                        </span>
+-                                        <button type="button" class="btn btn-xs btn-outline connect-row-remove"
+-                                                x-show="row.stale"
+-                                                @click="removeStale(row)"
+-                                                :aria-label="window.t('connect.rows.remove')">&times;</button>
+-                                    </div>
+-                                </template>
+-                            </div>
+-                        </template>
+-
+-                        <template x-if="mode === 'client'">
+-                            <div class="connect-row">
+-                                <button type="button" class="btn btn-sm btn-outline" id="connect-rows-save"
+-                                        @click="saveRows()"
+-                                        :disabled="!actions().canSaveRows">{{ t('connect.rows.save_btn') }}</button>
+-                            </div>
+-                        </template>
+-                        <template x-if="mode === 'local'">
+-                            <p id="connect-rows-note" class="connect-line">{{ t('connect.rows.local_note') }}</p>
+-                        </template>
+-                    </div>
+-                </template>
+-
+-                <p id="connect-cf" class="connect-line" x-text="cfText()"></p>
+-                <p id="connect-cf-note" class="connect-line" x-show="cfNoteText() !== ''" x-text="cfNoteText()"></p>
+-                <div class="connect-row" x-show="actions().showRetryCf" x-cloak>
+-                    <button type="button" class="btn btn-sm btn-outline" id="connect-cf-retry"
+-                                @click="retryCf()"
+-                                :disabled="!actions().canRetryCf">{{ t('connect.cf_retry_btn') }}</button>
+-                </div>
+-                <p id="connect-cf-retry-error" class="connect-error" x-show="cfRetryErrorText() !== ''" x-text="cfRetryErrorText()"></p>
+-
+-                <div class="connect-row connect-actions">
+-                    <button type="button" class="btn btn-sm btn-primary" id="connect-apply-btn"
+-                            @click="applyRestart()"
+-                            :disabled="!actions().canApply"
+-                            x-text="applyLabel()"></button>
+-                </div>
+-                <p class="connect-line" x-text="applyHint()"></p>
+-                <p id="connect-action-error" class="connect-error" x-show="actionErrorText() !== ''" x-text="actionErrorText()"></p>
+-                <p id="connect-restarting" class="connect-line" x-show="restarting" x-cloak>{{ t('connect.restarting') }}</p>
+-            </div>
+-        </section>
+-
+-        <template x-if="mode === 'client'">
+-            <section class="card connect-card">
+-                <div class="connect-card-header">
+-                    <h2 class="connect-title"><i class="bi bi-arrow-counterclockwise"></i> {{ t('connect.switch_local_title') }}</h2>
+-                </div>
+-                <div class="card-body">
+-                    <div class="connect-row">
+-                        <button type="button" class="btn btn-sm btn-outline" id="connect-switch-local-btn"
+-                                @click="switchLocal()"
+-                                :disabled="!actions().canSwitchLocal">
+-                            {{ t('connect.switch_local_btn') }}
+-                        </button>
+-                    </div>
+-                    <p class="connect-line">{{ t('connect.switch_local_hint') }}</p>
+-                </div>
+-            </section>
+-        </template>
+-
+-    </div>
+-</div>
+-{% endblock %}
+-
+-{# connect.js 走 pre_alpine_module：須早於 Alpine start 掛上 alpine:init listener，否則 connectPage 註冊太晚（FE-TIMING-01）。 #}
+-{% block pre_alpine_module %}
+-<script type="module" src="/static/js/pages/connect/main.js"></script>
+-{% endblock %}
+--- a/web/templates/help.html
++++ /dev/null
+@@ -1,905 +0,0 @@
+-{% extends "base.html" %}
+-
+-{% block title %}{{ t('help.hero.page_title') }} - OpenAver{% endblock %}
+-
+-{% block extra_css %}
+-<link href="/static/css/pages/help.css" rel="stylesheet">
+-{% endblock %}
+-
+-{% block content %}
+-<div class="help-container container mx-auto max-w-screen-2xl page-layer" x-data="helpPage"
+-     data-is-desktop="{{ 'true' if is_desktop else 'false' }}"
+-     data-shell-mode="{{ shell_mode or '' }}"
+-     data-auto-check-update="{{ 'true' if config.get('general', {}).get('auto_check_update', True) else 'false' }}">
+-    <div class="help-cards">
+-    <!-- Hero Card — 置頂區 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body flex flex-col lg:flex-row">
+-            <!-- 左欄：現有內容不動 -->
+-            <div class="flex-1">
+-                <h2 class="card-title text-lg flex items-center justify-between">
+-                    <span class="flex items-center gap-2">
+-                        <i class="bi bi-info-circle"></i>
+-                        <span>OpenAver <span x-text="appVersion || 'v{{ version }}'">v{{ version }}</span></span>
+-                    </span>
+-                    {% if is_desktop %}
+-                    <label class="flex items-center gap-2 text-sm font-normal ms-auto">
+-                        <span>{{ t('help.hero.auto_check_toggle') }}</span>
+-                        <input type="checkbox" class="toggle toggle-primary toggle-sm"
+-                               x-model="autoCheckUpdate" @change="saveAutoCheckUpdate()"
+-                               :disabled="_autoCheckSaving || _bridgeUnavailable">
+-                    </label>
+-                    {% endif %}
+-                </h2>
+-                <p class="text-base-content/60 text-sm mb-1">{{ t('help.hero.subtitle') }}</p>
+-                <p class="text-base-content/60 text-sm mb-3">
+-                    {{ t('help.hero.privacy') }}
+-                </p>
+-                <div class="flex flex-wrap items-center gap-2">
+-                    <!-- 主 CTA -->
+-                    <button class="btn btn-primary btn-sm"
+-                            @click="window.location.href = '/scanner?tutorial=restart'">
+-                        <i class="bi bi-play-circle"></i> {{ t('help.hero.btn_tutorial') }}
+-                    </button>
+-                    <!-- 次 CTA -->
+-                    <button class="btn btn-outline btn-neutral btn-sm"
+-                            @click="checkUpdate()"
+-                            :disabled="checkUpdateLoading">
+-                        <span x-show="checkUpdateLoading" class="loading loading-spinner loading-sm"></span>
+-                        <span x-show="checkUpdateLoading">{{ t('help.hero.btn_check_update') }}</span>
+-                        <span x-show="!checkUpdateLoading"><i class="bi bi-cloud-download"></i></span>
+-                        <span x-show="!checkUpdateLoading">{{ t('help.hero.btn_check_update_idle') }}</span>
+-                    </button>
+-                    <!-- 更新結果 inline -->
+-                    <template x-if="!_bridgeMode && checkDone && !errorMsg && hasUpdate">
+-                        <a :href="downloadUrl" target="_blank" rel="noopener noreferrer" class="text-success text-sm">
+-                            <i class="bi bi-download"></i> {{ t('help.hero.update_available_prefix') }} <span x-text="latestVersion"></span> {{ t('help.hero.update_available_suffix') }}
+-                        </a>
+-                    </template>
+-                    <template x-if="_bridgeMode && checkDone && !errorMsg && hasUpdate">
+-                        <a :href="downloadUrl" target="_blank" rel="noopener noreferrer" class="text-success text-sm">
+-                            <i class="bi bi-download"></i> {{ t('help.hero.client_update_available_prefix') }} <span x-text="latestVersion"></span> {{ t('help.hero.client_update_available_suffix') }}
+-                        </a>
+-                    </template>
+-                    {% if is_desktop %}
+-                    <template x-if="checkDone && !errorMsg && hasUpdate">
+-                        <button class="btn btn-warning btn-sm"
+-                                @click="triggerUpdate()"
+-                                :disabled="updateLoading">
+-                            <span x-show="updateLoading" class="loading loading-spinner loading-sm"></span>
+-                            {{ t('help.update_modal.trigger_btn') }}
+-                        </button>
+-                    </template>
+-                    {% endif %}
+-                    <template x-if="!_bridgeMode && checkDone && !errorMsg && !hasUpdate">
+-                        <span class="text-base-content/50 text-sm">
+-                            <i class="bi bi-check-circle"></i> {{ t('help.hero.up_to_date') }}
+-                        </span>
+-                    </template>
+-                    <template x-if="_bridgeMode && checkDone && !errorMsg && !hasUpdate">
+-                        <span class="text-base-content/50 text-sm">
+-                            <i class="bi bi-check-circle"></i> {{ t('help.hero.client_up_to_date') }}
+-                        </span>
+-                    </template>
+-                    <template x-if="checkDone && errorMsg">
+-                        <span class="text-error text-sm">
+-                            <i class="bi bi-exclamation-circle"></i> <span x-text="errorMsg"></span>
+-                        </span>
+-                    </template>
+-                    <!-- 外部連結 -->
+-                    <a class="btn btn-ghost btn-sm" href="https://github.com/slive777/OpenAver"
+-                       target="_blank" rel="noopener noreferrer">
+-                        <i class="bi bi-github"></i> GitHub
+-                    </a>
+-                    <a class="btn btn-ghost btn-sm" href="https://t.me/+J-U2l96gv0FjZTBl"
+-                       target="_blank" rel="noopener noreferrer">
+-                        <i class="bi bi-telegram"></i> Telegram
+-                    </a>
+-                </div>
+-            </div>
+-            <!-- 右欄：AI 整合入口 -->
+-            <div class="flex-1 lg:pl-6 mt-4 lg:mt-0">
+-                <div class="hero-terminal relative" data-capabilities-base="{{ base_url }}">
+-                    <span class="terminal-prompt">$</span>
+-                    {%- if show_agent_auth %}
+-                    <span x-text="curlDisplayText()"></span>
+-                    {%- else %}
+-                    curl -s {{ base_url }}/api/capabilities
+-                    {%- endif %}
+-                    <button class="terminal-copy-btn" @click="copyCurlCommand()"
+-                            :title="window.t('help.hero.copy_curl')"
+-                            :aria-label="window.t('help.hero.copy_curl')">
+-                        <i class="bi bi-clipboard" x-show="!curlCopied"></i>
+-                        <span x-show="curlCopied">✓</span>
+-                    </button>
+-                </div>
+-                <p class="text-sm text-base-content/70 mt-3">
+-                    🤖 {{ t('help.hero.ai_instruction') }}
+-                </p>
+-                <p class="text-xs text-base-content/50 mt-1">
+-                    {{ t('help.hero.ai_tools') }}
+-                </p>
+-                <p class="text-xs text-base-content/40 mt-0.5">
+-                    {{ t('help.hero.ai_hint_unsupported') }}
+-                </p>
+-                <p class="text-xs text-base-content/40 mt-0.5">
+-                    {{ t('help.hero.ai_actress_watch') }}
+-                </p>
+-                {%- if show_agent_auth %}
+-                <div class="help-agent-token-panel mt-3" data-agent-token="{{ agent_token }}">
+-                    <div class="help-agent-token-row">
+-                        <span class="help-agent-token-label">{{ t('help.agent_auth.title') }}</span>
+-                        <code class="help-agent-token-value" x-text="agentTokenVisible ? agentToken : maskedTokenDisplay"></code>
+-                        <button type="button" class="help-agent-token-reveal-btn"
+-                                :title="window.t('help.agent_auth.reveal')"
+-                                :aria-label="window.t('help.agent_auth.reveal')"
+-                                @click="toggleAgentTokenVisible()">
+-                            <i class="bi" :class="agentTokenVisible ? 'bi-eye-slash' : 'bi-eye'"></i>
+-                        </button>
+-                        <button type="button" class="help-agent-token-copy-btn"
+-                                :title="window.t('help.agent_auth.copy_token_tooltip')"
+-                                :aria-label="window.t('help.agent_auth.copy_token_tooltip')"
+-                                @click="copyAgentToken()">
+-                            <i class="bi bi-clipboard" x-show="!agentTokenCopied"></i>
+-                            <span x-show="agentTokenCopied">✓</span>
+-                        </button>
+-                    </div>
+-                    <p class="help-agent-token-rotate-hint text-xs text-base-content/50 mt-1">
+-                        {{ t('help.agent_auth.rotate_hint') }}
+-                    </p>
+-                    <p class="help-agent-token-sse-note text-xs text-base-content/50 mt-1">
+-                        {{ t('help.agent_auth.sse_limitation') }}
+-                    </p>
+-                </div>
+-                {% endif %}
+-            </div>
+-        </div>
+-    </div>
+-
+-    <!-- 工作流程 — 3步卡片 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body py-3 px-5">
+-            <h3 class="text-sm font-bold mb-3">{{ t('help.workflow.title') }} <span class="font-normal opacity-50">— {{ t('help.workflow.subtitle') }}</span></h3>
+-            <div class="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 lg:gap-4">
+-                <!-- Step 1 -->
+-                <div class="flex-1 rounded-xl bg-base-200 p-6 text-center">
+-                    <i class="bi bi-folder-plus workflow-step-icon"></i>
+-                    <div class="font-bold text-lg mt-1"><span class="workflow-step-num">1</span> {{ t('help.workflow.step1_title') }}</div>
+-                    <div class="text-base opacity-50 mt-0.5">{{ t('help.workflow.step1_desc') }}</div>
+-                </div>
+-                <!-- Arrow -->
+-                <div class="workflow-arrow text-xl leading-none">▶</div>
+-                <!-- Step 2 -->
+-                <div class="flex-1 rounded-xl bg-base-200 p-6 text-center">
+-                    <i class="bi bi-file-earmark-play workflow-step-icon"></i>
+-                    <div class="font-bold text-lg mt-1"><span class="workflow-step-num">2</span> {{ t('help.workflow.step2_title') }}</div>
+-                    <div class="text-base opacity-50 mt-0.5">{{ t('help.workflow.step2_desc') }}</div>
+-                </div>
+-                <!-- Arrow -->
+-                <div class="workflow-arrow text-xl leading-none">▶</div>
+-                <!-- Step 3 -->
+-                <div class="flex-1 rounded-xl bg-base-200 p-6 text-center">
+-                    <i class="bi bi-magic workflow-step-icon"></i>
+-                    <div class="font-bold text-lg mt-1"><span class="workflow-step-num">3</span> {{ t('help.workflow.step3_title') }}</div>
+-                    <div class="text-base opacity-50 mt-0.5">{{ t('help.workflow.step3_desc') }}</div>
+-                </div>
+-            </div>
+-
+-            <!-- Next Steps mini-list -->
+-            <div class="mt-4">
+-                <h6 class="text-sm font-bold mb-2">{{ t('help.workflow.next_steps_title') }}</h6>
+-                <ul class="text-sm opacity-80">
+-                    <li>{{ t('help.workflow.next_steps_similar') }}</li>
+-                    <li>{{ t('help.workflow.next_steps_favorite') }}</li>
+-                    <li>{{ t('help.workflow.next_steps_tag_alias') }}</li>
+-                </ul>
+-            </div>
+-        </div>
+-    </div>
+-
+-    <!-- 想要更多控制？分流段 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body py-3 px-5">
+-            <h3 class="text-base font-bold mb-2">{{ t('help.power_user.title') }}</h3>
+-            <p class="text-sm opacity-80 mb-0">{{ t('help.power_user.intro') }}</p>
+-        </div>
+-    </div>
+-
+-    <!-- 影片列表生成 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-list-ul"></i> {{ t('help.scanner.title') }}
+-            </h2>
+-            <h6>{{ t('help.scanner.h6_features') }}</h6>
+-            <ul>
+-                <li>{{ t('help.scanner.feat_scan') }}</li>
+-                <li>{{ t('help.scanner.feat_nfo') }}</li>
+-                <li>{{ t('help.scanner.feat_nfo_fill') }}</li>
+-                <li>{{ t('help.scanner.feat_terminal') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.scanner.h6_output') }}</h6>
+-            <ul>
+-                <li>{{ t('help.scanner.output_html') | safe }}</li>
+-                <li>{{ t('help.scanner.output_copy') | safe }}</li>
+-                <li>{{ t('help.scanner.output_darkmode') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.scanner.h6_subtitle') }}</h6>
+-            <ul>
+-                <li>{{ t('help.scanner.subtitle_detect') | safe }}</li>
+-                <li>{{ t('help.scanner.subtitle_move') | safe }}</li>
+-                <li>{{ t('help.scanner.subtitle_nfo') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.scanner.h6_jellyfin') }}</h6>
+-            <ul>
+-                <li>{{ t('help.scanner.jellyfin_enable') | safe }}</li>
+-                <li>{{ t('help.scanner.jellyfin_canonical') | safe }}</li>
+-                <li>{{ t('help.scanner.jellyfin_showcase') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.scanner.h6_strm_deploy') }}</h6>
+-            <ol>
+-                <li>{{ t('help.scanner.strm_deploy_step1') | safe }}</li>
+-                <li>{{ t('help.scanner.strm_deploy_step2') | safe }}</li>
+-                <li>{{ t('help.scanner.strm_deploy_step3') | safe }}</li>
+-                <li>{{ t('help.scanner.strm_deploy_step4') | safe }}</li>
+-            </ol>
+-
+-            <h6 class="mt-4">{{ t('help.scanner.h6_multiversion') }}</h6>
+-            <p>{{ t('help.scanner.multiversion_intro') }}</p>
+-            <pre class="bg-base-200 rounded-lg p-3 text-sm overflow-x-auto"><code>ABC-123/
+-  ABC-123 - 有碼.mp4{# cjk-exempt(有碼): 檔名命名慣例真實範例，非 UI copy — TASK-103-T7 §F.3 #}
+-  ABC-123 - 無碼流出.mp4{# cjk-exempt(無碼流出): 同上 #}
+-  ABC-123 - 中文字幕.mp4{# cjk-exempt(中文字幕): 同上 #}
+-  ABC-123.nfo
+-  ABC-123-poster.jpg</code></pre>
+-            <ul>
+-                <li>{{ t('help.scanner.multiversion_rule1') | safe }}</li>
+-                <li>{{ t('help.scanner.multiversion_rule2') | safe }}</li>
+-            </ul>
+-        </div>
+-    </div>
+-
+-    <!-- 影片瀏覽 Showcase -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-collection-play"></i> {{ t('help.showcase.title') }}
+-            </h2>
+-            <p>{{ t('help.showcase.intro') | safe }}</p>
+-
+-            <h6 class="mt-4">{{ t('help.showcase.h6_modes') }}</h6>
+-            <ul>
+-                <li>{{ t('help.showcase.mode_grid') | safe }}</li>
+-                <li>{{ t('help.showcase.mode_poster') | safe }}</li>
+-                <li>{{ t('help.showcase.mode_list') | safe }}</li>
+-                <li>{{ t('help.showcase.mode_table') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.showcase.h6_sort') }}</h6>
+-            <ul>
+-                <li>{{ t('help.showcase.sort_sort') | safe }}</li>
+-                <li>{{ t('help.showcase.sort_search') | safe }}</li>
+-                <li>{{ t('help.showcase.sort_pill') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.showcase.h6_other') }}</h6>
+-            <ul>
+-                <li>{{ t('help.showcase.other_lightbox') | safe }}</li>
+-                <li>{{ t('help.showcase.other_lightbox_detail') }}</li>
+-                <li>{{ t('help.showcase.other_table_cols') }}</li>
+-                <li>{{ t('help.showcase.other_gallery') }}</li>
+-                <li>{{ t('help.showcase.other_translate_title') | safe }}</li>
+-                <li>{{ t('help.showcase.other_per_page') | safe }}</li>
+-            </ul>
+-        </div>
+-    </div>
+-
+-    <!-- 相似影片探索 -->
+-    <div class="card help-card fluent-rounded-xl mb-4" id="similar">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-magic"></i> {{ t('help.similar.title') }}
+-            </h2>
+-            <p>{{ t('help.similar.intro') | safe }}</p>
+-
+-            <h6 class="mt-4">{{ t('help.similar.h6_what') }}</h6>
+-            <ul>
+-                <li>{{ t('help.similar.what_principle') | safe }}</li>
+-                <li>{{ t('help.similar.what_crop') | safe }}</li>
+-                <li>{{ t('help.similar.what_diversity') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.similar.h6_use') }}</h6>
+-            <ul>
+-                <li>{{ t('help.similar.use_lightbox') | safe }}</li>
+-                <li>{{ t('help.similar.use_constellation') | safe }}</li>
+-                <li>{{ t('help.similar.use_mobile') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.similar.h6_beta') }}</h6>
+-            <ul>
+-                <li>{{ t('help.similar.beta_uncensored') | safe }}</li>
+-                <li>{{ t('help.similar.beta_compilation') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.similar.h6_manage') }}</h6>
+-            <ul>
+-                <li>{{ t('help.similar.manage_enable') | safe }}</li>
+-                <li>{{ t('help.similar.manage_scanner') | safe }}</li>
+-            </ul>
+-        </div>
+-    </div>
+-
+-    <!-- Tag 別名管理 -->
+-    <div class="card help-card fluent-rounded-xl mb-4" id="tag-alias">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-tags"></i> {{ t('help.tag_alias.title') }}
+-            </h2>
+-            <p>{{ t('help.tag_alias.intro') }}</p>
+-
+-            <h6 class="mt-4">{{ t('help.tag_alias.h6_scanner') }}</h6>
+-            <ul>
+-                <li>{{ t('help.tag_alias.scanner_chipwall') }}</li>
+-                <li>{{ t('help.tag_alias.scanner_ai_hint') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.tag_alias.h6_showcase') }}</h6>
+-            <ul>
+-                <li>{{ t('help.tag_alias.showcase_expand') }}</li>
+-                <li>{{ t('help.tag_alias.showcase_click') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.tag_alias.h6_tips') }}</h6>
+-            <ul>
+-                <li>{{ t('help.tag_alias.tip_ranker') }}</li>
+-            </ul>
+-        </div>
+-    </div>
+-
+-    <!-- 女優功能 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-person-circle"></i> {{ t('help.actress.title') }}
+-            </h2>
+-            <h6>{{ t('help.actress.h6_search') }}</h6>
+-            <ul>
+-                <li>{{ t('help.actress.search_hero') }}</li>
+-                <li>{{ t('help.actress.search_favorite') }}</li>
+-                <li>{{ t('help.actress.search_grid') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.actress.h6_showcase') }}</h6>
+-            <ul>
+-                <li>{{ t('help.actress.showcase_toggle') }}</li>
+-                <li>{{ t('help.actress.showcase_grid') }}</li>
+-                <li>{{ t('help.actress.showcase_metric_pill') }}</li>
+-                <li>{{ t('help.actress.showcase_lightbox') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.actress.h6_manage') }}</h6>
+-            <ul>
+-                <li>{{ t('help.actress.manage_add') }}</li>
+-                <li>{{ t('help.actress.manage_library') | safe }}</li>
+-                <li>{{ t('help.actress.manage_alias') }}</li>
+-                <li>{{ t('help.actress.manage_enrich') }}</li>
+-                <li>{{ t('help.actress.manage_photo_path') }}</li>
+-            </ul>
+-        </div>
+-    </div>
+-
+-    <!-- 搜尋功能 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-search"></i> {{ t('help.search.title') }}
+-            </h2>
+-            <h6>{{ t('help.search.h6_methods') }}</h6>
+-            <ul>
+-                <li>{{ t('help.search.method_full') | safe }}</li>
+-                <li>{{ t('help.search.method_partial') | safe }}</li>
+-                <li>{{ t('help.search.method_series') | safe }}</li>
+-                <li>{{ t('help.search.method_actress') | safe }}</li>
+-                <li>{{ t('help.search.method_maker') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.search.h6_dragdrop') }}</h6>
+-            <ul>
+-                <li>{{ t('help.search.drag_auto') }}</li>
+-                <li>{{ t('help.search.drag_batch') }}</li>
+-                <li>{{ t('help.search.drag_generate') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.search.h6_grid') }}</h6>
+-            <ul>
+-                <li>{{ t('help.search.grid_switch') }}</li>
+-                <li>{{ t('help.search.grid_lightbox') | safe }}</li>
+-                <li>{{ t('help.search.grid_detail') }}</li>
+-                <li>{{ t('help.search.grid_gallery') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.search.h6_badge') }}</h6>
+-            <ul>
+-                <li>{{ t('help.search.badge_keywords') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.search.h6_advanced_picker') }}</h6>
+-            <ul>
+-                <li>{{ t('help.search.picker_longpress') }}</li>
+-                <li>{{ t('help.search.picker_panel_switch') }}</li>
+-                <li>{{ t('help.search.picker_showcase_enrich') }}</li>
+-                <li>{{ t('help.search.picker_lightbox_gear') }}</li>
+-            </ul>
+-        </div>
+-    </div>
+-
+-    <!-- 批次檔案搜尋 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-files"></i> {{ t('help.batch.title') }}
+-            </h2>
+-            <h6>{{ t('help.batch.h6_add') }}</h6>
+-            <ul>
+-                <li>{{ t('help.batch.add_folder') | safe }}</li>
+-                <li>{{ t('help.batch.add_filter') | safe }}</li>
+-                <li>{{ t('help.batch.add_batch') | safe }}</li>
+-                <li>{{ t('help.batch.add_progress') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.batch.h6_favorite') }}</h6>
+-            <ul>
+-                <li>{{ t('help.batch.fav_settings') | safe }}</li>
+-                <li>{{ t('help.batch.fav_load') }}</li>
+-                <li>{{ t('help.batch.fav_auto') }}</li>
+-                <li>{{ t('help.batch.fav_nfo_skip') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.batch.h6_pause') }}</h6>
+-            <ul>
+-                <li>{{ t('help.batch.pause_pause') }}</li>
+-                <li>{{ t('help.batch.pause_resume') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.batch.h6_generate_all') }}</h6>
+-            <ul>
+-                <li>{{ t('help.batch.generate_all') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.batch.h6_badge') }}</h6>
+-            <ul>
+-                <li>{{ t('help.batch.badge_suffix') | safe }}</li>
+-            </ul>
+-        </div>
+-    </div>
+-
+-    <!-- 伺服器模式 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-hdd-network"></i> {{ t('help.server_mode.title') }}
+-            </h2>
+-
+-            <h6>{{ t('help.server_mode.h6_what') }}</h6>
+-            <ul>
+-                <li>{{ t('help.server_mode.what_single') }}</li>
+-                <li>{{ t('help.server_mode.what_server') }}</li>
+-                <li>{{ t('help.server_mode.what_where') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.server_mode.h6_how') }}</h6>
+-            <ul>
+-                <li>{{ t('help.server_mode.how_url') | safe }}</li>
+-                <li>{{ t('help.server_mode.how_copy') }}</li>
+-                <li>{{ t('help.server_mode.how_off') }}</li>
+-                <li>{{ t('help.server_mode.how_shared_folder') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.server_mode.client_h6') }}</h6>
+-            <ul>
+-                <li>{{ t('help.server_mode.client_entry') }}</li>
+-                <li>{{ t('help.server_mode.client_password') }}</li>
+-                <li>{{ t('help.server_mode.client_map') }}</li>
+-                <li>{{ t('help.server_mode.client_back_local') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.server_mode.h6_security') }}</h6>
+-            <ul>
+-                <li>{{ t('help.server_mode.security_lan_auth') if auth_enabled else t('help.server_mode.security_lan') }}</li>
+-                <li>{{ t('help.server_mode.security_vpn') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.server_mode.h6_firewall') }}</h6>
+-            <ul>
+-                <li>{{ t('help.server_mode.firewall_allow') | safe }}</li>
+-                <li>{{ t('help.server_mode.firewall_why') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.server_mode.h6_recover') }}</h6>
+-            <ul>
+-                <li>{{ t('help.server_mode.recover_win_intro') }}</li>
+-                <li>{{ t('help.server_mode.recover_win_1') | safe }}</li>
+-                <li>{{ t('help.server_mode.recover_win_2') }}</li>
+-                <li>{{ t('help.server_mode.recover_win_3') | safe }}</li>
+-                <li>{{ t('help.server_mode.recover_win_4') }}</li>
+-                <li>{{ t('help.server_mode.recover_mac') }}</li>
+-            </ul>
+-        </div>
+-    </div>
+-
+-    <!-- 格式變數一覽表 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-braces"></i> {{ t('help.format.title') }}
+-            </h2>
+-            <div class="overflow-x-auto">
+-                <table class="table table-sm">
+-                    <thead>
+-                        <tr><th>{{ t('help.format.col_var') }}</th><th>{{ t('help.format.col_desc') }}</th><th>{{ t('help.format.col_example') }}</th><th>{{ t('help.format.col_fallback') }}</th></tr>
+-                    </thead>
+-                    <tbody>
+-                        <tr><td><code>{num}</code></td><td>{{ t('help.format.var_num_desc') }}</td><td>SONE-205</td><td>—</td></tr>
+-                        <tr><td><code>{title}</code></td><td>{{ t('help.format.var_title_desc') }}</td><td>新人出道...</td><td>{{ t('help.format.fallback_unknown_title') }}</td></tr>{# cjk-exempt(新人出道): 格式變數對照表範例值，非 UI copy — TASK-103-T7 §F.3 #}
+-                        <tr><td><code>{actor}</code></td><td>{{ t('help.format.var_actor_desc') }}</td><td>三上悠亜</td><td>{{ t('help.format.fallback_unknown_actor') }}</td></tr>{# cjk-exempt(三上悠亜): 同上 #}
+-                        <tr><td><code>{actors}</code></td><td>{{ t('help.format.var_actors_desc') }}</td><td>三上悠亜, 明日花</td><td>{{ t('help.format.fallback_unknown_actor') }}</td></tr>{# cjk-exempt(三上悠亜|明日花): 同上 #}
+-                        <tr><td><code>{maker}</code></td><td>{{ t('help.format.var_maker_desc') }}</td><td>S1</td><td>{{ t('help.format.fallback_unknown_maker') }}</td></tr>
+-                        <tr><td><code>{date}</code></td><td>{{ t('help.format.var_date_desc') }}</td><td>2024-01-15</td><td>{{ t('help.format.fallback_unknown_date') }}</td></tr>
+-                        <tr><td><code>{year}</code></td><td>{{ t('help.format.var_year_desc') }}</td><td>2024</td><td>{{ t('help.format.fallback_unknown_year') }}</td></tr>
+-                        <tr><td><code>{month}</code></td><td>{{ t('help.format.var_month_desc') }}</td><td>01</td><td>{{ t('help.format.fallback_unknown_month') }}</td></tr>
+-                        <tr><td><code>{day}</code></td><td>{{ t('help.format.var_day_desc') }}</td><td>15</td><td>{{ t('help.format.fallback_unknown_day') }}</td></tr>
+-                        <tr><td><code>{suffix}</code></td><td>{{ t('help.format.var_suffix_desc') }}</td><td>-4k</td><td>{{ t('help.format.fallback_empty') }}</td></tr>
+-                    </tbody>
+-                </table>
+-            </div>
+-            <h6 class="mt-4">{{ t('help.format.h6_default') }}</h6>
+-            <ul>
+-                <li>{{ t('help.format.default_filename') | safe }}</li>
+-                <li>{{ t('help.format.default_folder') | safe }}</li>
+-            </ul>
+-            <h6 class="mt-4">{{ t('help.format.h6_fallback') }}</h6>
+-            <ul>
+-                <li>{{ t('help.format.fallback_folder_rule') }}</li>
+-                <li>{{ t('help.format.fallback_filename_rule') }}</li>
+-            </ul>
+-        </div>
+-    </div>
+-
+-    <!-- 快捷鍵 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-keyboard"></i> {{ t('help.shortcuts.title') }}
+-            </h2>
+-
+-            <h6>{{ t('help.shortcuts.h6_search') }}</h6>
+-            <p class="text-base-content/60 text-sm mb-2">{{ t('help.shortcuts.search_hint') }}</p>
+-            <div class="overflow-x-auto">
+-                <table class="table table-sm">
+-                    <thead>
+-                        <tr><th>{{ t('help.shortcuts.col_key') }}</th><th>{{ t('help.shortcuts.col_context') }}</th><th>{{ t('help.shortcuts.col_action') }}</th></tr>
+-                    </thead>
+-                    <tbody>
+-                        <tr>
+-                            <td><kbd class="kbd kbd-sm">Esc</kbd></td>
+-                            <td>{{ t('help.shortcuts.ctx_lightbox_open') }}</td>
+-                            <td>{{ t('help.shortcuts.action_close_lightbox') }}</td>
+-                        </tr>
+-                        <tr>
+-                            <td><kbd class="kbd kbd-sm">←</kbd> <kbd class="kbd kbd-sm">→</kbd></td>
+-                            <td>{{ t('help.shortcuts.ctx_lightbox_open') }}</td>
+-                            <td>{{ t('help.shortcuts.action_prev_next_video') }}</td>
+-                        </tr>
+-                        <tr>
+-                            <td><kbd class="kbd kbd-sm">←</kbd> <kbd class="kbd kbd-sm">→</kbd></td>
+-                            <td>{{ t('help.shortcuts.search_arrow2_ctx') }}</td>
+-                            <td>{{ t('help.shortcuts.search_arrow2_action') }}</td>
+-                        </tr>
+-                    </tbody>
+-                </table>
+-            </div>
+-
+-            <h6 class="mt-4">{{ t('help.shortcuts.h6_showcase') }}</h6>
+-            <div class="overflow-x-auto">
+-                <table class="table table-sm">
+-                    <thead>
+-                        <tr><th>{{ t('help.shortcuts.col_key') }}</th><th>{{ t('help.shortcuts.col_context') }}</th><th>{{ t('help.shortcuts.col_action') }}</th></tr>
+-                    </thead>
+-                    <tbody>
+-                        <tr>
+-                            <td><kbd class="kbd kbd-sm">←</kbd> <kbd class="kbd kbd-sm">→</kbd></td>
+-                            <td>{{ t('help.shortcuts.ctx_lightbox_closed') }}</td>
+-                            <td>{{ t('help.shortcuts.showcase_arrow_action') }}</td>
+-                        </tr>
+-                        <tr>
+-                            <td><kbd class="kbd kbd-sm">A</kbd></td>
+-                            <td>{{ t('help.shortcuts.ctx_lightbox_closed') }}</td>
+-                            <td>{{ t('help.shortcuts.showcase_a_action') }}</td>
+-                        </tr>
+-                        <tr>
+-                            <td><kbd class="kbd kbd-sm">S</kbd></td>
+-                            <td>{{ t('help.shortcuts.showcase_s_ctx') }}</td>
+-                            <td>{{ t('help.shortcuts.showcase_s_action') }}</td>
+-                        </tr>
+-                        <tr>
+-                            <td><kbd class="kbd kbd-sm">Esc</kbd></td>
+-                            <td>{{ t('help.shortcuts.ctx_lightbox_open') }}</td>
+-                            <td>{{ t('help.shortcuts.action_close_lightbox') }}</td>
+-                        </tr>
+-                        <tr>
+-                            <td><kbd class="kbd kbd-sm">←</kbd> <kbd class="kbd kbd-sm">→</kbd></td>
+-                            <td>{{ t('help.shortcuts.ctx_lightbox_open') }}</td>
+-                            <td>{{ t('help.shortcuts.action_prev_next_video') }}</td>
+-                        </tr>
+-                    </tbody>
+-                </table>
+-            </div>
+-        </div>
+-    </div>
+-
+-    <!-- Scraper 來源說明 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-globe"></i> {{ t('help.scraper.title') }}
+-            </h2>
+-
+-            <h6>{{ t('help.scraper.h6_censored') }}</h6>
+-            <ul>
+-                <li>{{ t('help.scraper.censored_dmm') | safe }}</li>
+-                <li>{{ t('help.scraper.censored_others') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.scraper.h6_uncensored') }}</h6>
+-            <ul>
+-                <li>{{ t('help.scraper.uncensored_d2pass') | safe }}</li>
+-                <li>{{ t('help.scraper.uncensored_heyzo') | safe }}</li>
+-                <li>{{ t('help.scraper.uncensored_fc2') | safe }}</li>
+-                <li>{{ t('help.scraper.uncensored_avsox') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.scraper.h6_manual') }}</h6>
+-            <p>{{ t('help.scraper.manual_intro') | safe }}</p>
+-            <ul>
+-                <li>{{ t('help.scraper.manual_javlibrary') | safe }}</li>
+-                <li>{{ t('help.scraper.manual_fc2_javten') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.scraper.h6_custom') }}</h6>
+-            <p>{{ t('help.scraper.custom_what') | safe }}</p>
+-            <ul>
+-                <li>{{ t('help.scraper.custom_how') }}</li>
+-                <li>{{ t('help.scraper.custom_verify') | safe }}</li>
+-                <li>{{ t('help.scraper.custom_modal') }}</li>
+-                <li>{{ t('help.scraper.custom_new_media') | safe }}</li>
+-            </ul>
+-            <ul>
+-                <li>{{ t('help.scraper.custom_state_unverified') }}</li>
+-                <li>{{ t('help.scraper.custom_state_verifying') }}</li>
+-                <li>{{ t('help.scraper.custom_state_passed') }}</li>
+-                <li>{{ t('help.scraper.custom_state_failed') }}</li>
+-                <li>{{ t('help.scraper.custom_state_load_failed') }}</li>
+-            </ul>
+-            <p>{{ t('help.scraper.custom_folder_intro') }}</p>
+-            <ul>
+-                <li>{{ t('help.scraper.custom_folder_desktop') | safe }}</li>
+-                <li>{{ t('help.scraper.custom_folder_linux') | safe }}</li>
+-                <li>{{ t('help.scraper.custom_folder_synology') | safe }}</li>
+-            </ul>
+-            <ul>
+-                <li>{{ t('help.scraper.custom_limit_host') }}</li>
+-                <li>{{ t('help.scraper.custom_limit_userinfo') }}</li>
+-                <li>{{ t('help.scraper.custom_limit_stale') }}</li>
+-            </ul>
+-            <p><a href="https://github.com/slive777/OpenAver/blob/main/docs/custom-sources.md" target="_blank" rel="noopener noreferrer">{{ t('help.scraper.custom_docs_link') }}</a></p>
+-
+-            <h6 class="mt-4">{{ t('help.scraper.h6_default_source') }}</h6>
+-            <ul>
+-                <li>{{ t('help.scraper.default_source_set') | safe }}</li>
+-                <li>{{ t('help.scraper.default_source_effect') }}</li>
+-                <li>{{ t('help.scraper.fuzzy_always_on') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.scraper.h6_dmm_fuzzy') }}</h6>
+-            <ul>
+-                <li>{{ t('help.scraper.dmm_fuzzy_trigger') }}</li>
+-                <li>{{ t('help.scraper.dmm_fuzzy_prereq') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.scraper.h6_proxy_scope') }}</h6>
+-            <ul>
+-                <li>{{ t('help.scraper.proxy_empty_system') }}</li>
+-                <li>{{ t('help.scraper.proxy_scope_how') }}</li>
+-                <li>{{ t('help.scraper.proxy_scope_all_includes') }}</li>
+-                <li>{{ t('help.scraper.proxy_scope_excludes') }}</li>
+-                <li>{{ t('help.scraper.proxy_scope_verifier') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.scraper.h6_probe') }}</h6>
+-            <ul>
+-                <li>{{ t('help.scraper.probe_where') }}</li>
+-                <li>{{ t('help.scraper.probe_states') | safe }}</li>
+-                <li>{{ t('help.scraper.probe_not_data') }}</li>
+-                <li>{{ t('help.scraper.probe_no_images') }}</li>
+-                <li>{{ t('help.scraper.probe_verifier') }}</li>
+-                {% if is_windows_desktop %}
+-                <li>{{ t('help.scraper.probe_skipped_windows') }}</li>
+-                {% elif is_mac_desktop %}
+-                <li>{{ t('help.scraper.probe_skipped_mac') }}</li>
+-                {% else %}
+-                <li>{{ t('help.scraper.probe_skipped') }}</li>
+-                {% endif %}
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.scraper.h6_toggle') }}</h6>
+-            <ul>
+-                <li>{{ t('help.scraper.toggle_uncensored') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.scraper.h6_format') }}</h6>
+-            <div class="overflow-x-auto">
+-                <table class="table table-sm">
+-                    <thead>
+-                        <tr><th>{{ t('help.scraper.col_source') }}</th><th>{{ t('help.scraper.col_format') }}</th><th>{{ t('help.scraper.col_example') }}</th></tr>
+-                    </thead>
+-                    <tbody>
+-                        <tr><td>Caribbeancom</td><td><code>DDMMYY-NNN</code></td><td><code>010125-001</code></td></tr>
+-                        <tr><td>1Pondo</td><td><code>DDMMYY_NNN</code></td><td><code>010125_001</code></td></tr>
+-                        <tr><td>HEYZO</td><td><code>HEYZO-NNNN</code></td><td><code>HEYZO-3510</code></td></tr>
+-                        <tr><td>FC2</td><td><code>FC2-PPV-NNNNNN</code></td><td><code>FC2-PPV-1723984</code></td></tr>
+-                    </tbody>
+-                </table>
+-            </div>
+-        </div>
+-    </div>
+-
+-    <!-- Metatube 教學 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-plug"></i> {{ t('help.metatube.title') }}
+-            </h2>
+-
+-            <h6>{{ t('help.metatube.h6_what') }}</h6>
+-            <ul>
+-                <li>{{ t('help.metatube.what_desc') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.metatube.h6_enable') }}</h6>
+-            <ul>
+-                <li>{{ t('help.metatube.enable_gate') }}</li>
+-                <li>{{ t('help.metatube.enable_url') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.metatube.h6_sources') }}</h6>
+-            <ul>
+-                <li>{{ t('help.metatube.sources_promote') }}</li>
+-                <li>{{ t('help.metatube.sources_offline') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.metatube.h6_lan') }}</h6>
+-            <ul>
+-                <li>{{ t('help.metatube.lan_ssrf') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.metatube.h6_limits') }}</h6>
+-            <ul>
+-                <li>{{ t('help.metatube.limits_picker') }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.metatube.h6_db') }}</h6>
+-            <ul>
+-                <li>{{ t('help.metatube.db_hint') }}</li>
+-            </ul>
+-
+-            <p class="text-sm text-base-content/50 mt-2">↗ {{ t('help.metatube.crossref_picker') }}</p>
+-        </div>
+-    </div>
+-
+-    <!-- 疑難排解 -->
+-    <div class="card help-card fluent-rounded-xl mb-4">
+-        <div class="card-body">
+-            <h2 class="card-title text-lg">
+-                <i class="bi bi-tools"></i> {{ t('help.troubleshooting.title') }}
+-            </h2>
+-            <h6>{{ t('help.troubleshooting.h6_crash') }}</h6>
+-            <p>{{ t('help.troubleshooting.crash_cause') | safe }}</p>
+-            <p>{{ t('help.troubleshooting.crash_fix_label') | safe }}</p>
+-            <ol>
+-                <li>{{ t('help.troubleshooting.crash_fix_1') }}</li>
+-                <li>{{ t('help.troubleshooting.crash_fix_2') }}</li>
+-                <li>{{ t('help.troubleshooting.crash_fix_3') }}</li>
+-            </ol>
+-
+-            <h6 class="mt-4">{{ t('help.troubleshooting.h6_display') }}</h6>
+-            <p>{{ t('help.troubleshooting.display_cause') | safe }}</p>
+-            <p>{{ t('help.troubleshooting.display_fix') | safe }}</p>
+-
+-            <h6 class="mt-4">{{ t('help.troubleshooting.h6_report') }}</h6>
+-            <p>{{ t('help.troubleshooting.report_log_path') | safe }}</p>
+-            <p>{{ t('help.troubleshooting.report_debug_label') | safe }}</p>
+-            <ol>
+-                <li>{{ t('help.troubleshooting.report_debug_1') | safe }}</li>
+-                <li>{{ t('help.troubleshooting.report_debug_2') }}</li>
+-                <li>{{ t('help.troubleshooting.report_debug_3') | safe }}</li>
+-            </ol>
+-
+-            <h6 class="mt-4">{{ t('help.troubleshooting.h6_dmm') }}</h6>
+-            <ul>
+-                <li>{{ t('help.troubleshooting.dmm_proxy') | safe }}</li>
+-                <li>{{ t('help.troubleshooting.dmm_blocked_try_jp_proxy') | safe }}</li>
+-            </ul>
+-
+-            <h6 class="mt-4">{{ t('help.troubleshooting.h6_translate') }}</h6>
+-            <ul>
+-                <li>{{ t('help.troubleshooting.translate_ollama') | safe }}</li>
+-                <li>{{ t('help.troubleshooting.translate_gemini') | safe }}</li>
+-                <li>{{ t('help.troubleshooting.translate_openai') | safe }}</li>
+-                <li>{{ t('help.troubleshooting.translate_claude') | safe }}</li>
+-                <li>{{ t('help.troubleshooting.translate_blocked') | safe }}</li>
+-                <li>{{ t('help.troubleshooting.translate_manual_model') | safe }}</li>
+-            </ul>
+-        </div>
+-    </div>
+-    </div>
+-    {% if is_desktop %}
+-    <dialog class="modal fluent-modal"
+-            :class="{ 'modal-open': showUpdateModal }"
+-            @click.self="!updateLoading && cancelUpdate()"
+-            @keydown.escape.window="!updateLoading && cancelUpdate()">
+-        <div class="modal-box fluent-modal-box">
+-            <h3 class="fluent-modal-title" x-show="!_bridgeMode">{{ t('help.update_modal.title') }}</h3>
+-            <h3 class="fluent-modal-title" x-show="_bridgeMode" x-cloak>{{ t('help.update_modal.client_title') }}</h3>
+-            <!-- 情況 A：預設路徑 -->
+-            <p x-show="!_bridgeMode && isDefaultPath" class="fluent-modal-body text-sm">
+-                {{ t('help.update_modal.case_a_body') }}
+-            </p>
+-            <!-- 情況 B：非預設路徑（whitespace-pre-line 保留換行） -->
+-            <p x-show="!_bridgeMode && !isDefaultPath" class="fluent-modal-body text-sm whitespace-pre-line">
+-                {{ t('help.update_modal.case_b_body') }}
+-            </p>
+-            <!-- 168c-T5：client 模式（這台電腦）的 A／B -->
+-            <p x-show="_bridgeMode && isDefaultPath" x-cloak class="fluent-modal-body text-sm">
+-                {{ t('help.update_modal.client_case_a_body') }}
+-            </p>
+-            <p x-show="_bridgeMode && !isDefaultPath" x-cloak class="fluent-modal-body text-sm whitespace-pre-line">
+-                {{ t('help.update_modal.client_case_b_body') }}
+-            </p>
+-            <div class="modal-action fluent-modal-actions">
+-                <button type="button" class="btn btn-ghost btn-sm"
+-                        @click="cancelUpdate()"
+-                        :disabled="updateLoading">
+-                    {{ t('help.update_modal.cancel_btn') }}
+-                </button>
+-                <button type="button" class="btn btn-warning btn-sm"
+-                        @click="confirmUpdate()"
+-                        :disabled="updateLoading">
+-                    <span x-show="updateLoading" class="loading loading-spinner loading-sm"></span>
+-                    {{ t('help.update_modal.confirm_btn') }}
+-                </button>
+-            </div>
+-        </div>
+-    </dialog>
+-    {% endif %}
+-
+-    <!-- Toast 通知（update 成功/失敗回饋） -->
+-    <div class="toast toast-end toast-top z-[9999]" x-show="$store.toast.visible" x-cloak x-transition>
+-        <div class="alert" :class="`alert-${$store.toast.type}`">
+-            <span x-text="$store.toast.message"></span>
+-            <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="$store.toast.hide()">✕</button>
+-        </div>
+-    </div>
+-</div>
+-
+-{% endblock %}
+-{# help.js 走 pre_alpine_module（Alpine Core 之前）：ES module 隱式 defer，須早於 Alpine
+-   start 掛上 alpine:init listener 才註冊得到 Alpine.data('helpPage')，比照 scanner/main.js、
+-   search/main.js。放 extra_js（Alpine Core 之後）會導致 helpPage 註冊太晚、頁面不 hydrate。 #}
+-{% block pre_alpine_module %}
+-<script type="module" src="/static/js/pages/help.js"></script>
+-{% endblock %}
+--- a/web/templates/scraper.html
++++ /dev/null
+@@ -1,18 +0,0 @@
+-{% extends "base.html" %}
+-
+-{% block title %}{{ t('scraper.page_title') }} - OpenAver{% endblock %}
+-
+-{% block content %}
+-<div class="container mx-auto px-4 max-w-screen-2xl">
+-    <h2 class="text-2xl font-semibold mb-4">
+-        <i class="bi bi-cloud-download"></i> {{ t('scraper.heading') }}
+-    </h2>
+-
+-    <div class="card bg-base-100 fluent-shadow-4 fluent-rounded-xl">
+-        <div class="card-body text-center text-base-content/60 py-5">
+-            <i class="bi bi-tools" style="font-size: 4rem;"></i>
+-            <p class="mt-3">{{ t('scraper.body') }}</p>
+-        </div>
+-    </div>
+-</div>
+-{% endblock %}
+--- a/web/templates/updater.html
++++ /dev/null
+@@ -1,18 +0,0 @@
+-{% extends "base.html" %}
+-
+-{% block title %}{{ t('updater.page_title') }} - OpenAver{% endblock %}
+-
+-{% block content %}
+-<div class="container mx-auto px-4 max-w-screen-2xl">
+-    <h2 class="text-2xl font-semibold mb-4">
+-        <i class="bi bi-arrow-repeat"></i> {{ t('updater.heading') }}
+-    </h2>
+-
+-    <div class="card bg-base-100 fluent-shadow-4 fluent-rounded-xl">
+-        <div class="card-body text-center text-base-content/60 py-5">
+-            <i class="bi bi-tools" style="font-size: 4rem;"></i>
+-            <p class="mt-3">{{ t('updater.body') }}</p>
+-        </div>
+-    </div>
+-</div>
+-{% endblock %}

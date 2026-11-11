@@ -8,154 +8,12 @@
 {% endblock %}
 
 {% block content %}
-<div id="settings-components" class="page-layer" x-data="settings" data-lan-ip="{{ lan_ip or '' }}" data-shell-mode="{{ shell_mode or '' }}" data-is-android="{{ 'true' if is_android else 'false' }}" data-focal-auto-enabled="{{ 'true' if focal_auto_enabled else 'false' }}">
+<div id="settings-components" class="page-layer" x-data="settings" data-focal-auto-enabled="{{ 'true' if focal_auto_enabled else 'false' }}">
     <div class="settings-header">
-        <!-- 81b-T1: 左 cluster 包標題 + 膠囊 + 連線 inline 區塊；flex 樣式由 T2 補 -->
         <div class="settings-header-left">
             <h4 class="mb-0">
                 <i class="bi bi-gear"></i> {{ t('settings.header.title') }}
             </h4>
-            {% if not is_android %}
-            <!-- Server Mode Toggle (80a-T3) — 81b-T1: 從 actions 末尾搬到標題側 -->
-            {% if not is_synology %}
-            <div class="settings-server-mode">
-                <div class="settings-sources-segmented" role="group" :aria-label="window.t('settings.mode.label')">
-                    <button type="button"
-                            data-mode="local"
-                            :class="{ 'is-on': !serverMode }"
-                            @click="requestServerModeChange(false)"
-                            x-text="window.t('settings.mode.local')">
-                    </button>
-                    <button type="button"
-                            data-mode="server"
-                            :class="{ 'is-on': serverMode }"
-                            @click="requestServerModeChange(true)"
-                            x-text="window.t('settings.mode.server')">
-                    </button>
-                </div>
-            </div>
-            {% endif %}
-            <!-- T5: 存取密碼保護（114a）-->
-            <div class="settings-access-auth">
-                <label class="settings-access-auth-checkbox-row">
-                    <input type="checkbox"
-                           class="toggle toggle-sm toggle-primary"
-                           x-model="accessAuthEnabled"
-                           {# accessAuthSaving 與 PIN 欄同步鎖住（Codex PR#129 round-3 P2）：
-                              兩者本來就該一起鎖，T5 只鎖了 PIN 欄是不一致。不鎖的話，
-                              使用者可以在請求還在飛的時候把勾選框改掉，於是「送出去的值」
-                              與「事後記成已生效的值」不是同一個。 #}
-                           :disabled="!serverMode || accessAuthSaving">
-                    <span x-text="window.t('settings.access_auth.label')"></span>
-                </label>
-                <div class="settings-access-auth-pin-row" x-show="accessAuthEnabled" x-cloak>
-                    <span class="settings-access-auth-pin-prefix"
-                          x-text="window.t('settings.access_auth.pin_prefix')"></span>
-                    {# T7fix: 可見文字只留「密碼」，長度與字元集由四格欄位本身表達。
-                       完整說明搬到 aria-label／title——原本那個 <span> 沒有 for/id
-                       關聯，螢幕閱讀器讀不到欄位名稱，搬過去是淨改善。
-                       autocapitalize=off 是必要的，不是保險：比對區分大小寫，手機
-                       鍵盤自動大寫首字母會讓 abcd 變 Abcd。
-
-                       @input 的 NFKC 折疊要與後端同步（Codex Stage-2 P2）：後端存與
-                       比對都折，前端若只認 ASCII，中文輸入法全形模式打出的 ａＢ９２
-                       會讓儲存鈕永遠不亮、且不說明原因——與 T7fix 修掉的「打英文得到
-                       一顆灰按鈕」是同一個病。折在 input 上而不是只放寬 disabled 判斷：
-                       這樣欄位顯示的就是實際會存進去的值，不會出現「打的是全形、存的
-                       是半形、之後按眼睛看到的又不一樣」。 #}
-                    <input class="settings-access-auth-pin-input"
-                           :type="accessAuthPinVisible ? 'text' : 'password'"
-                           maxlength="4"
-                           autocomplete="off"
-                           autocapitalize="off"
-                           autocorrect="off"
-                           spellcheck="false"
-                           :aria-label="window.t('settings.access_auth.pin_label')"
-                           :title="window.t('settings.access_auth.pin_label')"
-                           x-model="accessAuthPin"
-                           @input="accessAuthPin = accessAuthPin.normalize('NFKC')"
-                           :disabled="accessAuthPinDisabled()">
-                    <button type="button"
-                            class="settings-access-auth-reveal-btn"
-                            :disabled="!accessAuthPinRevealed"
-                            :title="window.t('settings.access_auth.reveal')"
-                            :aria-label="window.t('settings.access_auth.reveal')"
-                            @click="accessAuthPinVisible = !accessAuthPinVisible">
-                        <i class="bi" :class="accessAuthPinVisible ? 'bi-eye-slash' : 'bi-eye'"></i>
-                    </button>
-                </div>
-                <button type="button"
-                        class="settings-access-auth-save-btn btn btn-sm btn-outline"
-                        :disabled="accessAuthSaveDisabled()"
-                        @click="saveAccessAuth()">
-                    <span x-show="accessAuthSaving" class="loading loading-spinner loading-sm"></span>
-                    <template x-if="!accessAuthSaving">
-                        <i class="bi bi-check-lg"></i>
-                    </template>
-                    <span x-text="accessAuthSaving ? '' : ' ' + window.t('settings.access_auth.save')"></span>
-                </button>
-                <div class="settings-access-auth-status-hint"
-                     x-show="accessAuthStatusHintKey()" x-cloak
-                     x-text="window.t(accessAuthStatusHintKey())"></div>
-            </div>
-            <!-- 81b-T1: 連線資訊 inline 區塊（ip:port + 複製 icon + ? popover）；
-                 x-cloak 防 Alpine boot 前 FOUC（同原第二排 .settings-server-info 理由）-->
-            <div class="settings-server-inline" x-show="serverMode" x-cloak>
-                <template x-if="serverUrl()">
-                    <div class="settings-server-info-row">
-                        <span class="settings-server-url" x-text="serverUrlDisplay()"></span>
-                        <button type="button"
-                                class="settings-server-copy-btn"
-                                @click="copyServerUrl()"
-                                :title="window.t('settings.server_info.copy')"
-                                :aria-label="window.t('settings.server_info.copy')">
-                            <i class="bi bi-clipboard"></i>
-                        </button>
-                    </div>
-                </template>
-                <!-- lanIp 在但 lanPort 缺（listener 未啟動，如重啟 auto-start 失敗）→ 指向正確問題，非「取不到 IP」 -->
-                <template x-if="!serverUrl() && lanIp">
-                    <div class="settings-server-no-ip" x-text="window.t('settings.server_info.listener_down')"></div>
-                </template>
-                <!-- IP 抓不到但 listener 已開（lanPort 已知）→ 顯示 port，否則用戶湊不出 IP:port -->
-                <template x-if="!serverUrl() && !lanIp && lanPort">
-                    <div class="settings-server-no-ip" x-text="window.t('settings.server_info.no_lan_ip_with_port', { port: lanPort })"></div>
-                </template>
-                <!-- 連 lanIp、lanPort 都沒有 → 真的是區網 IP 偵測失敗（也無 port） -->
-                <template x-if="!serverUrl() && !lanIp && !lanPort">
-                    <div class="settings-server-no-ip" x-text="window.t('settings.server_info.no_lan_ip')"></div>
-                </template>
-                <!-- ? 警語 popover（沿用 .help-popover disclosure 模式，與「下載劇照」等一致；
-                     81b-T1 直接落地完整互動＝既有 pattern verbatim copy，T3 收為 verify-only）-->
-                <div class="settings-server-warning-anchor popover-anchor" x-data="helpPopover">
-                    <button type="button" class="help-popover-btn"
-                            @click.prevent="toggle()"
-                            :aria-expanded="open">
-                        <i class="bi bi-question-circle"></i>
-                    </button>
-                    <div x-show="open" x-cloak x-transition
-                         @click.outside="close()"
-                         class="help-popover">
-                        {# 讀 accessAuthEnabledSaved 而非草稿 accessAuthEnabled：這句話對
-                           使用者做安全宣稱（「其他裝置需要輸入密碼才能連線」），只能反映
-                           後端已生效的狀態。讀草稿的話，勾下去還沒存檔就開始說謊，存檔
-                           失敗更會一路說到重新整理為止。（Codex PR#129 P2）#}
-                        <small class="help-popover__body"
-                               x-text="accessAuthEnabledSaved
-                                   ? window.t('settings.server_info.warning_auth')
-                                   : window.t('settings.server_info.warning')"></small>
-                    </div>
-                </div>
-                <div class="settings-server-public-warn"
-                     x-show="publicExposure"
-                     x-cloak
-                     role="status"
-                     aria-live="polite">
-                    <i class="bi bi-exclamation-triangle-fill"></i>
-                    <span>{{ t('settings.server_info.public_exposure') }}</span>
-                </div>
-            </div>
-            {% endif %}
         </div>
         <div class="settings-header-actions">
             <div class="settings-appearance-controls">
@@ -554,13 +412,8 @@
                                 {{ t('settings.search.proxy_scope_dmm_hint') }}
                             </small>
                             <small class="settings-hint" x-show="form.proxyScope === 'all'">
-                                {% if is_mac_desktop %}{{ t('settings.search.proxy_scope_all_hint_mac') }}{% else %}{{ t('settings.search.proxy_scope_all_hint') }}{% endif %}
+                                {{ t('settings.search.proxy_scope_all_hint') }}
                             </small>
-                            {% if is_windows_desktop %}
-                            <small class="settings-hint" x-show="cfWindowProxyRestartNeeded">
-                                {{ t('settings.search.proxy_restart_hint') }}
-                            </small>
-                            {% endif %}
                         </div>
                     </div>
 
@@ -705,7 +558,7 @@
                             <div class="variable-input-group" style="position:relative;">
                                 <input type="text" class="input input-bordered input-sm flex-1" id="searchFavoriteFolder"
                                     x-model="form.searchFavoriteFolder"
-                                    placeholder="{{ t('settings.search.favorite_folder_placeholder') if is_desktop else t('settings.search.favorite_folder_placeholder_server') }}">
+                                    placeholder="{{ t('settings.search.favorite_folder_placeholder_server') }}">
                                 <button type="button"
                                     class="btn btn-sm btn-outline"
                                     :title="t('settings.favorite_folder.pick_from_scanner')"
@@ -1300,32 +1153,10 @@
 
                         <div class="settings-form-row">
                             <label class="row-label" for="maxFilenameLength">{{ t('settings.scraper.max_filename_length_label') }}</label>
-                            <div class="input-group-inline popover-anchor" x-data="helpPopover">
+                            <div class="input-group-inline">
                                 <input type="number" class="input input-bordered input-sm" id="maxFilenameLength"
                                     x-model.number="form.maxFilenameLength" min="50" max="255">
                                 <span class="input-suffix">{{ t('settings.scraper.unit_chars') }}</span>
-                                {% if not is_android %}
-                                <button type="button" class="help-popover-btn"
-                                        @click="toggle()"
-                                        :aria-expanded="open"
-                                        aria-controls="pathLengthHelp"
-                                        aria-label="{{ t('settings.scraper.path_length_help_aria') }}">
-                                    <i class="bi bi-question-circle"></i>
-                                </button>
-                                <div id="pathLengthHelp" x-show="open" x-cloak x-transition
-                                     @click.outside="close()"
-                                     class="help-popover">
-                                    <small class="help-popover__body">
-                                        {{ t('settings.scraper.path_length_help_line1') }}<br>
-                                        {{ t('settings.scraper.path_length_help_line2') | safe }}
-                                    </small>
-                                    <pre class="help-popover__code"><code>Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -Value 1</code></pre>
-                                    <small class="help-popover__body">
-                                        {{ t('settings.scraper.path_length_help_line3') }}<br>
-                                        {{ t('settings.scraper.path_length_help_line4') }}
-                                    </small>
-                                </div>
-                                {% endif %}
                             </div>
                         </div>
 
@@ -1495,58 +1326,6 @@
                         </div>
                     </div>
 
-                    {% if not is_android %}
-                    <!-- ── 進階摺疊：離線 HTML 匯出（galleryExport，預設收合 G-B1）── -->
-                    <button class="collapsible-trigger" type="button" @click="galleryExport = !galleryExport"
-                            :aria-expanded="galleryExport.toString()">
-                        <span class="collapsible-title"><i class="bi bi-sliders"></i> {{ t('settings.gallery.export_section') }}</span>
-                        <span class="btn-icon-collapse" aria-hidden="true"><i class="bi bi-chevron-down" :class="{ 'rotate-180': galleryExport }"></i></span>
-                    </button>
-                    <div x-show="galleryExport" x-collapse class="collapsible-content">
-
-                        <!-- Windows 說明條（克制樣式 T3；export_notice 含 <code> 故 | safe，G-B5/CD-95b-6） -->
-                        <p class="settings-export-notice">
-                            <i class="bi bi-info-circle" aria-hidden="true"></i>
-                            <span>{{ t('settings.gallery.export_notice') | safe }}</span>
-                        </p>
-
-                        <!-- 顯示模式 avlistMode（僅影響離線匯出 G-B3/CD-95b-4） -->
-                        <div class="settings-form-row">
-                            <label class="row-label">{{ t('settings.gallery.default_mode_label') }}</label>
-                            <div class="flex-1 flex flex-col gap-1">
-                                <select class="select select-bordered select-sm" id="avlistMode"
-                                    x-model="form.avlistMode">
-                                    <option value="image">{{ t('settings.gallery.mode_image') }}</option>
-                                    <option value="detail">{{ t('settings.gallery.mode_detail') }}</option>
-                                    <option value="text">{{ t('settings.gallery.mode_text') }}</option>
-                                </select>
-                                <small class="settings-note-inline">{{ t('settings.gallery.mode_export_only_note') }}</small>
-                            </div>
-                        </div>
-
-                        <!-- 輸出目錄 avlistOutputDir（含 selectOutputFolder）搬入摺疊 -->
-                        <div class="settings-form-row">
-                            <label class="row-label">{{ t('settings.gallery.output_dir_label') }}</label>
-                            <div class="variable-input-group">
-                                <input type="text" class="input input-bordered input-sm flex-1" id="avlistOutputDir"
-                                    x-model="form.avlistOutputDir" :placeholder="resolvedGalleryOutputPath">
-                                <button class="btn btn-sm btn-outline btn-neutral" type="button"
-                                    @click="selectOutputFolder()" title="{{ t('settings.gallery.select_folder_title') }}">
-                                    <i class="bi bi-folder"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- 輸出檔名 avlistOutputFilename 搬入摺疊 -->
-                        <div class="settings-form-row">
-                            <label class="row-label">{{ t('settings.gallery.output_filename_label') }}</label>
-                            <input type="text" class="input input-bordered input-sm" id="avlistOutputFilename"
-                                x-model="form.avlistOutputFilename" placeholder="gallery_output.html">
-                        </div>
-
-                    </div><!-- /collapsible-content galleryExport -->
-                    {% endif %}
-
             </div>
           </div>
         </section><!-- /sec-gallery -->
@@ -1565,32 +1344,8 @@
                             <option value="showcase">{{ t('nav.showcase') }}</option>
                         </select>
                     </div>
-                    {% macro local_machine_tag() %}{% if shell_mode == 'client' %}<span class="badge badge-ghost badge-sm local-machine-tag">{{ t('settings.system.this_computer') }}</span><small class="settings-hint">{{ t('settings.system.this_computer_hint') }}</small>{% endif %}{% endmacro %}
-                    {% if is_windows_desktop %}
-                    <div class="settings-form-row">
-                        <label class="row-label">{{ t('settings.system.close_action_label') }}{{ local_machine_tag() }}</label>
-                        <select class="select select-bordered select-sm" id="closeAction" x-model="form.closeAction" :disabled="localMachineState === 'unavailable'">
-                            <option value="ask">{{ t('settings.system.close_action_ask') }}</option>
-                            <option value="tray">{{ t('settings.system.close_action_tray') }}</option>
-                            <option value="exit">{{ t('settings.system.close_action_exit') }}</option>
-                        </select>
-                        {% if shell_mode == 'client' %}<small class="settings-hint local-machine-unavailable" x-show="localMachineState === 'unavailable'" x-cloak x-text="window.t('settings.system.this_computer_unavailable')"></small>{% endif %}
-                    </div>
-                    {% endif %}
-                    {% if not is_android %}
-                    <div class="settings-form-row">
-                        <label class="row-label">{{ t('settings.system.player_label') }}{{ local_machine_tag() }}</label>
-                        <div class="flex-1 flex flex-col gap-1">
-                            <input type="text" class="input input-bordered input-sm" id="viewerPlayer"
-                                x-model="form.viewerPlayer" :disabled="localMachineState === 'unavailable'" placeholder="{{ t('settings.system.player_placeholder') }}">
-                            {% if shell_mode == 'client' %}<small class="settings-hint local-machine-unavailable" x-show="localMachineState === 'unavailable'" x-cloak x-text="window.t('settings.system.this_computer_unavailable')"></small>{% endif %}
-                            <small class="settings-hint">{{ t('settings.system.player_hint_prefix') }} C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe</small>
-                        </div>
-                    </div>
-                    {% endif %}
                     <hr class="my-3">
 
-                    {% if is_android %}
                     <div class="settings-form-row">
                         <label class="row-label">
                             {{ t('settings.system.database_backup_label') }}
@@ -1619,7 +1374,6 @@
                         </button>
                     </div>
                     <hr class="my-3">
-                    {% endif %}
 
                     <!-- 重置按鈕 -->
                     <div class="settings-form-row">
@@ -1736,40 +1490,6 @@
             </div>
         </div>
     </dialog>
-
-    {% if not is_android %}
-    <!-- T4: 伺服器模式切換 Confirm Modal -->
-    <dialog class="modal fluent-modal"
-            :class="{ 'modal-open': serverModeConfirmOpen }"
-            @click.self="cancelServerModeChange()"
-            @keydown.escape.window="serverModeConfirmOpen && cancelServerModeChange()">
-        <div class="modal-box fluent-modal-box">
-            <h3 class="fluent-modal-title">
-                <i class="bi bi-wifi"></i>
-                <span x-text="serverModeConfirmValue
-                    ? window.t('settings.server_mode_confirm.title_on')
-                    : window.t('settings.server_mode_confirm.title')"></span>
-            </h3>
-            {# 同「?」說明：這段也在做安全宣稱（「已設定密碼保護」），只准讀後端已生效的
-               accessAuthEnabledSaved，不可讀未提交草稿 accessAuthEnabled。（Codex PR#129 P2）#}
-            <p class="fluent-modal-body"
-               x-text="serverModeConfirmValue
-                   ? (accessAuthEnabledSaved
-                       ? window.t('settings.server_mode_confirm.body_on_auth')
-                       : window.t('settings.server_mode_confirm.body_on'))
-                   : window.t('settings.server_mode_confirm.body_off')"></p>
-            <div class="modal-action fluent-modal-actions">
-                <button type="button" class="btn btn-ghost" @click="cancelServerModeChange()">
-                    {{ t('common.action.cancel') }}
-                </button>
-                <button type="button" class="btn btn-primary" @click="confirmServerModeChange()"
-                        x-text="serverModeConfirmValue
-                            ? window.t('settings.server_mode_confirm.confirm_on')
-                            : window.t('settings.server_mode_confirm.confirm')"></button>
-            </div>
-        </div>
-    </dialog>
-    {% endif %}
 
     <!-- 90c-T5: 全域模式切換（破壞性重設）Confirm Modal -->
     <dialog class="modal fluent-modal"

@@ -50,7 +50,6 @@ function _seedCfAvail() {
         available: !!adv.cf_transport_available,
         sites: Array.isArray(adv.cf_sites) ? adv.cf_sites : null,
         preparing: Array.isArray(adv.cf_preparing) ? adv.cf_preparing : [],
-        inShell: !!adv.in_shell,
     };
 }
 
@@ -91,7 +90,7 @@ export function rescrapeState() {
         // 否則膠囊顯示 raw id（'javbus'）而非顯示名（'JavBus'）。openRescrape 仍每次重灌（belt-and-suspenders）。
         rescrapeSources: (window.__ADVANCED_SEARCH__ && window.__ADVANCED_SEARCH__.sources) || [],
         // 168e-T11：CF 可用性分片（window.__ADVANCED_SEARCH__ 只當 SSR seed；onCfPillClick 重查成功後整物件重賦值，
-        // 讓 :class／:title 立即重算）。inShell 本 task 只 seed、不消費。
+        // 讓 :class／:title 立即重算）。
         rescrapeCfAvail: _seedCfAvail(),
         rescrapeLoadingSource: null,       // string | null（明確，:disabled 純 boolean）
         rescrapePreview: null,             // transient（CD-62-2）
@@ -280,8 +279,7 @@ export function rescrapeState() {
             // 168d-fix-T2：殼回報這個站的視窗「還在準備」→ 請稍候，不是請重開（站名用 includes，FE-ALPINE-14）。
             if (siteId && Array.isArray(adv.preparing) && adv.preparing.includes(siteId)) return 'showcase.rescrape.cf_window_preparing';
             if (adv.available) return 'showcase.rescrape.cf_window_restart';
-            if (adv.inShell) return 'showcase.rescrape.cf_window_not_built';
-            return 'showcase.rescrape.jl_desktop_only';
+            return 'showcase.rescrape.cf_window_not_built';
         },
 
         /**
@@ -296,7 +294,7 @@ export function rescrapeState() {
                 if (!resp.ok) throw new Error('availability ' + resp.status);
                 const data = await resp.json();
                 // 168e-T11：整物件重賦值（Alpine 響應式），全域 __ADVANCED_SEARCH__ 只當 seed、不再被寫
-                this.rescrapeCfAvail = { available: !!data.available, sites: data.sites, preparing: data.preparing || [], inShell: this.rescrapeCfAvail.inShell };
+                this.rescrapeCfAvail = { available: !!data.available, sites: data.sites, preparing: data.preparing || [] };
             } catch (_e) {
                 // 逾時或任何錯誤：沿用快照判斷（含 cf_preparing）
             }

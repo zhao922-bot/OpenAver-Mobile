@@ -9,7 +9,6 @@
 import { SHOWCASE_MAX_SERVER_PAGE_SIZE, _videos, _filteredVideos, _nameToGroup, _tagToGroup, _setVideos, _setFilteredVideos, _recomputeAllBadges, _recomputeCardActorAges } from '@/showcase/state-base.js';
 import { applyCellFocal } from '@/shared/focal-cell.js';
 import { openLocal } from '@/shared/open-local.js';
-import { notifyOpenResult } from '@/shared/bridge-notify.js';
 import { normalizePillValue, buildPillPredicate } from '@/shared/pill-filter.js';
 // TASK-124a-T2：發售日 pill 浮層狀態機直接呼叫的 T1 六支純函式中的五支
 // （matchesReleasePill 屬 pill-filter.js 內部使用，state 層不直接呼叫）。
@@ -1087,7 +1086,7 @@ export function stateVideos() {
             (this.paginatedVideos || []).forEach(_recomputeCardActorAges);
         },
 
-        // --- 播放影片 (PyWebView 整合) ---
+        // --- 播放影片 ---
         playVideo(videoOrPath) {
             const video = (
                 videoOrPath && typeof videoOrPath === 'object'
@@ -1102,16 +1101,7 @@ export function stateVideos() {
             const labels = Array.isArray(video?.part_tokens)
                 ? video.part_tokens
                 : [];
-            if (window.pywebview && window.pywebview.api) {
-                window.pywebview.api.open_file(path)
-                    .then(result => {
-                        if (!notifyOpenResult(this.showToast.bind(this), result, 'file')) return;
-                    })
-                    .catch(err => {
-                        console.error('Failed to open file:', err);
-                        this.showToast(window.t('showcase.video.play_failed'), 'error');
-                    });
-            } else if (window.openVideoPlayer) {
+            if (window.openVideoPlayer) {
                 window.openVideoPlayer(path, { parts, labels });
             } else {
                 window.open('/api/gallery/player?path=' + encodeURIComponent(path), '_blank');
@@ -1127,7 +1117,7 @@ export function stateVideos() {
             return perPage === 0 ? paginatedIndex : (this.page - 1) * perPage + paginatedIndex;
         },
 
-        // 開啟資料夾（複製路徑到剪貼簿 + PyWebView 桌面模式額外開啟資料夾）
+        // 複製資料夾路徑到剪貼簿
         openLocal,
 
     };

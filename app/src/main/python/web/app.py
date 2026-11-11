@@ -3,12 +3,9 @@ OpenAver Web GUI - FastAPI Application
 """
 from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import urlencode, urlparse
 import asyncio
 import contextlib
 import os
-import re
-import subprocess  # noqa: F401 — 既有測試 mock.patch("web.app.subprocess.Popen") 需要此名稱存在
 import sys
 import threading
 
@@ -19,7 +16,7 @@ mimetypes.add_type("text/javascript", ".mjs")
 mimetypes.add_type("text/css", ".css")
 mimetypes.add_type("image/svg+xml", ".svg")
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from web.static_cache import NoCacheStaticFiles
@@ -61,17 +58,16 @@ from core.database import backfill_readonly_nfo_mtime_once
 from core.metatube.state import metatube_state as _mt_startup_state
 from core.access_auth import ensure_schema, load_snapshot, snapshot, verify_ticket
 from core import source_reachability
-from core import self_update
 from core.platform_info import is_synology
-from core.desktop_env import desktop_kind
 from core import cf_handoff
 from core.loopback import is_loopback_host
 from core.cf_transport import register_cf_transport
 from core.i18n import get_config_locale, t as i18n_t
 from web.shell_identity import cf_availability_here, shell_key
 
-# 168d CD-168d-3／BE-LINT-09：sink 註冊放 module level（不放 lifespan）——所有進入點（含不啟動
-# lifespan 的桌面版與 TestClient）import 時就已註冊。目前沒有任何路徑覆蓋它；桌面殼的驗證視窗由 windows/cf_shell.py 向主機登記，不走 register_cf_transport。
+# 168d CD-168d-3／BE-LINT-09：sink 註冊放 module level（不放 lifespan）——所有進入點
+# （含不啟動 lifespan 的 TestClient）import 時就已註冊。Android 原生驗證 WebView
+# 透過 /api/cf/mobile/* 領取 job，不走 register_cf_transport。
 register_cf_transport(cf_handoff.transport())
 
 
@@ -85,48 +81,6 @@ LIFESPAN_BOOTSTRAP_EXIT_CODE = 78
 _LIFESPAN_BOOTSTRAP_STDERR = (
     "OpenAver 啟動失敗：資料位置尚未就緒或已損毀，詳細原因請查看 debug.log。"
 )
-
-
-def _maybe_notify_update(result: dict) -> None:
-    """同一最新版本只發一次通知，並在設定鎖內保存已通知版本。"""
-    if not result.get("has_update"):
-        return
-    latest = result.get("latest_version")
-    cfg = load_config()
-    if latest and latest != cfg.get("general", {}).get("last_notified_update_version", ""):
-        emit_notification(
-            "info", "notif.update_available",
-            message=f"v{latest}", url=result.get("download_url", ""),
-        )
-        def _remember(config: dict) -> None:
-            config.setdefault("general", {})["last_notified_update_version"] = latest
-        mutate_config(_remember)
-
-
-async def _startup_update_check() -> None:
-    """啟動時背景檢查新版；任何錯誤只記錄，不阻斷啟動。"""
-    try:
-        _cfg = load_config()  # raw dict
-        if not _cfg.get("general", {}).get("auto_check_update", True):
-            return
-        result = await check_update()  # 復用端點函式，check_update() 本體不動
-        _maybe_notify_update(result)
-    except Exception:
-        logger.warning("lifespan: startup update check failed", exc_info=True)
-
-
-async def _periodic_update_check_loop() -> None:
-    """非桌面版每 24 小時重查一次；啟動當下已由 startup task 查過。"""
-    if _is_windows_desktop() or _is_mac_desktop():
-        return
-    while True:
-        await asyncio.sleep(86400)
-        try:
-            cfg = load_config()
-            if cfg.get("general", {}).get("auto_check_update", True):
-                _maybe_notify_update(await check_update())
-        except Exception:
-            logger.warning("lifespan: periodic update check failed", exc_info=True)
 
 
 def _run_in_daemon_thread(fn):
@@ -235,13 +189,6 @@ async def lifespan(app: FastAPI):
     # TASK-63e-1／166-T2: auto-reconnect metatube from persisted config，同樣放背景。
     app.state.metatube_reconnect_task = asyncio.create_task(_startup_metatube_reconnect())
 
-    # TASK-107-P1-T2: 背景（非阻塞）啟動更新檢查。lifespan 不 await 此 task，
-    # yield 立刻放行，App 啟動不被 GitHub 網路往返拖慢（AC-A6）。
-    # create_task 回傳值須保留強引用（event loop 只持 weak ref），否則 task 可能
-    # 執行中途被 GC 回收 —— 存 app.state（app 已建立、比 module global 乾淨，無需 global）。
-    app.state.startup_check_task = asyncio.create_task(_startup_update_check())
-    app.state.periodic_update_check_task = asyncio.create_task(_periodic_update_check_loop())
-
     # TASK-144-T5: 12 小時排程 loop；create_task 回傳值須保留強引用（同上一段理由，
     # event loop 只持 weak ref，task 可能執行中途被 GC 回收）。
     app.state.auto_organize_task = asyncio.create_task(auto_organize_loop())
@@ -279,13 +226,6 @@ async def lifespan(app: FastAPI):
                 await _task
         except Exception:
             logger.warning("lifespan: %s shutdown failed unexpectedly", _task_name, exc_info=True)
-
-    try:
-        app.state.periodic_update_check_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await app.state.periodic_update_check_task
-    except Exception:
-        logger.warning("lifespan: periodic_update_check_task shutdown failed unexpectedly", exc_info=True)
 
     try:
         app.state.auto_organize_task.cancel()
@@ -362,10 +302,9 @@ from web.routers import settings_link as settings_link_router
 from web.routers import scraper_sources as scraper_sources_router
 from web.routers import settings_metatube as settings_metatube_router
 from web.routers import cf as cf_router
-from web.routers import cf_shell as cf_shell_router
+from web.routers import cf_mobile as cf_mobile_router
 from web.routers import diagnostics as diagnostics_router
 from web.routers import access as access_router
-from web.routers import client as client_router
 from web.routers import wishlist as wishlist_router
 from web.routers import insights as insights_router
 from web.routers import source_probe as source_probe_router
@@ -401,10 +340,9 @@ app.include_router(settings_link_router.router)
 app.include_router(scraper_sources_router.router)
 app.include_router(settings_metatube_router.router)
 app.include_router(cf_router.router)
-app.include_router(cf_shell_router.router)
+app.include_router(cf_mobile_router.router)
 app.include_router(diagnostics_router.router)
 app.include_router(access_router.router)
-app.include_router(client_router.router)
 app.include_router(wishlist_router.router)
 app.include_router(insights_router.router)
 app.include_router(source_probe_router.router)
@@ -447,12 +385,6 @@ def _lan_access_allowed(client_host, server_mode):
 _VERIFY_ENDPOINT = ("POST", "/api/access/verify")
 _HEALTH_ENDPOINT = ("GET", "/api/health")
 _AUTH_ALLOWLIST = frozenset({_VERIFY_ENDPOINT, _HEALTH_ENDPOINT})
-
-# 桌面 client 握手（CD-168b-1）：只放 hello／token 兩端點，與上面常數分開、不併入。
-_CLIENT_HELLO_ENDPOINT = ("GET", "/api/client/hello")
-_CLIENT_TOKEN_ENDPOINT = ("POST", "/api/client/token")
-_CLIENT_HANDSHAKE_ALLOWLIST = frozenset({_CLIENT_HELLO_ENDPOINT, _CLIENT_TOKEN_ENDPOINT})
-
 
 def render_access_gate_page(request: Request):
     """偽裝頁：獨立完整 HTML，不透露任何真實內容存在與否。
@@ -567,10 +499,6 @@ async def access_gate(request: Request, call_next):
         # 登入入口本身，永遠可達，不比對 authed。
         return await call_next(request)
 
-    if (method, path) in _CLIENT_HANDSHAKE_ALLOWLIST:
-        # 桌面 client 握手端點（CD-168b-1）：冷載與「認證未開啟」判斷都已在上面做完。
-        return await call_next(request)
-
     if (method, path) == _HEALTH_ENDPOINT:
         if authed:
             return await call_next(request)
@@ -595,41 +523,6 @@ async def access_gate(request: Request, call_next):
     return render_access_gate_page(request)
 
 
-def _query_without_oa_token(request: Request) -> str:
-    """去掉 oa_token 後重組 query（其餘參數順序與重複鍵保留）。"""
-    return urlencode([(k, v) for k, v in request.query_params.multi_items() if k != "oa_token"])
-
-
-async def _warm_auth_snapshot() -> bool:
-    """快取冷時照 access_gate 寫法載入；失敗回 False（呼叫端 fail-closed 放行）。"""
-    if snapshot() is not None:
-        return True
-    try:
-        await asyncio.to_thread(ensure_schema)
-    except Exception:
-        logger.exception("client_token_gate: cold-load ensure_schema() failed")
-        return False
-    return snapshot() is not None
-
-
-@app.middleware("http")
-async def client_token_gate(request: Request, call_next):
-    """桌面 client 的 `?oa_token=` 入口（CD-168b-4）：驗票通過 → 種 session cookie 並 303
-    轉址（token 不留在網址）；無效或沒帶 → 原樣放行，交給 access_gate。
-
-    宣告在 access_gate 之後、lan_access_gate 之前＝在 access_gate 之外（先於它執行）、
-    在 lan_access_gate 之內（單機模式的非 loopback 仍先 403）。不做 loopback 短路。
-    """
-    token = request.query_params.get("oa_token") if request.method == "GET" else None
-    if not token or not await _warm_auth_snapshot() or not verify_ticket(token):
-        return await call_next(request)
-    query = _query_without_oa_token(request)
-    location = request.url.path + (f"?{query}" if query else "")
-    response = RedirectResponse(location, status_code=303)
-    response.set_cookie("sid", token, path="/", httponly=True, samesite="lax")
-    return response
-
-
 @app.middleware("http")
 async def lan_access_gate(request: Request, call_next):
     """
@@ -639,7 +532,7 @@ async def lan_access_gate(request: Request, call_next):
     """
     client = request.client
     client_host = client.host if client else None
-    # loopback 短路：桌面 App 自連，零 config I/O
+    # loopback 短路：移動端 App 自連，零 config I/O
     if client_host in _LOOPBACK_HOSTS:
         return await call_next(request)
     # 非 loopback：讀 config 後委派決策核心（測得即所跑）
@@ -649,64 +542,9 @@ async def lan_access_gate(request: Request, call_next):
     return PlainTextResponse("Forbidden", status_code=403)
 
 
-_SHELL_KINDS = ("windows", "mac")
-
-
-def _shell_kind(request: Request):
-    """請求自稱的桌面殼種類（僅供**顯示**；CD-168a-6）。
-
-    query `oa_shell` 優先，其次 cookie；只認 windows／mac，其餘一律忽略。
-    授權閘（/api/install-context、/api/trigger-update）禁讀本函式（CD-168a-7）。
-    """
-    value = request.query_params.get("oa_shell")
-    if value in _SHELL_KINDS:
-        return value
-    value = request.cookies.get("oa_shell")
-    return value if value in _SHELL_KINDS else None
-
-
-_SHELL_MODES = ("client", "local")
-
-
-def _shell_mode(request: Request):
-    """殼回報的連線模式（僅供**顯示**；168b）。query `oa_mode` 優先，其次 cookie；
-    只認 client／local，其餘當沒帶。授權閘禁讀本函式。"""
-    value = request.query_params.get("oa_mode")
-    if value in _SHELL_MODES:
-        return value
-    value = request.cookies.get("oa_mode")
-    return value if value in _SHELL_MODES else None
-
-
 @app.middleware("http")
-async def oa_shell_signal(request: Request, call_next):
-    """把 `_shell_kind` 掛上 request.state，query 帶來且 cookie 不同時種 session cookie。
-
-    宣告在 lan_access_gate 之後＝最外層，PIN 閘門頁與 LAN 403 回應也會帶 cookie。
-    不讀 config、不做 I/O。
-    """
-    kind = _shell_kind(request)
-    request.state.shell_kind = kind
-    mode = _shell_mode(request)
-    request.state.shell_mode = mode
-    response = await call_next(request)
-    from_query = request.query_params.get("oa_shell") in _SHELL_KINDS
-    if from_query and request.cookies.get("oa_shell") != kind:
-        response.set_cookie("oa_shell", kind, path="/", httponly=True, samesite="lax")
-    mode_from_query = request.query_params.get("oa_mode") in _SHELL_MODES
-    if mode_from_query and request.cookies.get("oa_mode") != mode:
-        response.set_cookie("oa_mode", mode, path="/", httponly=True, samesite="lax")
-    return response
-
-
-@app.middleware("http")
-async def cf_shell_scope(request: Request, call_next):
-    """把請求所屬殼的身分寫進 `cf_handoff.current_key`（CD-168d-4）。
-
-    宣告在 oa_shell_signal 之後＝最外層（BE-API-07）；**不讀 shell_kind**。零 I/O。
-    sync 路由經 anyio threadpool 會帶著這份 context；`ThreadPoolExecutor.submit` 不會
-    （刻意：到不了 manual_only 的 CF 站，見 tests/unit/test_cf_executor_boundary_contract.py）。
-    """
+async def cf_transport_scope(request: Request, call_next):
+    """把行動端請求的 CF transport 身分帶進同步刮削執行緒。"""
     token = cf_handoff.current_key.set(shell_key(request))
     try:
         return await call_next(request)
@@ -715,48 +553,14 @@ async def cf_shell_scope(request: Request, call_next):
 
 
 def _is_loopback_host(host):
-    """判斷 `host` 是否為本機（`/api/trigger-update` 三層護欄 CD-110b-5 用）。
+    """判斷 `host` 是否為本機。
 
     本體在 `core.loopback.is_loopback_host()`（全庫唯一所有者），這裡只委派。
     """
     return is_loopback_host(host)
 
 
-def _is_loopback_origin(origin):
-    """`Origin` header 是否解析出 loopback hostname（判 host 不判 port，CD-110b-5）。
-
-    用 `urlparse` 取 `hostname`；`null`、malformed（`http://`、`not-a-url`）解析出的
-    `hostname` 為 `None`／空字串，一律 fail-closed 回 False（不得當成「沒有 Origin」
-    放行——「沒有 Origin」是呼叫端看 `origin is None` 另行判斷，不歸本函式管）。
-
-    `urlparse` 本身也可能拋 `ValueError`（實測：未閉合的 IPv6 字面值
-    `http://[::1` → `Invalid IPv6 URL`）。不接的話會變成未處理例外 → 500，
-    既非 fail-closed 的 403、也把「被擋下」與「伺服器壞了」混在一起。一律接住回 False。
-    """
-    try:
-        hostname = urlparse(origin).hostname
-    except ValueError:
-        return False
-    return bool(hostname) and _is_loopback_host(hostname)
-
-
 # ============ 輔助函數 ============
-
-
-from web.lan_listener import get_lan_ip  # noqa: E402 — re-export for backward compat
-
-
-def _is_windows_desktop() -> bool:
-    """True のみ Windows 桌面 App（feature/82 T4：OPENAVER_STANDALONE env + win32 雙重條件）。
-    非桌面 / 非 Windows → False，Settings 中不渲染 close_action 下拉。
-    伺服器行程判斷，禁用於顯示（顯示看 `_shell_kind(request)`，CD-168a-6）。"""
-    return desktop_kind() == "windows"
-
-
-def _is_mac_desktop() -> bool:
-    """True 僅限 macOS 桌面 App（OPENAVER_STANDALONE=1 AND darwin）。
-    伺服器行程判斷，禁用於顯示（顯示看 `_shell_kind(request)`，CD-168a-6）。"""
-    return desktop_kind() == "mac"
 
 
 def get_common_context(request: Request) -> dict:
@@ -836,15 +640,12 @@ def get_common_context(request: Request) -> dict:
     # 在 web/shell_identity.py::cf_availability_here，SSR 與 /api/cf/availability 共用。
     _cf_avail = cf_availability_here(request)
 
-    _server_mode = bool(config.get('general', {}).get('server_mode', False))
-
     return {
         "request": request,
         "config": config,
         "cf_transport_available": _cf_avail["available"],
         "cf_sites": _cf_avail["sites"],
         "cf_preparing": _cf_avail["preparing"],
-        "lan_ip": get_lan_ip() if _server_mode else None,
         "theme": config.get('general', {}).get('theme', 'light'),
         "sidebar_collapsed": config.get('general', {}).get('sidebar_collapsed', False),
         "font_size": font_size,
@@ -854,11 +655,6 @@ def get_common_context(request: Request) -> dict:
         "merged_translations": merged_translations,
         "t": _t_bound,
         "is_android": sys.platform == "android" or os.environ.get("OPENAVER_MOBILE") == "1",
-        "is_windows_desktop": getattr(request.state, "shell_kind", None) == "windows",
-        "is_mac_desktop": getattr(request.state, "shell_kind", None) == "mac",
-        "is_desktop": getattr(request.state, "shell_kind", None) is not None,
-        "shell_mode": getattr(request.state, "shell_mode", None),
-        "in_shell": bool(getattr(request.state, "shell_mode", None)),
         "is_synology": is_synology(),
     }
 
@@ -899,22 +695,6 @@ async def search_page(request: Request):
     return templates.TemplateResponse(request, "search.html", context)
 
 
-@app.get("/scraper")
-async def scraper_page(request: Request):
-    """刮削器頁面"""
-    context = get_common_context(request)
-    context["page"] = "scraper"
-    return templates.TemplateResponse(request, "scraper.html", context)
-
-
-@app.get("/updater")
-async def updater_page(request: Request):
-    """更新器頁面"""
-    context = get_common_context(request)
-    context["page"] = "updater"
-    return templates.TemplateResponse(request, "updater.html", context)
-
-
 @app.get("/scanner")
 async def scanner_page(request: Request):
     """Scanner 頁面"""
@@ -943,16 +723,6 @@ async def insights_page(request: Request):
     context = get_common_context(request)
     context["page"] = "insights"
     return templates.TemplateResponse(request, "insights.html", context)
-
-
-@app.get("/connect")
-async def connect_page(request: Request):
-    """連線頁（桌面殼專用；非殼請求與不存在的路由同形 404）"""
-    if getattr(request.state, "shell_kind", None) is None:
-        raise HTTPException(status_code=404)
-    context = get_common_context(request)
-    context["page"] = "connect"
-    return templates.TemplateResponse(request, "connect.html", context)
 
 
 @app.get("/settings")
@@ -1002,8 +772,7 @@ async def help_page(request: Request):
     if show_agent_auth:
         context["agent_token"] = snap.agent_token
 
-    template_name = "help.html" if context.get("is_desktop") else "help_mobile.html"
-    return templates.TemplateResponse(request, template_name, context)
+    return templates.TemplateResponse(request, "help_mobile.html", context)
 
 
 # ============ API 路由（稍後移到 routers/）============
@@ -1018,114 +787,3 @@ async def health_check():
 async def get_version():
     """取得應用程式版本"""
     return {"success": True, "version": VERSION}
-
-
-@app.get("/api/check-update")
-async def check_update():
-    """手動檢查 GitHub 是否有新版本（保護隱私，不自動連網）"""
-    import asyncio
-    import httpx
-
-    locale = await asyncio.to_thread(get_config_locale)
-    current_version = VERSION
-    github_api = self_update.GITHUB_LATEST_API
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await asyncio.wait_for(
-                client.get(github_api, headers={"Accept": "application/vnd.github.v3+json"}),
-                timeout=5.0,
-            )
-
-            if resp.status_code == 404:
-                # 還沒有 release
-                return {"success": True, "has_update": False, "current_version": current_version}
-
-            resp.raise_for_status()
-            data = resp.json()
-
-            latest_version = data.get("tag_name", "").lstrip("v")
-            download_url = data.get("html_url", "")
-
-            # 語意版本比較（tuple 比較避免 "0.10.0" < "0.9.0" 問題）
-            def _parse_ver(v):
-                # Strip prerelease/build suffixes: "0.10.0-rc1" → "0.10.0"
-                m = re.match(r'(\d+(?:\.\d+)*)', v)
-                if not m:
-                    raise ValueError(f"Cannot parse version: {v}")
-                return tuple(int(x) for x in m.group(1).split('.'))
-            try:
-                has_update = _parse_ver(latest_version) > _parse_ver(current_version)
-            except (ValueError, AttributeError):
-                has_update = False
-
-            return {
-                "success": True,
-                "has_update": has_update,
-                "current_version": current_version,
-                "latest_version": latest_version,
-                "download_url": download_url
-            }
-    except (httpx.TimeoutException, TimeoutError):
-        return {"success": False, "error": _app_text("update_timeout", locale)}
-    except Exception as e:
-        logger.error("檢查更新失敗: %s", e)
-        return {"success": False, "error": _app_text("update_check_failed", locale)}
-
-
-@app.get("/api/install-context")
-async def get_install_context():
-    """取得安裝路徑資訊，供 Help 頁更新 modal 分流使用（僅 desktop App）。"""
-    if not (_is_windows_desktop() or _is_mac_desktop()):
-        raise HTTPException(status_code=403, detail=_app_text("desktop_only"))
-    return {"is_default_path": self_update.is_default_install()}
-
-
-@app.post("/api/trigger-update")
-async def trigger_update(request: Request):
-    """開啟外部終端視窗執行安裝 TUI（僅 desktop App，不揭露給 AI agent）。
-
-    三層護欄（CD-110b-5，缺一不可）防範 ① 任何網站用 auto-submit `<form>` 觸發的
-    CSRF ② `server_mode` 開啟時同網段裝置觸發桌面主機執行安裝腳本的 LAN 暴露面：
-    ① 硬條件：desktop **且** loopback client（兩者皆須成立；同時關掉 server_mode
-       的 LAN 暴露面）
-    ② Origin 存在時只接受 loopback origin（判 host 不判 port）；不存在時不得因此
-       放行，仍受①約束（PyWebView 可能不送 Origin）
-    ③ 自訂 header `X-OpenAver-Desktop-Action` 存在（只檢查存在、不比對值——比對值
-       不增加安全性，卻多一個日後改文案就破功的耦合點）
-    四個檢查全部在 `subprocess.Popen` 之前：403 路徑零副作用。
-    """
-    client = request.client
-    client_host = client.host if client else None
-    origin = request.headers.get("origin")
-    # 四個檢查對外一律回同一段文案（不讓外部探測出是哪一層擋的），但**對內記 log**：
-    # plan-110b §4 把「護欄把桌面版自己鎖在門外」列為最嚴重風險，而那個情境在真機
-    # 上只會看到一個 toast 錯誤。log 這一行是 owner 真機 hard-gate 失敗時唯一的
-    # 分診依據——沒有它就得靠猜是哪一層。
-    denied = None
-    if not (_is_windows_desktop() or _is_mac_desktop()):
-        denied = "not-desktop"
-    elif not _is_loopback_host(client_host):
-        denied = "non-loopback-client"
-    elif origin is not None and not _is_loopback_origin(origin):
-        # 註：`origin` 為空字串（header 存在但值為空）會走進這裡並被拒。這是刻意的
-        # fail-closed，且合規瀏覽器不會產生該情境——同源 POST 若送 Origin 必為真實
-        # origin 值，跨站沙箱情境送的是字面 `"null"` 而非空字串。
-        denied = "non-loopback-origin"
-    elif "X-OpenAver-Desktop-Action" not in request.headers:
-        denied = "missing-desktop-action-header"
-    if denied:
-        # client_host／origin 是外部可控值。標準 HTTP 下 header 值不能含裸 CR/LF
-        # （framing 層就會拒），所以換行式 log 偽造走不到這裡；但未消毒的外部輸入
-        # 進 log 仍值得設上界——截斷成本近乎零，診斷用途也不需要長字串。
-        logger.warning(
-            "trigger-update 拒絕：layer=%s client_host=%.64s origin=%.128s",
-            denied, str(client_host), str(origin),
-        )
-        raise HTTPException(status_code=403, detail=_app_text("desktop_only"))
-    try:
-        self_update.launch_installer()
-    except Exception as e:
-        logger.error("trigger-update 啟動外部終端失敗: %s", e)
-        raise HTTPException(status_code=500, detail=_app_text("update_start_failed")) from e
-    return {"success": True}

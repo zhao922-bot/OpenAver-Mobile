@@ -475,17 +475,7 @@ export function searchStateResultCard() {
     openSourceUrl(url) {
         if (!url || typeof url !== 'string') return;
         if (!url.startsWith('http://') && !url.startsWith('https://')) return;
-        if (window.pywebview?.api?.open_url) {
-            window.pywebview.api.open_url(url).then(ok => {
-                if (ok) {
-                    this.showToast(window.t('search.toast.browser_opened'), 'success');
-                } else {
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                }
-            }).catch(() => window.open(url, '_blank', 'noopener,noreferrer'));
-        } else {
-            window.open(url, '_blank', 'noopener,noreferrer');
-        }
+        window.open(url, '_blank', 'noopener,noreferrer');
     },
 
     // ===== T1c: Cover Error =====

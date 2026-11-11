@@ -13,13 +13,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r56-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r57-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r56-arm64-v8a.apk`
+- 文件名：`openaver-v0.17.18-android-r57-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r56`（versionCode `17074`）
+- 版本：`0.17.18-r57`（versionCode `17075`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -264,11 +264,19 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r56：最终 arm64 Release 约 `22.21 MiB`，较 r55 减少约 `6.53 MiB`；扫描、
   浏览、搜索、Insights、设置、四语言、播放、翻译、NFO、剧照、数据库导入导出、
   后台任务和真实设备 SD 卡路径均已回归验证
+- r57：移除 Android 包内无入口的桌面连接页、更新器、旧帮助页和桌面壳
+  CF 路由；不再启动桌面更新检查，并删除 PyWebView、连接状态和壳脚本残留
+- r57：设置页移除服务器模式、访问密码、局域网、Windows 播放器、关闭行为和
+  离线 HTML 导出入口，同时保留后端旧配置字段兼容；文件选择、目录选择、复制
+  路径和播放全部统一走 Android/移动端路径
+- r57：Android 原生 CF worker 改用移动专用端点，JavLibrary、FC2-javten 和
+  Jable 继续共用 WebView 验证；六页、四语言、数据库备份入口、扫描生成、
+  Insights、普通视频播放器选择和冷启动均在模拟器完成回归
 
 ## 限制
 
-- Windows 托盘、pywebview 桌面窗口、自动更新器、打开资源管理器等桌面专属功能
-  不适用于 Android。
+- 本项目只发布 Android APK；应用内不包含桌面窗口、托盘、自动更新器或局域网
+  服务器设置入口。
 - Android 没有 `curl_cffi` 原生轮子。JavDB 网页查询和 AVBase 女优资料使用行为
   兼容的 `requests` fallback，不保证与桌面端完全相同。
 - 自定义来源 `fetch: cf` 使用普通浏览器请求兼容模式，不保证通过所有

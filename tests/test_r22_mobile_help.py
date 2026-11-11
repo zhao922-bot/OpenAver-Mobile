@@ -15,7 +15,8 @@ def test_mobile_help_uses_dedicated_template():
     app = read(PYTHON_WEB / "app.py")
     template = read(PYTHON_WEB / "templates/help_mobile.html")
 
-    assert 'template_name = "help.html" if context.get("is_desktop") else "help_mobile.html"' in app
+    assert 'templates.TemplateResponse(request, "help_mobile.html", context)' in app
+    assert not (PYTHON_WEB / "templates/help.html").exists()
     assert 'id="mobile-help-start"' in template
     assert 'id="mobile-help-storage"' in template
     assert 'id="mobile-help-trouble"' in template
@@ -27,7 +28,6 @@ def test_mobile_help_uses_dedicated_template():
 def test_mobile_help_removes_desktop_only_actions():
     template = read(PYTHON_WEB / "templates/help_mobile.html")
     base = read(PYTHON_WEB / "templates/base.html")
-    desktop_help = read(PYTHON_WEB / "templates/help.html")
 
     for forbidden in (
         "t.me/",
@@ -40,7 +40,7 @@ def test_mobile_help_removes_desktop_only_actions():
         assert forbidden not in template
     assert "components/tutorial.js" not in base
     assert "components/tutorial.css" not in base
-    assert "btn_tutorial" not in desktop_help
+    assert not (PYTHON_WEB / "static/js/pages/help.js").exists()
 
 
 def test_mobile_help_locales_are_complete():

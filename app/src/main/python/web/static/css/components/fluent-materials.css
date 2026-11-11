@@ -215,7 +215,7 @@
  * Technique: owner-approved poc-settings-glass-v3.css recipe, tokenized.
  * - background: gradient + fill (direction-light over translucent fill)
  * - backdrop-filter: blur(--fluent-blur-light) saturate(--glass-shell-saturate)
- *   always double-written with -webkit-backdrop-filter (macOS WebKit / PyWebView)
+ *   always double-written with -webkit-backdrop-filter for WebView compatibility
  * - border edges: recolor existing hard border to --glass-shell-border (soft hairline)
  * - edge highlights: box-shadow inset ONLY (no ::after, no position:relative,
  *   no background-image edge gradients) — orientation-appropriate:
@@ -699,8 +699,8 @@
  * Technique: padding-box/border-box dual background + transparent border.
  *   EVERY rule using this technique MUST have `border: 1px solid transparent`
  *   otherwise the border-box area does not exist and border gradient is invisible.
- * backdrop-filter ALWAYS double-written with -webkit-backdrop-filter (macOS
- *   PyWebView WKWebView requires -webkit- prefix).
+ * backdrop-filter ALWAYS double-written with -webkit-backdrop-filter because
+ *   Android WebView variants may require the prefixed form.
  * !important ONLY on .scanner-dir-dropdown (inline style override).
  * Source: TASK-77b-T2.md T2–T9.
  * ========================================================================== */

@@ -5,7 +5,6 @@ window.__ADVANCED_SEARCH__ = {
     sources: {{ (config.sources or [])|tojson|safe }},
     cf_transport_available: {{ cf_transport_available|default(false)|tojson|safe }},
     cf_sites: {{ cf_sites|default(none)|tojson|safe }},
-    cf_preparing: {{ cf_preparing|default([])|tojson|safe }},
-    in_shell: {{ in_shell|default(false)|tojson|safe }}
+    cf_preparing: {{ cf_preparing|default([])|tojson|safe }}
 };
 </script>

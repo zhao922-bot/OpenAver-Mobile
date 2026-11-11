@@ -57,9 +57,7 @@ export function searchPage() {
                 clearTimeout(_dragTimeoutHandle);
                 _dragTimeoutHandle = null;
                 if (this.dragActive) this.dragActive = false;
-                if (typeof window.pywebview === 'undefined') {
-                    this.handleFileDrop(e.dataTransfer.files);
-                }
+                this.handleFileDrop(e.dataTransfer.files);
             },
 
             _initDragEvents() {
@@ -114,10 +112,6 @@ export function searchPage() {
                                 clearTimeout(this.lightboxCloseTimer);
                                 this.lightboxCloseTimer = null;
                             }
-                            // T2(40b): 移除 window listeners
-                            if (this._pywebviewFilesHandler) {
-                                window.removeEventListener('pywebview-files', this._pywebviewFilesHandler);
-                            }
                             if (this._resizeHandler) {
                                 window.removeEventListener('resize', this._resizeHandler);
                             }
@@ -125,11 +119,7 @@ export function searchPage() {
                     });
                 }
 
-                // 8. T1d: 監聽 pywebview-files 事件
-                this._pywebviewFilesHandler = async (e) => { await this.setFileList(e.detail.paths); };
-                window.addEventListener('pywebview-files', this._pywebviewFilesHandler);
-
-                // 9. Issue-2: resize / 導航時更新封面高度 CSS variable
+                // 8. Issue-2: resize / 導航時更新封面高度 CSS variable
                 this._resizeHandler = () => this._updateCoverHeight();
                 window.addEventListener('resize', this._resizeHandler);
                 this.$watch('currentIndex', () => {

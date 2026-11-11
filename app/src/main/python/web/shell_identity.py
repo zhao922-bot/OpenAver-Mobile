@@ -33,12 +33,11 @@ def shell_key(request: Request) -> str | None:
     return "ip:" + host
 
 
-def cf_availability_here(request: Request) -> dict:
+def cf_availability_here(_request: Request) -> dict:
     """這個請求所屬的殼，CF 來源現在可不可用（SSR 與 `/api/cf/availability` 共用的唯一規則，168d-fix-T2 CD-3）。
 
     回 `{available, sites, preparing}`：
-    - available：`cf_available_here()` 且〔key 為 loopback 或請求自稱桌面殼（oa_shell）〕——同機 localhost
-      瀏覽器與本機殼同為 loopback key 不要求 oa_shell；非 loopback 才用 oa_shell 區分同 IP 的殼與區網瀏覽器。
+    - available：`cf_available_here()` 且請求可對應到本機或已驗證的行動端身分。
     - sites：`get_cf_available_sites()`，可為 None（transport 判不出，前端 fail-open）；不可用時 `[]`。
     - preparing：殼回報還在準備的站；不可用時一律 `[]`。
     純記憶體讀取，不派工給殼（不得呼叫 is_ready／submit）。
@@ -47,10 +46,11 @@ def cf_availability_here(request: Request) -> dict:
     from core.cf_transport import cf_available_here, get_cf_available_sites
 
     key = cf_handoff.current_key.get()
-    available = bool(
-        cf_available_here()
-        and (key == "loopback" or getattr(request.state, "shell_kind", None) is not None)
+    has_transport_identity = (
+        key == "loopback"
+        or (isinstance(key, str) and key.startswith(("t:", "ip:")))
     )
+    available = bool(cf_available_here() and has_transport_identity)
     if not available:
         return {"available": False, "sites": [], "preparing": []}
     return {
