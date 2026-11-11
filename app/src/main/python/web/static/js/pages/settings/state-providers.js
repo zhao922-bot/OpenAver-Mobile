@@ -1,4 +1,5 @@
 import { pickClaudeModel } from './claude-model-pick.js';
+import { pickTagsModel } from '@/settings/ai-tags-logic.js';
 
 export function stateProviders() {
     return {
@@ -33,7 +34,7 @@ export function stateProviders() {
         testGeminiTranslateLoading: false,
 
         // ===== Methods =====
-        async loadOllamaModels(url, savedModel = '') {
+        async loadOllamaModels(url, savedModel = '', { keepModel = false } = {}) {
             if (!url) return;
 
             this.ollamaStatus = `<span class="text-base-content/50">${window.t('settings.status.loading_models')}</span>`;
@@ -45,11 +46,13 @@ export function stateProviders() {
                 if (result.success && result.models && result.models.length > 0) {
                     this.ollamaModels = result.models;
 
-                    // 設定儲存的模型
-                    if (savedModel && result.models.includes(savedModel)) {
-                        this.form.ollamaModel = savedModel;
-                    } else if (result.models.length > 0) {
-                        this.form.ollamaModel = result.models[0];
+                    if (!keepModel) {
+                        // 設定儲存的模型
+                        if (savedModel && result.models.includes(savedModel)) {
+                            this.form.ollamaModel = savedModel;
+                        } else if (result.models.length > 0) {
+                            this.form.ollamaModel = result.models[0];
+                        }
                     }
 
                     this.ollamaStatus = `<span class="text-success"><i class="bi bi-check-circle"></i> ${window.t('settings.status.n_models', {count: result.models.length})}</span>`;
@@ -515,6 +518,40 @@ export function stateProviders() {
                 this.claudeModelStatus = `<span class="text-error"><i class="bi bi-x-circle"></i> ${window.t('settings.status.claude_translate_failed')}</span>`;
             } finally {
                 this.testingClaudeTranslate = false;
+            }
+        },
+
+        aiTagsModelLists() {
+            return {
+                ollama: this.ollamaModels,
+                gemini: this.geminiModels,
+                claude: this.claudeModels,
+                openai_official: this.openaiOfficialModels,
+                openai: this.openaiModels,
+            };
+        },
+
+        async ensureProviderModels(provider) {
+            const count = (items) => (Array.isArray(items) ? items.length : 0);
+            if (provider === 'ollama' && count(this.ollamaModels) <= 1 && this.form.ollamaUrl) {
+                await this.loadOllamaModels(this.form.ollamaUrl, '', { keepModel: true });
+            } else if (provider === 'gemini' && count(this.geminiModels) <= 1 && this.form.geminiApiKey) {
+                await this.testGeminiConnection();
+            } else if (provider === 'claude' && count(this.claudeModels) <= 1 && this.form.claudeApiKey) {
+                await this.fetchClaudeModels({ source: 'auto' });
+            } else if (provider === 'openai_official' && count(this.openaiOfficialModels) <= 1 && this.form.openaiOfficialApiKey) {
+                await this.fetchOpenAIOfficialModels({ source: 'auto' });
+            } else if (provider === 'openai' && count(this.openaiModels) <= 1 && this.form.openaiBaseUrl) {
+                await this.fetchOpenAIModels({ source: 'auto' });
+            }
+
+            if (this.form.aiTagsProvider === provider && !this.form.aiTagsModel) {
+                const lists = this.aiTagsModelLists();
+                this.form.aiTagsModel = pickTagsModel(
+                    provider,
+                    '',
+                    lists[provider] || [],
+                );
             }
         },
     };

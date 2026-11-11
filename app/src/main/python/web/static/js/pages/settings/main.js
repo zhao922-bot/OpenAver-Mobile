@@ -7,6 +7,7 @@ import { stateDatabase }     from '@/settings/state-database.js';
 import { aiServicesCard }    from '@/settings/ai-services-card.js';
 import { aiSimilarPanel }    from '@/settings/ai-similar-panel.js';
 import { aiFacesPanel }      from '@/settings/ai-faces-panel.js';
+import { aiTagsPanel }       from '@/settings/ai-tags-panel.js';
 import { browseDirState }    from '@/shared/state-browse-dir.js';
 import { toastState }        from '@/shared/state-toast.js';
 import { mergeState }        from '@/shared/merge-state.js';
@@ -26,4 +27,5 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('aiServicesCard', aiServicesCard);
     Alpine.data('aiSimilarPanel', aiSimilarPanel);
     Alpine.data('aiFacesPanel', aiFacesPanel);
+    Alpine.data('aiTagsPanel', aiTagsPanel);
 });

@@ -333,6 +333,7 @@
     {
       "patch": "014-mobile-ai-services.patch",
       "files": [
+        "core/anthropic_client.py",
         "core/ai_services/__init__.py",
         "core/ai_services/backfill_state.py",
         "core/ai_services/embedding_cache.py",
@@ -347,12 +348,24 @@
         "core/ai_services/samples.py",
         "core/ai_services/similar_index.py",
         "core/ai_services/similar_state.py",
+        "core/ai_services/post_ingest.py",
+        "core/ai_services/tagging.py",
+        "core/ai_services/tagging_aliases.py",
+        "core/ai_services/tagging_vocab.json",
+        "core/ai_services/tagging_vocab.py",
+        "core/ai_services/tags_backfill.py",
+        "core/ai_services/tags_backfill_policy.py",
+        "core/ai_services/tags_state.py",
+        "core/ai_services/vision_chat.py",
         "core/database/__init__.py",
         "core/database/embeddings.py",
+        "core/gemini_client.py",
         "core/secret_fields.py",
         "core/similar/canonicalize.py",
         "core/similar/ranker.py",
+        "core/user_tags_write.py",
         "web/routers/ai_services.py",
+        "web/routers/ai_tags.py",
         "web/routers/similar.py",
         "web/static/js/pages/settings/ai-backfill-controls.js",
         "web/static/js/pages/settings/ai-backfill-logic.js",
@@ -361,6 +374,10 @@
         "web/static/js/pages/settings/ai-services-card.js",
         "web/static/js/pages/settings/ai-similar-logic.js",
         "web/static/js/pages/settings/ai-similar-panel.js",
+        "web/static/js/pages/settings/ai-tags-logic.js",
+        "web/static/js/pages/settings/ai-tags-panel.js",
+        "web/static/js/pages/showcase/lb-ai-tags-logic.js",
+        "web/static/js/pages/showcase/state-lightbox-ai-tags.js",
         "web/templates/_macros/ai_backfill_controls.html"
       ]
     }

@@ -1631,25 +1631,145 @@ class VideoRepository:
         finally:
             conn.close()
 
-    def update_user_tags(self, path: str, user_tags: List[str]) -> bool:
+    def update_user_tags(
+        self,
+        path: str,
+        user_tags: List[str],
+        *,
+        ai_tagged: bool = False,
+    ) -> bool:
         """安全更新 user_tags 欄位（不碰其他欄位）
 
         Args:
             path: 影片路徑（DB key，file:/// URI 格式）
             user_tags: 新的 user_tags 列表
+            ai_tagged: 同一條 UPDATE 記「AI 跑過」
 
         Returns:
             bool: 是否成功更新
         """
+        if ai_tagged:
+            sql = (
+                "UPDATE videos SET user_tags = ?, "
+                "ai_tagged_at = CURRENT_TIMESTAMP, "
+                "updated_at = CURRENT_TIMESTAMP WHERE path = ?"
+            )
+        else:
+            sql = (
+                "UPDATE videos SET user_tags = ?, "
+                "updated_at = CURRENT_TIMESTAMP WHERE path = ?"
+            )
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "UPDATE videos SET user_tags = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?",
-                (json.dumps(user_tags, ensure_ascii=False), path)
+                sql,
+                (json.dumps(user_tags, ensure_ascii=False), path),
+            )
+            conn.commit()
+            updated = cursor.rowcount > 0
+            if updated:
+                try:
+                    from core.similar.ranker_cache import SimilarRankerCache
+                    SimilarRankerCache.invalidate()
+                except Exception:
+                    logger.exception(
+                        "SimilarRankerCache invalidate failed (non-fatal)"
+                    )
+            return updated
+        finally:
+            conn.close()
+
+    def get_ai_tagged_at(self, path: str) -> Optional[str]:
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "SELECT ai_tagged_at FROM videos WHERE path = ?", (path,)
+            ).fetchone()
+            return row[0] if row is not None else None
+        finally:
+            conn.close()
+
+    def mark_ai_tagged(self, path: str) -> bool:
+        """Mark one physical row without changing user tags or updated_at."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "UPDATE videos SET ai_tagged_at = CURRENT_TIMESTAMP "
+                "WHERE path = ? AND ai_tagged_at IS NULL",
+                (path,),
             )
             conn.commit()
             return cursor.rowcount > 0
+        finally:
+            conn.close()
+
+    def _ai_tagged_map(self) -> dict[str, Optional[str]]:
+        conn = self._get_connection()
+        try:
+            return {
+                path: stamped
+                for path, stamped in conn.execute(
+                    "SELECT path, ai_tagged_at FROM videos"
+                ).fetchall()
+            }
+        finally:
+            conn.close()
+
+    def count_ai_tag_progress(self) -> Tuple[int, int]:
+        """Count logical videos with a usable cover and their pending groups.
+
+        A complete multipart group is one user-facing video. It is pending when
+        any physical member has not been processed, so a partially tagged group
+        is retried and every member is stamped on the next successful run.
+        """
+        from core.multipart_group import logical_video_groups
+
+        rows = self.get_all()
+        stamped = self._ai_tagged_map()
+        groups = logical_video_groups(rows, {})
+        eligible = [
+            group for group in groups
+            if any(member.cover_path for member in group.members)
+        ]
+        pending = sum(
+            1
+            for group in eligible
+            if any(stamped.get(member.path) is None for member in group.members)
+        )
+        return len(eligible), pending
+
+    def list_ai_pending_paths(self) -> List[str]:
+        """Return one representative path for every pending logical video."""
+        from core.multipart_group import logical_video_groups
+
+        rows = self.get_all()
+        stamped = self._ai_tagged_map()
+        result: List[str] = []
+        for group in logical_video_groups(rows, {}):
+            members = list(group.members)
+            if not any(member.cover_path for member in members):
+                continue
+            if not any(stamped.get(member.path) is None for member in members):
+                continue
+            rep = next(
+                (member for member in members if member.cover_path),
+                members[0],
+            )
+            result.append(rep.path)
+        return result
+
+    def reset_all_ai_tagged(self) -> int:
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "UPDATE videos SET ai_tagged_at = NULL "
+                "WHERE ai_tagged_at IS NOT NULL"
+            )
+            conn.commit()
+            return cursor.rowcount
         finally:
             conn.close()
 

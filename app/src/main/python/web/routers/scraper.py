@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from typing import Any, Dict, List, Literal, Optional
 
 from core import cover_upload
+from core.ai_services import post_ingest
 from core.actress_photo import CONTENT_TYPE_MAP
 from core.database import VideoRepository, organize_failures
 from core.db_inflow import try_inflow_upsert
@@ -255,6 +256,27 @@ def get_scrape_cover(token: str):
     )
 
 
+def _post_ingest_after_scrape(
+    target_file: str,
+    db_sync_status: str,
+    path_mappings: dict,
+) -> None:
+    """Queue optional AI work after a successful scrape without affecting it."""
+    if db_sync_status != "synced" or not target_file:
+        return
+    try:
+        post_ingest.run_after_ingest(
+            to_file_uri(target_file, path_mappings),
+            route="scrape_single",
+            skip_faces=True,
+        )
+    except Exception:
+        logger.warning(
+            "scrape_single: post-ingest scheduling failed (non-fatal)",
+            exc_info=True,
+        )
+
+
 @router.post("/scrape-single")
 def scrape_single(request: ScrapeRequest) -> dict:
     """
@@ -414,6 +436,11 @@ def scrape_single(request: ScrapeRequest) -> dict:
             except Exception:
                 logger.warning("scrape_single: 首刮 focal 排程失敗（不影響整理結果）", exc_info=True)
 
+    _post_ingest_after_scrape(
+        result.get("new_filename", ""),
+        db_sync_status,
+        path_mappings,
+    )
     return {**result, "db_sync_status": db_sync_status}
 
 
@@ -439,6 +466,37 @@ class EnrichRequest(BaseModel):
     allow_number_change: bool = False
     preserve_title: bool = False
     skip_format_check: bool = False
+
+
+def _post_ingest_after_enrich(
+    request: "EnrichRequest",
+    canonical: str,
+    success: bool,
+    readonly_action: str | None = None,
+) -> None:
+    """Queue AI work only for a real re-scrape, never for fill-missing."""
+    if not success:
+        return
+    if readonly_action is not None:
+        route = "readonly_rescrape" if readonly_action == "rescrape" else None
+    elif request.mode == "refresh_full" and request.overwrite_existing is True:
+        route = "enrich_rescrape"
+    else:
+        route = None
+    if route is None:
+        return
+    try:
+        post_ingest.run_after_ingest(
+            canonical,
+            route=route,
+            skip_faces=True,
+            skip_translate=bool(request.preserve_title),
+        )
+    except Exception:
+        logger.warning(
+            "enrich_single: post-ingest scheduling failed (non-fatal)",
+            exc_info=True,
+        )
 
 
 class BatchEnrichItem(BaseModel):
@@ -888,6 +946,12 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
                 locale=locale,
             )
             if result.success:
+                _post_ingest_after_enrich(
+                    request,
+                    canonical,
+                    True,
+                    readonly_action=action,
+                )
                 _reconcile_wishlist_after_write()
             return asdict(result)
         except CfChallengeRequired:
@@ -960,6 +1024,11 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
         # double-encode 砍錯 hash（PR #60 Codex P2）。
         if result.success:
             thumbnail_cache.invalidate(coerce_to_file_uri(request.file_path))  # uri-no-reverse: coerce_to_file_uri forward URI build, D2 complement
+            _post_ingest_after_enrich(
+                request,
+                coerce_to_file_uri(request.file_path, path_mappings),
+                True,
+            )
             _reconcile_wishlist_after_write()
         return asdict(result)
     except CfChallengeRequired:

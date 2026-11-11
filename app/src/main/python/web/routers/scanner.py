@@ -108,7 +108,7 @@ from core.platform_info import DSM_PERMISSION_HINT, is_synology
 from core.proxy_policy import proxy_kwargs
 from web.routers.notifications import emit_notification as _emit_notif
 from core.wishlist_reconcile import reconcile_wishlist, format_wishlist_removed_message
-from core.ai_services import faces_state, similar_index
+from core.ai_services import faces_state, similar_index, tags_backfill
 
 logger = get_logger(__name__)
 
@@ -126,7 +126,7 @@ _TAG_SOURCE_CF_POLL_SECONDS = 0.5
 
 
 def _schedule_ai_incremental() -> None:
-    """After a completed scan, queue cover embeddings and reset face notices."""
+    """After a completed scan, queue embeddings and AI tagging."""
     try:
         similar_index.schedule_incremental()
     except Exception:
@@ -135,6 +135,10 @@ def _schedule_ai_incremental() -> None:
         faces_state.new_round()
     except Exception:
         logger.exception("人臉通知輪次重置失敗（掃描完成收尾）")
+    try:
+        tags_backfill.schedule_incremental()
+    except Exception:
+        logger.exception("AI 標籤增量排程失敗（掃描完成收尾）")
 
 
 class RenameExecuteRequest(BaseModel):

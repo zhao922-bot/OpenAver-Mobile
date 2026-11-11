@@ -180,6 +180,7 @@ def _init_db_schema(db_path: Path = None) -> None:
             crop_mode TEXT NOT NULL DEFAULT 'auto',
             focal_attempted_at TIMESTAMP DEFAULT NULL,
             focal_model TEXT NOT NULL DEFAULT 'local-pigo',
+            ai_tagged_at TIMESTAMP DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -389,6 +390,11 @@ def _init_db_schema(db_path: Path = None) -> None:
     if 'focal_model' not in existing_cols:
         cursor.execute(
             "ALTER TABLE videos ADD COLUMN focal_model TEXT NOT NULL DEFAULT 'local-pigo'"
+        )
+
+    if 'ai_tagged_at' not in existing_cols:
+        cursor.execute(
+            "ALTER TABLE videos ADD COLUMN ai_tagged_at TIMESTAMP DEFAULT NULL"
         )
 
     # Migration: 加入 user_rating 欄位（videos，spec-123 精選標記；0=未精選，>0=已精選。

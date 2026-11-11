@@ -3,9 +3,9 @@
 [![Build APK](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml/badge.svg)](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml)
 
 OpenAver Mobile 是 [OpenAver](https://github.com/slive777/OpenAver) 的非官方
-Android 移植版。当前移动端开发版本为 `v0.18.17-android-r5`，已对齐上游
-`v0.18.17` 的补完性能、批次搜索、来源修复和片库浏览体验；尚未移植的上游
-功能会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)在后续 `r6` 完成。
+Android 移植版。当前移动端开发版本为 `v0.18.17-android-r6`，已对齐上游
+`v0.18.17` 的补完性能、批次搜索、来源修复、片库浏览和 AI 后处理体验；
+后续差异会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)继续收敛。
 内嵌代码基线仍为上游 `v0.17.18` 加本仓库补丁。
 
 App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，不需要
@@ -15,13 +15,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r5-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r6-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.18.17-android-r5-arm64-v8a.apk`
+- 文件名：`openaver-v0.18.17-android-r6-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.18.17-r5`（versionCode `18005`）
+- 版本：`0.18.17-r6`（versionCode `18006`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -306,8 +306,19 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   保留兼容；“整理与命名”保留文件夹、文件名、NFO 格式、外部媒体库和对焦设置
 - v0.18.17-r5：AI 区新增标题翻译、图片相似和人脸三个子页；相似索引与人脸补跑
   支持进度、停止、继续、失败提示，并通过 Android 前台服务在离开页面后继续运行
-- v0.18.17-r5：移动端不暴露 AI 标签入口；配置保存会保留尚未启用的标签设置字段，
+- v0.18.17-r5：移动端当时不暴露 AI 标签入口；配置保存会保留标签设置字段，
   远端服务密钥继续使用现有遮罩与本地配置机制
+- v0.18.17-r6：设置页新增 AI 标签子页，可从已配置的 Ollama、Gemini、Claude、
+  OpenAI 官方或 OpenAI 兼容服务选择视觉模型，支持连接测试、全库补跑、停止、
+  继续和带费用提示的全部重建
+- v0.18.17-r6：灯箱用户标签区新增 AI 标签按钮；只上传当前封面裁剪图，不发送
+  视频文件，AI 只追加词表内标签，不删除已有普通标签或用户标签
+- v0.18.17-r6：完整分段视频组只计 1 部、只调用 1 次视觉模型，但模型结果会逐
+  文件写入数据库和各自 NFO；关闭 AI 标签时所有入口直接拒绝调用模型
+- v0.18.17-r6：扫描完成后可增量补齐 AI 标签；单部失败会跳过并继续，认证、连接、
+  模型不支持等问题会停止整批并在设置页显示原因
+- v0.18.17-r6：首次刮削、真正重新刮削和自动整理入库后，可按现有开关自动执行
+  标题翻译、图片相似、人脸对焦和 AI 标签；补缺操作与重复入库不会重复调用 AI
 
 ## 限制
 

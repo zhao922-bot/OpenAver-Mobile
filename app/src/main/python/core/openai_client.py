@@ -100,6 +100,30 @@ def build_translate_payload(model: str, prompt: str) -> dict[str, Any]:
     }
 
 
+def build_vision_payload(
+    model: str,
+    system: str,
+    user_text: str,
+    image_data_uri: str,
+) -> dict[str, Any]:
+    return {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_text},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_data_uri},
+                    },
+                ],
+            },
+        ],
+    }
+
+
 def extract_text(data: dict) -> str:
     """判定順序見 CD-171-4（先中先贏）；成功回非空譯文，失敗拋 TranslateError。"""
     choices = data.get("choices")
@@ -237,3 +261,65 @@ async def request_translation(
     if last_error is not None:
         raise last_error
     raise build_error(TAG, "api_error", None, "", "translation retry exhausted")
+
+
+async def request_vision(
+    base_url: str,
+    api_key: str,
+    model: str,
+    system: str,
+    user_text: str,
+    image_data_uri: str,
+    *,
+    timeout: float,
+) -> str:
+    """POST chat/completions with one image, preserving bounded retries."""
+    last_error: TranslateError | None = None
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            resp = await cloud_request(
+                TAG,
+                "POST",
+                base_url.rstrip("/") + "/chat/completions",
+                headers=build_headers(api_key),
+                timeout=timeout,
+                json=build_vision_payload(
+                    model, system, user_text, image_data_uri
+                ),
+            )
+            if resp.status_code == 429 or 500 <= resp.status_code <= 599:
+                last_error = classify_http_error(resp)
+                if attempt + 1 >= _MAX_ATTEMPTS:
+                    raise last_error
+                await asyncio.sleep(_retry_after_seconds(resp))
+                continue
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise classify_http_error(e.response) from None
+            try:
+                data = resp.json()
+            except Exception as e:
+                raise build_error(
+                    TAG, "api_error", None, "", f"invalid JSON: {e}"
+                ) from e
+            if not isinstance(data, dict):
+                raise build_error(
+                    TAG,
+                    "api_error",
+                    None,
+                    "",
+                    "response is not a JSON object",
+                )
+            return extract_text(data)
+        except TranslateError as exc:
+            last_error = exc
+            if (
+                attempt + 1 >= _MAX_ATTEMPTS
+                or exc.kind not in ("connection_timeout", "connection_failed")
+            ):
+                raise
+            await asyncio.sleep(_DEFAULT_RETRY_DELAY)
+    if last_error is not None:
+        raise last_error
+    raise build_error(TAG, "api_error", None, "", "vision retry exhausted")

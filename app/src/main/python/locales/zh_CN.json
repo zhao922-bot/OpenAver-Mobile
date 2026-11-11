@@ -432,7 +432,8 @@
         "cover": "封面",
         "frame": "视频截图",
         "no_clear_hit": "没有明确命中，请自行核对候选结果",
-        "retry_hint": "换一张更清晰、没有水印的视频截图或封面再试"
+        "retry_hint": "换一张更清晰、没有水印的视频截图或封面再试",
+        "source_link": "avscan"
       },
       "in_library": "片库已有",
       "not_in_library": "片库没有",
@@ -444,7 +445,14 @@
       "thumb_alt": "待查询图片",
       "searching": "正在使用 avscan 查询番号…",
       "use_candidate": "使用此番号搜索",
-      "not_searchable": "这个结果无法作为番号搜索"
+      "not_searchable": "这个结果无法作为番号搜索",
+      "drag_hint": "用视频截图或封面查番号（avscan.cc）",
+      "one_at_a_time": "一次只查一张",
+      "your_image": "你的图",
+      "not_found": {
+        "hint": "avscan 认出了这个番号，但搜索来源里没有它",
+        "search_cta": "用这个番号搜索"
+      }
     }
   },
   "settings": {
@@ -456,7 +464,8 @@
       "organize": "整理规则",
       "translate": "AI 翻译",
       "advanced": "高级",
-      "naming": "整理与命名"
+      "naming": "整理与命名",
+      "gallery": "浏览显示"
     },
     "display": {
       "font_size_label": "界面字号",
@@ -659,7 +668,7 @@
       "favorite_folder_hint": "一键载入常用文件夹",
       "favorite_folder_placeholder": "留空 = 系统下载文件夹",
       "favorite_folder_placeholder_server": "留空 = 不使用待整理文件夹",
-        "favorite_folder_example_prefix": "示例：/sdcard/Download",
+      "favorite_folder_example_prefix": "示例：/sdcard/Download",
       "proxy_placeholder": "留空就直接连接或走系统代理",
       "proxy_scope_label": "代理范围",
       "proxy_scope_dmm": "仅 DMM",
@@ -751,7 +760,9 @@
         "rewrite_done": "已改写 {count} 个 .strm 文件",
         "rewrite_failed": "改写既有 .strm 失败，路径规则已保存但既有文件尚未更新；请稍后再保存一次重试。",
         "intro": "当 Emby／Jellyfin／Kodi 在另一台机器、看到的来源路径与本机不同时，用这些规则把「本机扫描前缀」替换成「播放端前缀」。没有规则时 strm 直接写本机路径。规则是全局一份，应用到所有 .strm（含 Emby／Kodi 的）。Jellyfin 10.11.7 起 .strm 只能指向网址（http／https／rtsp／rtp），写硬盘路径的 .strm 一律不播——不管硬盘在哪台机器；Emby、Kodi 不受影响。若你的云盘本来就通过 Alist／OpenList 等以 HTTP 提供，把「播放端路径替换」的播放端填成那个网址前缀即可（例：/volume1/cloud → http://nas:5244/d/115）。"
-      }
+      },
+      "preview_label": "预览",
+      "naming_default_hint": "通常保持默认即可。"
     },
     "gallery": {
       "output_dir_label": "输出目录",
@@ -795,7 +806,11 @@
       },
       "export_section": "离线 HTML 导出（Windows 本机查看用）",
       "export_notice": "此导出文件为 Windows 本机双击查看设计；macOS / Linux 请改用 app 浏览页。（成因：封面以 <code>file://</code> 嵌入，Mac 浏览器会拦截本机跨目录文件）",
-      "mode_export_only_note": "仅影响此导出文件（不影响 app Showcase）"
+      "mode_export_only_note": "仅影响此导出文件（不影响 app Showcase）",
+      "hide_unreachable_sources_label": "隐藏未连接硬盘",
+      "hide_unreachable_sources_note": "硬盘没插或云盘断线时，先不显示那上面的片；接回来就会自动出现。不会删除任何片或记录。",
+      "hide_unreachable_sources_help_aria": "隐藏未连接硬盘说明",
+      "export_optional": "（选用）"
     },
     "system": {
       "default_page_label": "启动时打开页面",
@@ -925,7 +940,7 @@
       "title": "AI 功能",
       "tab_translate": "翻译",
       "tab_similar": "图片相似",
-      "help_body": "配置标题翻译、封面相似检索和人脸检测。服务运行在你自建的远端 HTTP 服务中，封面和标题不会写入应用日志。",
+      "help_body": "这张卡集中管理翻译与图片相似。密钥与网址放在下方连接区；翻译分页只选引擎与模型。图片相似需要自建向量端点，没有可以略过。",
       "help_docs_link": "外部 AI 说明（GitHub：docs/external-ai.md）",
       "connections_title": "连接",
       "backfill": {
@@ -975,7 +990,11 @@
         "check_unstable": "同一张图两次的向量不够接近",
         "check_not_discriminative": "两张不同的图向量太接近",
         "check_model_flapping": "同一次测试 model 字符串不一致",
-        "check_unknown": "返回不符合约定（原因不明）"
+        "check_unknown": "返回不符合约定（原因不明）",
+        "btn_assistant": "交给 AI 助理设置",
+        "assistant_prompt": "请帮我架一个 OpenAver 图片相似端点。规格在 https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md 的「图片相似」一节，照那节的一致性测试自己验过再回报。架好后告诉我端点网址，我会填进 OpenAver 设置页「AI 功能 › 图片相似」。这台 OpenAver 在 {lan_url}，端点要让这个网址连得到。请把服务设成开机自启。",
+        "assistant_copied": "已复制，贴给你的 AI 助理",
+        "assistant_copy_failed": "复制失败，请手动选取文字"
       },
       "tab_faces": "人脸",
       "faces": {
@@ -1012,8 +1031,72 @@
         "check_no_model": "返回内容缺少 model 字段",
         "check_no_face": "样本图里没找到脸",
         "check_center_off": "找到的脸位置和样本差太多",
-        "check_unknown": "返回不符合约定（原因不明）"
+        "check_unknown": "返回不符合约定（原因不明）",
+        "btn_assistant": "交给 AI 助理设置",
+        "assistant_prompt": "请帮我架一个 OpenAver 人脸对焦端点。规格在 https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md 的「人脸对焦」一节，照那节的一致性测试自己验过再回报。架好后告诉我端点网址，我会填进 OpenAver 设置页「AI 功能 › 人脸」。这台 OpenAver 在 {lan_url}，端点要让这个网址连得到。请把服务设成开机自启。",
+        "assistant_copied": "已复制，贴给你的 AI 助理",
+        "assistant_copy_failed": "复制失败，请手动选取文字"
+      },
+      "tab_tags": "AI 标签",
+      "tags": {
+        "enabled_label": "启用 AI 标签",
+        "empty_desc": "AI 会看每部片的海报，从固定词表里挑出服装、袜类、外观、场景，加进你的标签。云端服务会产生费用；也可以用自己电脑上的模型。",
+        "provider_label": "连接",
+        "provider_placeholder": "请选择",
+        "model_label": "模型",
+        "model_hint": "要选看得懂图的模型",
+        "status_none": "尚未取得状态",
+        "status_slow_extra": "・服务要求放慢，已改为逐部处理",
+        "status_waiting_extra": "・服务要求放慢，等待中",
+        "status_skipped_extra": "・另有 {k} 部没标成",
+        "status_stopped_unreachable": "已停止：连不上这个服务，按「继续」接着跑",
+        "status_stopped_auth": "已停止：密钥被拒，请检查连接区的密钥",
+        "status_stopped_model_unsupported": "已停止：这个模型看不懂图，请换一个模型",
+        "status_stopped_quota": "服务额度用完，稍后按「继续」",
+        "status_stopped_not_configured": "已停止：连接还没设好",
+        "status_stopped_disabled": "已停止：AI 标签已关闭",
+        "status_unreachable": "上次成功 {time}・目前连不上",
+        "status_unreachable_no_time": "目前连不上",
+        "status_ready": "已跑 {n}／{m} 部・上次成功 {time}",
+        "status_ready_no_time": "已跑 {n}／{m} 部",
+        "test_ok": "通过・模型在样本图上标到：{tags}",
+        "test_ok_no_tags": "通过，但在样本图上没标到字；若使用时也都是 0 个，请换一个看得懂图的模型",
+        "test_unreachable": "连不上这个连接",
+        "test_unusable_model_unsupported": "连上了，但这个模型看不懂图，请换一个",
+        "test_unusable_bad_response": "连上了，但模型返回的内容读不出来",
+        "test_unusable_refused": "连上了，但模型不肯看这张样本图",
+        "test_unusable_no_tags": "连上了，但模型在样本图上一个标签都没标到，请换一个看得懂图的模型",
+        "test_not_configured": "请先选连接并填好下面的连接资料",
+        "test_failed_generic": "测试失败",
+        "rebuild_confirm": "会对 {n} 部片重新请 AI 看一次（会产生费用）；已有的标签不会被删除。",
+        "cost_pending_tail": "・这次大约 USD ${total}（以 {label} 估，依 2026-11 公开价格，实际以账单为准）",
+        "rebuild_confirm_cost": "会对 {n} 部再请 AI 看一次，大约 USD ${total}（以 {label} 估，依 2026-11 公开价格，实际以账单为准）；已有的标签不会被删除。",
+        "first_run_hint": "开启后，下一次更新片库会一并处理片库里还没跑过的 {n} 部",
+        "test_http_error": "测试请求失败",
+        "backfill_http_error": "补完全库请求失败",
+        "backfill_not_enabled": "请先开启 AI 标签并点「保存」，再补完全库"
       }
+    },
+    "group": {
+      "organize_from": "从哪里整理",
+      "organize_attach": "文件夹与附件",
+      "organize_naming": "怎么命名",
+      "sources_sites": "要查哪些网站",
+      "sources_proxy": "连接代理（选填）",
+      "sources_metatube": "自建 Metatube（进阶）",
+      "gallery_defaults": "浏览页默认",
+      "gallery_cover": "封面",
+      "gallery_gate": "入库门槛"
+    },
+    "tab_desc": {
+      "sources": "选择要去哪些网站查视频资料，并决定查询的先后顺序。",
+      "scraping": "整理视频时怎么放、怎么命名，以及要不要搭配其他媒体库软件。",
+      "gallery": "浏览页打开时的默认、封面处理，以及哪些文件会进片库。",
+      "ai": "翻译、图片相似、人脸、AI 标签的连接与补跑设置。",
+      "system": "默认页、关闭窗口行为、播放器。"
+    },
+    "save": {
+      "unsaved": "有未保存的更改"
     }
   },
   "scanner": {
@@ -1451,7 +1534,12 @@
     "focal_auto_disabled": "找脸连续两次超时，已经先帮你关掉自动对焦。想对焦的话，在灯箱里自己拖曳就可以。",
     "data_root_finalized": "数据位置已定版，备份时请把这个文件夹一起保留",
     "data_root_recovered": "既有片库已保留，设置已重建为默认值：来源设置、跨机器路径映射、外部服务设置与界面偏好都需要重新设置",
-    "cf_shell_lost": "验证窗口没有响应，请刷新后再试"
+    "cf_shell_lost": "验证窗口没有响应，请刷新后再试",
+    "update_available_server": "OpenAver 有新版本，请在主机执行 openaver update",
+    "ai_similar_unreachable": "图片相似端点连不上，新片暂以规则排序",
+    "ai_faces_unreachable": "人脸端点连不上，这轮改用内置方式找脸",
+    "ai_tags_unreachable": "AI 标签连不上，新片稍后再补",
+    "ai_tags_backfill_stopped": "AI 标签补完全库停下来了，请回设置页看原因"
   },
   "similar_mode": {
     "button_aria_label": "探索相似视频",
@@ -1464,7 +1552,8 @@
       "loading": "加载视频列表中...",
       "empty": "片库还没有视频",
       "generate_action": "前往片库管理",
-      "retry": "重试"
+      "retry": "重试",
+      "all_hidden": "所有视频都在未连接的硬盘上"
     },
     "error": {
       "server_error": "服务器错误 ({status})",
@@ -1617,7 +1706,13 @@
       "source_unreachable_list": "无法访问：{list}",
       "source_unreachable_count": "{n} 个位置无法访问",
       "source_no_permission_list": "没有权限读取：{list}",
-      "source_no_permission_count": "{n} 个位置没有权限读取"
+      "source_no_permission_count": "{n} 个位置没有权限读取",
+      "source_offline_list": "{list} 没有连接",
+      "source_offline_count": "{n} 块硬盘没有连接",
+      "source_offline_hidden": "・已隐藏 {n} 部",
+      "source_hide_btn": "隐藏",
+      "source_show_btn": "显示",
+      "source_hide_save_failed": "「隐藏未连接硬盘」没有保存成功，已改回原来的显示"
     },
     "nav": {
       "prev_page": "上一页",
@@ -1695,7 +1790,19 @@
       "plot_no_nfo": "这部片没有 NFO，无法写入简介",
       "plot_translate_done": "已翻译简介",
       "plot_translate_undo": "撤销",
-      "plot_translate_undone": "已撤销简介"
+      "plot_translate_undone": "已撤销简介",
+      "ai_tags_tooltip": "AI 标签",
+      "ai_tags_added": "AI 加了 {n} 个标签",
+      "ai_tags_none": "AI 没有看到词表里的东西",
+      "ai_tags_refused": "这部片 AI 不提供标签",
+      "ai_tags_unreachable": "连不上 {provider}",
+      "ai_tags_rate_limited": "{provider} 要求太频繁或额度用完，稍后再试",
+      "ai_tags_model_unsupported": "这个模型看不懂图，请到设置页换一个",
+      "ai_tags_bad_response": "AI 的返回读不出来",
+      "ai_tags_not_configured": "请先到设置页的 AI 标签设置好",
+      "ai_tags_failed": "AI 标签失败，请稍后再试",
+      "plot_already_zh": "简介已是中文",
+      "mask_focal_endpoint_down": "人脸端点没有响应，这次用内置方式找脸"
     },
     "pick": {
       "add_aria": "加入精选",
@@ -1900,7 +2007,8 @@
       "this_computer_unavailable": "暂时读不到这台电脑的更新信息，请重新打开帮助页再试",
       "client_up_to_date": "这台电脑的 OpenAver 已是最新",
       "client_update_available_prefix": "这台电脑有新版",
-      "client_update_available_suffix": "可用"
+      "client_update_available_suffix": "可用",
+      "server_update_available": "有新版 v{version}：在主机上执行"
     },
     "agent_auth": {
       "title": "Agent Token",
@@ -2284,6 +2392,57 @@
     "manual": {
       "faq_title": "常见问题",
       "chapters_title": "章节"
+    },
+    "stage": {
+      "common": {
+        "prev": "上一步",
+        "next": "下一步",
+        "dot_label": "第 {n} 步",
+        "scroll_hint": "向下滚动",
+        "you": "你",
+        "background": "背后",
+        "goto": "前往{page}"
+      },
+      "library": {
+        "subtitle": "保留文件名和位置，补资料、用封面看",
+        "s1_you": "把放片的文件夹拖进「{page}」",
+        "s1_bg": "文件夹加进清单，这一步还不会开始扫描",
+        "s2_you": "按「{action}」",
+        "s2_bg": "读取文件夹里已有的封面和 NFO（记着片名、女优的资料文件）",
+        "s3_you": "有片缺资料时，按「{action}」",
+        "s3_bg": "从内置来源查资料。只补封面和资料，不会改名，也不会搬动你的文件；用其他工具整理过的片会直接收进来，不重抓",
+        "s4_you": "点侧栏「{page}」",
+        "s4_bg": "同一批片排成封面墙。之后有新片，再按一次「{action}」"
+      },
+      "organize": {
+        "subtitle": "查好资料，按你的规则改名、搬好",
+        "s1_you": "在「{page}」页定好命名规则，按「{action}」",
+        "s1_bg": "马上预览整理后的文件夹和文件名",
+        "s2_you": "在「{page}」页拖动来源，排出顺序",
+        "s2_bg": "顺序自动保存；查资料时优先采用排在前面的来源",
+        "s3_you": "到「{page}」页，把新片拖进来；资料不对就换来源",
+        "s3_bg": "依你排的顺序查出封面和资料；这时文件都还没动",
+        "s4_you": "按「{single}」；多个文件可按「{batch}」",
+        "s4_bg": "在视频原本的文件夹里建子文件夹，改名、搬进去、放进封面和 NFO（记着片名、女优的资料文件）；结果和第 1 步的预览一样",
+        "mt_note": "接上后可再多 30+ 来源"
+      },
+      "demo": {
+        "folder_path": "D:\\视频",
+        "actor_a": "女优A",
+        "actor_b": "女优B",
+        "actor_c": "女优C",
+        "actor_d": "女优D",
+        "log_done": "D:\\视频: 12 部 (缓存: 0, 新增/更新: 12)",
+        "note_unchanged": "文件名和位置都没变",
+        "folder_name": "视频",
+        "log_found": "D:\\视频: 找到 12 个文件",
+        "title_scanning": "扫描: D:\\视频",
+        "title_generating": "产生离线网页...",
+        "org_maker": "示例片商",
+        "org_title": "范例标题",
+        "org_tree_root": "D:\\下载（原本放片的文件夹）",
+        "org_tree_same": "和你预览的一样"
+      }
     }
   },
   "tutorial": {

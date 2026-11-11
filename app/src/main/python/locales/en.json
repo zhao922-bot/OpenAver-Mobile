@@ -432,7 +432,8 @@
         "cover": "Cover",
         "frame": "Video frame",
         "no_clear_hit": "No clear match — please check the candidates yourself",
-        "retry_hint": "Try again with a clearer video screenshot or cover without watermarks"
+        "retry_hint": "Try again with a clearer video screenshot or cover without watermarks",
+        "source_link": "avscan"
       },
       "in_library": "In library",
       "not_in_library": "Not in library",
@@ -444,7 +445,14 @@
       "thumb_alt": "Image to search",
       "searching": "Looking up the ID with avscan…",
       "use_candidate": "Search with this ID",
-      "not_searchable": "This result cannot be searched as an ID"
+      "not_searchable": "This result cannot be searched as an ID",
+      "drag_hint": "Find the ID from a video screenshot or cover (avscan.cc)",
+      "one_at_a_time": "One image at a time",
+      "your_image": "Your image",
+      "not_found": {
+        "hint": "avscan recognized this ID, but none of your search sources has it",
+        "search_cta": "Search by this ID"
+      }
     }
   },
   "settings": {
@@ -456,7 +464,8 @@
       "organize": "Organize",
       "translate": "AI Translate",
       "advanced": "Advanced",
-      "naming": "Naming & files"
+      "naming": "Naming & files",
+      "gallery": "Browse"
     },
     "display": {
       "font_size_label": "Font Size",
@@ -659,7 +668,7 @@
       "favorite_folder_hint": "Load a commonly used folder with one click",
       "favorite_folder_placeholder": "Leave blank = system Downloads folder",
       "favorite_folder_placeholder_server": "Leave blank = don't use an inbox folder",
-        "favorite_folder_example_prefix": "Example: /sdcard/Download",
+      "favorite_folder_example_prefix": "Example: /sdcard/Download",
       "proxy_placeholder": "Leave empty to connect directly or use the system proxy",
       "proxy_scope_label": "Proxy Scope",
       "proxy_scope_dmm": "DMM only",
@@ -751,7 +760,9 @@
         "rewrite_done": "Rewrote {count} .strm file(s)",
         "rewrite_failed": "Failed to rewrite existing .strm files. The path rules were saved but existing files were not updated; save again later to retry.",
         "intro": "When Emby / Jellyfin / Kodi runs on another machine and sees source paths that differ from this machine's, use these rules to replace the \"local scan prefix\" with the \"player prefix\". With no rules, strm files contain local paths. The rules are global and apply to all .strm files (including Emby / Kodi ones). Since Jellyfin 10.11.7, .strm files may only point to URLs (http / https / rtsp / rtp); a .strm containing a disk path will not play, no matter which machine the disk is on. Emby and Kodi are not affected. If your cloud drive is already served over HTTP (e.g. via Alist / OpenList), set the player side of \"Playback-side path mapping\" to that URL prefix (e.g. /volume1/cloud → http://nas:5244/d/115)."
-      }
+      },
+      "preview_label": "Preview",
+      "naming_default_hint": "Usually fine to leave as default."
     },
     "gallery": {
       "output_dir_label": "Output Directory",
@@ -795,7 +806,11 @@
       },
       "export_section": "Offline HTML export (for local viewing on Windows)",
       "export_notice": "This export file is designed for local double-click viewing on Windows; on macOS / Linux, use the app’s Showcase page instead. (Reason: covers are embedded via <code>file://</code>, which Mac browsers block for local cross-directory files.)",
-      "mode_export_only_note": "Affects only this export file (not the app’s Showcase)"
+      "mode_export_only_note": "Affects only this export file (not the app’s Showcase)",
+      "hide_unreachable_sources_label": "Hide disconnected drives",
+      "hide_unreachable_sources_note": "When a drive is unplugged or a cloud drive is offline, the videos on it are hidden for now and reappear automatically once it is back. No videos or records are deleted.",
+      "hide_unreachable_sources_help_aria": "About hiding disconnected drives",
+      "export_optional": "(optional)"
     },
     "system": {
       "default_page_label": "Default Page on Startup",
@@ -925,7 +940,7 @@
       "title": "AI Features",
       "tab_translate": "Translate",
       "tab_similar": "Image Similarity",
-      "help_body": "Configure title translation, cover-image similarity search, and face detection. Services run on your own remote HTTP server; covers and titles are not written to app logs.",
+      "help_body": "This card manages translation and image similarity in one place. Keys and URLs go in the Connections section below; the Translate tab only picks the engine and model. Image similarity needs a self-hosted vector endpoint — skip it if you don't have one.",
       "help_docs_link": "External AI guide (GitHub: docs/external-ai.md)",
       "connections_title": "Connections",
       "backfill": {
@@ -975,7 +990,11 @@
         "check_unstable": "Two vectors for the same image aren't close enough",
         "check_not_discriminative": "Vectors for two different images are too close",
         "check_model_flapping": "The model string differs within the same test",
-        "check_unknown": "Response doesn't match the expected format (reason unknown)"
+        "check_unknown": "Response doesn't match the expected format (reason unknown)",
+        "btn_assistant": "Hand off to AI assistant",
+        "assistant_prompt": "Please set up an OpenAver image-similarity endpoint for me. The spec is in the \"圖片相似\" (image similarity) section of https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md — run that section's consistency tests yourself and report back once they pass. When it's up, tell me the endpoint URL; I'll enter it in OpenAver's Settings page under \"AI Features › Image Similarity\". This OpenAver is at {lan_url}, and the endpoint must be reachable from that address. Please set the service to start automatically on boot.",
+        "assistant_copied": "Copied — paste it to your AI assistant",
+        "assistant_copy_failed": "Copy failed — please select the text manually"
       },
       "tab_faces": "Faces",
       "faces": {
@@ -1012,8 +1031,72 @@
         "check_no_model": "Response is missing the model field",
         "check_no_face": "No face found in the sample image",
         "check_center_off": "The detected face position is too far from the sample's",
-        "check_unknown": "Response doesn't match the expected format (reason unknown)"
+        "check_unknown": "Response doesn't match the expected format (reason unknown)",
+        "btn_assistant": "Hand off to AI assistant",
+        "assistant_prompt": "Please set up an OpenAver face-focus endpoint for me. The spec is in the \"人臉對焦\" (face focus) section of https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md — run that section's consistency tests yourself and report back once they pass. When it's up, tell me the endpoint URL; I'll enter it in OpenAver's Settings page under \"AI Features › Faces\". This OpenAver is at {lan_url}, and the endpoint must be reachable from that address. Please set the service to start automatically on boot.",
+        "assistant_copied": "Copied — paste it to your AI assistant",
+        "assistant_copy_failed": "Copy failed — please select the text manually"
+      },
+      "tab_tags": "AI Tags",
+      "tags": {
+        "enabled_label": "Enable AI tags",
+        "empty_desc": "AI looks at each video's poster and picks outfits, legwear, appearance and settings from a fixed word list, then adds them to your tags. Cloud services cost money; you can also use a model running on your own computer.",
+        "provider_label": "Connection",
+        "provider_placeholder": "Select",
+        "model_label": "Model",
+        "model_hint": "Pick a model that can understand images",
+        "status_none": "Status not available yet",
+        "status_slow_extra": "・The service asked to slow down — now processing one at a time",
+        "status_waiting_extra": "・The service asked to slow down — waiting",
+        "status_skipped_extra": "・{k} couldn't be tagged",
+        "status_stopped_unreachable": "Stopped: can't reach this service. Click \"Continue\" to pick up where it left off",
+        "status_stopped_auth": "Stopped: the key was rejected. Check the key in the Connections section",
+        "status_stopped_model_unsupported": "Stopped: this model can't understand images. Please pick another model",
+        "status_stopped_quota": "Service quota used up. Click \"Continue\" later",
+        "status_stopped_not_configured": "Stopped: the connection isn't set up yet",
+        "status_stopped_disabled": "Stopped: AI tags are turned off",
+        "status_unreachable": "Last success {time}・Currently unreachable",
+        "status_unreachable_no_time": "Currently unreachable",
+        "status_ready": "Done {n}/{m}・Last success {time}",
+        "status_ready_no_time": "Done {n}/{m}",
+        "test_ok": "Passed・The model tagged the sample image with: {tags}",
+        "test_ok_no_tags": "Passed, but nothing was tagged on the sample image. If real use also gives 0 tags, switch to a model that can understand images",
+        "test_unreachable": "Can't reach this connection",
+        "test_unusable_model_unsupported": "Connected, but this model can't understand images. Please pick another",
+        "test_unusable_bad_response": "Connected, but the model's reply couldn't be read",
+        "test_unusable_refused": "Connected, but the model refused to look at the sample image",
+        "test_unusable_no_tags": "Connected, but the model didn't tag anything on the sample image. Please pick a model that can understand images",
+        "test_not_configured": "Pick a connection and fill in its details below first",
+        "test_failed_generic": "Test failed",
+        "rebuild_confirm": "This asks AI to look at {n} videos again (this costs money). Existing tags won't be deleted.",
+        "cost_pending_tail": "・About USD ${total} this time (estimated with {label}, based on public pricing as of 2026-11; your actual bill may differ)",
+        "rebuild_confirm_cost": "This asks AI to look at {n} videos again, about USD ${total} (estimated with {label}, based on public pricing as of 2026-11; your actual bill may differ). Existing tags won't be deleted.",
+        "first_run_hint": "Once enabled, the next library update will also process the {n} videos that haven't been run yet",
+        "test_http_error": "Test request failed",
+        "backfill_http_error": "Fill-whole-library request failed",
+        "backfill_not_enabled": "Turn on AI tags and click \"Save\" first, then fill the whole library"
       }
+    },
+    "group": {
+      "organize_from": "Where to organize from",
+      "organize_attach": "Folders & attachments",
+      "organize_naming": "Naming",
+      "sources_sites": "Which sites to search",
+      "sources_proxy": "Connection proxy (optional)",
+      "sources_metatube": "Self-hosted Metatube (advanced)",
+      "gallery_defaults": "Showcase defaults",
+      "gallery_cover": "Covers",
+      "gallery_gate": "Library entry rules"
+    },
+    "tab_desc": {
+      "sources": "Choose which sites to look up video info from, and the order to try them in.",
+      "scraping": "How videos are placed and named when organized, and whether to work alongside other media-library apps.",
+      "gallery": "Showcase defaults, cover handling, and which files get into your library.",
+      "ai": "Connection and backfill settings for translation, image similarity, faces and AI tags.",
+      "system": "Default page, what closing the window does, and the player."
+    },
+    "save": {
+      "unsaved": "Unsaved changes"
     }
   },
   "scanner": {
@@ -1451,7 +1534,12 @@
     "focal_auto_disabled": "Face detection timed out twice in a row, so we've turned off Auto Face Focus for you. If you want to adjust the position, just drag it yourself in the lightbox.",
     "data_root_finalized": "The data location is now finalized — please keep this folder together when backing up.",
     "data_root_recovered": "Your existing library has been kept, but settings were rebuilt to their defaults: source settings, cross-machine path mapping, external service settings, and interface preferences all need to be reconfigured.",
-    "cf_shell_lost": "The verification window is not responding. Please refresh and try again"
+    "cf_shell_lost": "The verification window is not responding. Please refresh and try again",
+    "update_available_server": "A new version of OpenAver is available. Run openaver update on the host",
+    "ai_similar_unreachable": "Can't reach the image-similarity endpoint. New videos use rule-based ordering for now",
+    "ai_faces_unreachable": "Can't reach the face endpoint. Using the built-in method to find faces this round",
+    "ai_tags_unreachable": "Can't reach AI tags. New videos will be filled in later",
+    "ai_tags_backfill_stopped": "AI tag library fill has stopped. Check the Settings page for the reason"
   },
   "similar_mode": {
     "button_aria_label": "Explore similar videos",
@@ -1464,7 +1552,8 @@
       "loading": "Loading video list...",
       "empty": "No videos in your library yet",
       "generate_action": "Go to Library Manager",
-      "retry": "Retry"
+      "retry": "Retry",
+      "all_hidden": "All videos are on disconnected drives"
     },
     "error": {
       "server_error": "Server error ({status})",
@@ -1617,7 +1706,13 @@
       "source_unreachable_list": "Unreachable: {list}",
       "source_unreachable_count": "{n} location(s) unreachable",
       "source_no_permission_list": "No permission to read: {list}",
-      "source_no_permission_count": "{n} location(s) without read permission"
+      "source_no_permission_count": "{n} location(s) without read permission",
+      "source_offline_list": "{list} not connected",
+      "source_offline_count": "{n} drive(s) disconnected",
+      "source_offline_hidden": "・{n} hidden",
+      "source_hide_btn": "Hide",
+      "source_show_btn": "Show",
+      "source_hide_save_failed": "Couldn't save \"Hide disconnected drives\". Switched back to the previous display"
     },
     "nav": {
       "prev_page": "Previous",
@@ -1695,7 +1790,19 @@
       "plot_no_nfo": "This video has no NFO, so the plot can't be saved",
       "plot_translate_done": "Plot translated",
       "plot_translate_undo": "Undo",
-      "plot_translate_undone": "Plot restored"
+      "plot_translate_undone": "Plot restored",
+      "ai_tags_tooltip": "AI tags",
+      "ai_tags_added": "AI added {n} tags",
+      "ai_tags_none": "AI didn't spot anything from the word list",
+      "ai_tags_refused": "AI won't provide tags for this video",
+      "ai_tags_unreachable": "Can't reach {provider}",
+      "ai_tags_rate_limited": "{provider} says too many requests or quota used up. Try again later",
+      "ai_tags_model_unsupported": "This model can't understand images. Pick another one in Settings",
+      "ai_tags_bad_response": "Couldn't read the AI's reply",
+      "ai_tags_not_configured": "Set up AI tags in Settings first",
+      "ai_tags_failed": "AI tagging failed. Please try again later",
+      "plot_already_zh": "Plot is already in Chinese",
+      "mask_focal_endpoint_down": "The face endpoint isn't responding. Using the built-in method to find faces this time"
     },
     "pick": {
       "add_aria": "Add to picks",
@@ -1900,7 +2007,8 @@
       "this_computer_unavailable": "Cannot read this computer's update info right now. Please reopen the Help page and try again",
       "client_up_to_date": "OpenAver on this computer is up to date",
       "client_update_available_prefix": "This computer has a new version",
-      "client_update_available_suffix": "available"
+      "client_update_available_suffix": "available",
+      "server_update_available": "New version v{version} available — run this on the host:"
     },
     "agent_auth": {
       "title": "Agent Token",
@@ -2284,6 +2392,57 @@
     "manual": {
       "faq_title": "FAQ",
       "chapters_title": "Chapters"
+    },
+    "stage": {
+      "common": {
+        "prev": "Previous step",
+        "next": "Next step",
+        "dot_label": "Step {n}",
+        "scroll_hint": "Scroll down",
+        "you": "You",
+        "background": "App",
+        "goto": "Go to {page}"
+      },
+      "library": {
+        "subtitle": "Keep filenames and locations; add info and browse by cover",
+        "s1_you": "Drag the folder with your videos into \"{page}\"",
+        "s1_bg": "The folder is added to the list. Scanning doesn't start yet",
+        "s2_you": "Click \"{action}\"",
+        "s2_bg": "Reads existing covers and NFO (a file listing title and actresses) in the folder",
+        "s3_you": "When some videos lack info, click \"{action}\"",
+        "s3_bg": "Fills in covers and info only. Nothing is renamed or moved. Videos organized by other tools are kept as they are.",
+        "s4_you": "Click \"{page}\" in the sidebar",
+        "s4_bg": "The same videos appear as a cover wall. For new ones, click \"{action}\" again"
+      },
+      "organize": {
+        "subtitle": "Look up info, then rename and move by your rules",
+        "s1_you": "On the \"{page}\" page, set your naming rules and click \"{action}\"",
+        "s1_bg": "Instantly previews the folders and filenames after organizing",
+        "s2_you": "On the \"{page}\" page, drag the sources into your preferred order",
+        "s2_bg": "The order saves automatically; sources placed higher are tried first",
+        "s3_you": "On the \"{page}\" page, drag in new videos; switch source if info is wrong",
+        "s3_bg": "Covers and info are fetched in your order; your files haven't been touched yet",
+        "s4_you": "Click \"{single}\"; for several files, click \"{batch}\"",
+        "s4_bg": "Makes a subfolder in the video's folder, renames and moves it in, adds cover and NFO (title/actress file). Same as step 1's preview",
+        "mt_note": "Connect it to add 30+ more sources"
+      },
+      "demo": {
+        "folder_path": "D:\\Videos",
+        "actor_a": "Actress A",
+        "actor_b": "Actress B",
+        "actor_c": "Actress C",
+        "actor_d": "Actress D",
+        "log_done": "D:\\Videos: 12 videos (cached: 0, added/updated: 12)",
+        "note_unchanged": "Filenames and locations unchanged",
+        "folder_name": "Videos",
+        "log_found": "D:\\Videos: found 12 files",
+        "title_scanning": "Scanning: D:\\Videos",
+        "title_generating": "Generating offline page...",
+        "org_maker": "Demo Maker",
+        "org_title": "Sample Title",
+        "org_tree_root": "D:\\Downloads (the folder your videos were in)",
+        "org_tree_same": "Same as your preview"
+      }
     }
   },
   "tutorial": {

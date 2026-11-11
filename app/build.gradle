@@ -3,7 +3,7 @@ plugins {
     id "com.chaquo.python"
 }
 
-def openaverRelease = "v0.18.17-r5"
+def openaverRelease = "v0.18.17-r6"
 def openaverCommit = "af0d99741e63e71980773c9ade04c473407a60b7"
 def requestedAbis = (project.findProperty("abi") ?: "arm64-v8a")
         .split(",")
@@ -31,8 +31,8 @@ android {
         applicationId "dev.openaver.mobile"
         minSdk 29
         targetSdk 29
-        versionCode 18005
-        versionName "0.18.17-r5"
+        versionCode 18006
+        versionName "0.18.17-r6"
 
         buildConfigField "String", "OPENAVER_RELEASE", "\"${openaverRelease}\""
         buildConfigField "String", "OPENAVER_COMMIT", "\"${openaverCommit}\""

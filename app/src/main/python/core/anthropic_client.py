@@ -7,6 +7,7 @@ Anthropic Messages API 請求／解析／錯誤分類（Claude 翻譯唯一來�
 
 from __future__ import annotations
 
+import base64
 from typing import Any
 
 import httpx
@@ -58,6 +59,41 @@ def build_translate_payload(model: str, prompt: str) -> dict[str, Any]:
         "max_tokens": MAX_TOKENS,
         "messages": [{"role": "user", "content": prompt}],
         "output_config": {"effort": "low"},
+    }
+
+
+def _data_uri_parts(image_data_uri: str) -> tuple[str, str]:
+    header, data = image_data_uri.split(",", 1)
+    media_type = header[5:].split(";", 1)[0] or "image/jpeg"
+    base64.b64decode(data, validate=True)
+    return media_type, data
+
+
+def build_vision_payload(
+    model: str,
+    system: str,
+    user_text: str,
+    image_data_uri: str,
+) -> dict[str, Any]:
+    media_type, data = _data_uri_parts(image_data_uri)
+    return {
+        "model": model,
+        "max_tokens": MAX_TOKENS,
+        "system": system,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": user_text},
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": data,
+                    },
+                },
+            ],
+        }],
     }
 
 
@@ -201,6 +237,56 @@ async def request_translation(
             "response is not a JSON object",
         )
 
+    return extract_text(data)
+
+
+async def request_vision(
+    api_key: str,
+    model: str,
+    system: str,
+    user_text: str,
+    image_data_uri: str,
+    *,
+    timeout: float,
+) -> str:
+    """POST /v1/messages with one JPEG image; return the model text."""
+    headers = build_headers(api_key)
+    payload = build_vision_payload(model, system, user_text, image_data_uri)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(
+                f"{ANTHROPIC_BASE_URL}/v1/messages",
+                headers=headers,
+                json=payload,
+            )
+    except httpx.TimeoutException as e:
+        raise _log_and_build_error(
+            "connection_timeout", None, "", str(e)
+        ) from e
+    except httpx.LocalProtocolError:
+        raise _log_and_build_error(
+            "auth_failed",
+            None,
+            "invalid_api_key_format",
+            _ILLEGAL_KEY_MESSAGE,
+        ) from None
+    except (httpx.HTTPError, OSError) as e:
+        raise _log_and_build_error(
+            "connection_failed", None, "", str(e)
+        ) from e
+
+    if resp.status_code >= 400:
+        raise classify_http_error(resp)
+    try:
+        data = resp.json()
+    except Exception as e:
+        raise _log_and_build_error(
+            "api_error", resp.status_code, "", f"invalid JSON: {e}"
+        ) from e
+    if not isinstance(data, dict):
+        raise _log_and_build_error(
+            "api_error", resp.status_code, "", "response is not a JSON object"
+        )
     return extract_text(data)
 
 

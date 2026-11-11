@@ -432,7 +432,8 @@
         "cover": "カバー",
         "frame": "動画フレーム",
         "no_clear_hit": "はっきりした一致はありません。候補をご自身で確認してください",
-        "retry_hint": "より鮮明で透かしのない動画のスクリーンショットかカバーに替えて、もう一度お試しください"
+        "retry_hint": "より鮮明で透かしのない動画のスクリーンショットかカバーに替えて、もう一度お試しください",
+        "source_link": "avscan"
       },
       "in_library": "ライブラリにあり",
       "not_in_library": "ライブラリになし",
@@ -444,7 +445,14 @@
       "thumb_alt": "検索する画像",
       "searching": "avscan で品番を調べています…",
       "use_candidate": "この品番で検索",
-      "not_searchable": "この結果は品番として検索できません"
+      "not_searchable": "この結果は品番として検索できません",
+      "drag_hint": "動画のスクリーンショットやカバーから品番を調べる（avscan.cc）",
+      "one_at_a_time": "一度に調べられるのは1枚だけです",
+      "your_image": "あなたの画像",
+      "not_found": {
+        "hint": "avscan はこの品番を認識しましたが、検索ソースには見つかりませんでした",
+        "search_cta": "この品番で検索"
+      }
     }
   },
   "settings": {
@@ -456,7 +464,8 @@
       "organize": "整理ルール",
       "translate": "AI 翻訳",
       "advanced": "高度な設定",
-      "naming": "整理・ファイル名"
+      "naming": "整理・ファイル名",
+      "gallery": "表示"
     },
     "display": {
       "font_size_label": "フォントサイズ",
@@ -659,7 +668,7 @@
       "favorite_folder_hint": "よく使うフォルダをワンクリックで読み込み",
       "favorite_folder_placeholder": "空欄 = システムのダウンロードフォルダ",
       "favorite_folder_placeholder_server": "空欄 = 整理待ちフォルダを使わない",
-        "favorite_folder_example_prefix": "例：/sdcard/Download",
+      "favorite_folder_example_prefix": "例：/sdcard/Download",
       "proxy_placeholder": "空欄の場合は直接接続またはシステムのプロキシを使用します",
       "proxy_scope_label": "プロキシの適用範囲",
       "proxy_scope_dmm": "DMM のみ",
@@ -751,7 +760,9 @@
         "rewrite_done": ".strm ファイル {count} 件を書き換えました",
         "rewrite_failed": "既存の .strm の書き換えに失敗しました。パスルールは保存されましたが既存ファイルは未更新です。しばらくしてからもう一度保存して再試行してください。",
         "intro": "Emby／Jellyfin／Kodi が別のマシンにあり、見えるソースパスがこのPCと異なる場合、これらのルールで「ローカルのスキャン接頭辞」を「再生側の接頭辞」に置き換えます。ルールがない場合、strm にはローカルのパスがそのまま書き込まれます。ルールは全体で1つで、すべての .strm（Emby／Kodi 用を含む）に適用されます。Jellyfin 10.11.7 以降、.strm が指せるのは URL（http／https／rtsp／rtp）のみで、ディスクのパスを書いた .strm はディスクがどのマシンにあっても再生されません。Emby と Kodi は影響を受けません。クラウドドライブが Alist／OpenList などで HTTP 提供されている場合は、「再生側パスの置換」の再生側にその URL 接頭辞を入力してください（例：/volume1/cloud → http://nas:5244/d/115）。"
-      }
+      },
+      "preview_label": "プレビュー",
+      "naming_default_hint": "通常はデフォルトのままで問題ありません。"
     },
     "gallery": {
       "output_dir_label": "出力ディレクトリ",
@@ -795,7 +806,11 @@
       },
       "export_section": "オフライン HTML エクスポート（Windows ローカル閲覧用）",
       "export_notice": "このエクスポートファイルは Windows でのローカル閲覧（ダブルクリック）向けです。macOS / Linux ではアプリのブラウズページをご利用ください。（理由：カバーが <code>file://</code> で埋め込まれており、Mac のブラウザはローカルの別ディレクトリのファイルをブロックします）",
-      "mode_export_only_note": "このエクスポートファイルのみに影響します（アプリの Showcase には影響しません）"
+      "mode_export_only_note": "このエクスポートファイルのみに影響します（アプリの Showcase には影響しません）",
+      "hide_unreachable_sources_label": "未接続のドライブを隠す",
+      "hide_unreachable_sources_note": "ドライブが接続されていない、またはクラウドドライブが切断されているときは、そこにある作品をいったん表示しません。接続し直すと自動的に表示されます。作品や記録が削除されることはありません。",
+      "hide_unreachable_sources_help_aria": "未接続ドライブを隠す設定の説明",
+      "export_optional": "（任意）"
     },
     "system": {
       "default_page_label": "起動時に開くページ",
@@ -925,7 +940,7 @@
       "title": "AI 機能",
       "tab_translate": "翻訳",
       "tab_similar": "画像の類似",
-      "help_body": "タイトル翻訳、カバー画像の類似検索、顔検出を設定します。サービスはユーザー自身のリモート HTTP サービスで実行され、カバー画像やタイトルはアプリログに記録されません。",
+      "help_body": "このカードでは翻訳と画像の類似をまとめて管理します。キーと URL は下の接続エリアに入力し、翻訳タブではエンジンとモデルを選ぶだけです。画像の類似には自前のベクトルエンドポイントが必要です。なければ省略できます。",
       "help_docs_link": "外部 AI の説明（GitHub：docs/external-ai.md）",
       "connections_title": "接続",
       "backfill": {
@@ -975,7 +990,11 @@
         "check_unstable": "同じ画像の 2 回分のベクトルが十分に近くありません",
         "check_not_discriminative": "異なる 2 枚の画像のベクトルが近すぎます",
         "check_model_flapping": "同じテスト内で model 文字列が一致しません",
-        "check_unknown": "返ってきた内容が仕様と一致しません（原因不明）"
+        "check_unknown": "返ってきた内容が仕様と一致しません（原因不明）",
+        "btn_assistant": "AI アシスタントに任せる",
+        "assistant_prompt": "OpenAver 用の画像類似エンドポイントを立ててください。仕様は https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md の「圖片相似」（画像の類似）の節にあります。その節の一貫性テストを自分で実行して通ってから報告してください。立ち上がったらエンドポイントの URL を教えてください。OpenAver の設定ページ「AI 機能 › 画像の類似」に入力します。この OpenAver は {lan_url} にあり、エンドポイントはこのアドレスから接続できる必要があります。サービスは起動時に自動で立ち上がるようにしてください。",
+        "assistant_copied": "コピーしました。AI アシスタントに貼り付けてください",
+        "assistant_copy_failed": "コピーに失敗しました。テキストを手動で選択してください"
       },
       "tab_faces": "顔",
       "faces": {
@@ -1012,8 +1031,72 @@
         "check_no_model": "返ってきた内容に model フィールドがありません",
         "check_no_face": "サンプル画像から顔が見つかりませんでした",
         "check_center_off": "見つかった顔の位置がサンプルと大きくずれています",
-        "check_unknown": "返ってきた内容が仕様と一致しません（原因不明）"
+        "check_unknown": "返ってきた内容が仕様と一致しません（原因不明）",
+        "btn_assistant": "AI アシスタントに任せる",
+        "assistant_prompt": "OpenAver 用の顔フォーカスエンドポイントを立ててください。仕様は https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md の「人臉對焦」（顔フォーカス）の節にあります。その節の一貫性テストを自分で実行して通ってから報告してください。立ち上がったらエンドポイントの URL を教えてください。OpenAver の設定ページ「AI 機能 › 顔」に入力します。この OpenAver は {lan_url} にあり、エンドポイントはこのアドレスから接続できる必要があります。サービスは起動時に自動で立ち上がるようにしてください。",
+        "assistant_copied": "コピーしました。AI アシスタントに貼り付けてください",
+        "assistant_copy_failed": "コピーに失敗しました。テキストを手動で選択してください"
+      },
+      "tab_tags": "AI タグ",
+      "tags": {
+        "enabled_label": "AI タグを有効にする",
+        "empty_desc": "AI が各作品のポスターを見て、固定の語彙リストから服装・靴下類・見た目・シーンを選び、あなたのタグに追加します。クラウドサービスは料金がかかります。自分のパソコン上のモデルも使えます。",
+        "provider_label": "接続",
+        "provider_placeholder": "選択してください",
+        "model_label": "モデル",
+        "model_hint": "画像を理解できるモデルを選んでください",
+        "status_none": "状態はまだ取得されていません",
+        "status_slow_extra": "・サービスから速度を落とすよう求められたため、1 本ずつ処理しています",
+        "status_waiting_extra": "・サービスから速度を落とすよう求められたため、待機中です",
+        "status_skipped_extra": "・ほかに {k} 本はタグ付けできませんでした",
+        "status_stopped_unreachable": "停止しました：このサービスに接続できません。「続ける」を押すと続きから再開します",
+        "status_stopped_auth": "停止しました：キーが拒否されました。接続エリアのキーを確認してください",
+        "status_stopped_model_unsupported": "停止しました：このモデルは画像を理解できません。別のモデルに変更してください",
+        "status_stopped_quota": "サービスの利用枠を使い切りました。しばらくしてから「続ける」を押してください",
+        "status_stopped_not_configured": "停止しました：接続がまだ設定されていません",
+        "status_stopped_disabled": "停止しました：AI タグがオフになっています",
+        "status_unreachable": "前回成功 {time}・現在接続できません",
+        "status_unreachable_no_time": "現在接続できません",
+        "status_ready": "{n}／{m} 本を処理済み・前回成功 {time}",
+        "status_ready_no_time": "{n}／{m} 本を処理済み",
+        "test_ok": "合格・モデルがサンプル画像に付けたタグ：{tags}",
+        "test_ok_no_tags": "合格しましたが、サンプル画像にはタグが付きませんでした。実際に使ってもずっと 0 個の場合は、画像を理解できるモデルに変更してください",
+        "test_unreachable": "この接続先に接続できません",
+        "test_unusable_model_unsupported": "接続できましたが、このモデルは画像を理解できません。別のモデルに変更してください",
+        "test_unusable_bad_response": "接続できましたが、モデルの返答を読み取れませんでした",
+        "test_unusable_refused": "接続できましたが、モデルがこのサンプル画像の確認を拒否しました",
+        "test_unusable_no_tags": "接続できましたが、モデルがサンプル画像にタグを 1 つも付けませんでした。画像を理解できるモデルに変更してください",
+        "test_not_configured": "先に接続先を選び、下の接続情報を入力してください",
+        "test_failed_generic": "テストに失敗しました",
+        "rebuild_confirm": "{n} 本の作品を AI にもう一度見てもらいます（料金がかかります）。すでにあるタグは削除されません。",
+        "cost_pending_tail": "・今回は約 USD ${total}（{label} で見積もり、2026-11 時点の公開価格に基づく概算。実際の請求額が優先されます）",
+        "rebuild_confirm_cost": "{n} 本の作品を AI にもう一度見てもらいます。約 USD ${total}（{label} で見積もり、2026-11 時点の公開価格に基づく概算。実際の請求額が優先されます）。すでにあるタグは削除されません。",
+        "first_run_hint": "オンにすると、次回のライブラリ更新で、まだ処理していない {n} 本もまとめて処理されます",
+        "test_http_error": "テストリクエストに失敗しました",
+        "backfill_http_error": "ライブラリ全体の補完リクエストに失敗しました",
+        "backfill_not_enabled": "先に AI タグをオンにして「保存」を押してから、ライブラリ全体を補完してください"
       }
+    },
+    "group": {
+      "organize_from": "整理元",
+      "organize_attach": "フォルダと付属ファイル",
+      "organize_naming": "命名",
+      "sources_sites": "検索するサイト",
+      "sources_proxy": "接続プロキシ（任意）",
+      "sources_metatube": "自前 Metatube（上級）",
+      "gallery_defaults": "ブラウズのデフォルト",
+      "gallery_cover": "カバー",
+      "gallery_gate": "ライブラリ登録の条件"
+    },
+    "tab_desc": {
+      "sources": "動画の情報をどのサイトから取得するか、またその優先順位を決めます。",
+      "scraping": "動画を整理するときの置き場所と命名、ほかのメディアライブラリソフトと併用するかどうかを設定します。",
+      "gallery": "ブラウズを開いたときのデフォルト、カバーの扱い、どのファイルがライブラリに入るかを設定します。",
+      "ai": "翻訳・画像の類似・顔・AI タグの接続と、未処理分の補完に関する設定です。",
+      "system": "起動時のページ、ウィンドウを閉じたときの動作、プレーヤー。"
+    },
+    "save": {
+      "unsaved": "未保存の変更があります"
     }
   },
   "scanner": {
@@ -1451,7 +1534,12 @@
     "focal_auto_disabled": "顔検出が2回連続でタイムアウトしたため、自動フォーカスを先にオフにしました。位置を調整したい場合は、ライトボックスで自分でドラッグしてください。",
     "data_root_finalized": "データの保存場所が確定しました。バックアップの際はこのフォルダも一緒に保持してください",
     "data_root_recovered": "既存のライブラリはそのまま保持されましたが、設定はデフォルト値に再構築されました：ソース設定、クロスマシンのパスマッピング、外部サービス設定、インターフェース設定はすべて再設定が必要です",
-    "cf_shell_lost": "認証ウィンドウが応答しません。再読み込みしてからもう一度お試しください"
+    "cf_shell_lost": "認証ウィンドウが応答しません。再読み込みしてからもう一度お試しください",
+    "update_available_server": "OpenAver の新しいバージョンがあります。ホストで openaver update を実行してください",
+    "ai_similar_unreachable": "画像類似エンドポイントに接続できません。新しい作品は当面ルールベースで並べます",
+    "ai_faces_unreachable": "顔エンドポイントに接続できません。今回は内蔵の方法で顔を検出します",
+    "ai_tags_unreachable": "AI タグに接続できません。新しい作品はあとで補完します",
+    "ai_tags_backfill_stopped": "AI タグのライブラリ全体の補完が止まりました。理由は設定ページで確認してください"
   },
   "similar_mode": {
     "button_aria_label": "類似動画を探索",
@@ -1464,7 +1552,8 @@
       "loading": "動画リストを読み込み中...",
       "empty": "ライブラリにまだ動画がありません",
       "generate_action": "ライブラリ管理へ",
-      "retry": "再試行"
+      "retry": "再試行",
+      "all_hidden": "すべての動画が未接続のドライブにあります"
     },
     "error": {
       "server_error": "サーバーエラー ({status})",
@@ -1617,7 +1706,13 @@
       "source_unreachable_list": "アクセスできません：{list}",
       "source_unreachable_count": "{n} 件の場所にアクセスできません",
       "source_no_permission_list": "読み取り権限がありません：{list}",
-      "source_no_permission_count": "{n} 件の場所に読み取り権限がありません"
+      "source_no_permission_count": "{n} 件の場所に読み取り権限がありません",
+      "source_offline_list": "{list} は接続されていません",
+      "source_offline_count": "{n} 台のドライブが未接続です",
+      "source_offline_hidden": "・{n} 本を非表示",
+      "source_hide_btn": "隠す",
+      "source_show_btn": "表示",
+      "source_hide_save_failed": "「未接続のドライブを隠す」を保存できませんでした。元の表示に戻しました"
     },
     "nav": {
       "prev_page": "前のページ",
@@ -1695,7 +1790,19 @@
       "plot_no_nfo": "この作品には NFO がないため、あらすじを書き込めません",
       "plot_translate_done": "あらすじを翻訳しました",
       "plot_translate_undo": "元に戻す",
-      "plot_translate_undone": "あらすじを元に戻しました"
+      "plot_translate_undone": "あらすじを元に戻しました",
+      "ai_tags_tooltip": "AI タグ",
+      "ai_tags_added": "AI が {n} 個のタグを追加しました",
+      "ai_tags_none": "AI は語彙リストにあるものを見つけられませんでした",
+      "ai_tags_refused": "この作品について AI はタグを提供しません",
+      "ai_tags_unreachable": "{provider} に接続できません",
+      "ai_tags_rate_limited": "{provider} のリクエストが多すぎるか利用枠を使い切りました。しばらくしてからお試しください",
+      "ai_tags_model_unsupported": "このモデルは画像を理解できません。設定ページで別のモデルに変更してください",
+      "ai_tags_bad_response": "AI の返答を読み取れませんでした",
+      "ai_tags_not_configured": "先に設定ページで AI タグを設定してください",
+      "ai_tags_failed": "AI タグ付けに失敗しました。しばらくしてからお試しください",
+      "plot_already_zh": "あらすじはすでに中国語です",
+      "mask_focal_endpoint_down": "顔エンドポイントが応答しません。今回は内蔵の方法で顔を検出します"
     },
     "pick": {
       "add_aria": "★を付ける",
@@ -1900,7 +2007,8 @@
       "this_computer_unavailable": "このPCの更新情報を一時的に読み取れません。ヘルプページを開き直してもう一度お試しください",
       "client_up_to_date": "このPCの OpenAver は最新です",
       "client_update_available_prefix": "このPCに新バージョン",
-      "client_update_available_suffix": "があります"
+      "client_update_available_suffix": "があります",
+      "server_update_available": "新バージョン v{version} があります：ホストで実行"
     },
     "agent_auth": {
       "title": "Agent Token",
@@ -2284,6 +2392,57 @@
     "manual": {
       "faq_title": "よくある質問",
       "chapters_title": "目次"
+    },
+    "stage": {
+      "common": {
+        "prev": "前のステップ",
+        "next": "次のステップ",
+        "dot_label": "ステップ {n}",
+        "scroll_hint": "下へスクロール",
+        "you": "あなた",
+        "background": "裏側",
+        "goto": "{page}へ移動"
+      },
+      "library": {
+        "subtitle": "ファイル名と場所はそのまま。情報を補ってカバーで見られます",
+        "s1_you": "動画のフォルダを「{page}」にドラッグします",
+        "s1_bg": "フォルダがリストに追加されます。この時点ではまだスキャンは始まりません",
+        "s2_you": "「{action}」を押します",
+        "s2_bg": "フォルダ内にあるカバーと NFO（作品名や女優名を記録したデータファイル）を読み込みます",
+        "s3_you": "情報が足りない作品があるときは「{action}」を押します",
+        "s3_bg": "内蔵ソースから情報を取得します。補うのはカバーと情報だけで、名前の変更やファイルの移動はしません。他のツールで整理済みの作品はそのまま取り込み、再取得しません",
+        "s4_you": "サイドバーの「{page}」をクリックします",
+        "s4_bg": "同じ作品がカバーウォールに並びます。新しい作品が増えたら、もう一度「{action}」を押してください"
+      },
+      "organize": {
+        "subtitle": "情報を調べて、ルールどおりに名前を変えて移動します",
+        "s1_you": "「{page}」ページで命名ルールを決めて「{action}」を押します",
+        "s1_bg": "整理後のフォルダとファイル名がすぐにプレビューされます",
+        "s2_you": "「{page}」ページでソースをドラッグして順番を決めます",
+        "s2_bg": "順番は自動で保存され、情報の取得では上に並べたソースが優先されます",
+        "s3_you": "「{page}」ページに新しい作品をドラッグします。情報が違うときはソースを切り替えます",
+        "s3_bg": "並べた順番で、カバーと情報を取得します。この時点ではファイルはまだ変更されていません",
+        "s4_you": "「{single}」を押します。複数のファイルは「{batch}」を押します",
+        "s4_bg": "動画のあるフォルダの中にサブフォルダを作り、名前を変えて移動し、カバーと NFO（作品名や女優名を記録したデータファイル）を入れます。結果はステップ 1 のプレビューと同じです",
+        "mt_note": "接続すると 30+ のソースを追加できます"
+      },
+      "demo": {
+        "folder_path": "D:\\動画",
+        "actor_a": "女優A",
+        "actor_b": "女優B",
+        "actor_c": "女優C",
+        "actor_d": "女優D",
+        "log_done": "D:\\動画: 12 本 (キャッシュ: 0, 追加/更新: 12)",
+        "note_unchanged": "ファイル名も場所も変わりません",
+        "folder_name": "動画",
+        "log_found": "D:\\動画: 12 件のファイルを検出",
+        "title_scanning": "スキャン: D:\\動画",
+        "title_generating": "オフラインページを生成中...",
+        "org_maker": "デモメーカー",
+        "org_title": "サンプルタイトル",
+        "org_tree_root": "D:\\ダウンロード（もともと動画を置いていたフォルダ）",
+        "org_tree_same": "プレビューと同じです"
+      }
     }
   },
   "tutorial": {

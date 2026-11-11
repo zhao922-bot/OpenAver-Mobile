@@ -432,7 +432,8 @@
         "cover": "封面",
         "frame": "影片截圖",
         "no_clear_hit": "沒有明確命中，請自行核對候選結果",
-        "retry_hint": "換一張更清晰、沒有浮水印的影片截圖或封面再試"
+        "retry_hint": "換一張更清晰、沒有浮水印的影片截圖或封面再試",
+        "source_link": "avscan"
       },
       "in_library": "片庫已有",
       "not_in_library": "片庫沒有",
@@ -444,7 +445,14 @@
       "thumb_alt": "待查詢圖片",
       "searching": "正在使用 avscan 查詢番號…",
       "use_candidate": "使用此番號搜尋",
-      "not_searchable": "這個結果無法作為番號搜尋"
+      "not_searchable": "這個結果無法作為番號搜尋",
+      "drag_hint": "用影片截圖或封面查番號（avscan.cc）",
+      "one_at_a_time": "一次只查一張",
+      "your_image": "你的圖",
+      "not_found": {
+        "hint": "avscan 認出了這個番號，但搜尋來源裡沒有它",
+        "search_cta": "用這個番號搜尋"
+      }
     }
   },
   "settings": {
@@ -456,7 +464,8 @@
       "organize": "整理規則",
       "translate": "AI 翻譯",
       "advanced": "進階",
-      "naming": "整理與命名"
+      "naming": "整理與命名",
+      "gallery": "瀏覽顯示"
     },
     "display": {
       "font_size_label": "介面字級",
@@ -667,7 +676,7 @@
       "favorite_folder_hint": "一鍵載入常用資料夾。請指向下載器的完成資料夾，不要指到下載中的資料夾",
       "favorite_folder_placeholder": "留空 = 系統下載資料夾",
       "favorite_folder_placeholder_server": "留空 = 不使用待整理資料夾",
-        "favorite_folder_example_prefix": "範例：/sdcard/Download",
+      "favorite_folder_example_prefix": "範例：/sdcard/Download",
       "favorite_folder_example_prefix_synology": "範例：/volume1/&lt;共用資料夾&gt;/下載"
     },
     "translate": {
@@ -751,7 +760,9 @@
         },
         "rewrite_done": "已改寫 {count} 個 .strm 檔",
         "rewrite_failed": "改寫既有 .strm 失敗，路徑規則已儲存但既有檔尚未更新；請稍後再儲存一次重試。"
-      }
+      },
+      "preview_label": "預覽",
+      "naming_default_hint": "通常維持預設即可。"
     },
     "gallery": {
       "output_dir_label": "輸出目錄",
@@ -795,7 +806,11 @@
       },
       "export_section": "離線 HTML 匯出（Windows 本機檢視用）",
       "export_notice": "此匯出檔為 Windows 本機雙擊檢視設計；macOS / Linux 請改用 app 瀏覽頁。（成因：封面以 <code>file://</code> 嵌入，Mac 瀏覽器會封鎖本機跨目錄檔）",
-      "mode_export_only_note": "僅影響此匯出檔（不影響 app Showcase）"
+      "mode_export_only_note": "僅影響此匯出檔（不影響 app Showcase）",
+      "hide_unreachable_sources_label": "隱藏未連線硬碟",
+      "hide_unreachable_sources_note": "硬碟沒插或雲端硬碟斷線時，先不顯示那上面的片；接回來就會自動出現。不會刪除任何片或紀錄。",
+      "hide_unreachable_sources_help_aria": "隱藏未連線硬碟說明",
+      "export_optional": "（選用）"
     },
     "system": {
       "default_page_label": "啟動時開啟頁面",
@@ -925,7 +940,7 @@
       "title": "AI 功能",
       "tab_translate": "翻譯",
       "tab_similar": "圖片相似",
-      "help_body": "設定標題翻譯、封面相似檢索與人臉偵測。服務執行於你自建的遠端 HTTP 服務，封面與標題不會寫入應用程式日誌。",
+      "help_body": "這張卡集中管理翻譯與圖片相似。金鑰與網址放在下方連線區；翻譯分頁只選引擎與模型。圖片相似需要自架向量端點，沒有可略過。",
       "help_docs_link": "外部 AI 說明（GitHub：docs/external-ai.md）",
       "connections_title": "連線",
       "backfill": {
@@ -975,7 +990,11 @@
         "check_unstable": "同圖兩次向量不夠接近",
         "check_not_discriminative": "兩張不同圖向量太接近",
         "check_model_flapping": "同一次測試 model 字串不一致",
-        "check_unknown": "回傳不符契約（原因不明）"
+        "check_unknown": "回傳不符契約（原因不明）",
+        "btn_assistant": "交給 AI 助理設定",
+        "assistant_prompt": "請替我架一個 OpenAver 圖片相似端點。規格在 https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md 的「圖片相似」一節，照那節的一致性測試自己驗過再回報。架好後告訴我端點網址，我會填進 OpenAver 設定頁「AI 功能 › 圖片相似」。這台 OpenAver 在 {lan_url}，端點要讓這個網址連得到。請把服務設成開機自啟。",
+        "assistant_copied": "已複製，貼給你的 AI 助理",
+        "assistant_copy_failed": "複製失敗，請手動選取文字"
       },
       "tab_faces": "人臉",
       "faces": {
@@ -1012,8 +1031,72 @@
         "check_no_model": "回應缺少 model 欄位",
         "check_no_face": "樣本圖裡沒找到臉",
         "check_center_off": "找到的臉位置和樣本差太多",
-        "check_unknown": "回傳不符契約（原因不明）"
+        "check_unknown": "回傳不符契約（原因不明）",
+        "btn_assistant": "交給 AI 助理設定",
+        "assistant_prompt": "請替我架一個 OpenAver 人臉對焦端點。規格在 https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md 的「人臉對焦」一節，照那節的一致性測試自己驗過再回報。架好後告訴我端點網址，我會填進 OpenAver 設定頁「AI 功能 › 人臉」。這台 OpenAver 在 {lan_url}，端點要讓這個網址連得到。請把服務設成開機自啟。",
+        "assistant_copied": "已複製，貼給你的 AI 助理",
+        "assistant_copy_failed": "複製失敗，請手動選取文字"
+      },
+      "tab_tags": "AI 標籤",
+      "tags": {
+        "enabled_label": "啟用 AI 標籤",
+        "empty_desc": "AI 會看每部片的海報，從固定詞表裡挑出服裝、襪類、外觀、場景，加進你的標籤。雲端服務會產生費用；也可以用自己電腦上的模型。",
+        "provider_label": "連線",
+        "provider_placeholder": "請選擇",
+        "model_label": "模型",
+        "model_hint": "要選看得懂圖的模型",
+        "status_none": "尚未取得狀態",
+        "status_slow_extra": "・服務要求放慢，已改為逐部處理",
+        "status_waiting_extra": "・服務要求放慢，等待中",
+        "status_skipped_extra": "・另有 {k} 部沒標成",
+        "status_stopped_unreachable": "已停止：連不上這個服務，按「繼續」接著跑",
+        "status_stopped_auth": "已停止：金鑰被拒，請檢查連線區的金鑰",
+        "status_stopped_model_unsupported": "已停止：這個模型看不懂圖，請換一個模型",
+        "status_stopped_quota": "服務額度用完，稍後按「繼續」",
+        "status_stopped_not_configured": "已停止：連線還沒設好",
+        "status_stopped_disabled": "已停止：AI 標籤已關閉",
+        "status_unreachable": "上次成功 {time}・目前連不上",
+        "status_unreachable_no_time": "目前連不上",
+        "status_ready": "已跑 {n}／{m} 部・上次成功 {time}",
+        "status_ready_no_time": "已跑 {n}／{m} 部",
+        "test_ok": "通過・模型在樣本圖上標到：{tags}",
+        "test_ok_no_tags": "通過，但在樣本圖上沒標到字；若使用時也都是 0 個，請換一個看得懂圖的模型",
+        "test_unreachable": "連不上這個連線",
+        "test_unusable_model_unsupported": "連上了，但這個模型看不懂圖，請換一個",
+        "test_unusable_bad_response": "連上了，但模型回傳的內容讀不出來",
+        "test_unusable_refused": "連上了，但模型不肯看這張樣本圖",
+        "test_unusable_no_tags": "連上了，但模型在樣本圖上一個字都沒標到，請換一個看得懂圖的模型",
+        "test_not_configured": "請先選連線並填好下面的連線資料",
+        "test_failed_generic": "測試失敗",
+        "rebuild_confirm": "會對 {n} 部片重新請 AI 看一次（會產生費用）；已有的標籤不會被刪除。",
+        "cost_pending_tail": "・這次大約 USD ${total}（以 {label} 估，依 2026-11 公開價格，實際以帳單為準）",
+        "rebuild_confirm_cost": "會對 {n} 部再請 AI 看一次，大約 USD ${total}（以 {label} 估，依 2026-11 公開價格，實際以帳單為準）；已有的標籤不會被刪除。",
+        "first_run_hint": "開啟後，下一次更新片庫會一併處理片庫裡還沒跑過的 {n} 部",
+        "test_http_error": "測試請求失敗",
+        "backfill_http_error": "補完全庫請求失敗",
+        "backfill_not_enabled": "請先開啟 AI 標籤並按「儲存」，再補完全庫"
       }
+    },
+    "group": {
+      "organize_from": "從哪裡整理",
+      "organize_attach": "資料夾與附件",
+      "organize_naming": "怎麼命名",
+      "sources_sites": "要查哪些網站",
+      "sources_proxy": "連線代理（選填）",
+      "sources_metatube": "自架 Metatube（進階）",
+      "gallery_defaults": "瀏覽頁預設",
+      "gallery_cover": "封面",
+      "gallery_gate": "入庫門檻"
+    },
+    "tab_desc": {
+      "sources": "選擇要去哪些網站查影片資料，並決定查詢的先後順序。",
+      "scraping": "整理影片時怎麼放、怎麼命名，以及要不要搭配其他媒體庫軟體。",
+      "gallery": "瀏覽頁打開時的預設、封面處理，以及哪些檔案會進片庫。",
+      "ai": "翻譯、圖片相似、人臉、AI 標籤的連線與補跑設定。",
+      "system": "預設頁、關閉視窗行為、播放器。"
+    },
+    "save": {
+      "unsaved": "有未儲存變更"
     }
   },
   "scanner": {
@@ -1451,7 +1534,12 @@
     "wishlist_reconcile_failed": "書籤對帳失敗，請查閱日誌",
     "focal_auto_disabled": "找臉連續兩次逾時，已經先幫你關掉自動對焦。想對焦的話，在燈箱裡自己拖曳就可以。",
     "data_root_finalized": "資料位置已定版，備份時請把這個資料夾一起保留",
-    "data_root_recovered": "既有片庫已保留，設定已重建為預設值：來源設定、跨機器路徑映射、外部服務設定與介面偏好都需要重新設定"
+    "data_root_recovered": "既有片庫已保留，設定已重建為預設值：來源設定、跨機器路徑映射、外部服務設定與介面偏好都需要重新設定",
+    "update_available_server": "OpenAver 有新版本，請在主機執行 openaver update",
+    "ai_similar_unreachable": "圖片相似端點連不上，新片暫以規則排序",
+    "ai_faces_unreachable": "人臉端點連不上，這輪改用內建方式找臉",
+    "ai_tags_unreachable": "AI 標籤連不上，新片稍後再補",
+    "ai_tags_backfill_stopped": "AI 標籤補完全庫停下來了，請回設定頁看原因"
   },
   "similar_mode": {
     "button_aria_label": "探索相似影片",
@@ -1464,7 +1552,8 @@
       "loading": "載入影片列表中...",
       "empty": "尚未產生影片列表",
       "generate_action": "前往片庫管理",
-      "retry": "重試"
+      "retry": "重試",
+      "all_hidden": "所有影片都在未連線的硬碟上"
     },
     "error": {
       "server_error": "伺服器錯誤 ({status})",
@@ -1617,7 +1706,13 @@
       "source_unreachable_list": "無法存取：{list}",
       "source_unreachable_count": "{n} 個位置無法存取",
       "source_no_permission_list": "沒有權限讀取：{list}",
-      "source_no_permission_count": "{n} 個位置沒有權限讀取"
+      "source_no_permission_count": "{n} 個位置沒有權限讀取",
+      "source_offline_list": "{list} 沒有連線",
+      "source_offline_count": "{n} 顆硬碟沒有連線",
+      "source_offline_hidden": "・已隱藏 {n} 部",
+      "source_hide_btn": "隱藏",
+      "source_show_btn": "顯示",
+      "source_hide_save_failed": "「隱藏未連線硬碟」沒有存成功，已改回原本的顯示"
     },
     "nav": {
       "prev_page": "上一頁",
@@ -1695,7 +1790,19 @@
       "plot_no_nfo": "這部片沒有 NFO，無法寫入簡介",
       "plot_translate_done": "已翻譯簡介",
       "plot_translate_undo": "復原",
-      "plot_translate_undone": "已復原簡介"
+      "plot_translate_undone": "已復原簡介",
+      "ai_tags_tooltip": "AI 標籤",
+      "ai_tags_added": "AI 加了 {n} 個標籤",
+      "ai_tags_none": "AI 沒有看到詞表裡的東西",
+      "ai_tags_refused": "這部片 AI 不提供標籤",
+      "ai_tags_unreachable": "連不上 {provider}",
+      "ai_tags_rate_limited": "{provider} 要求太頻繁或額度用完，稍後再試",
+      "ai_tags_model_unsupported": "這個模型看不懂圖，請到設定頁換一個",
+      "ai_tags_bad_response": "AI 的回傳讀不出來",
+      "ai_tags_not_configured": "請先到設定頁的 AI 標籤設定好",
+      "ai_tags_failed": "AI 標籤失敗，請稍後再試",
+      "plot_already_zh": "簡介已是中文",
+      "mask_focal_endpoint_down": "人臉端點沒有回應，這次用內建方式找臉"
     },
     "pick": {
       "add_aria": "加入精選",
@@ -1900,7 +2007,8 @@
       "ai_instruction": "貼給 AI agent 就能操作 OpenAver",
       "ai_hint_unsupported": "不適用網頁版聊天",
       "ai_tools": "支援：Claude Code · Cursor · Codex 等 AI agent",
-      "ai_actress_watch": "想追關注女優的新片？可請 agent 用搜尋＋書籤 API 定期查，結果會出現在搜尋頁的書籤分頁。快速探索搜尋只有 JavBus 一個來源，JavBus 被擋或在設定頁關掉時查不到。"
+      "ai_actress_watch": "想追關注女優的新片？可請 agent 用搜尋＋書籤 API 定期查，結果會出現在搜尋頁的書籤分頁。快速探索搜尋只有 JavBus 一個來源，JavBus 被擋或在設定頁關掉時查不到。",
+      "server_update_available": "有新版 v{version}：在主機上執行"
     },
     "agent_auth": {
       "title": "Agent Token",
@@ -2284,6 +2392,57 @@
     "manual": {
       "faq_title": "常見問題",
       "chapters_title": "章節"
+    },
+    "stage": {
+      "common": {
+        "prev": "上一步",
+        "next": "下一步",
+        "dot_label": "第 {n} 步",
+        "scroll_hint": "往下捲",
+        "you": "你",
+        "background": "背後",
+        "goto": "前往{page}"
+      },
+      "library": {
+        "subtitle": "保留檔名和位置，補資料、用封面看",
+        "s1_you": "把放片的資料夾拖進「{page}」",
+        "s1_bg": "資料夾加進清單，這一步還不會開始掃描",
+        "s2_you": "按「{action}」",
+        "s2_bg": "讀取資料夾裡已有的封面和 NFO（記著片名、女優的資料檔）",
+        "s3_you": "有片缺資料時，按「{action}」",
+        "s3_bg": "從內建來源查資料。只補封面和資料，不會改名，也不會搬動你的檔案；用其他工具整理過的片會直接收進來，不重抓",
+        "s4_you": "點側欄「{page}」",
+        "s4_bg": "同一批片排成封面牆。之後有新片，再按一次「{action}」"
+      },
+      "organize": {
+        "subtitle": "查好資料，按你的規則改名、搬好",
+        "s1_you": "在「{page}」頁定好命名規則，按「{action}」",
+        "s1_bg": "馬上預覽整理後的資料夾和檔名",
+        "s2_you": "在「{page}」頁拖動來源，排出順序",
+        "s2_bg": "順序自動儲存；查資料時優先採用排在前面的來源",
+        "s3_you": "到「{page}」頁，把新片拖進來；資料不對就換來源",
+        "s3_bg": "依你排的順序查出封面和資料；這時檔案都還沒動",
+        "s4_you": "按「{single}」；多個檔案可按「{batch}」",
+        "s4_bg": "在影片原本的資料夾裡建子資料夾，改名、搬進去、放進封面和 NFO（記著片名、女優的資料檔）；結果和第 1 步的預覽一樣",
+        "mt_note": "接上後可再多 30+ 來源"
+      },
+      "demo": {
+        "folder_path": "D:\\影片",
+        "actor_a": "演員A",
+        "actor_b": "演員B",
+        "actor_c": "演員C",
+        "actor_d": "演員D",
+        "log_done": "D:\\影片: 12 部 (快取: 0, 新增/更新: 12)",
+        "note_unchanged": "檔名和位置都沒變",
+        "folder_name": "影片",
+        "log_found": "D:\\影片: 找到 12 個檔案",
+        "title_scanning": "掃描: D:\\影片",
+        "title_generating": "產生離線網頁...",
+        "org_maker": "示範片商",
+        "org_title": "範例標題",
+        "org_tree_root": "D:\\下載（原本放片的資料夾）",
+        "org_tree_same": "和你預覽的一樣"
+      }
     }
   },
   "tutorial": {

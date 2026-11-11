@@ -58,6 +58,9 @@ export function stateConfig() {
             aiFacesUrl: '',
             aiFacesApiKey: '',
             aiFacesModel: '',
+            aiTagsEnabled: false,
+            aiTagsProvider: '',
+            aiTagsModel: '',
 
             // Scraper
             createFolder: true,
@@ -679,6 +682,9 @@ export function stateConfig() {
                     this.form.aiFacesUrl = config.ai_services?.faces?.url || '';
                     this.form.aiFacesApiKey = config.ai_services?.faces?.api_key || '';
                     this.form.aiFacesModel = config.ai_services?.faces?.model || '';
+                    this.form.aiTagsEnabled = config.ai_services?.tags?.enabled === true;
+                    this.form.aiTagsProvider = config.ai_services?.tags?.provider || '';
+                    this.form.aiTagsModel = config.ai_services?.tags?.model || '';
 
                     // 自動測試 Gemini（如果有 API Key 且是 gemini provider）
                     if (config.translate.gemini?.api_key && config.translate.provider === 'gemini') {
@@ -1013,7 +1019,6 @@ export function stateConfig() {
                     }
                 };
 
-                // Preserve the future AI-tags subtree; the mobile settings UI does not expose it.
                 config.ai_services = {
                     ...(config.ai_services || {}),
                     image_similar: {
@@ -1030,7 +1035,12 @@ export function stateConfig() {
                         api_key: this.form.aiFacesApiKey,
                         model: this.form.aiFacesModel.trim(),
                     },
-                    tags: { ...(config.ai_services?.tags || {}) },
+                    tags: {
+                        ...(config.ai_services?.tags || {}),
+                        enabled: this.form.aiTagsEnabled,
+                        provider: this.form.aiTagsProvider,
+                        model: this.form.aiTagsModel.trim(),
+                    },
                 };
 
                 // 更新 gallery

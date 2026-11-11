@@ -53,7 +53,7 @@ def _mark_mobile_startup(status: str) -> None:
 from core.config import load_config, mutate_config
 from core.data_layout import bootstrap_data_layout, consume_pending_bootstrap_result, consume_reset_access_auth_marker
 from core.focal import device_state
-from core.ai_services import faces_state, similar_index
+from core.ai_services import faces_state, similar_index, tags_state
 from core.database import init_db
 from core.database import backfill_readonly_nfo_mtime_once
 from core.metatube.state import metatube_state as _mt_startup_state
@@ -159,6 +159,13 @@ async def lifespan(app: FastAPI):
     # 不會因 legacy schema 欄位收到未知 keyword 而 500。CD-57b-8 contract。
     _mark_mobile_startup("database")
     init_db()
+    try:
+        from core.ai_services.tagging_aliases import seed_builtin_aliases
+        seed_builtin_aliases()
+    except Exception:
+        logger.warning(
+            "lifespan: AI tag alias seed failed", exc_info=True
+        )
     _mark_mobile_startup("notifications")
     start_notification_persistence()
 
@@ -302,6 +309,7 @@ from web.routers.notifications import emit_notification, start_notification_pers
 device_state.set_notification_sink(emit_notification)
 faces_state.set_notification_sink(emit_notification)
 similar_index.set_notification_sink(emit_notification)
+tags_state.set_notification_sink(emit_notification)
 from web.routers import similar as similar_router
 from web.routers import settings_link as settings_link_router
 from web.routers import scraper_sources as scraper_sources_router
@@ -315,6 +323,7 @@ from web.routers import insights as insights_router
 from web.routers import source_probe as source_probe_router
 from web.routers import custom_sources as custom_sources_router
 from web.routers import ai_services as ai_services_router
+from web.routers import ai_tags as ai_tags_router
 # Module-level imports for startup_reconnect / _fire_probe so that
 # patch("web.app.startup_reconnect") / patch("web.app._fire_probe") target the
 # correct use-site binding (TASK-63e-1; function-local import would defeat patch).
@@ -356,6 +365,7 @@ app.include_router(insights_router.router)
 app.include_router(source_probe_router.router)
 app.include_router(custom_sources_router.router)
 app.include_router(ai_services_router.router)
+app.include_router(ai_tags_router.router)
 
 
 @app.exception_handler(RequestValidationError)

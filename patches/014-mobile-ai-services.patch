@@ -1,3 +1,112 @@
+--- a/core/anthropic_client.py
++++ b/core/anthropic_client.py
+@@ -7,6 +7,7 @@
+ 
+ from __future__ import annotations
+ 
++import base64
+ from typing import Any
+ 
+ import httpx
+@@ -61,6 +62,41 @@
+     }
+ 
+ 
++def _data_uri_parts(image_data_uri: str) -> tuple[str, str]:
++    header, data = image_data_uri.split(",", 1)
++    media_type = header[5:].split(";", 1)[0] or "image/jpeg"
++    base64.b64decode(data, validate=True)
++    return media_type, data
++
++
++def build_vision_payload(
++    model: str,
++    system: str,
++    user_text: str,
++    image_data_uri: str,
++) -> dict[str, Any]:
++    media_type, data = _data_uri_parts(image_data_uri)
++    return {
++        "model": model,
++        "max_tokens": MAX_TOKENS,
++        "system": system,
++        "messages": [{
++            "role": "user",
++            "content": [
++                {"type": "text", "text": user_text},
++                {
++                    "type": "image",
++                    "source": {
++                        "type": "base64",
++                        "media_type": media_type,
++                        "data": data,
++                    },
++                },
++            ],
++        }],
++    }
++
++
+ def extract_text(data: dict) -> str:
+     """從 Messages 回應取出 text；refusal／max_tokens／空文字拋 AnthropicError。"""
+     if data.get("stop_reason") == "refusal":
+@@ -204,6 +240,56 @@
+     return extract_text(data)
+ 
+ 
++async def request_vision(
++    api_key: str,
++    model: str,
++    system: str,
++    user_text: str,
++    image_data_uri: str,
++    *,
++    timeout: float,
++) -> str:
++    """POST /v1/messages with one JPEG image; return the model text."""
++    headers = build_headers(api_key)
++    payload = build_vision_payload(model, system, user_text, image_data_uri)
++    try:
++        async with httpx.AsyncClient(timeout=timeout) as client:
++            resp = await client.post(
++                f"{ANTHROPIC_BASE_URL}/v1/messages",
++                headers=headers,
++                json=payload,
++            )
++    except httpx.TimeoutException as e:
++        raise _log_and_build_error(
++            "connection_timeout", None, "", str(e)
++        ) from e
++    except httpx.LocalProtocolError:
++        raise _log_and_build_error(
++            "auth_failed",
++            None,
++            "invalid_api_key_format",
++            _ILLEGAL_KEY_MESSAGE,
++        ) from None
++    except (httpx.HTTPError, OSError) as e:
++        raise _log_and_build_error(
++            "connection_failed", None, "", str(e)
++        ) from e
++
++    if resp.status_code >= 400:
++        raise classify_http_error(resp)
++    try:
++        data = resp.json()
++    except Exception as e:
++        raise _log_and_build_error(
++            "api_error", resp.status_code, "", f"invalid JSON: {e}"
++        ) from e
++    if not isinstance(data, dict):
++        raise _log_and_build_error(
++            "api_error", resp.status_code, "", "response is not a JSON object"
++        )
++    return extract_text(data)
++
++
+ async def list_models(api_key: str, *, timeout: float) -> dict:
+     """GET /v1/models?limit=1000；回原始 dict；has_more 只 warning 不翻頁。"""
+     headers = build_headers(api_key)
 --- /dev/null
 +++ b/core/ai_services/__init__.py
 @@ -0,0 +1,4 @@
@@ -2405,6 +2514,2449 @@
 +        return None
 +    from core.ai_services.embedding_cache import EmbeddingMatrixCache
 +    return EmbeddingMatrixCache.get(state["model"], state["dim"], db_path)
+--- /dev/null
++++ b/core/ai_services/post_ingest.py
+@@ -0,0 +1,464 @@
++"""Best-effort AI post-processing after a video is written to the library.
++
++The ingest path must never fail because an optional AI service is unavailable.
++Each enabled feature runs in its own FIFO worker so a slow translation cannot
++delay similarity indexing or tagging for the next video.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import functools
++import os
++import queue
++import threading
++from dataclasses import dataclass
++from typing import Callable, Optional
++
++from core.ai_services import similar_index, similar_state, tags_backfill_policy, tags_state
++from core.ai_services.tagging import TaggingFailure, tag_video_sync
++from core.config import load_config
++from core.database import VideoRepository
++from core.focal import requires_face_detection
++from core.focal_trigger import maybe_submit_video_focal
++from core.logger import get_logger
++from core.multipart_group import resolve_group
++from core.path_utils import uri_to_local_fs_path
++from core.title_language import (
++    title_needs_translation as _title_needs_translation,
++    translation_result_issue,
++)
++from core.title_writeback import apply_title_writeback
++from core.translate_service import create_translate_service
++from core.user_tags_write import hold_nfo_write
++
++logger = get_logger(__name__)
++
++ITEMS = ("translate", "similar", "faces", "tags")
++_TAGS_NOTIFY_KEY = "notif.ai_tags_unreachable"
++
++
++@dataclass(frozen=True)
++class Verdict:
++    run: bool
++    reason: str = ""
++
++
++@dataclass(frozen=True)
++class Plan:
++    translate: Verdict
++    similar: Verdict
++    faces: Verdict
++    tags: Verdict
++
++    def items(self):
++        return tuple((name, getattr(self, name)) for name in ITEMS)
++
++
++@dataclass(frozen=True)
++class IngestContext:
++    video_uri: str
++    route: str
++    notify: bool
++    cfg: dict
++    row: object
++    members: tuple
++
++
++def _flag_on(cfg: dict, *keys) -> bool:
++    current = cfg
++    for key in keys:
++        if not isinstance(current, dict):
++            return False
++        current = current.get(key)
++        if current is None:
++            return False
++    return bool(current)
++
++
++def video_label(row) -> str:
++    if row.number:
++        return str(row.number)
++    return os.path.basename(row.path or "")
++
++
++def format_log(route, row, plan: Plan) -> str:
++    def one(verdict: Verdict) -> str:
++        return "run" if verdict.run else f"skip({verdict.reason})"
++
++    return (
++        f"[post_ingest] route={route} video={video_label(row)} "
++        f"translate={one(plan.translate)} similar={one(plan.similar)} "
++        f"faces={one(plan.faces)} tags={one(plan.tags)}"
++    )
++
++
++def _decide_translate(cfg: dict, row, skip_translate: bool = False) -> Verdict:
++    if not _flag_on(cfg, "translate", "enabled"):
++        return Verdict(False, "off")
++    if skip_translate:
++        return Verdict(False, "preserve_title")
++    locale = (cfg.get("general") or {}).get("locale") or "zh-CN"
++    if not _title_needs_translation(
++        row.title or "", locale, row.actresses or ()
++    ):
++        return Verdict(False, "title_in_target_language")
++    return Verdict(True)
++
++
++def _decide_similar(cfg: dict, row, index_ready: bool) -> Verdict:
++    if not _flag_on(cfg, "ai_services", "image_similar", "enabled"):
++        return Verdict(False, "off")
++    if not row.cover_path:
++        return Verdict(False, "no_cover")
++    if not index_ready:
++        return Verdict(False, "index_not_ready")
++    return Verdict(True)
++
++
++def _decide_faces(row, skip_faces: bool, cover_exists: bool) -> Verdict:
++    if skip_faces:
++        return Verdict(False, "own_trigger")
++    if not requires_face_detection(row.number or "", row.maker or ""):
++        return Verdict(False, "not_uncensored")
++    if not row.cover_path or not cover_exists:
++        return Verdict(False, "no_cover")
++    return Verdict(True)
++
++
++def _decide_tags(cfg: dict, row, already_tagged: bool = False) -> Verdict:
++    if not _flag_on(cfg, "ai_services", "tags", "enabled"):
++        return Verdict(False, "off")
++    if not row.cover_path:
++        return Verdict(False, "no_cover")
++    if already_tagged:
++        return Verdict(False, "already_tagged")
++    return Verdict(True)
++
++
++def decide(
++    cfg: dict,
++    row,
++    *,
++    skip_faces: bool,
++    index_ready: bool,
++    cover_exists: bool,
++    skip_translate: bool = False,
++    tags_already_processed: bool = False,
++) -> Plan:
++    return Plan(
++        translate=_decide_translate(cfg, row, skip_translate),
++        similar=_decide_similar(cfg, row, index_ready),
++        faces=_decide_faces(row, skip_faces, cover_exists),
++        tags=_decide_tags(cfg, row, tags_already_processed),
++    )
++
++
++def _index_ready() -> bool:
++    from core.database import EmbeddingRepository
++
++    return similar_index._incremental_allowed(
++        EmbeddingRepository().get_index_state()
++    )
++
++
++def _path_mappings(cfg: dict) -> dict:
++    return (cfg.get("gallery") or {}).get("path_mappings") or {}
++
++
++def _cover_exists(row, cfg: dict) -> bool:
++    if not row.cover_path:
++        return False
++    return os.path.exists(
++        uri_to_local_fs_path(row.cover_path, _path_mappings(cfg))
++    )
++
++
++def _group_members(repo, row, cfg: dict) -> tuple:
++    try:
++        group = resolve_group(repo, row.path, _path_mappings(cfg))
++    except Exception:
++        logger.warning(
++            "[post_ingest] multipart group lookup failed video=%s",
++            video_label(row),
++            exc_info=True,
++        )
++        group = None
++    return tuple(group.members if group is not None else (row,))
++
++
++def _tags_already_processed(repo, members: tuple) -> bool:
++    if not members:
++        return False
++    try:
++        return all(repo.get_ai_tagged_at(member.path) is not None for member in members)
++    except Exception:
++        logger.warning(
++            "[post_ingest] AI tag state lookup failed",
++            exc_info=True,
++        )
++        return False
++
++
++class _Lane:
++    def __init__(self, item: str):
++        self.item = item
++        self.queue: queue.Queue = queue.Queue()
++        self.thread: Optional[threading.Thread] = None
++
++
++_LANES: dict[str, _Lane] = {}
++_LANES_LOCK = threading.Lock()
++
++
++def _lane_main(lane: _Lane) -> None:
++    while True:
++        job = lane.queue.get()
++        if job is None:
++            return
++        try:
++            job()
++        except Exception:
++            logger.exception("[post_ingest] lane job crashed item=%s", lane.item)
++        finally:
++            lane.queue.task_done()
++
++
++def _get_lane(item: str) -> _Lane:
++    with _LANES_LOCK:
++        lane = _LANES.get(item)
++        if lane is None:
++            lane = _LANES[item] = _Lane(item)
++        if lane.thread is None:
++            lane.thread = threading.Thread(
++                target=_lane_main,
++                args=(lane,),
++                name=f"post-ingest-{item}",
++                daemon=True,
++            )
++            lane.thread.start()
++        return lane
++
++
++def _submit(item: str, job: Callable[[], None]) -> None:
++    _get_lane(item).queue.put(job)
++
++
++def _row_stale(fresh, row) -> bool:
++    if fresh is None:
++        return True
++    return any(
++        getattr(fresh, field) != getattr(row, field)
++        for field in ("title", "original_title", "nfo_mtime")
++    )
++
++
++def _job_translate(ctx: IngestContext) -> Optional[str]:
++    locale = (ctx.cfg.get("general") or {}).get("locale") or "zh-CN"
++    service = create_translate_service(ctx.cfg.get("translate") or {}, locale)
++    translated = asyncio.run(
++        service.translate_or_raise(
++            ctx.row.title,
++            {
++                "actors": ctx.row.actresses or [],
++                "number": ctx.row.number or "",
++            },
++        )
++    )
++    issue = translation_result_issue(
++        ctx.row.title,
++        translated,
++        locale,
++        proper_terms=ctx.row.actresses or (),
++    )
++    if issue is not None:
++        return issue
++
++    mappings = _path_mappings(ctx.cfg)
++    with hold_nfo_write():
++        repo = VideoRepository()
++        fresh_group = _group_members(repo, ctx.row, ctx.cfg)
++        if tuple(member.path for member in fresh_group) != tuple(
++            member.path for member in ctx.members
++        ):
++            return "stale_group"
++        for member in fresh_group:
++            fresh = repo.get_by_path(member.path)
++            if _row_stale(fresh, member):
++                return "stale_row"
++            result = apply_title_writeback(
++                repo,
++                fresh,
++                translated,
++                None,
++                ctx.cfg,
++                mappings,
++            )
++            if not result.get("success"):
++                return result.get("error") or "write_failed"
++    return None
++
++
++def _job_similar(ctx: IngestContext) -> Optional[str]:
++    outcome = similar_index.index_one(ctx.video_uri)
++    if outcome == "indexed":
++        return None
++    if outcome == "unreachable" and ctx.notify:
++        if similar_state.note_failure():
++            similar_index._notify_unreachable()
++    return outcome
++
++
++def _is_unreachable_failure(exc: BaseException) -> bool:
++    return tags_backfill_policy.stop_reason(exc) not in (None, "disabled")
++
++
++def _job_tags(ctx: IngestContext) -> Optional[str]:
++    try:
++        tag_video_sync(ctx.video_uri, config=ctx.cfg)
++    except TaggingFailure as exc:
++        if ctx.notify and _is_unreachable_failure(exc):
++            if tags_state.note_hook_failure():
++                tags_state.emit(_TAGS_NOTIFY_KEY)
++        return exc.reason
++    return None
++
++
++def _job_faces(ctx: IngestContext) -> Optional[str]:
++    if not ctx.row.cover_path:
++        return "no_cover"
++    cover_fs = uri_to_local_fs_path(
++        ctx.row.cover_path, _path_mappings(ctx.cfg)
++    )
++    maybe_submit_video_focal(
++        ctx.row.number,
++        ctx.row.maker,
++        ctx.video_uri,
++        cover_fs,
++        cover_path_uri=ctx.row.cover_path,
++    )
++    return None
++
++
++def _run_item(item: str, ctx: IngestContext) -> None:
++    try:
++        reason = None
++        try:
++            if item == "translate":
++                reason = _job_translate(ctx)
++            elif item == "similar":
++                reason = _job_similar(ctx)
++            elif item == "tags":
++                reason = _job_tags(ctx)
++            elif item == "faces":
++                reason = _job_faces(ctx)
++        except Exception as exc:
++            reason = type(exc).__name__
++        if reason is not None:
++            logger.warning(
++                "[post_ingest] %s failed reason=%s video=%s",
++                item,
++                reason,
++                video_label(ctx.row),
++            )
++    except Exception:
++        logger.exception("[post_ingest] run_item failed item=%s", item)
++
++
++def begin_round() -> None:
++    """Reset per-round notification suppression. Never raises."""
++    try:
++        tags_state.new_round()
++        similar_state.new_round()
++    except Exception:
++        logger.exception("[post_ingest] begin_round failed")
++
++
++def run_after_ingest(
++    video_uri: str,
++    *,
++    route: str,
++    skip_faces: bool = False,
++    notify: bool = False,
++    skip_translate: bool = False,
++) -> None:
++    try:
++        _run_after_ingest(
++            video_uri,
++            route=route,
++            skip_faces=skip_faces,
++            notify=notify,
++            skip_translate=skip_translate,
++        )
++    except Exception:
++        logger.exception(
++            "[post_ingest] run_after_ingest failed video=%s",
++            video_uri,
++        )
++
++
++def _run_after_ingest(
++    video_uri: str,
++    *,
++    route: str,
++    skip_faces: bool,
++    notify: bool,
++    skip_translate: bool,
++) -> None:
++    cfg = load_config()
++    translate_on = _flag_on(cfg, "translate", "enabled")
++    similar_on = _flag_on(cfg, "ai_services", "image_similar", "enabled")
++    tags_on = _flag_on(cfg, "ai_services", "tags", "enabled")
++    if skip_faces and not (translate_on or similar_on or tags_on):
++        return
++
++    repo = VideoRepository()
++    row = repo.get_by_path(video_uri)
++    if row is None:
++        logger.warning(
++            "[post_ingest] route=%s video=%s skip(row_missing)",
++            route,
++            os.path.basename(video_uri),
++        )
++        return
++
++    members = _group_members(repo, row, cfg)
++    index_ready = _index_ready() if similar_on and row.cover_path else False
++    cover_exists = (
++        _cover_exists(row, cfg)
++        if not skip_faces and row.cover_path
++        else False
++    )
++    tags_done = tags_on and _tags_already_processed(repo, members)
++    plan = decide(
++        cfg,
++        row,
++        skip_faces=skip_faces,
++        index_ready=index_ready,
++        cover_exists=cover_exists,
++        skip_translate=skip_translate,
++        tags_already_processed=tags_done,
++    )
++    logger.info("%s", format_log(route, row, plan))
++    ctx = IngestContext(
++        video_uri=video_uri,
++        route=route,
++        notify=notify,
++        cfg=cfg,
++        row=row,
++        members=members,
++    )
++    for name, verdict in plan.items():
++        if not verdict.run:
++            continue
++        try:
++            if name == "faces":
++                _run_item("faces", ctx)
++            else:
++                _submit(name, functools.partial(_run_item, name, ctx))
++        except Exception:
++            logger.exception(
++                "[post_ingest] item failed item=%s video=%s",
++                name,
++                video_uri,
++            )
+--- /dev/null
++++ b/core/ai_services/tagging.py
+@@ -0,0 +1,434 @@
++"""AI tagging pure functions: prompt / parse / name map / failure / conn.
++
++I/O orchestration (`tag_video`) lives in T7b.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import json
++import os
++from collections.abc import Sequence
++from dataclasses import dataclass, field
++
++from core.ai_services import tags_state
++from core.ai_services.image_prep import poster_to_data_uri
++from core.ai_services.tagging_vocab import VocabItem
++from core.ai_services.tagging_vocab import merged
++from core.ai_services.vision_chat import VisionConn
++from core.ai_services.vision_chat import vision_chat
++from core.cloud_translate import TranslateError
++from core.config import load_config
++from core.database import VideoRepository
++from core.logger import get_logger
++from core.multipart_group import resolve_group
++from core.openai_client import OPENAI_OFFICIAL_BASE_URL
++from core.path_utils import uri_to_local_fs_path
++from core.secret_fields import read_secret
++from core.similar.canonicalize import alias_key
++from core.user_tags_write import apply_user_tags
++
++logger = get_logger(__name__)
++
++USER_TEXT = "請標這張海報。"
++
++TAGGING_FAILURE_REASONS = frozenset(
++    {
++        "unreachable",
++        "model_unsupported",
++        "bad_response",
++        "not_configured",
++        "disabled",
++        "not_found",
++        "no_cover",
++        "write_failed",
++    }
++)
++
++_REFUSAL_KINDS = frozenset({"blocked", "refused"})
++_UNREACHABLE_KINDS = frozenset(
++    {
++        "connection_timeout",
++        "connection_failed",
++        "auth_failed",
++        "forbidden",
++        "not_found",
++        "rate_limited",
++    }
++)
++_MODEL_UNSUPPORTED_STATUSES = frozenset({400, 413, 415, 422})
++_VALID_PROVIDERS = frozenset(
++    {"ollama", "gemini", "claude", "openai", "openai_official"}
++)
++
++_PROMPT_HEAD = (
++    "你是成人影片封面的標籤助手。只看這張海報上「人物的服裝、腿部、身材外觀、場景」，"
++    "從下面的詞表挑出畫面上看得到的項目。\n規則：\n"
++    "- 只能用詞表裡的名稱，一字不改。\n"
++    "- 只根據畫面上看得到的人物與服裝判斷；海報上印的文字一律忽略，不得當作依據。\n"
++    "- 看不清楚就不要選。\n"
++    "- 沒有符合的就回空陣列 {\"tags\":[]}，這是正常結果，不要為了有輸出而硬標。\n"
++    "- 只拍到臉或上半身、看不到服裝細節時，通常就是空陣列。\n"
++    "- 便服（T 恤、牛仔褲、短褲、一般洋裝、外套）不屬於任何一項，不要硬套最接近的詞。\n"
++    "- 寧可漏標，不要標錯。\n"
++    "- 每個標籤給 confidence：high（一眼確定）／mid（大致看得出）。\n"
++    "只輸出 JSON：{\"tags\":[{\"tag\":\"...\",\"confidence\":\"high\"}]}\n\n詞表：\n"
++)
++
++
++class TaggingFailure(Exception):
++    """Tagging failure; `.reason` is the stable code for callers."""
++
++    def __init__(self, reason: str, detail: str = ""):
++        self.reason = reason
++        self.detail = detail
++        super().__init__(reason)
++
++
++@dataclass(frozen=True)
++class TagOutcome:
++    added: list[str]
++    refused: bool = False
++    user_tags: list[str] = field(default_factory=list)
++    nfo_updated: bool = False
++    readonly_no_output: bool = False
++    nfo_write_blocked: bool = False
++
++
++@dataclass(frozen=True)
++class ParsedTags:
++    status: str
++    tags: list[str]
++
++
++def _vocab_line(item: VocabItem) -> str:
++    if item.definition:
++        return f"- 「{item.model_name}」 ＝ {item.definition}"
++    return f"- 「{item.model_name}」"
++
++
++def build_system_prompt(vocab: Sequence[VocabItem]) -> str:
++    """Compose system prompt; template matches poc/run_v5.py SYS verbatim."""
++    lines: list[str] = []
++    for group in dict.fromkeys(item.group for item in vocab):
++        lines.append(f"【{group}】")
++        lines += [_vocab_line(item) for item in vocab if item.group == group]
++    return _PROMPT_HEAD + "\n".join(lines)
++
++
++def parse_tags(text: str) -> ParsedTags:
++    """Parse model reply into ok / refused / bad (CD-188b-11)."""
++    start = text.find("{")
++    if start < 0:
++        return ParsedTags("refused" if text.strip() else "bad", [])
++    try:
++        obj, _ = json.JSONDecoder().raw_decode(text[start:])
++    except ValueError:
++        return ParsedTags("bad", [])
++    if not isinstance(obj, dict) or not isinstance(obj.get("tags"), list):
++        return ParsedTags("bad", [])
++    tags: list[str] = []
++    for el in obj["tags"]:
++        if isinstance(el, str):
++            tags.append(el)
++        elif isinstance(el, dict) and isinstance(el.get("tag"), str):
++            tags.append(el["tag"])
++    return ParsedTags("ok", tags)
++
++
++def to_display_names(raw: Sequence[object], vocab: Sequence[VocabItem]) -> list[str]:
++    """Map model_name / display name → display name; drop unknowns; keep order."""
++    lookup: dict[str, str] = {}
++    for item in vocab:
++        lookup[item.name] = item.name
++    for item in vocab:
++        lookup.setdefault(item.model_name, item.name)
++    out: list[str] = []
++    seen: set[str] = set()
++    for el in raw:
++        if not isinstance(el, str):
++            continue
++        name = lookup.get(el.strip())
++        if name is None:
++            continue
++        if name in seen:
++            continue
++        seen.add(name)
++        out.append(name)
++    return out
++
++
++def classify_failure(exc: TranslateError) -> TaggingFailure | None:
++    """Map TranslateError → TaggingFailure; None = API-layer refusal (CD-188b-10)."""
++    if exc.kind in _REFUSAL_KINDS:
++        return None
++    if exc.kind in _UNREACHABLE_KINDS:
++        return TaggingFailure("unreachable", detail=exc.kind)
++    if exc.kind == "http_error":
++        if exc.status in _MODEL_UNSUPPORTED_STATUSES:
++            return TaggingFailure("model_unsupported", detail=exc.kind)
++        return TaggingFailure("unreachable", detail=exc.kind)
++    return TaggingFailure("bad_response", detail=exc.kind)
++
++
++def _tags_section(config: dict) -> dict:
++    ai = config.get("ai_services")
++    if not isinstance(ai, dict):
++        return {}
++    tags = ai.get("tags")
++    return tags if isinstance(tags, dict) else {}
++
++
++def _require_key(config: dict, dotted: str, detail: str) -> str:
++    value = read_secret(config, dotted).strip()
++    if not value:
++        raise TaggingFailure("not_configured", detail=detail)
++    return value
++
++
++def resolve_vision_conn(config: dict) -> VisionConn:
++    """Resolve VisionConn from raw config dict (CD-188b-14). Ignores enabled."""
++    tags = _tags_section(config)
++    provider = str(tags.get("provider") or "").strip()
++    model = str(tags.get("model") or "").strip()
++    if not provider or provider not in _VALID_PROVIDERS:
++        raise TaggingFailure("not_configured", detail="provider")
++    if not model:
++        raise TaggingFailure("not_configured", detail="model")
++
++    if provider == "ollama":
++        url = read_secret(config, "translate.ollama.url").strip()
++        return VisionConn(
++            provider=provider,
++            model=model,
++            base_url=url or "http://localhost:11434",
++            api_key="",
++        )
++    if provider in ("gemini", "claude"):
++        key = _require_key(config, f"translate.{provider}.api_key", "api_key")
++        return VisionConn(provider=provider, model=model, base_url="", api_key=key)
++    if provider == "openai":
++        base = _require_key(config, "translate.openai.base_url", "base_url")
++        key = read_secret(config, "translate.openai.api_key").strip()
++        return VisionConn(provider=provider, model=model, base_url=base, api_key=key)
++    # openai_official
++    key = _require_key(config, "translate.openai_official.api_key", "api_key")
++    return VisionConn(
++        provider=provider,
++        model=model,
++        base_url=OPENAI_OFFICIAL_BASE_URL,
++        api_key=key,
++    )
++
++
++@dataclass(frozen=True)
++class _Prepared:
++    cfg: dict
++    repo: object
++    conn: VisionConn
++    poster_uri: str
++    vocab: list[VocabItem]
++    members: tuple
++    local_fs_paths: tuple[str, ...]
++
++
++def _mark_ran_best_effort(repo, paths) -> None:
++    for path in paths:
++        try:
++            repo.mark_ai_tagged(path)
++        except Exception:
++            logger.exception("[tagging] mark_ai_tagged failed path=%s", path)
++
++
++def _prepare(file_path: str, config: dict | None) -> _Prepared:
++    """All synchronous I/O before the model call (CD-188b-12)."""
++    cfg = config if config is not None else load_config()
++    if not _tags_section(cfg).get("enabled"):
++        raise TaggingFailure("disabled")
++    conn = resolve_vision_conn(cfg)
++    repo = VideoRepository()
++    video = repo.get_by_path(file_path)
++    if video is None:
++        raise TaggingFailure("not_found")
++    mappings = cfg.get("gallery", {}).get("path_mappings", {}) or {}
++    try:
++        group = resolve_group(repo, file_path, mappings)
++    except Exception:
++        logger.warning(
++            "[tagging] multipart group lookup failed path=%s",
++            file_path,
++            exc_info=True,
++        )
++        group = None
++    members = tuple(group.members if group is not None else (video,))
++    local_fs_paths = tuple(
++        uri_to_local_fs_path(member.path, mappings) for member in members
++    )
++    poster_member = next((member for member in members if member.cover_path), None)
++    poster_uri = None
++    if poster_member is not None:
++        cover_fs = uri_to_local_fs_path(poster_member.cover_path, mappings)
++        poster_uri = poster_to_data_uri(
++            cover_fs,
++            poster_member.crop_mode,
++            poster_member.auto_focal,
++        )
++    if poster_uri is None:
++        markable = []
++        for member in members:
++            if not member.cover_path:
++                continue
++            try:
++                cover_fs = uri_to_local_fs_path(member.cover_path, mappings)
++                if os.path.isdir(os.path.dirname(cover_fs)):
++                    markable.append(member.path)
++            except Exception:
++                logger.warning(
++                    "[tagging] cover path lookup failed path=%s",
++                    member.path,
++                    exc_info=True,
++                )
++        if markable:
++            _mark_ran_best_effort(repo, markable)
++        raise TaggingFailure("no_cover")
++    return _Prepared(
++        cfg=cfg,
++        repo=repo,
++        conn=conn,
++        poster_uri=poster_uri,
++        vocab=list(merged()),
++        members=members,
++        local_fs_paths=local_fs_paths,
++    )
++
++
++async def _ask_model(prep: _Prepared, vision_fn) -> tuple[list[str], bool]:
++    """Ask the model (no lock held). Returns (display names, refused)."""
++    system = build_system_prompt(prep.vocab)
++    try:
++        text = await vision_fn(prep.conn, system, USER_TEXT, prep.poster_uri)
++    except TranslateError as exc:
++        failure = classify_failure(exc)
++        if failure is None:
++            return [], True
++        raise failure from None
++    parsed = parse_tags(text)
++    if parsed.status == "refused":
++        return [], True
++    if parsed.status == "bad":
++        raise TaggingFailure("bad_response", detail="bad_json")
++    names = to_display_names(parsed.tags, prep.vocab)
++    hidden = {item.name for item in prep.vocab if item.hidden}
++    return [n for n in names if n not in hidden], False
++
++
++def _make_add_filter(names: list[str]):
++    """In-lock filter: drop names whose alias group is already in scraped tags."""
++
++    def _filter(video) -> list[str]:
++        have = {alias_key(t) for t in video.tags if isinstance(t, str)}
++        return [n for n in names if alias_key(n) not in have]
++
++    return _filter
++
++
++def _write(
++    prep: _Prepared, file_path: str, names: list[str], refused: bool
++) -> TagOutcome:
++    """Write user tags + ai_tagged_at under the shared lock (CD-188b-13)."""
++    added: list[str] = []
++    user_tags: list[str] = []
++    nfo_updated = False
++    readonly_no_output = False
++    nfo_write_blocked = False
++    for member, local_fs_path in zip(
++        prep.members, prep.local_fs_paths, strict=True
++    ):
++        result = apply_user_tags(
++            prep.repo,
++            member.path,
++            local_fs_path,
++            prep.cfg,
++            add=[],
++            remove=[],
++            ai_tagged=True,
++            add_filter=_make_add_filter(names),
++        )
++        if not result.ok:
++            raise TaggingFailure("write_failed", detail=result.error)
++        for tag in result.added:
++            if tag not in added:
++                added.append(tag)
++        if member.path == file_path or not user_tags:
++            user_tags = list(result.user_tags)
++        nfo_updated = nfo_updated or result.nfo_updated
++        readonly_no_output = readonly_no_output or result.readonly_no_output
++        nfo_write_blocked = nfo_write_blocked or result.nfo_write_blocked
++    return TagOutcome(
++        added=added,
++        refused=refused,
++        user_tags=user_tags,
++        nfo_updated=nfo_updated,
++        readonly_no_output=readonly_no_output,
++        nfo_write_blocked=nfo_write_blocked,
++    )
++
++
++async def tag_video(
++    file_path: str, *, config: dict | None = None, vision_fn=None
++) -> TagOutcome:
++    """Tag one video from its poster (CD-188b-12). `file_path` = videos.path URI."""
++    ask = vision_fn or vision_chat
++    prep = await asyncio.to_thread(_prepare, file_path, config)
++    try:
++        names, refused = await _ask_model(prep, ask)
++    except TaggingFailure as exc:
++        try:
++            tags_state.observe_failure(exc.reason, exc.detail)
++        except Exception:
++            logger.exception("[tagging] observe_failure failed")
++        raise
++    try:
++        await asyncio.to_thread(tags_state.observe_success)
++    except Exception:
++        logger.exception("[tagging] observe_success failed")
++    return await asyncio.to_thread(_write, prep, file_path, names, refused)
++
++
++def tag_video_sync(
++    file_path: str, *, config: dict | None = None, vision_fn=None
++) -> TagOutcome:
++    """Sync wrapper; only call from a worker thread with no running event loop."""
++    return asyncio.run(tag_video(file_path, config=config, vision_fn=vision_fn))
++
++
++_TEST_UNUSABLE_REASONS = frozenset({"model_unsupported", "bad_response"})
++
++
++async def run_vision_test(conn, vocab, sample_uri, *, vision_fn=None) -> dict:
++    """One-shot vision probe for the settings test button (no writes)."""
++    ask = vision_fn or vision_chat
++    prep = _Prepared(
++        cfg={},
++        repo=None,
++        conn=conn,
++        poster_uri=sample_uri,
++        vocab=list(vocab),
++        members=(),
++        local_fs_paths=(),
++    )
++    try:
++        names, refused = await _ask_model(prep, ask)
++    except TaggingFailure as exc:
++        if exc.reason in _TEST_UNUSABLE_REASONS:
++            return {"ok": False, "outcome": "unusable", "detail": exc.reason}
++        return {
++            "ok": False,
++            "outcome": "unreachable",
++            "detail": exc.detail or exc.reason,
++        }
++    if refused:
++        return {"ok": False, "outcome": "unusable", "detail": "refused"}
++    if not names:
++        return {"ok": False, "outcome": "unusable", "detail": "no_tags"}
++    return {"ok": True, "outcome": "ok", "tags": names}
+--- /dev/null
++++ b/core/ai_services/tagging_aliases.py
+@@ -0,0 +1,125 @@
++"""Builtin tag-alias seed (TASK-188b-T4 / CD-188b-7 / TASK-196-T2)."""
++
++from __future__ import annotations
++
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++SEED_VERSION = 2
++SOURCE = "builtin-188"
++_META_KEY = "ai_tags.alias_seed_version"
++_ADDED_IN: dict[int, frozenset[str]] = {2: frozenset({"女醫", "過膝襪", "靴子", "雙馬尾", "潤滑油"})}
++
++
++def _read_marker(repo) -> int:
++    from core.database.connection import get_connection
++
++    conn = get_connection(repo.db_path)
++    try:
++        row = conn.execute(
++            "SELECT value FROM app_meta WHERE key = ?", (_META_KEY,)
++        ).fetchone()
++        if row is None:
++            return 0
++        try:
++            return int(row[0])
++        except (TypeError, ValueError):
++            return 0
++    finally:
++        conn.close()
++
++
++def _write_marker(repo) -> None:
++    from core.database.connection import get_connection
++
++    conn = get_connection(repo.db_path)
++    try:
++        conn.execute(
++            "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
++            (_META_KEY, str(SEED_VERSION)),
++        )
++        conn.commit()
++    finally:
++        conn.close()
++
++
++def _occupied(repo, name: str) -> bool:
++    return (
++        repo.get_by_primary(name) is not None
++        or repo.find_by_alias(name) is not None
++    )
++
++
++def _top_up(repo, owner, item) -> int:
++    n = 0
++    for a in item.aliases:
++        if a in owner.aliases or _occupied(repo, a):
++            continue
++        ok, _msg = repo.add_alias(owner.primary_name, a)
++        if ok:
++            n += 1
++            owner.aliases = list(owner.aliases) + [a]
++    return n
++
++
++def _seed_one(repo, item, create_only: bool) -> tuple[int, int]:
++    owner = repo.get_by_primary(item.name) or repo.find_by_alias(item.name)
++    if owner is not None:
++        if create_only:
++            return 0, 0
++        if owner.source != SOURCE or owner.primary_name != item.name:
++            return 0, 0
++        return 0, _top_up(repo, owner, item)
++    free = [a for a in item.aliases if not _occupied(repo, a)]
++    if not free:
++        return 0, 0
++    try:
++        repo.add(item.name, free, source=SOURCE)
++    except ValueError:
++        logger.warning(
++            "seed_builtin_aliases: skip %r after ValueError", item.name
++        )
++        return 0, 0
++    return 1, 0
++
++
++def seed_builtin_aliases(repo=None) -> dict:
++    from core.database import TagAliasRepository
++    from core.ai_services.tagging_vocab import load_builtin
++    from core.similar.ranker_cache import SimilarRankerCache
++
++    if repo is None:
++        repo = TagAliasRepository()
++    marker = _read_marker(repo)
++    if marker >= SEED_VERSION:
++        return {"skipped": True, "created": 0, "topped_up": 0}
++    only = None if marker == 0 else {
++        name
++        for v, names in _ADDED_IN.items()
++        if marker < v <= SEED_VERSION
++        for name in names
++    }
++    created = 0
++    topped_up = 0
++    for item in load_builtin():
++        if not item.aliases:
++            continue
++        if only is not None and item.name not in only:
++            continue
++        c, t = _seed_one(repo, item, create_only=only is not None)
++        created += c
++        topped_up += t
++    if created or topped_up:
++        from core.similar import canonicalize
++
++        canonicalize._invalidate_cache()
++        try:
++            SimilarRankerCache.invalidate()
++        except Exception:
++            logger.warning(
++                "seed_builtin_aliases: SimilarRankerCache.invalidate failed",
++                exc_info=True,
++            )
++    _write_marker(repo)
++    return {"skipped": False, "created": created, "topped_up": topped_up}
+--- /dev/null
++++ b/core/ai_services/tagging_vocab.json
+@@ -0,0 +1,281 @@
++[
++ {
++  "group": "服裝",
++  "model_name": "制服",
++  "display_name": "校服",
++  "def": "可見水手領制服，或襯衫配領結／領帶與百褶裙的學生制服套裝；只有格子裙、只有西裝外套不算",
++  "aliases": [
++   "制服",
++   "学生服",
++   "水手服",
++   "セーラー服"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "体操着・ブルマ",
++  "display_name": "體育服",
++  "def": "日式學校體育服：白色短袖上衣配深色燈籠褲或運動短褲；一般健身服、瑜珈服不算",
++  "aliases": [
++   "体操着・ブルマ"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "競泳・スクール水着",
++  "display_name": "學校泳裝",
++  "def": "背心式深藍學校連身泳裝，或運動款競泳連身泳裝；比基尼、韻律服不算",
++  "aliases": [
++   "競泳・スクール水着"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "水着",
++  "display_name": "泳裝",
++  "def": "看得到實際泳裝布料的比基尼或一般連身泳裝；內衣、裸身、學校或競泳款泳裝不算",
++  "aliases": [
++   "水着",
++   "泳衣"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "OL",
++  "display_name": "OL",
++  "def": "西裝外套配窄裙或西裝褲，或正式襯衫配窄裙的辦公室套裝；只有單件襯衫、校服、空服員制服不算",
++  "aliases": [
++   "ビジネススーツ",
++   "白领"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "看護婦・ナース",
++  "display_name": "看護婦・ナース",
++  "def": "白色或淺粉色護士制服，並有護士帽或醫護標誌；普通白裙、醫師白袍不算",
++  "aliases": [
++   "护士",
++   "看護婦",
++   "護士"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "メイド",
++  "display_name": "女僕",
++  "def": "女僕洋裝配白色荷葉邊圍裙或女僕頭飾；普通廚房圍裙、只有髮帶不算",
++  "aliases": [
++   "メイド"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "和服・浴衣",
++  "display_name": "和服・浴衣",
++  "def": "和服或浴衣：左右交疊的前襟、寬袖、寬腰帶；一般浴袍、睡袍不算",
++  "aliases": [
++   "和服・喪服",
++   "浴衣和服",
++   "着物・浴衣"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "バニーガール",
++  "display_name": "兔女郎",
++  "def": "頭戴兔耳並穿兔女郎連身服；只有兔耳髮箍、兔子圖案不算",
++  "aliases": [
++   "バニーガール"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "スチュワーデス",
++  "display_name": "空中小姐",
++  "def": "套裝搭配空服員制服帽或頸巾的空服員制服；一般商務套裝不算",
++  "aliases": [
++   "スチュワーデス"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "チャイナドレス",
++  "display_name": "旗袍",
++  "def": "立領並有斜襟或盤扣的中式貼身連身裙；一般花紋洋裝不算",
++  "aliases": [
++   "チャイナドレス"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "チアガール",
++  "display_name": "啦啦隊",
++  "def": "啦啦隊上衣配百褶短裙，並有彩球或撞色條紋；普通校服、一般運動服不算",
++  "aliases": [
++   "チアガール"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "レオタード",
++  "display_name": "緊身衣",
++  "def": "芭蕾或體操用的連身衣，上身與褲襠連成一件；泳裝、兔女郎服、一般緊身上衣不算",
++  "aliases": [
++   "レオタード"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "レースクィーン",
++  "display_name": "賽車女郎",
++  "def": "印有贊助商標誌的亮面高叉連身衣或露腰兩件式服裝，常配長靴或陽傘",
++  "aliases": [
++   "レースクィーン"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "裸エプロン",
++  "display_name": "裸體圍裙",
++  "def": "必須看得到圍裙布片與頸帶或腰帶，圍裙外沒穿其他衣物；普通裸身、女僕洋裝不算",
++  "aliases": [
++   "裸エプロン"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "コスプレ",
++  "display_name": "角色扮演",
++  "def": "動漫、遊戲或奇幻角色服裝、彩色假髮；校服、護士、女僕、兔女郎、空服員等現實制服不算",
++  "aliases": [
++   "コスプレ"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "女医",
++  "display_name": "女醫",
++  "def": "白色醫師長袍，或脖子上掛聽診器；護士服、護士帽、一般白襯衫不算",
++  "aliases": [
++   "女医",
++   "女醫生"
++  ]
++ },
++ {
++  "group": "腿",
++  "model_name": "パンスト・タイツ",
++  "display_name": "連褲襪",
++  "def": "任何透膚絲襪、褲襪、長筒絲襪、吊帶襪、網襪；不透膚的棉襪、過膝襪不算",
++  "aliases": [
++   "パンスト・タイツ",
++   "パンスト"
++  ]
++ },
++ {
++  "group": "腿",
++  "model_name": "ニーソックス",
++  "display_name": "過膝襪",
++  "def": "不透膚的長襪，襪口在膝蓋附近或以上；透膚絲襪、網襪、褲襪、靴子不算",
++  "aliases": [
++   "ニーソックス",
++   "長襪"
++  ]
++ },
++ {
++  "group": "腿",
++  "model_name": "ブーツ",
++  "display_name": "靴子",
++  "def": "鞋身延伸到腳踝以上、看得到靴筒的靴子；長襪、護腿、一般高跟鞋不算",
++  "aliases": [
++   "ブーツ",
++   "高筒靴"
++  ]
++ },
++ {
++  "group": "外觀",
++  "model_name": "めがね",
++  "display_name": "眼鏡",
++  "def": "人物臉上正戴著透明鏡片的眼鏡；墨鏡、眼罩、拿在手上或架在頭上的眼鏡不算",
++  "aliases": [
++   "めがね"
++  ]
++ },
++ {
++  "group": "外觀",
++  "model_name": "ギャル",
++  "display_name": "辣妹",
++  "def": "日系辣妹妝髮：明顯淺色染髮，同時有濃妝或誇張美甲；只有染髮或只是膚色較深不算",
++  "aliases": [
++   "ギャル"
++  ]
++ },
++ {
++  "group": "外觀",
++  "model_name": "日焼け",
++  "display_name": "曬黑",
++  "def": "明顯曬成深膚色，或皮膚上看得到泳裝、肩帶形狀的曬痕；陰影、打光造成的深色不算",
++  "aliases": [
++   "日焼け"
++  ]
++ },
++ {
++  "group": "外觀",
++  "model_name": "ツインテール",
++  "display_name": "雙馬尾",
++  "def": "頭髮在左右兩側各綁成一束馬尾，兩束都看得到；單馬尾、披髮、雙辮子、雙髮髻不算",
++  "aliases": [
++   "ツインテール"
++  ]
++ },
++ {
++  "group": "外觀",
++  "model_name": "ローション・オイル",
++  "display_name": "潤滑油",
++  "def": "皮膚明顯塗滿油或乳液而強烈反光，或身上看得到大量乳液；只是出汗、打光造成的亮面不算",
++  "aliases": [
++   "ローション・オイル",
++   "乳液"
++  ]
++ },
++ {
++  "group": "場景",
++  "model_name": "温泉",
++  "display_name": "温泉",
++  "def": "露天或室內溫泉：岩石池緣、木造浴池、冒熱氣的池水；家用浴缸、游泳池不算",
++  "aliases": [
++   "溫泉"
++  ]
++ },
++ {
++  "group": "場景",
++  "model_name": "お風呂",
++  "display_name": "浴室",
++  "def": "看得到浴缸、蓮蓬頭或淋浴間；只有磁磚、毛巾或濕身不算",
++  "aliases": [
++   "お風呂"
++  ]
++ },
++ {
++  "group": "服裝",
++  "model_name": "スポーツウェア",
++  "display_name": "運動服",
++  "def": "運動內衣或運動背心，搭配緊身運動褲或運動短褲；一般內衣、泳裝、學校體育服不算",
++  "aliases": []
++ },
++ {
++  "group": "服裝",
++  "model_name": "ウェディングドレス",
++  "display_name": "婚紗",
++  "def": "白色或米白色婚紗禮服，並有新娘頭紗、蓬裙或拖尾；普通白裙、白色內衣不算",
++  "aliases": []
++ },
++ {
++  "group": "露出",
++  "model_name": "全裸",
++  "display_name": "全裸",
++  "def": "畫面中人物沒穿任何衣物；只露出肩膀或衣物被裁出畫面不算",
++  "aliases": [],
++  "hidden": true
++ }
++]
+--- /dev/null
++++ b/core/ai_services/tagging_vocab.py
+@@ -0,0 +1,225 @@
++"""AI tagging vocabulary: shipped builtin JSON + custom store on data root."""
++
++from __future__ import annotations
++
++import json
++import threading
++import unicodedata
++from dataclasses import dataclass
++from pathlib import Path
++
++from core.atomic_write import atomic_write
++from core.data_root import get_data_root, is_layout_finalized
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++NAME_MAX = 20
++DEF_MAX = 100
++CUSTOM_MAX = 40
++CUSTOM_FILENAME = "ai_tag_vocab.json"
++
++_LOCK = threading.Lock()
++
++
++@dataclass(frozen=True)
++class VocabItem:
++    name: str
++    source: str
++    group: str
++    definition: str
++    model_name: str
++    aliases: tuple[str, ...] = ()
++    hidden: bool = False
++
++
++class VocabError(Exception):
++    """Validation / store error; `.reason` is the stable code for callers."""
++
++    def __init__(self, reason: str):
++        self.reason = reason
++        super().__init__(reason)
++
++
++_builtin_cache: list[VocabItem] | None = None
++
++
++def load_builtin() -> list[VocabItem]:
++    """Load shipped vocab once; module-level cache (immutable at runtime)."""
++    global _builtin_cache
++    if _builtin_cache is not None:
++        return _builtin_cache
++    path = Path(__file__).with_name("tagging_vocab.json")
++    rows = json.loads(path.read_text(encoding="utf-8"))
++    items: list[VocabItem] = []
++    for row in rows:
++        aliases = row.get("aliases") or []
++        items.append(
++            VocabItem(
++                name=row["display_name"],
++                source="builtin",
++                group=row["group"],
++                definition=row["def"],
++                model_name=row["model_name"],
++                aliases=tuple(aliases),
++                hidden=bool(row.get("hidden", False)),
++            )
++        )
++    _builtin_cache = items
++    return items
++
++
++def _builtin_names() -> set[str]:
++    names: set[str] = set()
++    for item in load_builtin():
++        names.add(item.name)
++        names.add(item.model_name)
++    return names
++
++
++def _custom_path() -> Path:
++    return get_data_root() / CUSTOM_FILENAME
++
++
++def _parse_custom_entry(entry: object) -> VocabItem | None:
++    if not isinstance(entry, dict):
++        return None
++    name = entry.get("name")
++    if not isinstance(name, str) or not name:
++        return None
++    definition = entry.get("definition", "")
++    if not isinstance(definition, str):
++        definition = ""
++    return VocabItem(
++        name=name,
++        source="custom",
++        group="自訂",
++        definition=definition,
++        model_name=name,
++        aliases=(),
++    )
++
++
++def _load_custom(*, strict: bool) -> list[VocabItem]:
++    """Read custom vocab. Missing file → []. Display degrades; write raises."""
++    path = _custom_path()
++    if not path.is_file():
++        return []
++    try:
++        raw = json.loads(path.read_text(encoding="utf-8"))
++    except (OSError, ValueError):
++        if strict:
++            raise VocabError("custom_unreadable") from None
++        logger.warning("ai_tag_vocab: unreadable or corrupt %s", path)
++        return []
++    if not isinstance(raw, dict) or not isinstance(raw.get("items"), list):
++        if strict:
++            raise VocabError("custom_unreadable")
++        logger.warning("ai_tag_vocab: bad top-level shape at %s", path)
++        return []
++    out: list[VocabItem] = []
++    for entry in raw["items"]:
++        item = _parse_custom_entry(entry)
++        if item is not None:
++            out.append(item)
++    return out
++
++
++def load_custom() -> list[VocabItem]:
++    """Read custom vocab from data root every time (no cache; degrade on error)."""
++    return _load_custom(strict=False)
++
++
++_warned_custom_collisions: set[str] = set()
++
++
++def merged() -> list[VocabItem]:
++    return [*load_builtin(), *_custom_without_collisions()]
++
++
++def _custom_without_collisions() -> list[VocabItem]:
++    builtin_names: set[str] = set()
++    for item in load_builtin():
++        builtin_names.add(item.name)
++        builtin_names.add(item.model_name)
++    out: list[VocabItem] = []
++    for custom in load_custom():
++        if custom.name in builtin_names:
++            if custom.name not in _warned_custom_collisions:
++                _warned_custom_collisions.add(custom.name)
++                logger.warning(
++                    "ai_tag_vocab: custom %r collides with builtin, builtin wins",
++                    custom.name,
++                )
++            continue
++        out.append(custom)
++    return out
++
++
++def _has_control_char(text: str) -> bool:
++    return any(unicodedata.category(c)[0] == "C" for c in text)
++
++
++def _validate_definition(definition: str) -> str:
++    text = definition.strip()
++    if "\n" in text or "\r" in text:
++        raise VocabError("definition_invalid")
++    if len(text) > DEF_MAX:
++        raise VocabError("definition_invalid")
++    return text
++
++
++def _write_custom(items: list[VocabItem]) -> None:
++    path = _custom_path()
++    payload = {
++        "version": 1,
++        "items": [{"name": i.name, "definition": i.definition} for i in items],
++    }
++    data = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
++    with atomic_write(path, mode="wb") as handle:
++        handle.write(data)
++
++
++def add_custom(name: str, definition: str = "") -> VocabItem:
++    """Validate then append one custom word; returns the stored item."""
++    name = name.strip()
++    if not name:
++        raise VocabError("name_empty")
++    if len(name) > NAME_MAX:
++        raise VocabError("name_too_long")
++    if _has_control_char(name):
++        raise VocabError("name_invalid")
++    if name in _builtin_names():
++        raise VocabError("name_conflict_builtin")
++    definition = _validate_definition(definition)
++    if not is_layout_finalized(get_data_root()):
++        raise VocabError("data_root_not_ready")
++    with _LOCK:
++        current = _load_custom(strict=True)
++        if any(item.name == name for item in current):
++            raise VocabError("name_exists")
++        if len(current) >= CUSTOM_MAX:
++            raise VocabError("vocab_full")
++        item = VocabItem(
++            name=name,
++            source="custom",
++            group="自訂",
++            definition=definition,
++            model_name=name,
++            aliases=(),
++        )
++        _write_custom([*current, item])
++        return item
++
++
++def remove_custom(name: str) -> None:
++    """Remove one custom word by exact stored name (after strip)."""
++    name = name.strip()
++    if not is_layout_finalized(get_data_root()):
++        raise VocabError("data_root_not_ready")
++    with _LOCK:
++        current = _load_custom(strict=True)
++        kept = [item for item in current if item.name != name]
++        if len(kept) == len(current):
++            raise VocabError("not_found")
++        _write_custom(kept)
+--- /dev/null
++++ b/core/ai_services/tags_backfill.py
+@@ -0,0 +1,481 @@
++"""補完全庫 job 核心（188c-T4a／T4b，CD-188c-2／-3／-4／-5／-6／-7／-8／-9／-10／-11）。
++
++與 ``similar_index.py``／``faces_recompute.py`` 為三份刻意重複的骨架，統一留給 189。
++
++公開介面：``start_build()``、``start_rebuild()``、``request_stop()``、
++``schedule_incremental()``、``status()``。路由（T5）不在這裡。
++
++併發模型（不變式 J1～J5 的承載）：
++
++- ``_SHELL.job_lock`` 以 ``acquire(blocking=False)`` 取得，build／rebuild／incremental 共用，最多一份。
++- ``_SHELL.state_lock`` 是短暫的互斥：「取得／釋放工作鎖」與承接旗標 ``_SHELL.rerun`` 只在它裡面動。
++  工作結束前的最後檢查（待處理＝0、沒有被停止、沒有排隊中的承接、清「未完成」旗標）與釋放
++  工作鎖在**同一個** ``_SHELL.state_lock`` 區段內完成；掃描端「嘗試取得，失敗就排隊承接」也在同一把
++  鎖內 ⇒ 掃描要嘛看到鎖已釋放（自己開新 job）、要嘛把旗標留給仍在跑的那份 job 消化。
++- ``request_stop()`` 在同一把鎖內設停止旗標並清掉承接；停止後 job 不會自行重開（J2）。
++- 本次 job 內失敗的片進 ``ctx.abandoned``，不再被撈（J4）；每部結果在 ``tag_video`` 內已落盤（J5）。
++- 重啟不起任何背景執行緒（I-STATUS）：模組載入不做事，``status()`` 只讀 DB。
++- T4b：``_process_batch`` 內開 ``MAX_CONCURRENCY`` 條 pool thread＋名額 gate；政策由
++  ``tags_backfill_policy.RunPolicy`` 驅動；429 等待用 ``_SHELL.stop.wait``。
++"""
++from __future__ import annotations
++
++import threading
++from dataclasses import dataclass, field
++from time import monotonic as _monotonic_impl
++from typing import Optional
++
++from core.ai_services import tags_backfill_policy, tags_state
++from core.ai_services.job_shell import JobShell
++from core.ai_services.tagging import tag_video_sync
++from core.config import load_config
++from core.database import VideoRepository
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++THREAD_NAME = "tags-backfill"
++_NOTIF_INCREMENTAL = "notif.ai_tags_unreachable"
++_NOTIF_BACKFILL = "notif.ai_tags_backfill_stopped"
++
++_SHELL = JobShell()
++
++# 可注入假時鐘（測試）；`from time import monotonic` 避開 DoD 的 `import time` 字面
++_monotonic = _monotonic_impl
++
++
++@dataclass
++class _Ctx:
++    """一份 job 的上下文；``repo`` 在 job 開始當下建立並沿用（db_path 定死）。"""
++
++    kind: str  # "build" | "rebuild" | "incremental"
++    repo: VideoRepository
++    abandoned: set = field(default_factory=set)
++    released: bool = False
++    # T4b：政策／gate／halt（不新增模組層可變狀態，BE-TEST-38）
++    policy: tags_backfill_policy.RunPolicy = field(
++        default_factory=tags_backfill_policy.RunPolicy)
++    lock: threading.Lock = field(default_factory=threading.Lock)
++    inflight: int = 0
++    n_waiting: int = 0
++    halt_reason: Optional[str] = None
++    suppress_notify: bool = False  # 第一次 halt 當下若使用者已停止 → 整批不通知
++    cooldown_until: Optional[float] = None  # I-COOLDOWN：共用冷卻截止（monotonic）
++    gate: threading.Condition = field(init=False)
++
++    def __post_init__(self) -> None:
++        self.gate = threading.Condition(self.lock)
++
++
++# ── 鎖與承接旗標（只在 _SHELL.state_lock 內動） ────────────────────────────────
++
++def _begin_job_locked(kind: str) -> None:
++    _SHELL.begin_locked()
++    tags_state.job_begin(kind)
++    if kind != "incremental":  # CD-188c-8：手動 job 開始時記「有未完成的補完」
++        tags_state.meta_set(tags_state.META_BACKFILL_OPEN, "1")
++
++
++def _release_job_locked(ctx: Optional[_Ctx], outcome: str) -> None:
++    def _before_release() -> None:
++        tags_state.job_end(outcome)
++        if ctx is not None:
++            ctx.released = True
++
++    _SHELL.release_locked(before_release=_before_release)
++
++
++def _release_unlaunched(outcome: str) -> None:
++    def _before_release() -> None:
++        tags_state.job_end(outcome)
++
++    _SHELL.release_unlaunched(before_release=_before_release)
++
++
++def _start_thread(ctx: _Ctx) -> None:
++    _SHELL.start_thread(
++        _worker_main, (ctx,), name=THREAD_NAME,
++        on_failure=lambda: _release_unlaunched("error"))
++
++
++# ── 公開介面 ──────────────────────────────────────────────────────────────────
++
++def start_build() -> dict:
++    """補完全庫／繼續。回 ``{"ok", "status": "started"|"already_running"}``。"""
++    return _start(rebuild=False)
++
++
++def start_rebuild() -> dict:
++    """全部重建：與 ``start_build`` 同一條取鎖路徑；取得工作鎖後、起 thread 前清掉全部
++    「跑過」記號（I-RESET-LOCK：job 在跑時回 ``already_running``、零寫入）。"""
++    return _start(rebuild=True)
++
++
++def _start(rebuild: bool) -> dict:
++    kind = "rebuild" if rebuild else "build"
++    with _SHELL.state_lock:
++        if not _SHELL.try_acquire():
++            return {"ok": False, "status": "already_running"}
++        try:
++            repo = VideoRepository()
++            if rebuild:
++                repo.reset_all_ai_tagged()
++            _begin_job_locked(kind)
++        except BaseException:
++            _SHELL.abort_acquire()  # 取得鎖之後任何例外都必須放掉，否則卡在「執行中」
++            raise
++        ctx = _Ctx(kind, repo)
++    _start_thread(ctx)
++    return {"ok": True, "status": "started"}
++
++
++def request_stop() -> dict:
++    """停止：已在飛的跑完，之後不再開始新請求；同時中止排隊中的承接。"""
++    _SHELL.request_stop()
++    return {"ok": True, "running": _SHELL.is_running()}
++
++
++def schedule_incremental() -> None:
++    """掃描收尾呼叫：不拋例外。tags 沒開 → 什麼都不做；有 job 在跑 → 留承接旗標；
++    否則起 ``incremental`` job 跑全部沒跑過的片。"""
++    try:
++        _schedule_incremental()
++    except Exception:
++        logger.exception("[tags_backfill] schedule_incremental failed")
++
++
++def _tags_enabled(config: dict) -> bool:
++    tags = (config.get("ai_services") or {}).get("tags")
++    return bool(isinstance(tags, dict) and tags.get("enabled"))
++
++
++def _schedule_incremental() -> None:
++    if not _tags_enabled(load_config()):
++        return
++    repo = VideoRepository()
++    with _SHELL.state_lock:
++        if not _SHELL.schedule_handoff():
++            return
++        try:
++            _begin_job_locked("incremental")
++        except BaseException:
++            _SHELL.abort_acquire()
++            raise
++        ctx = _Ctx("incremental", repo)
++    _start_thread(ctx)
++
++
++def _last_success_at(memory: Optional[float]) -> Optional[float]:
++    if memory is not None:
++        return memory
++    try:
++        raw = tags_state.meta_get(tags_state.META_LAST_SUCCESS)
++        return float(raw) if raw is not None else None
++    except (TypeError, ValueError):
++        return None
++
++
++def status() -> dict:
++    """進度與狀態：SQL 現算＋記憶體觀察值；不起 thread、不打網路、不寫 DB（I-STATUS）。"""
++    total, pending = VideoRepository().count_ai_tag_progress()
++    snap = tags_state.snapshot()
++    job = snap["job"]
++    running = _SHELL.is_running()
++    is_open = tags_state.meta_get(tags_state.META_BACKFILL_OPEN) == "1"
++    return {
++        "running": running,
++        "job_kind": job["kind"] if running else None,
++        "done": job["done"],
++        "skipped": job["skipped"],
++        "slow": job["slow"],
++        "waiting": job["waiting"],
++        "stop_reason": job["stop_reason"],
++        "outcome": job["outcome"],
++        "pending": pending,
++        "total": total,
++        "tagged": total - pending,
++        "resumable": is_open and pending > 0,
++        "unreachable": snap["unreachable"],
++        "last_success_at": _last_success_at(snap["last_success_at"]),
++    }
++
++
++# ── 工作 thread ───────────────────────────────────────────────────────────────
++
++def _worker_main(ctx: _Ctx) -> None:
++    outcome = "error"
++    try:
++        outcome = _work_loop(ctx)
++    except Exception:
++        logger.exception("[tags_backfill] worker crashed")
++    finally:
++        if not ctx.released:
++            with _SHELL.state_lock:
++                _release_job_locked(ctx, outcome)
++
++
++def _fetch_pending(ctx: _Ctx) -> list:
++    """待處理清單（扣掉本次已放棄的，J4）；測試靠這個名字插 barrier。"""
++    return [p for p in ctx.repo.list_ai_pending_paths() if p not in ctx.abandoned]
++
++
++def _work_loop(ctx: _Ctx) -> str:
++    while True:
++        pending = _fetch_pending(ctx)
++        if pending:
++            outcome = _process_batch(ctx, pending)
++            if outcome != "ok":
++                return outcome
++            continue
++        finished = _finish_if_drained(ctx)
++        if finished is not None:
++            return finished
++
++
++def _finish_if_drained(ctx: _Ctx) -> Optional[str]:
++    """待處理＝0 的邊界：被停止 → 結束；有承接 → 回 None 再跑一輪；否則清「未完成」旗標
++    並在同一區段釋放工作鎖（J3）。"""
++    with _SHELL.state_lock:
++        if _SHELL.stop.is_set():
++            _release_job_locked(ctx, "stopped")
++            return "stopped"
++        if _SHELL.consume_handoff_locked():
++            return None
++        tags_state.meta_delete(tags_state.META_BACKFILL_OPEN)
++        _release_job_locked(ctx, "drained")
++        return "drained"
++
++
++def _process_batch(ctx: _Ctx, pending: list) -> str:
++    """開 pool thread 處理本批 pending；回傳前 join 全部。非 ``ok``＝halt／stopped。"""
++    queue = list(pending)
++    n = tags_backfill_policy.MAX_CONCURRENCY
++    workers = [
++        threading.Thread(
++            target=_pool_worker,
++            args=(ctx, queue),
++            name=f"tags-backfill-w{k}",
++            daemon=True,
++        )
++        for k in range(n)
++    ]
++    for t in workers:
++        t.start()
++    for t in workers:
++        t.join()
++    if ctx.halt_reason is not None:
++        return ctx.halt_reason
++    if _SHELL.stop.is_set():
++        return "stopped"
++    return "ok"
++
++
++def _tag_one(path: str):
++    """測試接縫：標一部片；正常返回＝成功，拋例外＝失敗。"""
++    return tag_video_sync(path)
++
++
++def _pool_worker(ctx: _Ctx, queue: list) -> None:
++    while True:
++        claimed = _claim(ctx, queue)
++        if claimed is None:
++            return
++        path, started_degraded = claimed
++        # _process_one 負責釋放（含 429 等待期間暫放再取）
++        _process_one(ctx, path, started_degraded)
++
++
++def _gate_blocked(ctx: _Ctx) -> bool:
++    return ctx.halt_reason is not None or _SHELL.stop.is_set()
++
++
++def _in_cooldown_locked(ctx: _Ctx) -> bool:
++    """呼叫端已持有 ``ctx.gate``。"""
++    return ctx.cooldown_until is not None and _monotonic() < ctx.cooldown_until
++
++
++def _refresh_waiting_locked(ctx: _Ctx) -> None:
++    """呼叫端已持有 ``ctx.gate``；冷卻中或仍有等待者 → waiting。"""
++    cooling = _in_cooldown_locked(ctx)
++    tags_state.job_set(waiting=cooling or ctx.n_waiting > 0)
++
++
++def _wait_for_slot(ctx: _Ctx) -> bool:
++    """呼叫端已持有 ``ctx.gate``；等到不在冷卻且 ``inflight < limit``，或被 stop／halt。回 False＝應退出。"""
++    while True:
++        if _gate_blocked(ctx):
++            return False
++        while _in_cooldown_locked(ctx):
++            if _gate_blocked(ctx):
++                return False
++            remaining = ctx.cooldown_until - _monotonic()
++            ctx.gate.wait(timeout=min(0.5, max(remaining, 0.0)))
++            if _gate_blocked(ctx):
++                return False
++        while ctx.inflight >= ctx.policy.limit:
++            if _gate_blocked(ctx):
++                return False
++            ctx.gate.wait(timeout=0.5)
++            if _gate_blocked(ctx):
++                return False
++        if _in_cooldown_locked(ctx):
++            continue
++        return True
++
++
++def _claim(ctx: _Ctx, queue: list) -> Optional[tuple[str, bool]]:
++    """取得一個名額並領取下一部片；冷卻期間不領；放行當下捕獲 ``started_degraded``。"""
++    with ctx.gate:
++        while True:
++            if _gate_blocked(ctx) or not queue:
++                return None
++            if not _wait_for_slot(ctx):
++                return None
++            if not queue:
++                return None
++            path = queue.pop(0)
++            ctx.inflight += 1
++            started_degraded = ctx.policy.attempt_started()
++            return path, started_degraded
++
++
++def _acquire_slot(ctx: _Ctx) -> Optional[bool]:
++    """429 等待後重送：冷卻結束後再取名額並捕獲新的 ``started_degraded``。"""
++    with ctx.gate:
++        while True:
++            if _gate_blocked(ctx):
++                return None
++            if not _wait_for_slot(ctx):
++                return None
++            ctx.inflight += 1
++            return ctx.policy.attempt_started()
++
++
++def _release_slot(ctx: _Ctx) -> None:
++    with ctx.gate:
++        ctx.inflight -= 1
++        ctx.gate.notify_all()
++
++
++def _halt(ctx: _Ctx, reason: str) -> None:
++    """整批停止：設 halt 旗標、喚醒 gate／429 等待；stop_reason 只寫第一次，通知靠 note_failure 去重。"""
++    first = False
++    with ctx.gate:
++        if ctx.halt_reason is None:
++            # 鎖定「halt 當下使用者是否已停止」；之後 _SHELL.stop.set 只為喚醒 429，不改此判斷
++            ctx.suppress_notify = _SHELL.stop.is_set()
++            ctx.halt_reason = reason
++            first = True
++        ctx.gate.notify_all()
++    if first:
++        tags_state.job_set(stop_reason=reason)
++    # 每位做出 halt 決策的 worker 都走到這裡；去重由 note_failure。再 set _SHELL.stop 喚醒 429。
++    if reason != "disabled" and not ctx.suppress_notify:
++        if tags_state.note_failure():
++            key = _NOTIF_INCREMENTAL if ctx.kind == "incremental" else _NOTIF_BACKFILL
++            tags_state.emit(key)
++    _SHELL.stop.set()  # 喚醒 _wait_429；halt 優先於 stopped（_process_batch 先看 halt_reason）
++
++
++def _wait_429(ctx: _Ctx, decision: tags_backfill_policy.Decision) -> bool:
++    """加入共用冷卻並等到截止；回 True＝被停止或 halt。``wait_s == 0`` 也必須呼叫 ``_SHELL.stop.wait``。
++
++    I-COOLDOWN：僅在「當下不在冷卻中」的第一次 429 設定截止＝now+wait_s；冷卻中回來的舊 429 不延長。
++    """
++    with ctx.gate:
++        now = _monotonic()
++        if ctx.cooldown_until is None or now >= ctx.cooldown_until:
++            ctx.cooldown_until = now + decision.wait_s
++        deadline = ctx.cooldown_until
++        ctx.n_waiting += 1
++        _refresh_waiting_locked(ctx)
++        ctx.gate.notify_all()
++    try:
++        while True:
++            if _gate_blocked(ctx):
++                return True
++            remaining = deadline - _monotonic()
++            if remaining <= 0:
++                # wait_s==0／已到期也必須呼叫縫，供 spy／mutation
++                stopped = _SHELL.stop.wait(0)
++                return bool(stopped) or _gate_blocked(ctx)
++            stopped = _SHELL.stop.wait(remaining)
++            if stopped or _gate_blocked(ctx):
++                return True
++    finally:
++        with ctx.gate:
++            ctx.n_waiting -= 1
++            if _gate_blocked(ctx) or not _in_cooldown_locked(ctx):
++                ctx.cooldown_until = None
++            _refresh_waiting_locked(ctx)
++            ctx.gate.notify_all()
++
++
++def _reacquire_after_yield(ctx: _Ctx) -> Optional[bool]:
++    """降速／429 後重取名額；回 None＝應退出，否則為新的 started_degraded。"""
++    if ctx.halt_reason is not None or _SHELL.stop.is_set():
++        return None
++    return _acquire_slot(ctx)
++
++
++def _process_one(ctx: _Ctx, path: str, started_degraded: bool) -> None:
++    """處理一部片（含 429 重送與 unreachable 重試）；進入時已持有飛行名額，離開前釋放。"""
++    retries_used = 0
++    holding = True
++    try:
++        while True:
++            if ctx.halt_reason is not None or _SHELL.stop.is_set():
++                return
++            try:
++                _tag_one(path)
++            except Exception as exc:
++                # 決策⑤：使用者停止之後才回來的失敗 → 不重試、不 skip、不 _halt
++                if _SHELL.stop.is_set() and ctx.halt_reason is None:
++                    return
++                verdict = tags_backfill_policy.classify_failure(exc)
++                with ctx.lock:
++                    decision = ctx.policy.on_failure(
++                        verdict, started_degraded, retries_used)
++                    degraded_now = ctx.policy.degraded
++                if degraded_now:
++                    tags_state.job_set(slow=True)
++                if decision.action == "halt":
++                    # 每位 halt 決策者都進 _halt（通知靠 note_failure 去重；stop_reason 只寫第一次）
++                    _halt(ctx, decision.stop_reason or "unreachable")
++                    return
++                if ctx.halt_reason is not None or _SHELL.stop.is_set():
++                    return  # 已 halt／停止：不 skip、不重試
++                if decision.action == "skip":
++                    logger.exception(
++                        "[tags_backfill] tag failed, skipping: %s", path)
++                    ctx.abandoned.add(path)
++                    tags_state.job_skip()
++                    return
++                if decision.action == "wait_retry":
++                    _release_slot(ctx)
++                    holding = False
++                    if _wait_429(ctx, decision):
++                        return  # 被停止／halt：不重送、不放棄
++                    started = _reacquire_after_yield(ctx)
++                    if started is None:
++                        return
++                    started_degraded = started
++                    holding = True
++                    continue
++                # retry：降速後必須重走 gate，重新捕獲 started_degraded
++                retries_used += 1
++                _release_slot(ctx)
++                holding = False
++                started = _reacquire_after_yield(ctx)
++                if started is None:
++                    return
++                started_degraded = started
++                holding = True
++                continue
++            with ctx.lock:
++                ctx.policy.on_success()
++            tags_state.job_progress()
++            return
++    finally:
++        if holding:
++            _release_slot(ctx)
+--- /dev/null
++++ b/core/ai_services/tags_backfill_policy.py
+@@ -0,0 +1,120 @@
++"""與 similar_index.py／faces_recompute.py 為三份刻意重複的骨架，統一留給 189。"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++
++from core.ai_services.tagging import TaggingFailure
++
++WAIT_429_S = 60
++MAX_CONCURRENCY = 4
++
++_REASON_ACTION = {
++    "bad_response": "skip",
++    "no_cover": "skip",
++    "write_failed": "skip",
++    "not_found": "skip",
++    "not_configured": "halt",
++    "disabled": "halt",
++    "model_unsupported": "retry_then_halt",
++    "unreachable": "retry_then_halt",
++}
++
++
++@dataclass(frozen=True)
++class Verdict:
++    action: str
++    degrade: bool
++    stop_reason: str | None
++
++
++@dataclass(frozen=True)
++class Decision:
++    action: str
++    wait_s: int
++    stop_reason: str | None
++
++
++def stop_reason(failure: BaseException) -> str | None:
++    """Return the batch-terminating reason code for this failure, or None."""
++    if not isinstance(failure, TaggingFailure):
++        return None
++    reason = failure.reason
++    detail = failure.detail
++    if reason == "unreachable" and detail == "rate_limited":
++        return None
++    if reason in ("not_configured", "disabled", "model_unsupported"):
++        return reason
++    if reason == "unreachable":
++        if detail in ("auth_failed", "forbidden"):
++            return "auth"
++        return "unreachable"
++    return None
++
++
++def classify_failure(exc: BaseException) -> Verdict:
++    """Map an exception to a Verdict (action / degrade / stop_reason)."""
++    if not isinstance(exc, TaggingFailure):
++        return Verdict("skip", False, None)
++
++    reason = exc.reason
++    detail = exc.detail
++
++    # 429 must be checked before other unreachable → retry_then_halt
++    if reason == "unreachable" and detail == "rate_limited":
++        return Verdict("wait_retry", False, None)
++
++    if reason == "unreachable" and detail == "connection_timeout":
++        return Verdict("retry_then_halt", True, "unreachable")
++
++    action = _REASON_ACTION.get(reason, "skip")
++    if action == "skip":
++        return Verdict("skip", False, None)
++    return Verdict(action, False, stop_reason(exc))
++
++
++class RunPolicy:
++    """Per-job concurrency / consecutive-429 state (no threads, no I/O)."""
++
++    def __init__(self) -> None:
++        self.degraded: bool = False
++        self.q429: int = 0
++
++    @property
++    def limit(self) -> int:
++        return 1 if self.degraded else MAX_CONCURRENCY
++
++    def attempt_started(self) -> bool:
++        """Whether the job was already degraded when this attempt began."""
++        return self.degraded
++
++    def on_success(self) -> None:
++        self.q429 = 0
++
++    def on_failure(
++        self,
++        verdict: Verdict,
++        started_degraded: bool,
++        retries_used: int,
++    ) -> Decision:
++        if verdict.degrade:
++            self.degraded = True
++
++        if verdict.action == "skip":
++            return Decision("skip", 0, None)
++
++        if verdict.action == "wait_retry":
++            self.degraded = True
++            if started_degraded:
++                self.q429 += 1
++                if self.q429 >= 3:
++                    return Decision("halt", 0, "quota")
++            return Decision("wait_retry", WAIT_429_S, None)
++
++        if verdict.action == "halt":
++            return Decision("halt", 0, verdict.stop_reason)
++
++        # retry_then_halt
++        if retries_used < 1:
++            return Decision("retry", 0, None)
++        return Decision("halt", 0, verdict.stop_reason)
+--- /dev/null
++++ b/core/ai_services/tags_state.py
+@@ -0,0 +1,151 @@
++"""AI 標籤的記憶體觀察值與 ``app_meta`` 讀寫（188c-T4a，CD-188c-2／-3）。
++
++只放「最近一次跟模型互動看到什麼」：``unreachable``（目前連不上）、``last_success_at``
++（上次成功）、``job``（本輪補完全庫進度）、``notified``（本輪是否已通知過）。全是記憶體、
++重啟即歸零；「上次成功」節流寫進 ``app_meta``，真理在 DB。
++
++不 import ``tagging``／``tags_backfill``（``tagging`` 要 import 本模組，避免循環）。
++本模組不建立任何背景執行緒，讀函式不打網路、不寫 DB（I-STATUS）。
++"""
++
++from __future__ import annotations
++
++import time
++from typing import Callable, Optional
++
++from core.ai_services import backfill_state
++from core.logger import get_logger
++
++logger = get_logger(__name__)
++
++META_LAST_SUCCESS = "ai.tags.last_success_at"
++META_BACKFILL_OPEN = "ai.tags.backfill_open"
++_JOB_SET_FIELDS = frozenset({"slow", "waiting", "stop_reason"})
++
++# monkeypatch seam for observe_success throttle tests (same as faces_state)
++_monotonic = time.monotonic
++
++
++def _new_job(kind: Optional[str] = None) -> dict:
++    return {
++        "kind": kind, "done": 0, "skipped": 0, "slow": False, "waiting": False,
++        "stop_reason": None, "outcome": None,
++    }
++
++
++# 共用欄位（unreachable／last_success_at／job／notified／hook_notified／鎖／sink／節流）
++# 都在 ``_STATE``（189a-T8）；``hook_notified`` 與補完全庫的 ``notified`` 互不影響。
++_STATE = backfill_state.BackfillState(name="tags_state", task_type="ai_tags", new_job=_new_job)
++
++
++# ── app_meta ─────────────────────────────────────────────────────────────────
++
++def meta_get(key: str) -> Optional[str]:
++    """Read one ``app_meta`` value (None if absent)."""
++    return backfill_state.meta_get(key)
++
++
++def meta_set(key: str, value: str) -> None:
++    """Upsert one ``app_meta`` value."""
++    backfill_state.meta_set(key, value)
++
++
++def meta_delete(key: str) -> None:
++    """Delete one ``app_meta`` value (no-op if absent)."""
++    backfill_state.meta_delete(key)
++
++
++# ── 觀察值 ───────────────────────────────────────────────────────────────────
++
++def observe_success() -> None:
++    """模型正常回來（含拒答）：清「連不上」旗標、記上次成功。
++
++    ``app_meta['ai.tags.last_success_at']`` 至多每 60 秒寫一次（第一次立即寫）。
++    含同步 sqlite 寫入 → 呼叫端須 ``asyncio.to_thread``。
++    """
++    now = time.time()
++    now_mono = _monotonic()
++    persist = False
++    with _STATE.lock:
++        _STATE.unreachable = False
++        _STATE.last_success_at = now
++        persist = _STATE.persist_due(now_mono)
++    if persist:
++        try:
++            meta_set(META_LAST_SUCCESS, repr(now))
++        except Exception:
++            logger.exception("[tags_state] persist last_success_at failed")
++
++
++def observe_failure(reason: str, detail: Optional[str]) -> None:
++    """只動記憶體旗標：``bad_response`` 清旗標（模型有回應）；``unreachable``（非 429）與
++    ``model_unsupported`` 設旗標；其餘（含 429）不動。"""
++    with _STATE.lock:
++        if reason == "bad_response":
++            _STATE.unreachable = False
++        elif reason == "model_unsupported" or (reason == "unreachable" and detail != "rate_limited"):
++            _STATE.unreachable = True
++
++
++# ── 通知（T4b 使用；sink 由 web 註冊，core 不 import web，BE-LINT-09）───────────
++
++def set_notification_sink(fn: Callable[..., None]) -> None:
++    _STATE.set_sink(fn)
++
++
++def note_failure() -> bool:
++    """每個 job 第一次回 True（``job_begin`` 重置）。"""
++    return _STATE.note_failure()
++
++
++def note_hook_failure() -> bool:
++    """入庫後掛勾每輪第一次回 True（``new_round`` 重置）；不碰補完全庫的 ``notified``。"""
++    return _STATE.note_hook_failure()
++
++
++def new_round() -> None:
++    """新一輪掛勾通知：只清 ``hook_notified``（189a）。"""
++    _STATE.new_hook_round()
++
++
++def emit(key: str) -> None:
++    """透過已註冊的 sink 發側欄通知（sink 為 None 時 no-op；sink 例外只記 log）。"""
++    _STATE.emit(key)
++
++
++# ── job 進度 ─────────────────────────────────────────────────────────────────
++
++def job_begin(kind: str) -> None:
++    _STATE.job_begin(kind, reset_notified=True)
++
++
++def job_progress() -> None:
++    _STATE.job_progress()
++
++
++def job_skip() -> None:
++    with _STATE.lock:
++        _STATE.job["skipped"] += 1
++
++
++def job_set(**fields) -> None:
++    """只准 ``slow``／``waiting``／``stop_reason``，其他鍵 ``ValueError``。"""
++    bad = set(fields) - _JOB_SET_FIELDS
++    if bad:
++        raise ValueError(f"job_set: unsupported fields {sorted(bad)}")
++    with _STATE.lock:
++        _STATE.job.update(fields)
++
++
++def job_end(outcome: str) -> None:
++    _STATE.job_end(outcome)
++
++
++def snapshot() -> dict:
++    with _STATE.lock:
++        return {
++            "unreachable": _STATE.unreachable,
++            "last_success_at": _STATE.last_success_at,
++            "notified": _STATE.notified,
++            "job": dict(_STATE.job),
++        }
+--- /dev/null
++++ b/core/ai_services/vision_chat.py
+@@ -0,0 +1,135 @@
++"""Vision chat：依連線分派 Claude／Gemini／OpenAI／Ollama 看圖請求。
++
++不 import web.*。翻譯路徑（translate_service／cloud_translate）零改動。
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++
++import httpx
++
++from core import anthropic_client, gemini_client, openai_client
++from core.cloud_translate import build_error, finalize_translation
++
++VISION_TIMEOUT_S = 90
++_OLLAMA_ILLEGAL_KEY_MESSAGE = (
++    "API Key contains illegal characters (whitespace/newline/non-ascii)"
++)
++
++
++@dataclass(frozen=True)
++class VisionConn:
++    provider: str
++    model: str
++    base_url: str = ""
++    api_key: str = ""
++
++
++def _strip_data_uri_prefix(uri: str) -> str:
++    return uri.split(",", 1)[1]
++
++
++def _build_ollama_payload(
++    model: str,
++    system: str,
++    user_text: str,
++    image_data_uri: str,
++) -> dict:
++    return {
++        "model": model,
++        "stream": False,
++        "messages": [
++            {"role": "system", "content": system},
++            {
++                "role": "user",
++                "content": user_text,
++                "images": [_strip_data_uri_prefix(image_data_uri)],
++            },
++        ],
++    }
++
++
++def _ollama_parse_response(resp: httpx.Response) -> str:
++    if resp.status_code >= 400:
++        kind = "not_found" if resp.status_code == 404 else "http_error"
++        raise build_error("Ollama", kind, resp.status_code, "", "")
++    try:
++        data = resp.json()
++    except Exception as e:
++        raise build_error("Ollama", "api_error", None, "", f"invalid JSON: {e}") from e
++    if not isinstance(data, dict):
++        raise build_error("Ollama", "api_error", None, "", "response is not a JSON object")
++    if data.get("done_reason") == "length":
++        raise build_error("Ollama", "truncated", None, "length", "done_reason=length")
++    message = data.get("message")
++    content = message.get("content") if isinstance(message, dict) else None
++    text = content.strip() if isinstance(content, str) else ""
++    if not text:
++        raise build_error("Ollama", "empty_response", None, "", "empty text content")
++    return finalize_translation("Ollama", text)
++
++
++async def ollama_vision(
++    url: str,
++    model: str,
++    system: str,
++    user_text: str,
++    image_data_uri: str,
++    *,
++    timeout: float,
++) -> str:
++    """POST {url}/api/chat with image；成功回非空 str，失敗拋 TranslateError。"""
++    endpoint = url.rstrip("/") + "/api/chat"
++    payload = _build_ollama_payload(model, system, user_text, image_data_uri)
++    try:
++        async with httpx.AsyncClient(timeout=timeout) as client:
++            resp = await client.post(endpoint, json=payload)
++    except httpx.TimeoutException:
++        raise build_error(
++            "Ollama", "connection_timeout", None, "", "request timed out"
++        ) from None
++    except (httpx.LocalProtocolError, UnicodeEncodeError):
++        raise build_error(
++            "Ollama",
++            "auth_failed",
++            None,
++            "invalid_api_key_format",
++            _OLLAMA_ILLEGAL_KEY_MESSAGE,
++        ) from None
++    except (httpx.HTTPError, OSError):
++        raise build_error(
++            "Ollama", "connection_failed", None, "", "cannot connect"
++        ) from None
++    return _ollama_parse_response(resp)
++
++
++async def vision_chat(
++    conn: VisionConn,
++    system: str,
++    user_text: str,
++    image_data_uri: str,
++) -> str:
++    """依 conn.provider 分派看圖請求；回原始文字。"""
++    t = VISION_TIMEOUT_S
++    p, m, k, u = conn.provider, conn.model, conn.api_key, conn.base_url
++    if p == "claude":
++        return await anthropic_client.request_vision(
++            k, m, system, user_text, image_data_uri, timeout=t
++        )
++    if p == "gemini":
++        return await gemini_client.request_vision(
++            k, m, system, user_text, image_data_uri, timeout=t
++        )
++    if p in ("openai", "openai_official"):
++        base = (
++            openai_client.OPENAI_OFFICIAL_BASE_URL
++            if p == "openai_official"
++            else u
++        )
++        return await openai_client.request_vision(
++            base, k, m, system, user_text, image_data_uri, timeout=t
++        )
++    if p == "ollama":
++        return await ollama_vision(u, m, system, user_text, image_data_uri, timeout=t)
++    raise ValueError(f"unsupported vision provider: {p}")
 --- a/core/database/__init__.py
 +++ b/core/database/__init__.py
 @@ -9,6 +9,7 @@
@@ -2633,6 +5185,75 @@
 +                "SELECT COUNT(*)" + _PENDING_FROM, (m, d)
 +            ).fetchone()[0]
 +        return {"indexed": indexed, "total": total, "pending": pending, "unreadable": unreadable}
+--- a/core/gemini_client.py
++++ b/core/gemini_client.py
+@@ -38,6 +38,27 @@
+     # model 在 URL 內，payload 不帶；刻意不送任何生成參數（上限／溫度／思考）
+     return {
+         "contents": [{"parts": [{"text": prompt}]}],
++        "safetySettings": [dict(s) for s in SAFETY_SETTINGS],
++    }
++
++
++def build_vision_payload(
++    model: str,
++    system: str,
++    user_text: str,
++    image_data_uri: str,
++) -> dict[str, Any]:
++    header, data = image_data_uri.split(",", 1)
++    mime_type = header[5:].split(";", 1)[0] or "image/jpeg"
++    return {
++        "systemInstruction": {"parts": [{"text": system}]},
++        "contents": [{
++            "role": "user",
++            "parts": [
++                {"text": user_text},
++                {"inlineData": {"mimeType": mime_type, "data": data}},
++            ],
++        }],
+         "safetySettings": [dict(s) for s in SAFETY_SETTINGS],
+     }
+ 
+@@ -135,3 +156,38 @@
+     if not isinstance(data, dict):
+         raise build_error(TAG, "api_error", None, "", "response is not a JSON object")
+     return extract_text(data)
++
++
++async def request_vision(
++    api_key: str,
++    model: str,
++    system: str,
++    user_text: str,
++    image_data_uri: str,
++    *,
++    timeout: float,
++) -> str:
++    """POST generateContent with one inline image; return the model text."""
++    resp = await cloud_request(
++        TAG,
++        "POST",
++        f"{GEMINI_BASE_URL}/models/{model}:generateContent",
++        headers=build_headers(api_key),
++        timeout=timeout,
++        json=build_vision_payload(model, system, user_text, image_data_uri),
++    )
++    try:
++        resp.raise_for_status()
++    except httpx.HTTPStatusError as e:
++        raise classify_http_error(e.response) from None
++    try:
++        data = resp.json()
++    except Exception as e:
++        raise build_error(
++            TAG, "api_error", None, "", f"invalid JSON: {e}"
++        ) from e
++    if not isinstance(data, dict):
++        raise build_error(
++            TAG, "api_error", None, "", "response is not a JSON object"
++        )
++    return extract_text(data)
 --- a/core/secret_fields.py
 +++ b/core/secret_fields.py
 @@ -9,12 +9,15 @@
@@ -2932,6 +5553,173 @@
 +
 +        return self._rank_fused(target, top_k, vectors)
 --- /dev/null
++++ b/core/user_tags_write.py
+@@ -0,0 +1,164 @@
++"""user_tags_write.py — 共用 user_tags 寫入（DB + NFO），鎖內讀→算→寫。
++
++TASK-188b-T2a：從 web.routers.collection.post_user_tags 步驟 2–5 抽出。
++燈箱／助理與之後 AI 標記共用同一條寫入路徑。
++"""
++
++from __future__ import annotations
++
++import threading
++from contextlib import contextmanager
++from dataclasses import dataclass, field
++from pathlib import Path
++from typing import Callable, List
++
++from core.logger import get_logger
++from core.path_utils import uri_to_local_fs_path
++from core.readonly_paths import resolve_owning_output_root
++
++logger = get_logger(__name__)
++
++_LOCK = threading.Lock()
++
++
++@contextmanager
++def hold_nfo_write():
++    """持有 NFO 寫入鎖（與 apply_user_tags 同一把 _LOCK）；不可重入，勿在內層再呼叫 apply_user_tags。"""
++    with _LOCK:
++        yield
++
++
++@dataclass
++class ApplyResult:
++    ok: bool
++    error: str = ""
++    user_tags: List[str] = field(default_factory=list)
++    added: List[str] = field(default_factory=list)
++    nfo_updated: bool = False
++    readonly_no_output: bool = False
++    nfo_write_blocked: bool = False
++
++
++def _merge_user_tags(existing: List[str], add: List[str], remove: List[str]) -> List[str]:
++    """去重合併（remove 優先），與今天 post_user_tags 逐式相同。"""
++    seen_add = set()
++    unique_add = []
++    for t in add:
++        if t not in seen_add:
++            seen_add.add(t)
++            unique_add.append(t)
++    after_add = existing + [t for t in unique_add if t not in existing]
++    return [t for t in after_add if t not in remove]
++
++
++def _write_nfo(
++    *,
++    nfo_writer: Callable,
++    is_readonly: bool,
++    video,
++    local_fs_path: str,
++    path_mappings: dict,
++    merged: List[str],
++) -> tuple[bool, bool]:
++    """兩個 NFO 分支（唯讀輸出夾／一般 sidecar）。回 (nfo_updated, nfo_exists)。"""
++    nfo_updated = False
++    nfo_exists = False
++    if is_readonly:
++        # 樁列（從未成功 produce、輸出夾沒有東西）直接跳過，nfo_updated 維持 False
++        if video.output_dir:
++            try:
++                out_fs = Path(uri_to_local_fs_path(video.output_dir, path_mappings))
++                nfo_candidates = list(out_fs.glob("*.nfo"))
++                # 份數不是恰好一份時不猜（full-mode produce 是 holistic，正常恰有一份）
++                if len(nfo_candidates) == 1:
++                    nfo_updated = nfo_writer(str(nfo_candidates[0]), merged)
++            except Exception as e:
++                logger.warning("[user-tags] 唯讀輸出夾 NFO 寫入失敗（忽略）: %s", e)
++    else:
++        try:
++            nfo_path = str(Path(local_fs_path).with_suffix(".nfo"))
++            nfo_exists = Path(nfo_path).exists()
++            nfo_updated = nfo_writer(nfo_path, merged)
++        except Exception as e:
++            logger.warning("[user-tags] NFO 寫入失敗（忽略）: %s", e)
++    return nfo_updated, nfo_exists
++
++
++def apply_user_tags(
++    repo,
++    file_path,
++    local_fs_path,
++    config,
++    *,
++    add,
++    remove,
++    ai_tagged=False,
++    nfo_writer=None,
++    add_filter=None,
++) -> ApplyResult:
++    """讀現有標籤→合併→寫 DB→寫 NFO（鎖內）。
++
++    nfo_writer：None → core.nfo_updater.update_nfo_user_tags；
++    路由傳入 update_nfo_user_tags 以保住既有 patch 目標名。
++    add_filter：None 或 callable(video) -> list[str]；鎖內以最新 video 呼叫，
++    回傳值併入 add。它自己拋例外時原樣往外拋（此時尚未寫 DB）。
++    """
++    if nfo_writer is None:
++        from core.nfo_updater import update_nfo_user_tags as nfo_writer
++
++    path_mappings = config.get("gallery", {}).get("path_mappings", {}) or {}
++
++    with _LOCK:
++        video = repo.get_by_path(file_path)
++        if video is None:
++            return ApplyResult(ok=False, error="找不到影片紀錄")
++
++        existing = list(video.user_tags)
++        to_add = list(add) + (list(add_filter(video)) if add_filter is not None else [])
++        merged = _merge_user_tags(existing, to_add, remove)
++        added = [t for t in merged if t not in existing]
++
++        updated = repo.update_user_tags(file_path, merged, ai_tagged=ai_tagged)
++        if not updated:
++            return ApplyResult(ok=False, error="DB 更新失敗")
++
++        if ai_tagged and merged == existing:
++            return ApplyResult(
++                ok=True,
++                user_tags=merged,
++                added=[],
++                nfo_updated=False,
++                readonly_no_output=False,
++                nfo_write_blocked=False,
++            )
++
++        # Surgical NFO update — 唯讀來源改寫輸出夾那份，來源零寫入（CD-143-4）
++        is_readonly = resolve_owning_output_root(file_path, config) is not None
++        nfo_updated, nfo_exists = _write_nfo(
++            nfo_writer=nfo_writer,
++            is_readonly=is_readonly,
++            video=video,
++            local_fs_path=local_fs_path,
++            path_mappings=path_mappings,
++            merged=merged,
++        )
++
++        # readonly_no_output 是**導出的**，不是逐個失敗分支去設的（Codex PR #179 round 2）。
++        # 上一輪的修法是「例外路徑補一個 readonly_no_output = True」，下一輪就被找到第四種
++        # 失敗形狀：輸出夾恰有一份 NFO 但它壞掉／glob 之後消失時，`update_nfo_user_tags`
++        # 是 **catch 後回 False**（`core/nfo_updater.py:50`）不是 raise ⇒ 三個分支一個都沒中，
++        # 而標籤其實只進了 DB。列舉失敗分支這個形狀本身會一直生出下一個洞。
++        #
++        # 這個旗標要講的事情只有一句：**唯讀來源的片，媒體伺服器讀的那份 NFO 這次沒有更新。**
++        # 那就直接從結果導出。`update_nfo_user_tags` 的 False 只有「檔案不存在」與「解析／
++        # 寫入失敗」兩種來源（沒有「不需要改所以回 False」），所以不會誤報。
++        readonly_no_output = is_readonly and not nfo_updated
++        nfo_write_blocked = (not is_readonly) and nfo_exists and not nfo_updated
++        return ApplyResult(
++            ok=True,
++            user_tags=merged,
++            added=added,
++            nfo_updated=nfo_updated,
++            readonly_no_output=readonly_no_output,
++            nfo_write_blocked=nfo_write_blocked,
++        )
+--- /dev/null
 +++ b/web/routers/ai_services.py
 @@ -0,0 +1,293 @@
 +"""AI services endpoints for embeddings samples and consistency test (186-T3 / 187-T1).
@@ -3227,6 +6015,328 @@
 +async def faces_rebuild():
 +    """刪除並重新對焦：先跑一致性測試，沒過什麼都不刪；業務失敗在 body、HTTP 200。"""
 +    return await asyncio.to_thread(faces_recompute.start_rebuild)
+--- /dev/null
++++ b/web/routers/ai_tags.py
+@@ -0,0 +1,319 @@
++"""AI tags HTTP endpoints (TASK-188b-T9a / CD-188b-15)."""
++
++from __future__ import annotations
++
++import asyncio
++import copy
++from typing import Optional
++
++from fastapi import APIRouter
++from fastapi.responses import JSONResponse, Response
++from pydantic import BaseModel
++
++from core.ai_services import tags_backfill
++from core.ai_services.image_prep import poster_to_data_uri, poster_to_jpeg_bytes
++from core.ai_services.tagging import (
++    TaggingFailure,
++    resolve_vision_conn,
++    run_vision_test,
++    tag_video,
++)
++from core.ai_services.tagging_vocab import (
++    VocabError,
++    add_custom,
++    load_builtin,
++    merged,
++    remove_custom,
++)
++from core.config import load_config
++from core.database import VideoRepository
++from core.logger import get_logger
++from core.path_utils import uri_to_local_fs_path
++from core.secret_fields import read_secret, resolve_secret
++from web.routers.collection import _normalize_to_uri  # noqa: PLC2701 — CD-188b-15 指定沿用 collection 的路徑正規化
++
++logger = get_logger(__name__)
++
++router = APIRouter(prefix="/api/ai", tags=["ai_tags"])
++
++_VOCAB_STATUS = {
++    "name_empty": 400,
++    "name_too_long": 400,
++    "name_invalid": 400,
++    "name_conflict_builtin": 400,
++    "definition_invalid": 400,
++    "vocab_full": 400,
++    "builtin": 400,
++    "name_exists": 409,
++    "data_root_not_ready": 409,
++    "custom_unreadable": 409,
++    "not_found": 404,
++}
++
++_TAGS_SAMPLE_STEPS = [
++    "Open inputs[0] as a JPEG poster crop (default right-half window).",
++    "Confirm the image is readable before calling POST /api/ai/tags/videos.",
++]
++
++_cache_tags: str | None = None
++
++
++class VocabAddRequest(BaseModel):
++    name: str
++    definition: str = ""
++
++
++class TagVideoRequest(BaseModel):
++    file_path: str
++
++
++class TagsTestRequest(BaseModel):
++    """Optional overrides. Absent (None) → stored config; present → use given value."""
++
++    provider: Optional[str] = None
++    model: Optional[str] = None
++    api_key: Optional[str] = None
++    base_url: Optional[str] = None
++
++
++def _prepare_tags_test(body: TagsTestRequest):
++    """Sync prep for POST /tags/test: copy config → apply overrides → resolve conn."""
++    config = copy.deepcopy(load_config())
++    tags = config.setdefault("ai_services", {}).setdefault("tags", {})
++    if body.provider is not None:
++        tags["provider"] = body.provider
++    if body.model is not None:
++        tags["model"] = body.model
++
++    provider = str(tags.get("provider") or "").strip()
++
++    stored_key = (
++        read_secret(config, f"translate.{provider}.api_key") if provider else ""
++    )
++    if body.api_key is None:
++        api_key = stored_key
++    else:
++        api_key = resolve_secret(body.api_key, stored_key)
++    if provider in ("gemini", "claude", "openai", "openai_official"):
++        config.setdefault("translate", {}).setdefault(provider, {})["api_key"] = api_key
++
++    if body.base_url is not None:
++        if provider == "openai":
++            config.setdefault("translate", {}).setdefault("openai", {})[
++                "base_url"
++            ] = body.base_url
++        elif provider == "ollama":
++            config.setdefault("translate", {}).setdefault("ollama", {})[
++                "url"
++            ] = body.base_url
++
++    conn = resolve_vision_conn(config)
++    return conn, list(merged()), _tags_sample_uri()
++
++
++def _vocab_error(reason: str, status: int | None = None):
++    code = status if status is not None else _VOCAB_STATUS.get(reason, 500)
++    return JSONResponse(
++        status_code=code,
++        content={"success": False, "reason": reason},
++    )
++
++
++def _failure_body(exc: TaggingFailure):
++    body: dict = {"success": False, "reason": exc.reason}
++    if exc.detail:
++        body["detail"] = exc.detail
++    return body
++
++
++def _vocab_item_payload(item) -> dict:
++    row = {
++        "name": item.name,
++        "source": item.source,
++        "definition": item.definition,
++    }
++    if item.source == "builtin":
++        row["group"] = item.group
++    if getattr(item, "hidden", False):
++        row["hidden"] = True
++    return row
++
++
++def _poster_bytes(file_path: str):
++    config = load_config()
++    path_mappings = config.get("gallery", {}).get("path_mappings", {}) or {}
++    file_uri = _normalize_to_uri(file_path, path_mappings)
++    if not file_uri:
++        return _vocab_error("not_found", 404)
++    video = VideoRepository().get_by_path(file_uri)
++    if video is None:
++        return _vocab_error("not_found", 404)
++    if not video.cover_path:
++        return _vocab_error("no_cover", 404)
++    fs_path = uri_to_local_fs_path(video.cover_path, path_mappings)
++    jpeg = poster_to_jpeg_bytes(fs_path, video.crop_mode, video.auto_focal)
++    if jpeg is None:
++        return _vocab_error("no_cover", 404)
++    return Response(content=jpeg, media_type="image/jpeg")
++
++
++def _tags_sample_uri() -> str:
++    global _cache_tags
++    if _cache_tags is None:
++        repo = VideoRepository()
++        config = load_config()
++        mappings = config.get("gallery", {}).get("path_mappings", {}) or {}
++        uri = None
++        for video in repo.get_all():
++            if not video.cover_path:
++                continue
++            cover_fs = uri_to_local_fs_path(video.cover_path, mappings)
++            uri = poster_to_data_uri(
++                cover_fs, video.crop_mode, video.auto_focal
++            )
++            if uri is not None:
++                break
++        if uri is None:
++            from core.data_root import get_project_root
++            path = get_project_root() / "web/static/favicon.png"
++            uri = poster_to_data_uri(str(path), "default", "")
++        if uri is None:
++            raise FileNotFoundError("tags sample unavailable")
++        _cache_tags = uri
++    return _cache_tags
++
++
++def _is_builtin_name(name: str) -> bool:
++    for item in load_builtin():
++        if name == item.name or name == item.model_name:
++            return True
++    return False
++
++
++@router.get("/tags/vocab")
++def get_vocab():
++    return {"items": [_vocab_item_payload(item) for item in merged()]}
++
++
++@router.post("/tags/vocab")
++def post_vocab(body: VocabAddRequest):
++    try:
++        item = add_custom(body.name, body.definition)
++    except VocabError as exc:
++        return _vocab_error(exc.reason)
++    return {"success": True, "item": _vocab_item_payload(item)}
++
++
++@router.delete("/tags/vocab/{name:path}")
++def delete_vocab(name: str):
++    target = name.strip()
++    if _is_builtin_name(target):
++        return _vocab_error("builtin")
++    try:
++        remove_custom(target)
++    except VocabError as exc:
++        return _vocab_error(exc.reason)
++    return {"success": True}
++
++
++@router.get("/tags/poster")
++def get_poster(file_path: str):
++    return _poster_bytes(file_path)
++
++
++@router.post("/tags/videos")
++async def post_tag_video(body: TagVideoRequest):
++    if not (body.file_path or "").strip():
++        return _failure_body(TaggingFailure("not_found"))
++    file_uri = await asyncio.to_thread(_normalize_to_uri, body.file_path)
++    if not file_uri:
++        return _failure_body(TaggingFailure("not_found"))
++    try:
++        outcome = await tag_video(file_uri)
++    except TaggingFailure as exc:
++        return _failure_body(exc)
++    return {
++        "success": True,
++        "added": outcome.added,
++        "refused": outcome.refused,
++        "user_tags": outcome.user_tags,
++        "nfo_updated": outcome.nfo_updated,
++        "readonly_no_output": outcome.readonly_no_output,
++        "nfo_write_blocked": outcome.nfo_write_blocked,
++    }
++
++
++@router.get("/sample/tags")
++def sample_tags():
++    return {
++        "inputs": [_tags_sample_uri()],
++        "steps": list(_TAGS_SAMPLE_STEPS),
++    }
++
++
++@router.post("/tags/test")
++async def post_tags_test(body: TagsTestRequest | None = None):
++    """Probe vision with current (or overridden) settings; no config/DB writes."""
++    req = body or TagsTestRequest()
++    try:
++        conn, vocab, sample_uri = await asyncio.to_thread(_prepare_tags_test, req)
++    except TaggingFailure as exc:
++        if exc.reason == "not_configured":
++            return {
++                "ok": False,
++                "outcome": "not_configured",
++                "detail": exc.detail,
++            }
++        raise
++    return await run_vision_test(conn, vocab, sample_uri)
++
++
++def _tags_feature_enabled(config: dict) -> bool:
++    tags = (config.get("ai_services") or {}).get("tags")
++    return bool(isinstance(tags, dict) and tags.get("enabled"))
++
++
++def _backfill_refusal(*, rebuild: bool) -> dict | None:
++    """前置判斷：not_enabled → not_configured → nothing_to_do；通過回 None。"""
++    config = load_config()
++    if not _tags_feature_enabled(config):
++        return {"ok": False, "status": "not_enabled"}
++    try:
++        resolve_vision_conn(config)
++    except TaggingFailure as exc:
++        if exc.reason == "not_configured":
++            return {"ok": False, "status": "not_configured"}
++        raise
++    total, pending = VideoRepository().count_ai_tag_progress()
++    if rebuild:
++        if total == 0:
++            return {"ok": False, "status": "nothing_to_do"}
++    elif pending == 0:
++        return {"ok": False, "status": "nothing_to_do"}
++    return None
++
++
++@router.get("/tags/backfill/status")
++def get_tags_backfill_status():
++    return tags_backfill.status()
++
++
++@router.post("/tags/backfill")
++def post_tags_backfill():
++    refusal = _backfill_refusal(rebuild=False)
++    if refusal is not None:
++        return refusal
++    return tags_backfill.start_build()
++
++
++@router.post("/tags/backfill/rebuild")
++def post_tags_backfill_rebuild():
++    refusal = _backfill_refusal(rebuild=True)
++    if refusal is not None:
++        return refusal
++    return tags_backfill.start_rebuild()
++
++
++@router.post("/tags/backfill/stop")
++def post_tags_backfill_stop():
++    return tags_backfill.request_stop()
 --- a/web/routers/similar.py
 +++ b/web/routers/similar.py
 @@ -15,6 +15,8 @@
@@ -4021,7 +7131,7 @@
 + */
 +
 +const KEY = 'settings_ai_tab';
-+const AI_TABS = ['translate', 'similar', 'faces'];
++const AI_TABS = ['translate', 'similar', 'faces', 'tags'];
 +
 +function readAiTab() {
 +    try {
@@ -4377,6 +7487,630 @@
 +            await this.bfRefresh();
 +        },
 +
++    };
++}
+--- /dev/null
++++ b/web/static/js/pages/settings/ai-tags-logic.js
+@@ -0,0 +1,300 @@
++/**
++ * ai-tags-logic.js — AI tags panel pure functions (TASK-188c-T7)
++ *
++ * panelMode / backfillAction / statusLine / progressExtras / connShown / connEnabled /
++ * pickTagsModel / costHint / formatUsd / buildTagsTestBody / testResultLine.
++ * No DOM, no component bindings, no i18n lookup.
++ */
++
++const COST_FAMILIES = [
++    { family: 'haiku', label: 'Haiku 5.5', per1000: 0.43 },
++    { family: 'luna', label: 'GPT-6 Luna', per1000: 0.24 },
++    { family: 'flash-lite', label: 'Gemini 3.5 Flash-Lite', per1000: 0.72 },
++];
++
++const COST_PROVIDERS = new Set(['claude', 'gemini', 'openai_official']);
++
++const STOP_KEYS = {
++    unreachable: 'settings.ai.tags.status_stopped_unreachable',
++    auth: 'settings.ai.tags.status_stopped_auth',
++    model_unsupported: 'settings.ai.tags.status_stopped_model_unsupported',
++    quota: 'settings.ai.tags.status_stopped_quota',
++    not_configured: 'settings.ai.tags.status_stopped_not_configured',
++    disabled: 'settings.ai.tags.status_stopped_disabled',
++};
++
++/** Toggle decides empty / fields. */
++export function panelMode(form) {
++    return form.aiTagsEnabled ? 'fields' : 'empty';
++}
++
++/**
++ * Backfill button action. Returns { action, disabled, reason }.
++ * running -> stop (always pressable); resumable -> continue; pending>0 -> start.
++ */
++export function backfillAction(status, { dirty = false, enabled = true } = {}) {
++    if (!status) return { action: null, disabled: true, reason: null };
++    if (status.running) return { action: 'stop', disabled: false, reason: null };
++
++    let action = null;
++    if (status.resumable) action = 'continue';
++    else if (status.pending > 0) action = 'start';
++
++    if (!action) return { action: null, disabled: true, reason: null };
++    if (!enabled) return { action, disabled: true, reason: 'not_enabled' };
++    if (dirty) return { action, disabled: true, reason: 'dirty' };
++    return { action, disabled: false, reason: null };
++}
++
++/**
++ * Connection block visibility, per AI tab (190a-T5): translate tab lists only the translate
++ * provider (even when translate is off), tags tab lists only the tags provider (only when
++ * tags is on), every other tab lists nothing.
++ */
++export function connShown(form, p, tab) {
++    if (tab === 'translate') return form.translateProvider === p;
++    if (tab === 'tags') return Boolean(form.aiTagsEnabled && form.aiTagsProvider === p);
++    return false;
++}
++
++/** Connection block editable (translate on+selected, or tags on+selected). */
++export function connEnabled(form, p) {
++    const byTranslate = Boolean(form.translateEnabled && form.translateProvider === p);
++    const byTags = Boolean(form.aiTagsEnabled && form.aiTagsProvider === p);
++    return byTranslate || byTags;
++}
++
++/** List item name (string or {name}). */
++function listName(item) {
++    if (typeof item === 'string') return item;
++    if (item && typeof item.name === 'string') return item.name;
++    return '';
++}
++
++/**
++ * Default model: keep non-empty current; else pick by provider family.
++ * Empty list / not found -> ''.
++ */
++export function pickTagsModel(provider, current, list) {
++    if (current) return current;
++    const items = Array.isArray(list) ? list : [];
++    const names = items.map(listName).filter(Boolean);
++    if (names.length === 0) return '';
++    if (provider === 'claude') {
++        return names.find((n) => n.toLowerCase().includes('haiku')) || '';
++    }
++    if (provider === 'gemini') return 'gemini-flash-lite-latest';
++    if (provider === 'openai_official') {
++        return names.find((n) => n.toLowerCase().includes('luna')) || '';
++    }
++    return names[0];
++}
++
++/** Cost hint; returns null when family/provider do not match. */
++export function costHint(provider, model, n) {
++    if (!COST_PROVIDERS.has(provider)) return null;
++    if (typeof model !== 'string') return null;
++    const lower = model.toLowerCase();
++    const hit = COST_FAMILIES.find((f) => lower.includes(f.family));
++    if (!hit) return null;
++    const count = (typeof n === 'number' && Number.isFinite(n) && n >= 0) ? n : 0;
++    return {
++        label: hit.label,
++        per1000: hit.per1000,
++        total: hit.per1000 * count / 1000,
++    };
++}
++
++/** USD display: 0 < v < 0.01 -> '<0.01', else toFixed(2). */
++export function formatUsd(v) {
++    if (typeof v === 'number' && v > 0 && v < 0.01) return '<0.01';
++    return Number(v).toFixed(2);
++}
++
++/** Test-button body: secrets as-is; omit absent fields. */
++export function buildTagsTestBody(form) {
++    const body = {
++        provider: form.aiTagsProvider,
++        model: form.aiTagsModel,
++    };
++    const p = form.aiTagsProvider;
++    if (p === 'ollama') {
++        body.base_url = form.ollamaUrl;
++    } else if (p === 'gemini') {
++        body.api_key = form.geminiApiKey;
++    } else if (p === 'claude') {
++        body.api_key = form.claudeApiKey;
++    } else if (p === 'openai_official') {
++        body.api_key = form.openaiOfficialApiKey;
++    } else if (p === 'openai') {
++        body.base_url = typeof form.openaiBaseUrl === 'string'
++            ? form.openaiBaseUrl.trim()
++            : form.openaiBaseUrl;
++        body.api_key = form.openaiApiKey;
++    }
++    return body;
++}
++
++/** Test-result line. Returns { key, params }. */
++export function testResultLine(data) {
++    if (!data) {
++        return { key: 'settings.ai.tags.test_failed_generic', params: {} };
++    }
++    if (data.ok) {
++        const tags = Array.isArray(data.tags) ? data.tags : [];
++        if (tags.length > 0) {
++            return {
++                key: 'settings.ai.tags.test_ok',
++                params: { tags: tags.join('\u3001') },
++            };
++        }
++        return { key: 'settings.ai.tags.test_ok_no_tags', params: {} };
++    }
++    if (data.outcome === 'unreachable') {
++        return { key: 'settings.ai.tags.test_unreachable', params: {} };
++    }
++    if (data.outcome === 'unusable') {
++        const detail = data.detail;
++        if (detail === 'model_unsupported') {
++            return { key: 'settings.ai.tags.test_unusable_model_unsupported', params: {} };
++        }
++        if (detail === 'bad_response') {
++            return { key: 'settings.ai.tags.test_unusable_bad_response', params: {} };
++        }
++        if (detail === 'refused') {
++            return { key: 'settings.ai.tags.test_unusable_refused', params: {} };
++        }
++        if (detail === 'no_tags') {
++            return { key: 'settings.ai.tags.test_unusable_no_tags', params: {} };
++        }
++        return { key: 'settings.ai.tags.test_failed_generic', params: {} };
++    }
++    if (data.outcome === 'not_configured') {
++        return { key: 'settings.ai.tags.test_not_configured', params: {} };
++    }
++    return { key: 'settings.ai.tags.test_failed_generic', params: {} };
++}
++
++/** unix seconds -> local HH:MM; invalid -> ''. */
++function formatHm(epochSec) {
++    if (typeof epochSec !== 'number' || !Number.isFinite(epochSec)) return '';
++    const d = new Date(epochSec * 1000);
++    if (Number.isNaN(d.getTime())) return '';
++    const p2 = (n) => String(n).padStart(2, '0');
++    return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
++}
++
++/**
++ * Status-line descriptor. Returns { key, params, extra }; extra is a key array.
++ * Does not call i18n lookup.
++ */
++export function statusLine(status) {
++    if (!status) {
++        return {
++            key: 'settings.ai.tags.status_none',
++            params: { n: 0, m: 0, k: 0, time: '' },
++            extra: [],
++        };
++    }
++
++    const tagged = status.tagged || 0;
++    const total = status.total || 0;
++    const pending = status.pending || 0;
++    const skipped = status.skipped || 0;
++    const time = formatHm(status.last_success_at);
++
++    const baseParams = { n: tagged, m: total, k: skipped, time };
++
++    // 跑中：進度行已有「已處理 n／m」，這裡不重述（slow／waiting／skipped 句改走 progressExtras）
++    if (status.running) {
++        return { key: null, params: baseParams, extra: [] };
++    }
++
++    if (status.stop_reason && STOP_KEYS[status.stop_reason]) {
++        const extra = skipped > 0 ? ['settings.ai.tags.status_skipped_extra'] : [];
++        return {
++            key: STOP_KEYS[status.stop_reason],
++            params: baseParams,
++            extra,
++        };
++    }
++
++    if (status.unreachable) {
++        const extra = skipped > 0 ? ['settings.ai.tags.status_skipped_extra'] : [];
++        return {
++            key: time
++                ? 'settings.ai.tags.status_unreachable'
++                : 'settings.ai.tags.status_unreachable_no_time',
++            params: baseParams,
++            extra,
++        };
++    }
++
++    if (status.resumable) {
++        const extra = skipped > 0 ? ['settings.ai.tags.status_skipped_extra'] : [];
++        // 閒置未完成：「還有 N 部沒跑」已表示待處理，這裡不重述，只留非重述 extra
++        return {
++            key: null,
++            params: { n: pending, m: total, k: skipped, time },
++            extra,
++        };
++    }
++
++    const extra = skipped > 0 ? ['settings.ai.tags.status_skipped_extra'] : [];
++    return {
++        key: time
++            ? 'settings.ai.tags.status_ready'
++            : 'settings.ai.tags.status_ready_no_time',
++        params: baseParams,
++        extra,
++    };
++}
++
++/** Running-state extras merged into the progress line: slow / waiting / skipped sentences (key array). */
++export function progressExtras(status) {
++    if (!status || !status.running) return [];
++    const extra = [];
++    if (status.slow) extra.push('settings.ai.tags.status_slow_extra');
++    if (status.waiting) extra.push('settings.ai.tags.status_waiting_extra');
++    if ((status.skipped || 0) > 0) extra.push('settings.ai.tags.status_skipped_extra');
++    return extra;
++}
++
++/** Shared backfill adapter (TASK-189a-T10): feature-specific half only. */
++export const adapter = {
++    tab: 'tags',
++    urls: {
++        status: '/api/ai/tags/backfill/status',
++        start: '/api/ai/tags/backfill',
++        rebuild: '/api/ai/tags/backfill/rebuild',
++        stop: '/api/ai/tags/backfill/stop',
++    },
++    normalize(raw) {
++        return {
++            running: Boolean(raw.running),
++            processed: raw.tagged || 0,
++            total: raw.total || 0,
++            pending: raw.pending || 0,
++            resumable: Boolean(raw.resumable),
++            lastSuccessAt: raw.last_success_at ?? null,
++            unreachable: Boolean(raw.unreachable),
++            stopReason: raw.stop_reason ?? null,
++            raw,
++        };
++    },
++    actionOf(view) {
++        if (view.running) return 'stop';
++        if (view.resumable) return 'continue';
++        if (view.pending > 0) return 'start';
++        return null;
++    },
++    extraAction() {
++        return null;
++    },
++    rebuildVisible(view) {
++        return view.total > 0;
++    },
++    rebuildConfirm(view) {
++        return { key: 'settings.ai.tags.rebuild_confirm', params: { n: view.total } };
++    },
++};
+--- /dev/null
++++ b/web/static/js/pages/settings/ai-tags-panel.js
+@@ -0,0 +1,173 @@
++/**
++ * ai-tags-panel.js — 設定頁「AI 標籤」分頁獨立 Alpine 元件（TASK-188c-T8b；補跑邏輯 189a-T11a 起改走共用 mixin）
++ *
++ * Alpine.data('aiTagsPanel')；面板獨有 key 一律 aiTags 前綴、補跑 key 一律 bf 前綴（展開自 ai-backfill-controls.js）；
++ * 不進 mergeState。外求恰 6（不複製父層 key）：form／isDirty／aiTab／showToast／
++ *   aiTagsModelLists()／ensureProviderModels()。
++ *
++ * 對外名單（模板照名單綁）：
++ *   面板獨有：aiTagsTestResult／aiTagsTestBusy；panelMode()、modelOptions()、onProviderChange()、
++ *         testDisabled()、runTest()、statusLineText()、firstRunHint()
++ *   補跑（mixin）：bfStatus／bfBusy；bfAction()（回 {action, disabled, reason}）、bfStart()、bfStop()、
++ *         bfRebuildVisible()、bfRebuildDisabled()、bfRebuild()
++ */
++
++import { aiBackfillControls } from './ai-backfill-controls.js';
++import {
++    adapter as TAGS_ADAPTER,
++    panelMode,
++    statusLine,
++    progressExtras,
++    pickTagsModel,
++    costHint,
++    formatUsd,
++    buildTagsTestBody,
++    testResultLine,
++} from './ai-tags-logic.js';
++
++const TEST_URL = '/api/ai/tags/test';
++
++/** 該筆數的費用提示；筆數 ≤ 0 或連線家／模型不屬費用規則回 null。 */
++function tagsCost(vm, n) {
++    if (!(n > 0)) return null;
++    return costHint(vm.form.aiTagsProvider, vm.form.aiTagsModel, n);
++}
++
++/** 補跑 mixin 的面板端 hooks：開關、POST 後 toast（判定順序不變）、進度行／待處理行尾巴、重建確認金額。 */
++const TAGS_HOOKS = {
++    enabled: (vm) => Boolean(vm.form.aiTagsEnabled),
++    /** 跑中的 slow／waiting／skipped 句併進進度行。 */
++    progressSuffix(vm) {
++        return progressExtras(vm.bfStatus)
++            .map((k) => window.t(k, { k: vm.bfStatus.skipped || 0 }))
++            .join('');
++    },
++    /** 「還有 N 部沒跑」後接費用半句（金額以 pending 算）。 */
++    pendingSuffix(vm) {
++        const n = vm.bfStatus ? vm.bfStatus.pending : 0;
++        const h = tagsCost(vm, n);
++        if (!h) return '';
++        return window.t('settings.ai.tags.cost_pending_tail', { total: formatUsd(h.total), label: h.label });
++    },
++    /** 全部重建確認：有費用規則時寫金額（以 total 算），否則回 null 沿用原文。 */
++    rebuildConfirm(vm, view) {
++        const h = tagsCost(vm, view.total);
++        if (!h) return null;
++        return {
++            key: 'settings.ai.tags.rebuild_confirm_cost',
++            params: { n: view.total, total: formatUsd(h.total), label: h.label },
++        };
++    },
++    afterPost(vm, kind, { ok, data, failed }) {
++        if (failed || !ok) {
++            vm.showToast(window.t('settings.ai.tags.backfill_http_error'), 'error');
++        } else if (data && data.status === 'not_enabled') {
++            vm.showToast(window.t('settings.ai.tags.backfill_not_enabled'), 'error');
++        } else if (data && data.status === 'not_configured') {
++            vm.showToast(window.t('settings.ai.tags.test_not_configured'), 'error');
++        }
++    },
++};
++
++export function aiTagsPanel() {
++    return {
++        ...aiBackfillControls(TAGS_ADAPTER, TAGS_HOOKS),
++        aiTagsTestResult: '',
++        aiTagsTestBusy: false,
++
++        init() {
++            // 第一次打開開關：預選翻譯用的連線（載入設定時 isDirty 為 false，不動）
++            this.$watch('form.aiTagsEnabled', (val) => {
++                if (this.bfDestroyed) return;
++                if (val !== true || this.isDirty !== true) return;
++                if (this.form.aiTagsProvider !== '') return;
++                const tp = this.form.translateProvider;
++                if (!Object.keys(this.aiTagsModelLists()).includes(tp)) return;
++                this.form.aiTagsProvider = tp;
++                this.onProviderChange();
++            });
++            this.bfOnInit();
++        },
++
++        destroy() {
++            this.bfOnDestroy();
++        },
++
++        panelMode() {
++            return panelMode(this.form);
++        },
++
++        /** 模型下拉選項＝該家既有清單 ∪ 目前已存的 aiTagsModel（清單元素為字串或 {name}）。 */
++        modelOptions() {
++            const provider = this.form.aiTagsProvider;
++            if (!provider) return [];
++            const list = this.aiTagsModelLists()[provider];
++            const names = [];
++            for (const item of Array.isArray(list) ? list : []) {
++                const name = typeof item === 'string' ? item : (item && item.name);
++                if (typeof name === 'string' && name && !names.includes(name)) names.push(name);
++            }
++            const cur = this.form.aiTagsModel;
++            if (cur && !names.includes(cur)) names.push(cur);
++            return names;
++        },
++
++        async onProviderChange() {
++            const provider = this.form.aiTagsProvider;
++            if (provider === '') {
++                this.form.aiTagsModel = '';
++            } else {
++                const lists = this.aiTagsModelLists();
++                // 換連線時 current 一律傳空字串，避免舊家模型名帶到新家
++                this.form.aiTagsModel = pickTagsModel(provider, '', lists[provider] || []);
++            }
++            await this.ensureProviderModels(provider);
++        },
++
++        testDisabled() {
++            return this.aiTagsTestBusy || this.form.aiTagsProvider === '';
++        },
++
++        /** 舊狀態行文字；key 為 null（跑中／閒置未完成）時只串 extra 並去掉前導「・」。 */
++        statusLineText() {
++            const desc = statusLine(this.bfStatus);
++            if (!desc) return '';
++            const extras = (desc.extra || []).map((k) => window.t(k, desc.params || {}));
++            if (!desc.key) return extras.join('').replace(/^\u30FB/, '');
++            return window.t(desc.key, desc.params || {}) + extras.join('');
++        },
++
++        firstRunHint() {
++            if (!this.bfStatus) return '';
++            return window.t('settings.ai.tags.first_run_hint', { n: this.bfStatus.pending });
++        },
++
++        async runTest() {
++            if (this.testDisabled()) return;
++            this.aiTagsTestBusy = true;
++            this.aiTagsTestResult = '';
++            try {
++                const body = buildTagsTestBody(this.form);
++                const res = await fetch(TEST_URL, {
++                    method: 'POST',
++                    headers: { 'Content-Type': 'application/json' },
++                    body: JSON.stringify(body),
++                });
++                if (!res.ok) {
++                    this.aiTagsTestResult = window.t('settings.ai.tags.test_failed_generic');
++                    this.showToast(window.t('settings.ai.tags.test_http_error'), 'error');
++                } else {
++                    let data = null;
++                    try { data = await res.json(); } catch { data = null; }
++                    const line = testResultLine(data);
++                    this.aiTagsTestResult = window.t(line.key, line.params);
++                }
++            } catch {
++                this.aiTagsTestResult = window.t('settings.ai.tags.test_failed_generic');
++                this.showToast(window.t('settings.ai.tags.test_http_error'), 'error');
++            } finally {
++                this.aiTagsTestBusy = false;
++            }
++        },
++    };
++}
+--- /dev/null
++++ b/web/static/js/pages/showcase/lb-ai-tags-logic.js
+@@ -0,0 +1,70 @@
++/**
++ * lb-ai-tags-logic.js — lightbox AI tags pure helpers (188c-T11)
++ *
++ * aiTagsProviderName / aiTagsFailureToast / aiTagsSuccessToasts
++ * relative import only (FE-GUARD-11); pure helpers only (no browser globals / network).
++ */
++
++const PROVIDER_NAMES = {
++    ollama: 'Ollama',
++    gemini: 'Gemini',
++    claude: 'Claude',
++    openai: 'OpenAI-compatible',
++    openai_official: 'OpenAI',
++};
++
++/** @param {string} provider */
++export function aiTagsProviderName(provider) {
++    if (Object.prototype.hasOwnProperty.call(PROVIDER_NAMES, provider)) {
++        return PROVIDER_NAMES[provider];
++    }
++    return provider;
++}
++
++/**
++ * @param {string} reason
++ * @param {string} [detail]
++ * @param {string} [provider]
++ * @returns {{ key: string, params: object }}
++ */
++export function aiTagsFailureToast(reason, detail, provider) {
++    const name = aiTagsProviderName(provider || '');
++    if (reason === 'unreachable' && detail === 'rate_limited') {
++        return { key: 'showcase.lightbox.ai_tags_rate_limited', params: { provider: name } };
++    }
++    if (reason === 'unreachable') {
++        return { key: 'showcase.lightbox.ai_tags_unreachable', params: { provider: name } };
++    }
++    if (reason === 'model_unsupported') {
++        return { key: 'showcase.lightbox.ai_tags_model_unsupported', params: {} };
++    }
++    if (reason === 'bad_response') {
++        return { key: 'showcase.lightbox.ai_tags_bad_response', params: {} };
++    }
++    if (reason === 'not_configured' || reason === 'disabled') {
++        return { key: 'showcase.lightbox.ai_tags_not_configured', params: {} };
++    }
++    return { key: 'showcase.lightbox.ai_tags_failed', params: {} };
++}
++
++/**
++ * @param {{ refused?: boolean, added?: unknown, readonly_no_output?: boolean, nfo_write_blocked?: boolean }} data
++ * @returns {Array<{ key: string, params: object, type: string }>}
++ */
++export function aiTagsSuccessToasts(data) {
++    // Order: NFO flags → refused → added non-empty → none (flags win; single toast slot)
++    if (data.readonly_no_output === true) {
++        return [{ key: 'showcase.lightbox.tag_nfo_not_written', params: {}, type: 'info' }];
++    }
++    if (data.nfo_write_blocked === true) {
++        return [{ key: 'showcase.lightbox.tag_nfo_write_blocked', params: {}, type: 'info' }];
++    }
++    if (data.refused === true) {
++        return [{ key: 'showcase.lightbox.ai_tags_refused', params: {}, type: 'info' }];
++    }
++    const added = Array.isArray(data.added) ? data.added : [];
++    if (added.length > 0) {
++        return [{ key: 'showcase.lightbox.ai_tags_added', params: { n: added.length }, type: 'success' }];
++    }
++    return [{ key: 'showcase.lightbox.ai_tags_none', params: {}, type: 'info' }];
++}
+--- /dev/null
++++ b/web/static/js/pages/showcase/state-lightbox-ai-tags.js
+@@ -0,0 +1,69 @@
++/**
++ * state-lightbox-ai-tags.js — Showcase ESM (188c-T11)
++ *
++ * Lightbox AI tag button: POST /api/ai/tags/videos → write captured video.user_tags → toast.
++ * mergeState slice (plan-188c CD-188c-17): no init method (FE-ALPINE-05); keys use lbAi / _lbAi prefix.
++ * Timing: set _lbAiInFlight[path] before any await; after await only mutate the captured video object.
++ */
++
++import { _recomputeVideoBadges } from '@/showcase/state-base.js';
++import { aiTagsFailureToast, aiTagsSuccessToasts } from './lb-ai-tags-logic.js';
++
++export function stateLightboxAiTags() {
++    return {
++        // path → true; same shape as _lbTrInFlight (per-path lock; switch does not clear)
++        _lbAiInFlight: {},
++
++        // AI tags flag: read showcase.html inject {enabled, provider}
++        get lbAiTagsEnabled() {
++            return typeof window !== 'undefined' && window.__SHOWCASE_AI_TAGS__?.enabled === true;
++        },
++
++        lbAiVisible() {
++            return this.lbAiTagsEnabled
++                && !!this.currentLightboxVideo?.path
++                && !!this.currentLightboxVideo?.has_cover;
++        },
++
++        lbAiIsBusy() {
++            return !!this._lbAiInFlight[this.currentLightboxVideo?.path];
++        },
++
++        async lbAiTag() {
++            const video = this.currentLightboxVideo;
++            if (!video?.path) return;
++            const path = video.path;
++            if (this._lbAiInFlight[path]) return;
++            this._lbAiInFlight[path] = true;
++            try {
++                let data;
++                try {
++                    const resp = await fetch('/api/ai/tags/videos', {
++                        method: 'POST',
++                        headers: { 'Content-Type': 'application/json' },
++                        body: JSON.stringify({ file_path: path }),
++                    });
++                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
++                    data = await resp.json();
++                } catch (e) {
++                    const toast = aiTagsFailureToast('failed');
++                    this.showToast(window.t(toast.key, toast.params), 'error');
++                    return;
++                }
++                if (data.success !== true) {
++                    const provider = (typeof window !== 'undefined' && window.__SHOWCASE_AI_TAGS__?.provider) || '';
++                    const toast = aiTagsFailureToast(data.reason, data.detail, provider);
++                    this.showToast(window.t(toast.key, toast.params), 'error');
++                    return;
++                }
++                video.user_tags = data.user_tags;
++                _recomputeVideoBadges(video);
++                for (const toast of aiTagsSuccessToasts(data)) {
++                    this.showToast(window.t(toast.key, toast.params), toast.type);
++                }
++            } finally {
++                delete this._lbAiInFlight[path];
++            }
++        },
 +    };
 +}
 --- /dev/null

@@ -42,6 +42,27 @@ def build_translate_payload(model: str, prompt: str) -> dict[str, Any]:
     }
 
 
+def build_vision_payload(
+    model: str,
+    system: str,
+    user_text: str,
+    image_data_uri: str,
+) -> dict[str, Any]:
+    header, data = image_data_uri.split(",", 1)
+    mime_type = header[5:].split(";", 1)[0] or "image/jpeg"
+    return {
+        "systemInstruction": {"parts": [{"text": system}]},
+        "contents": [{
+            "role": "user",
+            "parts": [
+                {"text": user_text},
+                {"inlineData": {"mimeType": mime_type, "data": data}},
+            ],
+        }],
+        "safetySettings": [dict(s) for s in SAFETY_SETTINGS],
+    }
+
+
 def extract_text(data: dict) -> str:
     """判定順序見 CD-171-4（先中先贏）；成功回非空譯文，失敗拋 TranslateError。"""
     feedback = data.get("promptFeedback")
@@ -134,4 +155,39 @@ async def request_translation(
         raise build_error(TAG, "api_error", None, "", f"invalid JSON: {e}") from e
     if not isinstance(data, dict):
         raise build_error(TAG, "api_error", None, "", "response is not a JSON object")
+    return extract_text(data)
+
+
+async def request_vision(
+    api_key: str,
+    model: str,
+    system: str,
+    user_text: str,
+    image_data_uri: str,
+    *,
+    timeout: float,
+) -> str:
+    """POST generateContent with one inline image; return the model text."""
+    resp = await cloud_request(
+        TAG,
+        "POST",
+        f"{GEMINI_BASE_URL}/models/{model}:generateContent",
+        headers=build_headers(api_key),
+        timeout=timeout,
+        json=build_vision_payload(model, system, user_text, image_data_uri),
+    )
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise classify_http_error(e.response) from None
+    try:
+        data = resp.json()
+    except Exception as e:
+        raise build_error(
+            TAG, "api_error", None, "", f"invalid JSON: {e}"
+        ) from e
+    if not isinstance(data, dict):
+        raise build_error(
+            TAG, "api_error", None, "", "response is not a JSON object"
+        )
     return extract_text(data)

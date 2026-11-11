@@ -37,8 +37,8 @@ def test_settings_has_independent_naming_and_ai_panels():
     assert 'id="aiPanelTranslate"' in template
     assert 'id="aiPanelSimilar"' in template
     assert 'id="aiPanelFaces"' in template
-    assert 'id="aiTabTags"' not in template
-    assert 'x-data="aiTagsPanel"' not in template
+    assert 'id="aiTabTags"' in template
+    assert 'x-data="aiTagsPanel"' in template
     assert 'copyAssistantPrompt' not in template
     assert 'settings-form-row--proxy' not in template
     assert 'metatubeEnableToggle' not in template
@@ -48,10 +48,10 @@ def test_settings_has_independent_naming_and_ai_panels():
     assert "aiServicesCard" in main
     assert "aiSimilarPanel" in main
     assert "aiFacesPanel" in main
-    assert "aiTagsPanel" not in main
+    assert "aiTagsPanel" in main
 
 
-def test_ai_config_is_loaded_saved_and_tags_are_preserved():
+def test_ai_config_is_loaded_saved_with_tags():
     state = read(WEB / "static/js/pages/settings/state-config.js")
 
     for field in (
@@ -63,22 +63,34 @@ def test_ai_config_is_loaded_saved_and_tags_are_preserved():
         "aiFacesUrl",
         "aiFacesApiKey",
         "aiFacesModel",
+        "aiTagsEnabled",
+        "aiTagsProvider",
+        "aiTagsModel",
     ):
         assert state.count(field) >= 2
 
     assert "config.ai_services?.image_similar" in state
     assert "config.ai_services?.faces" in state
-    assert "tags: { ...(config.ai_services?.tags || {}) }" in state
+    assert "config.ai_services?.tags" in state
+    assert "enabled: this.form.aiTagsEnabled" in state
+    assert "provider: this.form.aiTagsProvider" in state
+    assert "model: this.form.aiTagsModel.trim()" in state
 
 
-def test_ai_locales_are_complete_and_mobile_omits_tags():
+def test_ai_locales_are_complete_with_tags():
     locale_leaves: dict[str, set[str]] = {}
     for path in LOCALES.glob("*.json"):
         data = json.loads(read(path))
         ai = data["settings"]["ai"]
-        assert {"backfill", "faces", "similar", "title", "tab_translate"} <= set(ai)
-        assert "tags" not in ai
-        assert "tab_tags" not in ai
+        assert {
+            "backfill",
+            "faces",
+            "similar",
+            "tags",
+            "title",
+            "tab_translate",
+            "tab_tags",
+        } <= set(ai)
         locale_leaves[path.name] = leaves(data)
 
     baseline = locale_leaves["en.json"]
@@ -91,7 +103,7 @@ def test_mobile_settings_layout_and_background_tasks_are_stable():
     backfill = read(WEB / "static/js/pages/settings/ai-backfill-controls.js")
 
     assert "grid-template-columns: repeat(5, minmax(0, 1fr))" in css
-    assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
     appearance = css[
         css.index("#settings-components[data-is-android=\"true\"] .settings-appearance-controls"):
         css.index("/* quick-toggle-row", css.index("#settings-components[data-is-android=\"true\"] .settings-appearance-controls"))

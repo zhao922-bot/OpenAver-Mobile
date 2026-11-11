@@ -849,6 +849,11 @@
                                 :aria-selected="aiTab === 'faces'"
                                 :class="{ 'tab-active': aiTab === 'faces' }"
                                 x-text="window.t('settings.ai.tab_faces')"></button>
+                        <button type="button" role="tab" class="tab" id="aiTabTags"
+                                @click="selectAiTab('tags')"
+                                :aria-selected="aiTab === 'tags'"
+                                :class="{ 'tab-active': aiTab === 'tags' }"
+                                x-text="window.t('settings.ai.tab_tags')"></button>
                     </div>
                 </div>
 
@@ -1337,6 +1342,79 @@
                             <a class="btn btn-sm btn-ghost"
                                href="https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md"
                                target="_blank" rel="noopener noreferrer">{{ t('settings.ai.faces.btn_docs') }}</a>
+                        </div>
+                    </div>
+
+                    <div id="aiPanelTags" role="tabpanel"
+                         x-show="aiTab === 'tags'" x-cloak
+                         x-data="aiTagsPanel">
+                        <div class="settings-form-group">
+                            <label class="settings-label">
+                                <input type="checkbox" class="toggle toggle-primary"
+                                       id="aiTagsEnabled"
+                                       x-model="form.aiTagsEnabled">
+                                <span class="label-text">{{ t('settings.ai.tags.enabled_label') }}</span>
+                            </label>
+                        </div>
+                        <p class="settings-hint ai-tags-empty-desc"
+                           x-show="panelMode() === 'empty'">{{ t('settings.ai.tags.empty_desc') }}</p>
+                        <p class="settings-hint ai-tags-first-run"
+                           id="aiTagsFirstRunHint"
+                           x-text="firstRunHint()"></p>
+
+                        <div class="ai-tags-fields" x-show="panelMode() === 'fields'">
+                            <div class="settings-form-row">
+                                <label class="row-label" for="aiTagsProvider">{{ t('settings.ai.tags.provider_label') }}</label>
+                                <div class="flex-1 min-w-0">
+                                    <select class="select select-bordered select-sm w-full"
+                                            id="aiTagsProvider"
+                                            x-model="form.aiTagsProvider"
+                                            @change="onProviderChange()">
+                                        <option value="">{{ t('settings.ai.tags.provider_placeholder') }}</option>
+                                        <option value="ollama">Ollama{{ t('settings.translate.ollama_local') }}</option>
+                                        <option value="gemini">Gemini{{ t('settings.translate.gemini_cloud') }}</option>
+                                        <option value="claude">Claude{{ t('settings.translate.claude_cloud') }}</option>
+                                        <option value="openai_official">{{ t('settings.translate.openai_official') }}</option>
+                                        <option value="openai">{{ t('settings.translate.openai_compatible') }}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="settings-form-row">
+                                <label class="row-label" for="aiTagsModel">{{ t('settings.ai.tags.model_label') }}</label>
+                                <div class="flex-1 flex flex-col gap-1 min-w-0">
+                                    <div class="variable-input-group">
+                                        <select class="select select-bordered select-sm flex-1 min-w-0"
+                                                id="aiTagsModel"
+                                                x-model="form.aiTagsModel"
+                                                :disabled="form.aiTagsProvider === ''">
+                                            <option value="" disabled x-show="modelOptions().length === 0"></option>
+                                            <template x-for="m in modelOptions()" :key="m">
+                                                <option :value="m" x-text="m"></option>
+                                            </template>
+                                        </select>
+                                        <button class="btn btn-sm btn-outline" type="button"
+                                                id="aiTagsTestBtn"
+                                                @click="runTest()"
+                                                :disabled="testDisabled()">
+                                            <span x-show="aiTagsTestBusy" class="loading loading-spinner loading-sm"></span>
+                                            <span x-show="!aiTagsTestBusy" x-text="window.t('settings.action.test')"></span>
+                                        </button>
+                                    </div>
+                                    <small class="settings-hint">{{ t('settings.ai.tags.model_hint') }}</small>
+                                </div>
+                            </div>
+
+                            <p class="settings-hint ai-tags-status"
+                               id="aiTagsStatusLine"
+                               x-show="bfStatus !== null && statusLineText()"
+                               x-text="statusLineText()"></p>
+
+                            {{ ai_backfill_controls('aiTags', 'ai-tags') }}
+
+                            <pre class="ai-tags-test-result"
+                                 id="aiTagsTestResult"
+                                 x-show="aiTagsTestResult"
+                                 x-text="aiTagsTestResult"></pre>
                         </div>
                     </div>
 
