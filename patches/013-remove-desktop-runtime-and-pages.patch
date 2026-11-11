@@ -2768,7 +2768,33 @@
                  this.$watch('currentIndex', () => {
 --- a/web/static/js/pages/search/state/base.js
 +++ b/web/static/js/pages/search/state/base.js
-@@ -118,7 +118,6 @@
+@@ -2,6 +2,8 @@
+  * SearchState - Base Mixin
+  * 包含：data 初始值、constants、computed methods、file list helpers
+  */
++import { isFileSearching as isPathSearching } from '../batch-search-rules.js';
++
+ export function searchStateBase() {
+     return {
+         // ===== Page State =====
+@@ -46,13 +48,14 @@
+ 
+         // ===== Batch State =====
+         batchState: {
+-            batchSize: 20,
+             isProcessing: false,
+             isPaused: false,
+             total: 0,
+             processed: 0,
+             success: 0,
+-            failed: 0
++            failed: 0,
++            activePaths: [],
++            runId: 0
+         },
+ 
+         // ===== Translate State =====
+@@ -118,7 +121,6 @@
          _timers: {},  // Timer registry：{ [key: string]: number }（setTimeout ID）
          _batchCheckInterval: null,      // T1(40b): batch searchAll 暫停等待 interval ref
          _translateCheckInterval: null,  // T1(40b): translateAll 暫停等待 interval ref
@@ -2776,6 +2802,52 @@
          _resizeHandler: null,          // T2(40b): resize listener ref
          _abortControllers: {},  // Fetch AbortController registry：{ [key: string]: AbortController }（T4.3）
  
+@@ -296,7 +298,6 @@
+         searchAllButtonText() {
+             const searchableFiles = this.fileList.filter(f => f.number && !f.searched && !f.has_nfo);
+             const failedFiles = this.fileList.filter(f => f.number && f.searched && (!f.searchResults || f.searchResults.length === 0) && !f.has_nfo);
+-            const totalWithNumber = this.fileList.filter(f => f.number).length;
+             const batch = this.batchState;
+ 
+             if (searchableFiles.length === 0 && failedFiles.length === 0) {
+@@ -308,10 +309,7 @@
+             if (searchableFiles.length === 0 && failedFiles.length > 0) {
+                 return window.t('search.button.retry_failed', { count: failedFiles.length });
+             }
+-            const searchedCount = totalWithNumber - searchableFiles.length;
+-            const start = searchedCount + 1;
+-            const end = Math.min(searchedCount + batch.batchSize, totalWithNumber);
+-            return window.t('search.button.search_range', { start, end, total: totalWithNumber });
++            return window.t('search.button.search_all');
+         },
+ 
+         searchAllButtonIcon() {
+@@ -449,6 +447,14 @@
+             return Math.round((batch.processed / batch.total) * 100);
+         },
+ 
++        batchProgressText() {
++            const batch = this.batchState;
++            const key = batch.isPaused
++                ? 'search.filelist.paused_prefix'
++                : 'search.filelist.processing_prefix';
++            return window.t(key) + ' ' + batch.processed + '/' + batch.total;
++        },
++
+         // ===== T2b: Scrape Progress Computed =====
+         scrapePercent() {
+             const sp = this.scrapeProgress;
+@@ -473,6 +479,10 @@
+                 cls += ' text-error';
+             }
+             return cls;
++        },
++
++        isFileSearching(file) {
++            return isPathSearching(this.batchState.activePaths, file.path);
+         },
+ 
+         canScrapeFile(file) {
 --- a/web/static/js/pages/search/state/file-list.js
 +++ b/web/static/js/pages/search/state/file-list.js
 @@ -329,7 +329,7 @@
@@ -2787,7 +2859,16 @@
          // 表面化為 path_inaccessible 並中止，取代誤導的「無法識別番號」。
          let hadInaccessible = false;
          try {
-@@ -545,38 +545,15 @@
+@@ -476,6 +476,8 @@
+             batch.processed = 0;
+             batch.success = 0;
+             batch.failed = 0;
++            batch.activePaths = [];
++            batch.runId = (batch.runId || 0) + 1;
+ 
+             if (this.fileList.length > 0) {
+                 if (this.fileList[0].number) {
+@@ -545,38 +547,15 @@
      },
  
      async addFiles() {
@@ -3339,6 +3420,22 @@
              } catch (_e) {
                  // 逾時或任何錯誤：沿用快照判斷（含 cf_preparing）
              }
+@@ -430,6 +428,7 @@
+                     body: JSON.stringify({
+                         number: this.rescrapeNumber.trim(),
+                         source: sourceId,
++                        skip_format_check: true,
+                     }),
+                 });
+                 const data = await resp.json();
+@@ -684,6 +683,7 @@
+                         detail_url: this.rescrapePreview?.url || null,  // CD-86-13: 取 .url 非 .detail_url
+                         readonly_action: 'rescrape',                    // T4: 無條件送（非唯讀端後端忽略，CD-104-5）
+                         preserve_title: this.rescrapeShowPreserveTitle() && this.rescrapePreserveTitle,
++                        skip_format_check: true,                        // explicit advanced lookup; backend only relaxes JavDB
+                     }),
+                 });
+                 const result = await resp.json();
 --- a/web/templates/_advanced_search_bootstrap.html
 +++ b/web/templates/_advanced_search_bootstrap.html
 @@ -5,7 +5,6 @@

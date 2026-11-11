@@ -97,6 +97,7 @@ def start_server(
     data_dir: str,
     native_lib_path: str = "",
     cascade_path: str = "",
+    mobile_version: str = "",
 ) -> int:
     global _server, _thread, _server_socket, _server_port, _server_error
     if _server is not None and _thread is not None and _thread.is_alive():
@@ -109,6 +110,8 @@ def start_server(
     os.environ["OPENAVER_DATA_DIR"] = data_dir
     os.environ["HOME"] = runtime_home
     os.environ["OPENAVER_MOBILE"] = "1"
+    if mobile_version:
+        os.environ["OPENAVER_MOBILE_VERSION"] = mobile_version
     if native_lib_path:
         os.environ["OPENAVER_NATIVE_LIB"] = native_lib_path
     if cascade_path:

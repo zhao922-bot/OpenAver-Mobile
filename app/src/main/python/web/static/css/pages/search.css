@@ -819,6 +819,10 @@
     transition: width var(--fluent-duration-slow) var(--fluent-ease-standard), background-color var(--fluent-duration-slow) var(--fluent-ease-standard);
 }
 
+.batch-progress.is-paused .batch-progress-fill {
+    background: color-mix(in oklch, var(--color-base-content) 40%, transparent);
+}
+
 #scrapeProgressBar {
     transition: none;  /* T2b: GSAP 接管 width 動畫 */
 }

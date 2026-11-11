@@ -358,6 +358,7 @@ class EnrichRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     allow_number_change: bool = False
     preserve_title: bool = False
+    skip_format_check: bool = False
 
 
 class BatchEnrichItem(BaseModel):
@@ -365,9 +366,20 @@ class BatchEnrichItem(BaseModel):
     number: str
     source: Optional[str] = None       # per-item override（優先於 batch default）
     javbus_lang: Optional[str] = None  # per-item override
+    category: Optional[str] = None     # missing-check category; unknown values keep old behavior
     # check_missing collapses a complete cd1/cd2 work to one UI item.  The
     # hidden member paths let that one item still repair every physical row.
     member_paths: Optional[List[str]] = None
+
+
+FIRST_HIT_CATEGORIES = frozenset({"both", "nfo"})
+
+
+def _enrich_dispatch(request_mode: str, category: Optional[str]) -> tuple[str, bool]:
+    """Use first-hit full refresh for items with no NFO; leave all others unchanged."""
+    if request_mode == "fill_missing" and category in FIRST_HIT_CATEGORIES:
+        return "refresh_full", True
+    return request_mode, False
 
 
 class BatchEnrichRequest(BaseModel):
@@ -384,6 +396,7 @@ class BatchEnrichRequest(BaseModel):
 class RescrapePreviewRequest(BaseModel):
     number: str
     source: str = "auto"
+    skip_format_check: bool = False
 
 
 @router.post("/rescrape/preview")
@@ -410,12 +423,12 @@ def rescrape_preview_endpoint(request: RescrapePreviewRequest) -> dict:
         elif request.source == "auto":
             result = search_jav(
                 request.number,
-                source="auto",
+                source="auto", skip_format_check=request.skip_format_check,
             )
         else:
             result = search_jav_single_source(
                 request.number, request.source,
-                surface_access_errors=True,
+                surface_access_errors=True, skip_format_check=request.skip_format_check,
             )
 
         if result is None:
@@ -790,6 +803,7 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
                 scraper_data=scraper_data, scrape_source=request.source,
                 javbus_lang=request.javbus_lang, write_cover=resolved_write_cover,
                 overwrite_existing=request.overwrite_existing, preserve_title=request.preserve_title,
+                skip_format_check=request.skip_format_check,
                 after_produce=lambda: thumbnail_cache.invalidate(canonical),
                 locale=locale,
             )
@@ -855,6 +869,7 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
             javbus_lang=request.javbus_lang,
             scraper_data=scraper_data,
             path_mappings=path_mappings, preserve_title=request.preserve_title,
+            skip_format_check=request.skip_format_check,
             locale=locale,
         )
         # feature/71 T8: 換封面成功 → 失效舊縮圖（下次進畫面時重生，CD-9 / spec 2.A.7）。
@@ -1259,6 +1274,9 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                     )
                     effective_source = "auto"
                 effective_lang = item.javbus_lang or batch.javbus_lang
+                item_mode, item_first_hit = _enrich_dispatch(
+                    batch.mode, item.category
+                )
 
                 # progress 事件
                 yield f"data: {json.dumps({'type': 'progress', 'current': idx, 'total': total, 'number': item.number})}\n\n"
@@ -1291,7 +1309,7 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                         # short-circuits regardless of output_dir configuration.
                         # BatchEnrichRequest has no per-item mode override, so this
                         # is checked once against the whole-batch `batch.mode`.
-                        if batch.mode == 'db_to_sidecar':
+                        if item_mode == 'db_to_sidecar':
                             return ('db_to_sidecar', _api_text(locale, _READONLY_DB_TO_SIDECAR_ERROR_MSG))
                         # P1 revert + reject (round-3 review 2026-07-21): same
                         # write_nfo=false rejection as enrich_single_endpoint's
@@ -1338,6 +1356,7 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                                     scraper_data=None, scrape_source=es, javbus_lang=el,
                                     write_cover=batch.write_cover, overwrite_existing=batch.overwrite_existing,
                                     focal_before_cover_recheck=True,
+                                    first_hit=item_first_hit,
                                     locale=locale,
                                 )
                             except ReadonlyProduceError:
@@ -1444,7 +1463,9 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                 try:
                     loop = asyncio.get_running_loop()
 
-                    # scraper cache（只對 refresh_full pre-fetch）
+                    # scraper cache（只對原本就是 refresh_full 的請求 pre-fetch）
+                    # fill_missing 轉成的 first-hit 必須由 enrich_single 自己搜尋，
+                    # 否則這裡先跑無 first_hit 的完整 fan-out 會抵銷首家命中優化。
                     cached_data = None
                     if batch.mode == "refresh_full":
                         cache_key = (item.number.upper(), effective_source, effective_lang)
@@ -1467,7 +1488,7 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                             enrich_single,
                             file_path=group_file_path,
                             number=item.number,
-                            mode=batch.mode,
+                            mode=item_mode,
                             write_nfo=batch.write_nfo,
                             write_cover=batch.write_cover,
                             write_extrafanart=batch.write_extrafanart,
@@ -1477,6 +1498,7 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                             javbus_lang=effective_lang,
                             scraper_data=cached_data,
                             path_mappings=_ro_mappings,
+                            first_hit=item_first_hit,
                             locale=locale,
                         )
                         member_result = await loop.run_in_executor(

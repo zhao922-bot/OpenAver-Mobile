@@ -3,8 +3,10 @@
 [![Build APK](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml/badge.svg)](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml)
 
 OpenAver Mobile 是 [OpenAver](https://github.com/slive777/OpenAver) 的非官方
-Android 移植版，基于上游最新正式版 `v0.17.18`
-（提交 `af0d99741e63e71980773c9ade04c473407a60b7`）。
+Android 移植版。当前移动端新版本线为 `v0.18.17-android-r1`，首批对齐上游
+`v0.18.17` 的补完性能、批次搜索和来源修复；尚未移植的上游功能会按
+[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)在后续 `r2`～`r6` 完成。
+内嵌代码基线仍为上游 `v0.17.18` 加本仓库补丁。
 
 App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，不需要
 电脑、NAS、局域网服务器或 Termux。扫描、数据库、元数据搜索、NFO/封面写入和
@@ -13,13 +15,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.17.18-android-r57-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r1-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.17.18-android-r57-arm64-v8a.apk`
+- 文件名：`openaver-v0.18.17-android-r1-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.17.18-r57`（versionCode `17075`）
+- 版本：`0.18.17-r1`（versionCode `18001`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -272,6 +274,14 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r57：Android 原生 CF worker 改用移动专用端点，JavLibrary、FC2-javten 和
   Jable 继续共用 WebView 验证；六页、四语言、数据库备份入口、扫描生成、
   Insights、普通视频播放器选择和冷启动均在模拟器完成回归
+- v0.18.17-r1：无 NFO 的一键补完改为首家有效来源命中后直接采用，不再继续
+  请求后续来源；普通番号不再查询 D2Pass，日期型一本道、加勒比和 10musume
+  番号仍会正常查询
+- v0.18.17-r1：大批量补完预估改为无 NFO 约 1 秒/部、只缺封面约 10 秒/部；
+  批次搜索一次处理全部未搜索项，并正确支持暂停、继续、取消和重新载入
+- v0.18.17-r1：修复 MetaTube 新来源可用性、JavDB 冷门番号高级搜索和 jav321
+  标题尾部污染；移动端同步“片库管理”“更新片库”“待整理”等名称，继续保留
+  Jable、分段视频按 1 部计数及现有标题/NFO 写回逻辑
 
 ## 限制
 
@@ -357,7 +367,7 @@ python -m pytest tests -q
 
 `app/src/main/python/` 不是独立维护的第二份上游源码，而是固定的
 OpenAver `v0.17.18`（提交
-`af0d99741e63e71980773c9ade04c473407a60b7`）加 `patches/` 下八个有编号的
+`af0d99741e63e71980773c9ade04c473407a60b7`）加 `patches/` 下有编号的
 补丁。`patches/manifest.json` 记录上游提交和每个补丁负责的文件。
 
 CI 在构建前执行：

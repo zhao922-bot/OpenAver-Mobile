@@ -1180,13 +1180,14 @@
 
                 <!-- 批次進度條 -->
                 <div class="batch-progress" id="batchProgress"
+                     :class="{ 'is-paused': batchState.isPaused }"
                      x-show="batchState.isProcessing">
                     <div class="batch-progress-bar">
                         <div class="batch-progress-fill" id="batchProgressBar"
                              :style="'width:' + batchPercent() + '%'"></div>
                     </div>
                     <small class="batch-progress-text" id="batchProgressText"
-                           x-text="t('search.filelist.processing_prefix') + ' ' + batchState.processed + '/' + batchState.total">{{ t('search.filelist.processing_prefix') }} 0/0</small>
+                           x-text="batchProgressText()">{{ t('search.filelist.processing_prefix') }} 0/0</small>
                 </div>
 
                 <!-- 批次整理進度條 -->
@@ -1225,6 +1226,7 @@
                             <!-- 狀態圖示 -->
                             <span :class="fileStatusClass(file)"
                                   x-text="fileStatusIcon(file)"></span>
+                            <span x-show="isFileSearching(file)" class="loading loading-spinner loading-sm"></span>
 
                             <!-- 動作按鈕：產生 NFO -->
                             <button x-show="canScrapeFile(file) && !file.isScraping && file.scrapeStatus !== 'done'"

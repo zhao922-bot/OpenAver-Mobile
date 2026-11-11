@@ -32,6 +32,11 @@ def _extract_actress_names(block: str) -> list[str]:
     return [n.strip() for n in names if n.strip()]
 
 
+def is_d2pass_number(movie_id: str) -> bool:
+    """Return whether an ID uses D2Pass's date-based number format."""
+    return re.fullmatch(r'\d{6}[-_]\d{2,}', movie_id) is not None
+
+
 class D2PassScraper(BaseScraper):
     """
     D2Pass 聯合爬蟲 — 共享 JSON API，不同 base URL
@@ -374,6 +379,9 @@ class D2PassScraper(BaseScraper):
             Video 物件，找不到返回 None
         """
         movie_id = self.normalize_number(number)
+        if not is_d2pass_number(movie_id):
+            logger.debug("D2Pass: skipping non-date number %s", movie_id)
+            return None
         site_order = self._detect_site_order(movie_id)
 
         for site in site_order:

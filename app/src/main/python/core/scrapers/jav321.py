@@ -100,6 +100,9 @@ class JAV321Scraper(BaseScraper):
 
             # 標題
             title_elem = soup.select_one('h3')
+            if title_elem:
+                for small in title_elem.select('small'):  # 站方附帶的番號／女優名尾巴
+                    small.decompose()
             title = title_elem.get_text(strip=True) if title_elem else ''
             # 移除番號前綴
             title = re.sub(rf'^{re.escape(number)}\s*', '', title, flags=re.IGNORECASE)

@@ -455,7 +455,7 @@ public final class MainActivity extends Activity {
                 int serverPort = boot.callAttr(
                         "start_server", LOCAL_HOST, LOCAL_PORT, dataDir,
                         getApplicationInfo().nativeLibraryDir + "/libopenaver_mobile.so",
-                        cascadePath
+                        cascadePath, BuildConfig.VERSION_NAME
                 ).toInt();
                 localPort = serverPort;
                 localAuthToken = boot.callAttr("server_token").toString();

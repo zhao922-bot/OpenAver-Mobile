@@ -389,6 +389,8 @@ def resolve_ingest_plan(
     scraper_data: Optional[dict] = None,
     source: Optional[str] = None,
     javbus_lang: Optional[str] = None,
+    first_hit: bool = False,
+    skip_format_check: bool = False,
 ) -> tuple:
     """Metadata + cover two-axis decision for one source file (CD-104-3a).
 
@@ -487,9 +489,15 @@ def resolve_ingest_plan(
         # javbus_lang instead of hardcoding source="auto" — mirrors the
         # rescrape branch's dispatch below.
         elif source and source not in (None, 'auto'):
-            meta = search_jav_single_source(number, source, javbus_lang=javbus_lang)
+            meta = search_jav_single_source(
+                number, source, javbus_lang=javbus_lang,
+                skip_format_check=skip_format_check,
+            )
         else:
-            meta = search_jav(number, source="auto", javbus_lang=javbus_lang)
+            meta = search_jav(
+                number, source="auto", javbus_lang=javbus_lang,
+                first_hit=first_hit,
+            )
 
         nfo_thumb = root.findtext('thumb') if valid_nfo else None
         cover_fs = VideoScanner().find_cover_image(src_fs_path, nfo_thumb=nfo_thumb)
@@ -561,9 +569,15 @@ def resolve_ingest_plan(
         if scraper_data:
             meta = scraper_data
         elif source and source not in (None, 'auto'):
-            meta = search_jav_single_source(number, source, javbus_lang=javbus_lang) if number else None
+            meta = search_jav_single_source(
+                number, source, javbus_lang=javbus_lang,
+                skip_format_check=skip_format_check,
+            ) if number else None
         else:
-            meta = search_jav(number, source="auto", javbus_lang=javbus_lang) if number else None
+            meta = search_jav(
+                number, source="auto", javbus_lang=javbus_lang,
+                first_hit=first_hit,
+            ) if number else None
         cover_strategy = ('download', meta['cover']) if meta and meta.get('cover') else ('none',)
 
     if meta is None:
@@ -1046,6 +1060,8 @@ def enrich_one_readonly(
     after_produce: Optional[Callable[[], None]] = None,
     focal_before_cover_recheck: bool = False,
     preserve_title: bool = False,
+    first_hit: bool = False,
+    skip_format_check: bool = False,
     locale: Optional[str] = None,
 ) -> EnrichResult:
     """單片/批次唯讀 enrich 共用的「產出核心」——薄搬移自
@@ -1100,7 +1116,8 @@ def enrich_one_readonly(
     meta, cover_strategy = resolve_ingest_plan(
         fs_path, number, scraper_cfg,
         action=action, scraper_data=scraper_data, source=scrape_source,
-        javbus_lang=javbus_lang,
+        javbus_lang=javbus_lang, first_hit=first_hit,
+        skip_format_check=skip_format_check,
     )
     if not meta:
         # FIX P2-A / FIX#4 (P2 parity closeout): mirror non-readonly

@@ -30,7 +30,7 @@
     <string name="local_step3_title">Scan and play locally</string>
     <string name="local_step3_body">Generation, metadata search, NFO/cover writes, and playback all run on the phone. Network access is only used for metadata sources you enable.</string>
     <string name="privacy_note">The Python server, SQLite database, logs, and generated data stay inside this app’s private storage. Video files remain in their original phone folders.</string>
-    <string name="disclaimer">Unofficial Android build · OpenAver v0.17.18 · MIT licensed</string>
+    <string name="disclaimer">Unofficial Android build · OpenAver Mobile v0.18.17-r1 · MIT licensed</string>
     <string name="starting_local">Starting local OpenAver…</string>
     <string name="starting_python">Initializing the Python runtime…</string>
     <string name="loading_openaver_service">Loading the OpenAver service…</string>
@@ -66,7 +66,7 @@
     <string name="menu_connected_to">Local server · %1$s</string>
     <string name="menu_not_connected">Local server not running</string>
     <string name="about_title">About OpenAver Mobile</string>
-    <string name="about_message">Embedded Android build %1$s\nUpstream release %2$s\nCommit %3$s\n\nLocal data: %4$s\n\nOpenAver is MIT licensed. The original desktop-only integrations are unavailable on Android.</string>
+    <string name="about_message">Android build %1$s\nMobile release %2$s\nEmbedded upstream commit %3$s\n\nLocal data: %4$s\n\nOpenAver is MIT licensed. The original desktop-only integrations are unavailable on Android.</string>
     <string name="confirm_title">Please confirm</string>
     <string name="ok">OK</string>
     <string name="external_browser_missing">No browser is available.</string>

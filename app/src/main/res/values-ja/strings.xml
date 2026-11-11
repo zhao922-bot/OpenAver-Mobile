@@ -30,7 +30,7 @@
     <string name="local_step3_title">ローカルでスキャンして再生</string>
     <string name="local_step3_body">ページ生成、メタデータ検索、NFO とカバーの書き込み、再生はすべてスマートフォン上で実行されます。ネットワークは、有効にしたメタデータ取得元を使うときだけ利用します。</string>
     <string name="privacy_note">Python サーバー、SQLite データベース、ログ、生成データは本アプリのプライベートストレージ内に保存されます。動画ファイルは元のスマートフォンのフォルダーに残ります。</string>
-    <string name="disclaimer">非公式 Android ビルド · OpenAver v0.17.18 · MIT ライセンス</string>
+    <string name="disclaimer">非公式 Android ビルド · OpenAver Mobile v0.18.17-r1 · MIT ライセンス</string>
     <string name="starting_local">ローカル OpenAver を起動しています…</string>
     <string name="starting_python">Python ランタイムを初期化しています…</string>
     <string name="loading_openaver_service">OpenAver サービスを読み込んでいます…</string>
@@ -66,7 +66,7 @@
     <string name="menu_connected_to">ローカルサーバー · %1$s</string>
     <string name="menu_not_connected">ローカルサーバーは動作していません</string>
     <string name="about_title">OpenAver モバイルについて</string>
-    <string name="about_message">内蔵 Android ビルド %1$s\n上流リリース %2$s\nコミット %3$s\n\nローカルデータ：%4$s\n\nOpenAver は MIT ライセンスです。デスクトップ版専用の連携機能は Android では利用できません。</string>
+    <string name="about_message">Android ビルド %1$s\nモバイルリリース %2$s\n内蔵アップストリームコミット %3$s\n\nローカルデータ：%4$s\n\nOpenAver は MIT ライセンスです。デスクトップ版専用の連携機能は Android では利用できません。</string>
     <string name="confirm_title">確認</string>
     <string name="ok">OK</string>
     <string name="external_browser_missing">利用できるブラウザーがありません。</string>

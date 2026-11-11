@@ -3,6 +3,7 @@
  * 包含：批次操作（searchAll, scrapeAll, scrapeSingle）
  */
 import { isCloudTranslateProvider, translateAllSummary } from '../../../shared/translate-provider.js';
+import { isDetailEmpty, shouldAutoJump } from '../batch-search-rules.js';
 
 // T4: 追蹤正在批次翻譯的片索引（從 core.js 搬移）
 const batchTranslatingIndices = new Set();
@@ -216,7 +217,7 @@ export function searchStateBatch() {
             return;
         }
 
-        const currentBatch = targetFiles.slice(0, batch.batchSize);
+        const currentBatch = targetFiles;
 
         // 更新狀態
         batch.isProcessing = true;
@@ -224,6 +225,13 @@ export function searchStateBatch() {
         batch.processed = 0;
         batch.success = 0;
         batch.failed = 0;
+        batch.activePaths = [];
+        const myRun = ++batch.runId;
+        const superseded = () => myRun !== batch.runId;
+
+        const startFile = this.fileList[this.currentFileIndex];
+        let followArmed = isDetailEmpty(startFile);
+        const anchorPath = startFile?.path;
 
         // 並行處理，一次 2 個
         const concurrency = 2;
@@ -241,6 +249,7 @@ export function searchStateBatch() {
                     }, 100);
                 });
             }
+            if (superseded()) return;
             // cleanup 已設 isProcessing=false → 中斷 loop，不繼續發新工作
             if (!batch.isProcessing) { aborted = true; break; }
 
@@ -257,7 +266,16 @@ export function searchStateBatch() {
 
             // U10b: 背景搜尋（不碰共享 UI 狀態）
             await Promise.all(chunk.map(async (file) => {
-                await this._searchFileBackground(file);
+                try {
+                    batch.activePaths.push(file.path);
+                    await this._searchFileBackground(file);
+                } finally {
+                    if (!superseded()) {
+                        batch.activePaths = batch.activePaths.filter(p => p !== file.path);
+                    }
+                }
+
+                if (superseded()) return;
 
                 if (file.searched && file.searchResults && file.searchResults.length > 0) {
                     batch.success++;
@@ -268,15 +286,21 @@ export function searchStateBatch() {
             }));
 
             // cleanup 在 chunk 執行中發生 → SSE 被關掉，Promise.all resolve 後檢查
+            if (superseded()) return;
             if (!batch.isProcessing) { aborted = true; break; }
 
-            // U10b: chunk 完成後，將 UI 指向最後一個搜到結果的 file（序列化 UI 更新）
-            const lastSuccessFile = [...chunk].reverse().find(f => f.searchResults?.length > 0);
-            if (lastSuccessFile) {
-                const lastIdx = this.fileList.indexOf(lastSuccessFile);
-                await this.switchToFile(lastIdx, 'first', false);
+            const jumpTarget = chunk.find(f => f.searchResults?.length > 0);
+            if (jumpTarget && shouldAutoJump({
+                armed: followArmed,
+                anchorPath,
+                currentPath: this.fileList[this.currentFileIndex]?.path,
+            })) {
+                followArmed = false;
+                await this.switchToFile(this.fileList.indexOf(jumpTarget), 'first', false);
             }
         }
+
+        if (superseded()) return;
 
         // 批次處理完成
         this.isSearchingFile = false;

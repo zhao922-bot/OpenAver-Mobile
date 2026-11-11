@@ -476,6 +476,8 @@ export function searchStateFileList() {
             batch.processed = 0;
             batch.success = 0;
             batch.failed = 0;
+            batch.activePaths = [];
+            batch.runId = (batch.runId || 0) + 1;
 
             if (this.fileList.length > 0) {
                 if (this.fileList[0].number) {

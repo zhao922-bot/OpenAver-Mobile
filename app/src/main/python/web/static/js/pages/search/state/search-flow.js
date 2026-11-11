@@ -99,6 +99,11 @@ export function searchStateSearchFlow() {
         this.searchQuery = '';  // 清空搜尋框
         this.currentOffset = 0;
         this.hasMoreResults = false;
+        Object.assign(this.batchState, {
+            isProcessing: false, isPaused: false, total: 0,
+            processed: 0, success: 0, failed: 0, activePaths: [],
+        });
+        this.batchState.runId = (this.batchState.runId || 0) + 1;
         this.fileList = [];
         this.currentFileIndex = 0;
         this.listMode = null;
@@ -184,6 +189,11 @@ export function searchStateSearchFlow() {
         this._resetCoverState();
         this.searchResults = [];
         this.currentIndex = 0;
+        Object.assign(this.batchState, {
+            isProcessing: false, isPaused: false, total: 0,
+            processed: 0, success: 0, failed: 0, activePaths: [],
+        });
+        this.batchState.runId = (this.batchState.runId || 0) + 1;
         this.fileList = [];
         this.currentFileIndex = 0;
         this.listMode = null;

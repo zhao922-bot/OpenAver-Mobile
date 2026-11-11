@@ -742,6 +742,7 @@ async def help_page(request: Request):
     """使用說明頁面"""
     context = get_common_context(request)
     context["page"] = "help"
+    context["version"] = os.environ.get("OPENAVER_MOBILE_VERSION", VERSION)
     # 81b-T5 + Codex P2：僅桌面主機（loopback）覆寫成可分享 LAN URL；
     # 遠端裝置走自身 request.base_url（已是可分享位址，nas.local / 反向代理皆保留）。
     lan_ip = context.get("lan_ip")

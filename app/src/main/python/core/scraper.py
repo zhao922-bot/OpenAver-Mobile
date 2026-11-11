@@ -44,6 +44,7 @@ from core.source_merger import merge_results
 from core.source_config import validate_source_id
 from core.source_settings import get_enabled_source_ids
 from core.source_settings import get_all_source_ids_ordered, is_source_enabled  # noqa: F401  # relay 與測試 patch 點（呼叫當下經 core.scraper 讀）
+from core.source_settings import is_uncensored_mode_effective
 
 # 63c metatube routing imports（CD-63c-1 / CD-63c-2 / CD-63c-3）
 from core.metatube.client import MetatubeHttpClient, pick_movie_result
@@ -272,7 +273,8 @@ def build_card(video: Video, number: str) -> Dict[str, Any]:
 
 def search_jav(
     number: str, source: str = 'auto', javbus_lang: Optional[str] = None,
-    surface_access_errors: bool = False,
+    surface_access_errors: bool = False, *, skip_format_check: bool = False,
+    first_hit: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """
     搜尋 JAV 資訊（向後相容函數）
@@ -291,12 +293,20 @@ def search_jav(
     if not validate_source_id(source):
         logger.warning(f"[Search] 未知來源: {source}")
         return None
+    skip_format_check = bool(skip_format_check) and source == 'javdb'
 
     # javbus_lang 校驗 + config fallback（auto 與 explicit javbus 共用）
     if javbus_lang is not None and javbus_lang not in VALID_JAVBUS_LANGS:
         logger.warning("[Search] 無效的 javbus_lang: %s，fallback 到 config", javbus_lang)
         javbus_lang = None
     _javbus_lang = javbus_lang if javbus_lang is not None else get_javbus_lang()
+
+    # First-hit enrichment: for an exact number, stop after the first source
+    # returns a usable exact/uncensored card instead of asking every source.
+    if first_hit and source == "auto" and javbus_lang is None:
+        _fh = _try_first_hit(number)
+        if _fh is not _FH_SKIP:
+            return _fh
 
     # 來源 id → scraper factory（無參數 callable，回 scraper instance list）。
     # DMM 與 JavBus 是攜帶 closure 參數的特例：
@@ -307,7 +317,7 @@ def search_jav(
         'dmm': lambda: [DMMScraper()],
         'javbus': lambda: [JavBusScraper(lang=_javbus_lang)],
         'jav321': lambda: [JAV321Scraper()],
-        'javdb': lambda: [JavDBScraper()],
+        'javdb': lambda: [JavDBScraper(skip_format_check=skip_format_check)],
         'd2pass': lambda: [D2PassScraper()],
         'heyzo': lambda: [HEYZOScraper()],
         'fc2': lambda: [FC2OfficialScraper()],
@@ -443,12 +453,13 @@ def search_jav(
 
 def search_jav_single_source(
     number: str, source: str, javbus_lang: Optional[str] = None,
-    surface_access_errors: bool = False,
+    surface_access_errors: bool = False, *, skip_format_check: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """指定單一來源搜尋"""
     return search_jav(
         number, source=source, javbus_lang=javbus_lang,
         surface_access_errors=surface_access_errors,
+        skip_format_check=skip_format_check,
     )
 
 
@@ -657,6 +668,25 @@ def _search_maker_intent(query, maker_key, limit, offset, status_callback, resul
     if meta is not None:
         meta['has_more'] = result.has_more
     return result.results
+
+
+_FH_SKIP = object()
+
+
+def _try_first_hit(number: str):
+    """Return a usable first search card, ``None`` when not found, or ``_FH_SKIP``."""
+    uncensored_mode = is_uncensored_mode_effective(load_config())
+    if not (is_number_format(number) or uncensored_mode):
+        return _FH_SKIP
+    results = smart_search(number, uncensored_mode=uncensored_mode)
+    if not results:
+        return None
+    card = results[0]
+    mode = card.pop("_mode", None)
+    if mode not in ("exact", "uncensored"):
+        return _FH_SKIP
+    card.setdefault("original_title", card.get("title", ""))
+    return card
 
 
 def smart_search(query: str, limit: int = 20, offset: int = 0, status_callback: Optional[Callable[[str, str], None]] = None, uncensored_mode: bool = False, result_callback: Optional[Callable[[int, Any], None]] = None, discovery_only: bool = False, resolve_makers: bool = False, *, meta: Optional[dict] = None, cursor: Optional[str] = None) -> List[Dict[str, Any]]:  # noqa: C901 — 無碼/有碼兩條搜尋鏈並存於同一函式；CD-65-7 已明文交代無碼模式模糊搜尋「預期回空」的設計語意，拆分會把這段語意說明從呼叫點剝離、增加誤讀風險

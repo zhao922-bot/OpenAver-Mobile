@@ -13,6 +13,13 @@ export function didEnrichSomething(event) {
         || (event.fields_filled?.length > 0) || event.extrafanart_written > 0);
 }
 
+const SEC_NO_NFO = 1;
+const SEC_COVER_ONLY = 10;
+
+export function estimateEnrichMinutes(noNfoCount, coverOnlyCount) {
+    return Math.ceil((noNfoCount * SEC_NO_NFO + coverOnlyCount * SEC_COVER_ONLY) / 60);
+}
+
 export function stateBatch() {
     return {
         // ===== T10: Missing NFO/Cover Enrich =====
@@ -85,6 +92,12 @@ export function stateBatch() {
         },
         get missingCoverDrilldownPayload() {
             return { title: window.t('scanner.stats.missing_cover_prefix'), items: this.missingCoverDrilldownItems, footnote: window.t('scanner.stats.missing_list_footnote') };
+        },
+        get missingEstimateMinutes() {
+            return estimateEnrichMinutes(
+                this.missingBothCount + this.missingNfoCount,
+                this.missingCoverCount,
+            );
         },
 
         get titleBackfillDrilldownItems() {

@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/openaver_boot.py
-@@ -0,0 +1,178 @@
+@@ -0,0 +1,181 @@
 +"""OpenAver Android embedded server bootstrap."""
 +
 +from __future__ import annotations
@@ -100,6 +100,7 @@
 +    data_dir: str,
 +    native_lib_path: str = "",
 +    cascade_path: str = "",
++    mobile_version: str = "",
 +) -> int:
 +    global _server, _thread, _server_socket, _server_port, _server_error
 +    if _server is not None and _thread is not None and _thread.is_alive():
@@ -112,6 +113,8 @@
 +    os.environ["OPENAVER_DATA_DIR"] = data_dir
 +    os.environ["HOME"] = runtime_home
 +    os.environ["OPENAVER_MOBILE"] = "1"
++    if mobile_version:
++        os.environ["OPENAVER_MOBILE_VERSION"] = mobile_version
 +    if native_lib_path:
 +        os.environ["OPENAVER_NATIVE_LIB"] = native_lib_path
 +    if cascade_path:
@@ -754,7 +757,15 @@
  
  
  @app.get("/settings")
-@@ -953,15 +772,7 @@
+@@ -923,6 +742,7 @@
+     """使用說明頁面"""
+     context = get_common_context(request)
+     context["page"] = "help"
++    context["version"] = os.environ.get("OPENAVER_MOBILE_VERSION", VERSION)
+     # 81b-T5 + Codex P2：僅桌面主機（loopback）覆寫成可分享 LAN URL；
+     # 遠端裝置走自身 request.base_url（已是可分享位址，nas.local / 反向代理皆保留）。
+     lan_ip = context.get("lan_ip")
+@@ -953,15 +773,7 @@
      if show_agent_auth:
          context["agent_token"] = snap.agent_token
  
@@ -771,7 +782,7 @@
  
  
  # ============ API 路由（稍後移到 routers/）============
-@@ -976,113 +787,3 @@
+@@ -976,113 +788,3 @@
  async def get_version():
      """取得應用程式版本"""
      return {"success": True, "version": VERSION}
