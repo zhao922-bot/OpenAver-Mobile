@@ -62,7 +62,13 @@ REQUEST_DELAY = 0.3
 _PREFIX_LADDER_KINDS = frozenset({Kind.CODE, Kind.KEYWORD, Kind.ACTOR, Kind.SERIES, Kind.DIRECTOR, Kind.LABEL})
 
 # JavBus 語系對應表（zh-CN 無簡中版，沿用繁中 zh-tw）
-_LOCALE_TO_JAVBUS = {"zh-TW": "zh-tw", "zh-CN": "zh-tw", "ja": "ja", "en": "en"}
+_LOCALE_TO_JAVBUS = {
+    "zh-TW": "zh-tw",
+    "zh-CN": "zh-tw",
+    "ja": "ja",
+    "en": "en",
+    "ko": "ja",
+}
 
 
 def get_javbus_lang() -> str:

@@ -31,6 +31,13 @@ def test_english_target_rejects_cjk_and_accepts_latin():
     assert title_matches_target_language("繁體中文標題", "en") is False
 
 
+def test_korean_target_requires_hangul():
+    assert title_matches_target_language("한국어 제목입니다", "ko") is True
+    assert title_matches_target_language("日本語のタイトル", "ko") is False
+    assert title_matches_target_language("简体中文标题", "ko") is False
+    assert title_matches_target_language("English title", "ko") is False
+
+
 def test_translation_need_follows_the_active_locale():
     assert title_needs_translation("これは日本語です", "zh-CN") is True
     assert title_needs_translation("这是简体标题", "zh-CN") is False
@@ -39,7 +46,7 @@ def test_translation_need_follows_the_active_locale():
     assert title_needs_translation("これは日本語です", "en") is True
 
 
-def test_all_four_locales_use_the_same_target_language_policy():
+def test_all_five_locales_use_the_same_target_language_policy():
     cases = {
         "zh-CN": {
             "这是简体标题": False,
@@ -63,6 +70,13 @@ def test_all_four_locales_use_the_same_target_language_policy():
             "这是简体标题": True,
             "這是繁體標題": True,
             "これは日本語です": False,
+            "English title": True,
+        },
+        "ko": {
+            "这是简体标题": True,
+            "這是繁體標題": True,
+            "これは日本語です": True,
+            "한국어 제목입니다": False,
             "English title": True,
         },
     }
@@ -149,7 +163,7 @@ def test_translation_result_validation_rejects_policy_refusals():
 
 
 def test_cloud_prompts_require_a_stable_refusal_marker():
-    for locale in ("zh-CN", "zh-TW", "en", "ja"):
+    for locale in ("zh-CN", "zh-TW", "en", "ja", "ko"):
         prompt = translate_service.build_cloud_translate_prompt(
             "日本語のタイトル",
             locale,
@@ -164,6 +178,7 @@ def test_prompt_shell_and_labels_follow_the_target_language():
         "zh-TW": ("原文：", "翻譯要求：", "範例：", "請翻譯："),
         "en": ("Source title:", "Translation requirements:", "Example:", "Translate:"),
         "ja": ("原文：", "翻訳要件：", "例：", "翻訳："),
+        "ko": ("원문:", "번역 요구 사항:", "예:", "번역:"),
     }
 
     for locale, labels in expected.items():

@@ -614,7 +614,8 @@
     <!-- 頂部導航列（僅小螢幕顯示）-->
     <nav class="navbar bg-base-200 lg:hidden fixed top-0 left-0 right-0 z-50 h-14 top-navbar fluent-acrylic border-b border-base-300" x-show="!mobileMenuOpen">
         <div class="navbar-start">
-            <button class="btn btn-ghost btn-square" type="button" @click="mobileMenuOpen = true">
+            <button id="mobileMenuButton" class="btn btn-ghost btn-square" type="button"
+                    @click="mobileMenuOpen = true">
                 <i class="bi bi-list text-2xl"></i>
             </button>
         </div>
@@ -903,6 +904,7 @@
     {% endif %}
     {% if page == 'scanner' %}
     <script type="module" src="/static/js/components/number-drilldown.js"></script>
+    <script type="module" src="/static/js/components/tutorial.js"></script>
     {% endif %}
     {% if page == 'search' %}
     <!-- Auto Organize Panel — 搜尋頁自動整理 popover（TASK-144-T7） -->

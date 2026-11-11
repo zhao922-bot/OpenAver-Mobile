@@ -83,7 +83,7 @@ public final class MainActivity extends Activity {
     private static final String PREF_UI_LOCALE = "ui_locale";
     private static final String DEFAULT_UI_LOCALE = "zh-CN";
     private static final String[] SUPPORTED_UI_LOCALES = {
-            "zh-CN", "zh-TW", "ja", "en"
+            "zh-CN", "zh-TW", "ja", "en", "ko"
     };
 
     static {

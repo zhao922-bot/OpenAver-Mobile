@@ -1,5 +1,13 @@
 import { ChipEditor } from '@/settings/chip-editor.js';
 import { normalizeFolderLayers, buildNamingPreview, buildNfoTitlePreview } from '@/shared/naming-preview.js';
+import {
+    currentSettingsHash,
+    isSettingsTab,
+    readStoredSettingsTab,
+    resolveSettingsTab,
+    settingsTabOfElement,
+    writeStoredSettingsTab,
+} from '@/settings/settings-tabs.js';
 
 // 同時啟用來源數上限（前端鏡像；後端真理來源 core/source_config.py:MAX_ENABLED_SOURCES）
 const MAX_ENABLED_SOURCES = 10;
@@ -73,6 +81,10 @@ export function stateConfig() {
 
         // ===== i18n State =====
         locale: (window.__locale || 'zh-CN'),
+        settingsTab: resolveSettingsTab({
+            hash: currentSettingsHash(),
+            stored: readStoredSettingsTab(),
+        }),
 
         // ===== 全域模式切換破壞性 confirm State (90c-T5) =====
         switchModeConfirmOpen: false,
@@ -334,6 +346,7 @@ export function stateConfig() {
 
         // ===== Lifecycle =====
         init() {
+            this._initSettingsTabs();
             // 61b-5: 頁面級 GSAP context（tab 切換 fade 用）。
             // 缺 OpenAver.motion / gsap 時跳過，動畫退化為直接顯示（x-show 本就會顯示）。
             if (window.OpenAver && window.OpenAver.motion) {
@@ -378,6 +391,67 @@ export function stateConfig() {
         },
 
         // ===== Methods =====
+        _initSettingsTabs() {
+            writeStoredSettingsTab(this.settingsTab);
+            this.$nextTick(() => this._scrollToSettingsHashTarget());
+        },
+
+        selectSettingsTab(name) {
+            if (!isSettingsTab(name)) return;
+            this.settingsTab = name;
+            writeStoredSettingsTab(name);
+            try {
+                history.replaceState(history.state, '', `#${name}`);
+            } catch {
+                // History may be unavailable in embedded test pages.
+            }
+            this.$nextTick(() => this._scrollToSettingsHashTarget());
+        },
+
+        syncSettingsFromHash() {
+            const next = resolveSettingsTab({
+                hash: currentSettingsHash(),
+                stored: this.settingsTab,
+            });
+            if (next !== this.settingsTab) {
+                this.settingsTab = next;
+                writeStoredSettingsTab(next);
+            }
+            this.$nextTick(() => this._scrollToSettingsHashTarget());
+        },
+
+        revealInvalidSettingsTab(event) {
+            const panel = settingsTabOfElement(event.target);
+            if (!isSettingsTab(panel) || panel === this.settingsTab) return;
+            this.selectSettingsTab(panel);
+            this.$nextTick(() => this._whenSettingsRendered(event.target, () => {
+                event.target.focus();
+                event.target.reportValidity();
+            }));
+        },
+
+        _whenSettingsRendered(element, callback, frames = 30) {
+            if (!element || element.getClientRects().length > 0 || frames <= 0) {
+                callback();
+                return;
+            }
+            requestAnimationFrame(
+                () => this._whenSettingsRendered(element, callback, frames - 1)
+            );
+        },
+
+        _scrollToSettingsHashTarget() {
+            const id = String(currentSettingsHash() || '').replace(/^#/, '');
+            if (!id || isSettingsTab(id) || id.startsWith('sec-')) return;
+            const element = document.getElementById(id);
+            if (element) {
+                this._whenSettingsRendered(
+                    element,
+                    () => element.scrollIntoView({ block: 'center' })
+                );
+            }
+        },
+
         setFontSize(size) {
             this.form.fontSize = size;
             const root = window.Alpine && typeof window.Alpine.$data === 'function'
@@ -387,7 +461,7 @@ export function stateConfig() {
         },
 
         cycleLocale() {
-            const order = ['zh-TW', 'zh-CN', 'ja', 'en'];
+            const order = ['zh-TW', 'zh-CN', 'ja', 'en', 'ko'];
             const idx = order.indexOf(this.form.locale || this.locale);
             const next = order[(idx + 1) % order.length];
             this.form.locale = next;

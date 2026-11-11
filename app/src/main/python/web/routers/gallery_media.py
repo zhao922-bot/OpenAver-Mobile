@@ -20,6 +20,7 @@ from fastapi.responses import Response, FileResponse, HTMLResponse, StreamingRes
 from core.path_utils import to_file_uri, is_path_under_dir, uri_to_fs_path, uri_to_local_fs_path
 from core.config import load_config, iter_gallery_sources, get_gallery_source_paths
 from core.database import get_db_path, VideoRepository
+from core.i18n import SUPPORTED_LOCALES
 from core.multipart_group import resolve_group
 from core.video_extensions import get_proxy_extensions
 from core.readonly_paths import resolve_output_root
@@ -365,7 +366,7 @@ def video_player(
 
     config = load_config()
     locale = (config.get('general') or {}).get('locale') or ''
-    allowed_langs = {"zh-TW", "zh-CN", "ja", "en"}
+    allowed_langs = set(SUPPORTED_LOCALES)
     # 本端點唯一的 locale 正規化點，lang 屬性與提示文字都吃它
     html_lang = locale if isinstance(locale, str) and locale in allowed_langs else "zh-CN"
     html_lang_safe = html_escape(html_lang)

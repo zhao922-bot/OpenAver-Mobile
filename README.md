@@ -3,9 +3,9 @@
 [![Build APK](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml/badge.svg)](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml)
 
 OpenAver Mobile 是 [OpenAver](https://github.com/slive777/OpenAver) 的非官方
-Android 移植版。当前移动端新版本线为 `v0.18.17-android-r2`，已对齐上游
+Android 移植版。当前移动端新版本线为 `v0.18.17-android-r3`，已对齐上游
 `v0.18.17` 的补完性能、批次搜索、来源修复和片库浏览体验；尚未移植的上游
-功能会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)在后续 `r3`～`r6` 完成。
+功能会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)在后续 `r4`～`r6` 完成。
 内嵌代码基线仍为上游 `v0.17.18` 加本仓库补丁。
 
 App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，不需要
@@ -15,13 +15,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r2-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r3-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.18.17-android-r2-arm64-v8a.apk`
+- 文件名：`openaver-v0.18.17-android-r3-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.18.17-r2`（versionCode `18002`）
+- 版本：`0.18.17-r3`（versionCode `18003`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -58,7 +58,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - JavDB `curl_cffi` 缺失时的网页 `requests` fallback
 - AVBase 女优资料 `requests` fallback 和 UTF-8 修复
 - 自定义来源 `fetch: cf` 的普通浏览器请求兼容模式
-- 简体中文、繁体中文、日文和英文界面；首次启动默认简体中文
+- 简体中文、繁体中文、日文、英文和韩文界面；首次启动默认简体中文
 - Android 10 / API 29 上的安装、首次界面、存储授权、本地服务启动和视频扫描
 - Android 10 外置 SD 卡目录授权桥接，支持完整 NFO、封面、poster、fanart、
   标题翻译和补抓剧照写回
@@ -288,6 +288,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   排序；Graphis 每轮优先返回两张照片，换图时排除本轮已看过的候选
 - v0.18.17-r2：文件名含 LTX 时自动补充“LTX”和“無碼破解”标签；灯箱用户标签
   可直接点击筛选，纯数字搜索后点击演员、片商、标签等资料会自动清空数字
+
+- v0.18.17-r3：新增完整韩文 Web UI 和 Android 原生界面资源，五种语言共用同一套
+  设置、说明、引导、扫描、翻译、错误提示和通知文案
+- v0.18.17-r3：设置页整理为来源、命名、片库、AI 与服务、系统五个分页，仍使用单一
+  表单，切页不会丢失未保存内容；直接访问或刷新可恢复当前分页
+- v0.18.17-r3：手机说明页整理为片库、整理与改名、排错与手动操作三个页签，并兼容
+  旧版说明页锚点；新手引导缩短为四步，手机端直接指向右侧菜单
 
 ## 限制
 

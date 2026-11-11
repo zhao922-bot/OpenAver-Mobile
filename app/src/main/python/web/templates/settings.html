@@ -8,7 +8,10 @@
 {% endblock %}
 
 {% block content %}
-<div id="settings-components" class="page-layer" x-data="settings" data-focal-auto-enabled="{{ 'true' if focal_auto_enabled else 'false' }}">
+<div id="settings-components" class="page-layer" x-data="settings"
+     data-focal-auto-enabled="{{ 'true' if focal_auto_enabled else 'false' }}"
+     @hashchange.window="syncSettingsFromHash()"
+     @invalid.capture="revealInvalidSettingsTab($event)">
     <div class="settings-header">
         <div class="settings-header-left">
             <h4 class="mb-0">
@@ -34,7 +37,7 @@
                 <div class="settings-locale-toggle">
                     <button class="locale-toggle-btn"
                             type="button"
-                            x-text="{'zh-TW':'繁','zh-CN':'简','ja':'あ','en':'EN'}[locale] || '简'" {# cjk-exempt(繁|简|あ|简): 語言切換器原生字形（繁/简/あ/EN），全球化 UI 慣例不隨介面語言翻譯 — TASK-103-T7 §F.2 #}
+                            x-text="{'zh-TW':'繁','zh-CN':'简','ja':'あ','en':'EN','ko':'한'}[locale] || '简'" {# cjk-exempt(繁|简|あ|한): 語言切換器原生字形，全球化 UI 慣例不隨介面語言翻譯 — TASK-103-T7 §F.2 #}
                             @click="cycleLocale()"
                             :title="window.t('settings.header.locale_prefix') + ': ' + locale">
                     </button>
@@ -109,8 +112,53 @@
           x-show="!_configLoading && !_configError"
           x-cloak>
 
+        <div class="settings-tabs" role="tablist" aria-label="{{ t('settings.page_title') }}">
+            <button type="button" role="tab" id="settingsTabSources"
+                    class="settings-tab" :class="{ 'is-active': settingsTab === 'sources' }"
+                    :aria-selected="settingsTab === 'sources' ? 'true' : 'false'"
+                    :tabindex="settingsTab === 'sources' ? 0 : -1"
+                    @click="selectSettingsTab('sources')">
+                <i class="bi bi-collection" aria-hidden="true"></i>
+                <span>{{ t('settings.tabs.sources') }}</span>
+            </button>
+            <button type="button" role="tab" id="settingsTabNaming"
+                    class="settings-tab" :class="{ 'is-active': settingsTab === 'naming' }"
+                    :aria-selected="settingsTab === 'naming' ? 'true' : 'false'"
+                    :tabindex="settingsTab === 'naming' ? 0 : -1"
+                    @click="selectSettingsTab('naming')">
+                <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                <span>{{ t('settings.tabs.naming') }}</span>
+            </button>
+            <button type="button" role="tab" id="settingsTabGallery"
+                    class="settings-tab" :class="{ 'is-active': settingsTab === 'gallery' }"
+                    :aria-selected="settingsTab === 'gallery' ? 'true' : 'false'"
+                    :tabindex="settingsTab === 'gallery' ? 0 : -1"
+                    @click="selectSettingsTab('gallery')">
+                <i class="bi bi-grid-3x3-gap" aria-hidden="true"></i>
+                <span>{{ t('settings.tabs.display') }}</span>
+            </button>
+            <button type="button" role="tab" id="settingsTabAi"
+                    class="settings-tab" :class="{ 'is-active': settingsTab === 'ai' }"
+                    :aria-selected="settingsTab === 'ai' ? 'true' : 'false'"
+                    :tabindex="settingsTab === 'ai' ? 0 : -1"
+                    @click="selectSettingsTab('ai')">
+                <i class="bi bi-stars" aria-hidden="true"></i>
+                <span>{{ t('settings.tabs.translate') }}</span>
+            </button>
+            <button type="button" role="tab" id="settingsTabSystem"
+                    class="settings-tab" :class="{ 'is-active': settingsTab === 'system' }"
+                    :aria-selected="settingsTab === 'system' ? 'true' : 'false'"
+                    :tabindex="settingsTab === 'system' ? 0 : -1"
+                    @click="selectSettingsTab('system')">
+                <i class="bi bi-sliders" aria-hidden="true"></i>
+                <span>{{ t('settings.section.system') }}</span>
+            </button>
+        </div>
+
         <!-- ── quick-toggle 列（CD-64-B8）：下載劇照 + 進階搜尋，header 下 section 上 ── -->
-        <div class="settings-quick-toggle-row">
+        <div class="settings-quick-toggle-row"
+             data-settings-panel="naming"
+             x-show="settingsTab === 'naming'">
 
             <!-- 下載劇照（extrafanart） -->
             <div class="settings-form-group popover-anchor" x-data="helpPopover">
@@ -158,10 +206,13 @@
         </div><!-- /settings-quick-toggle-row -->
 
         <!-- ── Section 1: 搜尋與刮削（兩卡同包） ── -->
-        <section id="sec-search" class="settings-section">
+        <section id="sec-search" class="settings-section"
+                 x-show="['sources', 'naming', 'ai'].includes(settingsTab)">
 
           <!-- Card ①：搜尋來源 -->
-          <div class="card mb-4">
+          <div class="card mb-4"
+               data-settings-panel="sources"
+               x-show="settingsTab === 'sources'">
             <div class="settings-card-header"><i class="bi bi-collection"></i> {{ t('settings.tabs.sources') }}</div>
             <div class="card-body">
 
@@ -544,11 +595,18 @@
 
           <!-- Card ②：刮削與翻譯 -->
           <div class="card mb-4">
-            <div class="settings-card-header"><i class="bi bi-gear"></i> {{ t('settings.tabs.scraping') }}</div>
+            <div class="settings-card-header">
+                <i class="bi" :class="settingsTab === 'ai' ? 'bi-translate' : 'bi-gear'" aria-hidden="true"></i>
+                <span x-text="settingsTab === 'ai'
+                    ? window.t('settings.tabs.translate')
+                    : window.t('settings.tabs.naming')"></span>
+            </div>
             <div class="card-body">
 
                     <!-- 我的最愛資料夾（scanner dropdown + favoriteScannerLink） -->
-                    <div class="settings-form-row">
+                    <div class="settings-form-row"
+                         data-settings-panel="naming"
+                         x-show="settingsTab === 'naming'">
                         <label class="row-label">
                             {{ t('settings.search.favorite_folder_label') }}
                             <small class="settings-hint">{{ t('settings.search.favorite_folder_hint') }}</small>
@@ -600,6 +658,7 @@
                         </div>
                     </div>
 
+                    <div data-settings-panel="ai" x-show="settingsTab === 'ai'">
                     <!-- 翻譯三引擎（Ollama/Gemini/OpenAI-compat 完整欄位） -->
                     <div class="settings-form-group">
                         <label class="settings-label">
@@ -888,7 +947,9 @@
                             </div>
                         </div>
                     </div>
+                    </div><!-- /AI translation panel -->
 
+                    <div data-settings-panel="naming" x-show="settingsTab === 'naming'">
                     <!-- 外部媒體管理器模式（spec F1）— 沿用 .settings-sources-segmented 元件 -->
                     <div class="settings-form-row settings-form-row--external-manager">
                         <label class="row-label">{{ t('settings.scraper.external_manager_label') }}</label>
@@ -1191,6 +1252,7 @@
                         </div>
 
                     </div><!-- /collapsible-content scraperAdvanced -->
+                    </div><!-- /naming panel -->
 
             </div>
           </div>
@@ -1198,7 +1260,9 @@
         </section><!-- /sec-search -->
 
         <!-- ── Section 2: 列表生成 ── -->
-        <section id="sec-gallery" class="settings-section">
+        <section id="sec-gallery" class="settings-section"
+                 data-settings-panel="gallery"
+                 x-show="settingsTab === 'gallery'">
           <div class="card mb-4">
             <div class="settings-card-header"><i class="bi bi-list-ul"></i> {{ t('nav.scanner') }}</div>
             <div class="card-body">
@@ -1331,7 +1395,9 @@
         </section><!-- /sec-gallery -->
 
         <!-- ── Section 3: 系統設定 ── -->
-        <section id="sec-system" class="settings-section">
+        <section id="sec-system" class="settings-section"
+                 data-settings-panel="system"
+                 x-show="settingsTab === 'system'">
           <div class="card mb-4">
             <div class="settings-card-header"><i class="bi bi-sliders"></i> {{ t('settings.section.system') }}</div>
             <div class="card-body">

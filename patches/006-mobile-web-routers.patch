@@ -62,7 +62,7 @@
  from core.translate_service import OllamaTranslateService
  from core.cloud_translate import TranslateError
  from core.platform_info import is_synology
-+from core.i18n import get_config_locale, t as i18n_t
++from core.i18n import SUPPORTED_LOCALES, get_config_locale, t as i18n_t
  from core import cf_handoff
  from core.proxy_policy import cf_window_proxy_restart_needed, current_settings
  
@@ -229,7 +229,8 @@
                      return {"success": True, "lan_port": None}
  
          # locale 驗證在 mutate 前（保留既有順序：驗證 → 寫入 → translate reset）
-         if field == "locale" and request.value not in ("zh-TW", "zh-CN", "ja", "en"):
+-        if field == "locale" and request.value not in ("zh-TW", "zh-CN", "ja", "en"):
++        if field == "locale" and request.value not in SUPPORTED_LOCALES:
              logger.warning("嘗試設定不支援的語系: %s", request.value)
 -            return {"success": False, "error": "不支援的語系"}
 +            return {"success": False, "error": _config_text("locale_unsupported", response_locale)}
@@ -796,7 +797,15 @@
  from urllib.parse import quote, unquote
  
  from fastapi import APIRouter, Query, Request
-@@ -344,7 +344,10 @@
+@@ -20,6 +20,7 @@
+ from core.path_utils import to_file_uri, is_path_under_dir, uri_to_fs_path, uri_to_local_fs_path
+ from core.config import load_config, iter_gallery_sources, get_gallery_source_paths
+ from core.database import get_db_path, VideoRepository
++from core.i18n import SUPPORTED_LOCALES
+ from core.multipart_group import resolve_group
+ from core.video_extensions import get_proxy_extensions
+ from core.readonly_paths import resolve_output_root
+@@ -344,7 +345,10 @@
  
  
  @router.get("/player")
@@ -808,16 +817,19 @@
      """影片播放頁面 — 用 HTML5 <video> 標籤在新分頁播放"""
      from html import escape as html_escape
      from core.i18n import t as i18n_t
-@@ -364,7 +367,7 @@
+@@ -362,9 +366,9 @@
+ 
+     config = load_config()
      locale = (config.get('general') or {}).get('locale') or ''
-     allowed_langs = {"zh-TW", "zh-CN", "ja", "en"}
+-    allowed_langs = {"zh-TW", "zh-CN", "ja", "en"}
++    allowed_langs = set(SUPPORTED_LOCALES)
      # 本端點唯一的 locale 正規化點，lang 屬性與提示文字都吃它
 -    html_lang = locale if isinstance(locale, str) and locale in allowed_langs else "zh-TW"
 +    html_lang = locale if isinstance(locale, str) and locale in allowed_langs else "zh-CN"
      html_lang_safe = html_escape(html_lang)
      hint_text_network = html_escape(i18n_t('showcase.video.player_unavailable', locale=html_lang))
      hint_text_format = html_escape(i18n_t('showcase.video.player_unavailable_format', locale=html_lang))
-@@ -373,6 +376,7 @@
+@@ -373,6 +377,7 @@
      path_mappings = gallery_config.get('path_mappings', {})
  
      group = None
@@ -825,7 +837,7 @@
      try:
          db_path = get_db_path()
          if db_path.exists():
-@@ -380,31 +384,62 @@
+@@ -380,31 +385,62 @@
              v = repo.get_by_path(path)
              if v is not None:
                  group = resolve_group(repo, path, path_mappings, folder_source_uri=v.path)

@@ -2037,7 +2037,7 @@
  def resolve_nfo_cover_paths(file_path: str, path_mappings: dict = None, external_manager: str = "off") -> tuple:
 --- a/core/gallery_generator.py
 +++ b/core/gallery_generator.py
-@@ -14,11 +14,205 @@
+@@ -14,11 +14,252 @@
  """
  
  import html
@@ -2192,6 +2192,53 @@
 +        "previous_page": "← 前へ",
 +        "next_page": "次へ →",
 +    },
++    "ko": {
++        "search_placeholder": "영상 검색...",
++        "clear": "지우기",
++        "search": "검색",
++        "hotkeys": "단축키: A 보기 전환 | S 정보 표시/숨기기 | ← / → 페이지 | ESC 닫기",
++        "load_more": "더 보기",
++        "search_prefix": "검색",
++        "found": "찾음",
++        "total_prefix": "전체",
++        "video_unit": "개 영상",
++        "table_title": "제목",
++        "table_actor": "배우",
++        "table_number": "품번",
++        "table_maker": "제작사",
++        "table_date": "날짜",
++        "table_genre": "장르",
++        "table_size": "크기",
++        "open": "열기",
++        "copy": "복사",
++        "copied": "복사됨: ",
++        "actor_label": "배우: ",
++        "maker_label": "제작사: ",
++        "date_label": "날짜: ",
++        "mode_detail": "상세",
++        "mode_image": "이미지",
++        "mode_text": "텍스트",
++        "mode_suffix": "모드",
++        "sort_prefix": "정렬: ",
++        "sort_path": "경로",
++        "sort_title": "제목",
++        "sort_actor": "배우",
++        "sort_num": "품번",
++        "sort_maker": "제작사",
++        "sort_date": "날짜",
++        "sort_size": "크기",
++        "sort_mdate": "수정일",
++        "sort_random": "무작위",
++        "ascending": "오름차순",
++        "descending": "내림차순",
++        "info": "정보",
++        "per_page": "페이지당 ",
++        "all": "전체",
++        "theme_light": "라이트 모드로 전환",
++        "theme_dark": "다크 모드로 전환",
++        "previous_page": "← 이전",
++        "next_page": "다음 →",
++    },
 +    "en": {
 +        "search_placeholder": "Search videos...",
 +        "clear": "Clear",
@@ -2243,7 +2290,7 @@
  
  
  class HTMLGenerator:
-@@ -41,7 +235,8 @@
+@@ -41,7 +282,8 @@
                   items_per_page: int = 90,
                   theme: str = "light",
                   click_action: str = "play",
@@ -2253,7 +2300,7 @@
          """
          生成 HTML 檔案
          
-@@ -70,12 +265,14 @@
+@@ -70,12 +312,14 @@
                  f'maker:"{self.escape_js_string(v.maker)}", '
                  f'date:"{self.escape_js_string(v.date)}", '
                  f'genre:"{self.escape_js_string(v.genre)}", '
@@ -2268,7 +2315,7 @@
          html = self._generate_html(
              title=title,
              js_videos=js_videos,
-@@ -85,7 +282,8 @@
+@@ -85,7 +329,8 @@
              user_items=items_per_page,
              theme=theme,
              click_action=click_action,
@@ -2278,7 +2325,7 @@
          )
  
          # 寫入檔案
-@@ -97,13 +295,16 @@
+@@ -97,13 +342,16 @@
      def _generate_html(self, title: str, js_videos: List[str],
                         user_mode: int, user_order: int,
                         user_sort: str, user_items: int, theme: str,
@@ -2297,7 +2344,7 @@
  <head>
  \t<meta charset="utf-8">
  \t<meta name="viewport" content="width=device-width, initial-scale=1">
-@@ -122,12 +323,12 @@
+@@ -122,12 +370,12 @@
  \t\t\t<div class="spotlight-search">
  \t\t\t\t<i class="bi bi-search search-icon-left"></i>
  \t\t\t\t<form name="form_search" onsubmit="goToLinkWithParameters(document.form_search.sw.value, 1); return false;">
@@ -2313,7 +2360,7 @@
  \t\t\t\t\t\t\t<i class="bi bi-arrow-right"></i>
  \t\t\t\t\t\t</button>
  \t\t\t\t\t</div>
-@@ -149,7 +350,7 @@
+@@ -149,7 +397,7 @@
  \t<!-- Footer -->
  \t<footer class="footer">
  \t\t<div class="pagination" id="pagebar"></div>
@@ -2322,7 +2369,7 @@
  \t</footer>
  
  \t<!-- Lightbox Modal -->
-@@ -167,7 +368,7 @@
+@@ -167,7 +415,7 @@
  \t<!-- Load More Section (postMessage mode only) -->
  \t<div id="loadMoreSection" class="load-more-section" style="display: none;">
  \t\t<button onclick="loadMore()" class="load-more-btn">
@@ -2331,7 +2378,7 @@
  \t\t</button>
  \t</div>
  
-@@ -181,6 +382,7 @@
+@@ -181,6 +429,7 @@
  \t\tvar default_theme = "{theme}";
  \t\tvar click_action = "{click_action}";
  \t\tvar has_more = {str(has_more).lower()};
@@ -2339,7 +2386,7 @@
  {self._get_javascript()}
  \t\t// Load More function (postMessage mode)
  \t\tfunction loadMore() {{
-@@ -345,9 +547,9 @@
+@@ -345,9 +594,9 @@
  
  \t\t\t// 顯示總數與搜尋狀態
  \t\t\tif (search_words) {
@@ -2351,7 +2398,7 @@
  \t\t\t}
  
  \t\t\t// 渲染 Header 控制按鈕
-@@ -368,7 +570,7 @@
+@@ -368,7 +617,7 @@
  \t\t\tif (current_mode == 0) {
  \t\t\t\t// 詳細模式
  \t\t\t\thtml = '<table class="detail-table"><thead><tr>';
@@ -2360,7 +2407,7 @@
  \t\t\t\thtml += '</tr></thead><tbody>';
  \t\t\t\tfor (var i = start; i < end; i++) {
  \t\t\t\t\tvar v = filtered_videos[i];
-@@ -379,7 +581,7 @@
+@@ -379,7 +628,7 @@
  \t\t\t\t\thtml += '<td>' + escapeHtml(v.num) + '</td>';
  \t\t\t\t\thtml += '<td>' + formatMaker(v.maker) + '</td>';
  \t\t\t\t\thtml += '<td>' + escapeHtml(v.date) + '</td>';
@@ -2369,7 +2416,7 @@
  \t\t\t\t\thtml += '<td>' + formatSize(v.size) + '</td>';
  \t\t\t\t\thtml += '</tr>';
  \t\t\t\t}
-@@ -389,15 +591,15 @@
+@@ -389,15 +638,15 @@
  \t\t\t\thtml = '<div class="grid">';
  \t\t\t\tfor (var i = start; i < end; i++) {
  \t\t\t\t\tvar v = filtered_videos[i];
@@ -2388,7 +2435,7 @@
  \t\t\t\t\t\thtml += '</div>';
  \t\t\t\t\t\thtml += '</div>';
  \t\t\t\t\t// Footer - 預設：番號+女優，Hover：片名
-@@ -417,12 +619,12 @@
+@@ -417,12 +666,12 @@
  \t\t\t\t\t\tif (info_visible) {
  \t\t\t\t\t\t\thtml += '<div class="card-info">';
  \t\t\t\t\t\t\thtml += '<div class="info-title">' + escapeHtml(stripNumPrefix(v.title)) + '</div>';
@@ -2405,7 +2452,7 @@
  \t\t\t\t\t\t\thtml += '</div>';
  \t\t\t\t\t\t}
  \t\t\t\t\t\thtml += '</div>';
-@@ -452,18 +654,18 @@
+@@ -452,18 +701,18 @@
  \t\tfunction renderControls() {
  \t\t\tvar html = '';
  \t\t\tvar modeIcons = ['☰', '▦', '≡'];
@@ -2428,7 +2475,7 @@
  \t\t\thtml += '<div class="ctrl-dropdown-menu">';
  \t\t\tfor (var i = 0; i < sorts.length; i++) {
  \t\t\t\tvar s = sorts[i];
-@@ -473,7 +675,7 @@
+@@ -473,7 +722,7 @@
  
  \t\t\t// 顯示模式 (下拉選單)
  \t\t\thtml += '<div class="ctrl-dropdown">';
@@ -2437,7 +2484,7 @@
  \t\t\thtml += '<div class="ctrl-dropdown-menu">';
  \t\t\tfor (var i = 0; i < 3; i++) {
  \t\t\t\thtml += '<a href="javascript:void(0);" onclick="switchMode(' + i + ')"' + (current_mode==i?' class="active"':'') + '>' + modeIcons[i] + ' ' + modeNames[i] + '</a>';
-@@ -482,21 +684,21 @@
+@@ -482,21 +731,21 @@
  
  \t\t\t// 影片資訊 (圖片模式)
  \t\t\tif (current_mode == 1) {
@@ -2463,7 +2510,7 @@
  \t\t\thtml += current_theme == 'dark' ? '☼' : '☾';
  \t\t\thtml += '</button>';
  
-@@ -507,7 +709,7 @@
+@@ -507,7 +756,7 @@
  \t\t\tif (total_pages <= 1) return '';
  \t\t\tvar html = '';
  \t\t\tif (current_page > 1) {
@@ -2472,7 +2519,7 @@
  \t\t\t}
  \t\t\thtml += '<select onchange="goPage(this.value)">';
  \t\t\tfor (var i = 1; i <= total_pages; i++) {
-@@ -515,7 +717,7 @@
+@@ -515,7 +764,7 @@
  \t\t\t}
  \t\t\thtml += '</select>';
  \t\t\tif (current_page < total_pages) {
@@ -2481,7 +2528,7 @@
  \t\t\t}
  \t\t\treturn html;
  \t\t}
-@@ -615,10 +817,10 @@
+@@ -615,10 +864,10 @@
  \t\t\tvar lastSlash = path.lastIndexOf('/');
  \t\t\tif (lastSlash < 0) lastSlash = path.lastIndexOf('\\\\');
  \t\t\tvar folder = lastSlash >= 0 ? path.substring(0, lastSlash) : path;
@@ -2494,7 +2541,7 @@
  \t\t\t});
  \t\t}
  
-@@ -627,6 +829,37 @@
+@@ -627,6 +876,37 @@
  \t\t\ttoast.textContent = msg;
  \t\t\ttoast.classList.add('show');
  \t\t\tsetTimeout(function() { toast.classList.remove('show'); }, 2500);
@@ -2532,7 +2579,7 @@
  \t\t}
  
  \t\t// Lightbox
-@@ -642,7 +875,7 @@
+@@ -642,7 +922,7 @@
  \t\t\tvar lightboxInfo = document.getElementById('lightbox-info');
  \t\t\t
  \t\t\tif (v.img) {
@@ -2541,7 +2588,7 @@
  \t\t\t\tlightboxImg.style.display = 'block';
  \t\t\t} else {
  \t\t\t\tlightboxImg.style.display = 'none';
-@@ -656,11 +889,12 @@
+@@ -656,11 +936,12 @@
  \t\t\tif (v.maker) html += '<span>' + formatMaker(v.maker) + '</span>';
  \t\t\tif (v.date) html += '<span>' + escapeHtml(v.date) + '</span>';
  \t\t\thtml += '</div>';
@@ -7751,7 +7798,7 @@
              logger.warning("thumbnail generate failed: cover=%s err=%s", cover_fs_path, e)
 --- /dev/null
 +++ b/core/title_language.py
-@@ -0,0 +1,249 @@
+@@ -0,0 +1,282 @@
 +"""Target-language checks for library title translation."""
 +
 +from __future__ import annotations
@@ -7772,7 +7819,7 @@
 +    r"(?:の|を|は|が|に|で|と|へ|から|まで|より|です|ます|して|する|した|しない|される)"
 +)
 +_TRANSLATION_LABEL_RE = re.compile(
-+    r"^(?:译文|譯文|翻译|翻譯|翻訳|translation|output)\s*[:：]\s*",
++    r"^(?:译文|譯文|翻译|翻譯|翻訳|번역|translation|output)\s*[:：]\s*",
 +    re.IGNORECASE,
 +)
 +_ZERO_WIDTH_RE = re.compile(r"[\ufeff\u200b\u200c\u200d]")
@@ -7794,6 +7841,17 @@
 +    return 0x3040 <= code <= 0x30FF or 0x31F0 <= code <= 0x31FF
 +
 +
++def _is_hangul(character: str) -> bool:
++    code = ord(character)
++    return (
++        0x1100 <= code <= 0x11FF
++        or 0x3130 <= code <= 0x318F
++        or 0xA960 <= code <= 0xA97F
++        or 0xAC00 <= code <= 0xD7AF
++        or 0xD7B0 <= code <= 0xD7FF
++    )
++
++
 +def _has_latin_letter(text: str) -> bool:
 +    return any(
 +        "A" <= character <= "Z"
@@ -7809,6 +7867,10 @@
 +
 +def _has_kana(text: str) -> bool:
 +    return any(_is_kana(character) for character in text)
++
++
++def _has_hangul(text: str) -> bool:
++    return any(_is_hangul(character) for character in text)
 +
 +
 +def _strip_proper_terms(text: str, proper_terms: Iterable[str] | None) -> str:
@@ -7875,6 +7937,11 @@
 +        r"(?:as an ai|i am an ai|i'm an ai).{0,120}",
 +        r"(?:申し訳|すみません).{0,80}(?:できません|対応できません|お答えできません)",
 +        r"(?:aiとして|私はai).{0,100}(?:できません|対応できません)",
++        r"(?:죄송|미안).{0,100}(?:번역|처리|제공|도와).{0,50}"
++        r"(?:수 없|불가|어렵)",
++        r"(?:해당|이).{0,30}(?:제목|요청|내용).{0,100}"
++        r"(?:번역|처리|제공).{0,50}(?:수 없|불가|어렵)",
++        r"(?:ai|인공지능).{0,80}(?:수 없|불가|어렵)",
 +    )
 +    return any(re.search(pattern, prefix, re.IGNORECASE | re.DOTALL) for pattern in checks)
 +
@@ -7883,7 +7950,10 @@
 +    return "".join(
 +        character.casefold()
 +        for character in text
-+        if character.isalnum() or _is_han(character) or _is_kana(character)
++        if character.isalnum()
++        or _is_han(character)
++        or _is_kana(character)
++        or _is_hangul(character)
 +    )
 +
 +
@@ -7926,13 +7996,14 @@
 +    target = normalize_locale(locale)
 +    han_count = sum(_is_han(character) for character in script_text)
 +    kana_count = sum(_is_kana(character) for character in script_text)
++    hangul_count = sum(_is_hangul(character) for character in script_text)
 +    latin_count = sum(
 +        "A" <= character <= "Z"
 +        or "a" <= character <= "z"
 +        or 0x00C0 <= ord(character) <= 0x024F
 +        for character in script_text
 +    )
-+    script_total = han_count + kana_count + latin_count
++    script_total = han_count + kana_count + hangul_count + latin_count
 +
 +    if target == "en":
 +        return bool(
@@ -7943,6 +8014,15 @@
 +        )
 +    if target == "ja":
 +        return _looks_japanese(script_text)
++    if target == "ko":
++        return bool(
++            hangul_count
++            and script_total
++            and hangul_count / script_total >= _SCRIPT_MARKER_RATIO
++            and not _looks_japanese(script_text)
++        )
++    if _has_hangul(script_text):
++        return False
 +    if not han_count or _looks_japanese(script_text):
 +        return False
 +

@@ -18,7 +18,8 @@
       "zh-TW": "繁",
       "zh-CN": "简",
       "ja": "あ",
-      "en": "EN"
+      "en": "EN",
+      "ko": "한"
     },
     "action": {
       "confirm": "确认",
@@ -428,7 +429,8 @@
       "sources": "扫描来源",
       "organize": "整理规则",
       "translate": "AI 翻译",
-      "advanced": "高级"
+      "advanced": "高级",
+      "naming": "整理与命名"
     },
     "display": {
       "font_size_label": "界面字号",
@@ -2126,6 +2128,15 @@
       "client_title": "即将更新这台电脑的 OpenAver",
       "client_case_a_body": "更新的是这台电脑上的 OpenAver，不是服务器。点击确认后会在这台电脑打开终端运行安装，请先关闭 OpenAver，安装完成后再自行重新打开。",
       "client_case_b_body": "这台电脑的 OpenAver 不是安装在默认位置。\n安装程序会先把新版本安装到默认目录，安装期间不需要先关闭当前的 OpenAver。\n\n安装完成后，请依次操作：\n1. 关闭 OpenAver\n2. 删除旧安装目录中的 python 文件夹\n3. 将新版本的所有文件复制覆盖回这台电脑原本的安装位置\n\n不需要重新安装或重新设置，直接覆盖文件即可使用。"
+    },
+    "tabs": {
+      "library": "建立片库",
+      "organize": "整理与改名",
+      "manual": "使用手册"
+    },
+    "manual": {
+      "faq_title": "常见问题",
+      "chapters_title": "章节"
     }
   },
   "tutorial": {
@@ -2133,20 +2144,18 @@
     "skip": "跳过",
     "next": "下一步 →",
     "done": "完成 🎉",
-    "step1_title": "📂 加入片库文件夹",
-    "step1_content": "把放 AV 视频的文件夹路径加进来<br>OpenAver 会扫出所有视频并建立浏览页",
-    "step2_title": "▶ 生成网页",
-    "step2_content": "按下这个按钮，扫描 + 建立你的私人收藏页<br>几秒就好",
-    "step3_title": "🌐 NFO 补全入口",
-    "step3_content": "扫完后，回到片库管理页面<br>NFO 补全按钮会自动出现，缺封面或资料一键从网络补齐",
-    "step4_title": "🎬 浏览你的收藏",
-    "step4_content": "完成后从这里进 Showcase<br>灯箱里有魔杖按钮可以模糊探索类似片",
-    "step5_title": "🔍 进阶 — 逐片刮削",
-    "step5_content": "想精准掌控每片的资料？<br>Search 让你一片一片手动处理",
-    "step6_title": "⚙️ 进阶 — 自定义规则",
-    "step6_content": "命名格式、AI 翻译、视觉策略都在 Settings 里<br>玩透了再来",
-    "step7_title": "📖 说明手册",
-    "step7_content": "随时回来重看就好<br>Help 页也有功能详解与 AI agent 指令"
+    "flow": {
+      "s1_title": "📂 加入片库文件夹",
+      "s1_content": "按这个按钮选择放视频的文件夹，也可以直接把文件夹拖进这个窗口<br>文件夹会先加进清单，这一步还不会开始扫描",
+      "s2_title": "▶ {action}",
+      "s2_content": "按下这个按钮，读取文件夹里已有的封面和 NFO（记着片名、女优的资料文件）",
+      "s3_title": "🌐 缺资料的片，按「{action}」补齐",
+      "s3_content": "有片缺封面或资料时，会像下面这样列出来，按「{action}」就从内置来源查资料补上<br>只补封面和资料，不会改名，也不会搬动你的文件；用其他工具整理过的片会直接收进来，不重抓",
+      "s4_title": "🎬 浏览你的收藏",
+      "s4_content": "打开菜单，点「{page}」，同一批片会排成封面墙<br>之后有新片，再按一次「{action}」",
+      "s4_more": "想自定义命名和来源？",
+      "s4_more_link": "到「{page}」页看「{tab}」"
+    }
   },
   "updater": {
     "page_title": "更新器",

@@ -30,7 +30,7 @@
     <string name="local_step3_title">Scan and play locally</string>
     <string name="local_step3_body">Generation, metadata search, NFO/cover writes, and playback all run on the phone. Network access is only used for metadata sources you enable.</string>
     <string name="privacy_note">The Python server, SQLite database, logs, and generated data stay inside this app’s private storage. Video files remain in their original phone folders.</string>
-    <string name="disclaimer">Unofficial Android build · OpenAver Mobile v0.18.17-r2 · MIT licensed</string>
+    <string name="disclaimer">Unofficial Android build · OpenAver Mobile v0.18.17-r3 · MIT licensed</string>
     <string name="starting_local">Starting local OpenAver…</string>
     <string name="starting_python">Initializing the Python runtime…</string>
     <string name="loading_openaver_service">Loading the OpenAver service…</string>

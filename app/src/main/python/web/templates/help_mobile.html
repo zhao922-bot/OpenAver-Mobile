@@ -41,14 +41,30 @@
             </div>
         </section>
 
-        <nav class="mobile-help-jump" aria-label="{{ t('help.mobile.page_title') }}">
-            <a href="#mobile-help-start">{{ t('help.mobile.jump_start') }}</a>
-            <a href="#mobile-help-storage">{{ t('help.mobile.jump_storage') }}</a>
-            <a href="#mobile-help-tasks">{{ t('help.mobile.jump_tasks') }}</a>
-            <a href="#mobile-help-trouble">{{ t('help.mobile.jump_trouble') }}</a>
-            <a href="#mobile-help-about">{{ t('help.mobile.jump_about') }}</a>
+        <nav class="mobile-help-tabs" role="tablist" aria-label="{{ t('help.mobile.page_title') }}">
+            <button type="button" role="tab" class="mobile-help-tab" data-help-tab="library"
+                    aria-controls="mobile-help-panel-library"
+                    aria-selected="true">
+                <i class="bi bi-folder-plus" aria-hidden="true"></i>
+                <span>{{ t('help.tabs.library') }}</span>
+            </button>
+            <button type="button" role="tab" class="mobile-help-tab" data-help-tab="organize"
+                    aria-controls="mobile-help-panel-organize"
+                    aria-selected="false" tabindex="-1">
+                <i class="bi bi-magic" aria-hidden="true"></i>
+                <span>{{ t('help.tabs.organize') }}</span>
+            </button>
+            <button type="button" role="tab" class="mobile-help-tab" data-help-tab="manual"
+                    aria-controls="mobile-help-panel-manual"
+                    aria-selected="false" tabindex="-1">
+                <i class="bi bi-journal-text" aria-hidden="true"></i>
+                <span>{{ t('help.tabs.manual') }}</span>
+            </button>
         </nav>
 
+        <section id="mobile-help-panel-library" class="mobile-help-tab-panel"
+                 role="tabpanel" data-help-panel="library"
+                 aria-labelledby="mobile-help-start">
         <section class="mobile-help-status" aria-label="{{ t('help.mobile.local_title') }}">
             <article>
                 <i class="bi bi-cpu" aria-hidden="true"></i>
@@ -150,7 +166,11 @@
                 </ul>
             </div>
         </details>
+        </section><!-- /library panel -->
 
+        <section id="mobile-help-panel-organize" class="mobile-help-tab-panel"
+                 role="tabpanel" data-help-panel="organize"
+                 aria-labelledby="mobile-help-tasks" hidden>
         <section class="mobile-help-section" id="mobile-help-tasks">
             <div class="mobile-help-section__head">
                 <span>02</span>
@@ -191,7 +211,11 @@
                 </article>
             </div>
         </section>
+        </section><!-- /organize panel -->
 
+        <section id="mobile-help-panel-manual" class="mobile-help-tab-panel"
+                 role="tabpanel" data-help-panel="manual"
+                 aria-labelledby="mobile-help-trouble" hidden>
         <details class="mobile-help-panel mobile-help-panel--warning" id="mobile-help-trouble">
             <summary>
                 <span class="mobile-help-panel__icon"><i class="bi bi-tools" aria-hidden="true"></i></span>
@@ -259,6 +283,11 @@
                 </a>
             </div>
         </section>
+        </section><!-- /manual panel -->
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script type="module" src="/static/js/pages/help/help-tabs.js"></script>
 {% endblock %}

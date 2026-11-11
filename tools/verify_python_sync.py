@@ -14,6 +14,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from prepare_python_tree import (
+    PAYLOAD_ROOT_FILES,
+    PAYLOAD_ROOTS,
     copy_tree,
     normalize_text_files,
     normalized_file_bytes,
@@ -30,7 +32,10 @@ def iter_payload(root: Path):
             continue
         if "__tests__" in path.parts:
             continue
-        yield path.relative_to(root).as_posix(), path
+        rel = path.relative_to(root).as_posix()
+        if path.relative_to(root).parts[0] not in PAYLOAD_ROOTS and rel not in PAYLOAD_ROOT_FILES:
+            continue
+        yield rel, path
 
 
 def verify_upstream_checkout(upstream: Path, patch_root: Path) -> None:

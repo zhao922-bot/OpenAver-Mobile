@@ -38,7 +38,17 @@ def test_mobile_help_removes_desktop_only_actions():
         "help.shortcuts",
     ):
         assert forbidden not in template
-    assert "components/tutorial.js" not in base
+    tutorial_script = (
+        '<script type="module" '
+        'src="/static/js/components/tutorial.js"></script>'
+    )
+    tutorial_position = base.index(tutorial_script)
+    scanner_block_start = base.rindex(
+        "{% if page == 'scanner' %}", 0, tutorial_position
+    )
+    scanner_block_end = base.index("{% endif %}", scanner_block_start)
+    assert base.count(tutorial_script) == 1
+    assert tutorial_script in base[scanner_block_start:scanner_block_end]
     assert "components/tutorial.css" not in base
     assert not (PYTHON_WEB / "static/js/pages/help.js").exists()
 

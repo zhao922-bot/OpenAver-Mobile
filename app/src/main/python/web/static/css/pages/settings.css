@@ -1871,6 +1871,68 @@ html.theme-transition-active::view-transition-new(root) {
     color: var(--color-success);
 }
 
+/* ==================== Five-section navigation ==================== */
+
+#settings-components .settings-tabs {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.35rem;
+    margin: 0 0 0.85rem;
+    padding: 0.35rem;
+    border: 1px solid var(--stroke-default);
+    border-radius: calc(var(--fluent-radius-md) + 0.2rem);
+    background: color-mix(in oklch, var(--surface-1) 88%, transparent);
+    box-shadow: var(--fluent-shadow-4);
+    backdrop-filter: blur(14px);
+}
+
+#settings-components .settings-tab {
+    min-width: 0;
+    min-height: 3rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid transparent;
+    border-radius: var(--fluent-radius-md);
+    color: var(--text-secondary);
+    background: transparent;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    transition:
+        color var(--fluent-duration-fast) var(--fluent-ease-standard),
+        background var(--fluent-duration-fast) var(--fluent-ease-standard),
+        border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+        transform var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+#settings-components .settings-tab i {
+    font-size: 0.95rem;
+}
+
+#settings-components .settings-tab:hover {
+    color: var(--text-primary);
+    background: color-mix(in oklch, var(--color-base-content) 5%, transparent);
+}
+
+#settings-components .settings-tab.is-active {
+    color: var(--accent-contrast, #fff);
+    border-color: color-mix(in oklch, var(--accent) 84%, #000 16%);
+    background:
+        linear-gradient(145deg,
+            color-mix(in oklch, var(--accent) 92%, #fff 8%),
+            color-mix(in oklch, var(--accent) 82%, #000 18%));
+    box-shadow: 0 0.45rem 1rem color-mix(in oklch, var(--accent) 25%, transparent);
+}
+
+#settings-components .settings-tab:focus-visible {
+    outline: 2px solid color-mix(in oklch, var(--accent) 70%, #fff 30%);
+    outline-offset: 2px;
+}
+
 #settings-components .save-btn-wrapper.is-dirty {
     border-color: color-mix(in oklch, var(--color-warning) 55%, var(--stroke-default));
 }
@@ -1892,6 +1954,30 @@ html.theme-transition-active::view-transition-new(root) {
 }
 
 @media (max-width: 768px) {
+    #settings-components .settings-tabs {
+        grid-template-columns: repeat(5, minmax(6.4rem, 1fr));
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        scroll-snap-type: inline proximity;
+        scrollbar-width: none;
+        position: sticky;
+        top: calc(var(--mobile-topbar-height) + 112px);
+        z-index: 24;
+    }
+
+    #settings-components .settings-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    #settings-components .settings-tab {
+        scroll-snap-align: center;
+        flex-direction: column;
+        gap: 0.2rem;
+        min-height: 3.35rem;
+        padding: 0.45rem 0.55rem;
+        font-size: 0.72rem;
+    }
+
     #settingsForm {
         padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
     }

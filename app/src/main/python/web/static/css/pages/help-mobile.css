@@ -199,6 +199,65 @@
     text-decoration: none;
 }
 
+.mobile-help-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem;
+    margin-top: 0.85rem;
+    padding: 0.35rem;
+    border: 1px solid var(--mobile-help-border);
+    border-radius: 1rem;
+    background: var(--mobile-help-paper);
+    box-shadow: 0 0.55rem 1.5rem color-mix(in oklch, var(--mobile-help-teal) 9%, transparent);
+}
+
+.mobile-help-tab {
+    min-width: 0;
+    min-height: 3.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid transparent;
+    border-radius: 0.75rem;
+    color: var(--text-secondary);
+    background: transparent;
+    font-size: 0.76rem;
+    font-weight: 750;
+    line-height: 1.25;
+    text-align: center;
+}
+
+.mobile-help-tab i {
+    flex: 0 0 auto;
+    color: var(--mobile-help-teal);
+    font-size: 0.95rem;
+}
+
+.mobile-help-tab.is-active {
+    color: #f5fffc;
+    border-color: color-mix(in oklch, var(--mobile-help-teal) 75%, #000 25%);
+    background:
+        linear-gradient(145deg,
+            color-mix(in oklch, var(--mobile-help-teal) 94%, #fff 6%),
+            color-mix(in oklch, var(--mobile-help-teal) 76%, #000 24%));
+    box-shadow: 0 0.45rem 1rem color-mix(in oklch, var(--mobile-help-teal) 24%, transparent);
+}
+
+.mobile-help-tab.is-active i {
+    color: #d5fff6;
+}
+
+.mobile-help-tab:focus-visible {
+    outline: 2px solid var(--mobile-help-amber);
+    outline-offset: 2px;
+}
+
+.mobile-help-tab-panel[hidden] {
+    display: none !important;
+}
+
 .mobile-help-status {
     display: grid;
     gap: 0.65rem;

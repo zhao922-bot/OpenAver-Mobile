@@ -59,7 +59,7 @@ def _load_locales() -> dict[str, dict[str, str]]:
 
 def test_locale_files_have_identical_keys_and_placeholders():
     locales = _load_locales()
-    assert set(locales) == {"en", "ja", "zh_CN", "zh_TW"}
+    assert set(locales) == {"en", "ja", "ko", "zh_CN", "zh_TW"}
 
     base_keys = set(locales["zh_CN"])
     for name, messages in locales.items():
@@ -135,6 +135,7 @@ def test_android_native_strings_cover_all_ui_locales():
         "zh-TW": "values-zh-rTW",
         "ja": "values-ja",
         "en": "values-en",
+        "ko": "values-ko",
     }
     messages = {}
     for locale, dirname in locale_dirs.items():

@@ -18,7 +18,8 @@
       "zh-TW": "繁",
       "zh-CN": "简",
       "ja": "あ",
-      "en": "EN"
+      "en": "EN",
+      "ko": "한"
     },
     "action": {
       "confirm": "Confirm",
@@ -428,7 +429,8 @@
       "sources": "Sources",
       "organize": "Organize",
       "translate": "AI Translate",
-      "advanced": "Advanced"
+      "advanced": "Advanced",
+      "naming": "Naming & files"
     },
     "display": {
       "font_size_label": "Font Size",
@@ -2126,6 +2128,15 @@
       "client_title": "About to update OpenAver on this computer",
       "client_case_a_body": "This updates OpenAver on this computer, not the server. After you confirm, a terminal opens on this computer to run the installation. Please close OpenAver first, and reopen it yourself once the installation finishes.",
       "client_case_b_body": "OpenAver on this computer is not installed in the default location.\nThe installer will first install the new version to the default directory; you do not need to close the current OpenAver during installation.\n\nWhen the installation finishes, do the following in order:\n1. Close OpenAver\n2. Delete the python folder in the old installation directory\n3. Copy all files of the new version over your original installation location on this computer\n\nNo reinstall or reconfiguration is needed; just overwrite the files and use it."
+    },
+    "tabs": {
+      "library": "Build Library",
+      "organize": "Organize & Rename",
+      "manual": "User Guide"
+    },
+    "manual": {
+      "faq_title": "FAQ",
+      "chapters_title": "Chapters"
     }
   },
   "tutorial": {
@@ -2133,20 +2144,18 @@
     "skip": "Skip",
     "next": "Next →",
     "done": "Done 🎉",
-    "step1_title": "📂 Add Your Library Folder",
-    "step1_content": "Add the folder path where your AV videos are stored<br>OpenAver will scan all videos and build a browsable page",
-    "step2_title": "▶ Generate Page",
-    "step2_content": "Click this button to scan and build your private collection page<br>Takes just a few seconds",
-    "step3_title": "🌐 NFO Fill Entry Point",
-    "step3_content": "After scanning, return to the Library Manager page<br>The NFO fill button appears automatically — fetch missing covers or metadata from the web in one click",
-    "step4_title": "🎬 Browse Your Collection",
-    "step4_content": "Open Showcase when done<br>The lightbox has a wand button to fuzzy-explore similar videos",
-    "step5_title": "🔍 Advanced — Per-title Scraping",
-    "step5_content": "Want precise control over each title's metadata?<br>Search lets you handle them one by one manually",
-    "step6_title": "⚙️ Advanced — Custom Rules",
-    "step6_content": "Naming format, AI translation, and visual strategy are all in Settings<br>Come back when you're ready to dig deeper",
-    "step7_title": "📖 Help Manual",
-    "step7_content": "Come back any time to replay this<br>The Help page also has full feature docs and AI agent commands"
+    "flow": {
+      "s1_title": "📂 Add a Library Folder",
+      "s1_content": "Pick the folder with your videos here, or drag it into this window<br>It's only added to the list; scanning doesn't start yet",
+      "s2_title": "▶ {action}",
+      "s2_content": "Click to read the covers and NFO (a file listing title and actresses) already in the folder",
+      "s3_title": "🌐 Videos missing info: click \"{action}\" to fill in",
+      "s3_content": "Videos missing a cover or info are listed like this. Click \"{action}\" to fill them in<br>Only covers and info are added. Nothing is renamed or moved; videos organized by other tools stay as they are.",
+      "s4_title": "🎬 Browse Your Collection",
+      "s4_content": "Open the menu, then tap \"{page}\" to see your videos as a cover wall<br>For new videos, tap \"{action}\" again",
+      "s4_more": "Want to customize naming and sources? ",
+      "s4_more_link": "See \"{tab}\" on the \"{page}\" page"
+    }
   },
   "updater": {
     "page_title": "Updater",

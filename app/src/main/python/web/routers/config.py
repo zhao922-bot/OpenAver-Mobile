@@ -59,7 +59,7 @@ from core.source_config import MAX_ENABLED_SOURCES
 from core.translate_service import OllamaTranslateService
 from core.cloud_translate import TranslateError
 from core.platform_info import is_synology
-from core.i18n import get_config_locale, t as i18n_t
+from core.i18n import SUPPORTED_LOCALES, get_config_locale, t as i18n_t
 from core import cf_handoff
 from core.proxy_policy import cf_window_proxy_restart_needed, current_settings
 
@@ -366,7 +366,7 @@ def update_general_field(field: str, request: GeneralFieldRequest, raw_request: 
                     return {"success": True, "lan_port": None}
 
         # locale 驗證在 mutate 前（保留既有順序：驗證 → 寫入 → translate reset）
-        if field == "locale" and request.value not in ("zh-TW", "zh-CN", "ja", "en"):
+        if field == "locale" and request.value not in SUPPORTED_LOCALES:
             logger.warning("嘗試設定不支援的語系: %s", request.value)
             return {"success": False, "error": _config_text("locale_unsupported", response_locale)}
 

@@ -18,7 +18,7 @@ _JAPANESE_GRAMMAR_RE = re.compile(
     r"(?:の|を|は|が|に|で|と|へ|から|まで|より|です|ます|して|する|した|しない|される)"
 )
 _TRANSLATION_LABEL_RE = re.compile(
-    r"^(?:译文|譯文|翻译|翻譯|翻訳|translation|output)\s*[:：]\s*",
+    r"^(?:译文|譯文|翻译|翻譯|翻訳|번역|translation|output)\s*[:：]\s*",
     re.IGNORECASE,
 )
 _ZERO_WIDTH_RE = re.compile(r"[\ufeff\u200b\u200c\u200d]")
@@ -40,6 +40,17 @@ def _is_kana(character: str) -> bool:
     return 0x3040 <= code <= 0x30FF or 0x31F0 <= code <= 0x31FF
 
 
+def _is_hangul(character: str) -> bool:
+    code = ord(character)
+    return (
+        0x1100 <= code <= 0x11FF
+        or 0x3130 <= code <= 0x318F
+        or 0xA960 <= code <= 0xA97F
+        or 0xAC00 <= code <= 0xD7AF
+        or 0xD7B0 <= code <= 0xD7FF
+    )
+
+
 def _has_latin_letter(text: str) -> bool:
     return any(
         "A" <= character <= "Z"
@@ -55,6 +66,10 @@ def _has_han(text: str) -> bool:
 
 def _has_kana(text: str) -> bool:
     return any(_is_kana(character) for character in text)
+
+
+def _has_hangul(text: str) -> bool:
+    return any(_is_hangul(character) for character in text)
 
 
 def _strip_proper_terms(text: str, proper_terms: Iterable[str] | None) -> str:
@@ -121,6 +136,11 @@ def _is_refusal_text(text: str) -> bool:
         r"(?:as an ai|i am an ai|i'm an ai).{0,120}",
         r"(?:申し訳|すみません).{0,80}(?:できません|対応できません|お答えできません)",
         r"(?:aiとして|私はai).{0,100}(?:できません|対応できません)",
+        r"(?:죄송|미안).{0,100}(?:번역|처리|제공|도와).{0,50}"
+        r"(?:수 없|불가|어렵)",
+        r"(?:해당|이).{0,30}(?:제목|요청|내용).{0,100}"
+        r"(?:번역|처리|제공).{0,50}(?:수 없|불가|어렵)",
+        r"(?:ai|인공지능).{0,80}(?:수 없|불가|어렵)",
     )
     return any(re.search(pattern, prefix, re.IGNORECASE | re.DOTALL) for pattern in checks)
 
@@ -129,7 +149,10 @@ def _comparison_key(text: str) -> str:
     return "".join(
         character.casefold()
         for character in text
-        if character.isalnum() or _is_han(character) or _is_kana(character)
+        if character.isalnum()
+        or _is_han(character)
+        or _is_kana(character)
+        or _is_hangul(character)
     )
 
 
@@ -172,13 +195,14 @@ def title_matches_target_language(
     target = normalize_locale(locale)
     han_count = sum(_is_han(character) for character in script_text)
     kana_count = sum(_is_kana(character) for character in script_text)
+    hangul_count = sum(_is_hangul(character) for character in script_text)
     latin_count = sum(
         "A" <= character <= "Z"
         or "a" <= character <= "z"
         or 0x00C0 <= ord(character) <= 0x024F
         for character in script_text
     )
-    script_total = han_count + kana_count + latin_count
+    script_total = han_count + kana_count + hangul_count + latin_count
 
     if target == "en":
         return bool(
@@ -189,6 +213,15 @@ def title_matches_target_language(
         )
     if target == "ja":
         return _looks_japanese(script_text)
+    if target == "ko":
+        return bool(
+            hangul_count
+            and script_total
+            and hangul_count / script_total >= _SCRIPT_MARKER_RATIO
+            and not _looks_japanese(script_text)
+        )
+    if _has_hangul(script_text):
+        return False
     if not han_count or _looks_japanese(script_text):
         return False
 
