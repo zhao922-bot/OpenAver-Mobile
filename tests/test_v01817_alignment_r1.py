@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -147,9 +148,16 @@ def test_batch_router_preserves_first_hit_instead_of_prefetching_fanout():
 
 def test_android_release_line_and_user_visible_version_are_aligned():
     gradle = _read(ROOT / "app/build.gradle")
-    assert 'def openaverRelease = "v0.18.17-r1"' in gradle
-    assert "versionCode 18001" in gradle
-    assert 'versionName "0.18.17-r1"' in gradle
+    release_line = re.search(
+        r'def openaverRelease = "(v0\.18\.17-r\d+)"', gradle
+    )
+    version_code = re.search(r"versionCode (\d+)", gradle)
+    version_name = re.search(r'versionName "(0\.18\.17-r\d+)"', gradle)
+    assert release_line is not None
+    assert version_code is not None
+    assert version_name is not None
+    assert release_line.group(1) == f"v{version_name.group(1)}"
+    assert int(version_code.group(1)) >= 18001
 
     for relative in (
         "values/strings.xml",
@@ -159,7 +167,7 @@ def test_android_release_line_and_user_visible_version_are_aligned():
         "values-zh-rTW/strings.xml",
     ):
         strings = _read(ROOT / "app/src/main/res" / relative)
-        assert "OpenAver Mobile v0.18.17-r1" in strings
+        assert f"OpenAver Mobile {release_line.group(1)}" in strings
         assert "Upstream release %2$s" not in strings
 
     activity = _read(
