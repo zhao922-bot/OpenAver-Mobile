@@ -47,7 +47,7 @@ def _log_and_build_error(
 
 def build_headers(api_key: str) -> dict[str, str]:
     return {
-        "x-api-key": api_key.strip(),
+        **({"x-api-key": api_key.strip()} if api_key.strip() else {}),
         "anthropic-version": ANTHROPIC_VERSION,
         "content-type": "application/json",
     }
@@ -188,6 +188,7 @@ async def request_translation(
     *,
     timeout: float,
     max_tokens: int = MAX_TOKENS,
+    base_url: str = ANTHROPIC_BASE_URL,
 ) -> str:
     """POST /v1/messages；成功回非空 str，失敗拋 AnthropicError。"""
     headers = build_headers(api_key)
@@ -199,7 +200,7 @@ async def request_translation(
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
-                f"{ANTHROPIC_BASE_URL}/v1/messages",
+                f"{base_url.rstrip('/')}/v1/messages",
                 headers=headers,
                 json=payload,
             )
@@ -258,6 +259,7 @@ async def request_vision(
     image_data_uri: str,
     *,
     timeout: float,
+    base_url: str = ANTHROPIC_BASE_URL,
 ) -> str:
     """POST /v1/messages with one JPEG image; return the model text."""
     headers = build_headers(api_key)
@@ -265,7 +267,7 @@ async def request_vision(
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
-                f"{ANTHROPIC_BASE_URL}/v1/messages",
+                f"{base_url.rstrip('/')}/v1/messages",
                 headers=headers,
                 json=payload,
             )
@@ -300,13 +302,13 @@ async def request_vision(
     return extract_text(data)
 
 
-async def list_models(api_key: str, *, timeout: float) -> dict:
+async def list_models(api_key: str, *, timeout: float, base_url: str = ANTHROPIC_BASE_URL) -> dict:
     """GET /v1/models?limit=1000；回原始 dict；has_more 只 warning 不翻頁。"""
     headers = build_headers(api_key)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.get(
-                f"{ANTHROPIC_BASE_URL}/v1/models",
+                f"{base_url.rstrip('/')}/v1/models",
                 headers=headers,
                 params={"limit": 1000},
             )

@@ -2434,7 +2434,7 @@
      )
      extrafanart_written = extrafanart_res.downloaded
  
-@@ -940,14 +1104,22 @@
+@@ -940,14 +1104,23 @@
      repo.update_sample_images(path_uri, sample_images)
  
  
@@ -2449,6 +2449,7 @@
 +    related_db_paths: Optional[List[str]] = None,
 +    cancel_event: Optional[Event] = None,
 +    locale: Optional[str] = None,
++    source: str = "auto",
 +) -> tuple[EnrichResult, dict]:
 +    """只補抓劇照，並回傳足以區分「查無／無劇照／下載失敗／DB 失敗」的診斷。
 +
@@ -2461,7 +2462,7 @@
      _empty = EnrichResult(
          success=False,
          nfo_written=False,
-@@ -957,6 +1129,21 @@
+@@ -957,6 +1130,21 @@
          source_used="",
          error=None,
      )
@@ -2483,7 +2484,7 @@
  
      try:
          fs_path = uri_to_local_fs_path(file_path, path_mappings)
-@@ -966,40 +1153,154 @@
+@@ -966,40 +1154,154 @@
  
      if not os.path.exists(fs_path):
          logger.warning("[fetch_samples_only] 檔案不存在: %s", fs_path)
@@ -2498,7 +2499,7 @@
 +
 +    try:
 +        _raise_if_cancelled(cancel_event)
-+        meta = search_jav(number, source="auto", javbus_lang=None)
++        meta = search_jav(number, source=source, javbus_lang=None)
 +        _raise_if_cancelled(cancel_event)
 +    except SampleBackfillCancelled:
 +        _empty.error = _sample_text(locale, "cancelled")
@@ -3965,7 +3966,7 @@
  
  
  def parse_nfo(nfo_path: str) -> Tuple[Optional[ET.ElementTree], Optional[ET.Element]]:
-@@ -372,16 +418,54 @@
+@@ -372,16 +418,55 @@
  
      if modified:
          indent_xml(root)
@@ -4019,10 +4020,11 @@
 +    path_mappings: dict = None,
 +    should_abort: Optional[Callable[[], bool]] = None,
 +    backup: bool = False,
++    source: str = "auto",
  ) -> Generator[dict, None, dict]:
      """更新影片的生成器（用於 SSE 串流）
  
-@@ -403,9 +487,17 @@
+@@ -403,9 +488,17 @@
          'skipped': 0,
          'no_nfo': 0,
          'no_metadata': 0,
@@ -4040,7 +4042,7 @@
          data = cache.get(path, {})
          info = data.get('info', {})
          num = info.get('num', '')
-@@ -415,7 +507,11 @@
+@@ -415,7 +508,11 @@
              'current': i,
              'total': len(paths),
              'num': num,
@@ -4053,7 +4055,7 @@
          }
  
          # 取得 NFO 路徑
-@@ -430,6 +526,26 @@
+@@ -430,6 +527,26 @@
              stats['skipped'] += 1
              continue
  
@@ -4080,7 +4082,16 @@
          # 從網路取得 metadata
          yield {
              'type': 'log',
-@@ -447,6 +563,11 @@
+@@ -438,7 +555,7 @@
+         }
+ 
+         try:
+-            metadata = search_jav(num)
++            metadata = search_jav(num, source=source)
+         except Exception:
+             logger.exception("搜尋 JAV 資料失敗: %s", num)
+             yield {
+@@ -447,6 +564,11 @@
                  'message': f'[{i}] {num}: 搜尋發生錯誤'
              }
              stats['failed'] += 1
@@ -4092,7 +4103,7 @@
              continue
  
          if not metadata:
-@@ -463,6 +584,7 @@
+@@ -463,6 +585,7 @@
          try:
              updated, msg = update_nfo_file(nfo_path, metadata, info)
              if updated:
@@ -4100,7 +4111,7 @@
                  yield {
                      'type': 'log',
                      'level': 'info',
-@@ -484,6 +606,11 @@
+@@ -484,6 +607,11 @@
                  'message': f'[{i}] {num}: 更新 NFO 發生錯誤'
              }
              stats['failed'] += 1

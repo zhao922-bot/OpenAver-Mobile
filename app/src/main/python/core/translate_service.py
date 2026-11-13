@@ -22,6 +22,8 @@ from core.logger import get_logger
 
 logger = get_logger(__name__)
 from typing import List, Dict, Optional
+from core.ai_services.connections import provider_base_url, requires_api_key
+
 import httpx
 import re
 
@@ -322,6 +324,7 @@ class TranslateService(ABC):
             ) as client:
                 resp = await client.post(
                     f"{self.ollama_url}/api/chat",
+                    **({"headers": {"Authorization": f"Bearer {self.api_key}"}} if self.api_key else {}),
                     json={
                         "model": self.model,
                         "messages": [
@@ -342,6 +345,10 @@ class TranslateService(ABC):
             result = self._clean_output(result)
         except TranslateError:
             raise
+        except (httpx.LocalProtocolError, UnicodeEncodeError):
+            raise build_error(
+                "Ollama", "auth_failed", None, "invalid_api_key_format", "API Key has an invalid format"
+            ) from None
         except httpx.TimeoutException as e:
             raise build_error(
                 "Ollama",
@@ -398,7 +405,8 @@ class OllamaTranslateService(TranslateService):
                 }
             target_language: 目標語言代碼（zh-TW / zh-CN / en / ja）
         """
-        self.ollama_url = (config.get("url") or "http://localhost:11434").rstrip("/")
+        self.ollama_url = provider_base_url("ollama", config)
+        self.api_key = config.get("api_key", "")
         self.model = config.get("model") or "qwen3:8b"
         self.target_language = target_language
 
@@ -413,6 +421,7 @@ class OllamaTranslateService(TranslateService):
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
                     f"{self.ollama_url}/api/chat",
+                    **({"headers": {"Authorization": f"Bearer {self.api_key}"}} if self.api_key else {}),
                     json={
                         "model": self.model,
                         "messages": [
@@ -437,6 +446,10 @@ class OllamaTranslateService(TranslateService):
             result = self._clean_output(result)
         except TranslateError:
             raise
+        except (httpx.LocalProtocolError, UnicodeEncodeError):
+            raise build_error(
+                "Ollama", "auth_failed", None, "invalid_api_key_format", "API Key has an invalid format"
+            ) from None
         except httpx.TimeoutException as e:
             raise build_error(
                 "Ollama", "connection_timeout", None, type(e).__name__, "request timed out"
@@ -522,10 +535,11 @@ class GeminiTranslateService(TranslateService):
             target_language: 目標語言代碼（zh-TW / zh-CN / en / ja）
         """
         self.api_key = config.get("api_key", "")
+        self.base_url = provider_base_url("gemini", config)
         self.model = config.get("model", "gemini-flash-lite-latest")
         self.target_language = target_language
 
-        if not self.api_key:
+        if not self.api_key and requires_api_key("gemini", self.base_url):
             raise ValueError("Gemini API Key is required")
 
     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -538,6 +552,7 @@ class GeminiTranslateService(TranslateService):
                 self.model,
                 prompt,
                 timeout=CLOUD_TRANSLATE_TIMEOUT,
+                base_url=self.base_url,
             )
             return self._validate_result(title, result, context)
         except TranslateError:
@@ -564,6 +579,7 @@ class GeminiTranslateService(TranslateService):
                 self.model,
                 prompt,
                 timeout=PLOT_TRANSLATE_TIMEOUT,
+                base_url=self.base_url,
             )
             return self._validate_plot_result(plot, result, context)
         except TranslateError:
@@ -772,10 +788,11 @@ class ClaudeTranslateService(TranslateService):
             target_language: 目標語言代碼（zh-TW / zh-CN / en / ja）
         """
         self.api_key = config.get("api_key", "")
+        self.base_url = provider_base_url("claude", config)
         self.model = config.get("model") or DEFAULT_CLAUDE_MODEL
         self.target_language = target_language
 
-        if not self.api_key:
+        if not self.api_key and requires_api_key("claude", self.base_url):
             raise ValueError("Claude API Key is required")
 
     async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -788,6 +805,7 @@ class ClaudeTranslateService(TranslateService):
                 self.model,
                 prompt,
                 timeout=30,
+                base_url=self.base_url,
             )
             return self._validate_result(title, result, context)
         except TranslateError:
@@ -814,6 +832,7 @@ class ClaudeTranslateService(TranslateService):
                 self.model,
                 prompt,
                 timeout=PLOT_TRANSLATE_TIMEOUT,
+                base_url=self.base_url,
                 max_tokens=PLOT_MAX_TOKENS,
             )
             return self._validate_plot_result(plot, result, context)
@@ -887,7 +906,7 @@ def create_translate_service(config: Dict, target_language: str = "zh-CN") -> Tr
         official_config = config.get("openai_official", {}) or {}
         return OpenAICompatibleTranslateService(
             {
-                "base_url": openai_client.OPENAI_OFFICIAL_BASE_URL,
+                "base_url": provider_base_url("openai_official", official_config),
                 "api_key": official_config.get("api_key", ""),
                 "model": official_config.get("model", ""),
             },

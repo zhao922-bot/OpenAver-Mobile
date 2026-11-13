@@ -353,6 +353,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "core/anthropic_client.py",
             "core/ai_services/__init__.py",
+            "core/ai_services/connections.py",
             "core/ai_services/backfill_state.py",
             "core/ai_services/embedding_cache.py",
             "core/ai_services/embeddings.py",

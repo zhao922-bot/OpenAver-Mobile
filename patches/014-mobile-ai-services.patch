@@ -8,7 +8,14 @@
  from typing import Any
  
  import httpx
-@@ -52,12 +53,52 @@
+@@ -46,18 +47,58 @@
+ 
+ def build_headers(api_key: str) -> dict[str, str]:
+     return {
+-        "x-api-key": api_key.strip(),
++        **({"x-api-key": api_key.strip()} if api_key.strip() else {}),
+         "anthropic-version": ANTHROPIC_VERSION,
+         "content-type": "application/json",
      }
  
  
@@ -64,11 +71,12 @@
      }
  
  
-@@ -146,10 +187,15 @@
+@@ -146,14 +187,20 @@
      prompt: str,
      *,
      timeout: float,
 +    max_tokens: int = MAX_TOKENS,
++    base_url: str = ANTHROPIC_BASE_URL,
  ) -> str:
      """POST /v1/messages；成功回非空 str，失敗拋 AnthropicError。"""
      headers = build_headers(api_key)
@@ -81,10 +89,16 @@
      try:
          async with httpx.AsyncClient(timeout=timeout) as client:
              resp = await client.post(
-@@ -204,6 +250,56 @@
+-                f"{ANTHROPIC_BASE_URL}/v1/messages",
++                f"{base_url.rstrip('/')}/v1/messages",
+                 headers=headers,
+                 json=payload,
+             )
+@@ -204,13 +251,64 @@
      return extract_text(data)
  
  
+-async def list_models(api_key: str, *, timeout: float) -> dict:
 +async def request_vision(
 +    api_key: str,
 +    model: str,
@@ -93,6 +107,7 @@
 +    image_data_uri: str,
 +    *,
 +    timeout: float,
++    base_url: str = ANTHROPIC_BASE_URL,
 +) -> str:
 +    """POST /v1/messages with one JPEG image; return the model text."""
 +    headers = build_headers(api_key)
@@ -100,7 +115,7 @@
 +    try:
 +        async with httpx.AsyncClient(timeout=timeout) as client:
 +            resp = await client.post(
-+                f"{ANTHROPIC_BASE_URL}/v1/messages",
++                f"{base_url.rstrip('/')}/v1/messages",
 +                headers=headers,
 +                json=payload,
 +            )
@@ -135,9 +150,17 @@
 +    return extract_text(data)
 +
 +
- async def list_models(api_key: str, *, timeout: float) -> dict:
++async def list_models(api_key: str, *, timeout: float, base_url: str = ANTHROPIC_BASE_URL) -> dict:
      """GET /v1/models?limit=1000；回原始 dict；has_more 只 warning 不翻頁。"""
      headers = build_headers(api_key)
+     try:
+         async with httpx.AsyncClient(timeout=timeout) as client:
+             resp = await client.get(
+-                f"{ANTHROPIC_BASE_URL}/v1/models",
++                f"{base_url.rstrip('/')}/v1/models",
+                 headers=headers,
+                 params={"limit": 1000},
+             )
 --- /dev/null
 +++ b/core/ai_services/__init__.py
 @@ -0,0 +1,4 @@
@@ -145,6 +168,68 @@
 +
 +Must not import ``web`` (import-linter).
 +"""
+--- /dev/null
++++ b/core/ai_services/connections.py
+@@ -0,0 +1,59 @@
++"""Connection defaults and one-time migration for independent AI services."""
++from __future__ import annotations
++
++DEFAULT_BASE_URLS = {
++    "ollama": "http://localhost:11434",
++    "gemini": "https://generativelanguage.googleapis.com/v1beta",
++    "claude": "https://api.anthropic.com",
++    "openai_official": "https://api.openai.com/v1",
++    "openai": "",
++}
++
++
++def provider_base_url(provider: str, config: dict) -> str:
++    key = "url" if provider == "ollama" else "base_url"
++    return str(config.get(key) or DEFAULT_BASE_URLS.get(provider, "")).strip().rstrip("/")
++
++
++def requires_api_key(provider: str, base_url: str) -> bool:
++    return provider in ("gemini", "claude", "openai_official") and (
++        not base_url.strip() or base_url.strip().rstrip("/") == DEFAULT_BASE_URLS[provider]
++    )
++
++
++def migrate_tags_connection(config: dict) -> bool:
++    tags = config.setdefault("ai_services", {}).setdefault("tags", {})
++    if tags.get("connection_version", 0) >= 1:
++        return False
++    provider = str(tags.get("provider") or "")
++    source = (config.get("translate") or {}).get(provider) or {}
++    # Explicit empty values are intentional; only legacy missing fields inherit.
++    tags.setdefault("base_url", provider_base_url(provider, source))
++    tags.setdefault("api_key", str(source.get("api_key") or ""))
++    tags["connection_version"] = 1
++    return True
++
++
++async def fetch_provider_models(provider: str, base_url: str, api_key: str) -> list[str]:
++    """Query only the supplied connection; never read another feature's config."""
++    import httpx
++    from core import anthropic_client, gemini_client
++    if provider == "claude":
++        data = await anthropic_client.list_models(api_key, timeout=10, base_url=base_url)
++        items = data.get("data", [])
++        return sorted({str(item["id"]) for item in items if isinstance(item, dict) and item.get("id")})
++    base = base_url.rstrip("/")
++    if provider == "gemini":
++        url = base + "/models"
++        headers = gemini_client.build_headers(api_key)
++    else:
++        url = base + ("/api/tags" if provider == "ollama" else "/models")
++        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
++    async with httpx.AsyncClient(timeout=10) as client:
++        response = await client.get(url, headers=headers)
++        response.raise_for_status()
++    data = response.json()
++    field = "models" if provider in ("gemini", "ollama") else "data"
++    key = "name" if field == "models" else "id"
++    return sorted({str(item[key]).removeprefix("models/") for item in data.get(field, [])
++                   if isinstance(item, dict) and item.get(key)})
 --- /dev/null
 +++ b/core/ai_services/backfill_state.py
 @@ -0,0 +1,137 @@
@@ -3014,7 +3099,7 @@
 +            )
 --- /dev/null
 +++ b/core/ai_services/tagging.py
-@@ -0,0 +1,434 @@
+@@ -0,0 +1,422 @@
 +"""AI tagging pure functions: prompt / parse / name map / failure / conn.
 +
 +I/O orchestration (`tag_video`) lives in T7b.
@@ -3205,37 +3290,25 @@
 +
 +def resolve_vision_conn(config: dict) -> VisionConn:
 +    """Resolve VisionConn from raw config dict (CD-188b-14). Ignores enabled."""
++    from copy import deepcopy
++    from core.ai_services.connections import migrate_tags_connection, provider_base_url, requires_api_key
++
++    config = deepcopy(config)
++    migrate_tags_connection(config)
 +    tags = _tags_section(config)
 +    provider = str(tags.get("provider") or "").strip()
 +    model = str(tags.get("model") or "").strip()
-+    if not provider or provider not in _VALID_PROVIDERS:
++    if provider not in _VALID_PROVIDERS:
 +        raise TaggingFailure("not_configured", detail="provider")
 +    if not model:
 +        raise TaggingFailure("not_configured", detail="model")
-+
-+    if provider == "ollama":
-+        url = read_secret(config, "translate.ollama.url").strip()
-+        return VisionConn(
-+            provider=provider,
-+            model=model,
-+            base_url=url or "http://localhost:11434",
-+            api_key="",
-+        )
-+    if provider in ("gemini", "claude"):
-+        key = _require_key(config, f"translate.{provider}.api_key", "api_key")
-+        return VisionConn(provider=provider, model=model, base_url="", api_key=key)
-+    if provider == "openai":
-+        base = _require_key(config, "translate.openai.base_url", "base_url")
-+        key = read_secret(config, "translate.openai.api_key").strip()
-+        return VisionConn(provider=provider, model=model, base_url=base, api_key=key)
-+    # openai_official
-+    key = _require_key(config, "translate.openai_official.api_key", "api_key")
-+    return VisionConn(
-+        provider=provider,
-+        model=model,
-+        base_url=OPENAI_OFFICIAL_BASE_URL,
-+        api_key=key,
-+    )
++    base = provider_base_url(provider, {"url" if provider == "ollama" else "base_url": tags.get("base_url")})
++    if not base:
++        raise TaggingFailure("not_configured", detail="base_url")
++    key = str(tags.get("api_key") or "").strip()
++    if requires_api_key(provider, base) and not key:
++        raise TaggingFailure("not_configured", detail="api_key")
++    return VisionConn(provider=provider, model=model, base_url=base, api_key=key)
 +
 +
 +@dataclass(frozen=True)
@@ -4852,7 +4925,7 @@
 +        }
 --- /dev/null
 +++ b/core/ai_services/vision_chat.py
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,137 @@
 +"""Vision chat：依連線分派 Claude／Gemini／OpenAI／Ollama 看圖請求。
 +
 +不 import web.*。翻譯路徑（translate_service／cloud_translate）零改動。
@@ -4933,13 +5006,15 @@
 +    image_data_uri: str,
 +    *,
 +    timeout: float,
++    api_key: str = "",
 +) -> str:
 +    """POST {url}/api/chat with image；成功回非空 str，失敗拋 TranslateError。"""
 +    endpoint = url.rstrip("/") + "/api/chat"
 +    payload = _build_ollama_payload(model, system, user_text, image_data_uri)
 +    try:
 +        async with httpx.AsyncClient(timeout=timeout) as client:
-+            resp = await client.post(endpoint, json=payload)
++            headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
++            resp = await client.post(endpoint, json=payload, headers=headers)
 +    except httpx.TimeoutException:
 +        raise build_error(
 +            "Ollama", "connection_timeout", None, "", "request timed out"
@@ -4970,15 +5045,15 @@
 +    p, m, k, u = conn.provider, conn.model, conn.api_key, conn.base_url
 +    if p == "claude":
 +        return await anthropic_client.request_vision(
-+            k, m, system, user_text, image_data_uri, timeout=t
++            k, m, system, user_text, image_data_uri, timeout=t, **({"base_url": u} if u else {})
 +        )
 +    if p == "gemini":
 +        return await gemini_client.request_vision(
-+            k, m, system, user_text, image_data_uri, timeout=t
++            k, m, system, user_text, image_data_uri, timeout=t, **({"base_url": u} if u else {})
 +        )
 +    if p in ("openai", "openai_official"):
 +        base = (
-+            openai_client.OPENAI_OFFICIAL_BASE_URL
++            (u or openai_client.OPENAI_OFFICIAL_BASE_URL)
 +            if p == "openai_official"
 +            else u
 +        )
@@ -4986,7 +5061,7 @@
 +            base, k, m, system, user_text, image_data_uri, timeout=t
 +        )
 +    if p == "ollama":
-+        return await ollama_vision(u, m, system, user_text, image_data_uri, timeout=t)
++        return await ollama_vision(u, m, system, user_text, image_data_uri, timeout=t, api_key=k)
 +    raise ValueError(f"unsupported vision provider: {p}")
 --- a/core/database/__init__.py
 +++ b/core/database/__init__.py
@@ -5218,7 +5293,15 @@
 +        return {"indexed": indexed, "total": total, "pending": pending, "unreadable": unreadable}
 --- a/core/gemini_client.py
 +++ b/core/gemini_client.py
-@@ -38,6 +38,27 @@
+@@ -31,13 +31,34 @@
+ 
+ 
+ def build_headers(api_key: str) -> dict[str, str]:
+-    return {"x-goog-api-key": api_key.strip()}
++    return {"x-goog-api-key": api_key.strip()} if api_key.strip() else {}
+ 
+ 
+ def build_translate_payload(model: str, prompt: str) -> dict[str, Any]:
      # model 在 URL 內，payload 不帶；刻意不送任何生成參數（上限／溫度／思考）
      return {
          "contents": [{"parts": [{"text": prompt}]}],
@@ -5246,7 +5329,22 @@
          "safetySettings": [dict(s) for s in SAFETY_SETTINGS],
      }
  
-@@ -135,3 +156,38 @@
+@@ -113,12 +134,13 @@
+     prompt: str,
+     *,
+     timeout: float,
++    base_url: str = GEMINI_BASE_URL,
+ ) -> str:
+     """POST :generateContent；成功回非空 str，失敗拋 TranslateError。"""
+     resp = await cloud_request(
+         TAG,
+         "POST",
+-        f"{GEMINI_BASE_URL}/models/{model}:generateContent",
++        f"{base_url.rstrip('/')}/models/{model}:generateContent",
+         headers=build_headers(api_key),
+         timeout=timeout,
+         json=build_translate_payload(model, prompt),
+@@ -135,3 +157,39 @@
      if not isinstance(data, dict):
          raise build_error(TAG, "api_error", None, "", "response is not a JSON object")
      return extract_text(data)
@@ -5260,12 +5358,13 @@
 +    image_data_uri: str,
 +    *,
 +    timeout: float,
++    base_url: str = GEMINI_BASE_URL,
 +) -> str:
 +    """POST generateContent with one inline image; return the model text."""
 +    resp = await cloud_request(
 +        TAG,
 +        "POST",
-+        f"{GEMINI_BASE_URL}/models/{model}:generateContent",
++        f"{base_url.rstrip('/')}/models/{model}:generateContent",
 +        headers=build_headers(api_key),
 +        timeout=timeout,
 +        json=build_vision_payload(model, system, user_text, image_data_uri),
@@ -5287,13 +5386,14 @@
 +    return extract_text(data)
 --- a/core/secret_fields.py
 +++ b/core/secret_fields.py
-@@ -9,12 +9,15 @@
+@@ -9,12 +9,17 @@
  import copy
  from typing import Any
  
 -# CD-114c-1: four opaque secrets. Single inventory for render_config_secrets.
 +# Single inventory for opaque secrets rendered to the browser.
  SECRET_FIELDS: tuple[str, ...] = (
++    "translate.ollama.api_key",
      "translate.gemini.api_key",
      "translate.openai.api_key",
 +    "translate.openai_official.api_key",
@@ -5301,6 +5401,7 @@
      "metatube.token",
 +    "ai_services.image_similar.api_key",
 +    "ai_services.faces.api_key",
++    "ai_services.tags.api_key",
  )
  
  # CD-114c-2: U+2022 BULLET × 4 (not ASCII *, not U+25CF).
@@ -6048,7 +6149,7 @@
 +    return await asyncio.to_thread(faces_recompute.start_rebuild)
 --- /dev/null
 +++ b/web/routers/ai_tags.py
-@@ -0,0 +1,319 @@
+@@ -0,0 +1,325 @@
 +"""AI tags HTTP endpoints (TASK-188b-T9a / CD-188b-15)."""
 +
 +from __future__ import annotations
@@ -6127,39 +6228,45 @@
 +    base_url: Optional[str] = None
 +
 +
-+def _prepare_tags_test(body: TagsTestRequest):
-+    """Sync prep for POST /tags/test: copy config → apply overrides → resolve conn."""
++def _tags_connection_config(body: TagsTestRequest):
++    from core.ai_services.connections import migrate_tags_connection
 +    config = copy.deepcopy(load_config())
-+    tags = config.setdefault("ai_services", {}).setdefault("tags", {})
-+    if body.provider is not None:
-+        tags["provider"] = body.provider
-+    if body.model is not None:
-+        tags["model"] = body.model
++    migrate_tags_connection(config)
++    tags = config["ai_services"]["tags"]
++    stored_key = str(tags.get("api_key") or "")
++    for name in ("provider", "model", "base_url"):
++        value = getattr(body, name)
++        if value is not None:
++            tags[name] = value
++    if body.api_key is not None:
++        tags["api_key"] = resolve_secret(body.api_key, stored_key)
++    return config
 +
-+    provider = str(tags.get("provider") or "").strip()
 +
-+    stored_key = (
-+        read_secret(config, f"translate.{provider}.api_key") if provider else ""
-+    )
-+    if body.api_key is None:
-+        api_key = stored_key
-+    else:
-+        api_key = resolve_secret(body.api_key, stored_key)
-+    if provider in ("gemini", "claude", "openai", "openai_official"):
-+        config.setdefault("translate", {}).setdefault(provider, {})["api_key"] = api_key
++def _prepare_tags_test(body: TagsTestRequest):
++    config = _tags_connection_config(body)
++    return resolve_vision_conn(config), list(merged()), _tags_sample_uri()
 +
-+    if body.base_url is not None:
-+        if provider == "openai":
-+            config.setdefault("translate", {}).setdefault("openai", {})[
-+                "base_url"
-+            ] = body.base_url
-+        elif provider == "ollama":
-+            config.setdefault("translate", {}).setdefault("ollama", {})[
-+                "url"
-+            ] = body.base_url
 +
-+    conn = resolve_vision_conn(config)
-+    return conn, list(merged()), _tags_sample_uri()
++@router.post("/tags/models")
++async def tags_models(body: TagsTestRequest):
++    from core.ai_services.connections import fetch_provider_models
++    from core.cloud_translate import TranslateError, settings_error_key
++    import httpx
++    try:
++        config = _tags_connection_config(body)
++        config["ai_services"]["tags"]["model"] = "__model_list__"
++        conn = resolve_vision_conn(config)
++        models = await fetch_provider_models(conn.provider, conn.base_url, conn.api_key)
++        return {"success": True, "models": models}
++    except TaggingFailure:
++        return {"success": False, "error": "missing_key"}
++    except TranslateError as exc:
++        return {"success": False, "error": settings_error_key(exc.kind)}
++    except httpx.HTTPStatusError as exc:
++        return {"success": False, "error": {401: "auth_failed", 403: "forbidden", 404: "not_found", 429: "rate_limited"}.get(exc.response.status_code, "http_error")}
++    except Exception:
++        return {"success": False, "error": "connection_failed"}
 +
 +
 +def _vocab_error(reason: str, status: int | None = None):
@@ -7522,7 +7629,7 @@
 +}
 --- /dev/null
 +++ b/web/static/js/pages/settings/ai-tags-logic.js
-@@ -0,0 +1,300 @@
+@@ -0,0 +1,286 @@
 +/**
 + * ai-tags-logic.js — AI tags panel pure functions (TASK-188c-T7)
 + *
@@ -7638,26 +7745,12 @@
 +
 +/** Test-button body: secrets as-is; omit absent fields. */
 +export function buildTagsTestBody(form) {
-+    const body = {
++    return {
 +        provider: form.aiTagsProvider,
++        base_url: (form.aiTagsBaseUrl || '').trim(),
++        api_key: form.aiTagsApiKey || '',
 +        model: form.aiTagsModel,
 +    };
-+    const p = form.aiTagsProvider;
-+    if (p === 'ollama') {
-+        body.base_url = form.ollamaUrl;
-+    } else if (p === 'gemini') {
-+        body.api_key = form.geminiApiKey;
-+    } else if (p === 'claude') {
-+        body.api_key = form.claudeApiKey;
-+    } else if (p === 'openai_official') {
-+        body.api_key = form.openaiOfficialApiKey;
-+    } else if (p === 'openai') {
-+        body.base_url = typeof form.openaiBaseUrl === 'string'
-+            ? form.openaiBaseUrl.trim()
-+            : form.openaiBaseUrl;
-+        body.api_key = form.openaiApiKey;
-+    }
-+    return body;
 +}
 +
 +/** Test-result line. Returns { key, params }. */
@@ -7825,13 +7918,12 @@
 +};
 --- /dev/null
 +++ b/web/static/js/pages/settings/ai-tags-panel.js
-@@ -0,0 +1,173 @@
+@@ -0,0 +1,201 @@
 +/**
 + * ai-tags-panel.js — 設定頁「AI 標籤」分頁獨立 Alpine 元件（TASK-188c-T8b；補跑邏輯 189a-T11a 起改走共用 mixin）
 + *
 + * Alpine.data('aiTagsPanel')；面板獨有 key 一律 aiTags 前綴、補跑 key 一律 bf 前綴（展開自 ai-backfill-controls.js）；
-+ * 不進 mergeState。外求恰 6（不複製父層 key）：form／isDirty／aiTab／showToast／
-+ *   aiTagsModelLists()／ensureProviderModels()。
++ * Uses its own connection and model list; translation settings are independent.
 + *
 + * 對外名單（模板照名單綁）：
 + *   面板獨有：aiTagsTestResult／aiTagsTestBusy；panelMode()、modelOptions()、onProviderChange()、
@@ -7846,7 +7938,6 @@
 +    panelMode,
 +    statusLine,
 +    progressExtras,
-+    pickTagsModel,
 +    costHint,
 +    formatUsd,
 +    buildTagsTestBody,
@@ -7897,20 +7988,31 @@
 +    },
 +};
 +
++const BASE_URLS = {ollama: 'http://localhost:11434', gemini: 'https://generativelanguage.googleapis.com/v1beta',
++    claude: 'https://api.anthropic.com', openai_official: 'https://api.openai.com/v1', openai: ''};
++
 +export function aiTagsPanel() {
++    const drafts = {};
 +    return {
 +        ...aiBackfillControls(TAGS_ADAPTER, TAGS_HOOKS),
++        aiTagsModels: [],
++        aiTagsModelsBusy: false,
++        aiTagsModelsStatus: '',
 +        aiTagsTestResult: '',
 +        aiTagsTestBusy: false,
 +
 +        init() {
++            // Masked drafts only refer to the credential currently saved on disk.
++            this.$watch('savedState', () => {
++                for (const key of Object.keys(drafts)) delete drafts[key];
++            });
 +            // 第一次打開開關：預選翻譯用的連線（載入設定時 isDirty 為 false，不動）
 +            this.$watch('form.aiTagsEnabled', (val) => {
 +                if (this.bfDestroyed) return;
 +                if (val !== true || this.isDirty !== true) return;
 +                if (this.form.aiTagsProvider !== '') return;
 +                const tp = this.form.translateProvider;
-+                if (!Object.keys(this.aiTagsModelLists()).includes(tp)) return;
++                if (!Object.hasOwn(BASE_URLS, tp)) return;
 +                this.form.aiTagsProvider = tp;
 +                this.onProviderChange();
 +            });
@@ -7927,29 +8029,48 @@
 +
 +        /** 模型下拉選項＝該家既有清單 ∪ 目前已存的 aiTagsModel（清單元素為字串或 {name}）。 */
 +        modelOptions() {
-+            const provider = this.form.aiTagsProvider;
-+            if (!provider) return [];
-+            const list = this.aiTagsModelLists()[provider];
-+            const names = [];
-+            for (const item of Array.isArray(list) ? list : []) {
-+                const name = typeof item === 'string' ? item : (item && item.name);
-+                if (typeof name === 'string' && name && !names.includes(name)) names.push(name);
-+            }
-+            const cur = this.form.aiTagsModel;
-+            if (cur && !names.includes(cur)) names.push(cur);
-+            return names;
++            return [...new Set([...this.aiTagsModels, this.form.aiTagsModel].filter(Boolean))];
 +        },
 +
-+        async onProviderChange() {
-+            const provider = this.form.aiTagsProvider;
-+            if (provider === '') {
-+                this.form.aiTagsModel = '';
-+            } else {
-+                const lists = this.aiTagsModelLists();
-+                // 換連線時 current 一律傳空字串，避免舊家模型名帶到新家
-+                this.form.aiTagsModel = pickTagsModel(provider, '', lists[provider] || []);
++        rememberConnection() {
++            drafts[this.form.aiTagsProvider] = {baseUrl: this.form.aiTagsBaseUrl,
++                apiKey: this.form.aiTagsApiKey, model: this.form.aiTagsModel};
++        },
++
++        onProviderChange() {
++            const p = this.form.aiTagsProvider;
++            const draft = drafts[p];
++            this.form.aiTagsBaseUrl = draft ? draft.baseUrl : (BASE_URLS[p] || '');
++            this.form.aiTagsApiKey = draft ? draft.apiKey : '';
++            this.form.aiTagsModel = draft ? draft.model : '';
++            this.aiTagsModels = [];
++            this.aiTagsModelsStatus = '';
++            this.aiTagsTestResult = '';
++        },
++
++        async loadModels() {
++            if (this.aiTagsModelsBusy) return;
++            const body = buildTagsTestBody(this.form);
++            this.aiTagsModelsBusy = true;
++            this.aiTagsModelsStatus = '';
++            try {
++                const response = await fetch('/api/ai/tags/models', {
++                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
++                });
++                const data = await response.json();
++                // Ignore a stale response if the connection changed while loading.
++                if (JSON.stringify(body) !== JSON.stringify(buildTagsTestBody(this.form))) return;
++                if (response.ok && data.success) {
++                    this.aiTagsModels = data.models || [];
++                    this.aiTagsModelsStatus = window.t('settings.status.connected_n_models', {count: this.aiTagsModels.length});
++                } else {
++                    this.aiTagsModelsStatus = window.t('settings.ai.connection.models_failed');
++                }
++            } catch {
++                this.aiTagsModelsStatus = window.t('settings.ai.connection.models_failed');
++            } finally {
++                this.aiTagsModelsBusy = false;
 +            }
-+            await this.ensureProviderModels(provider);
 +        },
 +
 +        testDisabled() {

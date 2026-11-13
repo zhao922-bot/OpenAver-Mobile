@@ -76,39 +76,45 @@ class TagsTestRequest(BaseModel):
     base_url: Optional[str] = None
 
 
-def _prepare_tags_test(body: TagsTestRequest):
-    """Sync prep for POST /tags/test: copy config → apply overrides → resolve conn."""
+def _tags_connection_config(body: TagsTestRequest):
+    from core.ai_services.connections import migrate_tags_connection
     config = copy.deepcopy(load_config())
-    tags = config.setdefault("ai_services", {}).setdefault("tags", {})
-    if body.provider is not None:
-        tags["provider"] = body.provider
-    if body.model is not None:
-        tags["model"] = body.model
+    migrate_tags_connection(config)
+    tags = config["ai_services"]["tags"]
+    stored_key = str(tags.get("api_key") or "")
+    for name in ("provider", "model", "base_url"):
+        value = getattr(body, name)
+        if value is not None:
+            tags[name] = value
+    if body.api_key is not None:
+        tags["api_key"] = resolve_secret(body.api_key, stored_key)
+    return config
 
-    provider = str(tags.get("provider") or "").strip()
 
-    stored_key = (
-        read_secret(config, f"translate.{provider}.api_key") if provider else ""
-    )
-    if body.api_key is None:
-        api_key = stored_key
-    else:
-        api_key = resolve_secret(body.api_key, stored_key)
-    if provider in ("gemini", "claude", "openai", "openai_official"):
-        config.setdefault("translate", {}).setdefault(provider, {})["api_key"] = api_key
+def _prepare_tags_test(body: TagsTestRequest):
+    config = _tags_connection_config(body)
+    return resolve_vision_conn(config), list(merged()), _tags_sample_uri()
 
-    if body.base_url is not None:
-        if provider == "openai":
-            config.setdefault("translate", {}).setdefault("openai", {})[
-                "base_url"
-            ] = body.base_url
-        elif provider == "ollama":
-            config.setdefault("translate", {}).setdefault("ollama", {})[
-                "url"
-            ] = body.base_url
 
-    conn = resolve_vision_conn(config)
-    return conn, list(merged()), _tags_sample_uri()
+@router.post("/tags/models")
+async def tags_models(body: TagsTestRequest):
+    from core.ai_services.connections import fetch_provider_models
+    from core.cloud_translate import TranslateError, settings_error_key
+    import httpx
+    try:
+        config = _tags_connection_config(body)
+        config["ai_services"]["tags"]["model"] = "__model_list__"
+        conn = resolve_vision_conn(config)
+        models = await fetch_provider_models(conn.provider, conn.base_url, conn.api_key)
+        return {"success": True, "models": models}
+    except TaggingFailure:
+        return {"success": False, "error": "missing_key"}
+    except TranslateError as exc:
+        return {"success": False, "error": settings_error_key(exc.kind)}
+    except httpx.HTTPStatusError as exc:
+        return {"success": False, "error": {401: "auth_failed", 403: "forbidden", 404: "not_found", 429: "rate_limited"}.get(exc.response.status_code, "http_error")}
+    except Exception:
+        return {"success": False, "error": "connection_failed"}
 
 
 def _vocab_error(reason: str, status: int | None = None):

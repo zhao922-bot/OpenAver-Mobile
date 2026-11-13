@@ -31,7 +31,7 @@ BLOCKED_FINISH_REASONS = frozenset({"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST",
 
 
 def build_headers(api_key: str) -> dict[str, str]:
-    return {"x-goog-api-key": api_key.strip()}
+    return {"x-goog-api-key": api_key.strip()} if api_key.strip() else {}
 
 
 def build_translate_payload(model: str, prompt: str) -> dict[str, Any]:
@@ -134,12 +134,13 @@ async def request_translation(
     prompt: str,
     *,
     timeout: float,
+    base_url: str = GEMINI_BASE_URL,
 ) -> str:
     """POST :generateContent；成功回非空 str，失敗拋 TranslateError。"""
     resp = await cloud_request(
         TAG,
         "POST",
-        f"{GEMINI_BASE_URL}/models/{model}:generateContent",
+        f"{base_url.rstrip('/')}/models/{model}:generateContent",
         headers=build_headers(api_key),
         timeout=timeout,
         json=build_translate_payload(model, prompt),
@@ -166,12 +167,13 @@ async def request_vision(
     image_data_uri: str,
     *,
     timeout: float,
+    base_url: str = GEMINI_BASE_URL,
 ) -> str:
     """POST generateContent with one inline image; return the model text."""
     resp = await cloud_request(
         TAG,
         "POST",
-        f"{GEMINI_BASE_URL}/models/{model}:generateContent",
+        f"{base_url.rstrip('/')}/models/{model}:generateContent",
         headers=build_headers(api_key),
         timeout=timeout,
         json=build_vision_payload(model, system, user_text, image_data_uri),

@@ -129,7 +129,8 @@ _jellyfin_cache_time: float = 0
 _rename_execute_lock = threading.Lock()
 _rename_plan_cache: dict[str, tuple[float, dict]] = {}
 _RENAME_PLAN_TTL_SECONDS = 30 * 60
-_TAG_SOURCE_MANUAL_ALLOWLIST = frozenset({'jable'})
+_MAINTENANCE_MANUAL_SOURCES = frozenset({'javlibrary', 'fc-javten', 'jable'})
+_TAG_SOURCE_MANUAL_ALLOWLIST = _MAINTENANCE_MANUAL_SOURCES
 _TAG_SOURCE_CF_WAIT_SECONDS = 300.0
 _TAG_SOURCE_CF_POLL_SECONDS = 0.5
 
@@ -1800,7 +1801,7 @@ def _validate_batch_source(
     action: str | None = None,
     action_key: str | None = None,
     locale: str | None = None,
-    allow_manual_only: frozenset[str] = frozenset(),
+    allow_manual_only: frozenset[str] = _MAINTENANCE_MANUAL_SOURCES,
 ) -> Optional[str]:
     """Return a user-facing error for sources that cannot run in a batch."""
     locale = _active_locale(config) if locale is None else locale
@@ -1809,7 +1810,10 @@ def _validate_batch_source(
     action = action or ""
     if source == "auto":
         return None
-    if source.startswith("custom:"):
+    if source.startswith("custom:") and not any(
+        isinstance(row, dict) and row.get("id") == source and row.get("enabled")
+        for row in config.get("sources", [])
+    ):
         return _runtime_text(
             "scanner", "batch_custom_unsupported", locale, action=action
         )
@@ -1839,8 +1843,7 @@ def _validate_batch_source(
             "scanner", "batch_cloudflare_unsupported", locale, action=action
         )
     # Manual-only sources stay out of automatic fan-out, but a source can be
-    # explicitly allowlisted for one batch workflow. Jable is exact-number only
-    # and its Cloudflare verification is handled by the interactive batch flow.
+    # explicitly selected for maintenance, independent of automatic scan toggles.
     if source in allow_manual_only:
         return None
     if not source_row or not source_row.get("enabled"):
@@ -3293,7 +3296,9 @@ def _title_backfill_generator(cancel_event: threading.Event) -> Generator[str, N
         })
 
 
-def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
+def _sample_backfill_generator(
+    cancel_event: threading.Event, source: str = "auto",
+) -> Generator[str, None, None]:
     """Fetch samples only for rows whose stored sample-image list is empty."""
     locale = _active_locale()
     try:
@@ -3306,6 +3311,10 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
             )
             config = {}
         locale = _active_locale(config)
+        source_error = _validate_batch_source(source, config, locale=locale)
+        if source_error:
+            yield _sse_event({"type": "error", "message": source_error})
+            return
         db_path = get_db_path()
         if not db_path.exists():
             yield _sse_event({
@@ -3400,6 +3409,7 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
                     FetchSamplesRequest(
                         file_path=video.path,
                         number=number,
+                        source=source,
                     ),
                     cancel_event,
                 )
@@ -3614,12 +3624,18 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
         })
 
 
-def _plot_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
+def _plot_backfill_generator(
+    cancel_event: threading.Event, source: str = "auto",
+) -> Generator[str, None, None]:
     """Fetch and translate synopses only for existing NFOs with an empty plot."""
     locale = _active_locale()
     try:
         config = load_config()
         locale = _active_locale(config)
+        source_error = _validate_batch_source(source, config, locale=locale)
+        if source_error:
+            yield _sse_event({"type": "error", "message": source_error})
+            return
         db_path = get_db_path()
         if not db_path.exists():
             yield _sse_event({
@@ -3701,7 +3717,7 @@ def _plot_backfill_generator(cancel_event: threading.Event) -> Generator[str, No
             try:
                 metadata = search_jav(
                     number,
-                    source="auto",
+                    source=source,
                     javbus_lang=javbus_lang,
                 )
             except Exception:
@@ -4070,15 +4086,19 @@ async def backfill_titles(request: Request):
 
 
 @router.post("/backfill-samples")
-async def backfill_samples(request: Request):
+async def backfill_samples(request: Request, source: str = Query("auto", min_length=1)):
     """SSE: fetch samples only for rows whose sample list is empty."""
-    return await _cancelable_sse_response(request, _sample_backfill_generator)
+    return await _cancelable_sse_response(
+        request, lambda cancel: _sample_backfill_generator(cancel, source=source),
+    )
 
 
 @router.post("/backfill-plots")
-async def backfill_plots(request: Request):
+async def backfill_plots(request: Request, source: str = Query("auto", min_length=1)):
     """SSE: fetch and translate synopses for existing NFOs with empty plots."""
-    return await _cancelable_sse_response(request, _plot_backfill_generator)
+    return await _cancelable_sse_response(
+        request, lambda cancel: _plot_backfill_generator(cancel, source=source),
+    )
 
 
 def _build_current_rename_plan(scope: str = "files") -> dict:
@@ -4583,6 +4603,7 @@ def generate_nfo_update(
     cancel_event: Optional[threading.Event] = None,
     selected_paths: Optional[list[str]] = None,
     backup: bool = False,
+    source: str = "auto",
 ) -> Generator[str, None, None]:
     """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
 
@@ -4614,6 +4635,10 @@ def generate_nfo_update(
 
         config = load_config()
         locale = _active_locale(config)
+        source_error = _validate_batch_source(source, config, locale=locale)
+        if source_error:
+            yield _sse_event({"type": "error", "message": source_error})
+            return
         cache, skipped_readonly, path_mappings = _build_nfo_update_cache(
             all_videos, config
         )
@@ -4713,6 +4738,7 @@ def generate_nfo_update(
             path_mappings,
             should_abort=cancel_event.is_set if cancel_event is not None else None,
             backup=backup,
+            source=source,
         )
         update_stats = None
         while True:
@@ -4829,6 +4855,7 @@ async def run_update(
     request: Request,
     path: Optional[list[str]] = Query(default=None),
     backup: bool = Query(default=True),
+    source: str = Query("auto", min_length=1),
 ):
     """執行 NFO 更新（SSE 串流回傳進度）"""
     return await _cancelable_sse_response(
@@ -4837,6 +4864,7 @@ async def run_update(
             cancel_event,
             selected_paths=path,
             backup=backup,
+            source=source,
         ),
     )
 

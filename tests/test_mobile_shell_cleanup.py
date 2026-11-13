@@ -405,6 +405,22 @@ def test_mobile_settings_appearance_bar_stays_compact_at_large_font_sizes():
     assert "width: 34px;" in css
     assert "height: 40px;" in css
     assert "flex-wrap: nowrap;" in css
+    assert "gap: clamp(8px, 3vw, 14px);" in css
+    assert "width: fit-content;" in css
+    assert "margin-inline: auto;" in css
+    assert "justify-self: center;" in css
+    assert "display: grid;" in css
+    assert "grid-template-columns: 2.5rem max-content 2.5rem;" in css
+    assert "justify-items: center;" in css
+    assert "settings-appearance-controls .settings-locale-toggle" in css
+    assert "settings-appearance-controls .font-size-control" in css
+    assert "height: 48px;" in css
+    assert "settings-appearance-controls .settings-theme-toggle" in css
+    assert (
+        settings.index('class="settings-locale-toggle"')
+        < settings.index('class="font-size-control"')
+        < settings.index('class="settings-theme-toggle"')
+    )
 
 
 def test_mobile_sources_toolbar_keeps_probe_aligned_with_batch_actions():

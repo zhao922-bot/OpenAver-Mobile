@@ -704,7 +704,7 @@
       "claude_api_key_hint": "到 Anthropic Console 创建 API Key（sk-ant- 开头）。Claude 订阅套餐的登录不能直接用在这里。",
       "claude_api_key_placeholder": "sk-ant-...",
       "openai_official": "OpenAI（官方）",
-      "openai_official_hint": "固定连接 OpenAI 官方 API（https://api.openai.com/v1），只需填写 API Key 并选择模型。"
+      "openai_official_hint": "默认使用 OpenAI 官方地址，也可填写兼容服务地址、API Key 和模型。"
     },
     "scraper": {
       "suffix_keywords_label": "版本标记",
@@ -957,7 +957,7 @@
         "enabled_label": "启用图片相似",
         "empty_desc": "这个能力需要你自己架一个小服务（或请 AI 助理帮你架），OpenAver 会把封面送过去换成向量，让星空也看得懂「封面长得像」。没有的话可以略过，其他功能不受影响。",
         "btn_docs": "看文档",
-        "url_label": "端点网址",
+        "url_label": "服务地址",
         "url_placeholder": "http://127.0.0.1:8000",
         "api_key_label": "API Key",
         "api_key_placeholder": "留空 = 不发送 Authorization",
@@ -1000,7 +1000,7 @@
       "faces": {
         "enabled_label": "启用人脸端点",
         "empty_desc": "这个能力需要你自己架一个小服务（或请 AI 助理帮你架），OpenAver 会把封面送过去找脸并对焦。外部端点开着时，手机的算力限制不适用。没有的话可以略过，其他功能不受影响。",
-        "url_label": "端点网址",
+        "url_label": "服务地址",
         "url_placeholder": "http://127.0.0.1:8000",
         "api_key_label": "API Key",
         "api_key_placeholder": "留空 = 不发送 Authorization",
@@ -1075,6 +1075,18 @@
         "test_http_error": "测试请求失败",
         "backfill_http_error": "补完全库请求失败",
         "backfill_not_enabled": "请先开启 AI 标签并点「保存」，再补完全库"
+      },
+      "connection": {
+        "url_label": "服务地址",
+        "base_url_hint": "填写服务基础地址，保留所需的 API 版本路径；程序会追加请求路径。",
+        "api_key_label": "API Key",
+        "api_key_hint": "无需认证的服务可留空。密钥仅用于当前功能。",
+        "model_hint": "填写模型名称，也可先查询模型",
+        "fetch_models": "查询模型",
+        "models_failed": "查询失败，请检查当前功能的地址和密钥；也可直接填写模型名称。",
+        "independent_hint": "此连接独立于标题翻译，修改这里不会影响翻译设置。",
+        "similar_path_hint": "填写基础地址，例如 http://192.168.1.22:8765；自动追加 /v1/embeddings。",
+        "faces_path_hint": "填写基础地址，例如 http://192.168.1.22:8765；自动追加 /v1/faces。"
       }
     },
     "group": {
@@ -1100,6 +1112,14 @@
     }
   },
   "scanner": {
+    "sources": {
+      "title": "选择来源",
+      "hint": "选择本次操作使用的来源：设置中已勾选的扫描来源，以及始终可选的 JavLibrary、FC2-javten 和 Jable。",
+      "unavailable": "批量操作不可用",
+      "empty": "没有可用来源，请先在设置中勾选扫描来源。",
+      "load_failed": "无法读取最新来源设置，请重试。",
+      "cancel": "取消"
+    },
     "rename": {
       "row_title": "统一文件名格式",
       "row_hint": "统一番号与标题间距；超过系统限制的名称会安全截断并加 …",

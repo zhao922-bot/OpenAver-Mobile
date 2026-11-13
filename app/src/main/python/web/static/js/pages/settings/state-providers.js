@@ -1,5 +1,11 @@
 import { pickClaudeModel } from './claude-model-pick.js';
-import { pickTagsModel } from '@/settings/ai-tags-logic.js';
+
+const KEY_REQUIRED_URLS = {gemini: 'https://generativelanguage.googleapis.com/v1beta',
+    claude: 'https://api.anthropic.com', openaiOfficial: 'https://api.openai.com/v1'};
+function requiresProviderKey(provider, url) {
+    const value = (url || '').trim().replace(/\/+$/, '');
+    return !value || value === KEY_REQUIRED_URLS[provider];
+}
 
 export function stateProviders() {
     return {
@@ -40,7 +46,7 @@ export function stateProviders() {
             this.ollamaStatus = `<span class="text-base-content/50">${window.t('settings.status.loading_models')}</span>`;
 
             try {
-                const resp = await fetch(`/api/ollama/models?url=${encodeURIComponent(url)}`);
+                const resp = await fetch('/api/ollama/models', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({url, api_key: this.form.ollamaApiKey})});
                 const result = await resp.json();
 
                 if (result.success && result.models && result.models.length > 0) {
@@ -48,7 +54,7 @@ export function stateProviders() {
 
                     if (!keepModel) {
                         // 設定儲存的模型
-                        if (savedModel && result.models.includes(savedModel)) {
+                        if (savedModel) {
                             this.form.ollamaModel = savedModel;
                         } else if (result.models.length > 0) {
                             this.form.ollamaModel = result.models[0];
@@ -76,7 +82,7 @@ export function stateProviders() {
             this.ollamaStatus = `<span class="text-base-content/50">${window.t('settings.status.connecting')}</span>`;
 
             try {
-                const resp = await fetch(`/api/ollama/models?url=${encodeURIComponent(url)}`);
+                const resp = await fetch('/api/ollama/models', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({url, api_key: this.form.ollamaApiKey})});
                 const result = await resp.json();
 
                 if (result.success && result.models && result.models.length > 0) {
@@ -114,7 +120,7 @@ export function stateProviders() {
                 const resp = await fetch('/api/ollama/test', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url, model })
+                    body: JSON.stringify({ url, model, api_key: this.form.ollamaApiKey })
                 });
                 const result = await resp.json();
 
@@ -142,7 +148,7 @@ export function stateProviders() {
         async testGeminiConnection() {
             const apiKey = this.form.geminiApiKey;
 
-            if (!apiKey) {
+            if (!apiKey && requiresProviderKey('gemini', this.form.geminiBaseUrl)) {
                 this.geminiStatus = `<span class="text-error"><i class="bi bi-x-circle"></i> ${window.t('settings.status.enter_api_key')}</span>`;
                 return;
             }
@@ -154,7 +160,7 @@ export function stateProviders() {
                 const response = await fetch('/api/gemini/test', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key: apiKey })
+                    body: JSON.stringify({ api_key: apiKey, base_url: this.form.geminiBaseUrl })
                 });
 
                 const data = await response.json();
@@ -165,7 +171,7 @@ export function stateProviders() {
 
                     // 如果當前 model 不在 allowlist，自動選第一個
                     const modelNames = data.models.map(m => m.name);
-                    if (data.models.length > 0 && !modelNames.includes(this.form.geminiModel)) {
+                    if (data.models.length > 0 && !this.form.geminiModel) {
                         this.form.geminiModel = data.models[0].name;
                         // auto-fallback 不算用戶修改，同步快照避免 isDirty 誤判
                         if (this.savedState) this.savedState.geminiModel = this.form.geminiModel;
@@ -186,7 +192,7 @@ export function stateProviders() {
             const apiKey = this.form.geminiApiKey;
             const model = this.form.geminiModel;
 
-            if (!apiKey) {
+            if (!apiKey && requiresProviderKey('gemini', this.form.geminiBaseUrl)) {
                 this.geminiModelStatus = `<span class="text-error"><i class="bi bi-x-circle"></i> ${window.t('settings.status.enter_api_key_first')}</span>`;
                 return;
             }
@@ -205,6 +211,7 @@ export function stateProviders() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         api_key: apiKey,
+                        base_url: this.form.geminiBaseUrl,
                         model: model
                     })
                 });
@@ -341,7 +348,7 @@ export function stateProviders() {
 
         async fetchOpenAIOfficialModels({ source = 'manual' } = {}) {
             const apiKey = this.form.openaiOfficialApiKey;
-            if (!apiKey) {
+            if (!apiKey && requiresProviderKey('openaiOfficial', this.form.openaiOfficialBaseUrl)) {
                 this.openaiOfficialStatus = `<span class="text-error"><i class="bi bi-x-circle"></i> ${window.t('settings.status.enter_api_key')}</span>`;
                 return;
             }
@@ -352,13 +359,13 @@ export function stateProviders() {
                 const response = await fetch('/api/openai/official/models', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key: apiKey })
+                    body: JSON.stringify({ api_key: apiKey, base_url: this.form.openaiOfficialBaseUrl })
                 });
                 const data = await response.json();
                 if (data.success && data.models && data.models.length > 0) {
                     this.openaiOfficialModels = data.models;
                     this.openaiOfficialStatus = `<span class="text-success"><i class="bi bi-check-circle"></i> ${window.t('settings.status.connected_n_models', {count: data.models.length})}</span>`;
-                    if (!this.openaiOfficialModels.includes(this.form.openaiOfficialModel)) {
+                    if (!this.form.openaiOfficialModel) {
                         this.form.openaiOfficialModel = data.default_model || this.openaiOfficialModels[0];
                         if (this.savedState) {
                             this.savedState.openaiOfficialModel = this.form.openaiOfficialModel;
@@ -380,7 +387,7 @@ export function stateProviders() {
         async testOpenAIOfficialTranslation() {
             const apiKey = this.form.openaiOfficialApiKey;
             const model = this.form.openaiOfficialModel;
-            if (!apiKey) {
+            if (!apiKey && requiresProviderKey('openaiOfficial', this.form.openaiOfficialBaseUrl)) {
                 this.openaiOfficialModelStatus = `<span class="text-error"><i class="bi bi-x-circle"></i> ${window.t('settings.status.enter_api_key_first')}</span>`;
                 return;
             }
@@ -395,7 +402,7 @@ export function stateProviders() {
                 const response = await fetch('/api/openai/official/test', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key: apiKey, model })
+                    body: JSON.stringify({ api_key: apiKey, model, base_url: this.form.openaiOfficialBaseUrl })
                 });
                 const data = await response.json();
                 if (data.success) {
@@ -423,7 +430,7 @@ export function stateProviders() {
         async fetchClaudeModels({ source = 'manual' } = {}) {
             const apiKey = this.form.claudeApiKey;
 
-            if (!apiKey) {
+            if (!apiKey && requiresProviderKey('claude', this.form.claudeBaseUrl)) {
                 this.claudeStatus = `<span class="text-error"><i class="bi bi-x-circle"></i> ${window.t('settings.status.enter_api_key')}</span>`;
                 return;
             }
@@ -435,7 +442,7 @@ export function stateProviders() {
                 const response = await fetch('/api/claude/models', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key: apiKey })
+                    body: JSON.stringify({ api_key: apiKey, base_url: this.form.claudeBaseUrl })
                 });
 
                 const data = await response.json();
@@ -444,7 +451,7 @@ export function stateProviders() {
                     this.claudeModels = data.models;
                     this.claudeStatus = `<span class="text-success"><i class="bi bi-check-circle"></i> ${window.t('settings.status.connected_n_models', {count: data.models.length})}</span>`;
 
-                    const picked = pickClaudeModel(
+                    const picked = this.form.claudeModel || pickClaudeModel(
                         this.form.claudeModel,
                         data.models,
                         data.latest_haiku,
@@ -474,7 +481,7 @@ export function stateProviders() {
             const apiKey = this.form.claudeApiKey;
             const model = this.form.claudeModel;
 
-            if (!apiKey) {
+            if (!apiKey && requiresProviderKey('claude', this.form.claudeBaseUrl)) {
                 this.claudeModelStatus = `<span class="text-error"><i class="bi bi-x-circle"></i> ${window.t('settings.status.enter_api_key_first')}</span>`;
                 return;
             }
@@ -493,6 +500,7 @@ export function stateProviders() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         api_key: apiKey,
+                        base_url: this.form.claudeBaseUrl,
                         model: model
                     })
                 });
@@ -521,38 +529,5 @@ export function stateProviders() {
             }
         },
 
-        aiTagsModelLists() {
-            return {
-                ollama: this.ollamaModels,
-                gemini: this.geminiModels,
-                claude: this.claudeModels,
-                openai_official: this.openaiOfficialModels,
-                openai: this.openaiModels,
-            };
-        },
-
-        async ensureProviderModels(provider) {
-            const count = (items) => (Array.isArray(items) ? items.length : 0);
-            if (provider === 'ollama' && count(this.ollamaModels) <= 1 && this.form.ollamaUrl) {
-                await this.loadOllamaModels(this.form.ollamaUrl, '', { keepModel: true });
-            } else if (provider === 'gemini' && count(this.geminiModels) <= 1 && this.form.geminiApiKey) {
-                await this.testGeminiConnection();
-            } else if (provider === 'claude' && count(this.claudeModels) <= 1 && this.form.claudeApiKey) {
-                await this.fetchClaudeModels({ source: 'auto' });
-            } else if (provider === 'openai_official' && count(this.openaiOfficialModels) <= 1 && this.form.openaiOfficialApiKey) {
-                await this.fetchOpenAIOfficialModels({ source: 'auto' });
-            } else if (provider === 'openai' && count(this.openaiModels) <= 1 && this.form.openaiBaseUrl) {
-                await this.fetchOpenAIModels({ source: 'auto' });
-            }
-
-            if (this.form.aiTagsProvider === provider && !this.form.aiTagsModel) {
-                const lists = this.aiTagsModelLists();
-                this.form.aiTagsModel = pickTagsModel(
-                    provider,
-                    '',
-                    lists[provider] || [],
-                );
-            }
-        },
     };
 }

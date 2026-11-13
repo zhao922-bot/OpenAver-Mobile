@@ -396,7 +396,7 @@
                 {{ t('scanner.stats.nfo_suffix') }}
                 {{ number_drilldown_panel() }}
             </span>
-            <button class="btn-nfo-update" @click="openNfoUpdateConfirm()" id="btnUpdate"
+            <button class="btn-nfo-update" @click="openMaintenanceSourcePicker('nfo')" id="btnUpdate"
                     x-bind:disabled="nfoUpdateButtonDisabled"
                     x-html="nfoUpdateButtonText"
                     title="{{ t('scanner.stats.nfo_update_title') }}">
@@ -412,16 +412,8 @@
                 </span>
             </div>
             <div class="maintenance-controls rename-source-controls">
-                <select class="select select-bordered select-sm"
-                        x-model="renameSource"
-                        :disabled="isBusy"
-                        :aria-label="window.t('scanner.rename.source_select_label')">
-                    <template x-for="source in renameSourceOptions" :key="source.id">
-                        <option :value="source.id" x-text="source.display_name"></option>
-                    </template>
-                </select>
                 <button class="btn-tag-preview"
-                        @click="previewRenamePlan()"
+                        @click="openMaintenanceSourcePicker('rename')"
                         :disabled="renamePreviewLoading || isBusy">
                     <span x-show="renamePreviewLoading" class="loading loading-spinner loading-sm"></span>
                     <i class="bi bi-eye" x-show="!renamePreviewLoading"></i>
@@ -433,7 +425,7 @@
         </div>
 
         <div class="nfo-update-row maintenance-row maintenance-row-tag"
-             x-show="tagSourceOptions.length > 0">
+             >
             <div class="maintenance-copy" :title="window.t('scanner.stats.tag_source_hint')">
                 <span class="maintenance-icon"><i class="bi bi-tags"></i></span>
                 <span class="maintenance-text">
@@ -444,22 +436,15 @@
                 </span>
             </div>
             <div class="maintenance-controls">
-                <select class="select select-bordered select-sm"
-                        x-model="tagSourceUpdateSource"
-                        :disabled="isBusy">
-                    <template x-for="source in tagSourceOptions" :key="source.id">
-                        <option :value="source.id" x-text="source.display_name"></option>
-                    </template>
-                </select>
                 <div class="tag-source-actions">
                     <button class="btn-tag-preview"
-                            @click="previewTagSourceUpdate()"
-                            :disabled="tagSourceUpdateButtonDisabled"
+                            @click="openMaintenanceSourcePicker('tag-preview')"
+                            :disabled="isBusy || statTotal === 0"
                             x-html="tagSourcePreviewButtonText">
                     </button>
                     <button class="btn-nfo-update"
-                            @click="openTagSourceUpdateConfirm()"
-                            :disabled="tagSourceUpdateButtonDisabled"
+                            @click="openMaintenanceSourcePicker('tag-update')"
+                            :disabled="isBusy || statTotal === 0"
                             x-html="tagSourceUpdateButtonText"
                             :title="window.t('scanner.stats.tag_source_hint')">
                     </button>
@@ -510,7 +495,7 @@
                     {{ t('scanner.stats.missing_suffix') }}
                 </span>
             </span>
-            <button class="btn-nfo-update" @click="runMissingEnrich()"
+            <button class="btn-nfo-update" @click="openMaintenanceSourcePicker('enrich')"
                     x-bind:disabled="isBusy || missingItems.length === 0"
                     x-html="missingEnrichButtonText">
             </button>
@@ -548,7 +533,7 @@
                 {{ number_drilldown_panel() }}
             </span>
             <button class="btn-nfo-update"
-                    @click="runSampleBackfill()"
+                    @click="openMaintenanceSourcePicker('samples')"
                     :disabled="sampleBackfillDisabled"
                     x-html="sampleBackfillButtonText"
                     :title="window.t('scanner.stats.sample_backfill_hint')">
@@ -567,7 +552,7 @@
                 {{ number_drilldown_panel() }}
             </span>
             <button class="btn-nfo-update"
-                    @click="runPlotBackfill()"
+                    @click="openMaintenanceSourcePicker('plots')"
                     :disabled="plotBackfillDisabled"
                     x-html="plotBackfillButtonText"
                     :title="window.t('scanner.stats.plot_backfill_hint')">
@@ -582,7 +567,7 @@
                 <strong x-text="missingItems.length"></strong>
                 <span x-text="window.t('scanner.stats.missing_resume_suffix')"></span>
             </span>
-            <button class="btn-nfo-update" @click="resumeMissingEnrich()"
+            <button class="btn-nfo-update" @click="openMaintenanceSourcePicker('resume')"
                     x-bind:disabled="isBusy">
                 {{ t('scanner.stats.missing_resume_btn') }}
             </button>
@@ -1039,6 +1024,42 @@
             <div class="modal-action fluent-modal-actions">
                 <button type="button" class="btn btn-ghost" @click="closeCopyFailModal()">
                     {{ t('scanner.copy_fail_modal.close') }}
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog class="modal fluent-modal maintenance-source-modal"
+            :class="{ 'modal-open': maintenanceSourceModalOpen }"
+            @click.self="closeMaintenanceSourcePicker()"
+            @cancel.prevent="closeMaintenanceSourcePicker()"
+            @keydown.escape.prevent.stop="closeMaintenanceSourcePicker()"
+            aria-labelledby="maintenanceSourceTitle">
+        <div class="modal-box fluent-modal-box">
+            <h3 id="maintenanceSourceTitle" class="fluent-modal-title">
+                <i class="bi bi-collection"></i>
+                <span x-text="maintenanceSourceTitle"></span>
+            </h3>
+            <p class="fluent-modal-body">{{ t('scanner.sources.hint') }}</p>
+            <div class="maintenance-source-loading" x-show="maintenanceSourceLoading" role="status">
+                <span class="loading loading-spinner loading-sm"></span>
+            </div>
+            <div class="maintenance-source-grid" x-show="!maintenanceSourceLoading">
+                <template x-for="source in maintenanceSourceOptions" :key="source.id">
+                    <button type="button" class="maintenance-source-option"
+                            :disabled="source.disabled || maintenanceSourceLoading || isBusy"
+                            @click="chooseMaintenanceSource(source.id)">
+                        <span x-text="source.display_name"></span>
+                        <small x-show="source.disabled">{{ t('scanner.sources.unavailable') }}</small>
+                    </button>
+                </template>
+            </div>
+            <p class="fluent-modal-body" x-show="!maintenanceSourceLoading && tagSourceOptions.length === 0">
+                {{ t('scanner.sources.empty') }}
+            </p>
+            <div class="modal-action fluent-modal-actions">
+                <button type="button" class="btn btn-ghost" @click="closeMaintenanceSourcePicker()">
+                    {{ t('scanner.sources.cancel') }}
                 </button>
             </div>
         </div>

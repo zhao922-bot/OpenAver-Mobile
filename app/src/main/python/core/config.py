@@ -125,12 +125,14 @@ class SourceLinksConfig(BaseModel):
 class OllamaConfig(BaseModel):
     """串接結構：Ollama 配置"""
     url: str = "http://localhost:11434"
+    api_key: str = ""
     model: str = "qwen3:8b"  # 所有翻譯（單片/批次）都用此模型
 
 
 class GeminiConfig(BaseModel):
     """串接結構：Gemini 配置"""
     api_key: str = ""  # Gemini API Key
+    base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     model: str = "gemini-flash-lite-latest"  # 預設使用 latest 別名（自動路由可用版本）
 
 
@@ -145,12 +147,14 @@ class OpenAIConfig(BaseModel):
 class ClaudeConfig(BaseModel):
     """串接結構：Claude 配置"""
     api_key: str = ""
+    base_url: str = "https://api.anthropic.com"
     model: str = "claude-haiku-5-5"
 
 
 class OpenAIOfficialConfig(BaseModel):
-    """OpenAI 官方翻譯配置；base URL 由程式固定。"""
+    """OpenAI translation connection, defaulting to the official API."""
     api_key: str = ""
+    base_url: str = "https://api.openai.com/v1"
     model: str = ""
 
 
@@ -272,10 +276,13 @@ class FacesConfig(BaseModel):
 
 
 class TagsConfig(BaseModel):
-    """Reserved for the r6 AI-tagging release; preserved across mobile saves."""
+    """Independent vision chat connection for AI tagging."""
     enabled: bool = False
     provider: str = ""
     model: str = ""
+    base_url: str = ""
+    api_key: str = ""
+    connection_version: int = 1
 
 
 class AIServicesConfig(BaseModel):
@@ -771,6 +778,10 @@ def _migrate_additive_config(raw_config: dict) -> bool:
             if name not in ai or not isinstance(ai.get(name), dict):
                 ai[name] = model().model_dump()
                 need_save = True
+
+    from core.ai_services.connections import migrate_tags_connection
+    if migrate_tags_connection(raw_config):
+        need_save = True
 
     if (
         'scraper' in raw_config

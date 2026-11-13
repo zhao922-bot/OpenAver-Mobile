@@ -662,6 +662,73 @@
     padding-top: 0.1rem;
 }
 
+.scanner-maintenance,
+.maintenance-source-modal {
+    --maintenance-orange: #ed8a28;
+    --maintenance-orange-hover: #dc7616;
+    --maintenance-ink: #291706;
+}
+
+#scannerPage .scanner-maintenance-body :is(.btn-nfo-update, .btn-tag-preview),
+.maintenance-source-option {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 48px;
+    padding: 0.55rem 1rem;
+    border: 1px solid var(--maintenance-orange);
+    border-radius: var(--radius-pill);
+    background: var(--maintenance-orange);
+    color: var(--maintenance-ink);
+    font-size: 0.8rem;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+#scannerPage .scanner-maintenance-body :is(.btn-nfo-update, .btn-tag-preview):hover:not(:disabled),
+.maintenance-source-option:hover:not(:disabled) {
+    background: var(--maintenance-orange-hover);
+    border-color: var(--maintenance-orange-hover);
+    color: var(--maintenance-ink);
+}
+
+#scannerPage .scanner-maintenance-body :is(.btn-nfo-update, .btn-tag-preview):disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.maintenance-source-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin-top: 1rem;
+}
+
+.maintenance-source-option {
+    flex-direction: column;
+    min-width: 0;
+    border-radius: var(--fluent-radius-md);
+    overflow-wrap: anywhere;
+}
+
+.maintenance-source-option:disabled {
+    background: var(--bg-body);
+    border-color: var(--border-light);
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+
+.maintenance-source-option small {
+    font-size: 0.7rem;
+    font-weight: 400;
+}
+
+.maintenance-source-loading {
+    padding: 1rem;
+    text-align: center;
+}
+
 #statsCard .maintenance-row {
     display: flex;
     align-items: center;
@@ -684,7 +751,7 @@
 
 #statsCard .maintenance-row > .btn-nfo-update {
     flex: 0 0 auto;
-    min-height: 2.4rem;
+    min-height: 48px;
 }
 
 .maintenance-copy {

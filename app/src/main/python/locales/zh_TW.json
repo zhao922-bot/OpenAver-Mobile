@@ -704,7 +704,7 @@
       "openai_model_placeholder": "e.g. gpt-4o-mini",
       "openai_custom_model": "自訂...",
       "openai_official": "OpenAI（官方）",
-      "openai_official_hint": "固定連線 OpenAI 官方 API（https://api.openai.com/v1），只需填寫 API Key 並選擇模型。"
+      "openai_official_hint": "預設使用 OpenAI 官方位址，也可填寫相容服務位址、API Key 和模型。"
     },
     "scraper": {
       "suffix_keywords_label": "版本標記",
@@ -957,7 +957,7 @@
         "enabled_label": "啟用圖片相似",
         "empty_desc": "這個能力需要你自己架一個小服務（或請 AI 助理替你架），OpenAver 會把封面送過去換成向量，讓星空也看得懂「封面長得像」。沒有的話可以略過，其他功能不受影響。",
         "btn_docs": "看文件",
-        "url_label": "端點網址",
+        "url_label": "服務位址",
         "url_placeholder": "http://127.0.0.1:8000",
         "api_key_label": "API Key",
         "api_key_placeholder": "留空 = 不送 Authorization",
@@ -1000,7 +1000,7 @@
       "faces": {
         "enabled_label": "啟用人臉端點",
         "empty_desc": "這個能力需要你自己架一個小服務（或請 AI 助理替你架），OpenAver 會把封面送過去找臉並對焦。外部端點開著時，手機的算力限制不適用。沒有的話可以略過，其他功能不受影響。",
-        "url_label": "端點網址",
+        "url_label": "服務位址",
         "url_placeholder": "http://127.0.0.1:8000",
         "api_key_label": "API Key",
         "api_key_placeholder": "留空 = 不送 Authorization",
@@ -1075,6 +1075,18 @@
         "test_http_error": "測試請求失敗",
         "backfill_http_error": "補完全庫請求失敗",
         "backfill_not_enabled": "請先開啟 AI 標籤並按「儲存」，再補完全庫"
+      },
+      "connection": {
+        "url_label": "服務位址",
+        "base_url_hint": "填寫服務基礎位址，保留所需的 API 版本路徑；程式會附加請求路徑。",
+        "api_key_label": "API Key",
+        "api_key_hint": "不需驗證的服務可留空。金鑰僅用於目前功能。",
+        "model_hint": "填寫模型名稱，也可先查詢模型",
+        "fetch_models": "查詢模型",
+        "models_failed": "查詢失敗，請檢查目前功能的位址及金鑰；也可直接填寫模型名稱。",
+        "independent_hint": "此連線獨立於標題翻譯，修改這裡不會影響翻譯設定。",
+        "similar_path_hint": "填寫基礎位址，例如 http://192.168.1.22:8765；自動附加 /v1/embeddings。",
+        "faces_path_hint": "填寫基礎位址，例如 http://192.168.1.22:8765；自動附加 /v1/faces。"
       }
     },
     "group": {
@@ -1100,6 +1112,14 @@
     }
   },
   "scanner": {
+    "sources": {
+      "title": "選擇來源",
+      "hint": "選擇本次操作使用的來源：設定中已勾選的掃描來源，以及隨時可選的 JavLibrary、FC2-javten 和 Jable。",
+      "unavailable": "批次操作無法使用",
+      "empty": "沒有可用來源，請先在設定中勾選掃描來源。",
+      "load_failed": "無法讀取最新來源設定，請重試。",
+      "cancel": "取消"
+    },
     "rename": {
       "row_title": "統一檔名格式",
       "row_hint": "統一編號與標題間距；超過系統限制的名稱會安全截斷並加上 …",

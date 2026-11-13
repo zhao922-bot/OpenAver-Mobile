@@ -52,8 +52,92 @@ export function stateBatch() {
         renameExecuting: false,
         renamePlan: null,
         renamePreviewMode: 'combined',
-        renameSource: 'auto',
+        renameSource: '',
         renamePreviewPage: 1,
+
+        maintenanceSourceModalOpen: false,
+        maintenanceSourceLoading: false,
+        maintenanceSourceAction: '',
+        nfoUpdateSource: '',
+        missingEnrichSource: '',
+        sampleBackfillSource: '',
+        plotBackfillSource: '',
+
+        get maintenanceSourceTitle() {
+            const keys = {
+                nfo: 'scanner.stats.nfo_update_title',
+                rename: 'scanner.rename.source_row_title',
+                'tag-preview': 'scanner.stats.tag_source_label',
+                'tag-update': 'scanner.stats.tag_source_label',
+                enrich: 'scanner.stats.missing_enrich_idle',
+                samples: 'scanner.stats.sample_backfill_idle',
+                plots: 'scanner.stats.plot_backfill_idle',
+                resume: 'scanner.stats.missing_resume_btn',
+            };
+            return window.t(keys[this.maintenanceSourceAction] || 'scanner.sources.title');
+        },
+
+        async openMaintenanceSourcePicker(action) {
+            if (this.isBusy || this.maintenanceSourceLoading) return;
+            this.maintenanceSourceAction = action;
+            this.maintenanceSourceModalOpen = true;
+            this.maintenanceSourceLoading = true;
+            try {
+                const response = await fetch('/api/config');
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error('config');
+                // Refresh only the source list; unsaved scan directories stay intact.
+                this.config.sources = result.data.sources || [];
+            } catch {
+                this.closeMaintenanceSourcePicker();
+                this.showToast(window.t('scanner.sources.load_failed'), 'error');
+            } finally {
+                this.maintenanceSourceLoading = false;
+            }
+        },
+
+        closeMaintenanceSourcePicker() {
+            this.maintenanceSourceModalOpen = false;
+            this.maintenanceSourceAction = '';
+        },
+
+        async chooseMaintenanceSource(sourceId) {
+            if (!this.maintenanceSourceModalOpen || this.maintenanceSourceLoading || this.isBusy) return;
+            const source = this.maintenanceSourceOptions.find(item => item.id === sourceId);
+            if (!source || source.disabled) return;
+            const action = this.maintenanceSourceAction;
+            this.closeMaintenanceSourcePicker();
+            switch (action) {
+                case 'nfo':
+                    this.nfoUpdateSource = sourceId;
+                    this.openNfoUpdateConfirm();
+                    break;
+                case 'rename':
+                    this.renameSource = sourceId;
+                    await this.previewRenamePlan();
+                    break;
+                case 'tag-preview':
+                case 'tag-update':
+                    this.tagSourceUpdateSource = sourceId;
+                    if (action === 'tag-preview') await this.previewTagSourceUpdate();
+                    else this.openTagSourceUpdateConfirm();
+                    break;
+                case 'enrich':
+                case 'resume':
+                    this.missingEnrichSource = sourceId;
+                    if (action === 'resume') this.resumeMissingEnrich();
+                    else await this.runMissingEnrich();
+                    break;
+                case 'samples':
+                    this.sampleBackfillSource = sourceId;
+                    await this.runSampleBackfill();
+                    break;
+                case 'plots':
+                    this.plotBackfillSource = sourceId;
+                    await this.runPlotBackfill();
+                    break;
+            }
+        },
 
         // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
         currentCard: null,          // {number, status, source, reason, coverSrc} | null
@@ -313,7 +397,8 @@ export function stateBatch() {
 
         async previewRenamePlan() {
             if (this.renamePreviewLoading || this.isBusy) return;
-            const sourceId = this.renameSource || 'auto';
+            const sourceId = this.renameSource;
+            if (!this.tagSourceOptions.some(source => source.id === sourceId)) return;
             this.renamePreviewMode = 'combined';
             this.renamePreviewLoading = true;
             try {
@@ -540,8 +625,10 @@ export function stateBatch() {
 
         async runSampleBackfill() {
             if (this.sampleBackfillDisabled) return;
+            if (!this.sampleBackfillSource) return this.openMaintenanceSourcePicker('samples');
             await this._runBackfillStream({
                 url: '/api/gallery/backfill-samples',
+                source: this.sampleBackfillSource,
                 taskState: 'sampleBackfilling',
                 taskKind: 'sample-backfill',
                 startStatus: window.t('scanner.stats.sample_backfill_preparing'),
@@ -554,8 +641,10 @@ export function stateBatch() {
 
         async runPlotBackfill() {
             if (this.plotBackfillDisabled) return;
+            if (!this.plotBackfillSource) return this.openMaintenanceSourcePicker('plots');
             await this._runBackfillStream({
                 url: '/api/gallery/backfill-plots',
+                source: this.plotBackfillSource,
                 taskState: 'plotBackfilling',
                 taskKind: 'plot-backfill',
                 startStatus: window.t('scanner.stats.plot_backfill_preparing'),
@@ -568,6 +657,7 @@ export function stateBatch() {
 
         async _runBackfillStream({
             url,
+            source,
             taskState,
             taskKind,
             startStatus,
@@ -595,7 +685,8 @@ export function stateBatch() {
             let streamFailed = false;
 
             try {
-                const resp = await fetch(url, {
+                const endpoint = source ? `${url}?${new URLSearchParams({ source })}` : url;
+                const resp = await fetch(endpoint, {
                     method: 'POST',
                     headers: { Accept: 'text/event-stream' },
                     signal: controller.signal,
@@ -725,6 +816,7 @@ export function stateBatch() {
 
         async runMissingEnrich({ skipConfirm = false } = {}) {
             if (this.isGenerating || this.missingItems.length === 0) return;
+            if (!this.missingEnrichSource) return this.openMaintenanceSourcePicker('enrich');
 
             // TASK-13: 大批量 confirm gate — > 500 筆彈 modal，等用戶按確認才繼續
             if (!skipConfirm && this.missingItems.length > 500) {
@@ -766,7 +858,10 @@ export function stateBatch() {
                         resp = await fetch('/api/batch-enrich', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ items: batch, mode: 'fill_missing' }),
+                            body: JSON.stringify({
+                                items: batch.map(item => ({ ...item, source: this.missingEnrichSource })),
+                                mode: 'fill_missing', source: this.missingEnrichSource,
+                            }),
                             signal: controller.signal,
                         });
                     } catch (fetchErr) {

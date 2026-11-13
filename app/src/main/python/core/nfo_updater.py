@@ -466,6 +466,7 @@ def update_videos_generator(
     path_mappings: dict = None,
     should_abort: Optional[Callable[[], bool]] = None,
     backup: bool = False,
+    source: str = "auto",
 ) -> Generator[dict, None, dict]:
     """更新影片的生成器（用於 SSE 串流）
 
@@ -554,7 +555,7 @@ def update_videos_generator(
         }
 
         try:
-            metadata = search_jav(num)
+            metadata = search_jav(num, source=source)
         except Exception:
             logger.exception("搜尋 JAV 資料失敗: %s", num)
             yield {

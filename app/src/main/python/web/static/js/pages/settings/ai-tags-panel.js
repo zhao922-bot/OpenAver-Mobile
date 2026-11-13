@@ -2,8 +2,7 @@
  * ai-tags-panel.js — 設定頁「AI 標籤」分頁獨立 Alpine 元件（TASK-188c-T8b；補跑邏輯 189a-T11a 起改走共用 mixin）
  *
  * Alpine.data('aiTagsPanel')；面板獨有 key 一律 aiTags 前綴、補跑 key 一律 bf 前綴（展開自 ai-backfill-controls.js）；
- * 不進 mergeState。外求恰 6（不複製父層 key）：form／isDirty／aiTab／showToast／
- *   aiTagsModelLists()／ensureProviderModels()。
+ * Uses its own connection and model list; translation settings are independent.
  *
  * 對外名單（模板照名單綁）：
  *   面板獨有：aiTagsTestResult／aiTagsTestBusy；panelMode()、modelOptions()、onProviderChange()、
@@ -18,7 +17,6 @@ import {
     panelMode,
     statusLine,
     progressExtras,
-    pickTagsModel,
     costHint,
     formatUsd,
     buildTagsTestBody,
@@ -69,20 +67,31 @@ const TAGS_HOOKS = {
     },
 };
 
+const BASE_URLS = {ollama: 'http://localhost:11434', gemini: 'https://generativelanguage.googleapis.com/v1beta',
+    claude: 'https://api.anthropic.com', openai_official: 'https://api.openai.com/v1', openai: ''};
+
 export function aiTagsPanel() {
+    const drafts = {};
     return {
         ...aiBackfillControls(TAGS_ADAPTER, TAGS_HOOKS),
+        aiTagsModels: [],
+        aiTagsModelsBusy: false,
+        aiTagsModelsStatus: '',
         aiTagsTestResult: '',
         aiTagsTestBusy: false,
 
         init() {
+            // Masked drafts only refer to the credential currently saved on disk.
+            this.$watch('savedState', () => {
+                for (const key of Object.keys(drafts)) delete drafts[key];
+            });
             // 第一次打開開關：預選翻譯用的連線（載入設定時 isDirty 為 false，不動）
             this.$watch('form.aiTagsEnabled', (val) => {
                 if (this.bfDestroyed) return;
                 if (val !== true || this.isDirty !== true) return;
                 if (this.form.aiTagsProvider !== '') return;
                 const tp = this.form.translateProvider;
-                if (!Object.keys(this.aiTagsModelLists()).includes(tp)) return;
+                if (!Object.hasOwn(BASE_URLS, tp)) return;
                 this.form.aiTagsProvider = tp;
                 this.onProviderChange();
             });
@@ -99,29 +108,48 @@ export function aiTagsPanel() {
 
         /** 模型下拉選項＝該家既有清單 ∪ 目前已存的 aiTagsModel（清單元素為字串或 {name}）。 */
         modelOptions() {
-            const provider = this.form.aiTagsProvider;
-            if (!provider) return [];
-            const list = this.aiTagsModelLists()[provider];
-            const names = [];
-            for (const item of Array.isArray(list) ? list : []) {
-                const name = typeof item === 'string' ? item : (item && item.name);
-                if (typeof name === 'string' && name && !names.includes(name)) names.push(name);
-            }
-            const cur = this.form.aiTagsModel;
-            if (cur && !names.includes(cur)) names.push(cur);
-            return names;
+            return [...new Set([...this.aiTagsModels, this.form.aiTagsModel].filter(Boolean))];
         },
 
-        async onProviderChange() {
-            const provider = this.form.aiTagsProvider;
-            if (provider === '') {
-                this.form.aiTagsModel = '';
-            } else {
-                const lists = this.aiTagsModelLists();
-                // 換連線時 current 一律傳空字串，避免舊家模型名帶到新家
-                this.form.aiTagsModel = pickTagsModel(provider, '', lists[provider] || []);
+        rememberConnection() {
+            drafts[this.form.aiTagsProvider] = {baseUrl: this.form.aiTagsBaseUrl,
+                apiKey: this.form.aiTagsApiKey, model: this.form.aiTagsModel};
+        },
+
+        onProviderChange() {
+            const p = this.form.aiTagsProvider;
+            const draft = drafts[p];
+            this.form.aiTagsBaseUrl = draft ? draft.baseUrl : (BASE_URLS[p] || '');
+            this.form.aiTagsApiKey = draft ? draft.apiKey : '';
+            this.form.aiTagsModel = draft ? draft.model : '';
+            this.aiTagsModels = [];
+            this.aiTagsModelsStatus = '';
+            this.aiTagsTestResult = '';
+        },
+
+        async loadModels() {
+            if (this.aiTagsModelsBusy) return;
+            const body = buildTagsTestBody(this.form);
+            this.aiTagsModelsBusy = true;
+            this.aiTagsModelsStatus = '';
+            try {
+                const response = await fetch('/api/ai/tags/models', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+                });
+                const data = await response.json();
+                // Ignore a stale response if the connection changed while loading.
+                if (JSON.stringify(body) !== JSON.stringify(buildTagsTestBody(this.form))) return;
+                if (response.ok && data.success) {
+                    this.aiTagsModels = data.models || [];
+                    this.aiTagsModelsStatus = window.t('settings.status.connected_n_models', {count: this.aiTagsModels.length});
+                } else {
+                    this.aiTagsModelsStatus = window.t('settings.ai.connection.models_failed');
+                }
+            } catch {
+                this.aiTagsModelsStatus = window.t('settings.ai.connection.models_failed');
+            } finally {
+                this.aiTagsModelsBusy = false;
             }
-            await this.ensureProviderModels(provider);
         },
 
         testDisabled() {

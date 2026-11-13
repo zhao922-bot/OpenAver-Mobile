@@ -188,37 +188,25 @@ def _require_key(config: dict, dotted: str, detail: str) -> str:
 
 def resolve_vision_conn(config: dict) -> VisionConn:
     """Resolve VisionConn from raw config dict (CD-188b-14). Ignores enabled."""
+    from copy import deepcopy
+    from core.ai_services.connections import migrate_tags_connection, provider_base_url, requires_api_key
+
+    config = deepcopy(config)
+    migrate_tags_connection(config)
     tags = _tags_section(config)
     provider = str(tags.get("provider") or "").strip()
     model = str(tags.get("model") or "").strip()
-    if not provider or provider not in _VALID_PROVIDERS:
+    if provider not in _VALID_PROVIDERS:
         raise TaggingFailure("not_configured", detail="provider")
     if not model:
         raise TaggingFailure("not_configured", detail="model")
-
-    if provider == "ollama":
-        url = read_secret(config, "translate.ollama.url").strip()
-        return VisionConn(
-            provider=provider,
-            model=model,
-            base_url=url or "http://localhost:11434",
-            api_key="",
-        )
-    if provider in ("gemini", "claude"):
-        key = _require_key(config, f"translate.{provider}.api_key", "api_key")
-        return VisionConn(provider=provider, model=model, base_url="", api_key=key)
-    if provider == "openai":
-        base = _require_key(config, "translate.openai.base_url", "base_url")
-        key = read_secret(config, "translate.openai.api_key").strip()
-        return VisionConn(provider=provider, model=model, base_url=base, api_key=key)
-    # openai_official
-    key = _require_key(config, "translate.openai_official.api_key", "api_key")
-    return VisionConn(
-        provider=provider,
-        model=model,
-        base_url=OPENAI_OFFICIAL_BASE_URL,
-        api_key=key,
-    )
+    base = provider_base_url(provider, {"url" if provider == "ollama" else "base_url": tags.get("base_url")})
+    if not base:
+        raise TaggingFailure("not_configured", detail="base_url")
+    key = str(tags.get("api_key") or "").strip()
+    if requires_api_key(provider, base) and not key:
+        raise TaggingFailure("not_configured", detail="api_key")
+    return VisionConn(provider=provider, model=model, base_url=base, api_key=key)
 
 
 @dataclass(frozen=True)

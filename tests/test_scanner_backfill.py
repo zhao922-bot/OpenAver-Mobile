@@ -5,6 +5,8 @@ import json
 import threading
 import time
 
+import pytest
+
 from core.database import Video, VideoRepository, init_db
 from core.path_utils import to_file_uri
 from web.routers import scanner as scanner_router
@@ -378,9 +380,11 @@ def test_title_backfill_translates_concurrently_and_reports_progress(
     assert all(event["title"].startswith("译文-") for event in result_items)
 
 
+@pytest.mark.parametrize("source", ["auto", "javbus"])
 def test_sample_backfill_generator_skips_rows_with_existing_samples(
     tmp_path,
     monkeypatch,
+    source,
 ):
     db_path = tmp_path / "db.sqlite"
     db_path.write_bytes(b"")
@@ -406,6 +410,7 @@ def test_sample_backfill_generator_skips_rows_with_existing_samples(
             return [missing, present]
 
     def fake_fetch(req, _cancel_event):
+        assert req.source == source
         fetched_paths.append(req.file_path)
         return {
             "success": True,
@@ -421,8 +426,11 @@ def test_sample_backfill_generator_skips_rows_with_existing_samples(
         fake_fetch,
     )
 
+    monkeypatch.setattr(scanner_router, "load_config", lambda: {
+        "sources": [{"id": "javbus", "enabled": True}],
+    })
     events = _drain_events(
-        scanner_router._sample_backfill_generator(threading.Event())  # noqa: SLF001
+        scanner_router._sample_backfill_generator(threading.Event(), source=source)  # noqa: SLF001
     )
 
     assert fetched_paths == ["file:///ABC-205.mp4"]

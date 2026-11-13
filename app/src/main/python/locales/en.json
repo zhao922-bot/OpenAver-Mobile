@@ -704,7 +704,7 @@
       "claude_api_key_hint": "Create an API Key in the Anthropic Console (starts with sk-ant-). A Claude subscription login cannot be used here.",
       "claude_api_key_placeholder": "sk-ant-...",
       "openai_official": "OpenAI (official)",
-      "openai_official_hint": "Uses the fixed official OpenAI API (https://api.openai.com/v1). Enter an API Key and select a model."
+      "openai_official_hint": "Defaults to the official OpenAI URL. You can enter a compatible service URL, API Key and model."
     },
     "scraper": {
       "suffix_keywords_label": "Version Tags",
@@ -957,7 +957,7 @@
         "enabled_label": "Enable image similarity",
         "empty_desc": "This needs a small service you host yourself (or ask your AI assistant to set one up). OpenAver sends covers to it to turn them into vectors, so Constellation can tell when covers look alike. If you don't have one, just skip it — nothing else is affected.",
         "btn_docs": "View docs",
-        "url_label": "Endpoint URL",
+        "url_label": "Service URL",
         "url_placeholder": "http://127.0.0.1:8000",
         "api_key_label": "API Key",
         "api_key_placeholder": "Leave blank = no Authorization header",
@@ -1000,7 +1000,7 @@
       "faces": {
         "enabled_label": "Enable face endpoint",
         "empty_desc": "This needs a small service you host yourself (or ask your AI assistant to set one up). OpenAver sends covers to it to find faces and set the focus. While the external endpoint is on, this phone's processing-power limits don't apply. If you don't have one, just skip it — nothing else is affected.",
-        "url_label": "Endpoint URL",
+        "url_label": "Service URL",
         "url_placeholder": "http://127.0.0.1:8000",
         "api_key_label": "API Key",
         "api_key_placeholder": "Leave blank = no Authorization header",
@@ -1075,6 +1075,18 @@
         "test_http_error": "Test request failed",
         "backfill_http_error": "Fill-whole-library request failed",
         "backfill_not_enabled": "Turn on AI tags and click \"Save\" first, then fill the whole library"
+      },
+      "connection": {
+        "url_label": "Service URL",
+        "base_url_hint": "Enter the service base URL, keeping any required API version path. Request paths are appended automatically.",
+        "api_key_label": "API Key",
+        "api_key_hint": "Leave blank if authentication is not required. This key is used only for this feature.",
+        "model_hint": "Enter a model name or query available models",
+        "fetch_models": "Query models",
+        "models_failed": "Could not query models. Check this feature's URL and key, or enter the model name manually.",
+        "independent_hint": "This connection is independent of title translation. Changes here do not affect translation settings.",
+        "similar_path_hint": "Enter a base URL, such as http://192.168.1.22:8765. /v1/embeddings is appended automatically.",
+        "faces_path_hint": "Enter a base URL, such as http://192.168.1.22:8765. /v1/faces is appended automatically."
       }
     },
     "group": {
@@ -1100,6 +1112,14 @@
     }
   },
   "scanner": {
+    "sources": {
+      "title": "Choose a source",
+      "hint": "Choose a source enabled in Settings, or JavLibrary, FC2-javten or Jable, which are always available for selection.",
+      "unavailable": "Unavailable for batch tasks",
+      "empty": "No sources are available. Enable a scan source in Settings first.",
+      "load_failed": "Could not load the latest source settings. Please retry.",
+      "cancel": "Cancel"
+    },
     "rename": {
       "row_title": "Normalize video filenames",
       "row_hint": "Normalize number/title spacing; overlong names are safely truncated with …",

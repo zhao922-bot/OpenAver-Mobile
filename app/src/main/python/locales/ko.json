@@ -704,7 +704,7 @@
       "claude_api_key_hint": "Anthropic 콘솔에서 API 키(sk-ant-로 시작)를 생성하세요. Claude 구독 플랜 로그인 정보는 여기에 직접 사용할 수 없습니다.",
       "claude_api_key_placeholder": "sk-ant-...",
       "openai_official": "OpenAI (공식)",
-      "openai_official_hint": "고정된 OpenAI 공식 API(https://api.openai.com/v1)를 사용합니다. API 키를 입력하고 모델을 선택하세요."
+      "openai_official_hint": "기본값은 OpenAI 공식 URL입니다. 호환 서비스의 URL, API Key, 모델도 지정할 수 있습니다。"
     },
     "scraper": {
       "suffix_keywords_label": "버전 태그",
@@ -957,7 +957,7 @@
         "enabled_label": "이미지 유사성 활성화",
         "empty_desc": "이 기능은 사용자께서 직접 소규모 서비스를 구축해야 합니다 (또는 AI 어시스턴트에게 요청). OpenAver가 커버 이미지를 벡터로 변환하여 Xingkong이 '커버의 모양'을 이해할 수 있게 합니다. 없으시면 건너뛰셔도 되며, 다른 기능에는 영향을 미치지 않습니다.",
         "btn_docs": "문서 보기",
-        "url_label": "엔드포인트 URL",
+        "url_label": "서비스 URL",
         "url_placeholder": "http://127.0.0.1:8000",
         "api_key_label": "API 키",
         "api_key_placeholder": "비워두면 = 인증 정보 미전송",
@@ -1000,7 +1000,7 @@
       "faces": {
         "enabled_label": "얼굴 엔드포인트 활성화",
         "empty_desc": "이 기능은 직접 소규모 서비스를 구축하거나(또는 AI 어시스턴트에게 요청) 구축해야 합니다. OpenAver가 커버 이미지를 보내 얼굴을 찾고 초점을 맞춥니다. 외부 엔드포인트가 실행 중일 때는 휴대폰의 컴퓨팅 제한이 적용되지 않습니다. 없어도 무방하며, 다른 기능에는 영향을 미치지 않습니다.",
-        "url_label": "엔드포인트 URL",
+        "url_label": "서비스 URL",
         "url_placeholder": "http://127.0.0.1:8000",
         "api_key_label": "API 키",
         "api_key_placeholder": "비워둠 = 인증 정보 미전송",
@@ -1075,6 +1075,18 @@
         "test_http_error": "테스트 요청 실패",
         "backfill_http_error": "전체 재고 요청 실패",
         "backfill_not_enabled": "AI 태그를 먼저 활성화하고 \"저장\"을 누른 후 전체 재고를 보완하십시오."
+      },
+      "connection": {
+        "url_label": "서비스 URL",
+        "base_url_hint": "필요한 API 버전 경로를 포함한 기본 URL을 입력하세요. 요청 경로는 자동으로 추가됩니다.",
+        "api_key_label": "API Key",
+        "api_key_hint": "인증이 필요 없으면 비워 둘 수 있습니다. 이 키는 현재 기능에만 사용됩니다.",
+        "model_hint": "모델 이름을 입력하거나 모델 목록 조회",
+        "fetch_models": "모델 목록 조회",
+        "models_failed": "조회하지 못했습니다. 현재 기능의 URL과 키를 확인하거나 모델 이름을 직접 입력하세요.",
+        "independent_hint": "이 연결은 제목 번역과 독립적입니다. 여기서 변경해도 번역 설정에는 영향을 주지 않습니다.",
+        "similar_path_hint": "http://192.168.1.22:8765 같은 기본 URL을 입력하세요. /v1/embeddings가 자동으로 추가됩니다.",
+        "faces_path_hint": "http://192.168.1.22:8765 같은 기본 URL을 입력하세요. /v1/faces가 자동으로 추가됩니다."
       }
     },
     "group": {
@@ -1100,6 +1112,14 @@
     }
   },
   "scanner": {
+    "sources": {
+      "title": "출처 선택",
+      "hint": "설정에서 활성화한 수집 출처 또는 항상 선택할 수 있는 JavLibrary, FC2-javten, Jable을 선택하세요.",
+      "unavailable": "일괄 작업에서 사용 불가",
+      "empty": "사용 가능한 출처가 없습니다. 먼저 설정에서 검색 출처를 활성화하세요.",
+      "load_failed": "최신 출처 설정을 불러오지 못했습니다. 다시 시도하세요.",
+      "cancel": "취소"
+    },
     "rename": {
       "row_title": "비디오 파일 이름 표준화",
       "row_hint": "번호/제목 간격을 표준화합니다. 너무 긴 이름은 다음과 같이 안전하게 잘립니다.",

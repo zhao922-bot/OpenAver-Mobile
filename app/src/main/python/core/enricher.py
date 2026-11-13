@@ -1111,6 +1111,7 @@ def fetch_samples_only_detailed(
     related_db_paths: Optional[List[str]] = None,
     cancel_event: Optional[Event] = None,
     locale: Optional[str] = None,
+    source: str = "auto",
 ) -> tuple[EnrichResult, dict]:
     """只補抓劇照，並回傳足以區分「查無／無劇照／下載失敗／DB 失敗」的診斷。
 
@@ -1159,7 +1160,7 @@ def fetch_samples_only_detailed(
 
     try:
         _raise_if_cancelled(cancel_event)
-        meta = search_jav(number, source="auto", javbus_lang=None)
+        meta = search_jav(number, source=source, javbus_lang=None)
         _raise_if_cancelled(cancel_event)
     except SampleBackfillCancelled:
         _empty.error = _sample_text(locale, "cancelled")

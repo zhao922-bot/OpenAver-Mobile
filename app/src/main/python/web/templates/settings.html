@@ -21,6 +21,15 @@
         </div>
         <div class="settings-header-actions">
             <div class="settings-appearance-controls">
+                <!-- Locale Toggle -->
+                <div class="settings-locale-toggle">
+                    <button class="locale-toggle-btn"
+                            type="button"
+                            x-text="{'zh-TW':'繁','zh-CN':'简','ja':'あ','en':'EN','ko':'한'}[locale] || '简'" {# cjk-exempt(繁|简|あ|한): 語言切換器原生字形，全球化 UI 慣例不隨介面語言翻譯 — TASK-103-T7 §F.2 #}
+                            @click="cycleLocale()"
+                            :title="window.t('settings.header.locale_prefix') + ': ' + locale">
+                    </button>
+                </div>
                 <!-- Font Size Control -->
                 <div class="font-size-control">
                     <template x-for="s in [{k:'xs',l:'A'},{k:'sm',l:'A'},{k:'md',l:'A'},{k:'lg',l:'A'},{k:'xl',l:'A'}]">
@@ -33,15 +42,6 @@
                                 x-text="s.l">
                         </button>
                     </template>
-                </div>
-                <!-- Locale Toggle -->
-                <div class="settings-locale-toggle">
-                    <button class="locale-toggle-btn"
-                            type="button"
-                            x-text="{'zh-TW':'繁','zh-CN':'简','ja':'あ','en':'EN','ko':'한'}[locale] || '简'" {# cjk-exempt(繁|简|あ|한): 語言切換器原生字形，全球化 UI 慣例不隨介面語言翻譯 — TASK-103-T7 §F.2 #}
-                            @click="cycleLocale()"
-                            :title="window.t('settings.header.locale_prefix') + ': ' + locale">
-                    </button>
                 </div>
                 <!-- Theme Toggle -->
                 <div class="settings-theme-toggle">
@@ -887,7 +887,7 @@
                         <!-- Ollama 設定 -->
                         <div id="ollamaFields" x-show="form.translateProvider === 'ollama'">
                             <div class="settings-form-row">
-                                <label class="row-label">Ollama URL</label>
+                                <label class="row-label">{{ t('settings.ai.connection.url_label') }}</label>
                                 <div class="flex-1 flex flex-col gap-1">
                                     <div class="variable-input-group">
                                         <input type="text" class="input input-bordered input-sm flex-1" id="ollamaUrl"
@@ -911,13 +911,8 @@
                                 <label class="row-label">{{ t('settings.translate.model_label') }}</label>
                                 <div class="flex-1 flex flex-col gap-1">
                                     <div class="variable-input-group">
-                                        <select class="select select-bordered select-sm flex-1" id="ollamaModel"
-                                            x-model="form.ollamaModel" :disabled="!form.translateEnabled || ollamaModels.length === 0">
-                                            <option value="" disabled x-show="ollamaModels.length === 0">{{ t('settings.translate.test_connection_placeholder') }}</option>
-                                            <template x-for="model in ollamaModels" :key="model">
-                                                <option :value="model" x-text="model"></option>
-                                            </template>
-                                        </select>
+                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0" id="ollamaModel" x-model="form.ollamaModel" list="ollamaModelChoices" :disabled="!form.translateEnabled" :placeholder="window.t('settings.ai.connection.model_hint')">
+                                        <datalist id="ollamaModelChoices"><template x-for="m in ollamaModels" :key="m"><option :value="m"></option></template></datalist>
                                         <button class="btn btn-sm btn-outline" type="button" id="testModelBtn"
                                             @click="testModel()" title="{{ t('settings.translate.test_model_title') }}"
                                             :disabled="!form.translateEnabled || testModelLoading">
@@ -931,10 +926,24 @@
                                     <small class="settings-hint" x-html="modelStatus"></small>
                                 </div>
                             </div>
+                            <div class="settings-form-row">
+                                <label class="row-label" for="ollamaApiKey">{{ t('settings.ai.connection.api_key_label') }}</label>
+                                <div class="flex-1 min-w-0 flex flex-col gap-1">
+                                    <input type="password" id="ollamaApiKey" class="input input-bordered input-sm w-full min-w-0" x-model="form.ollamaApiKey" placeholder="" :disabled="!form.translateEnabled" autocomplete="off">
+                                    <small class="settings-hint">{{ t('settings.ai.connection.api_key_hint') }}</small>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Gemini 設定 (初始隱藏) -->
                         <div id="geminiFields" x-show="form.translateProvider === 'gemini'">
+                            <div class="settings-form-row">
+                                <label class="row-label" for="geminiBaseUrl">{{ t('settings.ai.connection.url_label') }}</label>
+                                <div class="flex-1 min-w-0 flex flex-col gap-1">
+                                    <input type="text" id="geminiBaseUrl" class="input input-bordered input-sm w-full min-w-0" x-model="form.geminiBaseUrl" placeholder="https://generativelanguage.googleapis.com/v1beta" :disabled="!form.translateEnabled" autocomplete="off">
+                                    <small class="settings-hint">{{ t('settings.ai.connection.base_url_hint') }}</small>
+                                </div>
+                            </div>
                             <div class="settings-form-row">
                                 <label class="row-label">API Key</label>
                                 <div class="flex-1 flex flex-col gap-1">
@@ -978,16 +987,11 @@
                                 <label class="row-label">{{ t('settings.translate.model_label') }}</label>
                                 <div class="flex-1 flex flex-col gap-1">
                                     <div class="variable-input-group">
-                                        <select class="select select-bordered select-sm flex-1" id="geminiModel"
-                                            x-model="form.geminiModel" :disabled="!form.translateEnabled || geminiModels.length === 0">
-                                            <option value="" disabled x-show="geminiModels.length === 0">{{ t('settings.translate.test_apikey_placeholder') }}</option>
-                                            <template x-for="model in geminiModels" :key="model.name">
-                                                <option :value="model.name" x-text="model.name"></option>
-                                            </template>
-                                        </select>
+                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0" id="geminiModel" x-model="form.geminiModel" list="geminiModelChoices" :disabled="!form.translateEnabled" :placeholder="window.t('settings.ai.connection.model_hint')">
+                                        <datalist id="geminiModelChoices"><template x-for="m in geminiModels" :key="m.name"><option :value="m.name"></option></template></datalist>
                                         <button class="btn btn-sm btn-outline" type="button" id="testGeminiTranslateBtn"
                                             @click="testGeminiTranslation()" title="{{ t('settings.translate.test_translation_title') }}"
-                                            :disabled="!form.translateEnabled || geminiModels.length === 0 || testGeminiTranslateLoading">
+                                            :disabled="!form.translateEnabled || testGeminiTranslateLoading">
                                             <span x-show="testGeminiTranslateLoading" class="loading loading-spinner loading-sm"></span>
                                             <template x-if="!testGeminiTranslateLoading">
                                                 <i class="bi bi-chat-dots"></i>
@@ -1002,6 +1006,13 @@
 
                         <!-- Claude 設定 -->
                         <div id="claudeFields" x-show="form.translateProvider === 'claude'" x-cloak>
+                            <div class="settings-form-row">
+                                <label class="row-label" for="claudeBaseUrl">{{ t('settings.ai.connection.url_label') }}</label>
+                                <div class="flex-1 min-w-0 flex flex-col gap-1">
+                                    <input type="text" id="claudeBaseUrl" class="input input-bordered input-sm w-full min-w-0" x-model="form.claudeBaseUrl" placeholder="https://api.anthropic.com" :disabled="!form.translateEnabled" autocomplete="off">
+                                    <small class="settings-hint">{{ t('settings.ai.connection.base_url_hint') }}</small>
+                                </div>
+                            </div>
                             <div class="settings-form-row">
                                 <label class="row-label">API Key</label>
                                 <div class="flex-1 flex flex-col gap-1">
@@ -1041,16 +1052,11 @@
                                 <label class="row-label">{{ t('settings.translate.model_label') }}</label>
                                 <div class="flex-1 flex flex-col gap-1">
                                     <div class="variable-input-group">
-                                        <select class="select select-bordered select-sm flex-1" id="claudeModel"
-                                            x-model="form.claudeModel" :disabled="!form.translateEnabled || claudeModels.length === 0">
-                                            <option value="" disabled x-show="claudeModels.length === 0">{{ t('settings.translate.test_apikey_placeholder') }}</option>
-                                            <template x-for="model in claudeModels" :key="model">
-                                                <option :value="model" x-text="model"></option>
-                                            </template>
-                                        </select>
+                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0" id="claudeModel" x-model="form.claudeModel" list="claudeModelChoices" :disabled="!form.translateEnabled" :placeholder="window.t('settings.ai.connection.model_hint')">
+                                        <datalist id="claudeModelChoices"><template x-for="m in claudeModels" :key="m"><option :value="m"></option></template></datalist>
                                         <button class="btn btn-sm btn-outline" type="button" id="testClaudeTranslateBtn"
                                             @click="testClaudeTranslation()" title="{{ t('settings.translate.test_translation_title') }}"
-                                            :disabled="!form.translateEnabled || claudeModels.length === 0 || testingClaudeTranslate">
+                                            :disabled="!form.translateEnabled || testingClaudeTranslate">
                                             <span x-show="testingClaudeTranslate" class="loading loading-spinner loading-sm"></span>
                                             <template x-if="!testingClaudeTranslate">
                                                 <i class="bi bi-chat-dots"></i>
@@ -1065,6 +1071,13 @@
 
                         <!-- OpenAI 官方設定 -->
                         <div id="openaiOfficialFields" x-show="form.translateProvider === 'openai_official'" x-cloak>
+                            <div class="settings-form-row">
+                                <label class="row-label" for="openaiOfficialBaseUrl">{{ t('settings.ai.connection.url_label') }}</label>
+                                <div class="flex-1 min-w-0 flex flex-col gap-1">
+                                    <input type="text" id="openaiOfficialBaseUrl" class="input input-bordered input-sm w-full min-w-0" x-model="form.openaiOfficialBaseUrl" placeholder="https://api.openai.com/v1" :disabled="!form.translateEnabled" autocomplete="off">
+                                    <small class="settings-hint">{{ t('settings.ai.connection.base_url_hint') }}</small>
+                                </div>
+                            </div>
                             <div class="settings-form-row">
                                 <label class="row-label">API Key</label>
                                 <div class="flex-1 flex flex-col gap-1">
@@ -1090,18 +1103,12 @@
                                 <label class="row-label" x-text="window.t('settings.translate.model_label')"></label>
                                 <div class="flex-1 flex flex-col gap-1">
                                     <div class="variable-input-group">
-                                        <select class="select select-bordered select-sm flex-1"
-                                            x-model="form.openaiOfficialModel"
-                                            :disabled="!form.translateEnabled || openaiOfficialModels.length === 0">
-                                            <option value="" disabled x-show="openaiOfficialModels.length === 0" x-text="window.t('settings.translate.test_apikey_placeholder')"></option>
-                                            <template x-for="model in openaiOfficialModels" :key="model">
-                                                <option :value="model" x-text="model"></option>
-                                            </template>
-                                        </select>
+                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0" id="openaiOfficialModel" x-model="form.openaiOfficialModel" list="openaiOfficialModelChoices" :disabled="!form.translateEnabled" :placeholder="window.t('settings.ai.connection.model_hint')">
+                                        <datalist id="openaiOfficialModelChoices"><template x-for="m in openaiOfficialModels" :key="m"><option :value="m"></option></template></datalist>
                                         <button class="btn btn-sm btn-outline" type="button"
                                             @click="testOpenAIOfficialTranslation()"
                                             title="{{ t('settings.translate.test_translation_title') }}"
-                                            :disabled="!form.translateEnabled || openaiOfficialModels.length === 0 || testingOpenaiOfficialTranslate">
+                                            :disabled="!form.translateEnabled || testingOpenaiOfficialTranslate">
                                             <span x-show="testingOpenaiOfficialTranslate" class="loading loading-spinner loading-sm"></span>
                                             <template x-if="!testingOpenaiOfficialTranslate">
                                                 <i class="bi bi-chat-dots"></i>
@@ -1118,7 +1125,7 @@
                         <div id="openaiFields" x-show="form.translateProvider === 'openai'" x-cloak>
                             <!-- Base URL + Test Connection -->
                             <div class="settings-form-row">
-                                <label class="row-label" x-text="'Base URL'"></label>
+                                <label class="row-label">{{ t('settings.ai.connection.url_label') }}</label>
                                 <div class="flex-1 flex flex-col gap-1">
                                     <div class="variable-input-group">
                                         <input type="text" class="input input-bordered input-sm flex-1"
@@ -1229,6 +1236,7 @@
                                             <span x-show="!aiSimTestBusy" x-text="window.t('settings.action.test')"></span>
                                         </button>
                                     </div>
+                                    <small class="settings-hint">{{ t('settings.ai.connection.similar_path_hint') }}</small>
                                 </div>
                             </div>
                             <div class="settings-form-row">
@@ -1300,6 +1308,7 @@
                                             <span x-show="!aiFacesTestBusy" x-text="window.t('settings.action.test')"></span>
                                         </button>
                                     </div>
+                                    <small class="settings-hint">{{ t('settings.ai.connection.faces_path_hint') }}</small>
                                 </div>
                             </div>
                             <div class="settings-form-row">
@@ -1368,6 +1377,7 @@
                                 <div class="flex-1 min-w-0">
                                     <select class="select select-bordered select-sm w-full"
                                             id="aiTagsProvider"
+                                            @focus="rememberConnection()"
                                             x-model="form.aiTagsProvider"
                                             @change="onProviderChange()">
                                         <option value="">{{ t('settings.ai.tags.provider_placeholder') }}</option>
@@ -1380,18 +1390,25 @@
                                 </div>
                             </div>
                             <div class="settings-form-row">
+                                <label class="row-label" for="aiTagsBaseUrl">{{ t('settings.ai.connection.url_label') }}</label>
+                                <div class="flex-1 min-w-0 flex flex-col gap-1">
+                                    <input type="text" id="aiTagsBaseUrl" class="input input-bordered input-sm w-full min-w-0" x-model="form.aiTagsBaseUrl" placeholder="" :disabled="form.aiTagsProvider === ''" autocomplete="off">
+                                    <small class="settings-hint">{{ t('settings.ai.connection.base_url_hint') }}</small>
+                                </div>
+                            </div>
+                            <div class="settings-form-row">
+                                <label class="row-label" for="aiTagsApiKey">{{ t('settings.ai.connection.api_key_label') }}</label>
+                                <div class="flex-1 min-w-0 flex flex-col gap-1">
+                                    <input type="password" id="aiTagsApiKey" class="input input-bordered input-sm w-full min-w-0" x-model="form.aiTagsApiKey" placeholder="" :disabled="form.aiTagsProvider === ''" autocomplete="off">
+                                    <small class="settings-hint">{{ t('settings.ai.connection.api_key_hint') }}</small>
+                                </div>
+                            </div>
+                            <div class="settings-form-row">
                                 <label class="row-label" for="aiTagsModel">{{ t('settings.ai.tags.model_label') }}</label>
                                 <div class="flex-1 flex flex-col gap-1 min-w-0">
                                     <div class="variable-input-group">
-                                        <select class="select select-bordered select-sm flex-1 min-w-0"
-                                                id="aiTagsModel"
-                                                x-model="form.aiTagsModel"
-                                                :disabled="form.aiTagsProvider === ''">
-                                            <option value="" disabled x-show="modelOptions().length === 0"></option>
-                                            <template x-for="m in modelOptions()" :key="m">
-                                                <option :value="m" x-text="m"></option>
-                                            </template>
-                                        </select>
+                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0" id="aiTagsModel" x-model="form.aiTagsModel" list="aiTagsModelChoices" :disabled="form.aiTagsProvider === ''" :placeholder="window.t('settings.ai.connection.model_hint')">
+                                        <datalist id="aiTagsModelChoices"><template x-for="m in modelOptions()" :key="m"><option :value="m"></option></template></datalist>
                                         <button class="btn btn-sm btn-outline" type="button"
                                                 id="aiTagsTestBtn"
                                                 @click="runTest()"
@@ -1404,6 +1421,16 @@
                                 </div>
                             </div>
 
+                            <div class="settings-form-row">
+                                <div class="flex-1 min-w-0">
+                                    <button type="button" class="btn btn-sm btn-outline" @click="loadModels()" :disabled="aiTagsModelsBusy || form.aiTagsProvider === ''">
+                                        <span x-show="aiTagsModelsBusy" class="loading loading-spinner loading-sm"></span>
+                                        {{ t('settings.ai.connection.fetch_models') }}
+                                    </button>
+                                    <small class="settings-hint" x-text="aiTagsModelsStatus"></small>
+                                    <small class="settings-hint">{{ t('settings.ai.connection.independent_hint') }}</small>
+                                </div>
+                            </div>
                             <p class="settings-hint ai-tags-status"
                                id="aiTagsStatusLine"
                                x-show="bfStatus !== null && statusLineText()"

@@ -87,7 +87,7 @@ export function stateScan() {
         nfoPreviewPage: 1,
 
         // ===== r16: Batch tag source update =====
-        tagSourceUpdateSource: 'auto',
+        tagSourceUpdateSource: '',
         tagSourceConfirmModalOpen: false,
         tagSourcePreviewSource: '',
         tagSourcePreviewSourceLabel: '',
@@ -276,39 +276,35 @@ export function stateScan() {
         },
 
         get renameSourceOptions() {
-            return this._batchSourceOptions(false);
+            return this.maintenanceSourceOptions.filter(source => !source.disabled);
         },
 
         get tagSourceOptions() {
-            return this._batchSourceOptions(true);
+            return this.renameSourceOptions;
         },
 
-        _batchSourceOptions(includeJable) {
-            const options = [{
-                id: 'auto',
-                display_name: window.t('scanner.stats.tag_source_auto'),
-                requires_cf: false,
-            }];
-            const seen = new Set(['auto']);
+        get maintenanceSourceOptions() {
+            const reserved = new Map([
+                ['javlibrary', 'JavLibrary'],
+                ['fc-javten', 'FC2-javten'],
+                ['jable', 'Jable'],
+            ]);
+            const options = [];
+            const seen = new Set(['auto', ...reserved.keys()]);
             const rows = (this.config.sources || [])
-                .filter((source) => {
-                    if (!source || String(source.id || '').startsWith('custom:')) {
-                        return false;
-                    }
-                    const jableBatchTag = includeJable && source.id === 'jable';
-                    return jableBatchTag || (source.enabled && !source.manual_only);
-                })
+                .filter(source => source?.enabled && !source.manual_only)
                 .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
             for (const source of rows) {
                 if (!source.id || seen.has(source.id)) continue;
                 seen.add(source.id);
                 options.push({
                     id: source.id,
-                    display_name: source.type === 'metatube'
-                        ? (source.display_name_raw || source.id)
-                        : (source.display_name_key || source.id),
-                    requires_cf: source.id === 'jable',
+                    display_name: source.display_name_raw || source.display_name_key || source.id,
+                    disabled: false,
                 });
+            }
+            for (const [id, display_name] of reserved) {
+                options.push({ id, display_name, disabled: false });
             }
             return options;
         },
@@ -545,11 +541,11 @@ export function stateScan() {
                     this.directories = this.config.gallery?.directories || [];
                     const tagSources = this.tagSourceOptions;
                     if (!tagSources.some((source) => source.id === this.tagSourceUpdateSource)) {
-                        this.tagSourceUpdateSource = tagSources[0]?.id || 'auto';
+                        this.tagSourceUpdateSource = tagSources[0]?.id || '';
                     }
                     const renameSources = this.renameSourceOptions;
                     if (!renameSources.some((source) => source.id === this.renameSource)) {
-                        this.renameSource = renameSources[0]?.id || 'auto';
+                        this.renameSource = renameSources[0]?.id || '';
                     }
                     // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                     this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
@@ -1399,6 +1395,7 @@ export function stateScan() {
         async runNfoUpdate(paths = []) {
             // 互斥鎖定
             if (this.isGenerating) return;
+            if (!this.nfoUpdateSource) return this.openMaintenanceSourcePicker('nfo');
 
             const selectedPaths = paths.length > 0 ? paths.slice() : this.nfoSelectedPaths.slice();
             const expectedCount = selectedPaths.length;
@@ -1417,6 +1414,7 @@ export function stateScan() {
             try {
                 const params = new URLSearchParams({
                     backup: this.nfoUpdateBackupEnabled ? 'true' : 'false',
+                    source: this.nfoUpdateSource,
                 });
                 for (const path of selectedPaths) params.append('path', path);
                 this.eventSource = new EventSource(`/api/gallery/update?${params.toString()}`);

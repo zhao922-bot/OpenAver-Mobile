@@ -23,6 +23,7 @@ from core.anthropic_client import (
 )
 from core.cloud_translate import settings_error_key
 from core.config import load_config
+from core.ai_services.connections import provider_base_url, requires_api_key
 from core.logger import get_logger
 from core.secret_fields import read_secret, resolve_secret
 from core.translate_service import build_cloud_translate_prompt
@@ -33,6 +34,7 @@ router = APIRouter(prefix="/api/claude", tags=["claude"])
 
 class ModelsRequest(BaseModel):
     api_key: str = ""
+    base_url: str = ""
 
 
 class ModelsResponse(BaseModel):
@@ -45,6 +47,7 @@ class ModelsResponse(BaseModel):
 
 class TestTranslateRequest(BaseModel):
     api_key: str = ""
+    base_url: str = ""
     model: str = ""
 
 
@@ -65,7 +68,7 @@ async def fetch_claude_models(request: ModelsRequest):
     config = await asyncio.to_thread(load_config)
     key = _resolve_claude_key(request.api_key, config)
 
-    if not key:
+    if not key and requires_api_key("claude", request.base_url):
         return ModelsResponse(
             success=False,
             default_model=default_model,
@@ -73,7 +76,7 @@ async def fetch_claude_models(request: ModelsRequest):
         )
 
     try:
-        data = await list_models(key, timeout=10)
+        data = await list_models(key, timeout=10, base_url=provider_base_url("claude", {"base_url": request.base_url}))
         models = pick_translate_models(data)
         latest_haiku = next((m for m in models if "haiku" in m.lower()), "")
         return ModelsResponse(
@@ -106,7 +109,7 @@ async def test_claude_translate(request: TestTranslateRequest):
     config = await asyncio.to_thread(load_config)
     key = _resolve_claude_key(request.api_key, config)
 
-    if not key:
+    if not key and requires_api_key("claude", request.base_url):
         return TestTranslateResponse(success=False, error="missing_key")
 
     locale = config.get("general", {}).get("locale", "zh-CN")
@@ -118,7 +121,7 @@ async def test_claude_translate(request: TestTranslateRequest):
 
     try:
         translation = await request_translation(
-            key, request.model, prompt, timeout=15
+            key, request.model, prompt, timeout=15, base_url=provider_base_url("claude", {"base_url": request.base_url})
         )
         return TestTranslateResponse(success=True, translation=translation)
     except AnthropicError as e:

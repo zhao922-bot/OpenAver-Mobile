@@ -1982,8 +1982,40 @@ html.theme-transition-active::view-transition-new(root) {
     }
 
     #settings-components .settings-appearance-controls {
-        width: 100%;
+        display: grid;
+        grid-template-columns: 2.5rem max-content 2.5rem;
+        align-items: center;
         justify-content: center;
+        justify-items: center;
+        width: fit-content;
+        max-width: 100%;
+        margin-inline: auto;
+        justify-self: center;
+        gap: clamp(8px, 3vw, 14px);
+    }
+
+    /* Explicit equal side tracks keep the visual mass of locale and theme
+       identical. This avoids a one-sided layout when the font-size pill
+       changes width at different screen densities. */
+    #settings-components .settings-appearance-controls .settings-locale-toggle {
+        height: 48px;
+    }
+
+    #settings-components .settings-appearance-controls .font-size-control {
+        height: 48px;
+        padding: 0;
+    }
+
+    #settings-components .settings-appearance-controls .settings-theme-toggle {
+        height: 48px;
+    }
+
+    /* Android enforces a 48px minimum touch target. Keep the middle pill at
+       the same outer height instead of letting its buttons overflow a 40px
+       frame, which made the centered row look vertically uneven. */
+    #settings-components .settings-header-actions .font-size-btn {
+        min-height: 0;
+        height: 100%;
     }
 
     #settings-components .settings-tabs {

@@ -100,7 +100,7 @@ def test_batch_tag_source_update_replaces_tags_and_nfo(
     assert "<plot>keep plot</plot>" in text
 
 
-def test_batch_tag_source_rejects_manual_only_source():
+def test_batch_tag_source_accepts_manual_only_source():
     error = scanner_router._validate_batch_tag_source(  # noqa: SLF001
         "javlibrary",
         {
@@ -110,8 +110,7 @@ def test_batch_tag_source_rejects_manual_only_source():
         },
     )
 
-    assert error is not None
-    assert "Cloudflare" in error
+    assert error is None
 
 
 def test_batch_tag_source_accepts_jable_manual_only_source():
@@ -127,14 +126,13 @@ def test_batch_tag_source_accepts_jable_manual_only_source():
     assert error is None
 
 
-def test_batch_tag_source_rejects_known_manual_only_source_without_config_row():
+def test_batch_tag_source_accepts_known_manual_only_source_without_config_row():
     error = scanner_router._validate_batch_tag_source(  # noqa: SLF001
         "javlibrary",
         {"sources": []},
     )
 
-    assert error is not None
-    assert "Cloudflare" in error
+    assert error is None
 
 
 def test_batch_tag_source_rejects_disabled_source():

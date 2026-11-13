@@ -11,6 +11,7 @@ from typing import Any
 
 # Single inventory for opaque secrets rendered to the browser.
 SECRET_FIELDS: tuple[str, ...] = (
+    "translate.ollama.api_key",
     "translate.gemini.api_key",
     "translate.openai.api_key",
     "translate.openai_official.api_key",
@@ -18,6 +19,7 @@ SECRET_FIELDS: tuple[str, ...] = (
     "metatube.token",
     "ai_services.image_similar.api_key",
     "ai_services.faces.api_key",
+    "ai_services.tags.api_key",
 )
 
 # CD-114c-2: U+2022 BULLET × 4 (not ASCII *, not U+25CF).

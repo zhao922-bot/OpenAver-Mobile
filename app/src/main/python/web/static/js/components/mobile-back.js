@@ -194,6 +194,7 @@
     function closeScanner(page) {
         if (!page) return false;
         var overlayHandled = closeFlag(page, 'dirtyCheckModalOpen', 'dirtyCheckCancel')
+            || closeFlag(page, 'maintenanceSourceModalOpen', 'closeMaintenanceSourcePicker')
             || closeFlag(page, 'missingConfirmModalOpen', 'cancelLargeMissingEnrich')
             || closeFlag(page, 'nfoUpdateConfirmModalOpen', 'cancelNfoUpdate')
             || closeFlag(page, 'tagSourceConfirmModalOpen', 'cancelTagSourceUpdate')

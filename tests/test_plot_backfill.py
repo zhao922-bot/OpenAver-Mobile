@@ -110,9 +110,11 @@ def test_fill_empty_nfo_plot_never_overwrites_existing_plot(tmp_path):
     assert root.find("originalplot") is None
 
 
+@pytest.mark.parametrize("source", ["auto", "javbus"])
 def test_plot_backfill_fills_translated_plot_and_original_plot(
     tmp_path,
     monkeypatch,
+    source,
 ):
     _configure_empty_output_root(monkeypatch)
     video_path = tmp_path / "ABC-105.mp4"
@@ -146,23 +148,25 @@ def test_plot_backfill_fills_translated_plot_and_original_plot(
         "load_config",
         lambda: {
             "general": {"locale": "zh-CN"},
+            "sources": [{"id": "javbus", "enabled": True}],
             "translate": {"enabled": True},
             "gallery": {"path_mappings": {}},
         },
     )
     monkeypatch.setattr(scanner_router, "get_javbus_lang", lambda: "zh-tw")
-    monkeypatch.setattr(
-        scanner_router,
-        "search_jav",
-        lambda *_args, **_kwargs: {"_summary": JAPANESE_SUMMARY},
-    )
+    def search(number, **kwargs):
+        assert number == "ABC-105"
+        assert kwargs["source"] == source
+        return {"_summary": JAPANESE_SUMMARY}
+
+    monkeypatch.setattr(scanner_router, "search_jav", search)
     monkeypatch.setattr(
         "web.routers.translate.get_translate_service",
         lambda: FakeService(),
     )
 
     events = _drain_events(
-        scanner_router._plot_backfill_generator(threading.Event())  # noqa: SLF001
+        scanner_router._plot_backfill_generator(threading.Event(), source=source)  # noqa: SLF001
     )
 
     root = ET.fromstring(nfo_path.read_bytes())
@@ -271,7 +275,7 @@ def test_plot_backfill_frontend_contract():
 
     assert '@router.post("/backfill-plots")' in scanner
     assert "/api/gallery/backfill-plots" in state
-    assert "runPlotBackfill()" in template
+    assert "openMaintenanceSourcePicker('plots')" in template
     assert "plotBackfillDrilldownPayload" in template
     assert "url: '/api/gallery/backfill-plots'" in state
     assert "taskKind: 'plot-backfill'" in state

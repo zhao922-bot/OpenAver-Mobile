@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from core.nfo_updater import update_videos_generator
 
 
@@ -21,7 +23,8 @@ def _cache_entry(number: str) -> dict:
     }
 
 
-def test_nfo_update_backs_up_before_fill(tmp_path, monkeypatch):
+@pytest.mark.parametrize("source", ["auto", "javbus"])
+def test_nfo_update_backs_up_before_fill(tmp_path, monkeypatch, source):
     video = tmp_path / "ABC-126.mp4"
     video.write_bytes(b"video")
     nfo = tmp_path / "ABC-126.nfo"
@@ -34,15 +37,18 @@ def test_nfo_update_backs_up_before_fill(tmp_path, monkeypatch):
     )
     nfo.write_text(original, encoding="utf-8")
 
-    monkeypatch.setattr(
-        "core.nfo_updater.search_jav",
-        lambda _number: {"title": "Filled title"},
-    )
+    def search(number, **kwargs):
+        assert number == "ABC-126"
+        assert kwargs["source"] == source
+        return {"title": "Filled title"}
+
+    monkeypatch.setattr("core.nfo_updater.search_jav", search)
 
     generator = update_videos_generator(
         {str(video): _cache_entry("ABC-126")},
         [str(video)],
         backup=True,
+        source=source,
     )
     events = []
     while True:

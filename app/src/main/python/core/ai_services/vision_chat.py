@@ -78,13 +78,15 @@ async def ollama_vision(
     image_data_uri: str,
     *,
     timeout: float,
+    api_key: str = "",
 ) -> str:
     """POST {url}/api/chat with image；成功回非空 str，失敗拋 TranslateError。"""
     endpoint = url.rstrip("/") + "/api/chat"
     payload = _build_ollama_payload(model, system, user_text, image_data_uri)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(endpoint, json=payload)
+            headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+            resp = await client.post(endpoint, json=payload, headers=headers)
     except httpx.TimeoutException:
         raise build_error(
             "Ollama", "connection_timeout", None, "", "request timed out"
@@ -115,15 +117,15 @@ async def vision_chat(
     p, m, k, u = conn.provider, conn.model, conn.api_key, conn.base_url
     if p == "claude":
         return await anthropic_client.request_vision(
-            k, m, system, user_text, image_data_uri, timeout=t
+            k, m, system, user_text, image_data_uri, timeout=t, **({"base_url": u} if u else {})
         )
     if p == "gemini":
         return await gemini_client.request_vision(
-            k, m, system, user_text, image_data_uri, timeout=t
+            k, m, system, user_text, image_data_uri, timeout=t, **({"base_url": u} if u else {})
         )
     if p in ("openai", "openai_official"):
         base = (
-            openai_client.OPENAI_OFFICIAL_BASE_URL
+            (u or openai_client.OPENAI_OFFICIAL_BASE_URL)
             if p == "openai_official"
             else u
         )
@@ -131,5 +133,5 @@ async def vision_chat(
             base, k, m, system, user_text, image_data_uri, timeout=t
         )
     if p == "ollama":
-        return await ollama_vision(u, m, system, user_text, image_data_uri, timeout=t)
+        return await ollama_vision(u, m, system, user_text, image_data_uri, timeout=t, api_key=k)
     raise ValueError(f"unsupported vision provider: {p}")

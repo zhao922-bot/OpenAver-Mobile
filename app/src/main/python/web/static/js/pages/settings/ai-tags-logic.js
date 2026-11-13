@@ -113,26 +113,12 @@ export function formatUsd(v) {
 
 /** Test-button body: secrets as-is; omit absent fields. */
 export function buildTagsTestBody(form) {
-    const body = {
+    return {
         provider: form.aiTagsProvider,
+        base_url: (form.aiTagsBaseUrl || '').trim(),
+        api_key: form.aiTagsApiKey || '',
         model: form.aiTagsModel,
     };
-    const p = form.aiTagsProvider;
-    if (p === 'ollama') {
-        body.base_url = form.ollamaUrl;
-    } else if (p === 'gemini') {
-        body.api_key = form.geminiApiKey;
-    } else if (p === 'claude') {
-        body.api_key = form.claudeApiKey;
-    } else if (p === 'openai_official') {
-        body.api_key = form.openaiOfficialApiKey;
-    } else if (p === 'openai') {
-        body.base_url = typeof form.openaiBaseUrl === 'string'
-            ? form.openaiBaseUrl.trim()
-            : form.openaiBaseUrl;
-        body.api_key = form.openaiApiKey;
-    }
-    return body;
 }
 
 /** Test-result line. Returns { key, params }. */

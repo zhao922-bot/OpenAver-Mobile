@@ -35,6 +35,12 @@ export function stateConfig() {
             thumbnailCacheEnabled: true,   // 縮圖快取開關（feature/71 T2，top-level config 欄位）；新安裝預設開啟（0.9.11+），舊用戶 migration 維持關閉
 
             // Translate
+            ollamaApiKey: '',
+            geminiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+            claudeBaseUrl: 'https://api.anthropic.com',
+            openaiOfficialBaseUrl: 'https://api.openai.com/v1',
+            aiTagsBaseUrl: '',
+            aiTagsApiKey: '',
             translateEnabled: false,
             translateProvider: 'ollama',
             ollamaUrl: 'http://localhost:11434',
@@ -685,6 +691,12 @@ export function stateConfig() {
                     this.form.aiTagsEnabled = config.ai_services?.tags?.enabled === true;
                     this.form.aiTagsProvider = config.ai_services?.tags?.provider || '';
                     this.form.aiTagsModel = config.ai_services?.tags?.model || '';
+                    this.form.ollamaApiKey = config.translate.ollama?.api_key || '';
+                    this.form.geminiBaseUrl = config.translate.gemini?.base_url || 'https://generativelanguage.googleapis.com/v1beta';
+                    this.form.claudeBaseUrl = config.translate.claude?.base_url || 'https://api.anthropic.com';
+                    this.form.openaiOfficialBaseUrl = config.translate.openai_official?.base_url || 'https://api.openai.com/v1';
+                    this.form.aiTagsBaseUrl = config.ai_services?.tags?.base_url || '';
+                    this.form.aiTagsApiKey = config.ai_services?.tags?.api_key || '';
 
                     // 自動測試 Gemini（如果有 API Key 且是 gemini provider）
                     if (config.translate.gemini?.api_key && config.translate.provider === 'gemini') {
@@ -996,10 +1008,12 @@ export function stateConfig() {
                     enabled: this.form.translateEnabled,
                     provider: this.form.translateProvider,
                     ollama: {
-                        url: this.form.ollamaUrl,
+                        url: this.form.ollamaUrl.trim(),
+                        api_key: this.form.ollamaApiKey,
                         model: this.form.ollamaModel
                     },
                     gemini: {
+                        base_url: this.form.geminiBaseUrl.trim(),
                         api_key: this.form.geminiApiKey,
                         model: this.form.geminiModel || 'gemini-flash-lite-latest'
                     },
@@ -1010,10 +1024,12 @@ export function stateConfig() {
                         use_custom_model: this.openaiUseCustomModel
                     },
                     openai_official: {
+                        base_url: this.form.openaiOfficialBaseUrl.trim(),
                         api_key: this.form.openaiOfficialApiKey,
                         model: this.form.openaiOfficialModel.trim()
                     },
                     claude: {
+                        base_url: this.form.claudeBaseUrl.trim(),
                         api_key: this.form.claudeApiKey,
                         model: this.form.claudeModel || 'claude-haiku-5-5'
                     }
@@ -1039,6 +1055,9 @@ export function stateConfig() {
                         ...(config.ai_services?.tags || {}),
                         enabled: this.form.aiTagsEnabled,
                         provider: this.form.aiTagsProvider,
+                        base_url: this.form.aiTagsBaseUrl.trim(),
+                        api_key: this.form.aiTagsApiKey,
+                        connection_version: 1,
                         model: this.form.aiTagsModel.trim(),
                     },
                 };

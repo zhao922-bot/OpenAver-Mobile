@@ -1048,6 +1048,7 @@ def enrich_single_endpoint(request: EnrichRequest) -> dict:
 class FetchSamplesRequest(BaseModel):
     file_path: str
     number: str
+    source: str = "auto"
 
 
 def _samples_failure(code: str, message: str, **diagnostics) -> dict:
@@ -1176,7 +1177,7 @@ def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
                 return _samples_failure(
                     "cancelled", _sample_text(locale, "cancelled")
                 )
-            meta = search_jav(req.number, source="auto")
+            meta = search_jav(req.number, source=req.source)
             if cancel_event is not None and cancel_event.is_set():
                 return _samples_failure(
                     "cancelled", _sample_text(locale, "cancelled")
@@ -1342,6 +1343,7 @@ def _fetch_samples_impl(req: FetchSamplesRequest, cancel_event=None) -> dict:
             related_db_paths=related_db_paths,
             cancel_event=cancel_event,
             locale=locale,
+            source=req.source,
         )
         payload = asdict(result)
         payload.update(diagnostics)
@@ -1368,6 +1370,13 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
     """批次 enrich — SSE streaming，最多 20 筆，按 file_path 去重"""
     config = await asyncio.to_thread(load_config)
     locale = get_config_locale(config)
+
+    # Explicit batch selections must remain enabled at execution time.
+    from web.routers.scanner import _validate_batch_source
+    for source in {batch.source, *(item.source for item in batch.items)} - {None, "auto"}:
+        error = _validate_batch_source(source, config, locale=locale)
+        if error:
+            raise HTTPException(status_code=422, detail=error)
 
     if len(batch.items) > 20:
         raise HTTPException(
@@ -1414,7 +1423,10 @@ async def batch_enrich_endpoint(request: Request, batch: BatchEnrichRequest):
                     return
 
                 effective_source = item.source or batch.source or "auto"
-                _custom_refused = effective_source.startswith('custom:')
+                _custom_refused = effective_source.startswith('custom:') and not any(
+                    isinstance(row, dict) and row.get('id') == effective_source and row.get('enabled')
+                    for row in config.get('sources', [])
+                )
                 # 未知 / 非法 source guard：不靜默轉成無效 cache_key，退回 'auto'（最小驚訝）。
                 if not _custom_refused and effective_source != "auto" and not validate_source_id(effective_source):
                     logger.warning(

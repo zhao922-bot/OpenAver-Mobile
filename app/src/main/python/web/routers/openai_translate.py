@@ -6,6 +6,7 @@ OpenAI Compatible API 路由 - 提供模型查詢和翻譯測試功能
 - POST /api/openai/test   - 翻譯測試
 """
 
+from core.ai_services.connections import provider_base_url, requires_api_key
 from core.logger import get_logger
 from core.config import load_config
 from core.secret_fields import read_secret, resolve_secret
@@ -57,6 +58,7 @@ class TestTranslateResponse(BaseModel):
 
 
 class OfficialModelsRequest(BaseModel):
+    base_url: str = ""
     api_key: str = ""
 
 
@@ -68,6 +70,7 @@ class OfficialModelsResponse(BaseModel):
 
 
 class OfficialTestTranslateRequest(BaseModel):
+    base_url: str = ""
     api_key: str = ""
     model: str = ""
 
@@ -203,14 +206,14 @@ async def fetch_openai_official_models(request: OfficialModelsRequest):
     """Return chat-capable models from the fixed official OpenAI endpoint."""
     config = await asyncio.to_thread(load_config)
     key = (_resolve_openai_official_key(request.api_key, config) or "").strip()
-    if not key:
+    if not key and requires_api_key("openai_official", request.base_url):
         return OfficialModelsResponse(success=False, error="missing_key")
 
-    headers = {"Authorization": f"Bearer {key}"}
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
-                f"{OPENAI_OFFICIAL_BASE_URL.rstrip('/')}/models",
+                provider_base_url("openai_official", {"base_url": request.base_url}) + "/models",
                 headers=headers,
             )
             response.raise_for_status()
@@ -258,7 +261,7 @@ async def test_openai_official_translate(request: OfficialTestTranslateRequest):
 
     config = await asyncio.to_thread(load_config)
     key = (_resolve_openai_official_key(request.api_key, config) or "").strip()
-    if not key:
+    if not key and requires_api_key("openai_official", request.base_url):
         return TestTranslateResponse(success=False, error="missing_key")
 
     locale = config.get("general", {}).get("locale", "zh-CN")
@@ -269,7 +272,7 @@ async def test_openai_official_translate(request: OfficialTestTranslateRequest):
     prompt = build_cloud_translate_prompt(test_title, locale)
     try:
         translation = await request_translation(
-            OPENAI_OFFICIAL_BASE_URL,
+            provider_base_url("openai_official", {"base_url": request.base_url}),
             key,
             request.model,
             prompt,

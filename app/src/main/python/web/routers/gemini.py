@@ -5,6 +5,7 @@ Gemini API 路由 - 提供測試和模型查詢功能
 - POST /api/gemini/test - 測試 API Key 並獲取可用模型
 """
 
+from core.ai_services.connections import provider_base_url, requires_api_key
 from core.logger import get_logger
 from core.config import load_config
 from core.secret_fields import read_secret, resolve_secret
@@ -33,6 +34,7 @@ ALLOWED_GEMINI_MODELS = [
 class TestRequest(BaseModel):
     """測試 Gemini API Key 請求"""
     api_key: str
+    base_url: str = ""
 
 
 class ModelInfo(BaseModel):
@@ -53,6 +55,7 @@ class TestResponse(BaseModel):
 class TestTranslateRequest(BaseModel):
     """測試翻譯請求"""
     api_key: str
+    base_url: str = ""
     model: str = "gemini-flash-lite-latest"
 
 
@@ -79,7 +82,7 @@ async def test_gemini_connection(request: TestRequest):
     Returns:
         TestResponse: 包含成功狀態和模型列表
     """
-    if not request.api_key:
+    if not request.api_key and requires_api_key("gemini", request.base_url):
         raise HTTPException(status_code=400, detail="API Key is required")
 
     config = await asyncio.to_thread(load_config)
@@ -87,8 +90,8 @@ async def test_gemini_connection(request: TestRequest):
 
     try:
         # 調用 Gemini API 獲取模型列表
-        url = "https://generativelanguage.googleapis.com/v1beta/models"
-        headers = {"x-goog-api-key": key}
+        url = provider_base_url("gemini", {"base_url": request.base_url}) + "/models"
+        headers = {"x-goog-api-key": key} if key else {}
 
         async with httpx.AsyncClient() as client:
             response = await client.get(url, headers=headers, timeout=30.0)
@@ -163,7 +166,7 @@ async def test_gemini_translate(request: TestTranslateRequest):
     config = await asyncio.to_thread(load_config)
     key = resolve_secret(request.api_key, read_secret(config, "translate.gemini.api_key"))
 
-    if not key:
+    if not key and requires_api_key("gemini", request.base_url):
         return TestTranslateResponse(success=False, error="missing_key")
 
     locale = config.get("general", {}).get("locale", "zh-CN")
@@ -176,7 +179,8 @@ async def test_gemini_translate(request: TestTranslateRequest):
 
     try:
         translation = await request_translation(
-            key, request.model, prompt, timeout=CLOUD_TRANSLATE_TIMEOUT
+            key, request.model, prompt, timeout=CLOUD_TRANSLATE_TIMEOUT,
+            base_url=provider_base_url("gemini", {"base_url": request.base_url}),
         )
         return TestTranslateResponse(success=True, translation=translation)
     except TranslateError as e:

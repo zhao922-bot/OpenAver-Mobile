@@ -749,7 +749,25 @@ async def get_ollama_models(url: str) -> dict:
         return {"success": False, "error": _config_text("ollama_models_failed", locale)}
 
 
+class OllamaModelsRequest(BaseModel):
+    url: str
+    api_key: str = ""
+
+
+@router.post("/ollama/models")
+async def post_ollama_models(request: OllamaModelsRequest) -> dict:
+    from core.ai_services.connections import fetch_provider_models
+    config = await asyncio.to_thread(load_config)
+    key = resolve_secret(request.api_key, read_secret(config, "translate.ollama.api_key"))
+    try:
+        models = await fetch_provider_models("ollama", request.url.strip(), key)
+        return {"success": True, "models": models}
+    except Exception:
+        return {"success": False, "error": _config_text("ollama_models_failed", get_config_locale(config))}
+
+
 class OllamaTestRequest(BaseModel):
+    api_key: str = ""
     url: str
     model: str
 
@@ -773,7 +791,8 @@ async def test_ollama_model(request: OllamaTestRequest) -> dict:
         if locale == "ja":
             return {"success": True, "result": "ja_skip"}
 
-        service = OllamaTranslateService({"url": url, "model": request.model}, locale)
+        key = resolve_secret(request.api_key, read_secret(config, "translate.ollama.api_key"))
+        service = OllamaTranslateService({"url": url, "model": request.model, "api_key": key}, locale)
         result = await service.translate_or_raise("新人女優デビュー")
         return {"success": True, "result": _config_text("ollama_response", locale, result=result)}
 
