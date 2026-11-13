@@ -20,6 +20,7 @@ import base64
 import json
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -47,6 +48,12 @@ from core.nfo_updater import (
     replace_nfo_tags,
     update_videos_generator,
 )
+from core.plot_backfill import (
+    clean_summary_text,
+    find_missing_plot_candidates,
+)
+from core.plot_writeback import fill_empty_nfo_plot
+from core.android_storage import AndroidStoragePermissionError
 from core.database import VideoRepository, Video, init_db, get_db_path, migrate_json_to_sqlite
 from core.focal import requires_face_detection
 from core.focal_trigger import maybe_submit_video_focal
@@ -97,9 +104,11 @@ from core.scrapers.utils import check_subtitle, extract_number
 from core.cloud_translate import TranslateError, build_error
 from core.title_language import (
     normalize_translation_text,
+    plot_needs_translation,
     title_needs_translation,
     translation_result_issue,
 )
+from core.title_writeback import NfoNotFoundError, NfoParseError
 from core.source_config import get_manual_only_sources, validate_source_id
 from pydantic import BaseModel
 from core.logger import get_logger
@@ -2622,8 +2631,10 @@ def check_missing():
                     "items": [],
                     "untranslated_titles": 0,
                     "missing_samples": 0,
+                    "missing_plots": 0,
                     "untranslated_title_items": [],
                     "missing_sample_items": [],
+                    "missing_plot_items": [],
                 },
             }
 
@@ -2640,7 +2651,23 @@ def check_missing():
         untranslated_title_items = []
         missing_sample_items = []
 
-        for group in logical_video_groups(all_videos, path_mappings):
+        groups = list(logical_video_groups(all_videos, path_mappings))
+        missing_plot_candidates = find_missing_plot_candidates(
+            groups,
+            config,
+            path_mappings,
+        )
+        missing_plot_items = [
+            {
+                "file_path": candidate.file_path,
+                "number": candidate.number,
+                "title": candidate.title,
+                "member_paths": list(candidate.member_paths),
+            }
+            for candidate in missing_plot_candidates
+        ]
+
+        for group in groups:
             members = group.members
             untranslated_members = [
                 video
@@ -2751,8 +2778,10 @@ def check_missing():
                 "items": items,
                 "untranslated_titles": len(untranslated_title_items),
                 "missing_samples": len(missing_sample_items),
+                "missing_plots": len(missing_plot_items),
                 "untranslated_title_items": untranslated_title_items,
                 "missing_sample_items": missing_sample_items,
+                "missing_plot_items": missing_plot_items,
             },
         }
     except Exception as e:
@@ -2767,6 +2796,7 @@ def check_missing():
 
 _TITLE_BACKFILL_CONCURRENCY = 4
 _SAMPLE_BACKFILL_CONCURRENCY = 3
+_PLOT_BACKFILL_CONCURRENCY = 3
 _TITLE_ERROR_KEYS = {
     "not_found": "error_not_found",
     "title_empty": "error_title_empty",
@@ -2782,6 +2812,25 @@ _TITLE_ERROR_KEYS = {
     "translation_invalid": "translation_invalid",
     "translation_empty": "translation_empty",
     "write_failed": "write_failed",
+}
+_PLOT_ERROR_KEYS = {
+    "missing_number": "missing_number",
+    "not_found": "error_not_found",
+    "no_summary": "error_no_summary",
+    "search_failed": "error_search_failed",
+    "no_nfo": "error_no_nfo",
+    "nfo_unreadable": "error_nfo_unreadable",
+    "nfo_write_failed": "error_nfo_write_failed",
+    "storage_permission_required": "error_storage_permission_required",
+    "db_write_failed": "error_db_write_failed",
+    "translate_failed": "translation_failed",
+    "translation_refused": "translation_refused",
+    "translation_invalid": "translation_invalid",
+    "translation_empty": "translation_empty",
+    "already_filled": "already_filled",
+    "write_failed": "error_nfo_write_failed",
+    "internal_error": "error_internal",
+    "cancelled": "cancelled",
 }
 _SAMPLE_ERROR_KEYS = {
     "missing_number": "missing_number",
@@ -2834,6 +2883,24 @@ def _localized_sample_error(
             number=number,
         )
     return fallback or _runtime_text("samples", "internal_error", locale)
+
+
+def _localized_plot_error(
+    locale: str,
+    error_code: str,
+    fallback: str = "",
+    *,
+    number: str = "",
+) -> str:
+    key = _PLOT_ERROR_KEYS.get(error_code)
+    if key:
+        return _runtime_text(
+            "plots",
+            key,
+            locale,
+            number=number,
+        )
+    return fallback or _runtime_text("plots", "error_internal", locale)
 
 
 def _iter_title_translations(
@@ -3547,6 +3614,455 @@ def _sample_backfill_generator(cancel_event: threading.Event) -> Generator[str, 
         })
 
 
+def _plot_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
+    """Fetch and translate synopses only for existing NFOs with an empty plot."""
+    locale = _active_locale()
+    try:
+        config = load_config()
+        locale = _active_locale(config)
+        db_path = get_db_path()
+        if not db_path.exists():
+            yield _sse_event({
+                "type": "error",
+                "message": _runtime_text(
+                    "plots", "db_missing", locale
+                ),
+            })
+            return
+        if not config.get("translate", {}).get("enabled", False):
+            yield _sse_event({
+                "type": "error",
+                "message": _runtime_text(
+                    "plots", "translate_disabled", locale
+                ),
+            })
+            return
+
+        from web.routers.translate import get_translate_service
+
+        try:
+            translate_service = get_translate_service()
+        except Exception:
+            logger.exception("初始化批次简介翻译服务失败")
+            yield _sse_event({
+                "type": "error",
+                "message": _runtime_text(
+                    "plots", "config_invalid", locale
+                ),
+            })
+            return
+
+        repo = VideoRepository(db_path)
+        path_mappings = (
+            config.get("gallery", {}).get("path_mappings", {})
+        )
+        groups = list(
+            logical_video_groups(repo.get_all(), path_mappings)
+        )
+        candidates = find_missing_plot_candidates(
+            groups,
+            config,
+            path_mappings,
+        )
+        total = len(candidates)
+        if total == 0:
+            yield _sse_event({
+                "type": "done",
+                "message": _runtime_text("plots", "none", locale),
+                "cancelled": False,
+                "summary": {
+                    "success": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                    "failed_items": [],
+                },
+            })
+            return
+
+        javbus_lang = get_javbus_lang()
+
+        def process_one(candidate) -> dict:
+            if cancel_event.is_set():
+                return {
+                    "success": False,
+                    "skipped": True,
+                    "error_code": "cancelled",
+                }
+            number = candidate.number or _candidate_number(
+                Video(path=candidate.file_path, title=candidate.title)
+            )
+            if not number:
+                return {
+                    "success": False,
+                    "skipped": True,
+                    "error_code": "missing_number",
+                }
+
+            try:
+                metadata = search_jav(
+                    number,
+                    source="auto",
+                    javbus_lang=javbus_lang,
+                )
+            except Exception:
+                logger.warning(
+                    "批次补简介搜索失败: %s",
+                    candidate.file_path,
+                    exc_info=True,
+                )
+                return {
+                    "success": False,
+                    "skipped": False,
+                    "error_code": "search_failed",
+                }
+            if not metadata:
+                return {
+                    "success": False,
+                    "skipped": False,
+                    "error_code": "not_found",
+                }
+
+            source_plot = clean_summary_text(
+                metadata.get("_summary")
+                or metadata.get("summary")
+                or ""
+            )
+            if not source_plot:
+                return {
+                    "success": False,
+                    "skipped": False,
+                    "error_code": "no_summary",
+                }
+
+            translated_plot = source_plot
+            if plot_needs_translation(
+                source_plot,
+                locale,
+                proper_terms=candidate.actors,
+            ):
+                try:
+                    translated_plot = asyncio.run(
+                        translate_service.translate_plot_or_raise(
+                            source_plot,
+                            {
+                                "actors": list(candidate.actors),
+                                "number": number,
+                            },
+                        )
+                    )
+                except TranslateError as exc:
+                    error_code = _title_translation_error_code(exc)
+                    return {
+                        "success": False,
+                        "skipped": False,
+                        "error_code": error_code,
+                    }
+                except Exception:
+                    logger.exception(
+                        "批次补简介翻译失败: %s",
+                        candidate.file_path,
+                    )
+                    return {
+                        "success": False,
+                        "skipped": False,
+                        "error_code": "translate_failed",
+                    }
+
+            translated_plot = normalize_translation_text(
+                translated_plot
+            ).strip()
+            if not translated_plot:
+                return {
+                    "success": False,
+                    "skipped": False,
+                    "error_code": "translation_empty",
+                }
+
+            updated_nfos = []
+            write_error = ""
+            for nfo_path, owner_paths in candidate.nfo_targets:
+                if cancel_event.is_set():
+                    break
+                try:
+                    changed = fill_empty_nfo_plot(
+                        nfo_path,
+                        new_plot=translated_plot,
+                        new_original=source_plot,
+                    )
+                    if not changed:
+                        continue
+                    updated_nfos.append(nfo_path)
+                    nfo_mtime = os.stat(nfo_path).st_mtime
+                    for owner_path in owner_paths:
+                        if not repo.update_nfo_mtime(
+                            owner_path,
+                            nfo_mtime,
+                        ):
+                            write_error = "db_write_failed"
+                except AndroidStoragePermissionError:
+                    write_error = "storage_permission_required"
+                except NfoNotFoundError:
+                    write_error = "no_nfo"
+                except NfoParseError:
+                    write_error = "nfo_unreadable"
+                except Exception:
+                    logger.warning(
+                        "批次补简介写入 NFO 失败: %s",
+                        nfo_path,
+                        exc_info=True,
+                    )
+                    write_error = "nfo_write_failed"
+
+            return {
+                "success": bool(updated_nfos) and not write_error,
+                "skipped": not updated_nfos and not write_error,
+                "error_code": write_error or (
+                    "" if updated_nfos else "already_filled"
+                ),
+                "updated_nfo_count": len(updated_nfos),
+                "translated_plot": translated_plot,
+                "source_plot": source_plot,
+            }
+
+        success_count = 0
+        failed_count = 0
+        skipped_count = 0
+        failed_items = []
+
+        yield _sse_event({
+            "type": "log",
+            "level": "info",
+            "message": _runtime_text(
+                "plots",
+                "start",
+                locale,
+                total=total,
+                concurrency=_PLOT_BACKFILL_CONCURRENCY,
+            ),
+        })
+        yield _sse_event({
+            "type": "progress",
+            "current": 0,
+            "total": total,
+            "number": "",
+            "status": _runtime_text(
+                "plots",
+                "status",
+                locale,
+                concurrency=_PLOT_BACKFILL_CONCURRENCY,
+            ),
+            "success": success_count,
+            "failed": failed_count,
+            "skipped": skipped_count,
+        })
+
+        executor = ThreadPoolExecutor(
+            max_workers=_PLOT_BACKFILL_CONCURRENCY,
+            thread_name_prefix="plot-backfill",
+        )
+        futures = {
+            executor.submit(process_one, candidate): (index, candidate)
+            for index, candidate in enumerate(candidates)
+        }
+        processed_count = 0
+        cancelled = False
+
+        try:
+            while futures:
+                if cancel_event.is_set():
+                    cancelled = True
+                    break
+                done, _ = futures_wait(
+                    tuple(futures),
+                    timeout=_DISCONNECT_POLL_INTERVAL_SEC,
+                    return_when=FIRST_COMPLETED,
+                )
+                ordered_done = sorted(
+                    done,
+                    key=lambda future: futures[future][0],
+                )
+                for future in ordered_done:
+                    if cancel_event.is_set():
+                        cancelled = True
+                        break
+                    _index, candidate = futures.pop(future)
+                    try:
+                        result = future.result()
+                    except Exception:
+                        logger.exception(
+                            "批次补简介处理失败: %s",
+                            candidate.file_path,
+                        )
+                        result = {
+                            "success": False,
+                            "skipped": False,
+                            "error_code": "internal_error",
+                        }
+
+                    if result.get("error_code") == "cancelled":
+                        cancelled = True
+                        break
+
+                    processed_count += 1
+                    number = candidate.number
+                    status = _runtime_text(
+                        "plots",
+                        "status_count",
+                        locale,
+                        current=processed_count,
+                        total=total,
+                        concurrency=_PLOT_BACKFILL_CONCURRENCY,
+                    )
+                    if result.get("success"):
+                        success_count += 1
+                        preview = re.sub(
+                            r"\s+",
+                            " ",
+                            result.get("translated_plot") or "",
+                        ).strip()[:180]
+                        yield _sse_event({
+                            "type": "result-item",
+                            "file_path": candidate.file_path,
+                            "number": number,
+                            "success": True,
+                            "skipped": False,
+                            "updated_nfo_count": result.get(
+                                "updated_nfo_count",
+                                0,
+                            ),
+                            "preview": preview,
+                            "member_paths": list(
+                                candidate.member_paths
+                            ),
+                            "current": processed_count,
+                            "total": total,
+                            "status": status,
+                            "success_count": success_count,
+                            "failed_count": failed_count,
+                            "skipped_count": skipped_count,
+                        })
+                        yield _sse_event({
+                            "type": "log",
+                            "level": "info",
+                            "message": _runtime_text(
+                                "plots",
+                                "log",
+                                locale,
+                                current=processed_count,
+                                total=total,
+                                number=number or candidate.file_path,
+                                preview=preview,
+                            ),
+                        })
+                        continue
+
+                    error_code = (
+                        result.get("error_code")
+                        or "internal_error"
+                    )
+                    error_message = _localized_plot_error(
+                        locale,
+                        error_code,
+                        number=number,
+                    )
+                    if result.get("skipped"):
+                        skipped_count += 1
+                        yield _sse_event({
+                            "type": "result-item",
+                            "file_path": candidate.file_path,
+                            "number": number,
+                            "success": False,
+                            "skipped": True,
+                            "error_code": error_code,
+                            "error": error_message,
+                            "current": processed_count,
+                            "total": total,
+                            "status": status,
+                            "success_count": success_count,
+                            "failed_count": failed_count,
+                            "skipped_count": skipped_count,
+                        })
+                        continue
+
+                    failed_count += 1
+                    failed_items.append({
+                        "path": candidate.file_path,
+                        "number": number,
+                        "error_code": error_code,
+                        "error": error_message,
+                    })
+                    yield _sse_event({
+                        "type": "result-item",
+                        "file_path": candidate.file_path,
+                        "number": number,
+                        "success": False,
+                        "skipped": False,
+                        "error_code": error_code,
+                        "error": error_message,
+                        "updated_nfo_count": result.get(
+                            "updated_nfo_count",
+                            0,
+                        ),
+                        "current": processed_count,
+                        "total": total,
+                        "status": status,
+                        "success_count": success_count,
+                        "failed_count": failed_count,
+                        "skipped_count": skipped_count,
+                    })
+                if cancelled:
+                    break
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
+
+        if cancelled or cancel_event.is_set():
+            yield _sse_event({
+                "type": "done",
+                "message": _runtime_text(
+                    "plots",
+                    "cancelled",
+                    locale,
+                ),
+                "cancelled": True,
+                "summary": {
+                    "success": success_count,
+                    "failed": failed_count,
+                    "skipped": skipped_count,
+                    "failed_items": failed_items,
+                },
+            })
+            return
+
+        yield _sse_event({
+            "type": "done",
+            "message": _runtime_text(
+                "plots",
+                "done",
+                locale,
+                success=success_count,
+                failed=failed_count,
+                skipped=skipped_count,
+            ),
+            "cancelled": False,
+            "summary": {
+                "success": success_count,
+                "failed": failed_count,
+                "skipped": skipped_count,
+                "failed_items": failed_items,
+            },
+        })
+    except Exception:
+        logger.exception("批次补简介端点失败")
+        yield _sse_event({
+            "type": "error",
+            "message": _runtime_text(
+                "plots",
+                "unexpected_error",
+                locale,
+            ),
+        })
+
+
 @router.post("/backfill-titles")
 async def backfill_titles(request: Request):
     """SSE: translate all titles that differ from the active UI language."""
@@ -3557,6 +4073,12 @@ async def backfill_titles(request: Request):
 async def backfill_samples(request: Request):
     """SSE: fetch samples only for rows whose sample list is empty."""
     return await _cancelable_sse_response(request, _sample_backfill_generator)
+
+
+@router.post("/backfill-plots")
+async def backfill_plots(request: Request):
+    """SSE: fetch and translate synopses for existing NFOs with empty plots."""
+    return await _cancelable_sse_response(request, _plot_backfill_generator)
 
 
 def _build_current_rename_plan(scope: str = "files") -> dict:

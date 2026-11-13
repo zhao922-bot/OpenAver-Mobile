@@ -3,7 +3,7 @@
 [![Build APK](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml/badge.svg)](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml)
 
 OpenAver Mobile 是 [OpenAver](https://github.com/slive777/OpenAver) 的非官方
-Android 移植版。当前移动端开发版本为 `v0.18.17-android-r6`，已对齐上游
+Android 移植版。当前移动端开发版本为 `v0.18.17-android-r7`，已对齐上游
 `v0.18.17` 的补完性能、批次搜索、来源修复、片库浏览和 AI 后处理体验；
 后续差异会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)继续收敛。
 内嵌代码基线仍为上游 `v0.17.18` 加本仓库补丁。
@@ -15,13 +15,13 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r6-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r7-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.18.17-android-r6-arm64-v8a.apk`
+- 文件名：`openaver-v0.18.17-android-r7-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.18.17-r6`（versionCode `18006`）
+- 版本：`0.18.17-r7`（versionCode `18007`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
@@ -319,6 +319,12 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
   模型不支持等问题会停止整批并在设置页显示原因
 - v0.18.17-r6：首次刮削、真正重新刮削和自动整理入库后，可按现有开关自动执行
   标题翻译、图片相似、人脸对焦和 AI 标签；补缺操作与重复入库不会重复调用 AI
+- v0.18.17-r7：扫描页新增“一键补齐简介”，只处理已有 NFO 且 `<plot>` 为空的
+  影片，不覆盖已有简介；没有 NFO 的影片继续使用原有缺件补全流程
+- v0.18.17-r7：补简介会从现有刮削来源获取完整简介，按当前界面语言全文翻译后
+  写入 `<plot>`，来源原文写入 `<originalplot>`；不会使用标题长度限制截断简介
+- v0.18.17-r7：补简介支持三路并行、实时进度、取消、失败重试和翻译日志预览；
+  完整分段视频组按 1 部计数，但组内所有空白 NFO 都会补齐
 
 ## 限制
 

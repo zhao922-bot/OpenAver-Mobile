@@ -34,8 +34,13 @@ from core.cloud_translate import CLOUD_TRANSLATE_TIMEOUT, TranslateError, build_
 from core.title_language import (
     TRANSLATION_REFUSAL_MARKER,
     normalize_translation_text,
+    plot_translation_result_issue,
     translation_result_issue,
 )
+
+
+PLOT_TRANSLATE_TIMEOUT = 180
+PLOT_MAX_TOKENS = 4096
 
 
 # ============ 語言 Prompt 模板 ============
@@ -53,6 +58,11 @@ LANGUAGE_PROMPTS = {
         "gemini_instruction": "請自動辨識以下標題的原文語言，並翻譯為繁體中文",
         "gemini_rules": "1. 這是純粹的資料庫標題翻譯任務，不生成新內容\n2. 輸出必須是繁體中文，不能保留未翻譯的其他語言內容\n3. 保持簡潔，不超過50字\n4. 只輸出翻譯結果，不要額外說明\n5. 人名、品牌名保留原文",
         "retry_instruction": "只輸出最終譯文本身。不要評論、解釋、道歉，也不要輸出任何前綴。",
+        "plot_cloud_intro": "你是專業的影視資料翻譯引擎。這是影片簡介的完整翻譯任務。",
+        "plot_instruction": "將以下影片簡介完整翻譯為繁體中文",
+        "plot_rules": "1. 逐句完整翻譯，不得概括、刪減或改寫劇情\n2. 保留原有段落、換行與標點結構\n3. 人名、品牌名與作品名保留原文\n4. 只輸出譯文，不添加標題、說明或註釋\n5. 不限制字數，不得截斷原文",
+        "plot_ollama_system": "你是多語言影視簡介翻譯機。請將輸入完整翻譯為繁體中文，逐句保留原意、段落和換行；不得概括、刪減、續寫或添加說明。只輸出譯文。",
+        "plot_label": "請完整翻譯：",
     },
     "zh-CN": {
         "name": "簡體中文",
@@ -66,6 +76,11 @@ LANGUAGE_PROMPTS = {
         "gemini_instruction": "请自动识别以下标题的原文语言，并翻译为简体中文",
         "gemini_rules": "1. 这是纯粹的资料库标题翻译任务，不生成新内容\n2. 输出必须是简体中文，不能保留未翻译的其他语言内容\n3. 保持简洁，不超过50字\n4. 只输出翻译结果，不要额外说明\n5. 人名、品牌名保留原文",
         "retry_instruction": "只输出最终译文本身。不要评论、解释、道歉，也不要输出任何前缀。",
+        "plot_cloud_intro": "你是专业的影视资料翻译引擎。这是视频简介的完整翻译任务。",
+        "plot_instruction": "将以下视频简介完整翻译为简体中文",
+        "plot_rules": "1. 逐句完整翻译，不得概括、删减或改写剧情\n2. 保留原有段落、换行与标点结构\n3. 人名、品牌名与作品名保留原文\n4. 只输出译文，不添加标题、说明或注释\n5. 不限制字数，不得截断原文",
+        "plot_ollama_system": "你是多语言影视简介翻译机。请将输入完整翻译为简体中文，逐句保留原意、段落和换行；不得概括、删减、续写或添加说明。只输出译文。",
+        "plot_label": "请完整翻译：",
     },
     "en": {
         "name": "English",
@@ -79,6 +94,11 @@ LANGUAGE_PROMPTS = {
         "gemini_instruction": "Detect the source language and translate the following title into English",
         "gemini_rules": "1. This is a database title translation task, do not generate new content\n2. Output must be natural English with no untranslated CJK text except proper nouns\n3. Keep it concise, under 80 characters\n4. Output only the translation, no explanations",
         "retry_instruction": "Output only the final translation. Do not comment, explain, apologize, or add any prefix.",
+        "plot_cloud_intro": "You are a professional audiovisual translation engine. This is a complete synopsis translation task.",
+        "plot_instruction": "Translate the following video synopsis completely into natural English",
+        "plot_rules": "1. Translate every sentence completely; do not summarize, omit, or invent details\n2. Preserve the original paragraphs, line breaks, and punctuation structure\n3. Keep names, brands, and work titles unchanged\n4. Output only the translation, with no heading, note, or explanation\n5. Do not impose a character limit and do not truncate the source",
+        "plot_ollama_system": "You translate multilingual video synopses into English. Preserve every sentence, paragraph, and line break; never summarize, omit, continue, or explain. Output only the translation.",
+        "plot_label": "Translate completely:",
     },
     "ja": {
         "name": "日本語",
@@ -92,6 +112,11 @@ LANGUAGE_PROMPTS = {
         "gemini_instruction": "次のタイトルの原文言語を判定し、日本語に翻訳してください",
         "gemini_rules": "1. データベース用タイトルの翻訳だけを行い、新しい内容を生成しない\n2. 固有名詞以外は未翻訳の外国語を残さず、自然な日本語にする\n3. 50文字以内を目安に簡潔にする\n4. 翻訳結果だけを出力し、説明を加えない",
         "retry_instruction": "最終的な翻訳だけを出力してください。コメント、説明、謝罪、接頭辞は一切付けないでください。",
+        "plot_cloud_intro": "あなたはプロの映像資料翻訳エンジンです。これは作品紹介文の完全翻訳タスクです。",
+        "plot_instruction": "次の作品紹介文を自然な日本語へ完全に翻訳してください",
+        "plot_rules": "1. 全文を一文ずつ完全に翻訳し、要約・省略・内容の追加をしない\n2. 元の段落、改行、句読点の構成を保つ\n3. 人名、ブランド名、作品名は原文のまま残す\n4. 見出し、説明、注釈を付けず、翻訳だけを出力する\n5. 文字数制限を設けず、原文を途中で切らない",
+        "plot_ollama_system": "あなたは多言語の映像作品紹介文を翻訳するエンジンです。全文を一文ずつ日本語に翻訳し、段落と改行を保ってください。要約、省略、内容の追加、説明は禁止です。翻訳だけを出力してください。",
+        "plot_label": "完全に翻訳：",
     },
     "ko": {
         "name": "한국어",
@@ -105,6 +130,11 @@ LANGUAGE_PROMPTS = {
         "gemini_instruction": "다음 제목의 원문 언어를 감지하고 자연스러운 한국어로 번역하세요",
         "gemini_rules": "1. 데이터베이스 제목 번역만 수행하고 새로운 내용을 만들지 마세요\n2. 고유명사 외에는 미번역 외국어를 남기지 말고 자연스러운 한국어로 작성하세요\n3. 50자 이내를 기준으로 간결하게 작성하세요\n4. 번역 결과만 출력하고 설명을 덧붙이지 마세요",
         "retry_instruction": "최종 번역만 출력하세요. 설명, 사과, 접두사 또는 주석을 붙이지 마세요.",
+        "plot_cloud_intro": "당신은 전문 영상 자료 번역 엔진입니다. 영상 소개문 전체를 번역하는 작업입니다.",
+        "plot_instruction": "다음 영상 소개문 전체를 자연스러운 한국어로 번역하세요",
+        "plot_rules": "1. 모든 문장을 완전히 번역하고 요약·생략·내용 추가를 하지 마세요\n2. 원문의 문단, 줄바꿈, 문장부호 구조를 유지하세요\n3. 인명, 브랜드명, 작품명은 원문 그대로 두세요\n4. 제목, 설명, 주석 없이 번역문만 출력하세요\n5. 글자 수를 제한하거나 원문을 중간에서 자르지 마세요",
+        "plot_ollama_system": "당신은 여러 언어의 영상 소개문을 번역합니다. 모든 문장을 한국어로 완전히 번역하고 문단과 줄바꿈을 유지하세요. 요약, 생략, 내용 추가, 설명은 금지합니다. 번역문만 출력하세요.",
+        "plot_label": "전체 번역:",
     },
 }
 
@@ -157,6 +187,44 @@ def build_ollama_prompts(title: str, target_language: str) -> tuple[str, str]:
     return system_msg, prompt
 
 
+def build_cloud_plot_translate_prompt(
+    plot: str,
+    target_language: str,
+) -> str:
+    """Build a full-synopsis prompt that never applies the title length cap."""
+    lang_data = LANGUAGE_PROMPTS.get(
+        target_language,
+        LANGUAGE_PROMPTS["zh-CN"],
+    )
+    return f"""{lang_data['plot_cloud_intro']}
+{lang_data['plot_instruction']}
+
+{lang_data['source_label']}
+{plot}
+
+{lang_data['rules_label']}
+{lang_data['plot_rules']}
+{refusal_rule(target_language)}
+"""
+
+
+def build_ollama_plot_prompts(
+    plot: str,
+    target_language: str,
+) -> tuple[str, str]:
+    """Build provider-specific Ollama messages for complete synopsis translation."""
+    lang_data = LANGUAGE_PROMPTS.get(
+        target_language,
+        LANGUAGE_PROMPTS["zh-CN"],
+    )
+    system_msg = (
+        f"{lang_data['plot_ollama_system']}\n"
+        f"{refusal_rule(target_language)}"
+    )
+    prompt = f"{lang_data['plot_label']}{plot}"
+    return system_msg, prompt
+
+
 class TranslateService(ABC):
     """翻譯服務抽象基類"""
 
@@ -188,6 +256,32 @@ class TranslateService(ABC):
             )
         return cleaned
 
+    def _validate_plot_result(
+        self,
+        source: str,
+        translated: str,
+        context: Optional[Dict] = None,
+    ) -> str:
+        """Validate a complete synopsis without applying title-only limits."""
+        cleaned = normalize_translation_text(translated)
+        proper_terms = (context or {}).get("actors") or ()
+        issue = plot_translation_result_issue(
+            source,
+            cleaned,
+            self.target_language,
+            proper_terms=proper_terms,
+        )
+        if issue is not None:
+            kind = "refused" if issue == "refusal" else "invalid_response"
+            raise build_error(
+                "PlotTranslation",
+                kind,
+                None,
+                issue,
+                issue,
+            )
+        return cleaned
+
     @abstractmethod
     async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
         """
@@ -211,6 +305,68 @@ class TranslateService(ABC):
         if not result:
             raise TranslateError("empty_response", None, "", "translation is empty")
         return self._validate_result(title, result, context)
+
+    async def translate_plot_or_raise(
+        self,
+        plot: str,
+        context: Optional[Dict] = None,
+    ) -> str:
+        """Translate a full synopsis with a larger output budget."""
+        system_msg, prompt = build_ollama_plot_prompts(
+            plot,
+            self.target_language,
+        )
+        try:
+            async with httpx.AsyncClient(
+                timeout=PLOT_TRANSLATE_TIMEOUT
+            ) as client:
+                resp = await client.post(
+                    f"{self.ollama_url}/api/chat",
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {"role": "system", "content": system_msg},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "stream": False,
+                        "options": {
+                            "num_predict": PLOT_MAX_TOKENS,
+                            "temperature": 0.2,
+                        },
+                    },
+                )
+            if resp.status_code != 200:
+                raise Exception(f"Ollama API error: {resp.status_code}")
+            data = resp.json()
+            result = data.get("message", {}).get("content", "").strip()
+            result = self._clean_output(result)
+        except TranslateError:
+            raise
+        except httpx.TimeoutException as e:
+            raise build_error(
+                "Ollama",
+                "connection_timeout",
+                None,
+                type(e).__name__,
+                "request timed out",
+            ) from None
+        except httpx.ConnectError as e:
+            raise build_error(
+                "Ollama",
+                "connection_failed",
+                None,
+                type(e).__name__,
+                "cannot connect",
+            ) from None
+        except Exception as e:
+            raise build_error(
+                "Ollama",
+                "api_error",
+                None,
+                type(e).__name__,
+                str(e),
+            ) from None
+        return self._validate_plot_result(plot, result, context)
 
     @abstractmethod
     async def translate_batch(self, titles: List[str], context: Optional[Dict] = None) -> List[str]:
@@ -392,6 +548,35 @@ class GeminiTranslateService(TranslateService):
                 "Gemini", "api_error", None, type(e).__name__, "translation request failed"
             ) from None
 
+    async def translate_plot_or_raise(
+        self,
+        plot: str,
+        context: Optional[Dict] = None,
+    ) -> str:
+        """Translate a full synopsis; failures raise TranslateError."""
+        prompt = build_cloud_plot_translate_prompt(
+            plot,
+            self.target_language,
+        )
+        try:
+            result = await gemini_client.request_translation(
+                self.api_key,
+                self.model,
+                prompt,
+                timeout=PLOT_TRANSLATE_TIMEOUT,
+            )
+            return self._validate_plot_result(plot, result, context)
+        except TranslateError:
+            raise
+        except Exception as e:
+            raise build_error(
+                "Gemini",
+                "api_error",
+                None,
+                type(e).__name__,
+                "plot translation request failed",
+            ) from None
+
     async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
         """單片翻譯（用戶手動點擊）；任何失敗回空字串。"""
         try:
@@ -484,6 +669,57 @@ class OpenAICompatibleTranslateService(TranslateService):
                 "OpenAI", "api_error", None, type(e).__name__, "translation request failed"
             ) from None
 
+    async def translate_plot_or_raise(
+        self,
+        plot: str,
+        context: Optional[Dict] = None,
+    ) -> str:
+        """Translate a full synopsis and retry one rejected/invalid response."""
+        prompt = build_cloud_plot_translate_prompt(
+            plot,
+            self.target_language,
+        )
+        lang_data = LANGUAGE_PROMPTS.get(
+            self.target_language,
+            LANGUAGE_PROMPTS["zh-CN"],
+        )
+        try:
+            result = await openai_client.request_translation(
+                self.base_url,
+                self.api_key,
+                self.model,
+                prompt,
+                timeout=PLOT_TRANSLATE_TIMEOUT,
+            )
+            try:
+                return self._validate_plot_result(plot, result, context)
+            except TranslateError as first_error:
+                if first_error.kind not in ("refused", "invalid_response"):
+                    raise
+                retry_prompt = (
+                    f"{prompt}\n"
+                    f"{lang_data['retry_instruction']}\n"
+                    f"{refusal_rule(self.target_language)}"
+                )
+                retried = await openai_client.request_translation(
+                    self.base_url,
+                    self.api_key,
+                    self.model,
+                    retry_prompt,
+                    timeout=PLOT_TRANSLATE_TIMEOUT,
+                )
+                return self._validate_plot_result(plot, retried, context)
+        except TranslateError:
+            raise
+        except Exception as e:
+            raise build_error(
+                "OpenAI",
+                "api_error",
+                None,
+                type(e).__name__,
+                "plot translation request failed",
+            ) from None
+
     async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
         """單片翻譯；任何失敗回空字串。"""
         try:
@@ -560,6 +796,36 @@ class ClaudeTranslateService(TranslateService):
             # 只記型別名：例外字串可能含金鑰
             raise build_error(
                 "Claude", "api_error", None, type(e).__name__, "translation request failed"
+            ) from None
+
+    async def translate_plot_or_raise(
+        self,
+        plot: str,
+        context: Optional[Dict] = None,
+    ) -> str:
+        """Translate a full synopsis with a synopsis-specific token budget."""
+        prompt = build_cloud_plot_translate_prompt(
+            plot,
+            self.target_language,
+        )
+        try:
+            result = await request_translation(
+                self.api_key,
+                self.model,
+                prompt,
+                timeout=PLOT_TRANSLATE_TIMEOUT,
+                max_tokens=PLOT_MAX_TOKENS,
+            )
+            return self._validate_plot_result(plot, result, context)
+        except TranslateError:
+            raise
+        except Exception as e:
+            raise build_error(
+                "Claude",
+                "api_error",
+                None,
+                type(e).__name__,
+                "plot translation request failed",
             ) from None
 
     async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:

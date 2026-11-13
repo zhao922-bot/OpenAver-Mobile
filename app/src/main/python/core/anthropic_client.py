@@ -53,10 +53,15 @@ def build_headers(api_key: str) -> dict[str, str]:
     }
 
 
-def build_translate_payload(model: str, prompt: str) -> dict[str, Any]:
+def build_translate_payload(
+    model: str,
+    prompt: str,
+    *,
+    max_tokens: int = MAX_TOKENS,
+) -> dict[str, Any]:
     return {
         "model": model,
-        "max_tokens": MAX_TOKENS,
+        "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": prompt}],
         "output_config": {"effort": "low"},
     }
@@ -182,10 +187,15 @@ async def request_translation(
     prompt: str,
     *,
     timeout: float,
+    max_tokens: int = MAX_TOKENS,
 ) -> str:
     """POST /v1/messages；成功回非空 str，失敗拋 AnthropicError。"""
     headers = build_headers(api_key)
-    payload = build_translate_payload(model, prompt)
+    payload = build_translate_payload(
+        model,
+        prompt,
+        max_tokens=max_tokens,
+    )
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(

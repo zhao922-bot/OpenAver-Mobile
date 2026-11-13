@@ -39,8 +39,10 @@ export function stateBatch() {
         // ===== Missing-only backfill queues =====
         untranslatedTitleCount: 0,
         missingSampleCount: 0,
+        missingPlotCount: 0,
         untranslatedTitleItems: [],
         missingSampleItems: [],
+        missingPlotItems: [],
         _backfillAbortController: null,
         _missingCheckRequestId: 0,
 
@@ -132,6 +134,22 @@ export function stateBatch() {
             };
         },
 
+        get plotBackfillDrilldownItems() {
+            return this.missingPlotItems.map(item => ({
+                number: item.number || item.title || '',
+                path: item.file_path,
+                note: item.title || '',
+            }));
+        },
+
+        get plotBackfillDrilldownPayload() {
+            return {
+                title: window.t('scanner.stats.plot_backfill_prefix'),
+                items: this.plotBackfillDrilldownItems,
+                footnote: window.t('scanner.stats.plot_backfill_drilldown_note'),
+            };
+        },
+
         get titleBackfillButtonText() {
             if (this.state === 'titleBackfilling') {
                 return '<span class="loading loading-spinner loading-sm"></span> '
@@ -162,6 +180,25 @@ export function stateBatch() {
 
         get sampleBackfillDisabled() {
             return this.isBusy || this.missingSampleCount === 0;
+        },
+
+        get plotBackfillButtonText() {
+            if (this.state === 'plotBackfilling') {
+                return '<span class="loading loading-spinner loading-sm"></span> '
+                    + window.t('scanner.stats.plot_backfill_loading');
+            }
+            if (this.config?.translate?.enabled !== true) {
+                return '<i class="bi bi-translate"></i> '
+                    + window.t('scanner.stats.plot_backfill_disabled');
+            }
+            return '<i class="bi bi-card-text"></i> '
+                + window.t('scanner.stats.plot_backfill_idle');
+        },
+
+        get plotBackfillDisabled() {
+            return this.isBusy
+                || this.missingPlotCount === 0
+                || this.config?.translate?.enabled !== true;
         },
 
         get missingEnrichButtonText() {
@@ -447,11 +484,15 @@ export function stateBatch() {
                 const d = result.data;
                 this.untranslatedTitleCount = d.untranslated_titles || 0;
                 this.missingSampleCount = d.missing_samples || 0;
+                this.missingPlotCount = d.missing_plots || 0;
                 this.untranslatedTitleItems = Array.isArray(d.untranslated_title_items)
                     ? d.untranslated_title_items
                     : [];
                 this.missingSampleItems = Array.isArray(d.missing_sample_items)
                     ? d.missing_sample_items
+                    : [];
+                this.missingPlotItems = Array.isArray(d.missing_plot_items)
+                    ? d.missing_plot_items
                     : [];
                 if (d.total_missing > 0) {
                     // TASK-13: 後端永遠回傳完整 items 清單；前端於 runMissingEnrich 內做 > 500 confirm gate
@@ -474,6 +515,7 @@ export function stateBatch() {
                     (d.total_missing || 0) > 0
                     || this.untranslatedTitleCount > 0
                     || this.missingSampleCount > 0
+                    || this.missingPlotCount > 0
                 ) {
                     this.maintenanceExpanded = true;
                 }
@@ -510,6 +552,20 @@ export function stateBatch() {
             });
         },
 
+        async runPlotBackfill() {
+            if (this.plotBackfillDisabled) return;
+            await this._runBackfillStream({
+                url: '/api/gallery/backfill-plots',
+                taskState: 'plotBackfilling',
+                taskKind: 'plot-backfill',
+                startStatus: window.t('scanner.stats.plot_backfill_preparing'),
+                total: this.missingPlotCount,
+                doneToastKey: 'scanner.stats.plot_backfill_toast_success',
+                mixedToastKey: 'scanner.stats.plot_backfill_toast_mixed',
+                errorText: window.t('scanner.stats.plot_backfill_error'),
+            });
+        },
+
         async _runBackfillStream({
             url,
             taskState,
@@ -525,7 +581,11 @@ export function stateBatch() {
             this.state = taskState;
             this._startTask(taskKind, startStatus, total);
             this.clearLogs();
-            if (taskKind === 'title-backfill' || taskKind === 'sample-backfill') {
+            if (
+                taskKind === 'title-backfill'
+                || taskKind === 'sample-backfill'
+                || taskKind === 'plot-backfill'
+            ) {
                 this.logPanelExpanded = true;
             }
 

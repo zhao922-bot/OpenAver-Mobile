@@ -1802,19 +1802,24 @@
  def smart_search(query: str, limit: int = 20, offset: int = 0, status_callback: Optional[Callable[[str, str], None]] = None, uncensored_mode: bool = False, result_callback: Optional[Callable[[int, Any], None]] = None, discovery_only: bool = False, resolve_makers: bool = False, *, meta: Optional[dict] = None, cursor: Optional[str] = None) -> List[Dict[str, Any]]:  # noqa: C901 — 無碼/有碼兩條搜尋鏈並存於同一函式；CD-65-7 已明文交代無碼模式模糊搜尋「預期回空」的設計語意，拆分會把這段語意說明從呼叫點剝離、增加誤讀風險
 --- a/core/translate_service.py
 +++ b/core/translate_service.py
-@@ -31,6 +31,11 @@
+@@ -31,6 +31,16 @@
      request_translation,
  )
  from core.cloud_translate import CLOUD_TRANSLATE_TIMEOUT, TranslateError, build_error
 +from core.title_language import (
 +    TRANSLATION_REFUSAL_MARKER,
 +    normalize_translation_text,
++    plot_translation_result_issue,
 +    translation_result_issue,
 +)
++
++
++PLOT_TRANSLATE_TIMEOUT = 180
++PLOT_MAX_TOKENS = 4096
  
  
  # ============ 語言 Prompt 模板 ============
-@@ -38,30 +43,150 @@
+@@ -38,30 +48,239 @@
  LANGUAGE_PROMPTS = {
      "zh-TW": {
          "name": "繁體中文",
@@ -1831,6 +1836,11 @@
 +        "gemini_instruction": "請自動辨識以下標題的原文語言，並翻譯為繁體中文",
 +        "gemini_rules": "1. 這是純粹的資料庫標題翻譯任務，不生成新內容\n2. 輸出必須是繁體中文，不能保留未翻譯的其他語言內容\n3. 保持簡潔，不超過50字\n4. 只輸出翻譯結果，不要額外說明\n5. 人名、品牌名保留原文",
 +        "retry_instruction": "只輸出最終譯文本身。不要評論、解釋、道歉，也不要輸出任何前綴。",
++        "plot_cloud_intro": "你是專業的影視資料翻譯引擎。這是影片簡介的完整翻譯任務。",
++        "plot_instruction": "將以下影片簡介完整翻譯為繁體中文",
++        "plot_rules": "1. 逐句完整翻譯，不得概括、刪減或改寫劇情\n2. 保留原有段落、換行與標點結構\n3. 人名、品牌名與作品名保留原文\n4. 只輸出譯文，不添加標題、說明或註釋\n5. 不限制字數，不得截斷原文",
++        "plot_ollama_system": "你是多語言影視簡介翻譯機。請將輸入完整翻譯為繁體中文，逐句保留原意、段落和換行；不得概括、刪減、續寫或添加說明。只輸出譯文。",
++        "plot_label": "請完整翻譯：",
      },
      "zh-CN": {
          "name": "簡體中文",
@@ -1847,6 +1857,11 @@
 +        "gemini_instruction": "请自动识别以下标题的原文语言，并翻译为简体中文",
 +        "gemini_rules": "1. 这是纯粹的资料库标题翻译任务，不生成新内容\n2. 输出必须是简体中文，不能保留未翻译的其他语言内容\n3. 保持简洁，不超过50字\n4. 只输出翻译结果，不要额外说明\n5. 人名、品牌名保留原文",
 +        "retry_instruction": "只输出最终译文本身。不要评论、解释、道歉，也不要输出任何前缀。",
++        "plot_cloud_intro": "你是专业的影视资料翻译引擎。这是视频简介的完整翻译任务。",
++        "plot_instruction": "将以下视频简介完整翻译为简体中文",
++        "plot_rules": "1. 逐句完整翻译，不得概括、删减或改写剧情\n2. 保留原有段落、换行与标点结构\n3. 人名、品牌名与作品名保留原文\n4. 只输出译文，不添加标题、说明或注释\n5. 不限制字数，不得截断原文",
++        "plot_ollama_system": "你是多语言影视简介翻译机。请将输入完整翻译为简体中文，逐句保留原意、段落和换行；不得概括、删减、续写或添加说明。只输出译文。",
++        "plot_label": "请完整翻译：",
      },
      "en": {
          "name": "English",
@@ -1863,6 +1878,11 @@
 +        "gemini_instruction": "Detect the source language and translate the following title into English",
 +        "gemini_rules": "1. This is a database title translation task, do not generate new content\n2. Output must be natural English with no untranslated CJK text except proper nouns\n3. Keep it concise, under 80 characters\n4. Output only the translation, no explanations",
 +        "retry_instruction": "Output only the final translation. Do not comment, explain, apologize, or add any prefix.",
++        "plot_cloud_intro": "You are a professional audiovisual translation engine. This is a complete synopsis translation task.",
++        "plot_instruction": "Translate the following video synopsis completely into natural English",
++        "plot_rules": "1. Translate every sentence completely; do not summarize, omit, or invent details\n2. Preserve the original paragraphs, line breaks, and punctuation structure\n3. Keep names, brands, and work titles unchanged\n4. Output only the translation, with no heading, note, or explanation\n5. Do not impose a character limit and do not truncate the source",
++        "plot_ollama_system": "You translate multilingual video synopses into English. Preserve every sentence, paragraph, and line break; never summarize, omit, continue, or explain. Output only the translation.",
++        "plot_label": "Translate completely:",
 +    },
 +    "ja": {
 +        "name": "日本語",
@@ -1876,6 +1896,11 @@
 +        "gemini_instruction": "次のタイトルの原文言語を判定し、日本語に翻訳してください",
 +        "gemini_rules": "1. データベース用タイトルの翻訳だけを行い、新しい内容を生成しない\n2. 固有名詞以外は未翻訳の外国語を残さず、自然な日本語にする\n3. 50文字以内を目安に簡潔にする\n4. 翻訳結果だけを出力し、説明を加えない",
 +        "retry_instruction": "最終的な翻訳だけを出力してください。コメント、説明、謝罪、接頭辞は一切付けないでください。",
++        "plot_cloud_intro": "あなたはプロの映像資料翻訳エンジンです。これは作品紹介文の完全翻訳タスクです。",
++        "plot_instruction": "次の作品紹介文を自然な日本語へ完全に翻訳してください",
++        "plot_rules": "1. 全文を一文ずつ完全に翻訳し、要約・省略・内容の追加をしない\n2. 元の段落、改行、句読点の構成を保つ\n3. 人名、ブランド名、作品名は原文のまま残す\n4. 見出し、説明、注釈を付けず、翻訳だけを出力する\n5. 文字数制限を設けず、原文を途中で切らない",
++        "plot_ollama_system": "あなたは多言語の映像作品紹介文を翻訳するエンジンです。全文を一文ずつ日本語に翻訳し、段落と改行を保ってください。要約、省略、内容の追加、説明は禁止です。翻訳だけを出力してください。",
++        "plot_label": "完全に翻訳：",
 +    },
 +    "ko": {
 +        "name": "한국어",
@@ -1889,6 +1914,11 @@
 +        "gemini_instruction": "다음 제목의 원문 언어를 감지하고 자연스러운 한국어로 번역하세요",
 +        "gemini_rules": "1. 데이터베이스 제목 번역만 수행하고 새로운 내용을 만들지 마세요\n2. 고유명사 외에는 미번역 외국어를 남기지 말고 자연스러운 한국어로 작성하세요\n3. 50자 이내를 기준으로 간결하게 작성하세요\n4. 번역 결과만 출력하고 설명을 덧붙이지 마세요",
 +        "retry_instruction": "최종 번역만 출력하세요. 설명, 사과, 접두사 또는 주석을 붙이지 마세요.",
++        "plot_cloud_intro": "당신은 전문 영상 자료 번역 엔진입니다. 영상 소개문 전체를 번역하는 작업입니다.",
++        "plot_instruction": "다음 영상 소개문 전체를 자연스러운 한국어로 번역하세요",
++        "plot_rules": "1. 모든 문장을 완전히 번역하고 요약·생략·내용 추가를 하지 마세요\n2. 원문의 문단, 줄바꿈, 문장부호 구조를 유지하세요\n3. 인명, 브랜드명, 작품명은 원문 그대로 두세요\n4. 제목, 설명, 주석 없이 번역문만 출력하세요\n5. 글자 수를 제한하거나 원문을 중간에서 자르지 마세요",
++        "plot_ollama_system": "당신은 여러 언어의 영상 소개문을 번역합니다. 모든 문장을 한국어로 완전히 번역하고 문단과 줄바꿈을 유지하세요. 요약, 생략, 내용 추가, 설명은 금지합니다. 번역문만 출력하세요.",
++        "plot_label": "전체 번역:",
      },
  }
  
@@ -1940,6 +1970,44 @@
 +    )
 +    return system_msg, prompt
 +
++
++def build_cloud_plot_translate_prompt(
++    plot: str,
++    target_language: str,
++) -> str:
++    """Build a full-synopsis prompt that never applies the title length cap."""
++    lang_data = LANGUAGE_PROMPTS.get(
++        target_language,
++        LANGUAGE_PROMPTS["zh-CN"],
++    )
++    return f"""{lang_data['plot_cloud_intro']}
++{lang_data['plot_instruction']}
++
++{lang_data['source_label']}
++{plot}
++
++{lang_data['rules_label']}
++{lang_data['plot_rules']}
++{refusal_rule(target_language)}
++"""
++
++
++def build_ollama_plot_prompts(
++    plot: str,
++    target_language: str,
++) -> tuple[str, str]:
++    """Build provider-specific Ollama messages for complete synopsis translation."""
++    lang_data = LANGUAGE_PROMPTS.get(
++        target_language,
++        LANGUAGE_PROMPTS["zh-CN"],
++    )
++    system_msg = (
++        f"{lang_data['plot_ollama_system']}\n"
++        f"{refusal_rule(target_language)}"
++    )
++    prompt = f"{lang_data['plot_label']}{plot}"
++    return system_msg, prompt
++
  
  class TranslateService(ABC):
      """翻譯服務抽象基類"""
@@ -1971,19 +2039,107 @@
 +                issue,
 +            )
 +        return cleaned
++
++    def _validate_plot_result(
++        self,
++        source: str,
++        translated: str,
++        context: Optional[Dict] = None,
++    ) -> str:
++        """Validate a complete synopsis without applying title-only limits."""
++        cleaned = normalize_translation_text(translated)
++        proper_terms = (context or {}).get("actors") or ()
++        issue = plot_translation_result_issue(
++            source,
++            cleaned,
++            self.target_language,
++            proper_terms=proper_terms,
++        )
++        if issue is not None:
++            kind = "refused" if issue == "refusal" else "invalid_response"
++            raise build_error(
++                "PlotTranslation",
++                kind,
++                None,
++                issue,
++                issue,
++            )
++        return cleaned
  
      @abstractmethod
      async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
-@@ -85,7 +210,7 @@
+@@ -85,7 +304,69 @@
          result = await self.translate_single(title, context)
          if not result:
              raise TranslateError("empty_response", None, "", "translation is empty")
 -        return result
 +        return self._validate_result(title, result, context)
++
++    async def translate_plot_or_raise(
++        self,
++        plot: str,
++        context: Optional[Dict] = None,
++    ) -> str:
++        """Translate a full synopsis with a larger output budget."""
++        system_msg, prompt = build_ollama_plot_prompts(
++            plot,
++            self.target_language,
++        )
++        try:
++            async with httpx.AsyncClient(
++                timeout=PLOT_TRANSLATE_TIMEOUT
++            ) as client:
++                resp = await client.post(
++                    f"{self.ollama_url}/api/chat",
++                    json={
++                        "model": self.model,
++                        "messages": [
++                            {"role": "system", "content": system_msg},
++                            {"role": "user", "content": prompt},
++                        ],
++                        "stream": False,
++                        "options": {
++                            "num_predict": PLOT_MAX_TOKENS,
++                            "temperature": 0.2,
++                        },
++                    },
++                )
++            if resp.status_code != 200:
++                raise Exception(f"Ollama API error: {resp.status_code}")
++            data = resp.json()
++            result = data.get("message", {}).get("content", "").strip()
++            result = self._clean_output(result)
++        except TranslateError:
++            raise
++        except httpx.TimeoutException as e:
++            raise build_error(
++                "Ollama",
++                "connection_timeout",
++                None,
++                type(e).__name__,
++                "request timed out",
++            ) from None
++        except httpx.ConnectError as e:
++            raise build_error(
++                "Ollama",
++                "connection_failed",
++                None,
++                type(e).__name__,
++                "cannot connect",
++            ) from None
++        except Exception as e:
++            raise build_error(
++                "Ollama",
++                "api_error",
++                None,
++                type(e).__name__,
++                str(e),
++            ) from None
++        return self._validate_plot_result(plot, result, context)
  
      @abstractmethod
      async def translate_batch(self, titles: List[str], context: Optional[Dict] = None) -> List[str]:
-@@ -105,7 +230,7 @@
+@@ -105,7 +386,7 @@
  class OllamaTranslateService(TranslateService):
      """Ollama 翻譯服務實現"""
  
@@ -1992,7 +2148,7 @@
          """
          初始化 Ollama 服務
  
-@@ -122,17 +247,11 @@
+@@ -122,17 +403,11 @@
          self.target_language = target_language
  
      async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -2015,7 +2171,7 @@
  
          try:
              async with httpx.AsyncClient(timeout=30.0) as client:
-@@ -175,9 +294,7 @@
+@@ -175,9 +450,7 @@
                  "Ollama", "api_error", None, type(e).__name__, str(e)
              ) from None
  
@@ -2026,7 +2182,7 @@
  
      async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
          """
-@@ -210,8 +327,8 @@
+@@ -210,8 +483,8 @@
      def _clean_output(self, text: str) -> str:
          """清理翻譯輸出"""
          text = text.strip().strip('"').strip("'")
@@ -2037,7 +2193,7 @@
          text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
          return text.strip()
  
-@@ -236,7 +353,7 @@
+@@ -236,7 +509,7 @@
  class GeminiTranslateService(TranslateService):
      """Google Gemini API 翻譯服務實現"""
  
@@ -2046,7 +2202,7 @@
          """
          初始化 Gemini 服務
  
-@@ -256,20 +373,17 @@
+@@ -256,26 +529,52 @@
              raise ValueError("Gemini API Key is required")
  
      async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -2070,7 +2226,42 @@
          except TranslateError:
              raise
          except Exception as e:
-@@ -310,7 +424,7 @@
+             # 只記型別名：例外字串可能含金鑰
+             raise build_error(
+                 "Gemini", "api_error", None, type(e).__name__, "translation request failed"
++            ) from None
++
++    async def translate_plot_or_raise(
++        self,
++        plot: str,
++        context: Optional[Dict] = None,
++    ) -> str:
++        """Translate a full synopsis; failures raise TranslateError."""
++        prompt = build_cloud_plot_translate_prompt(
++            plot,
++            self.target_language,
++        )
++        try:
++            result = await gemini_client.request_translation(
++                self.api_key,
++                self.model,
++                prompt,
++                timeout=PLOT_TRANSLATE_TIMEOUT,
++            )
++            return self._validate_plot_result(plot, result, context)
++        except TranslateError:
++            raise
++        except Exception as e:
++            raise build_error(
++                "Gemini",
++                "api_error",
++                None,
++                type(e).__name__,
++                "plot translation request failed",
+             ) from None
+ 
+     async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
+@@ -310,7 +609,7 @@
  class OpenAICompatibleTranslateService(TranslateService):
      """OpenAI Compatible API 翻譯服務實現（支援 OpenAI、Perplexity、OpenRouter、本地 LLM 等）"""
  
@@ -2079,7 +2270,7 @@
          """
          初始化 OpenAI Compatible 服務
  
-@@ -329,21 +443,39 @@
+@@ -329,27 +628,96 @@
          self.target_language = target_language
  
      async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -2127,7 +2318,64 @@
          except TranslateError:
              raise
          except Exception as e:
-@@ -375,24 +507,25 @@
+             # 只記型別名：例外字串可能含金鑰
+             raise build_error(
+                 "OpenAI", "api_error", None, type(e).__name__, "translation request failed"
++            ) from None
++
++    async def translate_plot_or_raise(
++        self,
++        plot: str,
++        context: Optional[Dict] = None,
++    ) -> str:
++        """Translate a full synopsis and retry one rejected/invalid response."""
++        prompt = build_cloud_plot_translate_prompt(
++            plot,
++            self.target_language,
++        )
++        lang_data = LANGUAGE_PROMPTS.get(
++            self.target_language,
++            LANGUAGE_PROMPTS["zh-CN"],
++        )
++        try:
++            result = await openai_client.request_translation(
++                self.base_url,
++                self.api_key,
++                self.model,
++                prompt,
++                timeout=PLOT_TRANSLATE_TIMEOUT,
++            )
++            try:
++                return self._validate_plot_result(plot, result, context)
++            except TranslateError as first_error:
++                if first_error.kind not in ("refused", "invalid_response"):
++                    raise
++                retry_prompt = (
++                    f"{prompt}\n"
++                    f"{lang_data['retry_instruction']}\n"
++                    f"{refusal_rule(self.target_language)}"
++                )
++                retried = await openai_client.request_translation(
++                    self.base_url,
++                    self.api_key,
++                    self.model,
++                    retry_prompt,
++                    timeout=PLOT_TRANSLATE_TIMEOUT,
++                )
++                return self._validate_plot_result(plot, retried, context)
++        except TranslateError:
++            raise
++        except Exception as e:
++            raise build_error(
++                "OpenAI",
++                "api_error",
++                None,
++                type(e).__name__,
++                "plot translation request failed",
+             ) from None
+ 
+     async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
+@@ -375,24 +743,25 @@
  
  
  def build_cloud_translate_prompt(title: str, target_language: str) -> str:
@@ -2163,7 +2411,7 @@
          """
          Args:
              config: Claude 配置字典
-@@ -410,19 +543,17 @@
+@@ -410,25 +779,53 @@
              raise ValueError("Claude API Key is required")
  
      async def translate_or_raise(self, title: str, context: Optional[Dict] = None) -> str:
@@ -2186,7 +2434,43 @@
          except TranslateError:
              raise
          except Exception as e:
-@@ -451,7 +582,7 @@
+             # 只記型別名：例外字串可能含金鑰
+             raise build_error(
+                 "Claude", "api_error", None, type(e).__name__, "translation request failed"
++            ) from None
++
++    async def translate_plot_or_raise(
++        self,
++        plot: str,
++        context: Optional[Dict] = None,
++    ) -> str:
++        """Translate a full synopsis with a synopsis-specific token budget."""
++        prompt = build_cloud_plot_translate_prompt(
++            plot,
++            self.target_language,
++        )
++        try:
++            result = await request_translation(
++                self.api_key,
++                self.model,
++                prompt,
++                timeout=PLOT_TRANSLATE_TIMEOUT,
++                max_tokens=PLOT_MAX_TOKENS,
++            )
++            return self._validate_plot_result(plot, result, context)
++        except TranslateError:
++            raise
++        except Exception as e:
++            raise build_error(
++                "Claude",
++                "api_error",
++                None,
++                type(e).__name__,
++                "plot translation request failed",
+             ) from None
+ 
+     async def translate_single(self, title: str, context: Optional[Dict] = None) -> str:
+@@ -451,7 +848,7 @@
          return results
  
  
@@ -2195,7 +2479,7 @@
      """
      創建翻譯服務實例（工廠函數）
  
-@@ -464,7 +595,7 @@
+@@ -464,7 +861,7 @@
                  "claude": {...},
                  "openai": {...}
              }
@@ -2204,7 +2488,7 @@
  
      Returns:
          TranslateService 實例
-@@ -486,6 +617,17 @@
+@@ -486,6 +883,17 @@
          openai_config = config.get("openai", {})
          return OpenAICompatibleTranslateService(openai_config, target_language)
  
@@ -3017,7 +3301,7 @@
        "nfo_idle": "Fill Fields",
        "nfo_loading": "Filling...",
        "jellyfin_help_line1": "Jellyfin / Emby media servers require additional cover formats:",
-@@ -928,7 +1358,30 @@
+@@ -928,7 +1358,41 @@
        "missing_enrich_confirm_body_suffix": " minutes. Continue?",
        "missing_enrich_confirm_cancel": "Cancel",
        "missing_enrich_confirm_confirm": "Confirm",
@@ -3043,13 +3327,24 @@
 +      "sample_backfill_toast_success": "Sample backfill complete: {success} succeeded",
 +      "sample_backfill_toast_mixed": "Sample backfill complete: {success} succeeded, {failed} failed",
 +      "sample_backfill_error": "Sample backfill failed. Please try again later",
++      "plot_backfill_prefix": "Missing synopses:",
++      "plot_backfill_suffix": "videos",
++      "plot_backfill_drilldown_note": "Only videos with an existing NFO whose plot is empty are included; videos without an NFO remain in the missing-NFO queue.",
++      "plot_backfill_idle": "Fill missing synopses",
++      "plot_backfill_loading": "Filling synopses...",
++      "plot_backfill_preparing": "Preparing synopsis backfill...",
++      "plot_backfill_disabled": "Translation disabled",
++      "plot_backfill_hint": "Fetch each missing synopsis, translate it into the current app language, and never overwrite an existing synopsis",
++      "plot_backfill_toast_success": "Synopsis backfill complete: {success} succeeded",
++      "plot_backfill_toast_mixed": "Synopsis backfill complete: {success} succeeded, {failed} failed",
++      "plot_backfill_error": "Synopsis backfill failed. Please try again later",
 +      "backfill_item_failed": "Failed: {number} — {error}",
 +      "backfill_item_skipped": "Skipped: {number} — {error}",
 +      "log_interrupted": "⚠ Update interrupted (left the page)",
        "status_preparing": "Preparing...",
        "status_done_count": "Done! {count} videos",
        "status_done": "Done",
-@@ -1019,7 +1472,7 @@
+@@ -1019,7 +1483,7 @@
      },
      "dirty_modal": {
        "title": "Unsaved Changes",
@@ -3058,7 +3353,7 @@
        "cancel": "Cancel",
        "discard": "Discard Changes",
        "save": "Save and Leave"
-@@ -1041,7 +1494,7 @@
+@@ -1041,7 +1505,7 @@
        "confirm": "Delete"
      },
      "leave_warning": {
@@ -3067,7 +3362,7 @@
        "image_check": "Image check is in progress — leaving will interrupt it!",
        "folder_dirty": "You have unsaved folder changes",
        "confirm": "{message} Leave anyway?"
-@@ -1072,16 +1525,21 @@
+@@ -1072,16 +1536,21 @@
      "update_available": "A new version of OpenAver is available",
      "auto_organize_summary": "Scheduled Organize",
      "auto_organize_aborted": "Scheduled organize aborted",
@@ -3093,7 +3388,7 @@
    },
    "similar_mode": {
      "button_aria_label": "Explore similar videos",
-@@ -1092,9 +1550,10 @@
+@@ -1092,9 +1561,10 @@
      "page_title": "Browse",
      "state": {
        "loading": "Loading video list...",
@@ -3107,7 +3402,7 @@
      },
      "error": {
        "server_error": "Server error ({status})",
-@@ -1197,6 +1656,7 @@
+@@ -1197,6 +1667,7 @@
        "mdate": "Modified",
        "random": "Random",
        "actress": {
@@ -3115,7 +3410,7 @@
          "video_count": "Film Count",
          "name": "Name",
          "added_at": "Date Added",
-@@ -1246,7 +1706,13 @@
+@@ -1246,7 +1717,13 @@
        "source_unreachable_list": "Unreachable: {list}",
        "source_unreachable_count": "{n} location(s) unreachable",
        "source_no_permission_list": "No permission to read: {list}",
@@ -3130,7 +3425,7 @@
      },
      "nav": {
        "prev_page": "Previous",
-@@ -1291,6 +1757,7 @@
+@@ -1291,6 +1768,7 @@
        "tag_nfo_write_blocked": "Tag saved, but there's no permission to write the NFO",
        "translate_tooltip": "Translate title",
        "translate_done": "Title translated",
@@ -3138,7 +3433,7 @@
        "translate_undo": "Undo",
        "translate_skipped": "Nothing in the title needs translating",
        "translate_undone": "Title restored",
-@@ -1298,7 +1765,7 @@
+@@ -1298,7 +1776,7 @@
        "translate_no_nfo": "This title has no NFO yet. Enrich it first, then translate the title",
        "user_tags_label": "Custom Tags",
        "alias_label": "Aliases",
@@ -3147,7 +3442,7 @@
        "mask_toggle": "Cover crop preview",
        "mask_detect_failed": "Focal detection failed. Please try again later.",
        "mask_focal_too_slow_auto_disabled": "Detecting the face on this cover took longer than 5 seconds, so we've turned off Auto Face Focus for you. Just drag to adjust the position directly — you can turn it back on anytime in Settings.",
-@@ -1307,9 +1774,35 @@
+@@ -1307,9 +1785,35 @@
        "mask_save_failed": "Failed to save crop settings. Please try again later.",
        "mask_cover_changed": "Cover has changed. Please reopen the crop tool and try again.",
        "cover_unavailable": "This cover can’t be loaded right now — the file location may be unreachable, or the cover file may be missing",
@@ -3185,7 +3480,7 @@
      },
      "pick": {
        "add_aria": "Add to picks",
-@@ -1410,10 +1903,90 @@
+@@ -1410,10 +1914,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -3276,7 +3571,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1434,7 +2007,8 @@
+@@ -1434,7 +2018,8 @@
        "this_computer_unavailable": "Cannot read this computer's update info right now. Please reopen the Help page and try again",
        "client_up_to_date": "OpenAver on this computer is up to date",
        "client_update_available_prefix": "This computer has a new version",
@@ -3286,7 +3581,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2021,7 @@
+@@ -1447,7 +2032,7 @@
        "title": "First time? Follow these 3 steps",
        "subtitle": "From adding your folder to filling metadata — three steps to get started",
        "step1_title": "Add Your Library Folder",
@@ -3295,7 +3590,7 @@
        "step2_title": "Generate Page",
        "step2_desc": "Scan and build a browsable collection page in one click",
        "step3_title": "NFO Fill",
-@@ -1464,7 +2038,7 @@
+@@ -1464,7 +2049,7 @@
      "tag_alias": {
        "title": "Tag Alias Management",
        "intro": "Manage Chinese/Japanese/English synonyms in one place so the search box, chip filters, and fuzzy exploration all speak the same language.",
@@ -3304,7 +3599,7 @@
        "scanner_chipwall": "The chip wall lists all tag alias groups. Click \"+\" to add an alias; the primary name is shown in pink, aliases in grey.",
        "scanner_ai_hint": "Click \"?\" to open the AI suggestion panel: describe your tag needs to the AI and it returns suggested alias groups for direct import.",
        "h6_showcase": "Auto-expand in Showcase",
-@@ -1501,16 +2075,16 @@
+@@ -1501,16 +2086,16 @@
      "batch": {
        "title": "Batch File Search",
        "h6_add": "Add Multiple Files",
@@ -3325,7 +3620,7 @@
        "fav_auto": "Automatically begins searching the first 20 files",
        "fav_nfo_skip": "If a same-name .nfo already exists, the file is treated as organized and the scraper is skipped",
        "pause_pause": "Click the 'Pause' button during batch search",
-@@ -1563,17 +2137,17 @@
+@@ -1563,17 +2148,17 @@
        "h6_manage": "Favorites Management",
        "manage_add": "Add favorites from Search or Showcase; profile photo is downloaded locally automatically",
        "manage_library": "The <strong>+</strong> next to the search bar opens an \"Add from library\" list: actresses already in your library sorted by title count, with aliases merged into a single person — tap the heart on any row to favorite her",
@@ -3347,7 +3642,7 @@
        "feat_nfo": "Automatically reads NFO files and displays metadata",
        "feat_nfo_fill": "Supports 'NFO Fill': automatically searches for missing NFO files",
        "feat_terminal": "Built-in Mini Terminal shows real-time processing progress",
-@@ -1587,7 +2161,7 @@
+@@ -1587,7 +2172,7 @@
        "jellyfin_canonical": "With a media-manager mode selected, OpenAver <strong>no longer writes a same-name cover file</strong> — Jellyfin / Emby prefer that file, which is what puts landscape images on the poster wall. Existing titles keep whatever cover location they already have (so manual focal crops are not wiped); to fix one, delete its same-name cover yourself and regenerate.",
        "jellyfin_showcase": "After scanning, browse results on the <code>/showcase</code> page",
        "h6_strm_deploy": "Read-only source + letting Emby / Jellyfin / Kodi find your titles (cross-machine setup)",
@@ -3356,7 +3651,7 @@
        "strm_deploy_step2": "Under \"Output to,\" specify a folder <strong>this machine can write to</strong> (which can be a writable NAS share mounted on this machine) — the generated <code>.strm</code> + NFO + covers go here, and you point Emby / Jellyfin / Kodi at it to build the library. This output folder is not the read-only source itself.",
        "strm_deploy_step4": "If you later change the mapping rules, the existing <code>.strm</code> files are rewritten automatically in one pass — no need to rebuild the whole library.",
        "h6_multiversion": "Multi-version manual merge (native Emby / Jellyfin feature)",
-@@ -1601,7 +2175,7 @@
+@@ -1601,7 +2186,7 @@
        "h6_modes": "Display Modes",
        "h6_sort": "Sort & Search",
        "h6_other": "Other Features",
@@ -3365,7 +3660,7 @@
        "mode_grid": "<strong>Full Cover</strong>: cover wall showing the whole cover image; click to open the Lightbox (default)",
        "mode_poster": "<strong>Poster</strong>: shows only the right half of the cover (the front), so cards are narrower and more fit per row; phones and narrow windows always use this layout",
        "mode_list": "<strong>List Mode</strong>: Compact list, ideal for quick browsing",
-@@ -1632,7 +2206,7 @@
+@@ -1632,7 +2217,7 @@
        "beta_compilation": "More complete tags (series / maker / cast) means better accuracy; videos with few tags should have their NFO filled in first",
        "h6_manage": "Tips",
        "manage_enable": "No configuration needed — works out of the box",
@@ -3374,7 +3669,7 @@
      },
      "shortcuts": {
        "title": "Keyboard Shortcuts",
-@@ -1809,6 +2383,66 @@
+@@ -1809,6 +2394,66 @@
        "client_title": "About to update OpenAver on this computer",
        "client_case_a_body": "This updates OpenAver on this computer, not the server. After you confirm, a terminal opens on this computer to run the installation. Please close OpenAver first, and reopen it yourself once the installation finishes.",
        "client_case_b_body": "OpenAver on this computer is not installed in the default location.\nThe installer will first install the new version to the default directory; you do not need to close the current OpenAver during installation.\n\nWhen the installation finishes, do the following in order:\n1. Close OpenAver\n2. Delete the python folder in the old installation directory\n3. Copy all files of the new version over your original installation location on this computer\n\nNo reinstall or reconfiguration is needed; just overwrite the files and use it."
@@ -3441,7 +3736,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2450,18 @@
+@@ -1816,20 +2461,18 @@
      "skip": "Skip",
      "next": "Next →",
      "done": "Done 🎉",
@@ -3474,7 +3769,7 @@
    },
    "updater": {
      "page_title": "Updater",
-@@ -1845,6 +2477,12 @@
+@@ -1845,6 +2488,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -3487,7 +3782,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2498,11 @@
+@@ -1860,7 +2509,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -3500,7 +3795,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2520,15 @@
+@@ -1878,11 +2531,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -3518,7 +3813,7 @@
      },
      "costar": {
        "count_label": "{n} videos"
-@@ -1957,7 +2603,7 @@
+@@ -1957,7 +2614,7 @@
        "intro": "The left column is the folder on the server; in the right column enter the path as seen from this computer. You can leave it empty and fill it in later.",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -3527,7 +3822,7 @@
        "readonly": "Read-only",
        "test_btn": "Test",
        "found": "Found",
-@@ -1968,7 +2614,7 @@
+@@ -1968,7 +2625,7 @@
        "loading": "Loading the server's scan sources...",
        "load_failed": "Could not read the server's scan sources",
        "reload_btn": "Reload",
@@ -3536,7 +3831,7 @@
        "stale": "(no longer on the server)",
        "remove": "Remove",
        "save_btn": "Save Mapping Table",
-@@ -1976,5 +2622,391 @@
+@@ -1976,5 +2633,419 @@
        "saved": "Mapping table saved",
        "save_failed": "Failed to save the mapping table"
      }
@@ -3707,6 +4002,34 @@
 +      "error_multi_video_folder": "This folder contains unrelated videos. Shared sample images would affect them; only complete parts of the same title (for example cd1/cd2) may share samples.",
 +      "error_internal": "Sample-image processing failed; check the log",
 +      "error_file_not_found": "File not found"
++    },
++    "plots": {
++      "none": "No videos are missing a synopsis",
++      "start": "Starting synopsis backfill: {total} videos ({concurrency} workers)",
++      "status": "Fetching and translating synopses in parallel ({concurrency} workers)...",
++      "status_count": "Backfilling synopses ({current}/{total}, {concurrency} workers)...",
++      "missing_number": "Could not detect the video number; skipped",
++      "already_filled": "The synopsis was filled by another task; skipped",
++      "log": "[{current}/{total}] {number}: {preview}",
++      "cancelled": "Synopsis backfill cancelled",
++      "done": "Synopsis backfill complete: {success} succeeded, {failed} failed, {skipped} skipped",
++      "unexpected_error": "Synopsis backfill failed; check the log",
++      "db_missing": "Database not found; generate the list first",
++      "translate_disabled": "Translation is disabled",
++      "config_invalid": "Translation settings are invalid; check Settings",
++      "error_not_found": "No metadata was found for {number}",
++      "error_no_summary": "No synopsis was found for {number}",
++      "error_search_failed": "Metadata search failed for {number}",
++      "error_no_nfo": "The NFO file no longer exists",
++      "error_nfo_unreadable": "The NFO file could not be read or parsed",
++      "error_nfo_write_failed": "Failed to write the synopsis to the NFO",
++      "error_storage_permission_required": "External storage is not writable. Use the top-right menu to authorize the SD-card folder containing the videos.",
++      "error_db_write_failed": "The NFO was updated, but the database refresh failed; try again",
++      "translation_failed": "Synopsis translation failed",
++      "translation_refused": "The model refused to translate this synopsis",
++      "translation_invalid": "The model returned an invalid synopsis translation",
++      "translation_empty": "The model returned an empty synopsis",
++      "error_internal": "Synopsis processing failed; check the log"
 +    },
 +    "database": {
 +      "missing": "Database not found; generate the list first",
@@ -4692,7 +5015,7 @@
        "nfo_idle": "項目補完",
        "nfo_loading": "補完中...",
        "jellyfin_help_line1": "Jellyfin / Emby などのメディアサーバーには追加のカバー形式が必要です：",
-@@ -928,7 +1358,30 @@
+@@ -928,7 +1358,41 @@
        "missing_enrich_confirm_body_suffix": " 分です。続行しますか？",
        "missing_enrich_confirm_cancel": "キャンセル",
        "missing_enrich_confirm_confirm": "補完を確認",
@@ -4718,13 +5041,24 @@
 +      "sample_backfill_toast_success": "サンプル画像の補完完了：{success} 本成功",
 +      "sample_backfill_toast_mixed": "サンプル画像の補完完了：{success} 本成功、{failed} 本失敗",
 +      "sample_backfill_error": "サンプル画像の補完に失敗しました。後でもう一度お試しください",
++      "plot_backfill_prefix": "あらすじ未登録:",
++      "plot_backfill_suffix": "本",
++      "plot_backfill_drilldown_note": "既存 NFO のあらすじが空の動画だけを対象にします。NFO がない動画は「NFO 不足」の補完対象です。",
++      "plot_backfill_idle": "あらすじを一括補完",
++      "plot_backfill_loading": "あらすじを補完中...",
++      "plot_backfill_preparing": "あらすじの補完を準備中...",
++      "plot_backfill_disabled": "翻訳が無効です",
++      "plot_backfill_hint": "未登録のあらすじを取得して現在のアプリ言語へ翻訳し、既存のあらすじは上書きしません",
++      "plot_backfill_toast_success": "あらすじの補完完了：{success} 本成功",
++      "plot_backfill_toast_mixed": "あらすじの補完完了：{success} 本成功、{failed} 本失敗",
++      "plot_backfill_error": "あらすじの補完に失敗しました。後でもう一度お試しください",
 +      "backfill_item_failed": "失敗：{number} — {error}",
 +      "backfill_item_skipped": "スキップ：{number} — {error}",
 +      "log_interrupted": "⚠ 更新が中断されました（ページを離れました）",
        "status_preparing": "準備中...",
        "status_done_count": "完了！{count} 本の動画",
        "status_done": "完了",
-@@ -1019,7 +1472,7 @@
+@@ -1019,7 +1483,7 @@
      },
      "dirty_modal": {
        "title": "未保存の変更",
@@ -4733,7 +5067,7 @@
        "cancel": "キャンセル",
        "discard": "変更を破棄",
        "save": "保存して終了"
-@@ -1041,7 +1494,7 @@
+@@ -1041,7 +1505,7 @@
        "confirm": "削除する"
      },
      "leave_warning": {
@@ -4742,7 +5076,7 @@
        "image_check": "画像チェックが進行中です。移動すると中断されます！",
        "folder_dirty": "保存していないフォルダの変更があります",
        "confirm": "{message}移動してもよろしいですか？"
-@@ -1072,16 +1525,21 @@
+@@ -1072,16 +1536,21 @@
      "update_available": "OpenAver の新しいバージョンがあります",
      "auto_organize_summary": "定期整理",
      "auto_organize_aborted": "定期整理を中止しました",
@@ -4768,7 +5102,7 @@
    },
    "similar_mode": {
      "button_aria_label": "類似動画を探索",
-@@ -1092,9 +1550,10 @@
+@@ -1092,9 +1561,10 @@
      "page_title": "動画ブラウズ",
      "state": {
        "loading": "動画リストを読み込み中...",
@@ -4782,7 +5116,7 @@
      },
      "error": {
        "server_error": "サーバーエラー ({status})",
-@@ -1197,6 +1656,7 @@
+@@ -1197,6 +1667,7 @@
        "mdate": "更新日時",
        "random": "ランダム",
        "actress": {
@@ -4790,7 +5124,7 @@
          "video_count": "作品数",
          "name": "名前",
          "added_at": "追加日時",
-@@ -1246,7 +1706,13 @@
+@@ -1246,7 +1717,13 @@
        "source_unreachable_list": "アクセスできません：{list}",
        "source_unreachable_count": "{n} 件の場所にアクセスできません",
        "source_no_permission_list": "読み取り権限がありません：{list}",
@@ -4805,7 +5139,7 @@
      },
      "nav": {
        "prev_page": "前のページ",
-@@ -1291,6 +1757,7 @@
+@@ -1291,6 +1768,7 @@
        "tag_nfo_write_blocked": "タグは保存されましたが、NFO への書き込み権限がありません",
        "translate_tooltip": "タイトルを翻訳",
        "translate_done": "タイトルを翻訳しました",
@@ -4813,7 +5147,7 @@
        "translate_undo": "元に戻す",
        "translate_skipped": "翻訳が必要な内容はありません",
        "translate_undone": "タイトルを元に戻しました",
-@@ -1298,7 +1765,7 @@
+@@ -1298,7 +1776,7 @@
        "translate_no_nfo": "この作品にはまだ NFO がありません。先に補完してから翻訳してください",
        "user_tags_label": "カスタムタグ",
        "alias_label": "別名",
@@ -4822,7 +5156,7 @@
        "mask_toggle": "カバーの切り抜きプレビュー",
        "mask_detect_failed": "焦点の検出に失敗しました。しばらくしてからもう一度お試しください。",
        "mask_focal_too_slow_auto_disabled": "このカバーの顔検出に5秒以上かかったため、自動フォーカスを先にオフにしました。位置を調整したい場合は直接ドラッグしてください。いつでも設定から再度オンにできます。",
-@@ -1307,9 +1774,35 @@
+@@ -1307,9 +1785,35 @@
        "mask_save_failed": "切り抜き設定の保存に失敗しました。しばらくしてからもう一度お試しください。",
        "mask_cover_changed": "カバーが変更されました。切り抜きツールを開き直してもう一度お試しください。",
        "cover_unavailable": "このカバー画像を読み込めません。ファイルの場所にアクセスできないか、カバー画像自体が失われている可能性があります",
@@ -4860,7 +5194,7 @@
      },
      "pick": {
        "add_aria": "★を付ける",
-@@ -1410,10 +1903,90 @@
+@@ -1410,10 +1914,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -4951,7 +5285,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1434,7 +2007,8 @@
+@@ -1434,7 +2018,8 @@
        "this_computer_unavailable": "このPCの更新情報を一時的に読み取れません。ヘルプページを開き直してもう一度お試しください",
        "client_up_to_date": "このPCの OpenAver は最新です",
        "client_update_available_prefix": "このPCに新バージョン",
@@ -4961,7 +5295,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2021,7 @@
+@@ -1447,7 +2032,7 @@
        "title": "初めてですか？3ステップで始めましょう",
        "subtitle": "フォルダ追加からメタデータ補完まで、3ステップで始める",
        "step1_title": "ライブラリフォルダを追加",
@@ -4970,7 +5304,7 @@
        "step2_title": "ページを生成",
        "step2_desc": "ワンクリックでスキャンして閲覧可能なコレクションページを作成",
        "step3_title": "NFO 補完",
-@@ -1464,7 +2038,7 @@
+@@ -1464,7 +2049,7 @@
      "tag_alias": {
        "title": "Tag エイリアス管理",
        "intro": "中日英の同義語を一元管理することで、検索ボックス・chip フィルター・あいまい探索がすべて同じ言語で動きます。",
@@ -4979,7 +5313,7 @@
        "scanner_chipwall": "chip ウォールにすべての Tag エイリアスグループが表示されます。「+」をクリックして alias を追加。プライマリ名はピンク、エイリアスはグレーで表示されます。",
        "scanner_ai_hint": "「?」をクリックすると AI 提案パネルが開きます。tag の要件を AI に説明すると、提案エイリアスグループをそのままインポートできます。",
        "h6_showcase": "Showcase で自動展開",
-@@ -1501,16 +2075,16 @@
+@@ -1501,16 +2086,16 @@
      "batch": {
        "title": "バッチファイル検索",
        "h6_add": "複数ファイルの追加",
@@ -5000,7 +5334,7 @@
        "fav_auto": "自動的に最初の 20 ファイルの検索を開始",
        "fav_nfo_skip": "同名の .nfo が存在する場合は整理済みとみなし、scraper を再実行しません",
        "pause_pause": "バッチ検索中に「一時停止」ボタンをクリック",
-@@ -1563,17 +2137,17 @@
+@@ -1563,17 +2148,17 @@
        "h6_manage": "お気に入り管理",
        "manage_add": "検索ページまたはショーケースページからお気に入りに追加。プロフィール写真は自動でローカルに保存",
        "manage_library": "検索バー横の <strong>+</strong> で「ライブラリから女優を追加」一覧を開けます。ライブラリ内の女優が作品数の多い順に並び、別名は同一人物としてまとめられます。行のハートをタップすればお気に入りに追加されます",
@@ -5022,7 +5356,7 @@
        "feat_nfo": "NFO ファイルを自動で読み込みメタデータを表示",
        "feat_nfo_fill": "「NFO 補完」に対応：欠損した NFO ファイルを自動検索",
        "feat_terminal": "内蔵 Mini Terminal でリアルタイム処理進捗を表示",
-@@ -1587,7 +2161,7 @@
+@@ -1587,7 +2172,7 @@
        "jellyfin_canonical": "メディアマネージャーモードを選ぶと<strong>同名のカバー画像は生成されなくなります</strong>——そのファイルは Jellyfin／Emby が優先的に読み込むため、ポスターウォールに横長画像が並ぶ原因になります。既存の作品はカバーの場所をそのまま維持します（手動で調整したフォーカス位置を消さないため）。修正したい場合は該当作品の同名カバーを削除してから再生成してください。",
        "jellyfin_showcase": "スキャン完了後、<code>/showcase</code> ページで生成結果を閲覧可能",
        "h6_strm_deploy": "読み取り専用ソース + Emby／Jellyfin／Kodi に作品をスキャンさせる（マシンをまたぐ配置）",
@@ -5031,7 +5365,7 @@
        "strm_deploy_step2": "「出力先」に<strong>このマシンで書き込める</strong>フォルダー（このマシンにマウントした NAS の書き込み可能な共有でも可）を指定します——生成される <code>.strm</code>＋NFO＋表紙がここに置かれ、それを Emby／Jellyfin／Kodi に指定してライブラリを作らせます。この出力フォルダーは読み取り専用ソースそのものではありません。",
        "strm_deploy_step4": "その後マッピングルールを変更すると、既存の <code>.strm</code> が一括で自動的に書き換えられ、ライブラリ全体を作り直す必要はありません。",
        "h6_multiversion": "同一作品の複数版（流出 / 4K / 字幕）を Emby/Jellyfin で結合するには？",
-@@ -1601,7 +2175,7 @@
+@@ -1601,7 +2186,7 @@
        "h6_modes": "表示モード",
        "h6_sort": "ソートと検索",
        "h6_other": "その他の機能",
@@ -5040,7 +5374,7 @@
        "mode_grid": "<strong>カバー全体</strong>：ジャケット全体を並べるカバーウォール。クリックで Lightbox を開きます（既定）",
        "mode_poster": "<strong>縦型ポスター</strong>：ジャケットの右半分（表面）だけを表示。カードが細くなり 1 行に多く並びます。スマホ／狭いウィンドウでは常にこのレイアウトです",
        "mode_list": "<strong>リストモード</strong>：コンパクトなリスト、素早い閲覧に最適",
-@@ -1632,7 +2206,7 @@
+@@ -1632,7 +2217,7 @@
        "beta_compilation": "tag が多いほど（シリーズ / メーカー / cast）精度が上がる；tag が少ない動画は先に NFO を補完することを推奨",
        "h6_manage": "使用ヒント",
        "manage_enable": "設定不要、すぐ使える",
@@ -5049,7 +5383,7 @@
      },
      "shortcuts": {
        "title": "キーボードショートカット",
-@@ -1809,6 +2383,66 @@
+@@ -1809,6 +2394,66 @@
        "client_title": "このPCの OpenAver を更新します",
        "client_case_a_body": "更新するのはこのPCの OpenAver で、サーバーではありません。確認を押すとこのPCでターミナルが開いてインストールが実行されます。先に OpenAver を閉じ、インストール完了後に手動で開き直してください。",
        "client_case_b_body": "このPCの OpenAver は既定の場所にインストールされていません。\nインストーラーはまず新バージョンを既定のディレクトリにインストールします。インストール中に現在の OpenAver を閉じる必要はありません。\n\nインストール完了後、次の順に操作してください：\n1. OpenAver を閉じる\n2. 旧インストールディレクトリの python フォルダを削除する\n3. 新バージョンのすべてのファイルを、このPCの元のインストール場所にコピーして上書きする\n\n再インストールや再設定は不要で、ファイルを上書きするだけで使えます。"
@@ -5116,7 +5450,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2450,18 @@
+@@ -1816,20 +2461,18 @@
      "skip": "スキップ",
      "next": "次へ →",
      "done": "完了 🎉",
@@ -5149,7 +5483,7 @@
    },
    "updater": {
      "page_title": "アップデーター",
-@@ -1845,6 +2477,12 @@
+@@ -1845,6 +2488,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -5162,7 +5496,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2498,11 @@
+@@ -1860,7 +2509,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -5175,7 +5509,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2520,15 @@
+@@ -1878,11 +2531,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -5193,7 +5527,7 @@
      },
      "costar": {
        "count_label": "{n} 本"
-@@ -1957,7 +2603,7 @@
+@@ -1957,7 +2614,7 @@
        "intro": "左の欄はサーバー上のフォルダ、右の欄はこのPCから見えるパスです。後で入力することもできるので、空欄のままでも構いません。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -5202,7 +5536,7 @@
        "readonly": "読み取り専用",
        "test_btn": "テスト",
        "found": "見つかりました",
-@@ -1968,7 +2614,7 @@
+@@ -1968,7 +2625,7 @@
        "loading": "サーバーのスキャンソースを読み込み中…",
        "load_failed": "サーバーのスキャンソースを読み込めません",
        "reload_btn": "再読み込み",
@@ -5211,7 +5545,7 @@
        "stale": "（サーバーにこのソースはもうありません）",
        "remove": "削除",
        "save_btn": "パス対応表を保存",
-@@ -1976,5 +2622,391 @@
+@@ -1976,5 +2633,419 @@
        "saved": "パス対応表を保存しました",
        "save_failed": "パス対応表の保存に失敗しました"
      }
@@ -5382,6 +5716,34 @@
 +      "error_multi_video_folder": "このフォルダーには無関係な動画があります。同じ作品の完全な分割版（例：cd1/cd2）だけがサンプル画像を共有できます。",
 +      "error_internal": "サンプル画像の処理に失敗しました。ログを確認してください",
 +      "error_file_not_found": "ファイルが見つかりません"
++    },
++    "plots": {
++      "none": "あらすじが未登録の動画はありません",
++      "start": "あらすじの補完を開始：{total} 本（{concurrency} 並列）",
++      "status": "あらすじを取得して並列翻訳しています（{concurrency} 並列）...",
++      "status_count": "あらすじを補完中（{current}/{total}、{concurrency} 並列）...",
++      "missing_number": "品番を判別できないためスキップしました",
++      "already_filled": "別の処理であらすじが入力済みのためスキップしました",
++      "log": "[{current}/{total}] {number}：{preview}",
++      "cancelled": "あらすじの補完をキャンセルしました",
++      "done": "あらすじの補完完了：成功 {success}、失敗 {failed}、スキップ {skipped}",
++      "unexpected_error": "あらすじの補完に失敗しました。ログを確認してください",
++      "db_missing": "データベースがありません。先にリストを生成してください",
++      "translate_disabled": "翻訳機能が有効になっていません",
++      "config_invalid": "翻訳設定が無効です。設定を確認してください",
++      "error_not_found": "{number} の情報が見つかりません",
++      "error_no_summary": "{number} のあらすじが見つかりません",
++      "error_search_failed": "{number} の情報検索に失敗しました",
++      "error_no_nfo": "NFO ファイルが見つかりません",
++      "error_nfo_unreadable": "NFO ファイルを読み込めないか、解析できません",
++      "error_nfo_write_failed": "あらすじを NFO に書き込めませんでした",
++      "error_storage_permission_required": "外部ストレージへの書き込みが許可されていません。右上のメニューから動画のあるストレージフォルダーを書き込み可能にしてください。",
++      "error_db_write_failed": "NFO は更新されましたが、データベースの更新に失敗しました。再試行してください",
++      "translation_failed": "あらすじの翻訳に失敗しました",
++      "translation_refused": "モデルがこのあらすじの翻訳を拒否しました",
++      "translation_invalid": "モデルから無効なあらすじ翻訳が返されました",
++      "translation_empty": "モデルから空のあらすじが返されました",
++      "error_internal": "あらすじの処理に失敗しました。ログを確認してください"
 +    },
 +    "database": {
 +      "missing": "データベースがありません。先にリストを生成してください",
@@ -5605,7 +5967,7 @@
  }
 --- /dev/null
 +++ b/locales/ko.json
-@@ -0,0 +1,3012 @@
+@@ -0,0 +1,3051 @@
 +{
 +  "nav": {
 +    "search": "검색",
@@ -6987,6 +7349,17 @@
 +      "sample_backfill_toast_success": "샘플 채우기 완료: {success} 성공",
 +      "sample_backfill_toast_mixed": "샘플 채우기 완료: {success} 성공, {failed} 실패",
 +      "sample_backfill_error": "샘플 채우기에 실패했습니다. 나중에 다시 시도해 주세요.",
++      "plot_backfill_prefix": "줄거리 없음:",
++      "plot_backfill_suffix": "개 동영상",
++      "plot_backfill_drilldown_note": "기존 NFO의 줄거리가 비어 있는 동영상만 포함됩니다. NFO가 없는 동영상은 NFO 누락 보완 대상입니다.",
++      "plot_backfill_idle": "줄거리 일괄 채우기",
++      "plot_backfill_loading": "줄거리를 채우는 중...",
++      "plot_backfill_preparing": "줄거리 채우기 준비 중...",
++      "plot_backfill_disabled": "번역이 비활성화됨",
++      "plot_backfill_hint": "누락된 줄거리를 가져와 현재 앱 언어로 번역하며 기존 줄거리는 덮어쓰지 않습니다",
++      "plot_backfill_toast_success": "줄거리 채우기 완료: {success} 성공",
++      "plot_backfill_toast_mixed": "줄거리 채우기 완료: {success} 성공, {failed} 실패",
++      "plot_backfill_error": "줄거리 채우기에 실패했습니다. 나중에 다시 시도해 주세요.",
 +      "backfill_item_failed": "실패: {number} — {error}",
 +      "backfill_item_skipped": "건너뛴 항목: {number} — {error}",
 +      "log_interrupted": "⚠ 업데이트가 중단되었습니다 (페이지를 떠났습니다)",
@@ -8398,6 +8771,34 @@
 +      "error_internal": "샘플 이미지 처리에 실패했습니다. 로그를 확인하세요",
 +      "error_file_not_found": "파일을 찾을 수 없습니다"
 +    },
++    "plots": {
++      "none": "줄거리가 누락된 동영상이 없습니다",
++      "start": "줄거리 채우기 시작: {total}개 동영상({concurrency} 작업자)",
++      "status": "줄거리를 가져와 병렬 번역하는 중({concurrency} 작업자)...",
++      "status_count": "줄거리 채우기({current}/{total}, {concurrency} 작업자)...",
++      "missing_number": "비디오 번호를 감지할 수 없습니다. 건너뛰었습니다",
++      "already_filled": "다른 작업에서 줄거리를 이미 채웠으므로 건너뛰었습니다",
++      "log": "[{current}/{total}] {number}: {preview}",
++      "cancelled": "줄거리 채우기가 취소되었습니다",
++      "done": "줄거리 채우기 완료: {success} 성공, {failed} 실패, {skipped} 건너뛰기",
++      "unexpected_error": "줄거리 채우기에 실패했습니다. 로그를 확인하세요",
++      "db_missing": "데이터베이스가 없습니다. 먼저 목록을 생성하세요",
++      "translate_disabled": "번역 기능이 활성화되지 않았습니다",
++      "config_invalid": "번역 설정이 올바르지 않습니다. 설정을 확인하세요",
++      "error_not_found": "{number}의 정보를 찾을 수 없습니다",
++      "error_no_summary": "{number}의 줄거리를 찾을 수 없습니다",
++      "error_search_failed": "{number}의 정보 검색에 실패했습니다",
++      "error_no_nfo": "NFO 파일을 찾을 수 없습니다",
++      "error_nfo_unreadable": "NFO 파일을 읽거나 분석할 수 없습니다",
++      "error_nfo_write_failed": "줄거리를 NFO에 쓰지 못했습니다",
++      "error_storage_permission_required": "외부 저장소에 쓸 수 없습니다. 오른쪽 상단 메뉴에서 동영상이 있는 SD 카드 폴더를 승인하세요.",
++      "error_db_write_failed": "NFO는 업데이트했지만 데이터베이스 갱신에 실패했습니다. 다시 시도하세요",
++      "translation_failed": "줄거리 번역에 실패했습니다",
++      "translation_refused": "모델이 이 줄거리의 번역을 거부했습니다",
++      "translation_invalid": "모델이 올바르지 않은 줄거리 번역을 반환했습니다",
++      "translation_empty": "모델이 빈 줄거리를 반환했습니다",
++      "error_internal": "줄거리 처리에 실패했습니다. 로그를 확인하세요"
++    },
 +    "database": {
 +      "missing": "데이터베이스를 찾을 수 없습니다. 먼저 목록을 생성하십시오",
 +      "export_failed": "데이터베이스 내보내기 실패",
@@ -9382,7 +9783,7 @@
        "nfo_idle": "补齐字段",
        "nfo_loading": "补齐中...",
        "jellyfin_help_line1": "Jellyfin / Emby 等媒体服务器需要额外封面格式：",
-@@ -928,7 +1358,30 @@
+@@ -928,7 +1358,41 @@
        "missing_enrich_confirm_body_suffix": " 分钟，是否继续？",
        "missing_enrich_confirm_cancel": "取消",
        "missing_enrich_confirm_confirm": "确认补全",
@@ -9408,13 +9809,24 @@
 +      "sample_backfill_toast_success": "剧照补齐完成！{success} 部成功",
 +      "sample_backfill_toast_mixed": "剧照补齐完成！{success} 部成功，{failed} 部失败",
 +      "sample_backfill_error": "剧照补齐失败，请稍后重试",
++      "plot_backfill_prefix": "缺简介:",
++      "plot_backfill_suffix": "部",
++      "plot_backfill_drilldown_note": "只处理已有 NFO 但简介为空的视频；没有 NFO 的视频仍由“缺 NFO/封面”补全处理。",
++      "plot_backfill_idle": "一键补齐简介",
++      "plot_backfill_loading": "补齐简介中...",
++      "plot_backfill_preparing": "准备补齐简介...",
++      "plot_backfill_disabled": "翻译未启用",
++      "plot_backfill_hint": "抓取缺失简介并按当前软件语言翻译，已有简介绝不覆盖",
++      "plot_backfill_toast_success": "简介补齐完成！{success} 部成功",
++      "plot_backfill_toast_mixed": "简介补齐完成！{success} 部成功，{failed} 部失败",
++      "plot_backfill_error": "简介补齐失败，请稍后重试",
 +      "backfill_item_failed": "失败：{number} — {error}",
 +      "backfill_item_skipped": "已跳过：{number} — {error}",
 +      "log_interrupted": "⚠ 更新被中断（离开页面）",
        "status_preparing": "准备中...",
        "status_done_count": "完成！{count} 部视频",
        "status_done": "完成",
-@@ -1019,7 +1472,7 @@
+@@ -1019,7 +1483,7 @@
      },
      "dirty_modal": {
        "title": "尚未保存的更改",
@@ -9423,7 +9835,7 @@
        "cancel": "取消",
        "discard": "放弃更改",
        "save": "保存并离开"
-@@ -1041,7 +1494,7 @@
+@@ -1041,7 +1505,7 @@
        "confirm": "确认删除"
      },
      "leave_warning": {
@@ -9432,7 +9844,7 @@
        "image_check": "图片检查进行中，离开将会中断！",
        "folder_dirty": "您有未保存的文件夹变更",
        "confirm": "{message}确定要离开吗？"
-@@ -1072,16 +1525,21 @@
+@@ -1072,16 +1536,21 @@
      "update_available": "OpenAver 有新版本",
      "auto_organize_summary": "定时整理",
      "auto_organize_aborted": "定时整理已中止",
@@ -9458,7 +9870,7 @@
    },
    "similar_mode": {
      "button_aria_label": "探索相似视频",
-@@ -1092,9 +1550,10 @@
+@@ -1092,9 +1561,10 @@
      "page_title": "视频浏览",
      "state": {
        "loading": "加载视频列表中...",
@@ -9472,7 +9884,7 @@
      },
      "error": {
        "server_error": "服务器错误 ({status})",
-@@ -1197,6 +1656,7 @@
+@@ -1197,6 +1667,7 @@
        "mdate": "修改时间",
        "random": "随机",
        "actress": {
@@ -9480,7 +9892,7 @@
          "video_count": "作品数",
          "name": "姓名",
          "added_at": "收藏时间",
-@@ -1246,7 +1706,13 @@
+@@ -1246,7 +1717,13 @@
        "source_unreachable_list": "无法访问：{list}",
        "source_unreachable_count": "{n} 个位置无法访问",
        "source_no_permission_list": "没有权限读取：{list}",
@@ -9495,7 +9907,7 @@
      },
      "nav": {
        "prev_page": "上一页",
-@@ -1291,6 +1757,7 @@
+@@ -1291,6 +1768,7 @@
        "tag_nfo_write_blocked": "标签已保存，但没有权限写入 NFO",
        "translate_tooltip": "翻译标题",
        "translate_done": "已翻译标题",
@@ -9503,7 +9915,7 @@
        "translate_undo": "复原",
        "translate_skipped": "标题没有需要翻译的内容",
        "translate_undone": "已复原标题",
-@@ -1298,7 +1765,7 @@
+@@ -1298,7 +1776,7 @@
        "translate_no_nfo": "这部影片还没有 NFO，请先补全再翻译标题",
        "user_tags_label": "自定义标签",
        "alias_label": "别名",
@@ -9512,7 +9924,7 @@
        "mask_toggle": "封面裁切预览",
        "mask_detect_failed": "焦点检测失败，请稍后再试",
        "mask_focal_too_slow_auto_disabled": "这张封面找脸花了超过 5 秒，已经先帮你关掉自动对焦。想调整位置直接拖就可以，随时能到设置开回来。",
-@@ -1307,9 +1774,35 @@
+@@ -1307,9 +1785,35 @@
        "mask_save_failed": "裁切设置保存失败，请稍后再试",
        "mask_cover_changed": "封面已变更，请重新打开裁切工具再试一次",
        "cover_unavailable": "这部视频的封面现在读不到——可能是文件位置目前无法访问，或者封面文件本身不见了",
@@ -9550,7 +9962,7 @@
      },
      "pick": {
        "add_aria": "加入精选",
-@@ -1410,10 +1903,90 @@
+@@ -1410,10 +1914,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -9641,7 +10053,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1434,7 +2007,8 @@
+@@ -1434,7 +2018,8 @@
        "this_computer_unavailable": "暂时读不到这台电脑的更新信息，请重新打开帮助页再试",
        "client_up_to_date": "这台电脑的 OpenAver 已是最新",
        "client_update_available_prefix": "这台电脑有新版",
@@ -9651,7 +10063,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2021,7 @@
+@@ -1447,7 +2032,7 @@
        "title": "第一次使用？先看这 3 步",
        "subtitle": "从加入文件夹到补全资料，三步上手",
        "step1_title": "加入片库文件夹",
@@ -9660,7 +10072,7 @@
        "step2_title": "生成网页",
        "step2_desc": "一键扫描并建立可浏览的收藏页",
        "step3_title": "NFO 补全",
-@@ -1464,7 +2038,7 @@
+@@ -1464,7 +2049,7 @@
      "tag_alias": {
        "title": "Tag 别名管理",
        "intro": "中日英同义词集中管理，让搜索框、chip 筛选、模糊探索全部说同一种语言。",
@@ -9669,7 +10081,7 @@
        "scanner_chipwall": "chip 墙列出所有 Tag 别名组。点「+」新增 alias，主名（primary）以粉红色显示，别名以灰色显示。",
        "scanner_ai_hint": "点「?」开启 AI 建议框：把你的 tag 需求描述给 AI，它会回传建议的别名组供你直接汇入。",
        "h6_showcase": "Showcase 自动展开",
-@@ -1501,16 +2075,16 @@
+@@ -1501,16 +2086,16 @@
      "batch": {
        "title": "批次文件搜索",
        "h6_add": "加入多个文件",
@@ -9690,7 +10102,7 @@
        "fav_auto": "自动开始搜索前 20 个文件",
        "fav_nfo_skip": "同名 .nfo 存在则视为已整理，不重打 scraper",
        "pause_pause": "批次搜索时可点击「暂停」按钮",
-@@ -1563,17 +2137,17 @@
+@@ -1563,17 +2148,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "从搜索页或浏览页加入收藏，照片自动下载至本地",
        "manage_library": "搜索栏旁的 <strong>+</strong> 可打开「从片库加入女优」列表：库内女优按片数由多到少排序，别名自动合并成同一人，逐行点爱心即可加入收藏",
@@ -9712,7 +10124,7 @@
        "feat_nfo": "自动读取 NFO 文件并显示元数据",
        "feat_nfo_fill": "支持「NFO 补全」：自动搜索缺失的 NFO 文件",
        "feat_terminal": "内建 Mini Terminal 显示即时处理进度",
-@@ -1587,7 +2161,7 @@
+@@ -1587,7 +2172,7 @@
        "jellyfin_canonical": "选了媒体管理器模式后<strong>不再另外生成同名封面</strong>——那张图会被 Jellyfin／Emby 优先读取，导致封面墙出现横版图。既有的片维持原本的封面位置（以免清掉你已调整过的对焦），要修正请自行删掉该片的同名封面后重新生成。",
        "jellyfin_showcase": "扫描完成后可至 <code>/showcase</code> 页面浏览生成结果",
        "h6_strm_deploy": "只读来源 + 让 Emby／Jellyfin／Kodi 扫到片（跨机器部署）",
@@ -9721,7 +10133,7 @@
        "strm_deploy_step2": "在「输出到」指定一个<strong>这台能写入</strong>的文件夹（可以是挂载到这台的 NAS 可写共享）——生成的 <code>.strm</code>＋NFO＋封面会放这里，再让 Emby／Jellyfin／Kodi 指向它建媒体库。这个输出夹不是只读来源本身。",
        "strm_deploy_step4": "之后改了映射规则，既有的 <code>.strm</code> 会自动一次改写，不用重建整个媒体库。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎么在 Emby/Jellyfin 合并？",
-@@ -1601,7 +2175,7 @@
+@@ -1601,7 +2186,7 @@
        "h6_modes": "显示模式",
        "h6_sort": "排序与搜索",
        "h6_other": "其他功能",
@@ -9730,7 +10142,7 @@
        "mode_grid": "<strong>完整封面</strong>：整张封面的封面墙，点击开启 Lightbox（默认）",
        "mode_poster": "<strong>竖版海报</strong>：只显示封面右半（正面），卡片变窄、一行放得更多；手机／窄窗口一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精简列表，适合快速浏览",
-@@ -1632,7 +2206,7 @@
+@@ -1632,7 +2217,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越准；tag 很少的视频建议先补完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "无需设置，开箱即用",
@@ -9739,7 +10151,7 @@
      },
      "shortcuts": {
        "title": "快捷键",
-@@ -1809,6 +2383,66 @@
+@@ -1809,6 +2394,66 @@
        "client_title": "即将更新这台电脑的 OpenAver",
        "client_case_a_body": "更新的是这台电脑上的 OpenAver，不是服务器。点击确认后会在这台电脑打开终端运行安装，请先关闭 OpenAver，安装完成后再自行重新打开。",
        "client_case_b_body": "这台电脑的 OpenAver 不是安装在默认位置。\n安装程序会先把新版本安装到默认目录，安装期间不需要先关闭当前的 OpenAver。\n\n安装完成后，请依次操作：\n1. 关闭 OpenAver\n2. 删除旧安装目录中的 python 文件夹\n3. 将新版本的所有文件复制覆盖回这台电脑原本的安装位置\n\n不需要重新安装或重新设置，直接覆盖文件即可使用。"
@@ -9806,7 +10218,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2450,18 @@
+@@ -1816,20 +2461,18 @@
      "skip": "跳过",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -9839,7 +10251,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1845,6 +2477,12 @@
+@@ -1845,6 +2488,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -9852,7 +10264,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2498,11 @@
+@@ -1860,7 +2509,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -9865,7 +10277,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2520,15 @@
+@@ -1878,11 +2531,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -9883,7 +10295,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1957,7 +2603,7 @@
+@@ -1957,7 +2614,7 @@
        "intro": "左栏是服务器上的文件夹，右栏填这台电脑看到的路径，可以先留空、之后再填。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -9892,7 +10304,7 @@
        "readonly": "只读",
        "test_btn": "测试",
        "found": "找得到",
-@@ -1968,7 +2614,7 @@
+@@ -1968,7 +2625,7 @@
        "loading": "正在读取服务器的扫描来源…",
        "load_failed": "读不到服务器的扫描来源",
        "reload_btn": "重新读取",
@@ -9901,7 +10313,7 @@
        "stale": "（服务器已无此来源）",
        "remove": "移除",
        "save_btn": "保存对照表",
-@@ -1976,5 +2622,391 @@
+@@ -1976,5 +2633,419 @@
        "saved": "对照表已保存",
        "save_failed": "对照表保存失败"
      }
@@ -10072,6 +10484,34 @@
 +      "error_multi_video_folder": "此文件夹有无关联影片，补抓剧照会污染其他视频；只有同一作品的完整分集（例如 cd1/cd2）可以共用剧照",
 +      "error_internal": "剧照补齐处理失败，请查看日志",
 +      "error_file_not_found": "文件不存在"
++    },
++    "plots": {
++      "none": "没有缺失简介的视频",
++      "start": "开始补齐简介：{total} 部（并行 {concurrency} 路）",
++      "status": "正在并行抓取并翻译简介（{concurrency} 路）...",
++      "status_count": "正在补齐简介（{current}/{total}，并行 {concurrency} 路）...",
++      "missing_number": "无法识别番号，已跳过",
++      "already_filled": "简介已被其他任务补齐，已跳过",
++      "log": "[{current}/{total}] {number}：{preview}",
++      "cancelled": "简介补齐已取消",
++      "done": "简介补齐完成：成功 {success}，失败 {failed}，跳过 {skipped}",
++      "unexpected_error": "简介补齐失败，请查看日志",
++      "db_missing": "数据库不存在，请先生成列表",
++      "translate_disabled": "翻译功能未启用",
++      "config_invalid": "翻译功能设置无效，请检查设置",
++      "error_not_found": "找不到 {number} 的资料",
++      "error_no_summary": "找不到 {number} 的简介",
++      "error_search_failed": "搜索 {number} 的资料失败",
++      "error_no_nfo": "NFO 文件已不存在",
++      "error_nfo_unreadable": "无法读取或解析 NFO 文件",
++      "error_nfo_write_failed": "简介写入 NFO 失败",
++      "error_storage_permission_required": "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
++      "error_db_write_failed": "NFO 已更新，但数据库刷新失败，请重试",
++      "translation_failed": "简介翻译失败",
++      "translation_refused": "模型拒绝翻译该简介",
++      "translation_invalid": "模型返回了无效的简介译文",
++      "translation_empty": "模型返回了空简介",
++      "error_internal": "简介处理失败，请查看日志"
 +    },
 +    "database": {
 +      "missing": "数据库不存在，请先生成列表",
@@ -11147,7 +11587,7 @@
        "nfo_idle": "補齊欄位",
        "nfo_loading": "補齊中...",
        "jellyfin_help_line1": "Jellyfin / Emby / Kodi 等媒體伺服器需要額外封面格式：",
-@@ -928,7 +1358,30 @@
+@@ -928,7 +1358,41 @@
        "missing_enrich_confirm_body_suffix": " 分鐘，是否繼續？",
        "missing_enrich_confirm_cancel": "取消",
        "missing_enrich_confirm_confirm": "確認補完",
@@ -11173,13 +11613,24 @@
 +      "sample_backfill_toast_success": "劇照補齊完成！{success} 部成功",
 +      "sample_backfill_toast_mixed": "劇照補齊完成！{success} 部成功，{failed} 部失敗",
 +      "sample_backfill_error": "劇照補齊失敗，請稍後重試",
++      "plot_backfill_prefix": "缺簡介:",
++      "plot_backfill_suffix": "部",
++      "plot_backfill_drilldown_note": "只處理已有 NFO 但簡介為空的影片；沒有 NFO 的影片仍由「缺 NFO/封面」補全處理。",
++      "plot_backfill_idle": "一鍵補齊簡介",
++      "plot_backfill_loading": "補齊簡介中...",
++      "plot_backfill_preparing": "準備補齊簡介...",
++      "plot_backfill_disabled": "翻譯未啟用",
++      "plot_backfill_hint": "抓取缺少的簡介並依目前軟體語言翻譯，既有簡介絕不覆寫",
++      "plot_backfill_toast_success": "簡介補齊完成！{success} 部成功",
++      "plot_backfill_toast_mixed": "簡介補齊完成！{success} 部成功，{failed} 部失敗",
++      "plot_backfill_error": "簡介補齊失敗，請稍後重試",
 +      "backfill_item_failed": "失敗：{number} — {error}",
 +      "backfill_item_skipped": "已跳過：{number} — {error}",
 +      "log_interrupted": "⚠ 更新被中斷（離開頁面）",
        "status_preparing": "準備中...",
        "status_done_count": "完成！{count} 部影片",
        "status_done": "完成",
-@@ -1019,7 +1472,7 @@
+@@ -1019,7 +1483,7 @@
      },
      "dirty_modal": {
        "title": "尚未儲存的變更",
@@ -11188,7 +11639,7 @@
        "cancel": "取消",
        "discard": "放棄變更",
        "save": "儲存並離開"
-@@ -1030,7 +1483,7 @@
+@@ -1030,7 +1494,7 @@
        "confirm": "確認設為唯讀",
        "intro": "唯讀來源代表 OpenAver 不會改動這個資料夾裡的任何檔案（不搬移、不改名、不寫入 NFO 或封面），改為在輸出夾另外生成一份本地媒體庫（每片一資料夾：NFO＋封面）供 OpenAver 自己瀏覽與播放。適合塞滿影片的唯讀網盤、NAS 分享、SMB 掛載等不可寫入的位置。若你只是本機一般收藏、資料夾可正常寫入，就不需要勾這個。",
        "output_hint_offline": "目前為預設模式，產物會自動落在 App 內建的固定本地夾，不需要另外指定輸出夾。",
@@ -11197,7 +11648,7 @@
        "nas_hint": "想餵給 NAS 上的 Emby／Jellyfin／Kodi？預設模式只生成 OpenAver 自己瀏覽用的本地庫、不會產生 .strm 捷徑檔。若你要讓媒體伺服器掃這批片，請先到「設定」把模式切到 Emby·Jellyfin·Kodi 模式。"
      },
      "clear_cache_modal": {
-@@ -1041,7 +1494,7 @@
+@@ -1041,7 +1505,7 @@
        "confirm": "確認刪除"
      },
      "leave_warning": {
@@ -11206,7 +11657,7 @@
        "image_check": "圖片檢查進行中，離開將會中斷！",
        "folder_dirty": "您有未儲存的資料夾變更",
        "confirm": "{message}確定要離開嗎？"
-@@ -1073,15 +1526,20 @@
+@@ -1073,15 +1537,20 @@
      "update_available": "OpenAver 有新版本",
      "auto_organize_summary": "定時整理",
      "auto_organize_aborted": "定時整理已中止",
@@ -11231,7 +11682,7 @@
    },
    "similar_mode": {
      "button_aria_label": "探索相似影片",
-@@ -1093,8 +1551,9 @@
+@@ -1093,8 +1562,9 @@
      "state": {
        "loading": "載入影片列表中...",
        "empty": "尚未產生影片列表",
@@ -11243,7 +11694,7 @@
      },
      "error": {
        "server_error": "伺服器錯誤 ({status})",
-@@ -1123,7 +1582,7 @@
+@@ -1123,7 +1593,7 @@
        "fail": "重新刮削失敗，請稍後再試。",
        "jl_desktop_only": "僅限桌面應用程式（standalone）可用",
        "cf_window_restart": "這個來源的驗證視窗沒有啟動成功，請重新啟動 OpenAver 再試。若重啟仍不行，到「連線」頁看原因",
@@ -11252,7 +11703,7 @@
        "cf_window_preparing": "驗證視窗正在準備，請幾秒後再試",
        "jl_cf_solving": "Cloudflare 驗證中……通過後將自動繼續",
        "versions_found": "找到 {count} 部同番號作品",
-@@ -1197,6 +1656,7 @@
+@@ -1197,6 +1667,7 @@
        "mdate": "修改時間",
        "random": "隨機",
        "actress": {
@@ -11260,7 +11711,7 @@
          "video_count": "作品數",
          "name": "姓名",
          "added_at": "收藏時間",
-@@ -1246,7 +1706,13 @@
+@@ -1246,7 +1717,13 @@
        "source_unreachable_list": "無法存取：{list}",
        "source_unreachable_count": "{n} 個位置無法存取",
        "source_no_permission_list": "沒有權限讀取：{list}",
@@ -11275,7 +11726,7 @@
      },
      "nav": {
        "prev_page": "上一頁",
-@@ -1291,6 +1757,7 @@
+@@ -1291,6 +1768,7 @@
        "tag_nfo_write_blocked": "標籤已存，但沒有權限寫入 NFO",
        "translate_tooltip": "翻譯標題",
        "translate_done": "已翻譯標題",
@@ -11283,7 +11734,7 @@
        "translate_undo": "復原",
        "translate_skipped": "標題沒有需要翻譯的內容",
        "translate_undone": "已復原標題",
-@@ -1298,18 +1765,44 @@
+@@ -1298,18 +1776,44 @@
        "translate_no_nfo": "這部片還沒有 NFO，請先補完再翻譯標題",
        "user_tags_label": "自訂標籤",
        "alias_label": "別名",
@@ -11331,7 +11782,7 @@
      },
      "pick": {
        "add_aria": "加入精選",
-@@ -1410,12 +1903,92 @@
+@@ -1410,12 +1914,92 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -11425,7 +11876,7 @@
        "copy_curl": "複製指令",
        "page_title": "使用說明",
        "subtitle": "JAV 影片元數據管理工具",
-@@ -1426,15 +1999,16 @@
+@@ -1426,15 +2010,16 @@
        "update_available_prefix": "新版本",
        "update_available_suffix": "可用",
        "up_to_date": "已是最新版本",
@@ -11445,7 +11896,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2021,7 @@
+@@ -1447,7 +2032,7 @@
        "title": "第一次使用？先看這 3 步",
        "subtitle": "從加入資料夾到補全資料，三步上手",
        "step1_title": "加入片庫資料夾",
@@ -11454,7 +11905,7 @@
        "step2_title": "產生網頁",
        "step2_desc": "一鍵掃描並建立可瀏覽的收藏頁",
        "step3_title": "NFO 補全",
-@@ -1464,7 +2038,7 @@
+@@ -1464,7 +2049,7 @@
      "tag_alias": {
        "title": "Tag 別名管理",
        "intro": "中日英同義詞集中管理，讓搜尋框、chip 篩選、模糊探索全部說同一種語言。",
@@ -11463,7 +11914,7 @@
        "scanner_chipwall": "chip 牆列出所有 Tag 別名組。點「+」新增 alias，主名（primary）以粉紅色顯示，別名以灰色顯示。",
        "scanner_ai_hint": "點「?」開啟 AI 建議框：把你的 tag 需求描述給 AI，它會回傳建議的別名組供你直接匯入。",
        "h6_showcase": "Showcase 自動展開",
-@@ -1501,16 +2075,16 @@
+@@ -1501,16 +2086,16 @@
      "batch": {
        "title": "批次檔案搜尋",
        "h6_add": "加入多個檔案",
@@ -11484,7 +11935,7 @@
        "fav_auto": "自動開始搜尋前 20 個檔案",
        "fav_nfo_skip": "同名 .nfo 存在則視為已整理，不重打 scraper",
        "pause_pause": "批次搜尋時可點擊「暫停」按鈕",
-@@ -1563,17 +2137,17 @@
+@@ -1563,17 +2148,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "從搜尋頁或瀏覽頁加入收藏，照片自動下載至本地",
        "manage_library": "搜尋列旁的 <strong>+</strong> 可開啟「從片庫加入女優」清單：庫內女優依片數由多到少排序，別名自動合併成同一人，逐列點愛心即可加入收藏",
@@ -11506,7 +11957,7 @@
        "feat_nfo": "自動讀取 NFO 檔案並顯示元數據",
        "feat_nfo_fill": "「就地補資料」：原地補缺失的 NFO + 封面，不改名、不搬位 — 適合唯讀網盤、已有自己的資料夾結構，或只想瀏覽不被改檔案",
        "feat_terminal": "內建 Mini Terminal 顯示即時處理進度",
-@@ -1587,9 +2161,9 @@
+@@ -1587,9 +2172,9 @@
        "jellyfin_canonical": "選了媒體管理器模式後<strong>不再另外產生同名封面</strong>——那張圖會被 Jellyfin／Emby 優先讀取，造成封面牆出現橫式圖。既有的片維持原本的封面位置（以免清掉你已調整過的對焦），要修正請自行刪掉該片的同名封面後重新產生。",
        "jellyfin_showcase": "掃描完成後可至 <code>/showcase</code> 頁面瀏覽生成結果",
        "h6_strm_deploy": "唯讀來源 + 讓 Emby／Jellyfin／Kodi 掃到片（跨機器部署）",
@@ -11518,7 +11969,7 @@
        "strm_deploy_step4": "之後改了映射規則，既有的 <code>.strm</code> 會自動一次改寫，不用重建整個媒體庫。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎麼在 Emby/Jellyfin 合併？",
        "multiversion_intro": "多版本合併是 Emby 與 Jellyfin 共同支援的原生功能（同一套「資料夾名 - 標籤」規則），不是哪一家獨有。把同一片各版本放進以番號命名的資料夾，檔名都以資料夾名開頭加「 - 標籤」：",
-@@ -1601,7 +2175,7 @@
+@@ -1601,7 +2186,7 @@
        "h6_modes": "顯示模式",
        "h6_sort": "排序與搜尋",
        "h6_other": "其他功能",
@@ -11527,7 +11978,7 @@
        "mode_grid": "<strong>完整封面</strong>：整張封面的封面牆，點擊開啟 Lightbox（預設）",
        "mode_poster": "<strong>直式海報</strong>：只顯示封面右半（正面），卡片變窄、一列放得更多；手機／窄視窗一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精簡列表，適合快速瀏覽（預設不顯示；可至「設定」→「列表顯示預設」開啟「顯示表格與清單」）",
-@@ -1632,7 +2206,7 @@
+@@ -1632,7 +2217,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越準；tag 很少的影片建議先補完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "無需設定，開箱即用",
@@ -11536,7 +11987,7 @@
      },
      "shortcuts": {
        "title": "快捷鍵",
-@@ -1736,26 +2310,26 @@
+@@ -1736,26 +2321,26 @@
      "server_mode": {
        "title": "伺服器模式 — 讓手機/平板連進來",
        "h6_what": "這是什麼",
@@ -11570,7 +12021,7 @@
        "h6_recover": "不小心按了「取消 / 拒絕」怎麼救回",
        "recover_win_intro": "Windows 救回步驟：",
        "recover_win_1": "按 <code>Win + R</code>，輸入 <code>wf.msc</code> 後 Enter，開啟「Windows Defender 防火牆 進階安全性」。",
-@@ -1800,15 +2374,75 @@
+@@ -1800,15 +2385,75 @@
      "update_modal": {
        "trigger_btn": "更新",
        "title": "即將開啟安裝視窗",
@@ -11649,7 +12100,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2450,18 @@
+@@ -1816,20 +2461,18 @@
      "skip": "跳過",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -11682,7 +12133,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1850,6 +2482,12 @@
+@@ -1850,6 +2493,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -11695,7 +12146,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1861,11 +2499,15 @@
+@@ -1861,11 +2510,15 @@
        "series": "系列",
        "deep_dive": "深入：女優與片商",
        "gantt": "主要片商年表",
@@ -11713,7 +12164,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2525,15 @@
+@@ -1883,11 +2536,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -11731,7 +12182,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1896,7 +2542,7 @@
+@@ -1896,7 +2553,7 @@
    },
    "connect": {
      "nobridge": "請在桌面版開啟",
@@ -11740,7 +12191,7 @@
      "status_connected": "已連線 {host}",
      "status_down": "連不到 {host}",
      "version_line": "版本 {version}（{kind}）",
-@@ -1906,69 +2552,69 @@
+@@ -1906,69 +2563,69 @@
      "kind_windows": "Windows 桌面版",
      "kind_mac": "Mac 桌面版",
      "last_ok": "上次成功連線：{time}",
@@ -11831,7 +12282,7 @@
        "stale": "（伺服器已無此來源）",
        "remove": "移除",
        "save_btn": "儲存對照表",
-@@ -1976,5 +2622,391 @@
+@@ -1976,5 +2633,419 @@
        "saved": "對照表已儲存",
        "save_failed": "對照表儲存失敗"
      }
@@ -12002,6 +12453,34 @@
 +      "error_multi_video_folder": "此資料夾有無關影片，補抓劇照會污染其他片；只有同一作品的完整分集（例如 cd1/cd2）可以共用劇照",
 +      "error_internal": "劇照補齊處理失敗，請查閱日誌",
 +      "error_file_not_found": "檔案不存在"
++    },
++    "plots": {
++      "none": "沒有缺少簡介的影片",
++      "start": "開始補齊簡介：{total} 部（並行 {concurrency} 路）",
++      "status": "正在並行抓取並翻譯簡介（{concurrency} 路）...",
++      "status_count": "正在補齊簡介（{current}/{total}，並行 {concurrency} 路）...",
++      "missing_number": "無法識別番號，已跳過",
++      "already_filled": "簡介已被其他任務補齊，已跳過",
++      "log": "[{current}/{total}] {number}：{preview}",
++      "cancelled": "簡介補齊已取消",
++      "done": "簡介補齊完成：成功 {success}，失敗 {failed}，跳過 {skipped}",
++      "unexpected_error": "簡介補齊失敗，請查閱日誌",
++      "db_missing": "資料庫不存在，請先產生列表",
++      "translate_disabled": "翻譯功能未啟用",
++      "config_invalid": "翻譯功能設定無效，請檢查設定",
++      "error_not_found": "找不到 {number} 的資料",
++      "error_no_summary": "找不到 {number} 的簡介",
++      "error_search_failed": "搜尋 {number} 的資料失敗",
++      "error_no_nfo": "NFO 檔案已不存在",
++      "error_nfo_unreadable": "無法讀取或解析 NFO 檔案",
++      "error_nfo_write_failed": "簡介寫入 NFO 失敗",
++      "error_storage_permission_required": "外置儲存尚未授權寫入，請從右上角選單選擇「授權可寫目錄」並選中影片所在的儲存卡目錄",
++      "error_db_write_failed": "NFO 已更新，但資料庫重新整理失敗，請再試一次",
++      "translation_failed": "簡介翻譯失敗",
++      "translation_refused": "模型拒絕翻譯該簡介",
++      "translation_invalid": "模型傳回了無效的簡介譯文",
++      "translation_empty": "模型傳回了空簡介",
++      "error_internal": "簡介處理失敗，請查閱日誌"
 +    },
 +    "database": {
 +      "missing": "資料庫不存在，請先產生列表",
@@ -21397,7 +21876,7 @@
  
          // ===== T7b: State Machine =====
 -        state: 'idle',  // 'idle' | 'generating' | 'nfoUpdating' | 'done' | 'error'
-+        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | titleBackfilling | sampleBackfilling | done | error | cancelled
++        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | titleBackfilling | sampleBackfilling | plotBackfilling | done | error | cancelled
  
          // ===== T7b: Progress =====
          progressStatus: '',
@@ -21451,7 +21930,7 @@
  
          // ===== T6d: Jellyfin Image Update =====
          jellyfinImageCount: 0,
-@@ -102,9 +133,129 @@
+@@ -102,9 +133,132 @@
              return (this.progressCurrent / this.progressTotal) * 100;
          },
  
@@ -21481,7 +21960,7 @@
 +        },
 +
 +        get taskEtaText() {
-+            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill'].includes(this.taskKind)) {
++            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill'].includes(this.taskKind)) {
 +                return '';
 +            }
 +            let seconds = this.taskEtaSeconds;
@@ -21499,13 +21978,15 @@
 +        get taskCanRetry() {
 +            return !this.isGenerating
 +                && this.taskFailedItems.length > 0
-+                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill'].includes(this.taskKind);
++                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill', 'plot-backfill'].includes(this.taskKind);
 +        },
 +
 +        get maintenanceSummaryText() {
 +            const nfo = this.nfoNeedUpdateCount || 0;
 +            const missing = (this.missingBothCount || 0) + (this.missingNfoCount || 0) + (this.missingCoverCount || 0);
-+            const backfill = (this.untranslatedTitleCount || 0) + (this.missingSampleCount || 0);
++            const backfill = (this.untranslatedTitleCount || 0)
++                + (this.missingSampleCount || 0)
++                + (this.missingPlotCount || 0);
 +            const images = this.jellyfinImageCount || 0;
 +            return window.t('scanner.stats.maintenance_summary', { nfo, missing, backfill, images });
 +        },
@@ -21578,11 +22059,12 @@
 +                || this.state === 'tagSourceUpdating'
 +                || this.state === 'renamePreviewing'
 +                || this.state === 'jellyfinUpdating' || this.state === 'enriching'
-+                || this.state === 'titleBackfilling' || this.state === 'sampleBackfilling';
++                || this.state === 'titleBackfilling' || this.state === 'sampleBackfilling'
++                || this.state === 'plotBackfilling';
          },
  
          get isBusy() {
-@@ -119,6 +270,88 @@
+@@ -119,6 +273,88 @@
  
          get doneActionsVisible() {
              return this.state === 'done' && this.outputPath !== '';
@@ -21671,7 +22153,7 @@
          },
  
          get generateButtonText() {
-@@ -173,14 +406,6 @@
+@@ -173,14 +409,6 @@
  
          // ===== Lifecycle =====
          async init() {
@@ -21686,7 +22168,7 @@
              // T5.1: 接入統一 page lifecycle
              // 提前到所有 await 之前註冊：closure 讀的都是 this.* runtime state，
              // 提前註冊不改變行為；但避免 loadConfig fetch 卡住時離頁 dirty-guard /
-@@ -212,13 +437,18 @@
+@@ -212,13 +440,18 @@
                      },
                      onBeforeUnload: () => {
                          const guard = this.shouldWarnBeforeLeave();
@@ -21706,7 +22188,7 @@
                          // T2(40c): abort jellyfin check fetch
                          if (this._jellyfinCheckController) {
                              this._jellyfinCheckController.abort();
-@@ -233,6 +463,10 @@
+@@ -233,6 +466,10 @@
                              this._enrichAbortController.abort();
                              this._enrichAbortController = null;
                          }
@@ -21717,7 +22199,7 @@
                          // TASK-94 Codex P1：離頁時清最後一片 flush dwell timer，避免 timer 事後
                          // 觸發 finalize（checkMissing fetch / state 變更）clobber 已離頁狀態。
                          if (this._flushTimer) {
-@@ -246,6 +480,7 @@
+@@ -246,6 +483,7 @@
              // 初始載入
              await this.loadConfig();
              this.loadStats();
@@ -21725,7 +22207,7 @@
  
              // T7b: 恢復日誌（logOutput 為 scanner.html 靜態 x-ref 元素，
              // init 時早已 mount，直接同步還原、無需等 $nextTick）
-@@ -305,6 +540,14 @@
+@@ -305,6 +543,14 @@
                  if (result.success) {
                      this.config = result.data;
                      this.directories = this.config.gallery?.directories || [];
@@ -21740,7 +22222,7 @@
                      // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                      this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
  
-@@ -358,7 +601,8 @@
+@@ -358,7 +604,8 @@
  
                          if (stats.last_run) {
                              const lastRun = new Date(stats.last_run);
@@ -21750,7 +22232,7 @@
                                  month: 'numeric',
                                  day: 'numeric',
                                  hour: '2-digit',
-@@ -377,6 +621,25 @@
+@@ -377,6 +624,25 @@
              }
          },
  
@@ -21776,7 +22258,7 @@
          async clearCache() {
              this.clearCacheLoading = true;
              try {
-@@ -387,6 +650,10 @@
+@@ -387,6 +653,10 @@
                      this.statTotal = 0;
                      this.statsVisible = false;
                      this.nfoUpdateVisible = false;
@@ -21787,7 +22269,7 @@
                      this.jellyfinImageVisible = false;
                      this.jellyfinCheckState = 'idle';
                      this.clearCacheModalOpen = false;
-@@ -455,27 +722,7 @@
+@@ -455,27 +725,7 @@
  
          // ===== Folder Management =====
          async selectFolder() {
@@ -21816,7 +22298,7 @@
          },
  
          addFolderPath(folderPath) {
-@@ -536,8 +783,6 @@
+@@ -536,8 +786,6 @@
              clearTimeout(_dragTimeoutHandle);
              _dragTimeoutHandle = null;
              if (this.showDragOverlay) this.showDragOverlay = false;
@@ -21825,7 +22307,7 @@
              this.showToast(window.t('scanner.toast.browse_dir_fallback'), 'info');
              this.openBrowseDir('scanner', (path) => { this.addFolderPath(path); });
          },
-@@ -636,6 +881,9 @@
+@@ -636,6 +884,9 @@
          addLog(level, message) {
              // T7d: 加入結構化陣列
              this.logEntries.push({ level, message, timestamp: Date.now() });
@@ -21835,7 +22317,7 @@
  
              const cls = level === 'error' ? 'log-error' :
                          level === 'warn' ? 'log-warn' : 'log-info';
-@@ -662,13 +910,30 @@
+@@ -662,13 +913,30 @@
  
              // 儲存到 localStorage
              localStorage.setItem('avlist_logs', this.logHtml);
@@ -21866,7 +22348,7 @@
              const wasGenerating = localStorage.getItem('avlist_generating') === 'true';
  
              if (savedLogs) {
-@@ -709,14 +974,27 @@
+@@ -709,14 +977,27 @@
  
          clearLogs() {
              localStorage.removeItem('avlist_logs');
@@ -21894,7 +22376,7 @@
          clearLogsDisplay() {
              this.logHtml = '';
              this.logEntries = [];
-@@ -758,7 +1036,11 @@
+@@ -758,7 +1039,11 @@
          },
  
          confirmClearAll() {
@@ -21907,7 +22389,7 @@
              if (!hasLogs) {
                  this.showToast(window.t('scanner.toast.no_logs'), 'info');
                  return;
-@@ -768,6 +1050,154 @@
+@@ -768,6 +1053,157 @@
              if (confirm(window.t('scanner.toast.confirm_clear_logs'))) {
                  this.clearLogs();
                  this.showToast(window.t('scanner.toast.logs_cleared'), 'success');
@@ -22059,10 +22541,13 @@
 +            }
 +            if (this.taskKind === 'sample-backfill') {
 +                this.runSampleBackfill();
++            }
++            if (this.taskKind === 'plot-backfill') {
++                this.runPlotBackfill();
              }
          },
  
-@@ -792,9 +1222,7 @@
+@@ -792,9 +1228,7 @@
  
              // 重置狀態
              this.state = 'generating';
@@ -22073,7 +22558,7 @@
              this.outputPath = '';
              this.nfoUpdateVisible = false;
              this.clearLogs();
-@@ -812,19 +1240,24 @@
+@@ -812,19 +1246,24 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -22101,7 +22586,7 @@
                          localStorage.removeItem('avlist_state');  // 清除 viewer 狀態
  
                          // 處理 NFO 更新提示
-@@ -868,6 +1301,15 @@
+@@ -868,6 +1307,15 @@
                              this.showToast(window.t('scanner.toast.generate_success', { count: data.video_count }), 'success');
                          }
  
@@ -22117,7 +22602,7 @@
                          // a5: Windows 長路徑警告
                          if (data.long_paths && data.long_paths.length > 0) {
                              this.showToast(
-@@ -890,24 +1332,24 @@
+@@ -890,24 +1338,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -22146,7 +22631,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] generate error:', e);
                  this.showToast(window.t('scanner.toast.generate_error'), 'error', 4000);
-@@ -915,26 +1357,63 @@
+@@ -915,26 +1363,63 @@
          },
  
          // ===== T7b: NFO Update Flow =====
@@ -22216,7 +22701,7 @@
  
                  this.eventSource.onmessage = (event) => {
                      const data = JSON.parse(event.data);
-@@ -943,55 +1422,288 @@
+@@ -943,55 +1428,288 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -22517,7 +23002,7 @@
          // ===== T6d: Jellyfin Image Update Flow =====
          async runJellyfinImageUpdate() {
              if (this.isGenerating) return;
-@@ -1002,9 +1714,7 @@
+@@ -1002,9 +1720,7 @@
              }
  
              this.state = 'jellyfinUpdating';
@@ -22528,7 +23013,7 @@
              this.clearLogs();
  
              localStorage.setItem('avlist_generating', 'true');
-@@ -1019,14 +1729,13 @@
+@@ -1019,14 +1735,13 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -22545,7 +23030,7 @@
                          // TASK-111 P2-b 後續（codex delta review）：done 不再必然代表「全數完成」——
                          // 批次跑到一半若把 external_manager 切成 off，後端會在下一部片 break 並送
                          // done(updated=已完成筆數)。這裡若無條件補滿 progressTotal，UI 會顯示 3/3
-@@ -1035,9 +1744,14 @@
+@@ -1035,9 +1750,14 @@
                          this.progressCurrent = (typeof data.updated === 'number')
                              ? data.updated
                              : this.progressTotal;
@@ -22561,7 +23046,7 @@
  
                          // T3(40c) Codex fix: update 完成後重設 jellyfin check 狀態，讓觸發列重新出現
                          this.jellyfinImageVisible = false;
-@@ -1045,7 +1759,13 @@
+@@ -1045,7 +1765,13 @@
                          this.jellyfinItems = [];
                          this.jellyfinCheckState = 'idle';
  
@@ -22576,7 +23061,7 @@
                          if (data.message) {
                              this.addLog('info', data.message);
                          }
-@@ -1053,24 +1773,24 @@
+@@ -1053,24 +1779,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -22605,7 +23090,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] runJellyfinImageUpdate error:', e);
                  this.showToast(window.t('scanner.toast.jellyfin_update_error'), 'error', 4000);
-@@ -1078,6 +1798,21 @@
+@@ -1078,6 +1804,21 @@
          },
  
          // ===== T7b: Utility =====
@@ -22627,7 +23112,7 @@
          copyOutputPath() {
              if (!this.outputPath) return;
  
-@@ -1097,5 +1832,6 @@
+@@ -1097,5 +1838,6 @@
                  }
              });
          },
@@ -22656,7 +23141,7 @@
  export function stateBatch() {
      return {
          // ===== T10: Missing NFO/Cover Enrich =====
-@@ -22,9 +31,27 @@
+@@ -22,9 +31,29 @@
          missingEnrichOffset: 0,     // batch offset
          missingEnrichSuccess: 0,
          missingEnrichFailed: 0,
@@ -22668,8 +23153,10 @@
 +        // ===== Missing-only backfill queues =====
 +        untranslatedTitleCount: 0,
 +        missingSampleCount: 0,
++        missingPlotCount: 0,
 +        untranslatedTitleItems: [],
 +        missingSampleItems: [],
++        missingPlotItems: [],
 +        _backfillAbortController: null,
 +        _missingCheckRequestId: 0,
 +
@@ -22684,7 +23171,7 @@
  
          // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
          currentCard: null,          // {number, status, source, reason, coverSrc} | null
-@@ -66,6 +93,76 @@
+@@ -66,6 +95,111 @@
          get missingCoverDrilldownPayload() {
              return { title: window.t('scanner.stats.missing_cover_prefix'), items: this.missingCoverDrilldownItems, footnote: window.t('scanner.stats.missing_list_footnote') };
          },
@@ -22727,6 +23214,22 @@
 +            };
 +        },
 +
++        get plotBackfillDrilldownItems() {
++            return this.missingPlotItems.map(item => ({
++                number: item.number || item.title || '',
++                path: item.file_path,
++                note: item.title || '',
++            }));
++        },
++
++        get plotBackfillDrilldownPayload() {
++            return {
++                title: window.t('scanner.stats.plot_backfill_prefix'),
++                items: this.plotBackfillDrilldownItems,
++                footnote: window.t('scanner.stats.plot_backfill_drilldown_note'),
++            };
++        },
++
 +        get titleBackfillButtonText() {
 +            if (this.state === 'titleBackfilling') {
 +                return '<span class="loading loading-spinner loading-sm"></span> '
@@ -22758,10 +23261,29 @@
 +        get sampleBackfillDisabled() {
 +            return this.isBusy || this.missingSampleCount === 0;
 +        },
++
++        get plotBackfillButtonText() {
++            if (this.state === 'plotBackfilling') {
++                return '<span class="loading loading-spinner loading-sm"></span> '
++                    + window.t('scanner.stats.plot_backfill_loading');
++            }
++            if (this.config?.translate?.enabled !== true) {
++                return '<i class="bi bi-translate"></i> '
++                    + window.t('scanner.stats.plot_backfill_disabled');
++            }
++            return '<i class="bi bi-card-text"></i> '
++                + window.t('scanner.stats.plot_backfill_idle');
++        },
++
++        get plotBackfillDisabled() {
++            return this.isBusy
++                || this.missingPlotCount === 0
++                || this.config?.translate?.enabled !== true;
++        },
  
          get missingEnrichButtonText() {
              if (this.state === 'enriching') {
-@@ -74,13 +171,288 @@
+@@ -74,13 +208,292 @@
              return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
          },
  
@@ -23041,16 +23563,20 @@
                  const d = result.data;
 +                this.untranslatedTitleCount = d.untranslated_titles || 0;
 +                this.missingSampleCount = d.missing_samples || 0;
++                this.missingPlotCount = d.missing_plots || 0;
 +                this.untranslatedTitleItems = Array.isArray(d.untranslated_title_items)
 +                    ? d.untranslated_title_items
 +                    : [];
 +                this.missingSampleItems = Array.isArray(d.missing_sample_items)
 +                    ? d.missing_sample_items
 +                    : [];
++                this.missingPlotItems = Array.isArray(d.missing_plot_items)
++                    ? d.missing_plot_items
++                    : [];
                  if (d.total_missing > 0) {
                      // TASK-13: 後端永遠回傳完整 items 清單；前端於 runMissingEnrich 內做 > 500 confirm gate
                      this.missingBothCount = d.missing_both || 0;
-@@ -88,11 +460,206 @@
+@@ -88,11 +501,225 @@
                      this.missingCoverCount = d.missing_cover || 0;
                      this.missingItems = Array.isArray(d.items) ? d.items : [];
                      this.missingPillVisible = true;
@@ -23068,6 +23594,7 @@
 +                    (d.total_missing || 0) > 0
 +                    || this.untranslatedTitleCount > 0
 +                    || this.missingSampleCount > 0
++                    || this.missingPlotCount > 0
 +                ) {
 +                    this.maintenanceExpanded = true;
                  }
@@ -23104,6 +23631,20 @@
 +            });
 +        },
 +
++        async runPlotBackfill() {
++            if (this.plotBackfillDisabled) return;
++            await this._runBackfillStream({
++                url: '/api/gallery/backfill-plots',
++                taskState: 'plotBackfilling',
++                taskKind: 'plot-backfill',
++                startStatus: window.t('scanner.stats.plot_backfill_preparing'),
++                total: this.missingPlotCount,
++                doneToastKey: 'scanner.stats.plot_backfill_toast_success',
++                mixedToastKey: 'scanner.stats.plot_backfill_toast_mixed',
++                errorText: window.t('scanner.stats.plot_backfill_error'),
++            });
++        },
++
 +        async _runBackfillStream({
 +            url,
 +            taskState,
@@ -23119,7 +23660,11 @@
 +            this.state = taskState;
 +            this._startTask(taskKind, startStatus, total);
 +            this.clearLogs();
-+            if (taskKind === 'title-backfill' || taskKind === 'sample-backfill') {
++            if (
++                taskKind === 'title-backfill'
++                || taskKind === 'sample-backfill'
++                || taskKind === 'plot-backfill'
++            ) {
 +                this.logPanelExpanded = true;
 +            }
 +
@@ -23257,7 +23802,7 @@
              }
          },
  
-@@ -109,14 +676,17 @@
+@@ -109,14 +736,17 @@
              this.missingEnrichOffset = 0;
              this.missingEnrichSuccess = 0;
              this.missingEnrichFailed = 0;
@@ -23278,7 +23823,7 @@
              this.clearLogs();
  
              const controller = new AbortController();
-@@ -146,7 +716,7 @@
+@@ -146,7 +776,7 @@
                          }
                          this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
                          this.flushLogs();
@@ -23287,7 +23832,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          // Save remaining
-@@ -159,7 +729,7 @@
+@@ -159,7 +789,7 @@
                          const errText = await resp.text().catch(() => '');
                          this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
                          this.flushLogs();
@@ -23296,7 +23841,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -200,6 +770,12 @@
+@@ -200,6 +830,12 @@
                                  this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
                                  this.progressTotal = items.length;
                                  this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
@@ -23309,7 +23854,7 @@
                              } else if (event.type === 'result-item') {
                                  // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
                                  // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
-@@ -234,7 +810,18 @@
+@@ -234,7 +870,18 @@
                                      this.missingEnrichSuccess++;
                                  } else {
                                      this.missingEnrichFailed++;
@@ -23328,7 +23873,7 @@
                                  // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
                                  if (event.reason === 'error') {
                                      this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
-@@ -246,7 +833,7 @@
+@@ -246,7 +893,7 @@
                              } else if (event.type === 'error') {
                                  this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
                                  this.flushLogs();
@@ -23337,7 +23882,7 @@
                                  this.currentCard = null;
                                  this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -258,7 +845,7 @@
+@@ -258,7 +905,7 @@
  
                      // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
                      if (!batchDone) {
@@ -23346,7 +23891,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -284,11 +871,19 @@
+@@ -284,11 +931,19 @@
                      if (lastCover) {
                          this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
                      }
@@ -23368,7 +23913,7 @@
                      const summary = this.missingEnrichFailed > 0
                          ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
                          : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
-@@ -312,7 +907,7 @@
+@@ -312,7 +967,7 @@
                  if (e.name === 'AbortError') return;
                  console.error('runMissingEnrich error:', e);
                  this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
@@ -28639,7 +29184,7 @@
 +            </div>
 +            <div class="task-control-actions">
 +                <div class="task-metrics"
-+                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill'].includes(taskKind)">
++                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill'].includes(taskKind)">
 +                    <span class="task-metric is-success">
 +                        <i class="bi bi-check2"></i>
 +                        <span x-text="window.t('scanner.task.success_count', { count: taskSuccessDisplay })"></span>
@@ -28834,7 +29379,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -294,8 +516,47 @@
+@@ -294,8 +516,66 @@
              </button>
          </div>
  
@@ -28877,13 +29422,32 @@
 +            </button>
 +        </div>
 +
++        <div class="nfo-update-row maintenance-row">
++            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
++                <i class="bi bi-card-text"></i>
++                {{ t('scanner.stats.plot_backfill_prefix') }}
++                <button type="button" class="number-drilldown-number-btn"
++                        :aria-expanded="open"
++                        @click="toggle(plotBackfillDrilldownPayload)"
++                        x-text="missingPlotCount"></button>
++                {{ t('scanner.stats.plot_backfill_suffix') }}
++                {{ number_drilldown_panel() }}
++            </span>
++            <button class="btn-nfo-update"
++                    @click="runPlotBackfill()"
++                    :disabled="plotBackfillDisabled"
++                    x-html="plotBackfillButtonText"
++                    :title="window.t('scanner.stats.plot_backfill_hint')">
++            </button>
++        </div>
++
          <!-- T10: Resume Pill (未完成提示) -->
 -        <div class="nfo-update-row" x-show="resumePillVisible">
 +        <div class="nfo-update-row maintenance-row" x-show="resumePillVisible">
              <span class="nfo-badge">
                  <i class="bi bi-arrow-repeat"></i>
                  <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-@@ -313,7 +574,7 @@
+@@ -313,7 +593,7 @@
  
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
          <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
@@ -28892,7 +29456,7 @@
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +600,7 @@
+@@ -339,7 +619,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -28901,7 +29465,7 @@
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +635,8 @@
+@@ -374,6 +654,8 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
@@ -28910,7 +29474,7 @@
          </div>
      </div>
  
-@@ -519,26 +782,6 @@
+@@ -519,26 +801,6 @@
               @keydown.space.prevent="toggleTagAliasCard()">
              <div class="title">
                  <i class="bi bi-tags"></i> <span>{{ t('scanner.tag_alias.section_title') }}</span>
@@ -28937,7 +29501,7 @@
              </div>
              <span class="btn-collapse" aria-hidden="true">
                  <i class="bi" :class="tagAliasCardCollapsed ? 'bi-chevron-down' : 'bi-chevron-up'"></i>
-@@ -782,6 +1025,212 @@
+@@ -782,6 +1044,212 @@
          </div>
      </dialog>
  
@@ -29150,7 +29714,7 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -792,7 +1241,7 @@
+@@ -792,7 +1260,7 @@
                  <span x-text="window.t('scanner.stats.missing_enrich_confirm_title')"></span>
              </h3>
              <p class="fluent-modal-body">
@@ -29159,7 +29723,7 @@
              </p>
              <div class="modal-action fluent-modal-actions">
                  <button type="button" class="btn btn-ghost" @click="cancelLargeMissingEnrich()">
-@@ -805,26 +1254,150 @@
+@@ -805,26 +1273,150 @@
          </div>
      </dialog>
  

@@ -3747,6 +3747,68 @@
 +        stripped,
 +        re.IGNORECASE,
 +    ) is not None
+--- /dev/null
++++ b/core/nfo_locator.py
+@@ -0,0 +1,59 @@
++"""Locate the sidecar NFO used by a library video.
++
++The lightbox plot API and maintenance backfills must agree on which NFO is
++authoritative.  Keeping that decision here prevents one feature from reading a
++file while another silently writes a different one.
++"""
++
++from __future__ import annotations
++
++import os
++from pathlib import Path
++
++from core.nfo_utils import find_sidecar_nfos
++from core.path_utils import is_path_under_dir, uri_to_local_fs_path
++from core.readonly_paths import resolve_owning_output_root
++
++
++def _locate_output_nfo(video, output_uri: str, path_mappings: dict):
++    if not video.output_dir or not output_uri:
++        return None, "no_nfo"
++    if not is_path_under_dir(video.output_dir, output_uri):
++        return None, "no_nfo"
++
++    output_dir = Path(uri_to_local_fs_path(video.output_dir, path_mappings))
++    video_path = Path(uri_to_local_fs_path(video.path, path_mappings))
++    try:
++        exact = find_sidecar_nfos(output_dir / video_path.name)
++        if exact:
++            return str(exact[0]), None
++        with os.scandir(output_dir) as entries:
++            candidates = sorted(
++                entry.path
++                for entry in entries
++                if entry.is_file() and entry.name.lower().endswith(".nfo")
++            )
++    except FileNotFoundError:
++        return None, "no_nfo"
++    except OSError:
++        return None, "nfo_unreadable"
++    if len(candidates) > 1:
++        return None, "nfo_ambiguous"
++    if not candidates:
++        return None, "no_nfo"
++    return candidates[0], None
++
++
++def locate_nfo_for_video(video, config: dict, path_mappings: dict):
++    """Return ``(nfo_path, error_code)`` for one database video row."""
++    owning = resolve_owning_output_root(video.path, config)
++    if owning is not None:
++        return _locate_output_nfo(video, owning[2], path_mappings)
++
++    video_path = Path(uri_to_local_fs_path(video.path, path_mappings))
++    candidates = find_sidecar_nfos(video_path)
++    if not candidates:
++        return None, "no_nfo"
++    if len(candidates) > 1:
++        return None, "nfo_ambiguous"
++    return str(candidates[0]), None
 --- a/core/nfo_utils.py
 +++ b/core/nfo_utils.py
 @@ -6,7 +6,9 @@
@@ -4875,8 +4937,132 @@
                          try:
                              dest = os.path.join(extrafanart_dir, f'fanart{i}.jpg')
 --- /dev/null
++++ b/core/plot_backfill.py
+@@ -0,0 +1,121 @@
++"""Helpers shared by the missing-plot check and batch backfill."""
++
++from __future__ import annotations
++
++import html
++import re
++from dataclasses import dataclass
++
++from core.nfo_locator import locate_nfo_for_video
++from core.plot_writeback import read_nfo_plots
++from core.scrapers.utils import extract_number
++
++
++class PlotBackfillError(Exception):
++    """Typed plot-backfill failure suitable for an SSE result."""
++
++    def __init__(self, code: str, detail: str = "") -> None:
++        self.code = code
++        self.detail = detail
++        super().__init__(detail or code)
++
++
++@dataclass(frozen=True)
++class PlotBackfillCandidate:
++    file_path: str
++    number: str
++    title: str
++    member_paths: tuple[str, ...]
++    nfo_targets: tuple[tuple[str, tuple[str, ...]], ...]
++    actors: tuple[str, ...] = ()
++
++    @property
++    def nfo_paths(self) -> tuple[str, ...]:
++        return tuple(nfo_path for nfo_path, _members in self.nfo_targets)
++
++
++def clean_summary_text(value: object) -> str:
++    """Normalize scraper summary text while preserving paragraph breaks."""
++    text = html.unescape(str(value or ""))
++    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
++    text = re.sub(r"(?i)</p\s*>", "\n\n", text)
++    text = re.sub(r"<[^>]+>", "", text)
++    text = text.replace("\r\n", "\n").replace("\r", "\n")
++    text = re.sub(r"[ \t\f\v]+", " ", text)
++    text = re.sub(r" *\n *", "\n", text)
++    text = re.sub(r"\n{3,}", "\n\n", text)
++    return text.strip()
++
++
++def candidate_number(video) -> str:
++    """Recover a number even when a cache row has a stale NULL value."""
++    if video.number:
++        return str(video.number).strip()
++    filename = str(video.path or "").rstrip("/").rsplit("/", 1)[-1]
++    return extract_number(filename) or extract_number(video.title or "") or ""
++
++
++def find_missing_plot_candidates(
++    groups,
++    config: dict,
++    path_mappings: dict,
++) -> list[PlotBackfillCandidate]:
++    """Return one item per logical video that has an empty existing NFO plot.
++
++    No-NFO rows are deliberately excluded: they belong to the existing
++    missing-NFO repair queue, which creates the sidecar with full metadata.
++    """
++    plot_cache: dict[str, bool] = {}
++    candidates: list[PlotBackfillCandidate] = []
++
++    for group in groups:
++        missing_targets: dict[str, list[str]] = {}
++        for member in group.members:
++            try:
++                nfo_path, _error = locate_nfo_for_video(
++                    member,
++                    config,
++                    path_mappings,
++                )
++            except Exception:
++                continue
++            if not nfo_path:
++                continue
++            has_plot = plot_cache.get(nfo_path)
++            if has_plot is None:
++                try:
++                    plot, _original = read_nfo_plots(nfo_path)
++                except Exception:
++                    # Unreadable/ambiguous sidecars must not produce a queue that
++                    # can never succeed. The normal NFO maintenance surfaces them.
++                    plot_cache[nfo_path] = True
++                    continue
++                has_plot = bool(plot.strip())
++                plot_cache[nfo_path] = has_plot
++            if not has_plot:
++                owners = missing_targets.setdefault(nfo_path, [])
++                if member.path not in owners:
++                    owners.append(member.path)
++
++        if not missing_targets:
++            continue
++
++        representative = next(
++            (member for member in group.members if candidate_number(member)),
++            group.members[0],
++        )
++        candidates.append(
++            PlotBackfillCandidate(
++                file_path=representative.path,
++                number=candidate_number(representative),
++                title=representative.title or "",
++                member_paths=tuple(member.path for member in group.members),
++                nfo_targets=tuple(
++                    (nfo_path, tuple(owners))
++                    for nfo_path, owners in missing_targets.items()
++                ),
++                actors=tuple(representative.actresses or ()),
++            )
++        )
++
++    return candidates
+--- /dev/null
 +++ b/core/plot_writeback.py
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,167 @@
 +"""Read and update ``<plot>`` / ``<originalplot>`` in an existing NFO.
 +
 +Only these two elements are changed.  The write goes through the shared atomic
@@ -4990,6 +5176,60 @@
 +    ) as handle:
 +        handle.write(out)
 +    return out
++
++
++def fill_empty_nfo_plot(
++    nfo_path: Union[str, Path],
++    *,
++    new_plot: str,
++    new_original: str,
++) -> bool:
++    """Fill ``<plot>`` only when it is missing or empty.
++
++    Returns ``True`` when the file changed and ``False`` when another process
++    already populated the plot. Existing summaries are never overwritten.
++    """
++    path = Path(nfo_path)
++    if not path.exists():
++        raise NfoNotFoundError(str(nfo_path))
++
++    plot_text = strip_illegal_xml_chars(new_plot).strip()
++    original_text = strip_illegal_xml_chars(new_original).strip()
++    if not plot_text:
++        raise PlotEmptyError(str(nfo_path))
++
++    raw = sanitize_nfo_bytes(path.read_bytes())
++    try:
++        root = ET.fromstring(raw)
++    except ET.ParseError as exc:
++        raise NfoParseError(str(exc)) from exc
++
++    plot_elem = root.find("plot")
++    if plot_elem is not None and (plot_elem.text or "").strip():
++        return False
++
++    set_element_text(root, "plot", plot_text, after_tag="premiered")
++    if original_text:
++        set_element_text(
++            root,
++            "originalplot",
++            original_text,
++            after_tag="plot",
++        )
++    else:
++        original_elem = root.find("originalplot")
++        if original_elem is not None:
++            root.remove(original_elem)
++
++    out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
++    with atomic_write(
++        path,
++        mode="wb",
++        suffix=".nfo.tmp",
++        mobile_fallback=True,
++    ) as handle:
++        handle.write(out)
++    return True
 --- /dev/null
 +++ b/core/recent_actresses.py
 @@ -0,0 +1,130 @@
@@ -8540,7 +8780,7 @@
              logger.warning("thumbnail generate failed: cover=%s err=%s", cover_fs_path, e)
 --- /dev/null
 +++ b/core/title_language.py
-@@ -0,0 +1,282 @@
+@@ -0,0 +1,331 @@
 +"""Target-language checks for library title translation."""
 +
 +from __future__ import annotations
@@ -8821,6 +9061,55 @@
 +    if _comparison_key(result) == _comparison_key(source_text):
 +        return "source_echo"
 +    if not title_matches_target_language(result, locale, proper_terms):
++        return "wrong_target_language"
++    return None
++
++
++def plot_needs_translation(
++    text: str,
++    locale: str | None,
++    proper_terms: Iterable[str] | None = None,
++) -> bool:
++    """Return whether a multi-paragraph synopsis is outside the target language."""
++    value = normalize_translation_text(text)
++    if not value:
++        return False
++    single_space = re.sub(r"\s+", " ", value).strip()
++    return not title_matches_target_language(
++        single_space,
++        locale,
++        proper_terms,
++    )
++
++
++def plot_translation_result_issue(
++    source: str,
++    translated: str,
++    locale: str | None,
++    proper_terms: Iterable[str] | None = None,
++) -> str | None:
++    """Validate a full synopsis translation without rejecting paragraphs.
++
++    The title validator intentionally rejects blank lines and long outputs.
++    A synopsis must allow both while still detecting refusals, source echoes,
++    and output in the wrong target language.
++    """
++    source_text = normalize_translation_text(source)
++    result = normalize_translation_text(translated)
++    if not result:
++        return "empty_response"
++    if _is_refusal_text(result):
++        return "refusal"
++    if len(result) > max(1200, len(source_text) * 5):
++        return "explanatory_response"
++    if _comparison_key(result) == _comparison_key(source_text):
++        return "source_echo"
++    language_sample = re.sub(r"\s+", " ", result).strip()
++    if not title_matches_target_language(
++        language_sample,
++        locale,
++        proper_terms,
++    ):
 +        return "wrong_target_language"
 +    return None
 --- /dev/null

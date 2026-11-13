@@ -288,7 +288,7 @@
             </div>
             <div class="task-control-actions">
                 <div class="task-metrics"
-                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill'].includes(taskKind)">
+                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill'].includes(taskKind)">
                     <span class="task-metric is-success">
                         <i class="bi bi-check2"></i>
                         <span x-text="window.t('scanner.task.success_count', { count: taskSuccessDisplay })"></span>
@@ -552,6 +552,25 @@
                     :disabled="sampleBackfillDisabled"
                     x-html="sampleBackfillButtonText"
                     :title="window.t('scanner.stats.sample_backfill_hint')">
+            </button>
+        </div>
+
+        <div class="nfo-update-row maintenance-row">
+            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
+                <i class="bi bi-card-text"></i>
+                {{ t('scanner.stats.plot_backfill_prefix') }}
+                <button type="button" class="number-drilldown-number-btn"
+                        :aria-expanded="open"
+                        @click="toggle(plotBackfillDrilldownPayload)"
+                        x-text="missingPlotCount"></button>
+                {{ t('scanner.stats.plot_backfill_suffix') }}
+                {{ number_drilldown_panel() }}
+            </span>
+            <button class="btn-nfo-update"
+                    @click="runPlotBackfill()"
+                    :disabled="plotBackfillDisabled"
+                    x-html="plotBackfillButtonText"
+                    :title="window.t('scanner.stats.plot_backfill_hint')">
             </button>
         </div>
 

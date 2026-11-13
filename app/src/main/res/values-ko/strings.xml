@@ -30,7 +30,7 @@
     <string name="local_step3_title">로컬에서 스캔하고 재생하세요</string>
     <string name="local_step3_body">생성, 메타데이터 검색, NFO/표지 쓰기 및 재생이 모두 전화기에서 실행됩니다. 네트워크 액세스는 활성화한 메타데이터 소스에만 사용됩니다.</string>
     <string name="privacy_note">Python 서버, SQLite 데이터베이스, 로그 및 생성된 데이터는 이 앱의 개인 저장소 내에 유지됩니다. 비디오 파일은 원래 휴대폰 폴더에 남아 있습니다.</string>
-    <string name="disclaimer">비공식 Android 빌드 · OpenAver Mobile v0.18.17-r6 · MIT 라이선스</string>
+    <string name="disclaimer">비공식 Android 빌드 · OpenAver Mobile v0.18.17-r7 · MIT 라이선스</string>
     <string name="starting_local">로컬 OpenAver 시작 중…</string>
     <string name="starting_python">Python 런타임 초기화 중…</string>
     <string name="loading_openaver_service">OpenAver 서비스 로드 중…</string>

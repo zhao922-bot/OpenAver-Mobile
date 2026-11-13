@@ -280,3 +280,52 @@ def translation_result_issue(
     if not title_matches_target_language(result, locale, proper_terms):
         return "wrong_target_language"
     return None
+
+
+def plot_needs_translation(
+    text: str,
+    locale: str | None,
+    proper_terms: Iterable[str] | None = None,
+) -> bool:
+    """Return whether a multi-paragraph synopsis is outside the target language."""
+    value = normalize_translation_text(text)
+    if not value:
+        return False
+    single_space = re.sub(r"\s+", " ", value).strip()
+    return not title_matches_target_language(
+        single_space,
+        locale,
+        proper_terms,
+    )
+
+
+def plot_translation_result_issue(
+    source: str,
+    translated: str,
+    locale: str | None,
+    proper_terms: Iterable[str] | None = None,
+) -> str | None:
+    """Validate a full synopsis translation without rejecting paragraphs.
+
+    The title validator intentionally rejects blank lines and long outputs.
+    A synopsis must allow both while still detecting refusals, source echoes,
+    and output in the wrong target language.
+    """
+    source_text = normalize_translation_text(source)
+    result = normalize_translation_text(translated)
+    if not result:
+        return "empty_response"
+    if _is_refusal_text(result):
+        return "refusal"
+    if len(result) > max(1200, len(source_text) * 5):
+        return "explanatory_response"
+    if _comparison_key(result) == _comparison_key(source_text):
+        return "source_echo"
+    language_sample = re.sub(r"\s+", " ", result).strip()
+    if not title_matches_target_language(
+        language_sample,
+        locale,
+        proper_terms,
+    ):
+        return "wrong_target_language"
+    return None

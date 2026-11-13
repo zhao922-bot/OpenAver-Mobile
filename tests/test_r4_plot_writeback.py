@@ -14,6 +14,7 @@ from core.plot_writeback import (
     rewrite_nfo_plot,
 )
 from core.title_writeback import NfoNotFoundError
+from core import nfo_locator
 from web.routers import showcase_plot
 
 
@@ -166,13 +167,13 @@ def _wire_plot_router(monkeypatch, db_path, library_dir, output_dir=None):
     )
     if output_dir is None:
         monkeypatch.setattr(
-            showcase_plot,
+            nfo_locator,
             "resolve_owning_output_root",
             lambda _path, _config: None,
         )
     else:
         monkeypatch.setattr(
-            showcase_plot,
+            nfo_locator,
             "resolve_owning_output_root",
             lambda _path, _config: (None, None, to_file_uri(str(output_dir))),
         )

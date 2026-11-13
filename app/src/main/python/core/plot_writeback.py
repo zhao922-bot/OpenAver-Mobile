@@ -111,3 +111,57 @@ def rewrite_nfo_plot(
     ) as handle:
         handle.write(out)
     return out
+
+
+def fill_empty_nfo_plot(
+    nfo_path: Union[str, Path],
+    *,
+    new_plot: str,
+    new_original: str,
+) -> bool:
+    """Fill ``<plot>`` only when it is missing or empty.
+
+    Returns ``True`` when the file changed and ``False`` when another process
+    already populated the plot. Existing summaries are never overwritten.
+    """
+    path = Path(nfo_path)
+    if not path.exists():
+        raise NfoNotFoundError(str(nfo_path))
+
+    plot_text = strip_illegal_xml_chars(new_plot).strip()
+    original_text = strip_illegal_xml_chars(new_original).strip()
+    if not plot_text:
+        raise PlotEmptyError(str(nfo_path))
+
+    raw = sanitize_nfo_bytes(path.read_bytes())
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError as exc:
+        raise NfoParseError(str(exc)) from exc
+
+    plot_elem = root.find("plot")
+    if plot_elem is not None and (plot_elem.text or "").strip():
+        return False
+
+    set_element_text(root, "plot", plot_text, after_tag="premiered")
+    if original_text:
+        set_element_text(
+            root,
+            "originalplot",
+            original_text,
+            after_tag="plot",
+        )
+    else:
+        original_elem = root.find("originalplot")
+        if original_elem is not None:
+            root.remove(original_elem)
+
+    out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    with atomic_write(
+        path,
+        mode="wb",
+        suffix=".nfo.tmp",
+        mobile_fallback=True,
+    ) as handle:
+        handle.write(out)
+    return True

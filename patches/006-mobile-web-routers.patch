@@ -1127,7 +1127,12 @@
  
 --- a/web/routers/scanner.py
 +++ b/web/routers/scanner.py
-@@ -24,6 +24,7 @@
+@@ -20,10 +20,12 @@
+ import json
+ import os
+ import queue
++import re
+ import sys
  import threading
  import time
  import requests
@@ -1135,7 +1140,7 @@
  from datetime import datetime
  from pathlib import Path
  from typing import Any, Callable, Dict, Generator, List, Optional
-@@ -32,31 +33,82 @@
+@@ -32,31 +34,90 @@
  from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
  from starlette.background import BackgroundTask
  
@@ -1155,6 +1160,12 @@
 +    replace_nfo_tags,
 +    update_videos_generator,
 +)
++from core.plot_backfill import (
++    clean_summary_text,
++    find_missing_plot_candidates,
++)
++from core.plot_writeback import fill_empty_nfo_plot
++from core.android_storage import AndroidStoragePermissionError
  from core.database import VideoRepository, Video, init_db, get_db_path, migrate_json_to_sqlite
  from core.focal import requires_face_detection
  from core.focal_trigger import maybe_submit_video_focal
@@ -1207,9 +1218,11 @@
 +from core.cloud_translate import TranslateError, build_error
 +from core.title_language import (
 +    normalize_translation_text,
++    plot_needs_translation,
 +    title_needs_translation,
 +    translation_result_issue,
 +)
++from core.title_writeback import NfoNotFoundError, NfoParseError
 +from core.source_config import get_manual_only_sources, validate_source_id
  from pydantic import BaseModel
  from core.logger import get_logger
@@ -1222,7 +1235,7 @@
  
  logger = get_logger(__name__)
  
-@@ -65,11 +117,51 @@
+@@ -65,11 +126,51 @@
  # T3(40c): Jellyfin check TTL 快取（60 秒）
  _jellyfin_cache_result: dict | None = None
  _jellyfin_cache_time: float = 0
@@ -1274,7 +1287,7 @@
  
  
  def _collect_long_paths(
-@@ -97,21 +189,36 @@
+@@ -97,21 +198,36 @@
  # TASK-88c-T2: readonly 來源分流 + SSE thread/queue 橋接 + 四數摘要
  # ---------------------------------------------------------------------------
  
@@ -1323,7 +1336,7 @@
      return {"type": "log", "level": "warn" if o.status == "failed" else "info", "message": msg}
  
  
-@@ -142,7 +249,7 @@
+@@ -142,7 +258,7 @@
          summary["partial"] += 1
  
  
@@ -1332,7 +1345,7 @@
      """該來源小結（產生器）。
  
      no_output_path → 「請先設定輸出夾」提示（Acceptance #11）。
-@@ -153,25 +260,39 @@
+@@ -153,25 +269,39 @@
      if result.aborted_reason == "no_output_path":
          yield _sse_event({
              "type": "log", "level": "warn",
@@ -1378,7 +1391,7 @@
              })
  
  
-@@ -188,6 +309,7 @@
+@@ -188,6 +318,7 @@
      q: "queue.Queue" = queue.Queue()  # 無界：worker 永不阻塞於 put，client 斷線 daemon 自然退出
      _SENTINEL = object()
      box: dict = {}
@@ -1386,7 +1399,7 @@
  
      def _work():
          try:
-@@ -206,39 +328,58 @@
+@@ -206,39 +337,58 @@
  
      t = threading.Thread(target=_work, daemon=True)
      t.start()
@@ -1456,7 +1469,7 @@
      """根目錄不可存取時回傳警告；可存取時回傳 None。
  
      白名單：只有明確的「不存在」才說資料夾不存在，其餘 OSError 一律「無法存取」（NAS 斷線不誤導成打錯字）。
-@@ -246,29 +387,379 @@
+@@ -246,29 +396,379 @@
      try:
          os.stat(normalized_dir)
      except PermissionError:
@@ -1846,7 +1859,7 @@
          gallery_config = config.get('gallery', {})
  
          directories = get_gallery_source_paths(gallery_config)
-@@ -287,7 +778,12 @@
+@@ -287,7 +787,12 @@
          default_theme = config.get('general', {}).get('theme', 'light')
  
          if not directories:
@@ -1860,7 +1873,7 @@
              return
  
          # 53b-T3: 確認 directories 有值才 emit 掃描開始通知
-@@ -302,19 +798,49 @@
+@@ -302,19 +807,49 @@
          cache_path = output_path / output_filename.replace('.html', '_cache.json')
          db_path = get_db_path()
  
@@ -1914,7 +1927,7 @@
  
          # 初始化掃描器
          scanner = VideoScanner(path_mappings=path_mappings, nfo_title_format=config.get('scraper', {}).get('nfo_title_format', '[{num}]{title}'))
-@@ -323,6 +849,7 @@
+@@ -323,6 +858,7 @@
          total_inserted = 0
          total_updated = 0
          total_deleted = 0
@@ -1922,7 +1935,7 @@
          scan_error_count = 0
          session_added_paths = []  # 追蹤本次新增/變更的影片路徑
          long_paths: list[str] = []  # a5: Windows 長路徑收集（只在 win32 填充）
-@@ -369,161 +896,39 @@
+@@ -369,161 +905,39 @@
                  normalized_dir = uri_to_fs_path(directory)  # uri-no-reverse: native config path (DirectoryConfig.path), no DB-mapped namespace
              except ValueError:
                  logger.exception("路徑轉換失敗: %s", directory)
@@ -2110,7 +2123,7 @@
  
          # TASK-90b-T4 / PR#90b Codex P1: 尾段每個外顯副作用（HTML 檔、完成通知、
          # done event）之前各自 fresh 查一次 should_abort()，而非迴圈結束時單次
-@@ -550,9 +955,36 @@
+@@ -550,9 +964,36 @@
          all_db_videos = [v for v in repo.get_all()
                           if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
  
@@ -2148,7 +2161,7 @@
              info = VideoInfo(
                  path=v.path,
                  title=v.title,
-@@ -562,6 +994,7 @@
+@@ -562,6 +1003,7 @@
                  maker=v.maker,
                  date=v.release_date,
                  genre=','.join(v.tags) if v.tags else '',
@@ -2156,7 +2169,7 @@
                  size=v.size_bytes,
                  mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
                  img=v.cover_path
-@@ -593,19 +1026,57 @@
+@@ -593,19 +1035,57 @@
                      }
              if session_cache:
                  session_stats = check_cache_needs_update(session_cache)
@@ -2219,7 +2232,7 @@
  
          # TASK-90b-T4: abort 時跳過 orphan 清理（全庫 pass，非本次掃描範圍新增
          # 的成本，abort 時執行拿不到「這次掃描結果更完整」的好處，純屬多做一次
-@@ -615,7 +1086,16 @@
+@@ -615,7 +1095,16 @@
              try:
                  cleaned = _run_sample_images_cleanup_pass(repo, path_mappings)
                  if cleaned > 0:
@@ -2237,7 +2250,7 @@
              except Exception as e:
                  logger.warning("sample_images cleanup pass failed: %s: %s", type(e).__name__, e)
                  # 失敗不中斷 scan 流程
-@@ -627,7 +1107,9 @@
+@@ -627,7 +1116,9 @@
              # 產生 HTML
              yield _sse_event({
                  "type": "progress",
@@ -2248,7 +2261,7 @@
                  "current": total_dirs,
                  "total": total_dirs + 1
              })
-@@ -641,12 +1123,13 @@
+@@ -641,12 +1132,13 @@
                  sort=default_sort,
                  order=default_order,
                  items_per_page=items_per_page,
@@ -2264,7 +2277,7 @@
                  "current": total_dirs + 1,
                  "total": total_dirs + 1
              })
-@@ -704,7 +1187,7 @@
+@@ -704,7 +1196,7 @@
          if _wl_removed:
              _emit_notif(
                  "info", "notif.wishlist_auto_removed",
@@ -2273,7 +2286,7 @@
                  task_type="wishlist_reconcile",
              )
  
-@@ -723,28 +1206,73 @@
+@@ -723,28 +1215,73 @@
                      or _readonly_no_output > 0 or _readonly_unreachable > 0 or _readonly_partial > 0):
                  _err_parts = []
                  if scan_error_count > 0:
@@ -2355,7 +2368,7 @@
  
              # TASK-90b-T4: abort 時跳過 done event——client 已斷線收不到，且
              # payload 的 output_path/video_count 語意上宣稱「已完成產生」，
-@@ -754,6 +1282,7 @@
+@@ -754,6 +1291,7 @@
                  "video_count": len(all_videos),
                  "output_path": str(html_path),
                  "session_update": session_update,
@@ -2363,7 +2376,7 @@
                  "long_paths": long_paths,  # a5
                  "stats": {
                      "inserted": total_inserted,
-@@ -772,10 +1301,15 @@
+@@ -772,10 +1310,15 @@
          # 53b-T3: 掃描失敗通知（不洩漏 str(e) 到前端）
          _emit_notif(
              "error", "notif.scanner_failed",
@@ -2381,7 +2394,7 @@
  
  
  # TASK-90b-T2: 斷線偵測輪詢間隔（秒）。定案依據見 plan-90b.md CD-90b-5/6：
-@@ -786,6 +1320,66 @@
+@@ -786,6 +1329,66 @@
  # `request.is_disconnected()`，非搶 iterate_in_threadpool 的同一組 receive
  # channel（該輪詢與 StreamingResponse 內部行為互不干擾，spike 已驗證）。
  _DISCONNECT_POLL_INTERVAL_SEC = 0.5
@@ -2448,7 +2461,7 @@
  
  
  @router.get("/generate")
-@@ -803,8 +1397,13 @@
+@@ -803,8 +1406,13 @@
      # 反方向——若設定頁正在切換模式（purge 窗口中），回 False → 拒絕開始產生，避免背景
      # producer 讀到舊唯讀來源、把剛被 purge 的卡 _upsert 補回（切模式後殭屍卡）。
      if not try_mark_generate_active(cancel_event):
@@ -2463,7 +2476,7 @@
          return StreamingResponse(
              _refuse_switching(),
              media_type="text/event-stream",
-@@ -874,7 +1473,11 @@
+@@ -874,7 +1482,11 @@
              return {"success": True, "data": {"total": 0, "last_run": None, "last_added": None}}
  
          repo = VideoRepository(db_path)
@@ -2476,7 +2489,7 @@
  
          return {
              "success": True,
-@@ -887,7 +1490,10 @@
+@@ -887,7 +1499,10 @@
          }
      except Exception as e:
          logger.error("取得統計資訊失敗: %s", e)
@@ -2488,7 +2501,7 @@
  
  
  @router.delete("/cache")
-@@ -897,9 +1503,21 @@
+@@ -897,9 +1512,21 @@
          db_path = get_db_path()
  
          if not db_path.exists():
@@ -2511,7 +2524,7 @@
          deleted = repo.clear_all()
          # feature/71 T8: 清空整個縮圖快取目錄（CD-11 / spec 2.A.9）
          thumbnail_cache.clear_all()
-@@ -907,10 +1525,17 @@
+@@ -907,10 +1534,17 @@
          global _jellyfin_cache_result, _jellyfin_cache_time
          _jellyfin_cache_result = None
          _jellyfin_cache_time = 0
@@ -2531,7 +2544,7 @@
  
  
  def _build_nfo_update_cache(all_videos, config) -> tuple:
-@@ -959,6 +1584,884 @@
+@@ -959,6 +1593,884 @@
      return cache, skipped_readonly, path_mappings
  
  
@@ -3416,7 +3429,7 @@
  @router.get("/update-check")
  def check_update():
      """檢查需要更新的影片數量（從 SQLite 讀取）"""
-@@ -971,73 +2474,273 @@
+@@ -971,73 +2483,291 @@
          repo = VideoRepository(db_path)
          all_videos = repo.get_all()
  
@@ -3585,8 +3598,10 @@
 +                    "items": [],
 +                    "untranslated_titles": 0,
 +                    "missing_samples": 0,
++                    "missing_plots": 0,
 +                    "untranslated_title_items": [],
 +                    "missing_sample_items": [],
++                    "missing_plot_items": [],
 +                },
 +            }
  
@@ -3610,7 +3625,23 @@
 +        untranslated_title_items = []
 +        missing_sample_items = []
 +
-+        for group in logical_video_groups(all_videos, path_mappings):
++        groups = list(logical_video_groups(all_videos, path_mappings))
++        missing_plot_candidates = find_missing_plot_candidates(
++            groups,
++            config,
++            path_mappings,
++        )
++        missing_plot_items = [
++            {
++                "file_path": candidate.file_path,
++                "number": candidate.number,
++                "title": candidate.title,
++                "member_paths": list(candidate.member_paths),
++            }
++            for candidate in missing_plot_candidates
++        ]
++
++        for group in groups:
 +            members = group.members
 +            untranslated_members = [
 +                video
@@ -3722,15 +3753,17 @@
          return {
              "success": True,
              "data": {
-@@ -1046,75 +2749,1616 @@
+@@ -1046,75 +2776,2111 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
 -            }
 +                "untranslated_titles": len(untranslated_title_items),
 +                "missing_samples": len(missing_sample_items),
++                "missing_plots": len(missing_plot_items),
 +                "untranslated_title_items": untranslated_title_items,
 +                "missing_sample_items": missing_sample_items,
++                "missing_plot_items": missing_plot_items,
 +            },
          }
      except Exception as e:
@@ -3752,6 +3785,7 @@
 +
 +_TITLE_BACKFILL_CONCURRENCY = 4
 +_SAMPLE_BACKFILL_CONCURRENCY = 3
++_PLOT_BACKFILL_CONCURRENCY = 3
 +_TITLE_ERROR_KEYS = {
 +    "not_found": "error_not_found",
 +    "title_empty": "error_title_empty",
@@ -3767,6 +3801,25 @@
 +    "translation_invalid": "translation_invalid",
 +    "translation_empty": "translation_empty",
 +    "write_failed": "write_failed",
++}
++_PLOT_ERROR_KEYS = {
++    "missing_number": "missing_number",
++    "not_found": "error_not_found",
++    "no_summary": "error_no_summary",
++    "search_failed": "error_search_failed",
++    "no_nfo": "error_no_nfo",
++    "nfo_unreadable": "error_nfo_unreadable",
++    "nfo_write_failed": "error_nfo_write_failed",
++    "storage_permission_required": "error_storage_permission_required",
++    "db_write_failed": "error_db_write_failed",
++    "translate_failed": "translation_failed",
++    "translation_refused": "translation_refused",
++    "translation_invalid": "translation_invalid",
++    "translation_empty": "translation_empty",
++    "already_filled": "already_filled",
++    "write_failed": "error_nfo_write_failed",
++    "internal_error": "error_internal",
++    "cancelled": "cancelled",
 +}
 +_SAMPLE_ERROR_KEYS = {
 +    "missing_number": "missing_number",
@@ -3819,6 +3872,24 @@
 +            number=number,
 +        )
 +    return fallback or _runtime_text("samples", "internal_error", locale)
++
++
++def _localized_plot_error(
++    locale: str,
++    error_code: str,
++    fallback: str = "",
++    *,
++    number: str = "",
++) -> str:
++    key = _PLOT_ERROR_KEYS.get(error_code)
++    if key:
++        return _runtime_text(
++            "plots",
++            key,
++            locale,
++            number=number,
++        )
++    return fallback or _runtime_text("plots", "error_internal", locale)
 +
 +
 +def _iter_title_translations(
@@ -4534,6 +4605,455 @@
 +        })
 +
 +
++def _plot_backfill_generator(cancel_event: threading.Event) -> Generator[str, None, None]:
++    """Fetch and translate synopses only for existing NFOs with an empty plot."""
++    locale = _active_locale()
++    try:
++        config = load_config()
++        locale = _active_locale(config)
++        db_path = get_db_path()
++        if not db_path.exists():
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text(
++                    "plots", "db_missing", locale
++                ),
++            })
++            return
++        if not config.get("translate", {}).get("enabled", False):
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text(
++                    "plots", "translate_disabled", locale
++                ),
++            })
++            return
++
++        from web.routers.translate import get_translate_service
++
++        try:
++            translate_service = get_translate_service()
++        except Exception:
++            logger.exception("初始化批次简介翻译服务失败")
++            yield _sse_event({
++                "type": "error",
++                "message": _runtime_text(
++                    "plots", "config_invalid", locale
++                ),
++            })
++            return
++
++        repo = VideoRepository(db_path)
++        path_mappings = (
++            config.get("gallery", {}).get("path_mappings", {})
++        )
++        groups = list(
++            logical_video_groups(repo.get_all(), path_mappings)
++        )
++        candidates = find_missing_plot_candidates(
++            groups,
++            config,
++            path_mappings,
++        )
++        total = len(candidates)
++        if total == 0:
++            yield _sse_event({
++                "type": "done",
++                "message": _runtime_text("plots", "none", locale),
++                "cancelled": False,
++                "summary": {
++                    "success": 0,
++                    "failed": 0,
++                    "skipped": 0,
++                    "failed_items": [],
++                },
++            })
++            return
++
++        javbus_lang = get_javbus_lang()
++
++        def process_one(candidate) -> dict:
++            if cancel_event.is_set():
++                return {
++                    "success": False,
++                    "skipped": True,
++                    "error_code": "cancelled",
++                }
++            number = candidate.number or _candidate_number(
++                Video(path=candidate.file_path, title=candidate.title)
++            )
++            if not number:
++                return {
++                    "success": False,
++                    "skipped": True,
++                    "error_code": "missing_number",
++                }
++
++            try:
++                metadata = search_jav(
++                    number,
++                    source="auto",
++                    javbus_lang=javbus_lang,
++                )
++            except Exception:
++                logger.warning(
++                    "批次补简介搜索失败: %s",
++                    candidate.file_path,
++                    exc_info=True,
++                )
++                return {
++                    "success": False,
++                    "skipped": False,
++                    "error_code": "search_failed",
++                }
++            if not metadata:
++                return {
++                    "success": False,
++                    "skipped": False,
++                    "error_code": "not_found",
++                }
++
++            source_plot = clean_summary_text(
++                metadata.get("_summary")
++                or metadata.get("summary")
++                or ""
++            )
++            if not source_plot:
++                return {
++                    "success": False,
++                    "skipped": False,
++                    "error_code": "no_summary",
++                }
++
++            translated_plot = source_plot
++            if plot_needs_translation(
++                source_plot,
++                locale,
++                proper_terms=candidate.actors,
++            ):
++                try:
++                    translated_plot = asyncio.run(
++                        translate_service.translate_plot_or_raise(
++                            source_plot,
++                            {
++                                "actors": list(candidate.actors),
++                                "number": number,
++                            },
++                        )
++                    )
++                except TranslateError as exc:
++                    error_code = _title_translation_error_code(exc)
++                    return {
++                        "success": False,
++                        "skipped": False,
++                        "error_code": error_code,
++                    }
++                except Exception:
++                    logger.exception(
++                        "批次补简介翻译失败: %s",
++                        candidate.file_path,
++                    )
++                    return {
++                        "success": False,
++                        "skipped": False,
++                        "error_code": "translate_failed",
++                    }
++
++            translated_plot = normalize_translation_text(
++                translated_plot
++            ).strip()
++            if not translated_plot:
++                return {
++                    "success": False,
++                    "skipped": False,
++                    "error_code": "translation_empty",
++                }
++
++            updated_nfos = []
++            write_error = ""
++            for nfo_path, owner_paths in candidate.nfo_targets:
++                if cancel_event.is_set():
++                    break
++                try:
++                    changed = fill_empty_nfo_plot(
++                        nfo_path,
++                        new_plot=translated_plot,
++                        new_original=source_plot,
++                    )
++                    if not changed:
++                        continue
++                    updated_nfos.append(nfo_path)
++                    nfo_mtime = os.stat(nfo_path).st_mtime
++                    for owner_path in owner_paths:
++                        if not repo.update_nfo_mtime(
++                            owner_path,
++                            nfo_mtime,
++                        ):
++                            write_error = "db_write_failed"
++                except AndroidStoragePermissionError:
++                    write_error = "storage_permission_required"
++                except NfoNotFoundError:
++                    write_error = "no_nfo"
++                except NfoParseError:
++                    write_error = "nfo_unreadable"
++                except Exception:
++                    logger.warning(
++                        "批次补简介写入 NFO 失败: %s",
++                        nfo_path,
++                        exc_info=True,
++                    )
++                    write_error = "nfo_write_failed"
++
++            return {
++                "success": bool(updated_nfos) and not write_error,
++                "skipped": not updated_nfos and not write_error,
++                "error_code": write_error or (
++                    "" if updated_nfos else "already_filled"
++                ),
++                "updated_nfo_count": len(updated_nfos),
++                "translated_plot": translated_plot,
++                "source_plot": source_plot,
++            }
++
++        success_count = 0
++        failed_count = 0
++        skipped_count = 0
++        failed_items = []
++
++        yield _sse_event({
++            "type": "log",
++            "level": "info",
++            "message": _runtime_text(
++                "plots",
++                "start",
++                locale,
++                total=total,
++                concurrency=_PLOT_BACKFILL_CONCURRENCY,
++            ),
++        })
++        yield _sse_event({
++            "type": "progress",
++            "current": 0,
++            "total": total,
++            "number": "",
++            "status": _runtime_text(
++                "plots",
++                "status",
++                locale,
++                concurrency=_PLOT_BACKFILL_CONCURRENCY,
++            ),
++            "success": success_count,
++            "failed": failed_count,
++            "skipped": skipped_count,
++        })
++
++        executor = ThreadPoolExecutor(
++            max_workers=_PLOT_BACKFILL_CONCURRENCY,
++            thread_name_prefix="plot-backfill",
++        )
++        futures = {
++            executor.submit(process_one, candidate): (index, candidate)
++            for index, candidate in enumerate(candidates)
++        }
++        processed_count = 0
++        cancelled = False
++
++        try:
++            while futures:
++                if cancel_event.is_set():
++                    cancelled = True
++                    break
++                done, _ = futures_wait(
++                    tuple(futures),
++                    timeout=_DISCONNECT_POLL_INTERVAL_SEC,
++                    return_when=FIRST_COMPLETED,
++                )
++                ordered_done = sorted(
++                    done,
++                    key=lambda future: futures[future][0],
++                )
++                for future in ordered_done:
++                    if cancel_event.is_set():
++                        cancelled = True
++                        break
++                    _index, candidate = futures.pop(future)
++                    try:
++                        result = future.result()
++                    except Exception:
++                        logger.exception(
++                            "批次补简介处理失败: %s",
++                            candidate.file_path,
++                        )
++                        result = {
++                            "success": False,
++                            "skipped": False,
++                            "error_code": "internal_error",
++                        }
++
++                    if result.get("error_code") == "cancelled":
++                        cancelled = True
++                        break
++
++                    processed_count += 1
++                    number = candidate.number
++                    status = _runtime_text(
++                        "plots",
++                        "status_count",
++                        locale,
++                        current=processed_count,
++                        total=total,
++                        concurrency=_PLOT_BACKFILL_CONCURRENCY,
++                    )
++                    if result.get("success"):
++                        success_count += 1
++                        preview = re.sub(
++                            r"\s+",
++                            " ",
++                            result.get("translated_plot") or "",
++                        ).strip()[:180]
++                        yield _sse_event({
++                            "type": "result-item",
++                            "file_path": candidate.file_path,
++                            "number": number,
++                            "success": True,
++                            "skipped": False,
++                            "updated_nfo_count": result.get(
++                                "updated_nfo_count",
++                                0,
++                            ),
++                            "preview": preview,
++                            "member_paths": list(
++                                candidate.member_paths
++                            ),
++                            "current": processed_count,
++                            "total": total,
++                            "status": status,
++                            "success_count": success_count,
++                            "failed_count": failed_count,
++                            "skipped_count": skipped_count,
++                        })
++                        yield _sse_event({
++                            "type": "log",
++                            "level": "info",
++                            "message": _runtime_text(
++                                "plots",
++                                "log",
++                                locale,
++                                current=processed_count,
++                                total=total,
++                                number=number or candidate.file_path,
++                                preview=preview,
++                            ),
++                        })
++                        continue
++
++                    error_code = (
++                        result.get("error_code")
++                        or "internal_error"
++                    )
++                    error_message = _localized_plot_error(
++                        locale,
++                        error_code,
++                        number=number,
++                    )
++                    if result.get("skipped"):
++                        skipped_count += 1
++                        yield _sse_event({
++                            "type": "result-item",
++                            "file_path": candidate.file_path,
++                            "number": number,
++                            "success": False,
++                            "skipped": True,
++                            "error_code": error_code,
++                            "error": error_message,
++                            "current": processed_count,
++                            "total": total,
++                            "status": status,
++                            "success_count": success_count,
++                            "failed_count": failed_count,
++                            "skipped_count": skipped_count,
++                        })
++                        continue
++
++                    failed_count += 1
++                    failed_items.append({
++                        "path": candidate.file_path,
++                        "number": number,
++                        "error_code": error_code,
++                        "error": error_message,
++                    })
++                    yield _sse_event({
++                        "type": "result-item",
++                        "file_path": candidate.file_path,
++                        "number": number,
++                        "success": False,
++                        "skipped": False,
++                        "error_code": error_code,
++                        "error": error_message,
++                        "updated_nfo_count": result.get(
++                            "updated_nfo_count",
++                            0,
++                        ),
++                        "current": processed_count,
++                        "total": total,
++                        "status": status,
++                        "success_count": success_count,
++                        "failed_count": failed_count,
++                        "skipped_count": skipped_count,
++                    })
++                if cancelled:
++                    break
++        finally:
++            executor.shutdown(wait=False, cancel_futures=True)
++
++        if cancelled or cancel_event.is_set():
++            yield _sse_event({
++                "type": "done",
++                "message": _runtime_text(
++                    "plots",
++                    "cancelled",
++                    locale,
++                ),
++                "cancelled": True,
++                "summary": {
++                    "success": success_count,
++                    "failed": failed_count,
++                    "skipped": skipped_count,
++                    "failed_items": failed_items,
++                },
++            })
++            return
++
++        yield _sse_event({
++            "type": "done",
++            "message": _runtime_text(
++                "plots",
++                "done",
++                locale,
++                success=success_count,
++                failed=failed_count,
++                skipped=skipped_count,
++            ),
++            "cancelled": False,
++            "summary": {
++                "success": success_count,
++                "failed": failed_count,
++                "skipped": skipped_count,
++                "failed_items": failed_items,
++            },
++        })
++    except Exception:
++        logger.exception("批次补简介端点失败")
++        yield _sse_event({
++            "type": "error",
++            "message": _runtime_text(
++                "plots",
++                "unexpected_error",
++                locale,
++            ),
++        })
++
++
 +@router.post("/backfill-titles")
 +async def backfill_titles(request: Request):
 +    """SSE: translate all titles that differ from the active UI language."""
@@ -4544,6 +5064,12 @@
 +async def backfill_samples(request: Request):
 +    """SSE: fetch samples only for rows whose sample list is empty."""
 +    return await _cancelable_sse_response(request, _sample_backfill_generator)
++
++
++@router.post("/backfill-plots")
++async def backfill_plots(request: Request):
++    """SSE: fetch and translate synopses for existing NFOs with empty plots."""
++    return await _cancelable_sse_response(request, _plot_backfill_generator)
 +
 +
 +def _build_current_rename_plan(scope: str = "files") -> dict:
@@ -5366,7 +5892,7 @@
      )
  
  
-@@ -1123,6 +4367,7 @@
+@@ -1123,6 +4889,7 @@
      """取得產生的 HTML 列表檔案（修改圖片路徑為 API 代理）"""
      try:
          config = load_config()
@@ -5374,7 +5900,7 @@
          gallery_config = config.get('gallery', {})
          output_dir = gallery_config.get('output_dir', '') or ''
          output_filename = gallery_config.get('output_filename', 'gallery_output.html')
-@@ -1131,7 +4376,10 @@
+@@ -1131,7 +4898,10 @@
  
          if not html_path.exists():
              return HTMLResponse(
@@ -5386,7 +5912,7 @@
                  status_code=404
              )
  
-@@ -1161,8 +4409,12 @@
+@@ -1161,8 +4931,12 @@
          return HTMLResponse(content=content)
      except Exception:
          logger.exception("view_list 讀取失敗")
@@ -5400,7 +5926,7 @@
              status_code=500
          )
  
-@@ -1177,12 +4429,25 @@
+@@ -1177,12 +4951,25 @@
              return {"success": True, "data": {"count": 0}}
  
          repo = VideoRepository(db_path)
@@ -5428,7 +5954,7 @@
  
  
  # === Jellyfin 圖片批次補齊 ===
-@@ -1191,30 +4456,43 @@
+@@ -1191,30 +4978,43 @@
      """檢查 DB 中有多少影片缺少 poster/fanart"""
      videos = repo.get_all()
      need_update = []
@@ -5490,7 +6016,7 @@
      try:
          # Codex PR#123 P2：gate 必須排在 get_db_path() 之前——get_db_path() 內部會
          # mkdir 建立 output/ 資料夾（core/database/connection.py:15-22），是有副作用
-@@ -1224,17 +4502,29 @@
+@@ -1224,17 +5024,29 @@
          # done + updated:0（off 時零寫入），且與 _check_jellyfin_needed() 的順序
          # 不對稱。config 只讀一次，下面 path_mappings 沿用同一個 config。
          config = load_config()
@@ -5522,7 +6048,7 @@
              return
  
          repo = VideoRepository(db_path)
-@@ -1246,13 +4536,31 @@
+@@ -1246,13 +5058,31 @@
          if total == 0:
              _jellyfin_cache_result = None
              _jellyfin_cache_time = 0
@@ -5556,7 +6082,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,45 +4569,129 @@
+@@ -1261,45 +5091,129 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -5703,7 +6229,7 @@
  
  
  def _check_jellyfin_needed() -> dict | None:
-@@ -1359,15 +4751,11 @@
+@@ -1359,15 +5273,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -5723,7 +6249,7 @@
      )
  
  
-@@ -1463,26 +4851,49 @@
+@@ -1463,26 +5373,49 @@
      ```
      """
      numbers = [n.strip() for n in body.numbers if isinstance(n, str) and n.strip()]
@@ -5778,7 +6304,7 @@
      gallery_config = config.get('gallery', {})
      output_dir = gallery_config.get('output_dir', '') or ''
      theme = config.get('general', {}).get('theme', 'light')
-@@ -1494,7 +4905,13 @@
+@@ -1494,7 +5427,13 @@
          db_results = repo.get_by_numbers(numbers)
      except Exception as e:
          logger.error('generate_from_ids: DB 查詢失敗: %s', e)
@@ -5793,7 +6319,7 @@
  
      all_videos: List[VideoInfo] = []
      missing: List[str] = []
-@@ -1577,7 +4994,13 @@
+@@ -1577,7 +5516,13 @@
          )
      except Exception as e:
          logger.error('generate_from_ids: HTML 產生失敗: %s', e)
@@ -5808,7 +6334,7 @@
  
      result = {
          "success": True,
-@@ -1621,6 +5044,11 @@
+@@ -1621,6 +5566,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:
@@ -8594,12 +9120,11 @@
  @router.get("/source-status")
 --- /dev/null
 +++ b/web/routers/showcase_plot.py
-@@ -0,0 +1,275 @@
+@@ -0,0 +1,236 @@
 +"""Lightbox plot API: read and translate NFO plot text on demand."""
 +
 +from __future__ import annotations
 +
-+import os
 +from pathlib import Path
 +from typing import Optional
 +
@@ -8615,14 +9140,13 @@
 +from core.i18n import get_config_locale, t as i18n_t
 +from core.logger import get_logger
 +from core.nfo_stat import nfo_mtime_or_none
-+from core.nfo_utils import find_sidecar_nfos
-+from core.path_utils import is_path_under_dir, uri_to_local_fs_path
++from core.nfo_locator import locate_nfo_for_video
++from core.path_utils import is_path_under_dir
 +from core.plot_writeback import (
 +    PlotEmptyError,
 +    read_nfo_plots,
 +    rewrite_nfo_plot,
 +)
-+from core.readonly_paths import resolve_owning_output_root
 +from core.title_writeback import NfoNotFoundError, NfoParseError, strip_illegal_xml_chars
 +
 +logger = get_logger(__name__)
@@ -8687,45 +9211,8 @@
 +    return repo, video, (config, path_mappings, locale), None
 +
 +
-+def _locate_output_nfo(video, output_uri: str, path_mappings: dict):
-+    if not video.output_dir or not output_uri:
-+        return None, "no_nfo"
-+    if not is_path_under_dir(video.output_dir, output_uri):
-+        return None, "no_nfo"
-+    output_dir = Path(uri_to_local_fs_path(video.output_dir, path_mappings))
-+    video_path = Path(uri_to_local_fs_path(video.path, path_mappings))
-+    try:
-+        exact = find_sidecar_nfos(output_dir / video_path.name)
-+        if exact:
-+            return str(exact[0]), None
-+        with os.scandir(output_dir) as entries:
-+            candidates = sorted(
-+                entry.path
-+                for entry in entries
-+                if entry.is_file() and entry.name.lower().endswith(".nfo")
-+            )
-+    except FileNotFoundError:
-+        return None, "no_nfo"
-+    except OSError:
-+        return None, "nfo_unreadable"
-+    if len(candidates) > 1:
-+        return None, "nfo_ambiguous"
-+    if not candidates:
-+        return None, "no_nfo"
-+    return candidates[0], None
-+
-+
 +def _locate_nfo(video, config: dict, path_mappings: dict):
-+    owning = resolve_owning_output_root(video.path, config)
-+    if owning is not None:
-+        return _locate_output_nfo(video, owning[2], path_mappings)
-+    video_path = Path(uri_to_local_fs_path(video.path, path_mappings))
-+    candidates = find_sidecar_nfos(video_path)
-+    if not candidates:
-+        return None, "no_nfo"
-+    if len(candidates) > 1:
-+        return None, "nfo_ambiguous"
-+    return str(candidates[0]), None
++    return locate_nfo_for_video(video, config, path_mappings)
 +
 +
 +def _read_plots(nfo_path: str, locale: str):

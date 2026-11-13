@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -18,14 +17,13 @@ from core.database import VideoRepository, get_db_path, init_db
 from core.i18n import get_config_locale, t as i18n_t
 from core.logger import get_logger
 from core.nfo_stat import nfo_mtime_or_none
-from core.nfo_utils import find_sidecar_nfos
-from core.path_utils import is_path_under_dir, uri_to_local_fs_path
+from core.nfo_locator import locate_nfo_for_video
+from core.path_utils import is_path_under_dir
 from core.plot_writeback import (
     PlotEmptyError,
     read_nfo_plots,
     rewrite_nfo_plot,
 )
-from core.readonly_paths import resolve_owning_output_root
 from core.title_writeback import NfoNotFoundError, NfoParseError, strip_illegal_xml_chars
 
 logger = get_logger(__name__)
@@ -90,45 +88,8 @@ def _load_video(file_path: str):
     return repo, video, (config, path_mappings, locale), None
 
 
-def _locate_output_nfo(video, output_uri: str, path_mappings: dict):
-    if not video.output_dir or not output_uri:
-        return None, "no_nfo"
-    if not is_path_under_dir(video.output_dir, output_uri):
-        return None, "no_nfo"
-    output_dir = Path(uri_to_local_fs_path(video.output_dir, path_mappings))
-    video_path = Path(uri_to_local_fs_path(video.path, path_mappings))
-    try:
-        exact = find_sidecar_nfos(output_dir / video_path.name)
-        if exact:
-            return str(exact[0]), None
-        with os.scandir(output_dir) as entries:
-            candidates = sorted(
-                entry.path
-                for entry in entries
-                if entry.is_file() and entry.name.lower().endswith(".nfo")
-            )
-    except FileNotFoundError:
-        return None, "no_nfo"
-    except OSError:
-        return None, "nfo_unreadable"
-    if len(candidates) > 1:
-        return None, "nfo_ambiguous"
-    if not candidates:
-        return None, "no_nfo"
-    return candidates[0], None
-
-
 def _locate_nfo(video, config: dict, path_mappings: dict):
-    owning = resolve_owning_output_root(video.path, config)
-    if owning is not None:
-        return _locate_output_nfo(video, owning[2], path_mappings)
-    video_path = Path(uri_to_local_fs_path(video.path, path_mappings))
-    candidates = find_sidecar_nfos(video_path)
-    if not candidates:
-        return None, "no_nfo"
-    if len(candidates) > 1:
-        return None, "nfo_ambiguous"
-    return str(candidates[0]), None
+    return locate_nfo_for_video(video, config, path_mappings)
 
 
 def _read_plots(nfo_path: str, locale: str):

@@ -8,10 +8,25 @@
  from typing import Any
  
  import httpx
-@@ -61,6 +62,41 @@
+@@ -52,12 +53,52 @@
      }
  
  
+-def build_translate_payload(model: str, prompt: str) -> dict[str, Any]:
++def build_translate_payload(
++    model: str,
++    prompt: str,
++    *,
++    max_tokens: int = MAX_TOKENS,
++) -> dict[str, Any]:
++    return {
++        "model": model,
++        "max_tokens": max_tokens,
++        "messages": [{"role": "user", "content": prompt}],
++        "output_config": {"effort": "low"},
++    }
++
++
 +def _data_uri_parts(image_data_uri: str) -> tuple[str, str]:
 +    header, data = image_data_uri.split(",", 1)
 +    media_type = header[5:].split(";", 1)[0] or "image/jpeg"
@@ -26,9 +41,11 @@
 +    image_data_uri: str,
 +) -> dict[str, Any]:
 +    media_type, data = _data_uri_parts(image_data_uri)
-+    return {
-+        "model": model,
-+        "max_tokens": MAX_TOKENS,
+     return {
+         "model": model,
+         "max_tokens": MAX_TOKENS,
+-        "messages": [{"role": "user", "content": prompt}],
+-        "output_config": {"effort": "low"},
 +        "system": system,
 +        "messages": [{
 +            "role": "user",
@@ -44,13 +61,27 @@
 +                },
 +            ],
 +        }],
-+    }
-+
-+
- def extract_text(data: dict) -> str:
-     """從 Messages 回應取出 text；refusal／max_tokens／空文字拋 AnthropicError。"""
-     if data.get("stop_reason") == "refusal":
-@@ -204,6 +240,56 @@
+     }
+ 
+ 
+@@ -146,10 +187,15 @@
+     prompt: str,
+     *,
+     timeout: float,
++    max_tokens: int = MAX_TOKENS,
+ ) -> str:
+     """POST /v1/messages；成功回非空 str，失敗拋 AnthropicError。"""
+     headers = build_headers(api_key)
+-    payload = build_translate_payload(model, prompt)
++    payload = build_translate_payload(
++        model,
++        prompt,
++        max_tokens=max_tokens,
++    )
+     try:
+         async with httpx.AsyncClient(timeout=timeout) as client:
+             resp = await client.post(
+@@ -204,6 +250,56 @@
      return extract_text(data)
  
  
