@@ -224,8 +224,24 @@ class GalleryConfig(BaseModel):
     cover_badges: CoverBadgesConfig = CoverBadgesConfig()
 
 
+class ShowcaseDisplayConfig(BaseModel):
+    """Live library preferences, independently owned by the display endpoint."""
+
+    presentation: Literal['cover', 'poster', 'list', 'table'] = 'poster'
+    columns: Literal[2, 3, 5] = 2
+    items_per_page: int = Field(default=45, ge=1, le=500, strict=True)
+
+    @field_validator('columns', mode='before')
+    @classmethod
+    def _strict_columns(cls, value):
+        if type(value) is not int:
+            raise ValueError('columns must be 2, 3 or 5')
+        return value
+
+
 class ShowcaseConfig(BaseModel):
     player: str = ""  # 播放器路徑，空字串使用系統預設
+    display: ShowcaseDisplayConfig = Field(default_factory=ShowcaseDisplayConfig)
 
 
 # Valid values for the window close-action preference（feature/82, single source of truth）.

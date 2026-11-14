@@ -76,7 +76,12 @@
     }
   },
   "showcase": {
-    "player": ""
+    "player": "",
+    "display": {
+      "presentation": "poster",
+      "columns": 2,
+      "items_per_page": 45
+    }
   },
   "general": {
     "default_page": "scanner",

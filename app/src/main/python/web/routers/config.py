@@ -29,6 +29,7 @@ from core.logger import get_logger
 from core.config import (
     AppConfig,
     FocalDeviceState,
+    ShowcaseDisplayConfig,
     add_computed_source_fields,
     load_config,
     mutate_config,
@@ -213,6 +214,13 @@ def update_config(config: AppConfig) -> dict:
                 current_server_mode = cfg.get("general", {}).get("server_mode", False)
                 payload["general"]["server_mode"] = current_server_mode
                 payload["general"]["last_notified_update_version"] = cfg.get("general", {}).get("last_notified_update_version", "")
+                # Display controls save independently. An unrelated settings
+                # snapshot must not revert a newer library preference.
+                current_showcase = cfg.get('showcase') or {}
+                if 'display' in current_showcase:
+                    payload['showcase']['display'] = copy.deepcopy(current_showcase['display'])
+                else:
+                    payload['showcase'].pop('display', None)
                 # focal_device 是**伺服器擁有狀態**：前端只透過專用 toggle 端點
                 # PUT /api/config/focal-device/disabled 寫它（另有背景
                 # core.focal.device_state.record_outcome），全量 PUT 一律不接受前端送來的值。
@@ -258,6 +266,20 @@ def update_config(config: AppConfig) -> dict:
             return {"success": False, "error": _config_text("save_failed", response_locale)}
     finally:
         end_config_save(save_token)
+
+
+@router.put('/config/showcase-display')
+def update_showcase_display(display: ShowcaseDisplayConfig) -> dict:
+    """Atomically update only live browsing preferences, never other settings."""
+    data = display.model_dump()
+
+    def _write(cfg):
+        if not isinstance(cfg.get('showcase'), dict):
+            cfg['showcase'] = {}
+        cfg['showcase']['display'] = data.copy()
+
+    mutate_config(_write)
+    return {'success': True, 'data': data}
 
 
 @router.delete("/config")
