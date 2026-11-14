@@ -23,6 +23,18 @@
      @wheel="handleWheel($event)"
      x-on:showcase:clear-search.window="clearAllFilters()">
 
+    <div class="native-browse-bar">
+        <span class="native-browse-count" x-show="!showFavoriteActresses">
+            {{ t('showcase.status.total_prefix') }} <b x-text="videoCount"></b> {{ t('showcase.status.total_suffix') }}
+        </span>
+                    <button type="button" class="btn native-display-trigger"
+                            @click="openDisplaySettings()" aria-haspopup="dialog"
+                            :aria-expanded="displayOpen.toString()">
+                        <i class="bi bi-grid" aria-hidden="true"></i>
+                        <span>{{ t('showcase.display.button') }}</span>
+                    </button>
+    </div>
+
     <!-- Loading State (初始顯示) -->
     <div class="ui-loading-card"
          x-cloak
@@ -368,12 +380,7 @@
                     <button class="btn-icon" @click="toggleOrder()" title="{{ t('showcase.action.toggle_order') }}">
                         <i class="bi" :class="order === 'asc' ? 'bi-sort-up' : 'bi-sort-down'"></i>
                     </button>
-                    <button type="button" class="btn native-display-trigger"
-                            @click="openDisplaySettings()" aria-haspopup="dialog"
-                            :aria-expanded="displayOpen.toString()">
-                        <i class="bi bi-grid" aria-hidden="true"></i>
-                        <span>{{ t('showcase.display.button') }}</span>
-                    </button>
+
                     <!-- 資訊顯示開關 (僅 Grid 模式) -->
                     <button class="btn-icon toggle-info-eye-btn"
                             x-show="mode === 'grid'"
@@ -642,9 +649,7 @@
                             </span>
                             <span class="av-actress"><span x-text="video.actresses || t('showcase.grid.unknown_actor')"></span><span class="lb-actor-age" x-show="singleActorAge(video) != null" x-text="' (' + singleActorAge(video) + t('showcase.unit.age_suffix') + ')'"></span></span>
                         </div>
-                        <div class="footer-hover" x-show="!infoVisible">
-                            <div class="hover-title" x-text="video.title || t('showcase.grid.unknown_title')"></div>
-                        </div>
+                        <div class="native-card-title" x-text="video.title || t('showcase.grid.unknown_title')"></div>
                     </div>
                     <!-- Card Info 展開區 (M3i) — footer 同層，展開時撐高卡片 -->
                     <div class="card-info" x-cloak @click.stop>

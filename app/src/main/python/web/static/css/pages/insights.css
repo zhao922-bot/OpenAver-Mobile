@@ -43,11 +43,9 @@
 .insights-container .card {
     border: 1px solid var(--stroke-default);
     border-radius: var(--radius-lg);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-4);
+    box-shadow: none;
     overflow: hidden;
-    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
+    background: var(--surface-1);
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -55,7 +53,7 @@
 }
 
 [data-theme="dim"] .insights-container .card {
-    background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
+    background: var(--surface-1);
 }
 
 .insights-container .card-head {
@@ -125,6 +123,7 @@
 
 .insights-container .insights-big-number {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
     gap: 0.375rem;
 }
@@ -157,9 +156,7 @@
         color-mix(in oklch, var(--color-primary) 6%, transparent),
         color-mix(in oklch, var(--color-primary) 6%, transparent)
     );
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-8);
+    box-shadow: none;
 }
 
 /* 「↗」只在可點時顯示（純符號、aria-hidden；不用 x-show，FE-ALPINE-17） */
@@ -788,7 +785,7 @@
     pointer-events: none;
     border-radius: var(--radius-md);
     overflow: hidden;
-    box-shadow: var(--fluent-shadow-16);
+    box-shadow: none;
     background: var(--surface-1);
     border: 1px solid var(--stroke-default);
     box-sizing: border-box;
@@ -1067,7 +1064,7 @@
 }
 
 .insights-container .maker-marker--ring::after {
-    box-shadow: inset 0 0 0 2px var(--surface-1);
+    box-shadow: none;
 }
 
 .insights-container .maker-marker--bar::after {
@@ -1139,7 +1136,7 @@
 }
 
 .insights-container .gantt-legend-dot.maker-marker--ring {
-    box-shadow: inset 0 0 0 2px var(--surface-1);
+    box-shadow: none;
 }
 
 .insights-container .gantt-legend-dot.maker-marker--bar {
@@ -1199,10 +1196,9 @@
 
 .insights-container .insights-gantt-toggle button.is-on {
     background: color-mix(in oklch, var(--surface-2) 80%, transparent);
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    backdrop-filter: none;
     color: var(--text-primary);
-    box-shadow: var(--fluent-shadow-2);
+    box-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1473,10 +1469,8 @@
         overflow: hidden;
         border: 1px solid var(--stroke-default);
         border-radius: var(--radius-lg);
-        background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
-        box-shadow:
-            inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-            var(--fluent-shadow-4);
+        background: var(--surface-1);
+        box-shadow: none;
     }
 
     .insights-container .row1 .card {

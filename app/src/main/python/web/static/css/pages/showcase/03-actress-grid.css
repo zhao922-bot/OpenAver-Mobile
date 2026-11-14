@@ -85,7 +85,7 @@
 .actress-card {
     background: var(--bg-card);
     border-radius: var(--fluent-radius-xl);
-    box-shadow: var(--fluent-shadow-2);
+    box-shadow: none;
     overflow: hidden;
     cursor: pointer;
     transition: transform var(--fluent-duration-fast) var(--fluent-ease-standard),
@@ -94,7 +94,7 @@
 
 .actress-card:hover {
     transform: translateY(-4px) scale(1.02);
-    box-shadow: var(--fluent-shadow-8);
+    box-shadow: none;
 }
 
 /* C21: GSAP cascade 進場期間關掉 CSS transition + 阻擋 hover 搶 transform */

@@ -11,10 +11,7 @@
     padding-bottom: 48px; /* 防止底部 .showcase-footer 遮擋最後一行卡片 (49a-T4 三段式 footer，高度約 40-44px) */
 
     /* Background Atmosphere — 對齊 Design System (design-system.css L6-11) */
-    background:
-        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(var(--ds-glow-rgb), 0.15), transparent),
-        radial-gradient(ellipse 60% 40% at 80% 100%, oklch(55% 0.15 250 / 0.08), transparent),
-        var(--bg-body);
+    background: var(--surface-0);
 }
 
 /* ==================== Toolbar - Sticky + Acrylic ==================== */
@@ -26,8 +23,7 @@
 
     /* Acrylic 毛玻璃效果（Fluent Design 2 - Heavy Glass）*/
     background: var(--bg-header); /* color-mix 85% transparency */
-    backdrop-filter: blur(var(--fluent-blur));
-    -webkit-backdrop-filter: blur(var(--fluent-blur));
+    backdrop-filter: none;
 
     /* Border */
     border-bottom: 1px solid var(--border-light);
@@ -85,7 +81,7 @@
 
 .actress-add-btn:focus-visible {
     /* outline 沿用全域 2px；額外 subtle glow（§6 #5 / lb-delete-btn 先例） */
-    box-shadow: 0 0 0 4px var(--glow-subtle);
+    box-shadow: none;
 }
 
 /* 面板開啟中：沿用 .btn-icon.active（markup :class），不新增規則 */
@@ -123,7 +119,7 @@
     background: var(--surface-2);
     border: 1px solid var(--stroke-default);
     border-radius: var(--radius-md);
-    box-shadow: var(--shadow-md);
+    box-shadow: none;
     padding: 0.375rem;
     display: flex;
     flex-direction: column;
@@ -273,7 +269,7 @@
 .page-select:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--glow-primary);
+    box-shadow: none;
 }
 
 .page-btn {

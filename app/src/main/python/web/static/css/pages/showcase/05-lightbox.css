@@ -12,8 +12,7 @@
     /* Smoke Backdrop — 匹配 gallery_generator.py 舊版風格 */
     background: var(--overlay-modal);
     /* charter §2 仲裁：lightbox backdrop 用 floating-control 12px (非 overlay 30px)，保留 grid spatial reference UX */
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    backdrop-filter: none;
 
     /* 初始隱藏 */
     opacity: 0;
@@ -48,7 +47,7 @@
     background: var(--surface-2);
     border: 1px solid var(--stroke-default);
     border-radius: var(--radius-lg);
-    box-shadow: var(--fluent-shadow-28);
+    box-shadow: none;
 
     /* Scale Pop-in 動畫 */
     transform: scale(0.95);
@@ -86,8 +85,7 @@
     border: none;
     border-radius: 50%;
     background: var(--overlay-control);
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    backdrop-filter: none;
     color: var(--text-inverse);
     font-size: 1.25rem;
     cursor: pointer;
@@ -237,7 +235,7 @@
     line-height: 1.4;
     text-align: center;
     border: 1px solid var(--stroke-subtle);
-    box-shadow: var(--shadow-sm);
+    box-shadow: none;
 }
 
 /* Metadata Panel — 緊湊版（匹配原版 gallery） */
@@ -551,13 +549,12 @@
     border: 1px solid rgba(255,255,255,0.4);
     border-radius: 50%;
     background: rgba(255,255,255,0.15);
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    backdrop-filter: none;
     color: white;
     font-size: 1.125rem;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: var(--fluent-shadow-8);
+    box-shadow: none;
     transition: background var(--duration-fast) var(--ease-out),
                 border-color var(--duration-fast) var(--ease-out),
                 transform var(--duration-fast) var(--ease-out),
@@ -568,7 +565,7 @@
     background: rgba(255,255,255,0.3);
     border-color: rgba(255,255,255,0.6);
     transform: scale(1.08);
-    box-shadow: var(--fluent-shadow-16);
+    box-shadow: none;
 }
 
 .lb-action-btn:active {
@@ -589,13 +586,12 @@
     border: 1px solid var(--stroke-subtle);
     border-radius: 50%;
     background: var(--surface-1);
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    backdrop-filter: none;
     color: var(--text-secondary);
     font-size: 0.875rem;
     line-height: 1;
     cursor: pointer;
-    box-shadow: var(--fluent-shadow-8);
+    box-shadow: none;
     transition: background var(--duration-fast) var(--ease-out),
                 border-color var(--duration-fast) var(--ease-out),
                 color var(--duration-fast) var(--ease-out),
@@ -606,7 +602,7 @@
 .lightbox-metadata .lb-plot-btn:hover {
     color: var(--text-primary);
     border-color: var(--stroke-default);
-    box-shadow: var(--fluent-shadow-16);
+    box-shadow: none;
 }
 
 .lightbox-metadata .lb-mask-btn:active,
@@ -618,7 +614,7 @@
 .lightbox-metadata .lb-plot-btn:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px var(--glow-subtle);   /* §6 #5 focus 4px glow */
+    box-shadow: none;   /* §6 #5 focus 4px glow */
 }
 
 .lightbox-metadata .lb-plot-btn[aria-pressed="true"] {
@@ -735,7 +731,7 @@
     left: 0;
     box-sizing: border-box;
     border: 1px solid rgba(255, 255, 255, 0.55);      /* 亮框：對齊 .lb-action-btn 玻璃邊 rgba 先例 */
-    box-shadow: 0 0 0 100vmax var(--lb-mask-scrim);   /* 窗外壓暗 spotlight，隨 transform 一起滑 */
+    box-shadow: none;   /* 窗外壓暗 spotlight，隨 transform 一起滑 */
     transition: transform var(--fluent-duration-medium) var(--ease-out);
     touch-action: none;   /* 99a-T3：拖曳時防手機系統手勢（頁面捲動/swipe-to-back/左右換片）搶走 */
     cursor: ew-resize;    /* 100c-T3a：Y 軸砍除後（CD-6）唯一可拖方向恆為橫向，游標契約併回基礎規則 */
@@ -929,9 +925,8 @@
     border: 1px solid rgba(255, 255, 255, 0.4);
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
-    box-shadow: var(--fluent-shadow-8);
+    backdrop-filter: none;
+    box-shadow: none;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -947,7 +942,7 @@
     background: rgba(255, 255, 255, 0.3);
     border-color: rgba(255, 255, 255, 0.6);
     transform: scale(1.08);
-    box-shadow: var(--fluent-shadow-16);
+    box-shadow: none;
 }
 
 .lightbox-similar-btn:active {

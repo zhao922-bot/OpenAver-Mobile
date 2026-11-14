@@ -235,8 +235,8 @@ def test_native_dialogs_use_the_open_aver_theme():
     ).read_text(encoding="utf-8")
 
     assert "Theme.OpenAverMobile.Dialog" in themes
-    assert activity.count("R.style.Theme_OpenAverMobile_Dialog") == 3
-    assert player.count("R.style.Theme_OpenAverMobile_Dialog") == 3
+    assert activity.count("NativeUiTheme.dialogStyle(MainActivity.this)") == 3
+    assert player.count("NativeUiTheme.dialogStyle(activity)") == 3
     assert "android.R.style.Theme_Material_Dialog_Alert" not in activity
     assert "android.R.style.Theme_Material_Dialog_Alert" not in player
 

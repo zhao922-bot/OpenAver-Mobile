@@ -3,7 +3,7 @@
       data-theme="{{ theme|default('light') }}"
       style="font-size: {{ font_size_px|default(16) }}px"
       x-data="{ theme: '{{ theme|default('light') }}', fontSize: '{{ font_size|default('md') }}' }"
-      x-init="$watch('theme', configSync('theme')); $watch('theme', v => { document.querySelector('meta[name=&quot;theme-color&quot;]').content = (v === 'dim' ? '#2a303c' : '#ffffff'); }); $watch('fontSize', configSync('font_size'))"
+      x-init="$watch('theme', configSync('theme')); $watch('theme', v => { document.querySelector('meta[name=&quot;theme-color&quot;]').content = (v === 'dim' ? '#212429' : '#ffffff'); }); $watch('fontSize', configSync('font_size'))"
       :data-theme="theme"
       :style="'font-size:' + {xs:'13px',sm:'14px',md:'16px',lg:'18px',xl:'20px'}[fontSize]">
 
@@ -119,7 +119,7 @@
 
     <!-- iOS add-to-home-screen icon + 動態狀態列色（隨 theme dim/light 切換，見 x-init $watch） -->
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-    <meta name="theme-color" content="{{ '#2a303c' if theme == 'dim' else '#ffffff' }}">
+    <meta name="theme-color" content="{{ '#212429' if theme == 'dim' else '#ffffff' }}">
 
     <!-- Shared source theme. -->
     <link href="/static/css/theme.css" rel="stylesheet">
@@ -838,6 +838,16 @@
     <main id="main-content" class="main-content">
         {% block content %}{% endblock %}
     </main>
+
+    <nav class="native-bottom-nav" aria-label="{{ t('nav.showcase') }} / {{ t('nav.scanner') }} / {{ t('nav.settings') }}">
+        {% for route, icon in [('showcase', 'bi-grid'), ('scanner', 'bi-collection-play'), ('settings', 'bi-sliders')] %}
+        <a href="/{{ route }}" {% if page == route %}aria-current="page"{% endif %}
+           @click="handleNavClick($event, $el.href)">
+            <i class="bi {{ icon }}" aria-hidden="true"></i><span>{{ t('nav.' + route) }}</span>
+        </a>
+        {% endfor %}
+    </nav>
+
 
     <!-- ESM Import Maps (54a) — must appear before all type="module" scripts -->
     <script type="importmap">

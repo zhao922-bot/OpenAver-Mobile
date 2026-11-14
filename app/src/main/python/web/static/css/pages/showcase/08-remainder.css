@@ -1,14 +1,11 @@
 /* ==================== Light / Dim 主題適配 ==================== */
 /* 使用 theme.css 定義的 CSS 變數，無需額外覆寫 */
-/* --bg-header 已在 theme.css 定義：color-mix(in oklch, var(--color-base-200) 85%, transparent) */
+/* --bg-header 已在 theme.css 定義：var(--surface-1) */
 /* 主題切換時自動過渡（transition 在 theme.css body 定義）*/
 
 /* Dim 模式：降低背景光暈透明度（對齊 design-system.css L18-23） */
 [data-theme="dim"] .showcase-container {
-    background:
-        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(var(--ds-glow-rgb), 0.08), transparent),
-        radial-gradient(ellipse 60% 40% at 80% 100%, oklch(55% 0.2 280 / 0.06), transparent),
-        var(--bg-body);
+    background: var(--surface-0);
 }
 
 /* ==================== Showcase Footer 三段式 (49a-T4) ==================== */
@@ -16,7 +13,7 @@
 
 .showcase-footer {
     position: fixed;
-    bottom: 0;
+    bottom: calc(var(--native-bottom-height, 0px) + env(safe-area-inset-bottom));
     /* 對齊 .main-content 的 margin-left 模式，避免被 sidebar (z-index 1000) 覆蓋左側 */
     left: var(--sidebar-width, 200px);
     right: 0;
@@ -26,8 +23,7 @@
 
     /* 背景 - 使用 Design System token */
     background: var(--bg-header);
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    backdrop-filter: none;
     border-top: 1px solid var(--stroke-subtle);
 
     /* 間距 */
@@ -131,7 +127,7 @@ body.sidebar-collapsed .showcase-footer {
     background: var(--surface-1);
     border: 1px solid var(--stroke-default);
     border-radius: var(--radius-sm);
-    box-shadow: var(--fluent-shadow-2);
+    box-shadow: none;
 
     font-family: var(--font-mono);
     font-size: 0.75rem;
@@ -295,8 +291,7 @@ body.sidebar-collapsed .showcase-footer {
     align-items: center;
     justify-content: center;
     background: var(--overlay-gallery);
-    backdrop-filter: blur(var(--fluent-blur));
-    -webkit-backdrop-filter: blur(var(--fluent-blur));
+    backdrop-filter: none;
 
     /* 初始隱藏 */
     opacity: 0;
@@ -639,7 +634,7 @@ body.sidebar-collapsed .showcase-footer {
 .lb-tag-ai-btn:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px var(--glow-subtle);
+    box-shadow: none;
 }
 
 /* 輸入框包裝 */
@@ -785,10 +780,9 @@ body.sidebar-collapsed .showcase-footer {
 
 .mode-toggle-btn.active {
     background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    backdrop-filter: none;
     color: var(--text-primary);
-    box-shadow: var(--fluent-shadow-2);
+    box-shadow: none;
 }
 
 .mode-toggle-btn:not(.active):hover {
@@ -852,12 +846,10 @@ body.sidebar-collapsed .showcase-footer {
     border-radius: var(--radius-pill);
     background: var(--bg-card);
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Heavy acrylic 20px spotlight frame (mirrors theme.css .spotlight-search input), TASK-115-T6 */
-    backdrop-filter: blur(20px);
+    backdrop-filter: none;
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Safari prefix mirror, TASK-115-T6 */
-    -webkit-backdrop-filter: blur(20px);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 10%, transparent),
-        var(--shadow-sm);
+    backdrop-filter: none;
+    box-shadow: none;
     transition:
         border-color var(--duration-normal) var(--ease-out),
         box-shadow var(--duration-normal) var(--ease-out),
@@ -867,11 +859,7 @@ body.sidebar-collapsed .showcase-footer {
 /* Focus ring wraps the whole group (pills + input), not just the text field. */
 .filter-pill-group:focus-within {
     border-color: var(--accent);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 15%, transparent),
-        0 0 0 4px color-mix(in oklch, var(--color-primary) 15%, transparent),
-        0 0 20px var(--glow-primary),
-        var(--shadow-md);
+    box-shadow: none;
     transform: scale(1.02);
 }
 
@@ -955,7 +943,6 @@ body.sidebar-collapsed .showcase-footer {
     border-radius: 0;
     background: transparent;
     backdrop-filter: none;
-    -webkit-backdrop-filter: none;
     box-shadow: none;
     transform: none;
 }
@@ -983,7 +970,7 @@ body.sidebar-collapsed .showcase-footer {
     background: var(--surface-2);
     border: 1px solid var(--stroke-default);
     border-radius: var(--radius-md);
-    box-shadow: var(--shadow-md);
+    box-shadow: none;
     padding: 0.75rem;
     z-index: 200;
 }
@@ -1394,7 +1381,7 @@ body.sidebar-collapsed .showcase-footer {
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: var(--fluent-radius-md);
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (default state), 2026-05-03 */
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--fluent-shadow-2);
+    box-shadow: none;
     cursor: pointer;
     color: var(--text-inverse);
     transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
@@ -1404,7 +1391,7 @@ body.sidebar-collapsed .showcase-footer {
     background: rgba(255, 255, 255, 0.15);
     border-color: rgba(255, 255, 255, 0.3);
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (hover state), 2026-05-03 */
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), var(--fluent-shadow-4);
+    box-shadow: none;
     transform: translateY(-1px);
 }
 
@@ -1412,7 +1399,7 @@ body.sidebar-collapsed .showcase-footer {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight + Fluent shadow + glow ring (focus-visible), 2026-05-03 */
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--fluent-shadow-2), 0 0 0 4px var(--glow-primary);
+    box-shadow: none;
 }
 
 .picker-refresh-btn:active:not(:disabled) {
@@ -1449,7 +1436,7 @@ body.sidebar-collapsed .showcase-footer {
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: var(--fluent-radius-md);
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (default state), 100b-T2b */
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--fluent-shadow-2);
+    box-shadow: none;
     cursor: pointer;
     color: var(--text-inverse);
     transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
@@ -1459,7 +1446,7 @@ body.sidebar-collapsed .showcase-footer {
     background: rgba(255, 255, 255, 0.15);
     border-color: rgba(255, 255, 255, 0.3);
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (hover state), 100b-T2b */
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), var(--fluent-shadow-4);
+    box-shadow: none;
     transform: translateY(-1px);
 }
 
@@ -1467,7 +1454,7 @@ body.sidebar-collapsed .showcase-footer {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight + Fluent shadow + glow ring (focus-visible), 100b-T2b */
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--fluent-shadow-2), 0 0 0 4px var(--glow-primary);
+    box-shadow: none;
 }
 
 .picker-upload-btn:active:not(:disabled) {
@@ -1540,7 +1527,6 @@ body.sidebar-collapsed .showcase-footer {
         position: static;
         background: transparent;
         backdrop-filter: none;
-        -webkit-backdrop-filter: none;
         color: inherit;
         padding: 0;
         margin-bottom: 8px;
@@ -1588,9 +1574,7 @@ body.sidebar-collapsed .showcase-footer {
     border-width: 1px;
     border-style: solid;
     /* Shadow: 底階 + dual-layer 內框 */
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-2);
+    box-shadow: none;
     transition:
         background var(--fluent-duration-fast) var(--fluent-ease-standard),
         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
@@ -1600,9 +1584,7 @@ body.sidebar-collapsed .showcase-footer {
 
 .showcase-container .btn:hover:not(:disabled) {
     /* hover 不覆寫 border-color，DaisyUI variant 自管 (.btn-outline.btn-primary primary 強調保留) */
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
-        var(--fluent-shadow-4);
+    box-shadow: none;
     transform: translateY(-1px);
 }
 
@@ -1610,17 +1592,12 @@ body.sidebar-collapsed .showcase-footer {
     /* Focus: 2px outline + 4px glow（charter §6 Checkpoint 5 精確規格） */
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-2),
-        0 0 0 4px var(--glow-primary);
+    box-shadow: none;
 }
 
 .showcase-container .btn:active:not(:disabled) {
     transform: translateY(0);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
-        var(--fluent-shadow-2);
+    box-shadow: none;
 }
 
 .showcase-container .input {
@@ -1631,9 +1608,7 @@ body.sidebar-collapsed .showcase-footer {
     border-width: 1px;
     border-style: solid;
     /* Shadow: 輸入框底階（charter §6 Checkpoint 4） */
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
-        var(--fluent-shadow-2);
+    box-shadow: none;
     transition:
         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
         box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
@@ -1645,10 +1620,7 @@ body.sidebar-collapsed .showcase-footer {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     border-color: var(--accent);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-2),
-        0 0 0 4px var(--glow-primary);
+    box-shadow: none;
 }
 
 /* ─── 57c-T4: Similar Stage — fullscreen takeover (z-index:1501) ─────────── */
@@ -1720,8 +1692,7 @@ body.sidebar-collapsed .showcase-footer {
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 50%;
     background: var(--overlay-control);
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    backdrop-filter: none;
     color: rgba(255, 255, 255, 0.8);
     display: flex;
     align-items: center;
@@ -1869,7 +1840,7 @@ body.sidebar-collapsed .showcase-footer {
     transform: translate(-50%, -50%);
     background: var(--color-base-100);
     border-radius: var(--fluent-radius-xl);
-    box-shadow: var(--fluent-shadow-4);
+    box-shadow: none;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -1896,7 +1867,7 @@ body.sidebar-collapsed .showcase-footer {
 }
 
 .similar-slot:hover {
-    box-shadow: var(--fluent-shadow-8);
+    box-shadow: none;
 }
 
 .similar-slot-img {
@@ -1967,7 +1938,7 @@ body.sidebar-collapsed .showcase-footer {
     object-position: right center;  /* 沿用 cropMode: 'right-half' 視覺一致 */
     transform-origin: center center;
     border-radius: var(--fluent-radius-lg);
-    box-shadow: var(--fluent-shadow-16);
+    box-shadow: none;
     z-index: 11;  /* > .similar-slot z=10；play button z=12 > 11 → button 在上 */
     cursor: pointer;
 }
@@ -1994,15 +1965,14 @@ body.sidebar-collapsed .showcase-footer {
     border: 1px solid rgba(255, 255, 255, 0.4);
     border-radius: 50%;
     background: var(--overlay-control);
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    backdrop-filter: none;
     color: white;
     font-size: 1.25rem;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: var(--fluent-shadow-8);
+    box-shadow: none;
     z-index: 12;  /* > .similar-main-static z=11 (inner stacking)；ghost 飛行期間蓋過 acceptable */
     transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
                 border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
@@ -2012,7 +1982,7 @@ body.sidebar-collapsed .showcase-footer {
 .similar-play-button:hover {
     background: rgba(0, 0, 0, 0.5);
     border-color: rgba(255, 255, 255, 0.6);
-    box-shadow: var(--fluent-shadow-16);
+    box-shadow: none;
     transform: translate(-50%, -50%) scale(calc(1.1 / var(--similar-stage-scale, 1)));
 }
 

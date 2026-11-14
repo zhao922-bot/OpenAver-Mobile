@@ -878,7 +878,7 @@ public final class MainActivity extends Activity {
                         }
                         new AlertDialog.Builder(
                                 MainActivity.this,
-                                R.style.Theme_OpenAverMobile_Dialog
+                                NativeUiTheme.dialogStyle(MainActivity.this)
                         )
                                 .setTitle(R.string.confirm_title)
                                 .setMessage(message)
@@ -1081,7 +1081,7 @@ public final class MainActivity extends Activity {
         );
         message += "\n\n" + getString(R.string.native_abi, nativeAbiSafe());
 
-        new AlertDialog.Builder(this, R.style.Theme_OpenAverMobile_Dialog)
+        new AlertDialog.Builder(this, NativeUiTheme.dialogStyle(MainActivity.this))
                 .setTitle(R.string.about_title)
                 .setMessage(message)
                 .setPositiveButton(R.string.ok, null)
@@ -1118,6 +1118,10 @@ public final class MainActivity extends Activity {
                     uri.getQueryParameter("parts"),
                     this::openBuiltInPlayer
             );
+            return true;
+        }
+        if ("openaver-theme".equals(scheme)) {
+            NativeUiTheme.apply(this, uri.getHost());
             return true;
         }
         if ("openaver-task".equals(scheme)) {
@@ -1516,6 +1520,13 @@ public final class MainActivity extends Activity {
             mainHandler.removeCallbacks(pageLoadTimeout);
             pageProgress.setVisibility(View.GONE);
             syncUiLocaleFromWebView();
+            view.evaluateJavascript(
+                    "(function(){function sync(){location.href='openaver-theme://'"
+                            + "+document.documentElement.dataset.theme;}"
+                            + "sync();if(!window.__nativeThemeObserver){"
+                            + "window.__nativeThemeObserver=new MutationObserver(sync);"
+                            + "window.__nativeThemeObserver.observe(document.documentElement,"
+                            + "{attributes:true,attributeFilter:['data-theme']});}})()", null);
         }
 
         @Override
@@ -1550,7 +1561,7 @@ public final class MainActivity extends Activity {
                                    final JsResult result) {
             new AlertDialog.Builder(
                     MainActivity.this,
-                    R.style.Theme_OpenAverMobile_Dialog
+                    NativeUiTheme.dialogStyle(MainActivity.this)
             )
                     .setTitle(R.string.confirm_title)
                     .setMessage(message)

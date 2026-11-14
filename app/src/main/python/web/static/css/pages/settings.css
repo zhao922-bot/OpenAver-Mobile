@@ -20,15 +20,13 @@
 #settings-components .card {
     border: 1px solid var(--stroke-default);
     border-radius: var(--radius-lg);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-4);
+    box-shadow: none;
     overflow: visible;
-    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
+    background: var(--surface-1);
 }
 
 [data-theme="dim"] #settings-components .card {
-    background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
+    background: var(--surface-1);
 }
 
 #settings-components .settings-card-header {
@@ -282,8 +280,7 @@
     gap: 1rem;
     /* T8.2: Acrylic 材質 */
     background: var(--bg-header);
-    backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
+    backdrop-filter: none;
     border-bottom: 1px solid var(--stroke-subtle);
     padding-bottom: 1rem;
     margin-bottom: 0.5rem;
@@ -355,10 +352,10 @@
 .settings-locale-toggle .locale-toggle-btn {
     padding: 0.5rem 0.75rem;
     min-width: 44px;
-    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
+    background: var(--surface-1);
     border: 1px solid var(--border-light);
     border-radius: var(--fluent-radius-lg);
-    box-shadow: var(--fluent-shadow-4);
+    box-shadow: none;
     color: var(--text-primary);
     font-weight: 600;
     font-size: 0.85rem;
@@ -373,7 +370,7 @@
 .settings-locale-toggle .locale-toggle-btn:hover {
     background: var(--color-base-200);
     border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent), var(--fluent-shadow-8);
+    box-shadow: none;
     transform: translateY(-2px);
 }
 
@@ -386,7 +383,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
+    background: var(--surface-1);
     border: 1px solid var(--border-light);
     border-radius: var(--fluent-radius-lg);
     cursor: pointer;
@@ -394,26 +391,23 @@
                 border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
                 box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard),
                 transform var(--fluent-duration-fast) var(--fluent-ease-standard);
-    box-shadow: var(--fluent-shadow-4);
+    box-shadow: none;
 }
 
 [data-theme="dim"] .settings-theme-toggle .theme-toggle-btn {
-    background: color-mix(in oklch, var(--color-base-200) 50%, transparent);
+    background: var(--surface-1);
 }
 
 .settings-theme-toggle .theme-toggle-btn:hover {
     background: var(--color-base-200);
     border-color: var(--accent);
-    box-shadow:
-        0 0 0 1px var(--accent),
-        0 0 20px rgba(var(--ds-glow-rgb), 0.2),
-        var(--fluent-shadow-8);
+    box-shadow: none;
     transform: translateY(-2px);
 }
 
 .settings-theme-toggle .theme-toggle-btn:active {
     transform: translateY(0);
-    box-shadow: var(--fluent-shadow-2);
+    box-shadow: none;
 }
 
 .settings-theme-toggle .theme-toggle-btn i {
@@ -462,8 +456,7 @@
         margin-bottom: 8px;
         background: var(--bg-header);
         border-bottom: 1px solid var(--stroke-subtle);
-        backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
-        -webkit-backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
+        backdrop-filter: none;
     }
 
     #settings-components .settings-header-left {
@@ -651,7 +644,7 @@
     height: 16px;
     background: var(--surface-0);
     border-radius: var(--radius-pill);
-    box-shadow: var(--fluent-shadow-2);
+    box-shadow: none;
     transition: transform var(--fluent-duration-fast) var(--fluent-ease-decel);
 }
 
@@ -874,10 +867,9 @@
 
 #settings-components .settings-sources-segmented button.is-on {
     background: color-mix(in oklch, var(--surface-2) 80%, transparent);
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    backdrop-filter: none;
     color: var(--text-primary);
-    box-shadow: var(--fluent-shadow-2);
+    box-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -929,7 +921,7 @@
 #settings-components .settings-mt-field input:focus-visible {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 22%, transparent);
+    box-shadow: none;
 }
 
 #settings-components .settings-mt-connect-btn {
@@ -950,7 +942,7 @@
 }
 
 #settings-components .settings-mt-connect-btn:hover {
-    box-shadow: var(--fluent-shadow-4);
+    box-shadow: none;
     transform: translateY(-1px);
 }
 
@@ -1138,14 +1130,14 @@
     align-items: center;
     gap: 2px;
     padding: 2px;
-    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
+    background: var(--surface-1);
     border: 1px solid var(--border-light);
     border-radius: var(--fluent-radius-lg);
     flex-shrink: 0;
 }
 
 [data-theme="dim"] .font-size-control {
-    background: color-mix(in oklch, var(--color-base-200) 50%, transparent);
+    background: var(--surface-1);
 }
 
 .font-size-btn {
@@ -1172,7 +1164,7 @@
 .font-size-btn.active {
     background: var(--accent);
     color: var(--color-primary-content);
-    box-shadow: var(--fluent-shadow-4);
+    box-shadow: none;
 }
 
 @media (max-width: 768px) {
@@ -1230,9 +1222,7 @@
     border-width: 1px;
     border-style: solid;
     /* §6 Checkpoint 4 Shadow — dual-layer: 頂部內高光 + 外縱深 */
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
-        var(--fluent-shadow-2);
+    box-shadow: none;
     /* §5 transition fluent 化 */
     transition:
         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
@@ -1250,9 +1240,7 @@
     border-width: 1px;
     border-style: solid;
     /* §6 Checkpoint 4 Shadow — dual-layer: 頂部內高光 + 外縱深 */
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
-        var(--fluent-shadow-2);
+    box-shadow: none;
     /* §5 transition fluent 化 */
     transition:
         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
@@ -1301,7 +1289,7 @@ html.theme-transition-active::view-transition-new(root) {
    亮面提對比（surface+white，無語義色不受插值影響）+ 1.5px inset accent 環作明確選中指示 */
 [data-theme="dim"] #settings-components .settings-sources-segmented button.is-on {
     background: color-mix(in oklch, var(--surface-2), white 16%);
-    box-shadow: var(--fluent-shadow-2), inset 0 0 0 1.5px var(--accent);
+    box-shadow: none;
 }
 
 /* P16: suffix-tag（base 用 srgb 20% 無對比，dim 最糟）— 改 oklch 提 tint 28% + accent 邊 55% */
@@ -1343,7 +1331,7 @@ html.theme-transition-active::view-transition-new(root) {
 
 /* P19: mt-field focus 環 — box-shadow 提至 40%（暗底上 22% 不可見；solid border 已救） */
 [data-theme="dim"] #settings-components .settings-mt-field input:focus-visible {
-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 40%, transparent);
+    box-shadow: none;
 }
 
 /* ─── Server Mode (80a-T3) ─── */
@@ -1377,7 +1365,7 @@ html.theme-transition-active::view-transition-new(root) {
    否則 dim server active 仍顯藍環，與「曝露/live」語意衝突（對齊 L1048/L1050 機制）。 */
 [data-theme="dim"] #settings-components .settings-server-mode .settings-sources-segmented button.is-on[data-mode="server"] {
     background: color-mix(in oklch, var(--color-warning) 22%, transparent);
-    box-shadow: var(--fluent-shadow-2), inset 0 0 0 1.5px var(--color-warning);
+    box-shadow: none;
 }
 
 /* ─── 存取密碼保護（114a-T5 markup / T7fix 補樣式）───────────────────────────
@@ -1485,7 +1473,7 @@ html.theme-transition-active::view-transition-new(root) {
 #settings-components .settings-access-auth-pin-input:focus-visible {
     --pin-cell-bg: color-mix(in oklch, var(--accent) 14%, var(--surface-2));
     --pin-cell-line: var(--accent);
-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 22%, transparent);
+    box-shadow: none;
 }
 
 #settings-components .settings-access-auth-pin-input:disabled {
@@ -1643,7 +1631,7 @@ html.theme-transition-active::view-transition-new(root) {
     min-height: 42px;
     padding: 0.4rem 0.6rem;
     line-height: 2.2;
-    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
+    background: var(--surface-1);
     border: 1px solid var(--stroke-default);
     border-radius: var(--radius-lg);
     color: var(--text-primary);
@@ -1658,7 +1646,7 @@ html.theme-transition-active::view-transition-new(root) {
 
 #settings-components .chip-editor:focus-within {
     border-color: var(--accent);
-    box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 55%, transparent);
+    box-shadow: none;
 }
 
 #settings-components .chip-editor:empty::before {
@@ -1671,7 +1659,7 @@ html.theme-transition-active::view-transition-new(root) {
 #settings-components .chip-editor[aria-disabled="true"] {
     opacity: 0.5;
     pointer-events: none;
-    background: color-mix(in oklch, var(--color-base-200) 40%, transparent);
+    background: var(--surface-1);
 }
 
 /* Inline adapt of .source-pill for in-flow contentEditable use. */
@@ -1688,7 +1676,7 @@ html.theme-transition-active::view-transition-new(root) {
 /* Keep a subtle lift on hover but drop the translateY (caret math stays stable in text flow). */
 #settings-components .source-pill--chip:hover {
     transform: none;
-    box-shadow: var(--fluent-shadow-2);
+    box-shadow: none;
 }
 
 #settings-components .source-pill--chip .chip-x {
@@ -1843,7 +1831,7 @@ html.theme-transition-active::view-transition-new(root) {
 /* r18: persistent save state and desktop bottom action bar */
 #settings-components .save-btn-wrapper {
     position: sticky;
-    bottom: 0.75rem;
+    bottom: calc(var(--native-bottom-height, 0px) + 8px + env(safe-area-inset-bottom));
     z-index: 20;
     align-items: center;
     justify-content: space-between;
@@ -1853,8 +1841,8 @@ html.theme-transition-active::view-transition-new(root) {
     border: 1px solid var(--stroke-default);
     border-radius: var(--fluent-radius-md);
     background: color-mix(in oklch, var(--surface-1) 88%, transparent);
-    box-shadow: var(--fluent-shadow-8);
-    backdrop-filter: blur(16px);
+    box-shadow: none;
+    backdrop-filter: none;
 }
 
 #settings-components .settings-mobile-save {
@@ -1891,8 +1879,8 @@ html.theme-transition-active::view-transition-new(root) {
     border: 1px solid var(--stroke-default);
     border-radius: calc(var(--fluent-radius-md) + 0.2rem);
     background: color-mix(in oklch, var(--surface-1) 88%, transparent);
-    box-shadow: var(--fluent-shadow-4);
-    backdrop-filter: blur(14px);
+    box-shadow: none;
+    backdrop-filter: none;
 }
 
 #settings-components .settings-tab {
@@ -1935,7 +1923,7 @@ html.theme-transition-active::view-transition-new(root) {
         linear-gradient(145deg,
             color-mix(in oklch, var(--accent) 92%, #fff 8%),
             color-mix(in oklch, var(--accent) 82%, #000 18%));
-    box-shadow: 0 0.45rem 1rem color-mix(in oklch, var(--accent) 25%, transparent);
+    box-shadow: none;
 }
 
 #settings-components .settings-tab:focus-visible {
@@ -2019,8 +2007,9 @@ html.theme-transition-active::view-transition-new(root) {
     }
 
     #settings-components .settings-tabs {
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-        overflow: visible;
+        display: flex;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
         position: relative;
         z-index: auto;
         gap: 0.2rem;
@@ -2028,7 +2017,8 @@ html.theme-transition-active::view-transition-new(root) {
     }
 
     #settings-components .settings-tab {
-        flex-direction: column;
+        flex: 0 0 auto;
+        flex-direction: row;
         gap: 0.2rem;
         min-height: 3.5rem;
         padding: 0.4rem 0.2rem;
@@ -2040,7 +2030,7 @@ html.theme-transition-active::view-transition-new(root) {
     #settings-components .settings-tab span {
         display: block;
         max-width: 100%;
-        overflow-wrap: anywhere;
+        white-space: nowrap;
     }
 
     #settings-components .card-body {

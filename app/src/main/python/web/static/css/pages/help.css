@@ -1,15 +1,13 @@
 /* ========== Help 頁面 — Surface Elevation (T8.3) ========== */
 
 .help-card {
-    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
+    background: var(--surface-1);
     border: 1px solid var(--stroke-default);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-4);
+    box-shadow: none;
 }
 
 [data-theme="dim"] .help-card {
-    background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
+    background: var(--surface-1);
 }
 
 /* 146b-T9（CD-146b-7 ownership）：.help-container 現為 .page-layer，padding-inline 恆 0；
@@ -40,9 +38,7 @@
     color: var(--text-primary);
     border: 1px solid var(--stroke-default);
     border-radius: var(--fluent-radius-lg, 8px);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
-        var(--fluent-shadow-4);
+    box-shadow: none;
     font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
     font-size: 0.9rem;
     padding: 0.75rem 1rem;

@@ -7,9 +7,7 @@
     --mobile-help-border: color-mix(in oklch, var(--stroke-default) 82%, var(--mobile-help-teal) 18%);
     min-height: 100%;
     padding: 0 0 2rem;
-    background:
-        radial-gradient(circle at 8% 4%, color-mix(in oklch, var(--mobile-help-teal) 12%, transparent) 0, transparent 28rem),
-        radial-gradient(circle at 92% 14%, color-mix(in oklch, var(--mobile-help-amber) 9%, transparent) 0, transparent 22rem);
+    background: var(--surface-0);
 }
 
 [data-theme="dim"] .mobile-help {
@@ -32,11 +30,10 @@
     display: grid;
     gap: 1rem;
     padding: 1.35rem;
-    color: #f4fffc;
+    color: var(--text-primary);
     border-radius: 1.35rem;
-    background:
-        linear-gradient(135deg, #0b3b3a 0%, #102a2a 54%, #172f3a 100%);
-    box-shadow: 0 1rem 2.5rem color-mix(in oklch, #102a2a 24%, transparent);
+    background: var(--surface-1);
+    box-shadow: none;
 }
 
 .mobile-help-hero::after {
@@ -47,9 +44,7 @@
     height: 15rem;
     border: 1px solid rgb(255 255 255 / 14%);
     border-radius: 50%;
-    box-shadow:
-        0 0 0 2.2rem rgb(255 255 255 / 5%),
-        0 0 0 4.8rem rgb(255 255 255 / 3%);
+    box-shadow: none;
     pointer-events: none;
 }
 
@@ -75,10 +70,10 @@
 
 .mobile-help-hero h1 {
     margin: 0.8rem 0 0.45rem;
-    color: #fff;
-    font-size: clamp(1.7rem, 7vw, 2.6rem);
+    color: var(--text-primary);
+    font-size: 1.5rem;
     line-height: 1.08;
-    letter-spacing: -0.04em;
+    letter-spacing: 0;
 }
 
 .mobile-help-hero h1 span {
@@ -88,7 +83,7 @@
 .mobile-help-hero p {
     max-width: 36rem;
     margin: 0;
-    color: rgb(239 255 251 / 76%);
+    color: var(--text-secondary);
     font-size: 0.92rem;
     line-height: 1.65;
 }
@@ -98,7 +93,7 @@
     flex-wrap: wrap;
     gap: 0.55rem 1rem;
     margin-top: 0.9rem;
-    color: rgb(239 255 251 / 64%);
+    color: var(--text-secondary);
     font-size: 0.75rem;
 }
 
@@ -124,7 +119,7 @@
     padding: 0.65rem 0.85rem;
     border: 1px solid rgb(255 255 255 / 22%);
     border-radius: 0.85rem;
-    color: #f4fffc;
+    color: var(--text-primary);
     background: rgb(255 255 255 / 8%);
     font-size: 0.86rem;
     font-weight: 700;
@@ -132,9 +127,9 @@
 }
 
 .mobile-help-button--primary {
-    color: #092c29;
-    border-color: #8ce5d4;
-    background: #8ce5d4;
+    color: var(--action-text);
+    border-color: var(--action-fill);
+    background: var(--action-fill);
 }
 
 .mobile-help-hero__signal {
@@ -154,7 +149,7 @@
     border-radius: 1.4rem;
     color: #baf4e8;
     background: rgb(255 255 255 / 8%);
-    box-shadow: 0 1rem 3rem rgb(0 0 0 / 18%);
+    box-shadow: none;
     font-size: 2.1rem;
 }
 
@@ -164,7 +159,7 @@
     height: 0.55rem;
     border-radius: 50%;
     background: #f5b85b;
-    box-shadow: 0 0 0 0.35rem rgb(245 184 91 / 14%);
+    box-shadow: none;
 }
 
 .mobile-help-hero__signal span:nth-child(1) { top: 18%; left: 20%; }
@@ -208,7 +203,7 @@
     border: 1px solid var(--mobile-help-border);
     border-radius: 1rem;
     background: var(--mobile-help-paper);
-    box-shadow: 0 0.55rem 1.5rem color-mix(in oklch, var(--mobile-help-teal) 9%, transparent);
+    box-shadow: none;
 }
 
 .mobile-help-tab {
@@ -242,7 +237,7 @@
         linear-gradient(145deg,
             color-mix(in oklch, var(--mobile-help-teal) 94%, #fff 6%),
             color-mix(in oklch, var(--mobile-help-teal) 76%, #000 24%));
-    box-shadow: 0 0.45rem 1rem color-mix(in oklch, var(--mobile-help-teal) 24%, transparent);
+    box-shadow: none;
 }
 
 .mobile-help-tab.is-active i {
@@ -325,7 +320,7 @@
     height: 2.4rem;
     place-items: center;
     border-radius: 50%;
-    color: #092c29;
+    color: var(--action-text);
     background: #9ce9db;
     font-size: 0.72rem;
     font-weight: 800;

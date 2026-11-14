@@ -14,8 +14,7 @@
     padding: 0.75rem var(--layer-inset);   /* 129-T4 / CD-129-4：與 .showcase-toolbar 對齊（showcase.css:36）*/
     background: var(--bg-header);
     border-bottom: 1px solid var(--border-light);
-    backdrop-filter: blur(var(--fluent-blur)) saturate(var(--fluent-saturate));
-    -webkit-backdrop-filter: blur(var(--fluent-blur)) saturate(var(--fluent-saturate));
+    backdrop-filter: none;
     z-index: 100;
 }
 
@@ -258,7 +257,7 @@
     transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
     z-index: 10;
     border-radius: var(--fluent-radius-md);
-    box-shadow: var(--fluent-shadow-4);
+    box-shadow: none;
 }
 
 .av-card-full-cover-wrapper .nav-btn:hover {
@@ -297,7 +296,7 @@
 
 /* 檔案列表區（卡片下方獨立區塊） */
 .file-list-section {
-    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
+    background: var(--surface-1);
     border: 1px solid var(--stroke-default);
     border-radius: var(--fluent-radius-lg);
     padding: 0.5rem 1rem;
@@ -305,9 +304,7 @@
     flex-shrink: 0;
     overflow-y: auto;
     max-height: 200px;
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-4);
+    box-shadow: none;
 }
 
 /* 92a-T5: 批次整理鈕常駐 — header sticky-top，長清單於 200px 捲動區內捲動時保持可見。
@@ -405,19 +402,15 @@
 
 /* T8.3: state-page Canvas 上的 surface 層 */
 .search-container .state-page {
-    background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
+    background: var(--surface-1);
     border: 1px solid var(--stroke-subtle);
     border-radius: var(--radius-md);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
-        var(--fluent-shadow-2);
+    box-shadow: none;
 }
 
 /* T8.3: av-card-full 補 inner highlight */
 .search-container .av-card-full {
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-8);
+    box-shadow: none;
 }
 
 /* .hidden 保護：search 頁內所有後代元素。
@@ -560,7 +553,7 @@
     padding: 1.5rem 2rem;
     min-width: 320px;
     max-width: 420px;
-    box-shadow: var(--shadow-md);
+    box-shadow: none;
     font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
     transition: background-color var(--fluent-duration-slow) var(--fluent-ease-standard);
 }
@@ -654,8 +647,7 @@
     right: 0;
     bottom: 0;
     background: color-mix(in oklch, var(--color-base-100) 60%, transparent);
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    backdrop-filter: none;
     z-index: 9999;
     display: flex;
     align-items: center;
@@ -1278,7 +1270,7 @@
 
 .search-toast-container .alert {
     pointer-events: auto;  /* alert 本身可點擊（未來可能加關閉按鈕） */
-    box-shadow: var(--fluent-shadow-16);  /* 大陰影，提升視覺層級 */
+    box-shadow: none;  /* 大陰影，提升視覺層級 */
 }
 
 /* Mobile 適配：toast 左右邊距 */
@@ -1389,9 +1381,7 @@
     border-width: 1px;
     border-style: solid;
     /* 不固定 border-color — 保留 DaisyUI variant (.btn-outline.btn-primary 等) */
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-2);
+    box-shadow: none;
     transition:
         background var(--fluent-duration-fast) var(--fluent-ease-standard),
         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
@@ -1400,26 +1390,19 @@
 }
 
 .search-container .btn:hover:not(:disabled) {
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
-        var(--fluent-shadow-4);
+    box-shadow: none;
     transform: translateY(-1px);
 }
 
 .search-container .btn:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-2),
-        0 0 0 4px var(--glow-primary);
+    box-shadow: none;
 }
 
 .search-container .btn:active:not(:disabled) {
     transform: translateY(0);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
-        var(--fluent-shadow-2);
+    box-shadow: none;
 }
 
 /* 個案豁免：dashed transparent btn / link btn / tag inline icon-only btn 自有設計語言，不套 dual-layer shadow（視覺衝突）*/
@@ -1461,7 +1444,7 @@
 .search-container .btn.tag-cancel:focus-visible,
 .search-container .btn-link:focus-visible {
     /* 保留 focus glow（a11y 必需）但移除 dual-layer shadow */
-    box-shadow: 0 0 0 4px var(--glow-primary);
+    box-shadow: none;
 }
 
 .search-container .textarea {
@@ -1469,9 +1452,7 @@
     background: var(--surface-1);
     border-width: 1px;
     border-style: solid;
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
-        var(--fluent-shadow-2);
+    box-shadow: none;
     transition:
         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
         box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
@@ -1482,10 +1463,7 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     border-color: var(--accent);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-2),
-        0 0 0 4px var(--glow-primary);
+    box-shadow: none;
 }
 
 /* TASK-141b-T9（CD-17）＋ owner 2026-09-03 視覺改判（T11 六筆真資料驗收的產出）：
@@ -1579,6 +1557,9 @@
 /* Mobile-first image lookup entry. Kept outside the crowded spotlight action
    rail so it does not steal width from search, clear, source and view buttons. */
 .image-search-entry {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     display: flex;
     justify-content: center;
     margin: -0.25rem auto 0.75rem;
@@ -1597,7 +1578,7 @@
     color: var(--text-secondary);
     font-size: 0.78rem;
     line-height: 1.2;
-    box-shadow: var(--fluent-shadow-8);
+    box-shadow: none;
 }
 
 .image-search-entry-btn:hover,
@@ -1676,7 +1657,7 @@
     background: color-mix(in oklch, var(--surface-1) 84%, transparent);
     color: var(--text-secondary);
     font-size: 0.8rem;
-    backdrop-filter: blur(8px);
+    backdrop-filter: none;
 }
 
 .image-search-error,
@@ -1772,9 +1753,9 @@
     }
 
     .image-search-entry-btn span {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        min-width: 0;
+        white-space: normal;
+        overflow-wrap: anywhere;
     }
 
     .image-search-candidate {

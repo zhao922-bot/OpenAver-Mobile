@@ -1,10 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap');
 
 /* ========== 全局主題變數 ========== */
 :root {
     /* Display Font for Design System */
-    --font-display: 'Space Grotesk', 'Plus Jakarta Sans', 'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-display: system-ui, 'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
 
     /* ===== Error Colors ===== */
     /* stylelint-disable-next-line color-no-hex -- Apple HIG palette source-of-truth token, 2026-05-03 */
@@ -15,7 +13,7 @@
     /* 背景色 */
     --bg-body: var(--color-base-100);
     --bg-card: var(--color-base-200);
-    --bg-header: color-mix(in oklch, var(--color-base-200) 85%, transparent);
+    --bg-header: var(--surface-1);
     --bg-overlay: color-mix(in oklch, var(--color-base-100) 88%, transparent);
 
     /* 文字色 */
@@ -122,7 +120,7 @@
 /* 應用背景色過渡 */
 body {
     transition: background-color var(--duration-normal) var(--fluent-ease-standard), color var(--duration-normal) var(--fluent-ease-standard);
-    font-family: "Plus Jakarta Sans", "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family: system-ui, "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 /* Utility: text-muted class */
@@ -138,9 +136,9 @@ body {
 .glass {
     background: var(--bg-header);
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Heavy glass 16px (per glass-hierarchy comment above), 2026-05-03 */
-    backdrop-filter: blur(16px);
+    backdrop-filter: none;
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Safari prefix mirror, 2026-05-03 */
-    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: none;
     border-bottom: 1px solid var(--border-light);
 }
 
@@ -148,9 +146,9 @@ body {
 .fluent-toolbar {
     background: var(--bg-header);
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Heavy acrylic toolbar standard, 2026-05-03 */
-    backdrop-filter: blur(16px) saturate(130%);
+    backdrop-filter: none;
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Safari prefix mirror, 2026-05-03 */
-    -webkit-backdrop-filter: blur(16px) saturate(130%);
+    backdrop-filter: none;
 }
 
 .noselect {
@@ -185,7 +183,7 @@ body {
     background: var(--accent);
     color: var(--color-primary-content);
     /* 邊界分離感 */
-    box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 40%, transparent);
+    box-shadow: none;
     border: 1px solid color-mix(in oklch, var(--color-base-content) 30%, transparent);
 }
 
@@ -209,7 +207,7 @@ body {
     cursor: pointer;
     transition: background var(--duration-fast) var(--fluent-ease-standard), border-color var(--duration-fast) var(--fluent-ease-standard), color var(--duration-fast) var(--fluent-ease-standard);
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Medium glass 4px on btn-glass, 2026-05-03 */
-    backdrop-filter: blur(4px);
+    backdrop-filter: none;
 }
 
 .btn-glass:hover {
@@ -258,14 +256,12 @@ body {
 
     /* Acrylic 玻璃效果 */
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Heavy acrylic 20px spotlight input, 2026-05-03 */
-    backdrop-filter: blur(20px);
+    backdrop-filter: none;
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Safari prefix mirror, 2026-05-03 */
-    -webkit-backdrop-filter: blur(20px); /* Safari 支援 */
+    backdrop-filter: none; /* Safari 支援 */
 
     /* 內層高光線 + 外陰影 */
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 10%, transparent),
-        var(--shadow-sm);
+    box-shadow: none;
 
     transition: border-color var(--duration-normal) var(--ease-out), box-shadow var(--duration-normal) var(--ease-out), transform var(--duration-normal) var(--ease-out);
 }
@@ -274,11 +270,7 @@ body {
     border-color: var(--accent);
 
     /* 內層高光線（強化）+ 發光環 + 外陰影 */
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 15%, transparent),
-        0 0 0 4px color-mix(in oklch, var(--color-primary) 15%, transparent),
-        0 0 20px var(--glow-primary),
-        var(--shadow-md);
+    box-shadow: none;
 
     /* 放大倍率提升 */
     transform: scale(1.02);
@@ -309,9 +301,7 @@ body {
     background: var(--bg-card);
     border-radius: var(--card-radius);
     overflow: hidden;
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--shadow-sm);
+    box-shadow: none;
     border: 1px solid var(--border-card);
     transition: transform var(--fluent-duration-fast) var(--fluent-ease-standard),
         box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
@@ -321,10 +311,8 @@ body {
 }
 
 .gallery-card:hover {
-    transform: translateY(-4px) scale(1.01);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
-        var(--shadow-card-hover);
+    transform: none;
+    box-shadow: none;
     z-index: 10;
 }
 
@@ -497,7 +485,7 @@ body {
     gap: 0;
     background: var(--bg-card);
     border-radius: var(--fluent-radius-xl);
-    box-shadow: var(--fluent-shadow-8);
+    box-shadow: none;
     overflow: hidden;
     border: 1px solid var(--border-light);
 }
@@ -754,12 +742,12 @@ body {
     padding: 0.5rem 1rem;
     border-radius: var(--radius-sm);
     transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
-    box-shadow: var(--fluent-shadow-2);
+    box-shadow: none;
 }
 
 .ds-page .empty-actions .btn:hover {
     transform: translateY(-2px);
-    box-shadow: var(--fluent-shadow-4);
+    box-shadow: none;
 }
 
 .ds-page .empty-actions .btn i {
@@ -784,10 +772,7 @@ body {
 /* Error State 容器 - 紅色微光邊框 */
 .ds-page .state-page.error {
     border-radius: var(--radius-md);
-    box-shadow:
-        0 0 0 1px var(--color-error),
-        0 0 20px var(--glow-error),
-        var(--fluent-shadow-4);
+    box-shadow: none;
     padding: 2.5rem;
     background: color-mix(in oklch, var(--color-error) 3%, transparent);
 }
@@ -829,7 +814,7 @@ body {
     padding: 0.75rem 1.25rem;
     background: var(--bg-card);
     border-radius: var(--radius-md);
-    box-shadow: var(--fluent-shadow-2);
+    box-shadow: none;
     border: 1px solid var(--border-light);
 }
 
@@ -860,7 +845,7 @@ body {
 /* 導航按鈕 Hover */
 .ds-page .error-nav .btn:hover {
     transform: translateY(-2px);
-    box-shadow: var(--fluent-shadow-4);
+    box-shadow: none;
 }
 
 /* 導航按鈕 Disabled */
@@ -894,9 +879,7 @@ body {
 :is(#ds-gallery-components, .ds-gallery-composition) .avlist-card {
     background: var(--bg-card);
     border-radius: var(--radius-md);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-4);
+    box-shadow: none;
     overflow: hidden;
     margin-bottom: 1rem;
     border: 1px solid var(--border-light);
@@ -904,11 +887,7 @@ body {
 }
 
 :is(#ds-gallery-components, .ds-gallery-composition) .avlist-card:hover {
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
-        0 0 0 2px var(--accent),
-        0 0 20px var(--glow-primary),
-        var(--fluent-shadow-8);
+    box-shadow: none;
 }
 
 /* AVList Card Header */
@@ -1035,9 +1014,7 @@ body {
 :is(#ds-gallery-components, .ds-gallery-composition) .av-card-preview {
     background: var(--bg-card);
     border-radius: var(--fluent-radius-xl);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-4);
+    box-shadow: none;
     overflow: hidden;
     transition: transform var(--fluent-duration-fast) var(--fluent-ease-standard),
                 box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard),
@@ -1063,7 +1040,7 @@ body {
 }
 :is(.ds-gallery-composition .flip-guard, .ds-gallery-composition.flip-guard) .av-card-preview:hover {
     transform: none !important;
-    box-shadow: none !important;
+    box-shadow: none;
 }
 
 /* C21: GSAP cascade 進場期間關掉 CSS transition + 阻擋 hover 搶 transform */
@@ -1074,12 +1051,8 @@ body {
 
 /* Preview Card - 發光邊 Hover */
 :is(#ds-gallery-components, .ds-gallery-composition) .av-card-preview:hover {
-    transform: translateY(-4px) scale(1.01);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
-        0 0 0 2px var(--accent),
-        0 0 20px var(--glow-primary),
-        var(--fluent-shadow-16);
+    transform: none;
+    box-shadow: none;
     border-color: var(--accent);
 }
 
@@ -1114,7 +1087,7 @@ body {
     font-weight: 600;
     padding: 4px 10px;
     border-radius: var(--fluent-radius-md);
-    box-shadow: 0 2px 8px oklch(0% 0 0 / 0.25);
+    box-shadow: none;
 }
 
 :is(#ds-gallery-components, .ds-gallery-composition) .av-card-preview-badge.local {
@@ -1179,14 +1152,14 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 12px oklch(0% 0 0 / 0.3);
+    box-shadow: none;
 }
 
 :is(#ds-gallery-components, .ds-gallery-composition) .btn-glass-circle:not(:disabled):hover {
     background: rgba(255, 255, 255, 0.3);
     border-color: rgba(255, 255, 255, 0.6);
     transform: scale(1.08);
-    box-shadow: 0 6px 16px oklch(0% 0 0 / 0.4);
+    box-shadow: none;
 }
 
 :is(#ds-gallery-components, .ds-gallery-composition) .btn-glass-circle:active {
@@ -1287,25 +1260,19 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    box-shadow: var(--fluent-shadow-4);
+    box-shadow: none;
 }
 
 .btn-hero-primary {
     background: var(--accent);
     color: var(--color-primary-content);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        0 4px 12px var(--glow-primary);
+    box-shadow: none;
 }
 
 .btn-hero-primary:hover {
     background: var(--accent-hover);
     transform: translateY(-2px);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
-        0 0 0 2px var(--accent),
-        0 0 20px var(--glow-primary),
-        var(--fluent-shadow-8);
+    box-shadow: none;
 }
 
 .btn-hero-primary:disabled {
@@ -1350,7 +1317,7 @@ body {
     padding: 0.75rem 1rem;
     font-size: 0.8rem;
     color: var(--text-secondary);
-    box-shadow: var(--fluent-shadow-4);
+    box-shadow: none;
     border: 1px solid var(--border-light);
 }
 
@@ -1431,13 +1398,13 @@ body {
     border-radius: var(--radius-pill);
     cursor: pointer;
     transition: background var(--fluent-duration-fast) var(--fluent-ease-standard), transform var(--fluent-duration-fast) var(--fluent-ease-standard), box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
-    box-shadow: 0 2px 8px color-mix(in oklch, var(--color-warning) 30%, transparent);
+    box-shadow: none;
 }
 
 :is(#ds-gallery-components, .ds-gallery-composition) .btn-nfo-update:hover {
     background: linear-gradient(135deg, var(--color-warning-dark), var(--color-warning-darker));
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px color-mix(in oklch, var(--color-warning) 40%, transparent);
+    box-shadow: none;
 }
 
 :is(#ds-gallery-components, .ds-gallery-composition) .btn-nfo-update:disabled {
@@ -1461,19 +1428,13 @@ body {
     border-radius: var(--radius-md);
     margin-top: 1rem;
     overflow: hidden;
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-        var(--fluent-shadow-4);
+    box-shadow: none;
     border: 1px solid var(--stroke-default);
     transition: box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
 }
 
 :is(#ds-gallery-components, .ds-gallery-composition) .actress-alias-card:hover {
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
-        0 0 0 2px var(--accent),
-        0 0 20px var(--glow-primary),
-        var(--fluent-shadow-8);
+    box-shadow: none;
 }
 
 /* Actress Alias Header */
@@ -1703,7 +1664,7 @@ body {
 
 :is(#ds-gallery-components, .ds-gallery-composition) .alias-add-inline input:focus {
     border-color: var(--accent-pink);
-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent-pink) 12%, transparent);
+    box-shadow: none;
 }
 
 :is(#ds-gallery-components, .ds-gallery-composition) .alias-add-inline button {
@@ -1957,7 +1918,7 @@ body {
 
 :is(#settings-components, #ds-settings-components) .btn-variable:hover {
     background: color-mix(in oklch, var(--accent) 15%, transparent);
-    box-shadow: 0 0 0 2px var(--glow-subtle);
+    box-shadow: none;
 }
 
 :is(#settings-components, #ds-settings-components) .btn-variable i {
@@ -1984,7 +1945,7 @@ body {
     background: var(--bg-card);
     border: 1px solid var(--border-light);
     border-radius: var(--radius-md);
-    box-shadow: var(--fluent-shadow-8);
+    box-shadow: none;
     padding: 8px;
     display: flex;
     flex-direction: column;
@@ -2044,7 +2005,7 @@ body {
 
 :is(#settings-components, #ds-settings-components) .btn-variable-sm:hover:not(:disabled) {
     background: color-mix(in oklch, var(--accent) 15%, transparent);
-    box-shadow: 0 0 0 2px var(--glow-subtle);
+    box-shadow: none;
 }
 
 :is(#settings-components, #ds-settings-components) .btn-variable-sm:disabled {
@@ -2156,7 +2117,7 @@ body {
 }
 
 :is(#settings-components, #ds-settings-components) .save-btn:hover {
-    box-shadow: 0 0 0 4px var(--glow-subtle);
+    box-shadow: none;
     transform: translateY(-1px);
 }
 
@@ -2209,13 +2170,12 @@ body {
  * background fallback paints first so the dim survives even if backdrop-filter is dropped. */
 .fluent-modal.modal-open {
     background: var(--overlay-modal);
-    backdrop-filter: blur(var(--fluent-blur-light));
-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+    backdrop-filter: none;
 }
 
 /* Fluent Modal Box - 卡片樣式 */
 .fluent-modal-box {
-    box-shadow: var(--fluent-shadow-28);
+    box-shadow: none;
     padding: 1.5rem;
     background: var(--surface-2);
     border: 1px solid var(--stroke-default);
@@ -2284,7 +2244,7 @@ body {
 /* Fluent Toast - Alert 樣式增強 */
 .fluent-toast {
     border-radius: var(--fluent-radius-lg);
-    box-shadow: var(--fluent-shadow-16);
+    box-shadow: none;
     padding: 0.75rem 1.25rem;
     font-size: 0.875rem;
     display: flex;
@@ -2354,7 +2314,7 @@ textarea:focus-visible,
 summary:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px var(--glow-primary);
+    box-shadow: none;
 }
 
 /* 特殊狀態保留 - 只調整光圈顏色 */
@@ -2363,7 +2323,7 @@ summary:focus-visible {
     opacity: 1;
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px var(--glow-primary);
+    box-shadow: none;
 }
 
 /* ========== Reduced Motion (D.13 統一收斂) ========== */
