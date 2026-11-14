@@ -3,7 +3,7 @@
 [![Build APK](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml/badge.svg)](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml)
 
 OpenAver Mobile 是 [OpenAver](https://github.com/slive777/OpenAver) 的非官方
-Android 移植版。当前移动端开发版本为 `v0.18.17-android-r9`，已对齐上游
+Android 移植版。当前移动端开发版本为 `v0.18.17-android-r10`，已对齐上游
 `v0.18.17` 的补完性能、批次搜索、来源修复、片库浏览和 AI 后处理体验；
 后续差异会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)继续收敛。
 内嵌代码基线为上游 `v0.18.17` 加本仓库补丁。
@@ -15,19 +15,19 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r9-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r10-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.18.17-android-r9-arm64-v8a.apk`
+- 文件名：`openaver-v0.18.17-android-r10-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.18.17-r9`（versionCode `18009`）
+- 版本：`0.18.17-r10`（versionCode `18010`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
 - SHA-256：发布后以 Release 附件中的 `SHA256SUMS.txt` 为准
 
-本版变更见 [r9 发布说明](docs/releases/v0.18.17-android-r9.md)。
+本版变更见 [r10 发布说明](docs/releases/v0.18.17-android-r10.md)。
 
 ## 安装
 
