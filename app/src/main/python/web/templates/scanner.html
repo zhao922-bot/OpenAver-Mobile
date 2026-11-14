@@ -288,7 +288,7 @@
             </div>
             <div class="task-control-actions">
                 <div class="task-metrics"
-                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill'].includes(taskKind)">
+                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(taskKind)">
                     <span class="task-metric is-success">
                         <i class="bi bi-check2"></i>
                         <span x-text="window.t('scanner.task.success_count', { count: taskSuccessDisplay })"></span>
@@ -557,6 +557,10 @@
                     x-html="plotBackfillButtonText"
                     :title="window.t('scanner.stats.plot_backfill_hint')">
             </button>
+                <button type="button" class="btn btn-warning btn-sm"
+                        x-show="pendingPlotTranslation" :disabled="isBusy"
+                        @click="plotTranslationConfirmOpen = true"
+                        x-text="window.t('scanner.plot_flow.pending', {n:pendingPlotTranslation?.count || 0})"></button>
         </div>
 
         <!-- T10: Resume Pill (未完成提示) -->
@@ -1290,6 +1294,20 @@
                 <button type="button" class="btn btn-primary" @click="confirmLargeMissingEnrich()">
                     <span x-text="window.t('scanner.stats.missing_enrich_confirm_confirm')"></span>
                 </button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog class="modal fluent-modal" :class="{ 'modal-open': plotTranslationConfirmOpen }"
+            @cancel.prevent="keepOriginalPlots()" @click.self="keepOriginalPlots()"
+            aria-labelledby="plotTranslationTitle">
+        <div class="modal-box fluent-modal-box">
+            <h3 id="plotTranslationTitle" class="fluent-modal-title" x-text="window.t('scanner.plot_flow.title')"></h3>
+            <p class="fluent-modal-body" x-text="window.t('scanner.plot_flow.confirm', {n:pendingPlotTranslation?.count || 0})"></p>
+            <p class="fluent-modal-body" x-show="config?.translate?.enabled !== true" x-text="window.t('scanner.plot_flow.enable_translation')"></p>
+            <div class="modal-action fluent-modal-actions">
+                <button type="button" class="btn btn-ghost" @click="keepOriginalPlots()" x-text="window.t('scanner.plot_flow.keep_original')"></button>
+                <button type="button" class="btn btn-warning" :disabled="isBusy || config?.translate?.enabled !== true" @click="runPlotTranslation()" x-text="window.t('scanner.plot_flow.translate')"></button>
             </div>
         </div>
     </dialog>

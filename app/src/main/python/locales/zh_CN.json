@@ -1426,13 +1426,13 @@
       "plot_backfill_prefix": "缺简介:",
       "plot_backfill_suffix": "部",
       "plot_backfill_drilldown_note": "只处理已有 NFO 但简介为空的视频；没有 NFO 的视频仍由“缺 NFO/封面”补全处理。",
-      "plot_backfill_idle": "一键补齐简介",
-      "plot_backfill_loading": "补齐简介中...",
-      "plot_backfill_preparing": "准备补齐简介...",
+      "plot_backfill_idle": "搜索并补齐简介",
+      "plot_backfill_loading": "搜索并补齐简介",
+      "plot_backfill_preparing": "正在搜索并保存简介原文（{concurrency} 路）…",
       "plot_backfill_disabled": "翻译未启用",
-      "plot_backfill_hint": "抓取缺失简介并按当前软件语言翻译，已有简介绝不覆盖",
-      "plot_backfill_toast_success": "简介补齐完成！{success} 部成功",
-      "plot_backfill_toast_mixed": "简介补齐完成！{success} 部成功，{failed} 部失败",
+      "plot_backfill_hint": "只搜索并保存空白 NFO 简介，完成后再询问是否翻译。",
+      "plot_backfill_toast_success": "简介搜索完成：已保存 {success}，失败 {failed}，跳过 {skipped}",
+      "plot_backfill_toast_mixed": "简介搜索完成：已保存 {success}，失败 {failed}，跳过 {skipped}",
       "plot_backfill_error": "简介补齐失败，请稍后重试",
       "backfill_item_failed": "失败：{number} — {error}",
       "backfill_item_skipped": "已跳过：{number} — {error}",
@@ -1553,6 +1553,18 @@
       "image_check": "图片检查进行中，离开将会中断！",
       "folder_dirty": "您有未保存的文件夹变更",
       "confirm": "{message}确定要离开吗？"
+    },
+    "plot_flow": {
+      "title": "简介已保存",
+      "confirm": "本次已找到并保存 {n} 部影片的简介原文。是否按当前软件语言翻译这些简介？翻译失败会保留原文。",
+      "keep_original": "保留原文",
+      "translate": "翻译这些简介",
+      "pending": "翻译本次简介（{n} 部）",
+      "enable_translation": "请先在设置中启用并配置翻译功能。简介原文已保存，可稍后继续翻译。",
+      "translating": "正在翻译本次找到的简介…",
+      "translated": "简介翻译完成：成功 {success} 部",
+      "translation_mixed": "简介翻译完成：成功 {success}，失败 {failed}；失败项保留原文",
+      "translation_error": "简介翻译未完成，已保存的原文不会丢失"
     }
   },
   "scraper": {
@@ -2847,14 +2859,14 @@
     },
     "plots": {
       "none": "没有缺失简介的视频",
-      "start": "开始补齐简介：{total} 部（并行 {concurrency} 路）",
-      "status": "正在并行抓取并翻译简介（{concurrency} 路）...",
-      "status_count": "正在补齐简介（{current}/{total}，并行 {concurrency} 路）...",
+      "start": "开始搜索并保存简介：{total} 部（并行 {concurrency} 路）",
+      "status": "正在搜索并保存简介原文（{concurrency} 路）…",
+      "status_count": "正在搜索并保存简介（{current}/{total}，并行 {concurrency} 路）…",
       "missing_number": "无法识别番号，已跳过",
       "already_filled": "简介已被其他任务补齐，已跳过",
       "log": "[{current}/{total}] {number}：{preview}",
       "cancelled": "简介补齐已取消",
-      "done": "简介补齐完成：成功 {success}，失败 {failed}，跳过 {skipped}",
+      "done": "简介搜索完成：已保存 {success}，失败 {failed}，跳过 {skipped}",
       "unexpected_error": "简介补齐失败，请查看日志",
       "db_missing": "数据库不存在，请先生成列表",
       "translate_disabled": "翻译功能未启用",
@@ -2871,7 +2883,8 @@
       "translation_refused": "模型拒绝翻译该简介",
       "translation_invalid": "模型返回了无效的简介译文",
       "translation_empty": "模型返回了空简介",
-      "error_internal": "简介处理失败，请查看日志"
+      "error_internal": "简介处理失败，请查看日志",
+      "batch_missing": "本次简介记录已不存在，请重新检查缺失简介；已保存的原文不受影响。"
     },
     "database": {
       "missing": "数据库不存在，请先生成列表",
@@ -3090,6 +3103,35 @@
       "ollama_unreachable": "无法连接到 Ollama",
       "optimize_failed": "标题优化失败",
       "batch_failed": "批量翻译失败"
+    },
+    "plot_translation": {
+      "none": "没有需要翻译的本次简介",
+      "start": "开始翻译本次简介：{total} 部（并行 {concurrency} 路）",
+      "status": "正在翻译本次找到的简介（{concurrency} 路）…",
+      "status_count": "正在翻译简介（{current}/{total}，并行 {concurrency} 路）…",
+      "missing_number": "无法识别番号，已跳过",
+      "already_filled": "简介已被其他任务补齐，已跳过",
+      "log": "[{current}/{total}] {number}：{preview}",
+      "cancelled": "简介补齐已取消",
+      "done": "简介翻译完成：成功 {success}，失败 {failed}，跳过 {skipped}",
+      "unexpected_error": "简介补齐失败，请查看日志",
+      "db_missing": "数据库不存在，请先生成列表",
+      "translate_disabled": "翻译功能未启用",
+      "config_invalid": "翻译功能设置无效，请检查设置",
+      "error_not_found": "找不到 {number} 的资料",
+      "error_no_summary": "找不到 {number} 的简介",
+      "error_search_failed": "搜索 {number} 的资料失败",
+      "error_no_nfo": "NFO 文件已不存在",
+      "error_nfo_unreadable": "无法读取或解析 NFO 文件",
+      "error_nfo_write_failed": "简介写入 NFO 失败",
+      "error_storage_permission_required": "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
+      "error_db_write_failed": "NFO 已更新，但数据库刷新失败，请重试",
+      "translation_failed": "简介翻译失败",
+      "translation_refused": "模型拒绝翻译该简介",
+      "translation_invalid": "模型返回了无效的简介译文",
+      "translation_empty": "模型返回了空简介",
+      "error_internal": "简介处理失败，请查看日志",
+      "batch_missing": "本次简介记录已不存在，请重新检查缺失简介；已保存的原文不受影响。"
     }
   }
 }

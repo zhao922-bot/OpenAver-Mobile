@@ -1426,13 +1426,13 @@
       "plot_backfill_prefix": "あらすじ未登録:",
       "plot_backfill_suffix": "本",
       "plot_backfill_drilldown_note": "既存 NFO のあらすじが空の動画だけを対象にします。NFO がない動画は「NFO 不足」の補完対象です。",
-      "plot_backfill_idle": "あらすじを一括補完",
-      "plot_backfill_loading": "あらすじを補完中...",
-      "plot_backfill_preparing": "あらすじの補完を準備中...",
+      "plot_backfill_idle": "不足あらすじを検索",
+      "plot_backfill_loading": "不足あらすじを検索",
+      "plot_backfill_preparing": "あらすじ原文を検索・保存中（並列 {concurrency} 件）…",
       "plot_backfill_disabled": "翻訳が無効です",
-      "plot_backfill_hint": "未登録のあらすじを取得して現在のアプリ言語へ翻訳し、既存のあらすじは上書きしません",
-      "plot_backfill_toast_success": "あらすじの補完完了：{success} 本成功",
-      "plot_backfill_toast_mixed": "あらすじの補完完了：{success} 本成功、{failed} 本失敗",
+      "plot_backfill_hint": "空の NFO あらすじのみ検索・保存し、完了後に翻訳するか確認します。",
+      "plot_backfill_toast_success": "あらすじ検索完了：保存 {success}、失敗 {failed}、スキップ {skipped}",
+      "plot_backfill_toast_mixed": "あらすじ検索完了：保存 {success}、失敗 {failed}、スキップ {skipped}",
       "plot_backfill_error": "あらすじの補完に失敗しました。後でもう一度お試しください",
       "backfill_item_failed": "失敗：{number} — {error}",
       "backfill_item_skipped": "スキップ：{number} — {error}",
@@ -1553,6 +1553,18 @@
       "image_check": "画像チェックが進行中です。移動すると中断されます！",
       "folder_dirty": "保存していないフォルダの変更があります",
       "confirm": "{message}移動してもよろしいですか？"
+    },
+    "plot_flow": {
+      "title": "あらすじを保存しました",
+      "confirm": "今回見つかった {n} 本のあらすじ原文を保存しました。現在のアプリ言語に翻訳しますか？翻訳に失敗しても原文は保持されます。",
+      "keep_original": "原文を保持",
+      "translate": "このあらすじを翻訳",
+      "pending": "今回のあらすじを翻訳（{n} 本）",
+      "enable_translation": "先に設定で翻訳を有効にし、接続を設定してください。原文は保存済みで、後から翻訳できます。",
+      "translating": "今回取得したあらすじを翻訳中…",
+      "translated": "あらすじの翻訳完了：成功 {success} 本",
+      "translation_mixed": "あらすじの翻訳完了：成功 {success}、失敗 {failed}。失敗分の原文は保持されます。",
+      "translation_error": "翻訳が完了しませんでした。保存済みの原文は保持されます。"
     }
   },
   "scraper": {
@@ -2847,14 +2859,14 @@
     },
     "plots": {
       "none": "あらすじが未登録の動画はありません",
-      "start": "あらすじの補完を開始：{total} 本（{concurrency} 並列）",
-      "status": "あらすじを取得して並列翻訳しています（{concurrency} 並列）...",
-      "status_count": "あらすじを補完中（{current}/{total}、{concurrency} 並列）...",
+      "start": "あらすじを検索・保存開始：{total} 本（並列 {concurrency} 件）",
+      "status": "あらすじ原文を検索・保存中（並列 {concurrency} 件）…",
+      "status_count": "あらすじを検索・保存中（{current}/{total}、並列 {concurrency} 件）…",
       "missing_number": "品番を判別できないためスキップしました",
       "already_filled": "別の処理であらすじが入力済みのためスキップしました",
       "log": "[{current}/{total}] {number}：{preview}",
       "cancelled": "あらすじの補完をキャンセルしました",
-      "done": "あらすじの補完完了：成功 {success}、失敗 {failed}、スキップ {skipped}",
+      "done": "あらすじ検索完了：保存 {success}、失敗 {failed}、スキップ {skipped}",
       "unexpected_error": "あらすじの補完に失敗しました。ログを確認してください",
       "db_missing": "データベースがありません。先にリストを生成してください",
       "translate_disabled": "翻訳機能が有効になっていません",
@@ -2871,7 +2883,8 @@
       "translation_refused": "モデルがこのあらすじの翻訳を拒否しました",
       "translation_invalid": "モデルから無効なあらすじ翻訳が返されました",
       "translation_empty": "モデルから空のあらすじが返されました",
-      "error_internal": "あらすじの処理に失敗しました。ログを確認してください"
+      "error_internal": "あらすじの処理に失敗しました。ログを確認してください",
+      "batch_missing": "今回の取得記録が見つかりません。あらすじの欠落を再確認してください。保存済みの原文には影響しません。"
     },
     "database": {
       "missing": "データベースがありません。先にリストを生成してください",
@@ -3090,6 +3103,35 @@
       "ollama_unreachable": "Ollama に接続できません",
       "optimize_failed": "タイトルの最適化に失敗しました",
       "batch_failed": "バッチ翻訳に失敗しました"
+    },
+    "plot_translation": {
+      "none": "今回のあらすじに翻訳対象はありません",
+      "start": "今回のあらすじを翻訳開始：{total} 本（並列 {concurrency} 件）",
+      "status": "今回取得したあらすじを翻訳中（並列 {concurrency} 件）…",
+      "status_count": "あらすじを翻訳中（{current}/{total}、並列 {concurrency} 件）…",
+      "missing_number": "品番を判別できないためスキップしました",
+      "already_filled": "別の処理であらすじが入力済みのためスキップしました",
+      "log": "[{current}/{total}] {number}：{preview}",
+      "cancelled": "あらすじの補完をキャンセルしました",
+      "done": "あらすじ翻訳完了：成功 {success}、失敗 {failed}、スキップ {skipped}",
+      "unexpected_error": "あらすじの補完に失敗しました。ログを確認してください",
+      "db_missing": "データベースがありません。先にリストを生成してください",
+      "translate_disabled": "翻訳機能が有効になっていません",
+      "config_invalid": "翻訳設定が無効です。設定を確認してください",
+      "error_not_found": "{number} の情報が見つかりません",
+      "error_no_summary": "{number} のあらすじが見つかりません",
+      "error_search_failed": "{number} の情報検索に失敗しました",
+      "error_no_nfo": "NFO ファイルが見つかりません",
+      "error_nfo_unreadable": "NFO ファイルを読み込めないか、解析できません",
+      "error_nfo_write_failed": "あらすじを NFO に書き込めませんでした",
+      "error_storage_permission_required": "外部ストレージへの書き込みが許可されていません。右上のメニューから動画のあるストレージフォルダーを書き込み可能にしてください。",
+      "error_db_write_failed": "NFO は更新されましたが、データベースの更新に失敗しました。再試行してください",
+      "translation_failed": "あらすじの翻訳に失敗しました",
+      "translation_refused": "モデルがこのあらすじの翻訳を拒否しました",
+      "translation_invalid": "モデルから無効なあらすじ翻訳が返されました",
+      "translation_empty": "モデルから空のあらすじが返されました",
+      "error_internal": "あらすじの処理に失敗しました。ログを確認してください",
+      "batch_missing": "今回の取得記録が見つかりません。あらすじの欠落を再確認してください。保存済みの原文には影響しません。"
     }
   }
 }

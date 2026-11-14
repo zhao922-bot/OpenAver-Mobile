@@ -1426,13 +1426,13 @@
       "plot_backfill_prefix": "Missing synopses:",
       "plot_backfill_suffix": "videos",
       "plot_backfill_drilldown_note": "Only videos with an existing NFO whose plot is empty are included; videos without an NFO remain in the missing-NFO queue.",
-      "plot_backfill_idle": "Fill missing synopses",
-      "plot_backfill_loading": "Filling synopses...",
-      "plot_backfill_preparing": "Preparing synopsis backfill...",
+      "plot_backfill_idle": "Find missing synopses",
+      "plot_backfill_loading": "Find missing synopses",
+      "plot_backfill_preparing": "Searching and saving original synopses ({concurrency} concurrent)…",
       "plot_backfill_disabled": "Translation disabled",
-      "plot_backfill_hint": "Fetch each missing synopsis, translate it into the current app language, and never overwrite an existing synopsis",
-      "plot_backfill_toast_success": "Synopsis backfill complete: {success} succeeded",
-      "plot_backfill_toast_mixed": "Synopsis backfill complete: {success} succeeded, {failed} failed",
+      "plot_backfill_hint": "Search and save only empty NFO synopses, then ask whether to translate.",
+      "plot_backfill_toast_success": "Synopsis search finished: {success} saved, {failed} failed, {skipped} skipped",
+      "plot_backfill_toast_mixed": "Synopsis search finished: {success} saved, {failed} failed, {skipped} skipped",
       "plot_backfill_error": "Synopsis backfill failed. Please try again later",
       "backfill_item_failed": "Failed: {number} — {error}",
       "backfill_item_skipped": "Skipped: {number} — {error}",
@@ -1553,6 +1553,18 @@
       "image_check": "Image check is in progress — leaving will interrupt it!",
       "folder_dirty": "You have unsaved folder changes",
       "confirm": "{message} Leave anyway?"
+    },
+    "plot_flow": {
+      "title": "Synopses saved",
+      "confirm": "Found and saved original synopses for {n} videos. Translate these into the current app language? Originals are kept if translation fails.",
+      "keep_original": "Keep originals",
+      "translate": "Translate these synopses",
+      "pending": "Translate this batch ({n} videos)",
+      "enable_translation": "Enable and configure translation in Settings first. The originals are saved; you can translate them later.",
+      "translating": "Translating synopses from this search…",
+      "translated": "Synopsis translation finished: {success} succeeded",
+      "translation_mixed": "Synopsis translation finished: {success} succeeded, {failed} failed; originals kept for failures",
+      "translation_error": "Translation did not finish. The saved originals are kept."
     }
   },
   "scraper": {
@@ -2847,14 +2859,14 @@
     },
     "plots": {
       "none": "No videos are missing a synopsis",
-      "start": "Starting synopsis backfill: {total} videos ({concurrency} workers)",
-      "status": "Fetching and translating synopses in parallel ({concurrency} workers)...",
-      "status_count": "Backfilling synopses ({current}/{total}, {concurrency} workers)...",
+      "start": "Searching and saving synopses: {total} videos ({concurrency} concurrent)",
+      "status": "Searching and saving original synopses ({concurrency} concurrent)…",
+      "status_count": "Searching and saving synopses ({current}/{total}, {concurrency} concurrent)…",
       "missing_number": "Could not detect the video number; skipped",
       "already_filled": "The synopsis was filled by another task; skipped",
       "log": "[{current}/{total}] {number}: {preview}",
       "cancelled": "Synopsis backfill cancelled",
-      "done": "Synopsis backfill complete: {success} succeeded, {failed} failed, {skipped} skipped",
+      "done": "Synopsis search finished: {success} saved, {failed} failed, {skipped} skipped",
       "unexpected_error": "Synopsis backfill failed; check the log",
       "db_missing": "Database not found; generate the list first",
       "translate_disabled": "Translation is disabled",
@@ -2871,7 +2883,8 @@
       "translation_refused": "The model refused to translate this synopsis",
       "translation_invalid": "The model returned an invalid synopsis translation",
       "translation_empty": "The model returned an empty synopsis",
-      "error_internal": "Synopsis processing failed; check the log"
+      "error_internal": "Synopsis processing failed; check the log",
+      "batch_missing": "This saved batch is no longer available. Check for missing synopses again; saved originals are unaffected."
     },
     "database": {
       "missing": "Database not found; generate the list first",
@@ -3090,6 +3103,35 @@
       "ollama_unreachable": "Could not connect to Ollama",
       "optimize_failed": "Title optimization failed",
       "batch_failed": "Batch translation failed"
+    },
+    "plot_translation": {
+      "none": "No synopses from this batch need translation",
+      "start": "Translating this batch: {total} videos ({concurrency} concurrent)",
+      "status": "Translating synopses from this search ({concurrency} concurrent)…",
+      "status_count": "Translating synopses ({current}/{total}, {concurrency} concurrent)…",
+      "missing_number": "Could not detect the video number; skipped",
+      "already_filled": "The synopsis was filled by another task; skipped",
+      "log": "[{current}/{total}] {number}: {preview}",
+      "cancelled": "Synopsis backfill cancelled",
+      "done": "Synopsis translation finished: {success} succeeded, {failed} failed, {skipped} skipped",
+      "unexpected_error": "Synopsis backfill failed; check the log",
+      "db_missing": "Database not found; generate the list first",
+      "translate_disabled": "Translation is disabled",
+      "config_invalid": "Translation settings are invalid; check Settings",
+      "error_not_found": "No metadata was found for {number}",
+      "error_no_summary": "No synopsis was found for {number}",
+      "error_search_failed": "Metadata search failed for {number}",
+      "error_no_nfo": "The NFO file no longer exists",
+      "error_nfo_unreadable": "The NFO file could not be read or parsed",
+      "error_nfo_write_failed": "Failed to write the synopsis to the NFO",
+      "error_storage_permission_required": "External storage is not writable. Use the top-right menu to authorize the SD-card folder containing the videos.",
+      "error_db_write_failed": "The NFO was updated, but the database refresh failed; try again",
+      "translation_failed": "Synopsis translation failed",
+      "translation_refused": "The model refused to translate this synopsis",
+      "translation_invalid": "The model returned an invalid synopsis translation",
+      "translation_empty": "The model returned an empty synopsis",
+      "error_internal": "Synopsis processing failed; check the log",
+      "batch_missing": "This saved batch is no longer available. Check for missing synopses again; saved originals are unaffected."
     }
   }
 }

@@ -1426,13 +1426,13 @@
       "plot_backfill_prefix": "缺簡介:",
       "plot_backfill_suffix": "部",
       "plot_backfill_drilldown_note": "只處理已有 NFO 但簡介為空的影片；沒有 NFO 的影片仍由「缺 NFO/封面」補全處理。",
-      "plot_backfill_idle": "一鍵補齊簡介",
-      "plot_backfill_loading": "補齊簡介中...",
-      "plot_backfill_preparing": "準備補齊簡介...",
+      "plot_backfill_idle": "搜尋並補齊簡介",
+      "plot_backfill_loading": "搜尋並補齊簡介",
+      "plot_backfill_preparing": "正在搜尋並儲存簡介原文（{concurrency} 路）…",
       "plot_backfill_disabled": "翻譯未啟用",
-      "plot_backfill_hint": "抓取缺少的簡介並依目前軟體語言翻譯，既有簡介絕不覆寫",
-      "plot_backfill_toast_success": "簡介補齊完成！{success} 部成功",
-      "plot_backfill_toast_mixed": "簡介補齊完成！{success} 部成功，{failed} 部失敗",
+      "plot_backfill_hint": "只搜尋並儲存空白 NFO 簡介，完成後再詢問是否翻譯。",
+      "plot_backfill_toast_success": "簡介搜尋完成：已儲存 {success}，失敗 {failed}，略過 {skipped}",
+      "plot_backfill_toast_mixed": "簡介搜尋完成：已儲存 {success}，失敗 {failed}，略過 {skipped}",
       "plot_backfill_error": "簡介補齊失敗，請稍後重試",
       "backfill_item_failed": "失敗：{number} — {error}",
       "backfill_item_skipped": "已跳過：{number} — {error}",
@@ -1553,6 +1553,18 @@
       "image_check": "圖片檢查進行中，離開將會中斷！",
       "folder_dirty": "您有未儲存的資料夾變更",
       "confirm": "{message}確定要離開嗎？"
+    },
+    "plot_flow": {
+      "title": "簡介已儲存",
+      "confirm": "本次已找到並儲存 {n} 部影片的簡介原文。是否依目前軟體語言翻譯這些簡介？翻譯失敗會保留原文。",
+      "keep_original": "保留原文",
+      "translate": "翻譯這些簡介",
+      "pending": "翻譯本次簡介（{n} 部）",
+      "enable_translation": "請先在設定中啟用並設定翻譯功能。簡介原文已儲存，可稍後繼續翻譯。",
+      "translating": "正在翻譯本次找到的簡介…",
+      "translated": "簡介翻譯完成：成功 {success} 部",
+      "translation_mixed": "簡介翻譯完成：成功 {success}，失敗 {failed}；失敗項保留原文",
+      "translation_error": "簡介翻譯未完成，已儲存的原文不會遺失"
     }
   },
   "scraper": {
@@ -2847,14 +2859,14 @@
     },
     "plots": {
       "none": "沒有缺少簡介的影片",
-      "start": "開始補齊簡介：{total} 部（並行 {concurrency} 路）",
-      "status": "正在並行抓取並翻譯簡介（{concurrency} 路）...",
-      "status_count": "正在補齊簡介（{current}/{total}，並行 {concurrency} 路）...",
+      "start": "開始搜尋並儲存簡介：{total} 部（並行 {concurrency} 路）",
+      "status": "正在搜尋並儲存簡介原文（{concurrency} 路）…",
+      "status_count": "正在搜尋並儲存簡介（{current}/{total}，並行 {concurrency} 路）…",
       "missing_number": "無法識別番號，已跳過",
       "already_filled": "簡介已被其他任務補齊，已跳過",
       "log": "[{current}/{total}] {number}：{preview}",
       "cancelled": "簡介補齊已取消",
-      "done": "簡介補齊完成：成功 {success}，失敗 {failed}，跳過 {skipped}",
+      "done": "簡介搜尋完成：已儲存 {success}，失敗 {failed}，略過 {skipped}",
       "unexpected_error": "簡介補齊失敗，請查閱日誌",
       "db_missing": "資料庫不存在，請先產生列表",
       "translate_disabled": "翻譯功能未啟用",
@@ -2871,7 +2883,8 @@
       "translation_refused": "模型拒絕翻譯該簡介",
       "translation_invalid": "模型傳回了無效的簡介譯文",
       "translation_empty": "模型傳回了空簡介",
-      "error_internal": "簡介處理失敗，請查閱日誌"
+      "error_internal": "簡介處理失敗，請查閱日誌",
+      "batch_missing": "本次簡介紀錄已不存在，請重新檢查缺失簡介；已儲存的原文不受影響。"
     },
     "database": {
       "missing": "資料庫不存在，請先產生列表",
@@ -3090,6 +3103,35 @@
       "ollama_unreachable": "無法連線到 Ollama",
       "optimize_failed": "標題最佳化失敗",
       "batch_failed": "批次翻譯失敗"
+    },
+    "plot_translation": {
+      "none": "沒有需要翻譯的本次簡介",
+      "start": "開始翻譯本次簡介：{total} 部（並行 {concurrency} 路）",
+      "status": "正在翻譯本次找到的簡介（{concurrency} 路）…",
+      "status_count": "正在翻譯簡介（{current}/{total}，並行 {concurrency} 路）…",
+      "missing_number": "無法識別番號，已跳過",
+      "already_filled": "簡介已被其他任務補齊，已跳過",
+      "log": "[{current}/{total}] {number}：{preview}",
+      "cancelled": "簡介補齊已取消",
+      "done": "簡介翻譯完成：成功 {success}，失敗 {failed}，略過 {skipped}",
+      "unexpected_error": "簡介補齊失敗，請查閱日誌",
+      "db_missing": "資料庫不存在，請先產生列表",
+      "translate_disabled": "翻譯功能未啟用",
+      "config_invalid": "翻譯功能設定無效，請檢查設定",
+      "error_not_found": "找不到 {number} 的資料",
+      "error_no_summary": "找不到 {number} 的簡介",
+      "error_search_failed": "搜尋 {number} 的資料失敗",
+      "error_no_nfo": "NFO 檔案已不存在",
+      "error_nfo_unreadable": "無法讀取或解析 NFO 檔案",
+      "error_nfo_write_failed": "簡介寫入 NFO 失敗",
+      "error_storage_permission_required": "外置儲存尚未授權寫入，請從右上角選單選擇「授權可寫目錄」並選中影片所在的儲存卡目錄",
+      "error_db_write_failed": "NFO 已更新，但資料庫重新整理失敗，請再試一次",
+      "translation_failed": "簡介翻譯失敗",
+      "translation_refused": "模型拒絕翻譯該簡介",
+      "translation_invalid": "模型傳回了無效的簡介譯文",
+      "translation_empty": "模型傳回了空簡介",
+      "error_internal": "簡介處理失敗，請查閱日誌",
+      "batch_missing": "本次簡介紀錄已不存在，請重新檢查缺失簡介；已儲存的原文不受影響。"
     }
   }
 }

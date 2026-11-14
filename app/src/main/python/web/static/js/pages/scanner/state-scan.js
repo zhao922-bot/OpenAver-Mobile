@@ -159,7 +159,7 @@ export function stateScan() {
         },
 
         get taskEtaText() {
-            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill'].includes(this.taskKind)) {
+            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind)) {
                 return '';
             }
             let seconds = this.taskEtaSeconds;
@@ -177,7 +177,7 @@ export function stateScan() {
         get taskCanRetry() {
             return !this.isGenerating
                 && this.taskFailedItems.length > 0
-                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill', 'plot-backfill'].includes(this.taskKind);
+                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind);
         },
 
         get maintenanceSummaryText() {
@@ -258,7 +258,7 @@ export function stateScan() {
                 || this.state === 'renamePreviewing'
                 || this.state === 'jellyfinUpdating' || this.state === 'enriching'
                 || this.state === 'titleBackfilling' || this.state === 'sampleBackfilling'
-                || this.state === 'plotBackfilling';
+                || this.state === 'plotBackfilling' || this.state === 'plotTranslating';
         },
 
         get isBusy() {
@@ -1197,6 +1197,10 @@ export function stateScan() {
             }
             if (this.taskKind === 'sample-backfill') {
                 this.runSampleBackfill();
+            }
+            if (this.taskKind === 'plot-translate') {
+                this.runPlotTranslation();
+                return;
             }
             if (this.taskKind === 'plot-backfill') {
                 this.runPlotBackfill();

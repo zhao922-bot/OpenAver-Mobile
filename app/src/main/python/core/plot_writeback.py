@@ -24,6 +24,10 @@ class PlotEmptyError(Exception):
     """NFO has no non-empty ``<plot>`` element."""
 
 
+class PlotChangedError(Exception):
+    """The plot no longer matches the original saved by this batch."""
+
+
 def read_nfo_plots(nfo_path: Union[str, Path]) -> Tuple[str, str]:
     """Return ``(plot, original_plot)`` while preserving internal newlines."""
     path = Path(nfo_path)
@@ -44,6 +48,7 @@ def rewrite_nfo_plot(
     *,
     new_plot: str,
     new_original: Optional[str],
+    expected_source: Optional[str] = None,
 ) -> bytes:
     """Rewrite plot fields and return the serialized XML.
 
@@ -65,6 +70,11 @@ def rewrite_nfo_plot(
         raise NfoParseError(str(exc)) from exc
 
     plot_elem = root.find("plot")
+    if expected_source is not None and (
+        (root.findtext('plot') or '').strip() != expected_source
+        or (root.findtext('originalplot') or '').strip() != expected_source
+    ):
+        raise PlotChangedError(str(nfo_path))
     if plot_elem is None or not (plot_elem.text or "").strip():
         raise PlotEmptyError(str(nfo_path))
 

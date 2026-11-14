@@ -3461,13 +3461,13 @@
 +      "plot_backfill_prefix": "Missing synopses:",
 +      "plot_backfill_suffix": "videos",
 +      "plot_backfill_drilldown_note": "Only videos with an existing NFO whose plot is empty are included; videos without an NFO remain in the missing-NFO queue.",
-+      "plot_backfill_idle": "Fill missing synopses",
-+      "plot_backfill_loading": "Filling synopses...",
-+      "plot_backfill_preparing": "Preparing synopsis backfill...",
++      "plot_backfill_idle": "Find missing synopses",
++      "plot_backfill_loading": "Find missing synopses",
++      "plot_backfill_preparing": "Searching and saving original synopses ({concurrency} concurrent)…",
 +      "plot_backfill_disabled": "Translation disabled",
-+      "plot_backfill_hint": "Fetch each missing synopsis, translate it into the current app language, and never overwrite an existing synopsis",
-+      "plot_backfill_toast_success": "Synopsis backfill complete: {success} succeeded",
-+      "plot_backfill_toast_mixed": "Synopsis backfill complete: {success} succeeded, {failed} failed",
++      "plot_backfill_hint": "Search and save only empty NFO synopses, then ask whether to translate.",
++      "plot_backfill_toast_success": "Synopsis search finished: {success} saved, {failed} failed, {skipped} skipped",
++      "plot_backfill_toast_mixed": "Synopsis search finished: {success} saved, {failed} failed, {skipped} skipped",
 +      "plot_backfill_error": "Synopsis backfill failed. Please try again later",
 +      "backfill_item_failed": "Failed: {number} — {error}",
 +      "backfill_item_skipped": "Skipped: {number} — {error}",
@@ -3484,7 +3484,7 @@
        "cancel": "Cancel",
        "discard": "Discard Changes",
        "save": "Save and Leave"
-@@ -1041,7 +1549,7 @@
+@@ -1041,10 +1549,22 @@
        "confirm": "Delete"
      },
      "leave_warning": {
@@ -3493,7 +3493,22 @@
        "image_check": "Image check is in progress — leaving will interrupt it!",
        "folder_dirty": "You have unsaved folder changes",
        "confirm": "{message} Leave anyway?"
-@@ -1072,16 +1580,21 @@
++    },
++    "plot_flow": {
++      "title": "Synopses saved",
++      "confirm": "Found and saved original synopses for {n} videos. Translate these into the current app language? Originals are kept if translation fails.",
++      "keep_original": "Keep originals",
++      "translate": "Translate these synopses",
++      "pending": "Translate this batch ({n} videos)",
++      "enable_translation": "Enable and configure translation in Settings first. The originals are saved; you can translate them later.",
++      "translating": "Translating synopses from this search…",
++      "translated": "Synopsis translation finished: {success} succeeded",
++      "translation_mixed": "Synopsis translation finished: {success} succeeded, {failed} failed; originals kept for failures",
++      "translation_error": "Translation did not finish. The saved originals are kept."
+     }
+   },
+   "scraper": {
+@@ -1072,16 +1592,21 @@
      "update_available": "A new version of OpenAver is available",
      "auto_organize_summary": "Scheduled Organize",
      "auto_organize_aborted": "Scheduled organize aborted",
@@ -3519,7 +3534,7 @@
    },
    "similar_mode": {
      "button_aria_label": "Explore similar videos",
-@@ -1092,9 +1605,10 @@
+@@ -1092,9 +1617,10 @@
      "page_title": "Browse",
      "state": {
        "loading": "Loading video list...",
@@ -3533,7 +3548,7 @@
      },
      "error": {
        "server_error": "Server error ({status})",
-@@ -1197,6 +1711,7 @@
+@@ -1197,6 +1723,7 @@
        "mdate": "Modified",
        "random": "Random",
        "actress": {
@@ -3541,7 +3556,7 @@
          "video_count": "Film Count",
          "name": "Name",
          "added_at": "Date Added",
-@@ -1246,7 +1761,13 @@
+@@ -1246,7 +1773,13 @@
        "source_unreachable_list": "Unreachable: {list}",
        "source_unreachable_count": "{n} location(s) unreachable",
        "source_no_permission_list": "No permission to read: {list}",
@@ -3556,7 +3571,7 @@
      },
      "nav": {
        "prev_page": "Previous",
-@@ -1291,6 +1812,7 @@
+@@ -1291,6 +1824,7 @@
        "tag_nfo_write_blocked": "Tag saved, but there's no permission to write the NFO",
        "translate_tooltip": "Translate title",
        "translate_done": "Title translated",
@@ -3564,7 +3579,7 @@
        "translate_undo": "Undo",
        "translate_skipped": "Nothing in the title needs translating",
        "translate_undone": "Title restored",
-@@ -1298,7 +1820,7 @@
+@@ -1298,7 +1832,7 @@
        "translate_no_nfo": "This title has no NFO yet. Enrich it first, then translate the title",
        "user_tags_label": "Custom Tags",
        "alias_label": "Aliases",
@@ -3573,7 +3588,7 @@
        "mask_toggle": "Cover crop preview",
        "mask_detect_failed": "Focal detection failed. Please try again later.",
        "mask_focal_too_slow_auto_disabled": "Detecting the face on this cover took longer than 5 seconds, so we've turned off Auto Face Focus for you. Just drag to adjust the position directly — you can turn it back on anytime in Settings.",
-@@ -1307,9 +1829,35 @@
+@@ -1307,9 +1841,35 @@
        "mask_save_failed": "Failed to save crop settings. Please try again later.",
        "mask_cover_changed": "Cover has changed. Please reopen the crop tool and try again.",
        "cover_unavailable": "This cover can’t be loaded right now — the file location may be unreachable, or the cover file may be missing",
@@ -3611,7 +3626,7 @@
      },
      "pick": {
        "add_aria": "Add to picks",
-@@ -1410,10 +1958,90 @@
+@@ -1410,10 +1970,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -3702,7 +3717,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1434,7 +2062,8 @@
+@@ -1434,7 +2074,8 @@
        "this_computer_unavailable": "Cannot read this computer's update info right now. Please reopen the Help page and try again",
        "client_up_to_date": "OpenAver on this computer is up to date",
        "client_update_available_prefix": "This computer has a new version",
@@ -3712,7 +3727,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2076,7 @@
+@@ -1447,7 +2088,7 @@
        "title": "First time? Follow these 3 steps",
        "subtitle": "From adding your folder to filling metadata — three steps to get started",
        "step1_title": "Add Your Library Folder",
@@ -3721,7 +3736,7 @@
        "step2_title": "Generate Page",
        "step2_desc": "Scan and build a browsable collection page in one click",
        "step3_title": "NFO Fill",
-@@ -1464,7 +2093,7 @@
+@@ -1464,7 +2105,7 @@
      "tag_alias": {
        "title": "Tag Alias Management",
        "intro": "Manage Chinese/Japanese/English synonyms in one place so the search box, chip filters, and fuzzy exploration all speak the same language.",
@@ -3730,7 +3745,7 @@
        "scanner_chipwall": "The chip wall lists all tag alias groups. Click \"+\" to add an alias; the primary name is shown in pink, aliases in grey.",
        "scanner_ai_hint": "Click \"?\" to open the AI suggestion panel: describe your tag needs to the AI and it returns suggested alias groups for direct import.",
        "h6_showcase": "Auto-expand in Showcase",
-@@ -1501,16 +2130,16 @@
+@@ -1501,16 +2142,16 @@
      "batch": {
        "title": "Batch File Search",
        "h6_add": "Add Multiple Files",
@@ -3751,7 +3766,7 @@
        "fav_auto": "Automatically begins searching the first 20 files",
        "fav_nfo_skip": "If a same-name .nfo already exists, the file is treated as organized and the scraper is skipped",
        "pause_pause": "Click the 'Pause' button during batch search",
-@@ -1563,17 +2192,17 @@
+@@ -1563,17 +2204,17 @@
        "h6_manage": "Favorites Management",
        "manage_add": "Add favorites from Search or Showcase; profile photo is downloaded locally automatically",
        "manage_library": "The <strong>+</strong> next to the search bar opens an \"Add from library\" list: actresses already in your library sorted by title count, with aliases merged into a single person — tap the heart on any row to favorite her",
@@ -3773,7 +3788,7 @@
        "feat_nfo": "Automatically reads NFO files and displays metadata",
        "feat_nfo_fill": "Supports 'NFO Fill': automatically searches for missing NFO files",
        "feat_terminal": "Built-in Mini Terminal shows real-time processing progress",
-@@ -1587,7 +2216,7 @@
+@@ -1587,7 +2228,7 @@
        "jellyfin_canonical": "With a media-manager mode selected, OpenAver <strong>no longer writes a same-name cover file</strong> — Jellyfin / Emby prefer that file, which is what puts landscape images on the poster wall. Existing titles keep whatever cover location they already have (so manual focal crops are not wiped); to fix one, delete its same-name cover yourself and regenerate.",
        "jellyfin_showcase": "After scanning, browse results on the <code>/showcase</code> page",
        "h6_strm_deploy": "Read-only source + letting Emby / Jellyfin / Kodi find your titles (cross-machine setup)",
@@ -3782,7 +3797,7 @@
        "strm_deploy_step2": "Under \"Output to,\" specify a folder <strong>this machine can write to</strong> (which can be a writable NAS share mounted on this machine) — the generated <code>.strm</code> + NFO + covers go here, and you point Emby / Jellyfin / Kodi at it to build the library. This output folder is not the read-only source itself.",
        "strm_deploy_step4": "If you later change the mapping rules, the existing <code>.strm</code> files are rewritten automatically in one pass — no need to rebuild the whole library.",
        "h6_multiversion": "Multi-version manual merge (native Emby / Jellyfin feature)",
-@@ -1601,7 +2230,7 @@
+@@ -1601,7 +2242,7 @@
        "h6_modes": "Display Modes",
        "h6_sort": "Sort & Search",
        "h6_other": "Other Features",
@@ -3791,7 +3806,7 @@
        "mode_grid": "<strong>Full Cover</strong>: cover wall showing the whole cover image; click to open the Lightbox (default)",
        "mode_poster": "<strong>Poster</strong>: shows only the right half of the cover (the front), so cards are narrower and more fit per row; phones and narrow windows always use this layout",
        "mode_list": "<strong>List Mode</strong>: Compact list, ideal for quick browsing",
-@@ -1632,7 +2261,7 @@
+@@ -1632,7 +2273,7 @@
        "beta_compilation": "More complete tags (series / maker / cast) means better accuracy; videos with few tags should have their NFO filled in first",
        "h6_manage": "Tips",
        "manage_enable": "No configuration needed — works out of the box",
@@ -3800,7 +3815,7 @@
      },
      "shortcuts": {
        "title": "Keyboard Shortcuts",
-@@ -1809,6 +2438,66 @@
+@@ -1809,6 +2450,66 @@
        "client_title": "About to update OpenAver on this computer",
        "client_case_a_body": "This updates OpenAver on this computer, not the server. After you confirm, a terminal opens on this computer to run the installation. Please close OpenAver first, and reopen it yourself once the installation finishes.",
        "client_case_b_body": "OpenAver on this computer is not installed in the default location.\nThe installer will first install the new version to the default directory; you do not need to close the current OpenAver during installation.\n\nWhen the installation finishes, do the following in order:\n1. Close OpenAver\n2. Delete the python folder in the old installation directory\n3. Copy all files of the new version over your original installation location on this computer\n\nNo reinstall or reconfiguration is needed; just overwrite the files and use it."
@@ -3867,7 +3882,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2505,18 @@
+@@ -1816,20 +2517,18 @@
      "skip": "Skip",
      "next": "Next →",
      "done": "Done 🎉",
@@ -3900,7 +3915,7 @@
    },
    "updater": {
      "page_title": "Updater",
-@@ -1845,6 +2532,12 @@
+@@ -1845,6 +2544,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -3913,7 +3928,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2553,11 @@
+@@ -1860,7 +2565,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -3926,7 +3941,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2575,15 @@
+@@ -1878,11 +2587,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -3944,7 +3959,7 @@
      },
      "costar": {
        "count_label": "{n} videos"
-@@ -1957,7 +2658,7 @@
+@@ -1957,7 +2670,7 @@
        "intro": "The left column is the folder on the server; in the right column enter the path as seen from this computer. You can leave it empty and fill it in later.",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -3953,7 +3968,7 @@
        "readonly": "Read-only",
        "test_btn": "Test",
        "found": "Found",
-@@ -1968,7 +2669,7 @@
+@@ -1968,7 +2681,7 @@
        "loading": "Loading the server's scan sources...",
        "load_failed": "Could not read the server's scan sources",
        "reload_btn": "Reload",
@@ -3962,7 +3977,7 @@
        "stale": "(no longer on the server)",
        "remove": "Remove",
        "save_btn": "Save Mapping Table",
-@@ -1976,5 +2677,419 @@
+@@ -1976,5 +2689,449 @@
        "saved": "Mapping table saved",
        "save_failed": "Failed to save the mapping table"
      }
@@ -4136,14 +4151,14 @@
 +    },
 +    "plots": {
 +      "none": "No videos are missing a synopsis",
-+      "start": "Starting synopsis backfill: {total} videos ({concurrency} workers)",
-+      "status": "Fetching and translating synopses in parallel ({concurrency} workers)...",
-+      "status_count": "Backfilling synopses ({current}/{total}, {concurrency} workers)...",
++      "start": "Searching and saving synopses: {total} videos ({concurrency} concurrent)",
++      "status": "Searching and saving original synopses ({concurrency} concurrent)…",
++      "status_count": "Searching and saving synopses ({current}/{total}, {concurrency} concurrent)…",
 +      "missing_number": "Could not detect the video number; skipped",
 +      "already_filled": "The synopsis was filled by another task; skipped",
 +      "log": "[{current}/{total}] {number}: {preview}",
 +      "cancelled": "Synopsis backfill cancelled",
-+      "done": "Synopsis backfill complete: {success} succeeded, {failed} failed, {skipped} skipped",
++      "done": "Synopsis search finished: {success} saved, {failed} failed, {skipped} skipped",
 +      "unexpected_error": "Synopsis backfill failed; check the log",
 +      "db_missing": "Database not found; generate the list first",
 +      "translate_disabled": "Translation is disabled",
@@ -4160,7 +4175,8 @@
 +      "translation_refused": "The model refused to translate this synopsis",
 +      "translation_invalid": "The model returned an invalid synopsis translation",
 +      "translation_empty": "The model returned an empty synopsis",
-+      "error_internal": "Synopsis processing failed; check the log"
++      "error_internal": "Synopsis processing failed; check the log",
++      "batch_missing": "This saved batch is no longer available. Check for missing synopses again; saved originals are unaffected."
 +    },
 +    "database": {
 +      "missing": "Database not found; generate the list first",
@@ -4379,6 +4395,35 @@
 +      "ollama_unreachable": "Could not connect to Ollama",
 +      "optimize_failed": "Title optimization failed",
 +      "batch_failed": "Batch translation failed"
++    },
++    "plot_translation": {
++      "none": "No synopses from this batch need translation",
++      "start": "Translating this batch: {total} videos ({concurrency} concurrent)",
++      "status": "Translating synopses from this search ({concurrency} concurrent)…",
++      "status_count": "Translating synopses ({current}/{total}, {concurrency} concurrent)…",
++      "missing_number": "Could not detect the video number; skipped",
++      "already_filled": "The synopsis was filled by another task; skipped",
++      "log": "[{current}/{total}] {number}: {preview}",
++      "cancelled": "Synopsis backfill cancelled",
++      "done": "Synopsis translation finished: {success} succeeded, {failed} failed, {skipped} skipped",
++      "unexpected_error": "Synopsis backfill failed; check the log",
++      "db_missing": "Database not found; generate the list first",
++      "translate_disabled": "Translation is disabled",
++      "config_invalid": "Translation settings are invalid; check Settings",
++      "error_not_found": "No metadata was found for {number}",
++      "error_no_summary": "No synopsis was found for {number}",
++      "error_search_failed": "Metadata search failed for {number}",
++      "error_no_nfo": "The NFO file no longer exists",
++      "error_nfo_unreadable": "The NFO file could not be read or parsed",
++      "error_nfo_write_failed": "Failed to write the synopsis to the NFO",
++      "error_storage_permission_required": "External storage is not writable. Use the top-right menu to authorize the SD-card folder containing the videos.",
++      "error_db_write_failed": "The NFO was updated, but the database refresh failed; try again",
++      "translation_failed": "Synopsis translation failed",
++      "translation_refused": "The model refused to translate this synopsis",
++      "translation_invalid": "The model returned an invalid synopsis translation",
++      "translation_empty": "The model returned an empty synopsis",
++      "error_internal": "Synopsis processing failed; check the log",
++      "batch_missing": "This saved batch is no longer available. Check for missing synopses again; saved originals are unaffected."
 +    }
    }
  }
@@ -5219,13 +5264,13 @@
 +      "plot_backfill_prefix": "あらすじ未登録:",
 +      "plot_backfill_suffix": "本",
 +      "plot_backfill_drilldown_note": "既存 NFO のあらすじが空の動画だけを対象にします。NFO がない動画は「NFO 不足」の補完対象です。",
-+      "plot_backfill_idle": "あらすじを一括補完",
-+      "plot_backfill_loading": "あらすじを補完中...",
-+      "plot_backfill_preparing": "あらすじの補完を準備中...",
++      "plot_backfill_idle": "不足あらすじを検索",
++      "plot_backfill_loading": "不足あらすじを検索",
++      "plot_backfill_preparing": "あらすじ原文を検索・保存中（並列 {concurrency} 件）…",
 +      "plot_backfill_disabled": "翻訳が無効です",
-+      "plot_backfill_hint": "未登録のあらすじを取得して現在のアプリ言語へ翻訳し、既存のあらすじは上書きしません",
-+      "plot_backfill_toast_success": "あらすじの補完完了：{success} 本成功",
-+      "plot_backfill_toast_mixed": "あらすじの補完完了：{success} 本成功、{failed} 本失敗",
++      "plot_backfill_hint": "空の NFO あらすじのみ検索・保存し、完了後に翻訳するか確認します。",
++      "plot_backfill_toast_success": "あらすじ検索完了：保存 {success}、失敗 {failed}、スキップ {skipped}",
++      "plot_backfill_toast_mixed": "あらすじ検索完了：保存 {success}、失敗 {failed}、スキップ {skipped}",
 +      "plot_backfill_error": "あらすじの補完に失敗しました。後でもう一度お試しください",
 +      "backfill_item_failed": "失敗：{number} — {error}",
 +      "backfill_item_skipped": "スキップ：{number} — {error}",
@@ -5242,7 +5287,7 @@
        "cancel": "キャンセル",
        "discard": "変更を破棄",
        "save": "保存して終了"
-@@ -1041,7 +1549,7 @@
+@@ -1041,10 +1549,22 @@
        "confirm": "削除する"
      },
      "leave_warning": {
@@ -5251,7 +5296,22 @@
        "image_check": "画像チェックが進行中です。移動すると中断されます！",
        "folder_dirty": "保存していないフォルダの変更があります",
        "confirm": "{message}移動してもよろしいですか？"
-@@ -1072,16 +1580,21 @@
++    },
++    "plot_flow": {
++      "title": "あらすじを保存しました",
++      "confirm": "今回見つかった {n} 本のあらすじ原文を保存しました。現在のアプリ言語に翻訳しますか？翻訳に失敗しても原文は保持されます。",
++      "keep_original": "原文を保持",
++      "translate": "このあらすじを翻訳",
++      "pending": "今回のあらすじを翻訳（{n} 本）",
++      "enable_translation": "先に設定で翻訳を有効にし、接続を設定してください。原文は保存済みで、後から翻訳できます。",
++      "translating": "今回取得したあらすじを翻訳中…",
++      "translated": "あらすじの翻訳完了：成功 {success} 本",
++      "translation_mixed": "あらすじの翻訳完了：成功 {success}、失敗 {failed}。失敗分の原文は保持されます。",
++      "translation_error": "翻訳が完了しませんでした。保存済みの原文は保持されます。"
+     }
+   },
+   "scraper": {
+@@ -1072,16 +1592,21 @@
      "update_available": "OpenAver の新しいバージョンがあります",
      "auto_organize_summary": "定期整理",
      "auto_organize_aborted": "定期整理を中止しました",
@@ -5277,7 +5337,7 @@
    },
    "similar_mode": {
      "button_aria_label": "類似動画を探索",
-@@ -1092,9 +1605,10 @@
+@@ -1092,9 +1617,10 @@
      "page_title": "動画ブラウズ",
      "state": {
        "loading": "動画リストを読み込み中...",
@@ -5291,7 +5351,7 @@
      },
      "error": {
        "server_error": "サーバーエラー ({status})",
-@@ -1197,6 +1711,7 @@
+@@ -1197,6 +1723,7 @@
        "mdate": "更新日時",
        "random": "ランダム",
        "actress": {
@@ -5299,7 +5359,7 @@
          "video_count": "作品数",
          "name": "名前",
          "added_at": "追加日時",
-@@ -1246,7 +1761,13 @@
+@@ -1246,7 +1773,13 @@
        "source_unreachable_list": "アクセスできません：{list}",
        "source_unreachable_count": "{n} 件の場所にアクセスできません",
        "source_no_permission_list": "読み取り権限がありません：{list}",
@@ -5314,7 +5374,7 @@
      },
      "nav": {
        "prev_page": "前のページ",
-@@ -1291,6 +1812,7 @@
+@@ -1291,6 +1824,7 @@
        "tag_nfo_write_blocked": "タグは保存されましたが、NFO への書き込み権限がありません",
        "translate_tooltip": "タイトルを翻訳",
        "translate_done": "タイトルを翻訳しました",
@@ -5322,7 +5382,7 @@
        "translate_undo": "元に戻す",
        "translate_skipped": "翻訳が必要な内容はありません",
        "translate_undone": "タイトルを元に戻しました",
-@@ -1298,7 +1820,7 @@
+@@ -1298,7 +1832,7 @@
        "translate_no_nfo": "この作品にはまだ NFO がありません。先に補完してから翻訳してください",
        "user_tags_label": "カスタムタグ",
        "alias_label": "別名",
@@ -5331,7 +5391,7 @@
        "mask_toggle": "カバーの切り抜きプレビュー",
        "mask_detect_failed": "焦点の検出に失敗しました。しばらくしてからもう一度お試しください。",
        "mask_focal_too_slow_auto_disabled": "このカバーの顔検出に5秒以上かかったため、自動フォーカスを先にオフにしました。位置を調整したい場合は直接ドラッグしてください。いつでも設定から再度オンにできます。",
-@@ -1307,9 +1829,35 @@
+@@ -1307,9 +1841,35 @@
        "mask_save_failed": "切り抜き設定の保存に失敗しました。しばらくしてからもう一度お試しください。",
        "mask_cover_changed": "カバーが変更されました。切り抜きツールを開き直してもう一度お試しください。",
        "cover_unavailable": "このカバー画像を読み込めません。ファイルの場所にアクセスできないか、カバー画像自体が失われている可能性があります",
@@ -5369,7 +5429,7 @@
      },
      "pick": {
        "add_aria": "★を付ける",
-@@ -1410,10 +1958,90 @@
+@@ -1410,10 +1970,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -5460,7 +5520,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1434,7 +2062,8 @@
+@@ -1434,7 +2074,8 @@
        "this_computer_unavailable": "このPCの更新情報を一時的に読み取れません。ヘルプページを開き直してもう一度お試しください",
        "client_up_to_date": "このPCの OpenAver は最新です",
        "client_update_available_prefix": "このPCに新バージョン",
@@ -5470,7 +5530,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2076,7 @@
+@@ -1447,7 +2088,7 @@
        "title": "初めてですか？3ステップで始めましょう",
        "subtitle": "フォルダ追加からメタデータ補完まで、3ステップで始める",
        "step1_title": "ライブラリフォルダを追加",
@@ -5479,7 +5539,7 @@
        "step2_title": "ページを生成",
        "step2_desc": "ワンクリックでスキャンして閲覧可能なコレクションページを作成",
        "step3_title": "NFO 補完",
-@@ -1464,7 +2093,7 @@
+@@ -1464,7 +2105,7 @@
      "tag_alias": {
        "title": "Tag エイリアス管理",
        "intro": "中日英の同義語を一元管理することで、検索ボックス・chip フィルター・あいまい探索がすべて同じ言語で動きます。",
@@ -5488,7 +5548,7 @@
        "scanner_chipwall": "chip ウォールにすべての Tag エイリアスグループが表示されます。「+」をクリックして alias を追加。プライマリ名はピンク、エイリアスはグレーで表示されます。",
        "scanner_ai_hint": "「?」をクリックすると AI 提案パネルが開きます。tag の要件を AI に説明すると、提案エイリアスグループをそのままインポートできます。",
        "h6_showcase": "Showcase で自動展開",
-@@ -1501,16 +2130,16 @@
+@@ -1501,16 +2142,16 @@
      "batch": {
        "title": "バッチファイル検索",
        "h6_add": "複数ファイルの追加",
@@ -5509,7 +5569,7 @@
        "fav_auto": "自動的に最初の 20 ファイルの検索を開始",
        "fav_nfo_skip": "同名の .nfo が存在する場合は整理済みとみなし、scraper を再実行しません",
        "pause_pause": "バッチ検索中に「一時停止」ボタンをクリック",
-@@ -1563,17 +2192,17 @@
+@@ -1563,17 +2204,17 @@
        "h6_manage": "お気に入り管理",
        "manage_add": "検索ページまたはショーケースページからお気に入りに追加。プロフィール写真は自動でローカルに保存",
        "manage_library": "検索バー横の <strong>+</strong> で「ライブラリから女優を追加」一覧を開けます。ライブラリ内の女優が作品数の多い順に並び、別名は同一人物としてまとめられます。行のハートをタップすればお気に入りに追加されます",
@@ -5531,7 +5591,7 @@
        "feat_nfo": "NFO ファイルを自動で読み込みメタデータを表示",
        "feat_nfo_fill": "「NFO 補完」に対応：欠損した NFO ファイルを自動検索",
        "feat_terminal": "内蔵 Mini Terminal でリアルタイム処理進捗を表示",
-@@ -1587,7 +2216,7 @@
+@@ -1587,7 +2228,7 @@
        "jellyfin_canonical": "メディアマネージャーモードを選ぶと<strong>同名のカバー画像は生成されなくなります</strong>——そのファイルは Jellyfin／Emby が優先的に読み込むため、ポスターウォールに横長画像が並ぶ原因になります。既存の作品はカバーの場所をそのまま維持します（手動で調整したフォーカス位置を消さないため）。修正したい場合は該当作品の同名カバーを削除してから再生成してください。",
        "jellyfin_showcase": "スキャン完了後、<code>/showcase</code> ページで生成結果を閲覧可能",
        "h6_strm_deploy": "読み取り専用ソース + Emby／Jellyfin／Kodi に作品をスキャンさせる（マシンをまたぐ配置）",
@@ -5540,7 +5600,7 @@
        "strm_deploy_step2": "「出力先」に<strong>このマシンで書き込める</strong>フォルダー（このマシンにマウントした NAS の書き込み可能な共有でも可）を指定します——生成される <code>.strm</code>＋NFO＋表紙がここに置かれ、それを Emby／Jellyfin／Kodi に指定してライブラリを作らせます。この出力フォルダーは読み取り専用ソースそのものではありません。",
        "strm_deploy_step4": "その後マッピングルールを変更すると、既存の <code>.strm</code> が一括で自動的に書き換えられ、ライブラリ全体を作り直す必要はありません。",
        "h6_multiversion": "同一作品の複数版（流出 / 4K / 字幕）を Emby/Jellyfin で結合するには？",
-@@ -1601,7 +2230,7 @@
+@@ -1601,7 +2242,7 @@
        "h6_modes": "表示モード",
        "h6_sort": "ソートと検索",
        "h6_other": "その他の機能",
@@ -5549,7 +5609,7 @@
        "mode_grid": "<strong>カバー全体</strong>：ジャケット全体を並べるカバーウォール。クリックで Lightbox を開きます（既定）",
        "mode_poster": "<strong>縦型ポスター</strong>：ジャケットの右半分（表面）だけを表示。カードが細くなり 1 行に多く並びます。スマホ／狭いウィンドウでは常にこのレイアウトです",
        "mode_list": "<strong>リストモード</strong>：コンパクトなリスト、素早い閲覧に最適",
-@@ -1632,7 +2261,7 @@
+@@ -1632,7 +2273,7 @@
        "beta_compilation": "tag が多いほど（シリーズ / メーカー / cast）精度が上がる；tag が少ない動画は先に NFO を補完することを推奨",
        "h6_manage": "使用ヒント",
        "manage_enable": "設定不要、すぐ使える",
@@ -5558,7 +5618,7 @@
      },
      "shortcuts": {
        "title": "キーボードショートカット",
-@@ -1809,6 +2438,66 @@
+@@ -1809,6 +2450,66 @@
        "client_title": "このPCの OpenAver を更新します",
        "client_case_a_body": "更新するのはこのPCの OpenAver で、サーバーではありません。確認を押すとこのPCでターミナルが開いてインストールが実行されます。先に OpenAver を閉じ、インストール完了後に手動で開き直してください。",
        "client_case_b_body": "このPCの OpenAver は既定の場所にインストールされていません。\nインストーラーはまず新バージョンを既定のディレクトリにインストールします。インストール中に現在の OpenAver を閉じる必要はありません。\n\nインストール完了後、次の順に操作してください：\n1. OpenAver を閉じる\n2. 旧インストールディレクトリの python フォルダを削除する\n3. 新バージョンのすべてのファイルを、このPCの元のインストール場所にコピーして上書きする\n\n再インストールや再設定は不要で、ファイルを上書きするだけで使えます。"
@@ -5625,7 +5685,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2505,18 @@
+@@ -1816,20 +2517,18 @@
      "skip": "スキップ",
      "next": "次へ →",
      "done": "完了 🎉",
@@ -5658,7 +5718,7 @@
    },
    "updater": {
      "page_title": "アップデーター",
-@@ -1845,6 +2532,12 @@
+@@ -1845,6 +2544,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -5671,7 +5731,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2553,11 @@
+@@ -1860,7 +2565,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -5684,7 +5744,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2575,15 @@
+@@ -1878,11 +2587,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -5702,7 +5762,7 @@
      },
      "costar": {
        "count_label": "{n} 本"
-@@ -1957,7 +2658,7 @@
+@@ -1957,7 +2670,7 @@
        "intro": "左の欄はサーバー上のフォルダ、右の欄はこのPCから見えるパスです。後で入力することもできるので、空欄のままでも構いません。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -5711,7 +5771,7 @@
        "readonly": "読み取り専用",
        "test_btn": "テスト",
        "found": "見つかりました",
-@@ -1968,7 +2669,7 @@
+@@ -1968,7 +2681,7 @@
        "loading": "サーバーのスキャンソースを読み込み中…",
        "load_failed": "サーバーのスキャンソースを読み込めません",
        "reload_btn": "再読み込み",
@@ -5720,7 +5780,7 @@
        "stale": "（サーバーにこのソースはもうありません）",
        "remove": "削除",
        "save_btn": "パス対応表を保存",
-@@ -1976,5 +2677,419 @@
+@@ -1976,5 +2689,449 @@
        "saved": "パス対応表を保存しました",
        "save_failed": "パス対応表の保存に失敗しました"
      }
@@ -5894,14 +5954,14 @@
 +    },
 +    "plots": {
 +      "none": "あらすじが未登録の動画はありません",
-+      "start": "あらすじの補完を開始：{total} 本（{concurrency} 並列）",
-+      "status": "あらすじを取得して並列翻訳しています（{concurrency} 並列）...",
-+      "status_count": "あらすじを補完中（{current}/{total}、{concurrency} 並列）...",
++      "start": "あらすじを検索・保存開始：{total} 本（並列 {concurrency} 件）",
++      "status": "あらすじ原文を検索・保存中（並列 {concurrency} 件）…",
++      "status_count": "あらすじを検索・保存中（{current}/{total}、並列 {concurrency} 件）…",
 +      "missing_number": "品番を判別できないためスキップしました",
 +      "already_filled": "別の処理であらすじが入力済みのためスキップしました",
 +      "log": "[{current}/{total}] {number}：{preview}",
 +      "cancelled": "あらすじの補完をキャンセルしました",
-+      "done": "あらすじの補完完了：成功 {success}、失敗 {failed}、スキップ {skipped}",
++      "done": "あらすじ検索完了：保存 {success}、失敗 {failed}、スキップ {skipped}",
 +      "unexpected_error": "あらすじの補完に失敗しました。ログを確認してください",
 +      "db_missing": "データベースがありません。先にリストを生成してください",
 +      "translate_disabled": "翻訳機能が有効になっていません",
@@ -5918,7 +5978,8 @@
 +      "translation_refused": "モデルがこのあらすじの翻訳を拒否しました",
 +      "translation_invalid": "モデルから無効なあらすじ翻訳が返されました",
 +      "translation_empty": "モデルから空のあらすじが返されました",
-+      "error_internal": "あらすじの処理に失敗しました。ログを確認してください"
++      "error_internal": "あらすじの処理に失敗しました。ログを確認してください",
++      "batch_missing": "今回の取得記録が見つかりません。あらすじの欠落を再確認してください。保存済みの原文には影響しません。"
 +    },
 +    "database": {
 +      "missing": "データベースがありません。先にリストを生成してください",
@@ -6137,12 +6198,41 @@
 +      "ollama_unreachable": "Ollama に接続できません",
 +      "optimize_failed": "タイトルの最適化に失敗しました",
 +      "batch_failed": "バッチ翻訳に失敗しました"
++    },
++    "plot_translation": {
++      "none": "今回のあらすじに翻訳対象はありません",
++      "start": "今回のあらすじを翻訳開始：{total} 本（並列 {concurrency} 件）",
++      "status": "今回取得したあらすじを翻訳中（並列 {concurrency} 件）…",
++      "status_count": "あらすじを翻訳中（{current}/{total}、並列 {concurrency} 件）…",
++      "missing_number": "品番を判別できないためスキップしました",
++      "already_filled": "別の処理であらすじが入力済みのためスキップしました",
++      "log": "[{current}/{total}] {number}：{preview}",
++      "cancelled": "あらすじの補完をキャンセルしました",
++      "done": "あらすじ翻訳完了：成功 {success}、失敗 {failed}、スキップ {skipped}",
++      "unexpected_error": "あらすじの補完に失敗しました。ログを確認してください",
++      "db_missing": "データベースがありません。先にリストを生成してください",
++      "translate_disabled": "翻訳機能が有効になっていません",
++      "config_invalid": "翻訳設定が無効です。設定を確認してください",
++      "error_not_found": "{number} の情報が見つかりません",
++      "error_no_summary": "{number} のあらすじが見つかりません",
++      "error_search_failed": "{number} の情報検索に失敗しました",
++      "error_no_nfo": "NFO ファイルが見つかりません",
++      "error_nfo_unreadable": "NFO ファイルを読み込めないか、解析できません",
++      "error_nfo_write_failed": "あらすじを NFO に書き込めませんでした",
++      "error_storage_permission_required": "外部ストレージへの書き込みが許可されていません。右上のメニューから動画のあるストレージフォルダーを書き込み可能にしてください。",
++      "error_db_write_failed": "NFO は更新されましたが、データベースの更新に失敗しました。再試行してください",
++      "translation_failed": "あらすじの翻訳に失敗しました",
++      "translation_refused": "モデルがこのあらすじの翻訳を拒否しました",
++      "translation_invalid": "モデルから無効なあらすじ翻訳が返されました",
++      "translation_empty": "モデルから空のあらすじが返されました",
++      "error_internal": "あらすじの処理に失敗しました。ログを確認してください",
++      "batch_missing": "今回の取得記録が見つかりません。あらすじの欠落を再確認してください。保存済みの原文には影響しません。"
 +    }
    }
  }
 --- /dev/null
 +++ b/locales/ko.json
-@@ -0,0 +1,3095 @@
+@@ -0,0 +1,3137 @@
 +{
 +  "nav": {
 +    "search": "검색",
@@ -7571,13 +7661,13 @@
 +      "plot_backfill_prefix": "줄거리 없음:",
 +      "plot_backfill_suffix": "개 동영상",
 +      "plot_backfill_drilldown_note": "기존 NFO의 줄거리가 비어 있는 동영상만 포함됩니다. NFO가 없는 동영상은 NFO 누락 보완 대상입니다.",
-+      "plot_backfill_idle": "줄거리 일괄 채우기",
-+      "plot_backfill_loading": "줄거리를 채우는 중...",
-+      "plot_backfill_preparing": "줄거리 채우기 준비 중...",
++      "plot_backfill_idle": "누락된 줄거리 검색",
++      "plot_backfill_loading": "누락된 줄거리 검색",
++      "plot_backfill_preparing": "줄거리 원문 검색 및 저장 중 (동시 {concurrency}개)…",
 +      "plot_backfill_disabled": "번역이 비활성화됨",
-+      "plot_backfill_hint": "누락된 줄거리를 가져와 현재 앱 언어로 번역하며 기존 줄거리는 덮어쓰지 않습니다",
-+      "plot_backfill_toast_success": "줄거리 채우기 완료: {success} 성공",
-+      "plot_backfill_toast_mixed": "줄거리 채우기 완료: {success} 성공, {failed} 실패",
++      "plot_backfill_hint": "빈 NFO 줄거리만 검색하여 저장한 뒤 번역 여부를 묻습니다.",
++      "plot_backfill_toast_success": "줄거리 검색 완료: 저장 {success}, 실패 {failed}, 건너뜀 {skipped}",
++      "plot_backfill_toast_mixed": "줄거리 검색 완료: 저장 {success}, 실패 {failed}, 건너뜀 {skipped}",
 +      "plot_backfill_error": "줄거리 채우기에 실패했습니다. 나중에 다시 시도해 주세요.",
 +      "backfill_item_failed": "실패: {number} — {error}",
 +      "backfill_item_skipped": "건너뛴 항목: {number} — {error}",
@@ -7698,6 +7788,18 @@
 +      "image_check": "이미지 검사 중입니다. 나가면 중단됩니다!",
 +      "folder_dirty": "저장되지 않은 폴더 변경 사항이 있습니다",
 +      "confirm": "{message}나가시겠습니까?"
++    },
++    "plot_flow": {
++      "title": "줄거리가 저장되었습니다",
++      "confirm": "이번 검색에서 영상 {n}편의 줄거리 원문을 찾아 저장했습니다. 현재 앱 언어로 번역할까요? 번역에 실패해도 원문은 유지됩니다.",
++      "keep_original": "원문 유지",
++      "translate": "이 줄거리 번역",
++      "pending": "이번 줄거리 번역 ({n}편)",
++      "enable_translation": "먼저 설정에서 번역을 활성화하고 연결을 구성하세요. 원문은 저장되어 나중에 번역할 수 있습니다.",
++      "translating": "이번에 찾은 줄거리 번역 중…",
++      "translated": "줄거리 번역 완료: {success}편 성공",
++      "translation_mixed": "줄거리 번역 완료: 성공 {success}, 실패 {failed}. 실패한 항목의 원문은 유지됩니다.",
++      "translation_error": "번역이 완료되지 않았습니다. 저장된 원문은 유지됩니다."
 +    }
 +  },
 +  "scraper": {
@@ -8992,14 +9094,14 @@
 +    },
 +    "plots": {
 +      "none": "줄거리가 누락된 동영상이 없습니다",
-+      "start": "줄거리 채우기 시작: {total}개 동영상({concurrency} 작업자)",
-+      "status": "줄거리를 가져와 병렬 번역하는 중({concurrency} 작업자)...",
-+      "status_count": "줄거리 채우기({current}/{total}, {concurrency} 작업자)...",
++      "start": "줄거리 검색 및 저장 시작: {total}편 (동시 {concurrency}개)",
++      "status": "줄거리 원문 검색 및 저장 중 (동시 {concurrency}개)…",
++      "status_count": "줄거리 검색 및 저장 중 ({current}/{total}, 동시 {concurrency}개)…",
 +      "missing_number": "비디오 번호를 감지할 수 없습니다. 건너뛰었습니다",
 +      "already_filled": "다른 작업에서 줄거리를 이미 채웠으므로 건너뛰었습니다",
 +      "log": "[{current}/{total}] {number}: {preview}",
 +      "cancelled": "줄거리 채우기가 취소되었습니다",
-+      "done": "줄거리 채우기 완료: {success} 성공, {failed} 실패, {skipped} 건너뛰기",
++      "done": "줄거리 검색 완료: 저장 {success}, 실패 {failed}, 건너뜀 {skipped}",
 +      "unexpected_error": "줄거리 채우기에 실패했습니다. 로그를 확인하세요",
 +      "db_missing": "데이터베이스가 없습니다. 먼저 목록을 생성하세요",
 +      "translate_disabled": "번역 기능이 활성화되지 않았습니다",
@@ -9016,7 +9118,8 @@
 +      "translation_refused": "모델이 이 줄거리의 번역을 거부했습니다",
 +      "translation_invalid": "모델이 올바르지 않은 줄거리 번역을 반환했습니다",
 +      "translation_empty": "모델이 빈 줄거리를 반환했습니다",
-+      "error_internal": "줄거리 처리에 실패했습니다. 로그를 확인하세요"
++      "error_internal": "줄거리 처리에 실패했습니다. 로그를 확인하세요",
++      "batch_missing": "이번 검색 기록이 없습니다. 누락된 줄거리를 다시 확인하세요. 저장된 원문은 유지됩니다."
 +    },
 +    "database": {
 +      "missing": "데이터베이스를 찾을 수 없습니다. 먼저 목록을 생성하십시오",
@@ -9235,6 +9338,35 @@
 +      "ollama_unreachable": "Ollama에 연결할 수 없습니다.",
 +      "optimize_failed": "제목 최적화 실패",
 +      "batch_failed": "일괄 번역 실패"
++    },
++    "plot_translation": {
++      "none": "이번 줄거리 중 번역할 항목이 없습니다",
++      "start": "이번 줄거리 번역 시작: {total}편 (동시 {concurrency}개)",
++      "status": "이번에 찾은 줄거리 번역 중 (동시 {concurrency}개)…",
++      "status_count": "줄거리 번역 중 ({current}/{total}, 동시 {concurrency}개)…",
++      "missing_number": "비디오 번호를 감지할 수 없습니다. 건너뛰었습니다",
++      "already_filled": "다른 작업에서 줄거리를 이미 채웠으므로 건너뛰었습니다",
++      "log": "[{current}/{total}] {number}: {preview}",
++      "cancelled": "줄거리 채우기가 취소되었습니다",
++      "done": "줄거리 번역 완료: 성공 {success}, 실패 {failed}, 건너뜀 {skipped}",
++      "unexpected_error": "줄거리 채우기에 실패했습니다. 로그를 확인하세요",
++      "db_missing": "데이터베이스가 없습니다. 먼저 목록을 생성하세요",
++      "translate_disabled": "번역 기능이 활성화되지 않았습니다",
++      "config_invalid": "번역 설정이 올바르지 않습니다. 설정을 확인하세요",
++      "error_not_found": "{number}의 정보를 찾을 수 없습니다",
++      "error_no_summary": "{number}의 줄거리를 찾을 수 없습니다",
++      "error_search_failed": "{number}의 정보 검색에 실패했습니다",
++      "error_no_nfo": "NFO 파일을 찾을 수 없습니다",
++      "error_nfo_unreadable": "NFO 파일을 읽거나 분석할 수 없습니다",
++      "error_nfo_write_failed": "줄거리를 NFO에 쓰지 못했습니다",
++      "error_storage_permission_required": "외부 저장소에 쓸 수 없습니다. 오른쪽 상단 메뉴에서 동영상이 있는 SD 카드 폴더를 승인하세요.",
++      "error_db_write_failed": "NFO는 업데이트했지만 데이터베이스 갱신에 실패했습니다. 다시 시도하세요",
++      "translation_failed": "줄거리 번역에 실패했습니다",
++      "translation_refused": "모델이 이 줄거리의 번역을 거부했습니다",
++      "translation_invalid": "모델이 올바르지 않은 줄거리 번역을 반환했습니다",
++      "translation_empty": "모델이 빈 줄거리를 반환했습니다",
++      "error_internal": "줄거리 처리에 실패했습니다. 로그를 확인하세요",
++      "batch_missing": "이번 검색 기록이 없습니다. 누락된 줄거리를 다시 확인하세요. 저장된 원문은 유지됩니다."
 +    }
 +  }
 +}
@@ -10075,13 +10207,13 @@
 +      "plot_backfill_prefix": "缺简介:",
 +      "plot_backfill_suffix": "部",
 +      "plot_backfill_drilldown_note": "只处理已有 NFO 但简介为空的视频；没有 NFO 的视频仍由“缺 NFO/封面”补全处理。",
-+      "plot_backfill_idle": "一键补齐简介",
-+      "plot_backfill_loading": "补齐简介中...",
-+      "plot_backfill_preparing": "准备补齐简介...",
++      "plot_backfill_idle": "搜索并补齐简介",
++      "plot_backfill_loading": "搜索并补齐简介",
++      "plot_backfill_preparing": "正在搜索并保存简介原文（{concurrency} 路）…",
 +      "plot_backfill_disabled": "翻译未启用",
-+      "plot_backfill_hint": "抓取缺失简介并按当前软件语言翻译，已有简介绝不覆盖",
-+      "plot_backfill_toast_success": "简介补齐完成！{success} 部成功",
-+      "plot_backfill_toast_mixed": "简介补齐完成！{success} 部成功，{failed} 部失败",
++      "plot_backfill_hint": "只搜索并保存空白 NFO 简介，完成后再询问是否翻译。",
++      "plot_backfill_toast_success": "简介搜索完成：已保存 {success}，失败 {failed}，跳过 {skipped}",
++      "plot_backfill_toast_mixed": "简介搜索完成：已保存 {success}，失败 {failed}，跳过 {skipped}",
 +      "plot_backfill_error": "简介补齐失败，请稍后重试",
 +      "backfill_item_failed": "失败：{number} — {error}",
 +      "backfill_item_skipped": "已跳过：{number} — {error}",
@@ -10098,7 +10230,7 @@
        "cancel": "取消",
        "discard": "放弃更改",
        "save": "保存并离开"
-@@ -1041,7 +1549,7 @@
+@@ -1041,10 +1549,22 @@
        "confirm": "确认删除"
      },
      "leave_warning": {
@@ -10107,7 +10239,22 @@
        "image_check": "图片检查进行中，离开将会中断！",
        "folder_dirty": "您有未保存的文件夹变更",
        "confirm": "{message}确定要离开吗？"
-@@ -1072,16 +1580,21 @@
++    },
++    "plot_flow": {
++      "title": "简介已保存",
++      "confirm": "本次已找到并保存 {n} 部影片的简介原文。是否按当前软件语言翻译这些简介？翻译失败会保留原文。",
++      "keep_original": "保留原文",
++      "translate": "翻译这些简介",
++      "pending": "翻译本次简介（{n} 部）",
++      "enable_translation": "请先在设置中启用并配置翻译功能。简介原文已保存，可稍后继续翻译。",
++      "translating": "正在翻译本次找到的简介…",
++      "translated": "简介翻译完成：成功 {success} 部",
++      "translation_mixed": "简介翻译完成：成功 {success}，失败 {failed}；失败项保留原文",
++      "translation_error": "简介翻译未完成，已保存的原文不会丢失"
+     }
+   },
+   "scraper": {
+@@ -1072,16 +1592,21 @@
      "update_available": "OpenAver 有新版本",
      "auto_organize_summary": "定时整理",
      "auto_organize_aborted": "定时整理已中止",
@@ -10133,7 +10280,7 @@
    },
    "similar_mode": {
      "button_aria_label": "探索相似视频",
-@@ -1092,9 +1605,10 @@
+@@ -1092,9 +1617,10 @@
      "page_title": "视频浏览",
      "state": {
        "loading": "加载视频列表中...",
@@ -10147,7 +10294,7 @@
      },
      "error": {
        "server_error": "服务器错误 ({status})",
-@@ -1197,6 +1711,7 @@
+@@ -1197,6 +1723,7 @@
        "mdate": "修改时间",
        "random": "随机",
        "actress": {
@@ -10155,7 +10302,7 @@
          "video_count": "作品数",
          "name": "姓名",
          "added_at": "收藏时间",
-@@ -1246,7 +1761,13 @@
+@@ -1246,7 +1773,13 @@
        "source_unreachable_list": "无法访问：{list}",
        "source_unreachable_count": "{n} 个位置无法访问",
        "source_no_permission_list": "没有权限读取：{list}",
@@ -10170,7 +10317,7 @@
      },
      "nav": {
        "prev_page": "上一页",
-@@ -1291,6 +1812,7 @@
+@@ -1291,6 +1824,7 @@
        "tag_nfo_write_blocked": "标签已保存，但没有权限写入 NFO",
        "translate_tooltip": "翻译标题",
        "translate_done": "已翻译标题",
@@ -10178,7 +10325,7 @@
        "translate_undo": "复原",
        "translate_skipped": "标题没有需要翻译的内容",
        "translate_undone": "已复原标题",
-@@ -1298,7 +1820,7 @@
+@@ -1298,7 +1832,7 @@
        "translate_no_nfo": "这部影片还没有 NFO，请先补全再翻译标题",
        "user_tags_label": "自定义标签",
        "alias_label": "别名",
@@ -10187,7 +10334,7 @@
        "mask_toggle": "封面裁切预览",
        "mask_detect_failed": "焦点检测失败，请稍后再试",
        "mask_focal_too_slow_auto_disabled": "这张封面找脸花了超过 5 秒，已经先帮你关掉自动对焦。想调整位置直接拖就可以，随时能到设置开回来。",
-@@ -1307,9 +1829,35 @@
+@@ -1307,9 +1841,35 @@
        "mask_save_failed": "裁切设置保存失败，请稍后再试",
        "mask_cover_changed": "封面已变更，请重新打开裁切工具再试一次",
        "cover_unavailable": "这部视频的封面现在读不到——可能是文件位置目前无法访问，或者封面文件本身不见了",
@@ -10225,7 +10372,7 @@
      },
      "pick": {
        "add_aria": "加入精选",
-@@ -1410,10 +1958,90 @@
+@@ -1410,10 +1970,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -10316,7 +10463,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1434,7 +2062,8 @@
+@@ -1434,7 +2074,8 @@
        "this_computer_unavailable": "暂时读不到这台电脑的更新信息，请重新打开帮助页再试",
        "client_up_to_date": "这台电脑的 OpenAver 已是最新",
        "client_update_available_prefix": "这台电脑有新版",
@@ -10326,7 +10473,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2076,7 @@
+@@ -1447,7 +2088,7 @@
        "title": "第一次使用？先看这 3 步",
        "subtitle": "从加入文件夹到补全资料，三步上手",
        "step1_title": "加入片库文件夹",
@@ -10335,7 +10482,7 @@
        "step2_title": "生成网页",
        "step2_desc": "一键扫描并建立可浏览的收藏页",
        "step3_title": "NFO 补全",
-@@ -1464,7 +2093,7 @@
+@@ -1464,7 +2105,7 @@
      "tag_alias": {
        "title": "Tag 别名管理",
        "intro": "中日英同义词集中管理，让搜索框、chip 筛选、模糊探索全部说同一种语言。",
@@ -10344,7 +10491,7 @@
        "scanner_chipwall": "chip 墙列出所有 Tag 别名组。点「+」新增 alias，主名（primary）以粉红色显示，别名以灰色显示。",
        "scanner_ai_hint": "点「?」开启 AI 建议框：把你的 tag 需求描述给 AI，它会回传建议的别名组供你直接汇入。",
        "h6_showcase": "Showcase 自动展开",
-@@ -1501,16 +2130,16 @@
+@@ -1501,16 +2142,16 @@
      "batch": {
        "title": "批次文件搜索",
        "h6_add": "加入多个文件",
@@ -10365,7 +10512,7 @@
        "fav_auto": "自动开始搜索前 20 个文件",
        "fav_nfo_skip": "同名 .nfo 存在则视为已整理，不重打 scraper",
        "pause_pause": "批次搜索时可点击「暂停」按钮",
-@@ -1563,17 +2192,17 @@
+@@ -1563,17 +2204,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "从搜索页或浏览页加入收藏，照片自动下载至本地",
        "manage_library": "搜索栏旁的 <strong>+</strong> 可打开「从片库加入女优」列表：库内女优按片数由多到少排序，别名自动合并成同一人，逐行点爱心即可加入收藏",
@@ -10387,7 +10534,7 @@
        "feat_nfo": "自动读取 NFO 文件并显示元数据",
        "feat_nfo_fill": "支持「NFO 补全」：自动搜索缺失的 NFO 文件",
        "feat_terminal": "内建 Mini Terminal 显示即时处理进度",
-@@ -1587,7 +2216,7 @@
+@@ -1587,7 +2228,7 @@
        "jellyfin_canonical": "选了媒体管理器模式后<strong>不再另外生成同名封面</strong>——那张图会被 Jellyfin／Emby 优先读取，导致封面墙出现横版图。既有的片维持原本的封面位置（以免清掉你已调整过的对焦），要修正请自行删掉该片的同名封面后重新生成。",
        "jellyfin_showcase": "扫描完成后可至 <code>/showcase</code> 页面浏览生成结果",
        "h6_strm_deploy": "只读来源 + 让 Emby／Jellyfin／Kodi 扫到片（跨机器部署）",
@@ -10396,7 +10543,7 @@
        "strm_deploy_step2": "在「输出到」指定一个<strong>这台能写入</strong>的文件夹（可以是挂载到这台的 NAS 可写共享）——生成的 <code>.strm</code>＋NFO＋封面会放这里，再让 Emby／Jellyfin／Kodi 指向它建媒体库。这个输出夹不是只读来源本身。",
        "strm_deploy_step4": "之后改了映射规则，既有的 <code>.strm</code> 会自动一次改写，不用重建整个媒体库。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎么在 Emby/Jellyfin 合并？",
-@@ -1601,7 +2230,7 @@
+@@ -1601,7 +2242,7 @@
        "h6_modes": "显示模式",
        "h6_sort": "排序与搜索",
        "h6_other": "其他功能",
@@ -10405,7 +10552,7 @@
        "mode_grid": "<strong>完整封面</strong>：整张封面的封面墙，点击开启 Lightbox（默认）",
        "mode_poster": "<strong>竖版海报</strong>：只显示封面右半（正面），卡片变窄、一行放得更多；手机／窄窗口一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精简列表，适合快速浏览",
-@@ -1632,7 +2261,7 @@
+@@ -1632,7 +2273,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越准；tag 很少的视频建议先补完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "无需设置，开箱即用",
@@ -10414,7 +10561,7 @@
      },
      "shortcuts": {
        "title": "快捷键",
-@@ -1809,6 +2438,66 @@
+@@ -1809,6 +2450,66 @@
        "client_title": "即将更新这台电脑的 OpenAver",
        "client_case_a_body": "更新的是这台电脑上的 OpenAver，不是服务器。点击确认后会在这台电脑打开终端运行安装，请先关闭 OpenAver，安装完成后再自行重新打开。",
        "client_case_b_body": "这台电脑的 OpenAver 不是安装在默认位置。\n安装程序会先把新版本安装到默认目录，安装期间不需要先关闭当前的 OpenAver。\n\n安装完成后，请依次操作：\n1. 关闭 OpenAver\n2. 删除旧安装目录中的 python 文件夹\n3. 将新版本的所有文件复制覆盖回这台电脑原本的安装位置\n\n不需要重新安装或重新设置，直接覆盖文件即可使用。"
@@ -10481,7 +10628,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2505,18 @@
+@@ -1816,20 +2517,18 @@
      "skip": "跳过",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -10514,7 +10661,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1845,6 +2532,12 @@
+@@ -1845,6 +2544,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -10527,7 +10674,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2553,11 @@
+@@ -1860,7 +2565,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -10540,7 +10687,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2575,15 @@
+@@ -1878,11 +2587,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -10558,7 +10705,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1957,7 +2658,7 @@
+@@ -1957,7 +2670,7 @@
        "intro": "左栏是服务器上的文件夹，右栏填这台电脑看到的路径，可以先留空、之后再填。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -10567,7 +10714,7 @@
        "readonly": "只读",
        "test_btn": "测试",
        "found": "找得到",
-@@ -1968,7 +2669,7 @@
+@@ -1968,7 +2681,7 @@
        "loading": "正在读取服务器的扫描来源…",
        "load_failed": "读不到服务器的扫描来源",
        "reload_btn": "重新读取",
@@ -10576,7 +10723,7 @@
        "stale": "（服务器已无此来源）",
        "remove": "移除",
        "save_btn": "保存对照表",
-@@ -1976,5 +2677,419 @@
+@@ -1976,5 +2689,449 @@
        "saved": "对照表已保存",
        "save_failed": "对照表保存失败"
      }
@@ -10750,14 +10897,14 @@
 +    },
 +    "plots": {
 +      "none": "没有缺失简介的视频",
-+      "start": "开始补齐简介：{total} 部（并行 {concurrency} 路）",
-+      "status": "正在并行抓取并翻译简介（{concurrency} 路）...",
-+      "status_count": "正在补齐简介（{current}/{total}，并行 {concurrency} 路）...",
++      "start": "开始搜索并保存简介：{total} 部（并行 {concurrency} 路）",
++      "status": "正在搜索并保存简介原文（{concurrency} 路）…",
++      "status_count": "正在搜索并保存简介（{current}/{total}，并行 {concurrency} 路）…",
 +      "missing_number": "无法识别番号，已跳过",
 +      "already_filled": "简介已被其他任务补齐，已跳过",
 +      "log": "[{current}/{total}] {number}：{preview}",
 +      "cancelled": "简介补齐已取消",
-+      "done": "简介补齐完成：成功 {success}，失败 {failed}，跳过 {skipped}",
++      "done": "简介搜索完成：已保存 {success}，失败 {failed}，跳过 {skipped}",
 +      "unexpected_error": "简介补齐失败，请查看日志",
 +      "db_missing": "数据库不存在，请先生成列表",
 +      "translate_disabled": "翻译功能未启用",
@@ -10774,7 +10921,8 @@
 +      "translation_refused": "模型拒绝翻译该简介",
 +      "translation_invalid": "模型返回了无效的简介译文",
 +      "translation_empty": "模型返回了空简介",
-+      "error_internal": "简介处理失败，请查看日志"
++      "error_internal": "简介处理失败，请查看日志",
++      "batch_missing": "本次简介记录已不存在，请重新检查缺失简介；已保存的原文不受影响。"
 +    },
 +    "database": {
 +      "missing": "数据库不存在，请先生成列表",
@@ -10993,6 +11141,35 @@
 +      "ollama_unreachable": "无法连接到 Ollama",
 +      "optimize_failed": "标题优化失败",
 +      "batch_failed": "批量翻译失败"
++    },
++    "plot_translation": {
++      "none": "没有需要翻译的本次简介",
++      "start": "开始翻译本次简介：{total} 部（并行 {concurrency} 路）",
++      "status": "正在翻译本次找到的简介（{concurrency} 路）…",
++      "status_count": "正在翻译简介（{current}/{total}，并行 {concurrency} 路）…",
++      "missing_number": "无法识别番号，已跳过",
++      "already_filled": "简介已被其他任务补齐，已跳过",
++      "log": "[{current}/{total}] {number}：{preview}",
++      "cancelled": "简介补齐已取消",
++      "done": "简介翻译完成：成功 {success}，失败 {failed}，跳过 {skipped}",
++      "unexpected_error": "简介补齐失败，请查看日志",
++      "db_missing": "数据库不存在，请先生成列表",
++      "translate_disabled": "翻译功能未启用",
++      "config_invalid": "翻译功能设置无效，请检查设置",
++      "error_not_found": "找不到 {number} 的资料",
++      "error_no_summary": "找不到 {number} 的简介",
++      "error_search_failed": "搜索 {number} 的资料失败",
++      "error_no_nfo": "NFO 文件已不存在",
++      "error_nfo_unreadable": "无法读取或解析 NFO 文件",
++      "error_nfo_write_failed": "简介写入 NFO 失败",
++      "error_storage_permission_required": "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
++      "error_db_write_failed": "NFO 已更新，但数据库刷新失败，请重试",
++      "translation_failed": "简介翻译失败",
++      "translation_refused": "模型拒绝翻译该简介",
++      "translation_invalid": "模型返回了无效的简介译文",
++      "translation_empty": "模型返回了空简介",
++      "error_internal": "简介处理失败，请查看日志",
++      "batch_missing": "本次简介记录已不存在，请重新检查缺失简介；已保存的原文不受影响。"
 +    }
    }
  }
@@ -11923,13 +12100,13 @@
 +      "plot_backfill_prefix": "缺簡介:",
 +      "plot_backfill_suffix": "部",
 +      "plot_backfill_drilldown_note": "只處理已有 NFO 但簡介為空的影片；沒有 NFO 的影片仍由「缺 NFO/封面」補全處理。",
-+      "plot_backfill_idle": "一鍵補齊簡介",
-+      "plot_backfill_loading": "補齊簡介中...",
-+      "plot_backfill_preparing": "準備補齊簡介...",
++      "plot_backfill_idle": "搜尋並補齊簡介",
++      "plot_backfill_loading": "搜尋並補齊簡介",
++      "plot_backfill_preparing": "正在搜尋並儲存簡介原文（{concurrency} 路）…",
 +      "plot_backfill_disabled": "翻譯未啟用",
-+      "plot_backfill_hint": "抓取缺少的簡介並依目前軟體語言翻譯，既有簡介絕不覆寫",
-+      "plot_backfill_toast_success": "簡介補齊完成！{success} 部成功",
-+      "plot_backfill_toast_mixed": "簡介補齊完成！{success} 部成功，{failed} 部失敗",
++      "plot_backfill_hint": "只搜尋並儲存空白 NFO 簡介，完成後再詢問是否翻譯。",
++      "plot_backfill_toast_success": "簡介搜尋完成：已儲存 {success}，失敗 {failed}，略過 {skipped}",
++      "plot_backfill_toast_mixed": "簡介搜尋完成：已儲存 {success}，失敗 {failed}，略過 {skipped}",
 +      "plot_backfill_error": "簡介補齊失敗，請稍後重試",
 +      "backfill_item_failed": "失敗：{number} — {error}",
 +      "backfill_item_skipped": "已跳過：{number} — {error}",
@@ -11955,7 +12132,7 @@
        "nas_hint": "想餵給 NAS 上的 Emby／Jellyfin／Kodi？預設模式只生成 OpenAver 自己瀏覽用的本地庫、不會產生 .strm 捷徑檔。若你要讓媒體伺服器掃這批片，請先到「設定」把模式切到 Emby·Jellyfin·Kodi 模式。"
      },
      "clear_cache_modal": {
-@@ -1041,7 +1549,7 @@
+@@ -1041,10 +1549,22 @@
        "confirm": "確認刪除"
      },
      "leave_warning": {
@@ -11964,7 +12141,22 @@
        "image_check": "圖片檢查進行中，離開將會中斷！",
        "folder_dirty": "您有未儲存的資料夾變更",
        "confirm": "{message}確定要離開嗎？"
-@@ -1073,15 +1581,20 @@
++    },
++    "plot_flow": {
++      "title": "簡介已儲存",
++      "confirm": "本次已找到並儲存 {n} 部影片的簡介原文。是否依目前軟體語言翻譯這些簡介？翻譯失敗會保留原文。",
++      "keep_original": "保留原文",
++      "translate": "翻譯這些簡介",
++      "pending": "翻譯本次簡介（{n} 部）",
++      "enable_translation": "請先在設定中啟用並設定翻譯功能。簡介原文已儲存，可稍後繼續翻譯。",
++      "translating": "正在翻譯本次找到的簡介…",
++      "translated": "簡介翻譯完成：成功 {success} 部",
++      "translation_mixed": "簡介翻譯完成：成功 {success}，失敗 {failed}；失敗項保留原文",
++      "translation_error": "簡介翻譯未完成，已儲存的原文不會遺失"
+     }
+   },
+   "scraper": {
+@@ -1073,15 +1593,20 @@
      "update_available": "OpenAver 有新版本",
      "auto_organize_summary": "定時整理",
      "auto_organize_aborted": "定時整理已中止",
@@ -11989,7 +12181,7 @@
    },
    "similar_mode": {
      "button_aria_label": "探索相似影片",
-@@ -1093,8 +1606,9 @@
+@@ -1093,8 +1618,9 @@
      "state": {
        "loading": "載入影片列表中...",
        "empty": "尚未產生影片列表",
@@ -12001,7 +12193,7 @@
      },
      "error": {
        "server_error": "伺服器錯誤 ({status})",
-@@ -1123,7 +1637,7 @@
+@@ -1123,7 +1649,7 @@
        "fail": "重新刮削失敗，請稍後再試。",
        "jl_desktop_only": "僅限桌面應用程式（standalone）可用",
        "cf_window_restart": "這個來源的驗證視窗沒有啟動成功，請重新啟動 OpenAver 再試。若重啟仍不行，到「連線」頁看原因",
@@ -12010,7 +12202,7 @@
        "cf_window_preparing": "驗證視窗正在準備，請幾秒後再試",
        "jl_cf_solving": "Cloudflare 驗證中……通過後將自動繼續",
        "versions_found": "找到 {count} 部同番號作品",
-@@ -1197,6 +1711,7 @@
+@@ -1197,6 +1723,7 @@
        "mdate": "修改時間",
        "random": "隨機",
        "actress": {
@@ -12018,7 +12210,7 @@
          "video_count": "作品數",
          "name": "姓名",
          "added_at": "收藏時間",
-@@ -1246,7 +1761,13 @@
+@@ -1246,7 +1773,13 @@
        "source_unreachable_list": "無法存取：{list}",
        "source_unreachable_count": "{n} 個位置無法存取",
        "source_no_permission_list": "沒有權限讀取：{list}",
@@ -12033,7 +12225,7 @@
      },
      "nav": {
        "prev_page": "上一頁",
-@@ -1291,6 +1812,7 @@
+@@ -1291,6 +1824,7 @@
        "tag_nfo_write_blocked": "標籤已存，但沒有權限寫入 NFO",
        "translate_tooltip": "翻譯標題",
        "translate_done": "已翻譯標題",
@@ -12041,7 +12233,7 @@
        "translate_undo": "復原",
        "translate_skipped": "標題沒有需要翻譯的內容",
        "translate_undone": "已復原標題",
-@@ -1298,18 +1820,44 @@
+@@ -1298,18 +1832,44 @@
        "translate_no_nfo": "這部片還沒有 NFO，請先補完再翻譯標題",
        "user_tags_label": "自訂標籤",
        "alias_label": "別名",
@@ -12089,7 +12281,7 @@
      },
      "pick": {
        "add_aria": "加入精選",
-@@ -1410,12 +1958,92 @@
+@@ -1410,12 +1970,92 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -12183,7 +12375,7 @@
        "copy_curl": "複製指令",
        "page_title": "使用說明",
        "subtitle": "JAV 影片元數據管理工具",
-@@ -1426,15 +2054,16 @@
+@@ -1426,15 +2066,16 @@
        "update_available_prefix": "新版本",
        "update_available_suffix": "可用",
        "up_to_date": "已是最新版本",
@@ -12203,7 +12395,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2076,7 @@
+@@ -1447,7 +2088,7 @@
        "title": "第一次使用？先看這 3 步",
        "subtitle": "從加入資料夾到補全資料，三步上手",
        "step1_title": "加入片庫資料夾",
@@ -12212,7 +12404,7 @@
        "step2_title": "產生網頁",
        "step2_desc": "一鍵掃描並建立可瀏覽的收藏頁",
        "step3_title": "NFO 補全",
-@@ -1464,7 +2093,7 @@
+@@ -1464,7 +2105,7 @@
      "tag_alias": {
        "title": "Tag 別名管理",
        "intro": "中日英同義詞集中管理，讓搜尋框、chip 篩選、模糊探索全部說同一種語言。",
@@ -12221,7 +12413,7 @@
        "scanner_chipwall": "chip 牆列出所有 Tag 別名組。點「+」新增 alias，主名（primary）以粉紅色顯示，別名以灰色顯示。",
        "scanner_ai_hint": "點「?」開啟 AI 建議框：把你的 tag 需求描述給 AI，它會回傳建議的別名組供你直接匯入。",
        "h6_showcase": "Showcase 自動展開",
-@@ -1501,16 +2130,16 @@
+@@ -1501,16 +2142,16 @@
      "batch": {
        "title": "批次檔案搜尋",
        "h6_add": "加入多個檔案",
@@ -12242,7 +12434,7 @@
        "fav_auto": "自動開始搜尋前 20 個檔案",
        "fav_nfo_skip": "同名 .nfo 存在則視為已整理，不重打 scraper",
        "pause_pause": "批次搜尋時可點擊「暫停」按鈕",
-@@ -1563,17 +2192,17 @@
+@@ -1563,17 +2204,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "從搜尋頁或瀏覽頁加入收藏，照片自動下載至本地",
        "manage_library": "搜尋列旁的 <strong>+</strong> 可開啟「從片庫加入女優」清單：庫內女優依片數由多到少排序，別名自動合併成同一人，逐列點愛心即可加入收藏",
@@ -12264,7 +12456,7 @@
        "feat_nfo": "自動讀取 NFO 檔案並顯示元數據",
        "feat_nfo_fill": "「就地補資料」：原地補缺失的 NFO + 封面，不改名、不搬位 — 適合唯讀網盤、已有自己的資料夾結構，或只想瀏覽不被改檔案",
        "feat_terminal": "內建 Mini Terminal 顯示即時處理進度",
-@@ -1587,9 +2216,9 @@
+@@ -1587,9 +2228,9 @@
        "jellyfin_canonical": "選了媒體管理器模式後<strong>不再另外產生同名封面</strong>——那張圖會被 Jellyfin／Emby 優先讀取，造成封面牆出現橫式圖。既有的片維持原本的封面位置（以免清掉你已調整過的對焦），要修正請自行刪掉該片的同名封面後重新產生。",
        "jellyfin_showcase": "掃描完成後可至 <code>/showcase</code> 頁面瀏覽生成結果",
        "h6_strm_deploy": "唯讀來源 + 讓 Emby／Jellyfin／Kodi 掃到片（跨機器部署）",
@@ -12276,7 +12468,7 @@
        "strm_deploy_step4": "之後改了映射規則，既有的 <code>.strm</code> 會自動一次改寫，不用重建整個媒體庫。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎麼在 Emby/Jellyfin 合併？",
        "multiversion_intro": "多版本合併是 Emby 與 Jellyfin 共同支援的原生功能（同一套「資料夾名 - 標籤」規則），不是哪一家獨有。把同一片各版本放進以番號命名的資料夾，檔名都以資料夾名開頭加「 - 標籤」：",
-@@ -1601,7 +2230,7 @@
+@@ -1601,7 +2242,7 @@
        "h6_modes": "顯示模式",
        "h6_sort": "排序與搜尋",
        "h6_other": "其他功能",
@@ -12285,7 +12477,7 @@
        "mode_grid": "<strong>完整封面</strong>：整張封面的封面牆，點擊開啟 Lightbox（預設）",
        "mode_poster": "<strong>直式海報</strong>：只顯示封面右半（正面），卡片變窄、一列放得更多；手機／窄視窗一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精簡列表，適合快速瀏覽（預設不顯示；可至「設定」→「列表顯示預設」開啟「顯示表格與清單」）",
-@@ -1632,7 +2261,7 @@
+@@ -1632,7 +2273,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越準；tag 很少的影片建議先補完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "無需設定，開箱即用",
@@ -12294,7 +12486,7 @@
      },
      "shortcuts": {
        "title": "快捷鍵",
-@@ -1736,26 +2365,26 @@
+@@ -1736,26 +2377,26 @@
      "server_mode": {
        "title": "伺服器模式 — 讓手機/平板連進來",
        "h6_what": "這是什麼",
@@ -12328,7 +12520,7 @@
        "h6_recover": "不小心按了「取消 / 拒絕」怎麼救回",
        "recover_win_intro": "Windows 救回步驟：",
        "recover_win_1": "按 <code>Win + R</code>，輸入 <code>wf.msc</code> 後 Enter，開啟「Windows Defender 防火牆 進階安全性」。",
-@@ -1800,15 +2429,75 @@
+@@ -1800,15 +2441,75 @@
      "update_modal": {
        "trigger_btn": "更新",
        "title": "即將開啟安裝視窗",
@@ -12407,7 +12599,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2505,18 @@
+@@ -1816,20 +2517,18 @@
      "skip": "跳過",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -12440,7 +12632,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1850,6 +2537,12 @@
+@@ -1850,6 +2549,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -12453,7 +12645,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1861,11 +2554,15 @@
+@@ -1861,11 +2566,15 @@
        "series": "系列",
        "deep_dive": "深入：女優與片商",
        "gantt": "主要片商年表",
@@ -12471,7 +12663,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2580,15 @@
+@@ -1883,11 +2592,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -12489,7 +12681,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1896,7 +2597,7 @@
+@@ -1896,7 +2609,7 @@
    },
    "connect": {
      "nobridge": "請在桌面版開啟",
@@ -12498,7 +12690,7 @@
      "status_connected": "已連線 {host}",
      "status_down": "連不到 {host}",
      "version_line": "版本 {version}（{kind}）",
-@@ -1906,69 +2607,69 @@
+@@ -1906,69 +2619,69 @@
      "kind_windows": "Windows 桌面版",
      "kind_mac": "Mac 桌面版",
      "last_ok": "上次成功連線：{time}",
@@ -12589,7 +12781,7 @@
        "stale": "（伺服器已無此來源）",
        "remove": "移除",
        "save_btn": "儲存對照表",
-@@ -1976,5 +2677,419 @@
+@@ -1976,5 +2689,449 @@
        "saved": "對照表已儲存",
        "save_failed": "對照表儲存失敗"
      }
@@ -12763,14 +12955,14 @@
 +    },
 +    "plots": {
 +      "none": "沒有缺少簡介的影片",
-+      "start": "開始補齊簡介：{total} 部（並行 {concurrency} 路）",
-+      "status": "正在並行抓取並翻譯簡介（{concurrency} 路）...",
-+      "status_count": "正在補齊簡介（{current}/{total}，並行 {concurrency} 路）...",
++      "start": "開始搜尋並儲存簡介：{total} 部（並行 {concurrency} 路）",
++      "status": "正在搜尋並儲存簡介原文（{concurrency} 路）…",
++      "status_count": "正在搜尋並儲存簡介（{current}/{total}，並行 {concurrency} 路）…",
 +      "missing_number": "無法識別番號，已跳過",
 +      "already_filled": "簡介已被其他任務補齊，已跳過",
 +      "log": "[{current}/{total}] {number}：{preview}",
 +      "cancelled": "簡介補齊已取消",
-+      "done": "簡介補齊完成：成功 {success}，失敗 {failed}，跳過 {skipped}",
++      "done": "簡介搜尋完成：已儲存 {success}，失敗 {failed}，略過 {skipped}",
 +      "unexpected_error": "簡介補齊失敗，請查閱日誌",
 +      "db_missing": "資料庫不存在，請先產生列表",
 +      "translate_disabled": "翻譯功能未啟用",
@@ -12787,7 +12979,8 @@
 +      "translation_refused": "模型拒絕翻譯該簡介",
 +      "translation_invalid": "模型傳回了無效的簡介譯文",
 +      "translation_empty": "模型傳回了空簡介",
-+      "error_internal": "簡介處理失敗，請查閱日誌"
++      "error_internal": "簡介處理失敗，請查閱日誌",
++      "batch_missing": "本次簡介紀錄已不存在，請重新檢查缺失簡介；已儲存的原文不受影響。"
 +    },
 +    "database": {
 +      "missing": "資料庫不存在，請先產生列表",
@@ -13006,6 +13199,35 @@
 +      "ollama_unreachable": "無法連線到 Ollama",
 +      "optimize_failed": "標題最佳化失敗",
 +      "batch_failed": "批次翻譯失敗"
++    },
++    "plot_translation": {
++      "none": "沒有需要翻譯的本次簡介",
++      "start": "開始翻譯本次簡介：{total} 部（並行 {concurrency} 路）",
++      "status": "正在翻譯本次找到的簡介（{concurrency} 路）…",
++      "status_count": "正在翻譯簡介（{current}/{total}，並行 {concurrency} 路）…",
++      "missing_number": "無法識別番號，已跳過",
++      "already_filled": "簡介已被其他任務補齊，已跳過",
++      "log": "[{current}/{total}] {number}：{preview}",
++      "cancelled": "簡介補齊已取消",
++      "done": "簡介翻譯完成：成功 {success}，失敗 {failed}，略過 {skipped}",
++      "unexpected_error": "簡介補齊失敗，請查閱日誌",
++      "db_missing": "資料庫不存在，請先產生列表",
++      "translate_disabled": "翻譯功能未啟用",
++      "config_invalid": "翻譯功能設定無效，請檢查設定",
++      "error_not_found": "找不到 {number} 的資料",
++      "error_no_summary": "找不到 {number} 的簡介",
++      "error_search_failed": "搜尋 {number} 的資料失敗",
++      "error_no_nfo": "NFO 檔案已不存在",
++      "error_nfo_unreadable": "無法讀取或解析 NFO 檔案",
++      "error_nfo_write_failed": "簡介寫入 NFO 失敗",
++      "error_storage_permission_required": "外置儲存尚未授權寫入，請從右上角選單選擇「授權可寫目錄」並選中影片所在的儲存卡目錄",
++      "error_db_write_failed": "NFO 已更新，但資料庫重新整理失敗，請再試一次",
++      "translation_failed": "簡介翻譯失敗",
++      "translation_refused": "模型拒絕翻譯該簡介",
++      "translation_invalid": "模型傳回了無效的簡介譯文",
++      "translation_empty": "模型傳回了空簡介",
++      "error_internal": "簡介處理失敗，請查閱日誌",
++      "batch_missing": "本次簡介紀錄已不存在，請重新檢查缺失簡介；已儲存的原文不受影響。"
 +    }
    }
  }
@@ -22488,7 +22710,7 @@
 +        },
 +
 +        get taskEtaText() {
-+            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill'].includes(this.taskKind)) {
++            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind)) {
 +                return '';
 +            }
 +            let seconds = this.taskEtaSeconds;
@@ -22506,7 +22728,7 @@
 +        get taskCanRetry() {
 +            return !this.isGenerating
 +                && this.taskFailedItems.length > 0
-+                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill', 'plot-backfill'].includes(this.taskKind);
++                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind);
 +        },
 +
 +        get maintenanceSummaryText() {
@@ -22588,7 +22810,7 @@
 +                || this.state === 'renamePreviewing'
 +                || this.state === 'jellyfinUpdating' || this.state === 'enriching'
 +                || this.state === 'titleBackfilling' || this.state === 'sampleBackfilling'
-+                || this.state === 'plotBackfilling';
++                || this.state === 'plotBackfilling' || this.state === 'plotTranslating';
          },
  
          get isBusy() {
@@ -22913,7 +23135,7 @@
              if (!hasLogs) {
                  this.showToast(window.t('scanner.toast.no_logs'), 'info');
                  return;
-@@ -768,6 +1049,157 @@
+@@ -768,6 +1049,161 @@
              if (confirm(window.t('scanner.toast.confirm_clear_logs'))) {
                  this.clearLogs();
                  this.showToast(window.t('scanner.toast.logs_cleared'), 'success');
@@ -23066,12 +23288,16 @@
 +            if (this.taskKind === 'sample-backfill') {
 +                this.runSampleBackfill();
 +            }
++            if (this.taskKind === 'plot-translate') {
++                this.runPlotTranslation();
++                return;
++            }
 +            if (this.taskKind === 'plot-backfill') {
 +                this.runPlotBackfill();
              }
          },
  
-@@ -792,9 +1224,7 @@
+@@ -792,9 +1228,7 @@
  
              // 重置狀態
              this.state = 'generating';
@@ -23082,7 +23308,7 @@
              this.outputPath = '';
              this.nfoUpdateVisible = false;
              this.clearLogs();
-@@ -812,19 +1242,24 @@
+@@ -812,19 +1246,24 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -23110,7 +23336,7 @@
                          localStorage.removeItem('avlist_state');  // 清除 viewer 狀態
  
                          // 處理 NFO 更新提示
-@@ -868,6 +1303,15 @@
+@@ -868,6 +1307,15 @@
                              this.showToast(window.t('scanner.toast.generate_success', { count: data.video_count }), 'success');
                          }
  
@@ -23126,7 +23352,7 @@
                          // a5: Windows 長路徑警告
                          if (data.long_paths && data.long_paths.length > 0) {
                              this.showToast(
-@@ -890,24 +1334,24 @@
+@@ -890,24 +1338,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -23155,7 +23381,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] generate error:', e);
                  this.showToast(window.t('scanner.toast.generate_error'), 'error', 4000);
-@@ -915,26 +1359,65 @@
+@@ -915,26 +1363,65 @@
          },
  
          // ===== T7b: NFO Update Flow =====
@@ -23228,7 +23454,7 @@
  
                  this.eventSource.onmessage = (event) => {
                      const data = JSON.parse(event.data);
-@@ -943,55 +1426,288 @@
+@@ -943,55 +1430,288 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -23529,7 +23755,7 @@
          // ===== T6d: Jellyfin Image Update Flow =====
          async runJellyfinImageUpdate() {
              if (this.isGenerating) return;
-@@ -1002,9 +1718,7 @@
+@@ -1002,9 +1722,7 @@
              }
  
              this.state = 'jellyfinUpdating';
@@ -23540,7 +23766,7 @@
              this.clearLogs();
  
              localStorage.setItem('avlist_generating', 'true');
-@@ -1019,14 +1733,13 @@
+@@ -1019,14 +1737,13 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -23557,7 +23783,7 @@
                          // TASK-111 P2-b 後續（codex delta review）：done 不再必然代表「全數完成」——
                          // 批次跑到一半若把 external_manager 切成 off，後端會在下一部片 break 並送
                          // done(updated=已完成筆數)。這裡若無條件補滿 progressTotal，UI 會顯示 3/3
-@@ -1035,9 +1748,14 @@
+@@ -1035,9 +1752,14 @@
                          this.progressCurrent = (typeof data.updated === 'number')
                              ? data.updated
                              : this.progressTotal;
@@ -23573,7 +23799,7 @@
  
                          // T3(40c) Codex fix: update 完成後重設 jellyfin check 狀態，讓觸發列重新出現
                          this.jellyfinImageVisible = false;
-@@ -1045,7 +1763,13 @@
+@@ -1045,7 +1767,13 @@
                          this.jellyfinItems = [];
                          this.jellyfinCheckState = 'idle';
  
@@ -23588,7 +23814,7 @@
                          if (data.message) {
                              this.addLog('info', data.message);
                          }
-@@ -1053,24 +1777,24 @@
+@@ -1053,24 +1781,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -23617,7 +23843,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] runJellyfinImageUpdate error:', e);
                  this.showToast(window.t('scanner.toast.jellyfin_update_error'), 'error', 4000);
-@@ -1078,6 +1802,21 @@
+@@ -1078,6 +1806,21 @@
          },
  
          // ===== T7b: Utility =====
@@ -23639,7 +23865,7 @@
          copyOutputPath() {
              if (!this.outputPath) return;
  
-@@ -1097,5 +1836,6 @@
+@@ -1097,5 +1840,6 @@
                  }
              });
          },
@@ -23654,7 +23880,7 @@
  /** TASK-147b-T3 / CD-147b-5：四項判準——真的補到 NFO／封面／欄位／劇照才算成功。
   * 與 core/enrich_contract.py 的 did_enrich_something() 同一判準；改一邊必須改另一邊。
   *
-@@ -11,6 +13,13 @@
+@@ -11,8 +13,22 @@
          || (event.fields_filled?.length > 0) || event.extrafanart_written > 0);
  }
  
@@ -23666,9 +23892,18 @@
 +}
 +
  export function stateBatch() {
++    let pendingPlotTranslation = null;
++    try {
++        const saved = JSON.parse(localStorage.getItem('avlist_plot_translation_pending') || 'null');
++        if (/^[0-9a-f]{32}$/.test(saved?.batch_id || '') && saved.count > 0) pendingPlotTranslation = saved;
++    } catch { /* A damaged local draft must not block the scanner. */ }
      return {
++        pendingPlotTranslation,
++        plotTranslationConfirmOpen: false,
          // ===== T10: Missing NFO/Cover Enrich =====
-@@ -22,9 +31,113 @@
+         missingPillVisible: false,
+         missingBothCount: 0,
+@@ -22,9 +38,113 @@
          missingEnrichOffset: 0,     // batch offset
          missingEnrichSuccess: 0,
          missingEnrichFailed: 0,
@@ -23782,7 +24017,7 @@
  
          // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
          currentCard: null,          // {number, status, source, reason, coverSrc} | null
-@@ -66,6 +179,111 @@
+@@ -66,6 +186,106 @@
          get missingCoverDrilldownPayload() {
              return { title: window.t('scanner.stats.missing_cover_prefix'), items: this.missingCoverDrilldownItems, footnote: window.t('scanner.stats.missing_list_footnote') };
          },
@@ -23878,23 +24113,18 @@
 +                return '<span class="loading loading-spinner loading-sm"></span> '
 +                    + window.t('scanner.stats.plot_backfill_loading');
 +            }
-+            if (this.config?.translate?.enabled !== true) {
-+                return '<i class="bi bi-translate"></i> '
-+                    + window.t('scanner.stats.plot_backfill_disabled');
-+            }
 +            return '<i class="bi bi-card-text"></i> '
 +                + window.t('scanner.stats.plot_backfill_idle');
 +        },
 +
 +        get plotBackfillDisabled() {
 +            return this.isBusy
-+                || this.missingPlotCount === 0
-+                || this.config?.translate?.enabled !== true;
++                || this.missingPlotCount === 0;
 +        },
  
          get missingEnrichButtonText() {
              if (this.state === 'enriching') {
-@@ -74,13 +292,293 @@
+@@ -74,13 +294,293 @@
              return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
          },
  
@@ -24188,7 +24418,7 @@
                  if (d.total_missing > 0) {
                      // TASK-13: 後端永遠回傳完整 items 清單；前端於 runMissingEnrich 內做 > 500 confirm gate
                      this.missingBothCount = d.missing_both || 0;
-@@ -88,16 +586,237 @@
+@@ -88,16 +588,284 @@
                      this.missingCoverCount = d.missing_cover || 0;
                      this.missingItems = Array.isArray(d.items) ? d.items : [];
                      this.missingPillVisible = true;
@@ -24248,7 +24478,7 @@
 +        async runPlotBackfill() {
 +            if (this.plotBackfillDisabled) return;
 +            if (!this.plotBackfillSource) return this.openMaintenanceSourcePicker('plots');
-+            await this._runBackfillStream({
++            const event = await this._runBackfillStream({
 +                url: '/api/gallery/backfill-plots',
 +                source: this.plotBackfillSource,
 +                taskState: 'plotBackfilling',
@@ -24259,11 +24489,51 @@
 +                mixedToastKey: 'scanner.stats.plot_backfill_toast_mixed',
 +                errorText: window.t('scanner.stats.plot_backfill_error'),
 +            });
++            if (event?.summary?.translation_batch && event.summary.translation_count > 0) {
++                this._setPendingPlotTranslation({batch_id:event.summary.translation_batch,count:event.summary.translation_count});
++                if (!event.cancelled) this.plotTranslationConfirmOpen = true;
++            }
++        },
++
++        _setPendingPlotTranslation(value) {
++            this.pendingPlotTranslation = value;
++            try {
++                if (value) localStorage.setItem('avlist_plot_translation_pending', JSON.stringify(value));
++                else localStorage.removeItem('avlist_plot_translation_pending');
++            } catch { /* The current in-memory batch is still usable. */ }
++        },
++
++        keepOriginalPlots() {
++            this.plotTranslationConfirmOpen = false;
++        },
++
++        async runPlotTranslation() {
++            if (this.isBusy || !this.pendingPlotTranslation) return;
++            if (this.config?.translate?.enabled !== true) {
++                this.showToast(window.t('scanner.plot_flow.enable_translation'), 'warn');
++                return;
++            }
++            this.plotTranslationConfirmOpen = false;
++            const event = await this._runBackfillStream({
++                url: '/api/gallery/translate-backfilled-plots',
++                body: {batch_id:this.pendingPlotTranslation.batch_id},
++                taskState: 'plotTranslating', taskKind: 'plot-translate',
++                startStatus: window.t('scanner.plot_flow.translating'),
++                total: this.pendingPlotTranslation.count,
++                doneToastKey: 'scanner.plot_flow.translated', mixedToastKey: 'scanner.plot_flow.translation_mixed',
++                errorText: window.t('scanner.plot_flow.translation_error'),
++            });
++            if (event?.code === 'batch_missing') this._setPendingPlotTranslation(null);
++            if (event?.type === 'done' && !event.cancelled) {
++                if (!event.summary?.failed) this._setPendingPlotTranslation(null);
++                else this._setPendingPlotTranslation({...this.pendingPlotTranslation,count:event.summary.failed});
++            }
 +        },
 +
 +        async _runBackfillStream({
 +            url,
 +            source,
++            body,
 +            taskState,
 +            taskKind,
 +            startStatus,
@@ -24281,6 +24551,7 @@
 +                taskKind === 'title-backfill'
 +                || taskKind === 'sample-backfill'
 +                || taskKind === 'plot-backfill'
++                || taskKind === 'plot-translate'
 +            ) {
 +                this.logPanelExpanded = true;
 +            }
@@ -24289,12 +24560,14 @@
 +            this._backfillAbortController = controller;
 +            let completed = false;
 +            let streamFailed = false;
++            let completionEvent = null;
 +
 +            try {
 +                const endpoint = source ? `${url}?${new URLSearchParams({ source })}` : url;
 +                const resp = await fetch(endpoint, {
 +                    method: 'POST',
 +                    headers: { Accept: 'text/event-stream' },
++                    ...(body ? {headers:{Accept:'text/event-stream','Content-Type':'application/json'},body:JSON.stringify(body)} : {}),
 +                    signal: controller.signal,
 +                });
 +                if (!resp.ok) {
@@ -24373,6 +24646,7 @@
 +                        } else if (event.type === 'log') {
 +                            this.addLog(event.level || 'info', event.message || '');
 +                        } else if (event.type === 'done') {
++                            completionEvent = event;
 +                            completed = true;
 +                            streamDone = true;
 +                            this.progressCurrent = this.progressTotal;
@@ -24389,11 +24663,13 @@
 +                                    window.t(failed > 0 ? mixedToastKey : doneToastKey, {
 +                                        success,
 +                                        failed,
++                                        skipped: event.summary?.skipped || 0,
 +                                    }),
 +                                    failed > 0 ? 'warn' : 'success'
 +                                );
 +                            }
 +                        } else if (event.type === 'error') {
++                            completionEvent = event;
 +                            streamDone = true;
 +                            streamFailed = true;
 +                            this._finishTask('error', event.message || errorText);
@@ -24418,6 +24694,7 @@
 +                this.flushLogs();
 +                await this.checkMissing();
 +            }
++            return completionEvent;
 +        },
 +
          async runMissingEnrich({ skipConfirm = false } = {}) {
@@ -24426,7 +24703,7 @@
  
              // TASK-13: 大批量 confirm gate — > 500 筆彈 modal，等用戶按確認才繼續
              if (!skipConfirm && this.missingItems.length > 500) {
-@@ -109,14 +828,17 @@
+@@ -109,14 +877,17 @@
              this.missingEnrichOffset = 0;
              this.missingEnrichSuccess = 0;
              this.missingEnrichFailed = 0;
@@ -24447,7 +24724,7 @@
              this.clearLogs();
  
              const controller = new AbortController();
-@@ -136,7 +858,10 @@
+@@ -136,7 +907,10 @@
                          resp = await fetch('/api/batch-enrich', {
                              method: 'POST',
                              headers: { 'Content-Type': 'application/json' },
@@ -24459,7 +24736,7 @@
                              signal: controller.signal,
                          });
                      } catch (fetchErr) {
-@@ -146,7 +871,7 @@
+@@ -146,7 +920,7 @@
                          }
                          this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
                          this.flushLogs();
@@ -24468,7 +24745,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          // Save remaining
-@@ -159,7 +884,7 @@
+@@ -159,7 +933,7 @@
                          const errText = await resp.text().catch(() => '');
                          this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
                          this.flushLogs();
@@ -24477,7 +24754,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -200,6 +925,12 @@
+@@ -200,6 +974,12 @@
                                  this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
                                  this.progressTotal = items.length;
                                  this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
@@ -24490,7 +24767,7 @@
                              } else if (event.type === 'result-item') {
                                  // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
                                  // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
-@@ -234,7 +965,18 @@
+@@ -234,7 +1014,18 @@
                                      this.missingEnrichSuccess++;
                                  } else {
                                      this.missingEnrichFailed++;
@@ -24509,7 +24786,7 @@
                                  // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
                                  if (event.reason === 'error') {
                                      this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
-@@ -246,7 +988,7 @@
+@@ -246,7 +1037,7 @@
                              } else if (event.type === 'error') {
                                  this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
                                  this.flushLogs();
@@ -24518,7 +24795,7 @@
                                  this.currentCard = null;
                                  this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -258,7 +1000,7 @@
+@@ -258,7 +1049,7 @@
  
                      // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
                      if (!batchDone) {
@@ -24527,7 +24804,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -284,11 +1026,19 @@
+@@ -284,11 +1075,19 @@
                      if (lastCover) {
                          this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
                      }
@@ -24549,7 +24826,7 @@
                      const summary = this.missingEnrichFailed > 0
                          ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
                          : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
-@@ -312,7 +1062,7 @@
+@@ -312,7 +1111,7 @@
                  if (e.name === 'AbortError') return;
                  console.error('runMissingEnrich error:', e);
                  this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
@@ -29944,7 +30221,7 @@
 +            </div>
 +            <div class="task-control-actions">
 +                <div class="task-metrics"
-+                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill'].includes(taskKind)">
++                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(taskKind)">
 +                    <span class="task-metric is-success">
 +                        <i class="bi bi-check2"></i>
 +                        <span x-text="window.t('scanner.task.success_count', { count: taskSuccessDisplay })"></span>
@@ -30124,7 +30401,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -288,21 +495,79 @@
+@@ -288,21 +495,83 @@
                      {{ t('scanner.stats.missing_suffix') }}
                  </span>
              </span>
@@ -30191,6 +30468,10 @@
 +                    x-html="plotBackfillButtonText"
 +                    :title="window.t('scanner.stats.plot_backfill_hint')">
 +            </button>
++                <button type="button" class="btn btn-warning btn-sm"
++                        x-show="pendingPlotTranslation" :disabled="isBusy"
++                        @click="plotTranslationConfirmOpen = true"
++                        x-text="window.t('scanner.plot_flow.pending', {n:pendingPlotTranslation?.count || 0})"></button>
 +        </div>
 +
          <!-- T10: Resume Pill (未完成提示) -->
@@ -30207,7 +30488,7 @@
                      x-bind:disabled="isBusy">
                  {{ t('scanner.stats.missing_resume_btn') }}
              </button>
-@@ -313,7 +578,7 @@
+@@ -313,7 +582,7 @@
  
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
          <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
@@ -30216,7 +30497,7 @@
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +604,7 @@
+@@ -339,7 +608,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -30225,7 +30506,7 @@
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +639,8 @@
+@@ -374,6 +643,8 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
@@ -30234,7 +30515,7 @@
          </div>
      </div>
  
-@@ -519,26 +786,6 @@
+@@ -519,26 +790,6 @@
               @keydown.space.prevent="toggleTagAliasCard()">
              <div class="title">
                  <i class="bi bi-tags"></i> <span>{{ t('scanner.tag_alias.section_title') }}</span>
@@ -30261,7 +30542,7 @@
              </div>
              <span class="btn-collapse" aria-hidden="true">
                  <i class="bi" :class="tagAliasCardCollapsed ? 'bi-chevron-down' : 'bi-chevron-up'"></i>
-@@ -782,6 +1029,248 @@
+@@ -782,6 +1033,248 @@
          </div>
      </dialog>
  
@@ -30510,7 +30791,7 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -792,7 +1281,7 @@
+@@ -792,7 +1285,7 @@
                  <span x-text="window.t('scanner.stats.missing_enrich_confirm_title')"></span>
              </h3>
              <p class="fluent-modal-body">
@@ -30519,10 +30800,24 @@
              </p>
              <div class="modal-action fluent-modal-actions">
                  <button type="button" class="btn btn-ghost" @click="cancelLargeMissingEnrich()">
-@@ -805,26 +1294,150 @@
+@@ -805,26 +1298,164 @@
          </div>
      </dialog>
  
++    <dialog class="modal fluent-modal" :class="{ 'modal-open': plotTranslationConfirmOpen }"
++            @cancel.prevent="keepOriginalPlots()" @click.self="keepOriginalPlots()"
++            aria-labelledby="plotTranslationTitle">
++        <div class="modal-box fluent-modal-box">
++            <h3 id="plotTranslationTitle" class="fluent-modal-title" x-text="window.t('scanner.plot_flow.title')"></h3>
++            <p class="fluent-modal-body" x-text="window.t('scanner.plot_flow.confirm', {n:pendingPlotTranslation?.count || 0})"></p>
++            <p class="fluent-modal-body" x-show="config?.translate?.enabled !== true" x-text="window.t('scanner.plot_flow.enable_translation')"></p>
++            <div class="modal-action fluent-modal-actions">
++                <button type="button" class="btn btn-ghost" @click="keepOriginalPlots()" x-text="window.t('scanner.plot_flow.keep_original')"></button>
++                <button type="button" class="btn btn-warning" :disabled="isBusy || config?.translate?.enabled !== true" @click="runPlotTranslation()" x-text="window.t('scanner.plot_flow.translate')"></button>
++            </div>
++        </div>
++    </dialog>
++
 +    <!-- r23: Preview-first filename normalization -->
 +    <dialog class="modal fluent-modal rename-preview-modal"
 +            :class="{ 'modal-open': renamePreviewOpen }"

@@ -21,7 +21,14 @@ export function estimateEnrichMinutes(noNfoCount, coverOnlyCount) {
 }
 
 export function stateBatch() {
+    let pendingPlotTranslation = null;
+    try {
+        const saved = JSON.parse(localStorage.getItem('avlist_plot_translation_pending') || 'null');
+        if (/^[0-9a-f]{32}$/.test(saved?.batch_id || '') && saved.count > 0) pendingPlotTranslation = saved;
+    } catch { /* A damaged local draft must not block the scanner. */ }
     return {
+        pendingPlotTranslation,
+        plotTranslationConfirmOpen: false,
         // ===== T10: Missing NFO/Cover Enrich =====
         missingPillVisible: false,
         missingBothCount: 0,
@@ -271,18 +278,13 @@ export function stateBatch() {
                 return '<span class="loading loading-spinner loading-sm"></span> '
                     + window.t('scanner.stats.plot_backfill_loading');
             }
-            if (this.config?.translate?.enabled !== true) {
-                return '<i class="bi bi-translate"></i> '
-                    + window.t('scanner.stats.plot_backfill_disabled');
-            }
             return '<i class="bi bi-card-text"></i> '
                 + window.t('scanner.stats.plot_backfill_idle');
         },
 
         get plotBackfillDisabled() {
             return this.isBusy
-                || this.missingPlotCount === 0
-                || this.config?.translate?.enabled !== true;
+                || this.missingPlotCount === 0;
         },
 
         get missingEnrichButtonText() {
@@ -642,7 +644,7 @@ export function stateBatch() {
         async runPlotBackfill() {
             if (this.plotBackfillDisabled) return;
             if (!this.plotBackfillSource) return this.openMaintenanceSourcePicker('plots');
-            await this._runBackfillStream({
+            const event = await this._runBackfillStream({
                 url: '/api/gallery/backfill-plots',
                 source: this.plotBackfillSource,
                 taskState: 'plotBackfilling',
@@ -653,11 +655,51 @@ export function stateBatch() {
                 mixedToastKey: 'scanner.stats.plot_backfill_toast_mixed',
                 errorText: window.t('scanner.stats.plot_backfill_error'),
             });
+            if (event?.summary?.translation_batch && event.summary.translation_count > 0) {
+                this._setPendingPlotTranslation({batch_id:event.summary.translation_batch,count:event.summary.translation_count});
+                if (!event.cancelled) this.plotTranslationConfirmOpen = true;
+            }
+        },
+
+        _setPendingPlotTranslation(value) {
+            this.pendingPlotTranslation = value;
+            try {
+                if (value) localStorage.setItem('avlist_plot_translation_pending', JSON.stringify(value));
+                else localStorage.removeItem('avlist_plot_translation_pending');
+            } catch { /* The current in-memory batch is still usable. */ }
+        },
+
+        keepOriginalPlots() {
+            this.plotTranslationConfirmOpen = false;
+        },
+
+        async runPlotTranslation() {
+            if (this.isBusy || !this.pendingPlotTranslation) return;
+            if (this.config?.translate?.enabled !== true) {
+                this.showToast(window.t('scanner.plot_flow.enable_translation'), 'warn');
+                return;
+            }
+            this.plotTranslationConfirmOpen = false;
+            const event = await this._runBackfillStream({
+                url: '/api/gallery/translate-backfilled-plots',
+                body: {batch_id:this.pendingPlotTranslation.batch_id},
+                taskState: 'plotTranslating', taskKind: 'plot-translate',
+                startStatus: window.t('scanner.plot_flow.translating'),
+                total: this.pendingPlotTranslation.count,
+                doneToastKey: 'scanner.plot_flow.translated', mixedToastKey: 'scanner.plot_flow.translation_mixed',
+                errorText: window.t('scanner.plot_flow.translation_error'),
+            });
+            if (event?.code === 'batch_missing') this._setPendingPlotTranslation(null);
+            if (event?.type === 'done' && !event.cancelled) {
+                if (!event.summary?.failed) this._setPendingPlotTranslation(null);
+                else this._setPendingPlotTranslation({...this.pendingPlotTranslation,count:event.summary.failed});
+            }
         },
 
         async _runBackfillStream({
             url,
             source,
+            body,
             taskState,
             taskKind,
             startStatus,
@@ -675,6 +717,7 @@ export function stateBatch() {
                 taskKind === 'title-backfill'
                 || taskKind === 'sample-backfill'
                 || taskKind === 'plot-backfill'
+                || taskKind === 'plot-translate'
             ) {
                 this.logPanelExpanded = true;
             }
@@ -683,12 +726,14 @@ export function stateBatch() {
             this._backfillAbortController = controller;
             let completed = false;
             let streamFailed = false;
+            let completionEvent = null;
 
             try {
                 const endpoint = source ? `${url}?${new URLSearchParams({ source })}` : url;
                 const resp = await fetch(endpoint, {
                     method: 'POST',
                     headers: { Accept: 'text/event-stream' },
+                    ...(body ? {headers:{Accept:'text/event-stream','Content-Type':'application/json'},body:JSON.stringify(body)} : {}),
                     signal: controller.signal,
                 });
                 if (!resp.ok) {
@@ -767,6 +812,7 @@ export function stateBatch() {
                         } else if (event.type === 'log') {
                             this.addLog(event.level || 'info', event.message || '');
                         } else if (event.type === 'done') {
+                            completionEvent = event;
                             completed = true;
                             streamDone = true;
                             this.progressCurrent = this.progressTotal;
@@ -783,11 +829,13 @@ export function stateBatch() {
                                     window.t(failed > 0 ? mixedToastKey : doneToastKey, {
                                         success,
                                         failed,
+                                        skipped: event.summary?.skipped || 0,
                                     }),
                                     failed > 0 ? 'warn' : 'success'
                                 );
                             }
                         } else if (event.type === 'error') {
+                            completionEvent = event;
                             streamDone = true;
                             streamFailed = true;
                             this._finishTask('error', event.message || errorText);
@@ -812,6 +860,7 @@ export function stateBatch() {
                 this.flushLogs();
                 await this.checkMissing();
             }
+            return completionEvent;
         },
 
         async runMissingEnrich({ skipConfirm = false } = {}) {

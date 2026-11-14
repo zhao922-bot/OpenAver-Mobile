@@ -111,7 +111,7 @@ def test_fill_empty_nfo_plot_never_overwrites_existing_plot(tmp_path):
 
 
 @pytest.mark.parametrize("source", ["auto", "javbus"])
-def test_plot_backfill_fills_translated_plot_and_original_plot(
+def test_plot_search_saves_source_before_separate_translation(
     tmp_path,
     monkeypatch,
     source,
@@ -136,8 +136,10 @@ def test_plot_backfill_fills_translated_plot_and_original_plot(
         )
     )
 
+    calls = []
     class FakeService:
         async def translate_plot_or_raise(self, plot, context):
+            calls.append(plot)
             assert plot == JAPANESE_SUMMARY
             assert context["number"] == "ABC-105"
             return CHINESE_SUMMARY
@@ -170,7 +172,7 @@ def test_plot_backfill_fills_translated_plot_and_original_plot(
     )
 
     root = ET.fromstring(nfo_path.read_bytes())
-    assert root.findtext("plot") == CHINESE_SUMMARY
+    assert root.findtext("plot") == JAPANESE_SUMMARY
     assert root.findtext("originalplot") == JAPANESE_SUMMARY
     assert events[-1]["summary"]["success"] == 1
     assert events[-1]["summary"]["failed"] == 0
@@ -178,13 +180,21 @@ def test_plot_backfill_fills_translated_plot_and_original_plot(
         event for event in events if event.get("type") == "result-item"
     )
     assert result["updated_nfo_count"] == 1
-    assert result["preview"].startswith("这是第一段")
+    assert result["preview"].startswith("これは最初の段落")
     assert VideoRepository(db_path).get_by_path(
         video_uri
     ).nfo_mtime == pytest.approx(nfo_path.stat().st_mtime)
+    assert calls == []
+    batch_id = events[-1]["summary"]["translation_batch"]
+    translated = _drain_events(scanner_router._plot_backfill_generator(
+        threading.Event(), translation_batch=batch_id))
+    assert translated[-1]["summary"]["success"] == 1
+    root = ET.fromstring(nfo_path.read_bytes())
+    assert root.findtext("plot") == CHINESE_SUMMARY
+    assert root.findtext("originalplot") == JAPANESE_SUMMARY
     assert any(
         event.get("type") == "log"
-        and "这是第一段" in event.get("message", "")
+        and "これは最初の段落" in event.get("message", "")
         for event in events
     )
 
@@ -254,8 +264,14 @@ def test_multipart_plot_backfill_is_one_item_and_fills_every_empty_nfo(
     assert result_items[0]["updated_nfo_count"] == 2
     for nfo_path in nfo_paths:
         root = ET.fromstring(nfo_path.read_bytes())
-        assert root.findtext("plot") == CHINESE_SUMMARY
+        assert root.findtext("plot") == JAPANESE_SUMMARY
         assert root.findtext("originalplot") == JAPANESE_SUMMARY
+    batch_id = events[-1]['summary']['translation_batch']
+    translated = _drain_events(scanner_router._plot_backfill_generator(threading.Event(), translation_batch=batch_id))
+    assert translated[-1]['summary']['success'] == 1
+    assert next(e for e in translated if e['type']=='result-item')['updated_nfo_count'] == 2
+    for nfo_path in nfo_paths:
+        assert ET.fromstring(nfo_path.read_bytes()).findtext('plot') == CHINESE_SUMMARY
 
 
 def test_plot_backfill_frontend_contract():
@@ -279,3 +295,69 @@ def test_plot_backfill_frontend_contract():
     assert "plotBackfillDrilldownPayload" in template
     assert "url: '/api/gallery/backfill-plots'" in state
     assert "taskKind: 'plot-backfill'" in state
+
+
+@pytest.fixture
+def saved_plot_batch(tmp_path, monkeypatch):
+    _configure_empty_output_root(monkeypatch)
+    db = tmp_path / 'batch.db'
+    init_db(db)
+    path = tmp_path / 'ABC-201.mp4'
+    path.write_bytes(b'video')
+    nfo = path.with_suffix('.nfo')
+    nfo.write_text('<movie><plot /></movie>', encoding='utf-8')
+    repo = VideoRepository(db)
+    repo.upsert(Video(path=to_file_uri(str(path)), number='ABC-201'))
+    old = tmp_path / 'ABC-202.nfo'
+    old.write_text('<movie><plot>'+JAPANESE_SUMMARY+'</plot></movie>', encoding='utf-8')
+    repo.upsert(Video(path=to_file_uri(str(tmp_path/'ABC-202.mp4')), number='ABC-202'))
+    config={'general':{'locale':'zh-CN'},'translate':{'enabled':False},'gallery':{'path_mappings':{}}}
+    monkeypatch.setattr(scanner_router,'load_config',lambda:config)
+    monkeypatch.setattr(scanner_router,'get_db_path',lambda:db)
+    monkeypatch.setattr(scanner_router,'get_javbus_lang',lambda:'ja')
+    monkeypatch.setattr(scanner_router,'search_jav',lambda *_args,**_kw:{'_summary':JAPANESE_SUMMARY})
+    monkeypatch.setattr('web.routers.translate.get_translate_service',lambda:pytest.fail('search initialized AI'))
+    events=_drain_events(scanner_router._plot_backfill_generator(threading.Event()))
+    assert events[-1]['summary']['success']==1
+    assert ET.fromstring(nfo.read_bytes()).findtext('plot')==JAPANESE_SUMMARY
+    config['translate']['enabled']=True
+    monkeypatch.setattr(scanner_router,'search_jav',lambda *_args,**_kw:pytest.fail('translation re-scraped'))
+    return events[-1]['summary']['translation_batch'], nfo, old, config
+
+
+def test_translation_failure_keeps_saved_source_and_retry_uses_only_this_batch(saved_plot_batch, monkeypatch):
+    batch,nfo,old,config=saved_plot_batch
+    class Failing:
+        async def translate_plot_or_raise(self,*_):
+            raise RuntimeError('test failure')
+    monkeypatch.setattr('web.routers.translate.get_translate_service',lambda:Failing())
+    failed=_drain_events(scanner_router._plot_backfill_generator(threading.Event(),translation_batch=batch))
+    assert failed[-1]['summary']['failed']==1
+    assert ET.fromstring(nfo.read_bytes()).findtext('plot')==JAPANESE_SUMMARY
+    config['general']['locale']='en'
+    seen=[]
+    class Working:
+        async def translate_plot_or_raise(self,plot,context):
+            seen.append(context['number'])
+            return 'This is the complete synopsis in English.'
+    monkeypatch.setattr('web.routers.translate.get_translate_service',lambda:Working())
+    retried=_drain_events(scanner_router._plot_backfill_generator(threading.Event(),translation_batch=batch))
+    assert retried[-1]['summary']['success']==1
+    assert seen==['ABC-201']
+    assert ET.fromstring(nfo.read_bytes()).findtext('originalplot')==JAPANESE_SUMMARY
+    assert ET.fromstring(old.read_bytes()).findtext('plot')==JAPANESE_SUMMARY
+    again=_drain_events(scanner_router._plot_backfill_generator(threading.Event(),translation_batch=batch))
+    assert again[-1]['summary']['success']==0
+    assert seen==['ABC-201']
+
+
+def test_edit_during_translation_is_not_overwritten(saved_plot_batch,monkeypatch):
+    batch,nfo,_old,_config=saved_plot_batch
+    class Editing:
+        async def translate_plot_or_raise(self,*_):
+            nfo.write_text('<movie><plot>Manually edited</plot></movie>',encoding='utf-8')
+            return CHINESE_SUMMARY
+    monkeypatch.setattr('web.routers.translate.get_translate_service',lambda:Editing())
+    events=_drain_events(scanner_router._plot_backfill_generator(threading.Event(),translation_batch=batch))
+    assert events[-1]['summary']['skipped']==1
+    assert ET.fromstring(nfo.read_bytes()).findtext('plot')=='Manually edited'

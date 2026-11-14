@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import html
 import re
+import json
+import uuid
+import threading
+from pathlib import Path
 from dataclasses import dataclass
+from core.atomic_write import atomic_write
 
 from core.nfo_locator import locate_nfo_for_video
 from core.plot_writeback import read_nfo_plots
@@ -32,6 +37,61 @@ class PlotBackfillCandidate:
     @property
     def nfo_paths(self) -> tuple[str, ...]:
         return tuple(nfo_path for nfo_path, _members in self.nfo_targets)
+
+
+class PlotTranslationBatch:
+    """Server-created scope for translating only plots saved by one search."""
+
+    def __init__(self, db_path, batch_id: str | None = None):
+        if batch_id is not None and not re.fullmatch(r'[0-9a-f]{32}', batch_id):
+            raise PlotBackfillError('batch_missing')
+        self.id = batch_id or uuid.uuid4().hex
+        self.path = Path(db_path).parent / 'plot_translation_batches' / (self.id + '.json')
+        self.lock = threading.Lock()
+        self.items = []
+        if batch_id is not None:
+            try:
+                self.items = json.loads(self.path.read_text(encoding='utf-8'))
+                if not isinstance(self.items, list):
+                    raise ValueError('invalid batch')
+            except (OSError, ValueError):
+                raise PlotBackfillError('batch_missing') from None
+
+    def add(self, candidate, nfo_targets, source_plot):
+        if not nfo_targets:
+            return
+        with self.lock:
+            self.items.append({
+                'file_path': candidate.file_path, 'number': candidate.number,
+                'title': candidate.title, 'member_paths': candidate.member_paths,
+                'actors': candidate.actors, 'nfo_targets': nfo_targets,
+                'source_plot': source_plot,
+            })
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with atomic_write(self.path, mode='w', encoding='utf-8', suffix='.json.tmp') as handle:
+                json.dump(self.items, handle, ensure_ascii=False)
+
+    def pending(self):
+        result = []
+        sources = {}
+        for item in self.items:
+            targets = []
+            for path, owners in item['nfo_targets']:
+                try:
+                    plot, original = read_nfo_plots(path)
+                    if plot != item['source_plot'] or original != item['source_plot']:
+                        continue
+                except Exception:
+                    pass  # Let the task report the missing/unreadable NFO.
+                targets.append((path, tuple(owners)))
+            if targets:
+                result.append(PlotBackfillCandidate(
+                    file_path=item['file_path'], number=item['number'], title=item['title'],
+                    member_paths=tuple(item['member_paths']), nfo_targets=tuple(targets),
+                    actors=tuple(item['actors']),
+                ))
+                sources[item['file_path']] = item['source_plot']
+        return result, sources
 
 
 def clean_summary_text(value: object) -> str:

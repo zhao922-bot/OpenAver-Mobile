@@ -49,10 +49,11 @@ from core.nfo_updater import (
     update_videos_generator,
 )
 from core.plot_backfill import (
+    PlotTranslationBatch, PlotBackfillError,
     clean_summary_text,
     find_missing_plot_candidates,
 )
-from core.plot_writeback import fill_empty_nfo_plot
+from core.plot_writeback import fill_empty_nfo_plot, rewrite_nfo_plot, PlotChangedError
 from core.android_storage import AndroidStoragePermissionError
 from core.database import VideoRepository, Video, init_db, get_db_path, migrate_json_to_sqlite
 from core.focal import requires_face_detection
@@ -108,9 +109,9 @@ from core.title_language import (
     title_needs_translation,
     translation_result_issue,
 )
-from core.title_writeback import NfoNotFoundError, NfoParseError
+from core.title_writeback import NfoNotFoundError, NfoParseError, strip_illegal_xml_chars
 from core.source_config import get_manual_only_sources, validate_source_id
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from core.logger import get_logger
 from core.i18n import get_config_locale, t as i18n_t
 from core.platform_info import DSM_PERMISSION_HINT, is_synology
@@ -3625,14 +3626,16 @@ def _sample_backfill_generator(
 
 
 def _plot_backfill_generator(
-    cancel_event: threading.Event, source: str = "auto",
+    cancel_event: threading.Event, source: str = "auto", *, translation_batch: Optional[str] = None,
 ) -> Generator[str, None, None]:
-    """Fetch and translate synopses only for existing NFOs with an empty plot."""
+    """Search and save originals, or translate only the supplied saved batch."""
+    translating = translation_batch is not None
+    section = "plot_translation" if translating else "plots"
     locale = _active_locale()
     try:
         config = load_config()
         locale = _active_locale(config)
-        source_error = _validate_batch_source(source, config, locale=locale)
+        source_error = "" if translating else _validate_batch_source(source, config, locale=locale)
         if source_error:
             yield _sse_event({"type": "error", "message": source_error})
             return
@@ -3641,50 +3644,55 @@ def _plot_backfill_generator(
             yield _sse_event({
                 "type": "error",
                 "message": _runtime_text(
-                    "plots", "db_missing", locale
+                    section, "db_missing", locale
                 ),
             })
             return
-        if not config.get("translate", {}).get("enabled", False):
-            yield _sse_event({
-                "type": "error",
-                "message": _runtime_text(
-                    "plots", "translate_disabled", locale
-                ),
-            })
-            return
+        translate_service = None
+        if translating:
+            if not config.get("translate", {}).get("enabled", False):
+                yield _sse_event({
+                    "type": "error",
+                    "message": _runtime_text(
+                        section, "translate_disabled", locale
+                    ),
+                })
+                return
 
-        from web.routers.translate import get_translate_service
+            from web.routers.translate import get_translate_service
 
-        try:
-            translate_service = get_translate_service()
-        except Exception:
-            logger.exception("初始化批次简介翻译服务失败")
-            yield _sse_event({
-                "type": "error",
-                "message": _runtime_text(
-                    "plots", "config_invalid", locale
-                ),
-            })
-            return
+            try:
+                translate_service = get_translate_service()
+            except Exception:
+                logger.exception("初始化批次简介翻译服务失败")
+                yield _sse_event({
+                    "type": "error",
+                    "message": _runtime_text(
+                        section, "config_invalid", locale
+                    ),
+                })
+                return
 
         repo = VideoRepository(db_path)
         path_mappings = (
             config.get("gallery", {}).get("path_mappings", {})
         )
-        groups = list(
-            logical_video_groups(repo.get_all(), path_mappings)
-        )
-        candidates = find_missing_plot_candidates(
-            groups,
-            config,
-            path_mappings,
-        )
+        try:
+            batch = PlotTranslationBatch(db_path, translation_batch)
+        except PlotBackfillError:
+            yield _sse_event({"type": "error", "code": "batch_missing", "message": _runtime_text(section, "batch_missing", locale)})
+            return
+        source_plots = {}
+        if translating:
+            candidates, source_plots = batch.pending()
+        else:
+            groups = list(logical_video_groups(repo.get_all(), path_mappings))
+            candidates = find_missing_plot_candidates(groups, config, path_mappings)
         total = len(candidates)
         if total == 0:
             yield _sse_event({
                 "type": "done",
-                "message": _runtime_text("plots", "none", locale),
+                "message": _runtime_text(section, "none", locale),
                 "cancelled": False,
                 "summary": {
                     "success": 0,
@@ -3714,44 +3722,50 @@ def _plot_backfill_generator(
                     "error_code": "missing_number",
                 }
 
-            try:
-                metadata = search_jav(
-                    number,
-                    source=source,
-                    javbus_lang=javbus_lang,
-                )
-            except Exception:
-                logger.warning(
-                    "批次补简介搜索失败: %s",
-                    candidate.file_path,
-                    exc_info=True,
-                )
-                return {
-                    "success": False,
-                    "skipped": False,
-                    "error_code": "search_failed",
-                }
-            if not metadata:
-                return {
-                    "success": False,
-                    "skipped": False,
-                    "error_code": "not_found",
-                }
+            if translating:
+                source_plot = source_plots[candidate.file_path]
+                if not plot_needs_translation(source_plot, locale, proper_terms=candidate.actors):
+                    return {"success": False, "skipped": True, "error_code": "already_filled"}
+            else:
+                try:
+                    metadata = search_jav(
+                        number,
+                        source=source,
+                        javbus_lang=javbus_lang,
+                    )
+                except Exception:
+                    logger.warning(
+                        "批次补简介搜索失败: %s",
+                        candidate.file_path,
+                        exc_info=True,
+                    )
+                    return {
+                        "success": False,
+                        "skipped": False,
+                        "error_code": "search_failed",
+                    }
+                if not metadata:
+                    return {
+                        "success": False,
+                        "skipped": False,
+                        "error_code": "not_found",
+                    }
 
-            source_plot = clean_summary_text(
-                metadata.get("_summary")
-                or metadata.get("summary")
-                or ""
-            )
-            if not source_plot:
-                return {
-                    "success": False,
-                    "skipped": False,
-                    "error_code": "no_summary",
-                }
+                source_plot = clean_summary_text(
+                    metadata.get("_summary")
+                    or metadata.get("summary")
+                    or ""
+                )
+                if not source_plot:
+                    return {
+                        "success": False,
+                        "skipped": False,
+                        "error_code": "no_summary",
+                    }
 
+                source_plot = strip_illegal_xml_chars(source_plot).strip()
             translated_plot = source_plot
-            if plot_needs_translation(
+            if translating and plot_needs_translation(
                 source_plot,
                 locale,
                 proper_terms=candidate.actors,
@@ -3795,19 +3809,26 @@ def _plot_backfill_generator(
                 }
 
             updated_nfos = []
+            updated_targets = []
             write_error = ""
             for nfo_path, owner_paths in candidate.nfo_targets:
                 if cancel_event.is_set():
                     break
                 try:
-                    changed = fill_empty_nfo_plot(
-                        nfo_path,
-                        new_plot=translated_plot,
-                        new_original=source_plot,
-                    )
+                    if translating:
+                        rewrite_nfo_plot(nfo_path, new_plot=translated_plot,
+                            new_original=source_plot, expected_source=source_plot)
+                        changed = True
+                    else:
+                        changed = fill_empty_nfo_plot(
+                            nfo_path,
+                            new_plot=translated_plot,
+                            new_original=source_plot,
+                        )
                     if not changed:
                         continue
                     updated_nfos.append(nfo_path)
+                    updated_targets.append((nfo_path, owner_paths))
                     nfo_mtime = os.stat(nfo_path).st_mtime
                     for owner_path in owner_paths:
                         if not repo.update_nfo_mtime(
@@ -3815,6 +3836,8 @@ def _plot_backfill_generator(
                             nfo_mtime,
                         ):
                             write_error = "db_write_failed"
+                except PlotChangedError:
+                    continue
                 except AndroidStoragePermissionError:
                     write_error = "storage_permission_required"
                 except NfoNotFoundError:
@@ -3828,6 +3851,9 @@ def _plot_backfill_generator(
                         exc_info=True,
                     )
                     write_error = "nfo_write_failed"
+
+            if not translating and updated_targets:
+                batch.add(candidate, updated_targets, source_plot)
 
             return {
                 "success": bool(updated_nfos) and not write_error,
@@ -3849,7 +3875,7 @@ def _plot_backfill_generator(
             "type": "log",
             "level": "info",
             "message": _runtime_text(
-                "plots",
+                section,
                 "start",
                 locale,
                 total=total,
@@ -3862,7 +3888,7 @@ def _plot_backfill_generator(
             "total": total,
             "number": "",
             "status": _runtime_text(
-                "plots",
+                section,
                 "status",
                 locale,
                 concurrency=_PLOT_BACKFILL_CONCURRENCY,
@@ -3922,7 +3948,7 @@ def _plot_backfill_generator(
                     processed_count += 1
                     number = candidate.number
                     status = _runtime_text(
-                        "plots",
+                        section,
                         "status_count",
                         locale,
                         current=processed_count,
@@ -3961,7 +3987,7 @@ def _plot_backfill_generator(
                             "type": "log",
                             "level": "info",
                             "message": _runtime_text(
-                                "plots",
+                                section,
                                 "log",
                                 locale,
                                 current=processed_count,
@@ -4035,7 +4061,7 @@ def _plot_backfill_generator(
             yield _sse_event({
                 "type": "done",
                 "message": _runtime_text(
-                    "plots",
+                    section,
                     "cancelled",
                     locale,
                 ),
@@ -4045,6 +4071,8 @@ def _plot_backfill_generator(
                     "failed": failed_count,
                     "skipped": skipped_count,
                     "failed_items": failed_items,
+                    "translation_batch": batch.id if batch.items else "",
+                    "translation_count": len(batch.items),
                 },
             })
             return
@@ -4052,7 +4080,7 @@ def _plot_backfill_generator(
         yield _sse_event({
             "type": "done",
             "message": _runtime_text(
-                "plots",
+                section,
                 "done",
                 locale,
                 success=success_count,
@@ -4065,6 +4093,8 @@ def _plot_backfill_generator(
                 "failed": failed_count,
                 "skipped": skipped_count,
                 "failed_items": failed_items,
+                "translation_batch": batch.id if batch.items else "",
+                "translation_count": len(batch.items),
             },
         })
     except Exception:
@@ -4072,7 +4102,7 @@ def _plot_backfill_generator(
         yield _sse_event({
             "type": "error",
             "message": _runtime_text(
-                "plots",
+                section,
                 "unexpected_error",
                 locale,
             ),
@@ -4095,10 +4125,21 @@ async def backfill_samples(request: Request, source: str = Query("auto", min_len
 
 @router.post("/backfill-plots")
 async def backfill_plots(request: Request, source: str = Query("auto", min_length=1)):
-    """SSE: fetch and translate synopses for existing NFOs with empty plots."""
+    """SSE: search and save original synopses; translation requires a separate request."""
     return await _cancelable_sse_response(
         request, lambda cancel: _plot_backfill_generator(cancel, source=source),
     )
+
+
+class PlotTranslationRequest(BaseModel):
+    batch_id: str = Field(min_length=32, max_length=32, pattern=r"^[0-9a-f]{32}$")
+
+
+@router.post("/translate-backfilled-plots")
+async def translate_backfilled_plots(request: Request, body: PlotTranslationRequest):
+    """Translate only unchanged source plots saved by the specified search batch."""
+    return await _cancelable_sse_response(request,
+        lambda cancel: _plot_backfill_generator(cancel, translation_batch=body.batch_id))
 
 
 def _build_current_rename_plan(scope: str = "files") -> dict:
