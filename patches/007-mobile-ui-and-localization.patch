@@ -19466,7 +19466,7 @@
      display: flex;
      flex-direction: column;
      width: 100%;
-@@ -973,13 +1025,70 @@
+@@ -973,13 +1025,71 @@
      border-radius: var(--fluent-radius-md);
  }
  
@@ -19514,7 +19514,8 @@
 +}
 +
 +.insights-container .maker-marker--ring::after {
-+    box-shadow: none;
++    -webkit-mask-image: radial-gradient(circle, transparent 35%, #000 40%);
++    mask-image: radial-gradient(circle, transparent 35%, #000 40%);
 +}
 +
 +.insights-container .maker-marker--bar::after {
@@ -19542,7 +19543,7 @@
  }
  
  .insights-container .gantt-legend {
-@@ -987,13 +1096,22 @@
+@@ -987,13 +1097,22 @@
      flex-wrap: wrap;
      align-items: center;
      gap: 0.5rem;
@@ -19568,7 +19569,7 @@
  .insights-container .gantt-legend-item {
      display: inline-flex;
      align-items: center;
-@@ -1002,10 +1120,47 @@
+@@ -1002,10 +1121,48 @@
  }
  
  .insights-container .gantt-legend-dot {
@@ -19590,7 +19591,8 @@
 +}
 +
 +.insights-container .gantt-legend-dot.maker-marker--ring {
-+    box-shadow: none;
++    -webkit-mask-image: radial-gradient(circle, transparent 35%, #000 40%);
++    mask-image: radial-gradient(circle, transparent 35%, #000 40%);
 +}
 +
 +.insights-container .gantt-legend-dot.maker-marker--bar {
@@ -19618,7 +19620,7 @@
  }
  
  .insights-container .insights-gantt-toggle {
-@@ -1041,10 +1196,9 @@
+@@ -1041,10 +1198,9 @@
  
  .insights-container .insights-gantt-toggle button.is-on {
      background: color-mix(in oklch, var(--surface-2) 80%, transparent);
@@ -19631,7 +19633,7 @@
  }
  
  @media (prefers-reduced-motion: reduce) {
-@@ -1310,11 +1464,102 @@
+@@ -1310,11 +1466,102 @@
  /* ===== 響應式斷點 ===== */
  @media (max-width: 1024px) {
      .insights-container .row1 {
@@ -19739,7 +19741,7 @@
      }
  
      .insights-container .row2,
-@@ -1324,19 +1569,148 @@
+@@ -1324,19 +1571,148 @@
          grid-template-columns: 1fr;
      }
  
@@ -29093,7 +29095,22 @@
                      Object.assign(video, data.video);
                      _recomputeVideoBadges(video);
                      _recomputeCardActorAges(video);
-@@ -1118,7 +1169,7 @@
+@@ -969,6 +1020,14 @@
+ 
+         // --- 快捷鍵 (M4c 完整實作) ---
+         handleKeydown(e) {
++            // The display dialog owns its controls, including select arrows.
++            if (this.displayOpen) {
++                if (e.key === 'Escape') {
++                    e.preventDefault();
++                    this.displayOpen = false;
++                }
++                return;
++            }
+             // 116b：浮層開啟時最高優先（必須在 INPUT early-return 之前——區間的 number input
+             // 取得焦點時 e.target.tagName === 'INPUT'，放在後面 ESC 永遠到不了這裡）。
+             // TASK-124a-T2：新增 _releaseEditor 分支（兩個 slot 依 §3.5 不變式恆不同時非
+@@ -1118,7 +1177,7 @@
                  if (this.showFavoriteActresses) return;          // AC-5.3：女優牆整條早退
                  const order = this._presentationOrder();
                  const idx = order.indexOf(this._currentPresentation());
@@ -29102,6 +29119,14 @@
              } else if (key === 'ARROWLEFT') {
                  if (this.page > 1) {
                      this.prevPage();
+@@ -1140,6 +1199,7 @@
+          * @param {WheelEvent} event
+          */
+         handleWheel(event) {
++            if (this.displayOpen) return;
+             // Opus 審核註記 #1：非 passive 監聽器每個 tick 都同步等 handler 跑完，
+             // 第一行必須是純數值方向判斷，DOM 走訪（closest）排在其後。
+             // 102d P2b（owner 拍板 2026-07-19）：軸向化——horizontal/vertical 互斥判斷，
 --- a/web/static/js/pages/showcase/state-lightbox-picker.js
 +++ b/web/static/js/pages/showcase/state-lightbox-picker.js
 @@ -8,6 +8,7 @@
@@ -29723,8 +29748,8 @@
 -            this.page = savedPage;          // 恢復儲存的頁碼
 +            if (this._fullVideosLoaded) {
 +                this.applyFilterAndSort(true);  // M4a: 套用搜尋篩選（跳過 pagination，下面統一處理）
-+                // 129-T3 的回頁重算已提前到 restoreState 之後平行啟動（見上），此處不再呼叫
-+                this.page = savedPage;          // 恢復儲存的頁碼
++                // restoreState already set the saved page. Keep the current
++                // page so a display change during loading can reset it to 1.
 +            } else {
 +                // 首屏由服務端分頁；不要用當頁資料重算全庫總數。
 +                this.page = this._serverPage || savedPage;
@@ -29823,7 +29848,7 @@
              // .cover-loaded(=_imgLoaded) 才可見。stale/404 換 placeholder 後，可見性原本只依賴 placeholder
 --- /dev/null
 +++ b/web/static/js/pages/showcase/state-display.js
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,84 @@
 +import { resolveDisplayPreferences, createDisplaySaver, writeDisplayPreferences, DISPLAY_COLUMNS, DISPLAY_PAGE_SIZES, DISPLAY_PRESENTATIONS } from '../../shared/showcase-display.js';
 +
 +export function stateDisplay(write = writeDisplayPreferences) {
@@ -29893,8 +29918,12 @@
 +            this.perPage = value;
 +            this.page = 1;
 +            const saved = this.persistDisplayPreferences();
-+            if (this._serverPaged && !this._fullVideosLoaded) {
-+                const loaded = await this.fetchVideos({ page: 1 });
++            if (!this._fullVideosLoaded) {
++                const options = { page: 1 };
++                // Initial loading has not confirmed _serverPaged yet. Replace
++                // that request too, keeping full-list search/random semantics.
++                if (this.loading && this._shouldLoadAllVideosForInitialFetch()) options.all = true;
++                const loaded = await this.fetchVideos(options);
 +                if (!loaded || generation !== pageGeneration) return saved;
 +            }
 +            if (generation !== pageGeneration) return saved;
@@ -30280,7 +30309,7 @@
 +};
 --- /dev/null
 +++ b/web/static/js/shared/showcase-display.js
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,64 @@
 +/** Live browsing preferences. Offline HTML export has independent defaults. */
 +export const DISPLAY_PRESENTATIONS = ['poster', 'cover', 'list', 'table'];
 +export const DISPLAY_COLUMNS = [2, 3, 5];
@@ -30289,12 +30318,13 @@
 +export function resolveDisplayPreferences(display, legacyState = {}, gallery = {}) {
 +    const explicit = display && typeof display === 'object';
 +    let presentation = explicit ? display.presentation : (
-+        ['list', 'table'].includes(legacyState?.mode) ? legacyState.mode : 'poster');
++        ['list', 'table'].includes(legacyState?.mode) ? legacyState.mode : (
++            legacyState?.mode === 'grid' && ['cover', 'poster'].includes(legacyState?.cardShape)
++                ? legacyState.cardShape : 'poster'));
 +    if (!DISPLAY_PRESENTATIONS.includes(presentation)) presentation = 'poster';
 +    const columns = explicit && DISPLAY_COLUMNS.includes(display.columns) ? display.columns : 2;
 +    const raw = explicit ? display.items_per_page : Number(gallery?.items_per_page);
-+    let count = Number.isInteger(raw) && raw >= 1 && raw <= 500 ? raw : 45;
-+    if (!explicit) count = Math.min(count, 45); // Preserve the old effective mobile size once.
++    const count = Number.isInteger(raw) && raw >= 1 && raw <= 500 ? raw : 45;
 +    return { presentation, columns, items_per_page: count };
 +}
 +

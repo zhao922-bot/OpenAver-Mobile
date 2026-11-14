@@ -40,14 +40,88 @@ test('saved live preferences override stale legacy layout and retain 120 films',
     {presentation:'cover',columns:5,items_per_page:120});
 });
 
-test('legacy list and effective mobile page size survive migration', async () => {
+test('legacy custom page sizes and explicit cover choice survive migration', async () => {
     const { resolveDisplayPreferences } = await import(path);
     assert.deepEqual(resolveDisplayPreferences(null,{mode:'list'},{items_per_page:30}),
         {presentation:'list',columns:2,items_per_page:30});
-    assert.equal(resolveDisplayPreferences(null,{}, {items_per_page:90}).items_per_page,45);
+    for (const mode of ['grid', 'list', 'table']) {
+        assert.equal(resolveDisplayPreferences(null,{mode}, {items_per_page:75}).items_per_page,75);
+    }
     assert.equal(resolveDisplayPreferences(null,{}, {items_per_page:0}).items_per_page,45);
     assert.deepEqual(resolveDisplayPreferences({presentation:'bad',columns:4,items_per_page:Infinity}),
         {presentation:'poster',columns:2,items_per_page:45});
+});
+
+test('legacy explicit cover choice survives migration', async () => {
+    const { resolveDisplayPreferences } = await import(path);
+    assert.equal(resolveDisplayPreferences(null,{mode:'grid',cardShape:'cover'},{}).presentation,'cover');
+});
+
+test('page-size changes supersede the initial fetch and retain full-list mode', async () => {
+    const { register } = await import('node:module');
+    const root = new URL('../../app/src/main/python/web/static/js/', import.meta.url).href;
+    register(`data:text/javascript,${encodeURIComponent(`
+        export async function resolve(s,c,next) {
+            if(s.startsWith('@/showcase/'))s=${JSON.stringify(root)}+'pages/showcase/'+s.slice(11);
+            if(s.startsWith('@/shared/'))s=${JSON.stringify(root)}+'shared/'+s.slice(9);
+            if(s.startsWith('@/components/'))s=${JSON.stringify(root)}+'components/'+s.slice(13);
+            return next(s,c);
+        }`)}`, import.meta.url);
+    const oldWindow=globalThis.window, oldFetch=globalThis.fetch, oldStorage=globalThis.localStorage, oldAlpine=globalThis.Alpine;
+    globalThis.window={t:key=>key,addEventListener(){}};
+    globalThis.Alpine={store:()=>({})};
+    globalThis.localStorage={getItem:()=>null};
+    try {
+        const { stateVideos } = await import('../../app/src/main/python/web/static/js/pages/showcase/state-videos.js');
+        const { stateDisplay } = await import('../../app/src/main/python/web/static/js/pages/showcase/state-display.js');
+        const { stateBase } = await import('../../app/src/main/python/web/static/js/pages/showcase/state-base.js');
+        const { stateLightbox } = await import('../../app/src/main/python/web/static/js/pages/showcase/state-lightbox.js');
+        for (const all of [false, true]) {
+            let release;
+            const calls=[];
+            globalThis.fetch=async url=>{
+                if(!url.startsWith('/api/showcase/videos'))return {ok:true,json:async()=>({groups:[],badges:[]})};
+                const params=new URL(url,'http://localhost').searchParams;
+                calls.push(params);
+                if(calls.length===1)await new Promise(r=>release=r);
+                const full=params.get('paged')==='false';
+                const count=full?157:Number(params.get('per_page'));
+                return {ok:true,json:async()=>({success:true,paged:!full,total:157,page:Number(params.get('page')||1),
+                    videos:Array.from({length:count},(_,i)=>({path:`test-${i}`,number:`TEST-${i}`}))})};
+            };
+            const state=Object.assign(stateBase.call({$persist:v=>({as:()=>v})}),stateVideos(),stateDisplay(async v=>v),{
+                page:3,perPage:45,mode:'grid',cardShape:'poster',sort:all?'random':'number',order:'asc',
+                _serverPaged:false,_fullVideosLoaded:false,_serverTotal:0,_videoFetchGeneration:0,
+                _serverActressFilter:'',pills:[],search:'',saveState(){},
+                restoreState(){},refreshSourceStatus(){},showFavoriteActresses:true,
+                loadActresses(){},applyFilterAndSort(){},$watch(){},$nextTick(){},
+            });
+            const initial=all?state.init():state.fetchVideos({page:3,all});
+            await state.setDisplayPageSize(120);
+            release();await initial;
+            assert.equal(calls.length,2,'the initial request must be superseded');
+            assert.equal(calls[1].get('paged'),all?'false':'true');
+            assert.equal(state.perPage,120);
+            assert.equal(state.paginatedVideos.length,120);
+            assert.equal(state.page,1);
+            assert.equal(state.totalPages,2);
+        }
+        const actions=[];
+        const modal=Object.assign(stateLightbox(),{
+            displayOpen:true,mode:'grid',page:2,totalPages:3,
+            prevPage(){actions.push('prev');},nextPage(){actions.push('next');},
+            toggleInfo(){actions.push('info');},_presentationOrder:()=>['poster','cover'],
+            _currentPresentation:()=> 'poster',setDisplayPresentation(){actions.push('presentation');},
+        });
+        const target={tagName:'SELECT',closest:()=>null};
+        for(const key of ['ArrowLeft','ArrowRight','s','a'])modal.handleKeydown({key,target,preventDefault(){}});
+        modal.handleWheel({deltaX:250,deltaY:0,target,preventDefault(){}});
+        assert.deepEqual(actions,[],'display dialog must own navigation while open');
+        modal.handleKeydown({key:'Escape',target,preventDefault(){}});
+        assert.equal(modal.displayOpen,false);
+    } finally {
+        globalThis.window=oldWindow;globalThis.fetch=oldFetch;globalThis.localStorage=oldStorage;globalThis.Alpine=oldAlpine;
+    }
 });
 
 test('rapid saves are serialized and coalesced; last preference wins', async () => {

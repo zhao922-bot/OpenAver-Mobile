@@ -67,8 +67,12 @@ export function stateDisplay(write = writeDisplayPreferences) {
             this.perPage = value;
             this.page = 1;
             const saved = this.persistDisplayPreferences();
-            if (this._serverPaged && !this._fullVideosLoaded) {
-                const loaded = await this.fetchVideos({ page: 1 });
+            if (!this._fullVideosLoaded) {
+                const options = { page: 1 };
+                // Initial loading has not confirmed _serverPaged yet. Replace
+                // that request too, keeping full-list search/random semantics.
+                if (this.loading && this._shouldLoadAllVideosForInitialFetch()) options.all = true;
+                const loaded = await this.fetchVideos(options);
                 if (!loaded || generation !== pageGeneration) return saved;
             }
             if (generation !== pageGeneration) return saved;

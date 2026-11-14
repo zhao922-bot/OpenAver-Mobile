@@ -32,9 +32,9 @@
 
 **Interfaces:** `ShowcaseDisplayConfig(presentation, columns, items_per_page)`; `PUT /api/config/showcase-display` accepts the complete three-field preference object and mutates only `showcase.display`. `resolveDisplayPreferences(display, legacyState, gallery)` validates config and legacy inputs; `createDisplaySaver(write)` serializes/coalesces writes and exposes a promise per requested save.
 
-- [ ] Write and run RED tests for exact column validation, invalid input, independent page sizes, atomic preservation of unrelated config, legacy fallback, and serialized saves.
-- [ ] Implement typed preference schema, new-install defaults, dedicated endpoint, and the pure shared helper. Full-config saves preserve the canonical display field, including absence on legacy configs.
-- [ ] Run focused Python and Node tests GREEN. Commit this task explicitly.
+- [x] Write and run RED tests for exact column validation, invalid input, independent page sizes, atomic preservation of unrelated config, legacy fallback, and serialized saves.
+- [x] Implement typed preference schema, new-install defaults, dedicated endpoint, and the pure shared helper. Full-config saves preserve the canonical display field, including absence on legacy configs.
+- [x] Run focused Python and Node tests GREEN. Commit this task explicitly.
 
 ## Task 2: Home and settings controls
 
@@ -42,11 +42,11 @@
 
 **Interfaces:** `stateDisplay()` exposes `displayOpen`, `displaySaving`, `displayError`, `gridColumns`, `openDisplaySettings()`, `setDisplayPresentation(value)`, `setDisplayColumns(value)`, `setDisplayPageSize(value)`, and retry. Consumes Task 1 helper and endpoint. `window.__SHOWCASE_DISPLAY__` supplies persisted preferences.
 
-- [ ] Add behavior regression tests for restoration, filtering/pagination after page-size changes, request races, and mobile-back close behavior; observe RED.
-- [ ] Replace mobile presentation gate with a visible Display button and one accessible panel. Add native classes/data to the grid; retain existing image window.
-- [ ] Remove implicit 45 cap for explicit preferences. Reset page only on page-size changes, preserve filters and sorting, and fetch current server pages as needed.
-- [ ] Add settings live-browsing preferences distinct from offline export controls; use dedicated save only when changed.
-- [ ] Translate new labels and states in all existing locale files; run focused tests and JS syntax GREEN. Commit explicitly.
+- [x] Add behavior regression tests for restoration, filtering/pagination after page-size changes, request races, and mobile-back close behavior; observe RED.
+- [x] Replace mobile presentation gate with a visible Display button and one accessible panel. Add native classes/data to the grid; retain existing image window.
+- [x] Remove implicit 45 cap for explicit preferences. Reset page only on page-size changes, preserve filters and sorting, and fetch current server pages as needed.
+- [x] Add settings live-browsing preferences distinct from offline export controls; use dedicated save only when changed.
+- [x] Translate new labels and states in all existing locale files; run focused tests and JS syntax GREEN. Commit explicitly.
 
 ## Task 3: Native visual primitives and all pages
 
@@ -54,22 +54,22 @@
 
 **Interfaces:** Shared `--surface-*`, `--text-*`, `--stroke-*`, radius/space/control tokens consumed by all pages. New `native-bottom-nav` provides browsing/scanner/settings links through existing guarded navigation. Display grid uses exact `--browse-columns` with compact five-column captions.
 
-- [ ] Remove network font imports; replace glass/background/shadow primitives with opaque light/dim native tokens and consistent controls.
-- [ ] Simplify headers, add bottom navigation, normalize dialogs and states. Keep every existing route and action reachable.
-- [ ] Update per-page layout rules rather than retaining contradictory materials. Make settings appearance group centered, fields readable, and maintenance buttons consistently orange.
-- [ ] Validate actual layouts at narrow/large-font breakpoints in the simulator; use behavioral tests for state changes, not tests duplicating decorative CSS.
-- [ ] Commit explicitly after focused regression checks.
+- [x] Remove network font imports; replace glass/background/shadow primitives with opaque light/dim native tokens and consistent controls.
+- [x] Simplify headers, add bottom navigation, normalize dialogs and states. Keep every existing route and action reachable.
+- [x] Update per-page layout rules rather than retaining contradictory materials. Make settings appearance group centered, fields readable, and maintenance buttons consistently orange.
+- [x] Validate actual layouts at narrow/large-font breakpoints in the simulator; use behavioral tests for state changes, not tests duplicating decorative CSS.
+- [x] Commit explicitly after focused regression checks.
 
 ## Task 4: Integration and verification
 
 **Files:** patch generator file list, generated patches, implementation ledger/verification notes.
 
-- [ ] Register new files, regenerate patches against upstream v0.18.17, verify source replay.
-- [ ] Run TUR and Cleanup Python suites, all JS syntax checks, relevant Node behavior suites and Android unit/Debug build for x86_64.
-- [ ] Use emulator-5554 with isolated fixtures. Measure exact 2/3/5 columns, all page sizes on 150+ logical films, filter/last-page counts, persistence after app restart, and image-window bounds at 120.
-- [ ] Check all six pages in four languages, light/dim, standard/largest fonts, narrow widths and landscape. Restore emulator data and configuration.
-- [ ] Perform one fresh whole-branch review, fix material findings with regression evidence, and record limitations honestly.
-- [ ] Build arm64 Debug/Release for local review; do not publish or change the version without user direction. Explicitly commit final source/patch/docs only.
+- [x] Register new files, regenerate patches against upstream v0.18.17, verify source replay.
+- [x] Run TUR and Cleanup Python suites, all JS syntax checks, relevant Node behavior suites and Android unit/Debug build for x86_64.
+- [x] Use emulator-5554 with isolated fixtures. Measure exact 2/3/5 columns, all page sizes on 150+ logical films, filter/last-page counts, persistence after app restart, and image-window bounds at 120.
+- [x] Check all six pages in four languages, light/dim, standard/largest fonts, narrow widths and landscape. Restore emulator data and configuration.
+- [x] Perform one fresh whole-branch review, fix material findings with regression evidence, and record limitations honestly.
+- [x] Build arm64 Debug/Release for local review; do not publish or change the version without user direction. Explicitly commit final source/patch/docs only.
 
 ## Execution record
 

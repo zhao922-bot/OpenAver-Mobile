@@ -6,12 +6,13 @@ export const DISPLAY_PAGE_SIZES = [30, 45, 60, 90, 120];
 export function resolveDisplayPreferences(display, legacyState = {}, gallery = {}) {
     const explicit = display && typeof display === 'object';
     let presentation = explicit ? display.presentation : (
-        ['list', 'table'].includes(legacyState?.mode) ? legacyState.mode : 'poster');
+        ['list', 'table'].includes(legacyState?.mode) ? legacyState.mode : (
+            legacyState?.mode === 'grid' && ['cover', 'poster'].includes(legacyState?.cardShape)
+                ? legacyState.cardShape : 'poster'));
     if (!DISPLAY_PRESENTATIONS.includes(presentation)) presentation = 'poster';
     const columns = explicit && DISPLAY_COLUMNS.includes(display.columns) ? display.columns : 2;
     const raw = explicit ? display.items_per_page : Number(gallery?.items_per_page);
-    let count = Number.isInteger(raw) && raw >= 1 && raw <= 500 ? raw : 45;
-    if (!explicit) count = Math.min(count, 45); // Preserve the old effective mobile size once.
+    const count = Number.isInteger(raw) && raw >= 1 && raw <= 500 ? raw : 45;
     return { presentation, columns, items_per_page: count };
 }
 

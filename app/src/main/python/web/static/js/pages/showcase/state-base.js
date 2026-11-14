@@ -414,8 +414,8 @@ export function stateBase() {
 
             if (this._fullVideosLoaded) {
                 this.applyFilterAndSort(true);  // M4a: 套用搜尋篩選（跳過 pagination，下面統一處理）
-                // 129-T3 的回頁重算已提前到 restoreState 之後平行啟動（見上），此處不再呼叫
-                this.page = savedPage;          // 恢復儲存的頁碼
+                // restoreState already set the saved page. Keep the current
+                // page so a display change during loading can reset it to 1.
             } else {
                 // 首屏由服務端分頁；不要用當頁資料重算全庫總數。
                 this.page = this._serverPage || savedPage;

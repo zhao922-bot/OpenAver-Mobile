@@ -1064,7 +1064,8 @@
 }
 
 .insights-container .maker-marker--ring::after {
-    box-shadow: none;
+    -webkit-mask-image: radial-gradient(circle, transparent 35%, #000 40%);
+    mask-image: radial-gradient(circle, transparent 35%, #000 40%);
 }
 
 .insights-container .maker-marker--bar::after {
@@ -1136,7 +1137,8 @@
 }
 
 .insights-container .gantt-legend-dot.maker-marker--ring {
-    box-shadow: none;
+    -webkit-mask-image: radial-gradient(circle, transparent 35%, #000 40%);
+    mask-image: radial-gradient(circle, transparent 35%, #000 40%);
 }
 
 .insights-container .gantt-legend-dot.maker-marker--bar {

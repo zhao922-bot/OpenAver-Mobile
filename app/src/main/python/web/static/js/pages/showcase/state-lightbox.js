@@ -1020,6 +1020,14 @@ export function stateLightbox() {
 
         // --- 快捷鍵 (M4c 完整實作) ---
         handleKeydown(e) {
+            // The display dialog owns its controls, including select arrows.
+            if (this.displayOpen) {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.displayOpen = false;
+                }
+                return;
+            }
             // 116b：浮層開啟時最高優先（必須在 INPUT early-return 之前——區間的 number input
             // 取得焦點時 e.target.tagName === 'INPUT'，放在後面 ESC 永遠到不了這裡）。
             // TASK-124a-T2：新增 _releaseEditor 分支（兩個 slot 依 §3.5 不變式恆不同時非
@@ -1191,6 +1199,7 @@ export function stateLightbox() {
          * @param {WheelEvent} event
          */
         handleWheel(event) {
+            if (this.displayOpen) return;
             // Opus 審核註記 #1：非 passive 監聽器每個 tick 都同步等 handler 跑完，
             // 第一行必須是純數值方向判斷，DOM 走訪（closest）排在其後。
             // 102d P2b（owner 拍板 2026-07-19）：軸向化——horizontal/vertical 互斥判斷，
