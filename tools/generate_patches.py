@@ -351,6 +351,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "014-mobile-ai-services.patch",
         (
+            "core/ai_services/cloud_protocols.py",
             "core/anthropic_client.py",
             "core/ai_services/__init__.py",
             "core/ai_services/connections.py",

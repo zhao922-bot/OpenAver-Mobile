@@ -1218,6 +1218,15 @@
                         </div>
                         <div class="ai-similar-fields">
                             <div class="settings-form-row">
+                                <label class="row-label" for="aiSimilarProvider">{{ t('settings.ai.cloud.service_type') }}</label>
+                                <select id="aiSimilarProvider" class="select select-bordered select-sm w-full min-w-0 flex-1"
+                                    x-model="form.aiSimilarProvider" :disabled="!form.aiSimilarEnabled"
+                                    @focus="aiSimPreviousProvider=form.aiSimilarProvider" @change="onProviderChange()">
+                                    <option value="endpoint">{{ t('settings.ai.cloud.legacy_embeddings') }}</option>
+                                    <option value="qwen">{{ t('settings.ai.cloud.qwen_embeddings') }}</option>
+                                </select>
+                            </div>
+                            <div class="settings-form-row">
                                 <label class="row-label" for="aiSimilarUrl">{{ t('settings.ai.similar.url_label') }}</label>
                                 <div class="flex-1 flex flex-col gap-1 min-w-0">
                                     <input type="text" class="input input-bordered input-sm w-full min-w-0"
@@ -1255,7 +1264,8 @@
                                     <span x-show="!aiSimTestBusy" x-text="window.t('settings.action.test')"></span>
                                 </button>
                             </div>
-                            <small class="settings-hint">{{ t('settings.ai.connection.similar_path_hint') }}</small>
+                            <small class="settings-hint" x-show="form.aiSimilarProvider !== 'qwen'">{{ t('settings.ai.connection.similar_path_hint') }}</small>
+                            <small class="settings-hint" x-show="form.aiSimilarProvider === 'qwen'">{{ t('settings.ai.cloud.embedding_help') }}</small>
                             <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.similar.empty_desc') }}</p>
 
                             <p class="settings-hint ai-similar-status"
@@ -1291,6 +1301,22 @@
                         </div>
                         <div class="ai-similar-fields">
                             <div class="settings-form-row">
+                                <label class="row-label" for="aiFacesProvider">{{ t('settings.ai.cloud.service_type') }}</label>
+                                <select id="aiFacesProvider" class="select select-bordered select-sm w-full min-w-0 flex-1"
+                                    x-model="form.aiFacesProvider" :disabled="!form.aiFacesEnabled">
+                                    <option value="endpoint">{{ t('settings.ai.cloud.legacy_faces') }}</option>
+                                    <option value="openai">{{ t('settings.ai.cloud.vision_faces') }}</option>
+                                </select>
+                            </div>
+                            <div class="settings-form-row" x-show="form.aiFacesProvider === 'openai'">
+                                <span class="row-label">{{ t('settings.ai.cloud.presets') }}</span>
+                                <div class="flex flex-wrap gap-2 flex-1 min-w-0">
+                                    <button type="button" class="btn btn-sm btn-outline" :disabled="!form.aiFacesEnabled" @click="usePreset('qwen')">Qwen</button>
+                                    <button type="button" class="btn btn-sm btn-outline" :disabled="!form.aiFacesEnabled" @click="usePreset('deepseek')">DeepSeek</button>
+                                    <button type="button" class="btn btn-sm btn-outline" :disabled="!form.aiFacesEnabled" @click="usePreset('bai')">B.AI</button>
+                                </div>
+                            </div>
+                            <div class="settings-form-row">
                                 <label class="row-label" for="aiFacesUrl">{{ t('settings.ai.faces.url_label') }}</label>
                                 <div class="flex-1 flex flex-col gap-1 min-w-0">
                                     <input type="text" class="input input-bordered input-sm w-full min-w-0"
@@ -1315,12 +1341,32 @@
                                 <div class="flex-1 min-w-0">
                                     <input type="text" class="input input-bordered input-sm w-full"
                                            id="aiFacesModel"
+                                           list="aiFacesModelChoices"
                                            x-model="form.aiFacesModel"
                                            :disabled="!form.aiFacesEnabled"
                                            :placeholder="window.t('settings.ai.faces.model_placeholder')">
                                 </div>
                             </div>
 
+                            <datalist id="aiFacesModelChoices"><template x-for="model in aiFacesModels" :key="model"><option :value="model"></option></template></datalist>
+                            <div class="ai-connection-actions" x-show="form.aiFacesProvider === 'openai'">
+                                <button type="button" class="btn btn-sm btn-outline" @click="loadModels()" :disabled="!form.aiFacesEnabled || aiFacesModelsBusy">{{ t('settings.ai.connection.fetch_models') }}</button>
+                                <small class="settings-hint" x-text="aiFacesModelsStatus"></small>
+                            </div>
+                            <div class="settings-form-row" x-show="form.aiFacesProvider === 'openai'">
+                                <label class="row-label" for="aiFacesTestImage">{{ t('settings.ai.cloud.test_image') }}</label>
+                                <div class="flex-1 min-w-0">
+                                    <input type="file" id="aiFacesTestImage" accept="image/jpeg,image/png,image/webp" class="file-input file-input-bordered file-input-sm w-full"
+                                        :disabled="!form.aiFacesEnabled" @change="selectTestImage($event)">
+                                    <small class="settings-hint">{{ t('settings.ai.cloud.image_help') }}</small>
+                                </div>
+                            </div>
+                            <div x-show="aiFacesTestImage" class="relative w-full" style="max-width:32rem">
+                                <img :src="aiFacesTestImage || undefined" alt="" class="block w-full" style="height:auto">
+                                <template x-for="(box,index) in aiFacesBoxes" :key="index">
+                                    <span aria-hidden="true" :style="'position:absolute;pointer-events:none;border:2px solid #f97316;left:'+box[0]*100+'%;top:'+box[1]*100+'%;width:'+box[2]*100+'%;height:'+box[3]*100+'%;'"></span>
+                                </template>
+                            </div>
                             <div class="ai-connection-actions">
                                 <button class="btn btn-sm btn-outline" type="button"
                                         id="aiFacesTestBtn" @click="runTest()" :disabled="testDisabled()">
@@ -1328,7 +1374,8 @@
                                     <span x-show="!aiFacesTestBusy" x-text="window.t('settings.action.test')"></span>
                                 </button>
                             </div>
-                            <small class="settings-hint">{{ t('settings.ai.connection.faces_path_hint') }}</small>
+                            <small class="settings-hint" x-show="form.aiFacesProvider !== 'openai'">{{ t('settings.ai.connection.faces_path_hint') }}</small>
+                            <small class="settings-hint" x-show="form.aiFacesProvider === 'openai'">{{ t('settings.ai.cloud.faces_help') }}</small>
                             <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.faces.empty_desc') }}</p>
 
                             <p class="settings-hint ai-similar-status"

@@ -1087,6 +1087,29 @@
         "independent_hint": "This connection is independent of title translation. Changes here do not affect translation settings.",
         "similar_path_hint": "Enter a base URL, such as http://192.168.1.22:8765. /v1/embeddings is appended automatically.",
         "faces_path_hint": "Enter a base URL, such as http://192.168.1.22:8765. /v1/faces is appended automatically."
+      },
+      "cloud": {
+        "service_type": "Service type",
+        "legacy_embeddings": "Custom image embedding endpoint",
+        "qwen_embeddings": "Qwen cloud image embeddings",
+        "legacy_faces": "Custom face endpoint",
+        "vision_faces": "Cloud vision (OpenAI compatible)",
+        "presets": "Provider presets",
+        "embedding_help": "Requires an image embedding model, such as qwen3-vl-embedding. Chat models cannot be used. Rebuild the index after changing the service or model.",
+        "faces_help": "Requires a vision model that accepts images. Detects face locations only, not identities. Cloud requests may incur charges; rebuilding starts only when requested.",
+        "test_image": "Test image",
+        "image_help": "Optional JPEG, PNG or WebP, up to 5 MB. Sent only when you tap Test; not saved in settings.",
+        "image_limit": "Choose a JPEG, PNG or WebP no larger than 5 MB.",
+        "models_loaded": "Loaded {n} models",
+        "models_failed": "Could not load models; check the connection or enter a model name.",
+        "faces_detected": "Detected {n} faces in the test image.",
+        "connection_only": "Interface response is valid; face detection has not been verified. Choose a photo with a clear face and test again.",
+        "check_url": "Invalid service URL; use an HTTP(S) base address or full endpoint without a query or fragment.",
+        "check_provider": "Unsupported service type.",
+        "check_refused": "The model refused to process this image.",
+        "check_truncated": "The response was truncated; try another model or image.",
+        "check_box": "Invalid face coordinates; normalized boxes must fit inside the image.",
+        "check_score": "Invalid face confidence score; expected a value from 0 to 1."
       }
     },
     "group": {

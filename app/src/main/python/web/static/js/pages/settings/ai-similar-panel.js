@@ -53,8 +53,24 @@ export function aiSimilarPanel() {
         aiSimTestPassed: false,
         aiSimTestResultHtml: '',
         aiSimTestBusy: false,
+        aiSimConnectionDrafts: {},
+        aiSimPreviousProvider: 'endpoint',
+
+        onProviderChange() {
+            const f = this.form;
+            this.aiSimConnectionDrafts[this.aiSimPreviousProvider] = {url:f.aiSimilarUrl,key:f.aiSimilarApiKey,model:f.aiSimilarModel};
+            const provider = f.aiSimilarProvider || 'endpoint';
+            const draft = this.aiSimConnectionDrafts[provider] || (provider === 'qwen'
+                ? {url:'https://dashscope.aliyuncs.com',key:'',model:'qwen3-vl-embedding'}
+                : {url:'',key:'',model:''});
+            f.aiSimilarUrl=draft.url;f.aiSimilarApiKey=draft.key;f.aiSimilarModel=draft.model;
+            this.aiSimPreviousProvider=provider;
+            this.aiSimTestPassed=false;this.aiSimTestResultHtml='';
+        },
 
         init() {
+            this.aiSimPreviousProvider=this.form?.aiSimilarProvider || 'endpoint';
+            this.$watch('isDirty', (dirty,previous)=>{if(!dirty && previous)this.aiSimConnectionDrafts={};});
             this.bfOnInit();
         },
 
@@ -116,6 +132,7 @@ export function aiSimilarPanel() {
             this.aiSimTestResultHtml = '';
             try {
                 const body = {
+                    provider: this.form.aiSimilarProvider || 'endpoint',
                     url: String(this.form.aiSimilarUrl || '').trim(),
                     api_key: this.form.aiSimilarApiKey || '',
                     model: this.form.aiSimilarModel || '',

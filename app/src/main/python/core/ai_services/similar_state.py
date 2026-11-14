@@ -97,8 +97,15 @@ def preserve_legacy_connection(old: dict, new: dict) -> None:
     """Before changing a legacy target, bind its existing index to its old address."""
     if not old.get("url"):
         return
-    old_id = embedding_connection_id(SimpleNamespace(**old))
-    new_id = embedding_connection_id(SimpleNamespace(**new)) if new.get("url") else ""
+    from core.ai_services.embeddings import EndpointError
+    try:
+        old_id = embedding_connection_id(SimpleNamespace(**old))
+    except EndpointError:
+        old_id = "legacy-invalid"
+    try:
+        new_id = embedding_connection_id(SimpleNamespace(**new)) if new.get("url") else ""
+    except EndpointError:
+        new_id = ""
     if old_id == new_id:
         return
     repo = EmbeddingRepository()

@@ -1,3 +1,63 @@
+--- /dev/null
++++ b/core/ai_services/cloud_protocols.py
+@@ -0,0 +1,57 @@
++"""Protocol selection, endpoint construction and connection identity (no secrets)."""
++from __future__ import annotations
++
++import hashlib
++import json
++from urllib.parse import urlsplit, urlunsplit
++
++QWEN_EMBEDDINGS_PATH = "/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding"
++FACES_PROMPT = (
++    'Locate every clearly visible human face in this image. Do not identify people. '
++    'Return only a JSON object: {"faces":[{"box":[x,y,width,height],"score":0.9}]}. '
++    'Coordinates must be normalized to 0..1 relative to the ENTIRE supplied image, '
++    'with the top-left as origin. Boxes enclose faces, not whole bodies. '
++    'Width and height must be positive; x+width and y+height must not exceed 1. '
++    'score must be between 0 and 1. If there is no visible face, return {"faces":[]}. '
++    'Do not return explanations, markdown or invented faces.'
++)
++
++
++def provider_of(cfg) -> str:
++    return str(getattr(cfg, "provider", None) or "endpoint")
++
++
++def endpoint_url(base: str, suffix: str) -> str:
++    from core.ai_services.embeddings import EndpointError
++    try:
++        parts = urlsplit(base.strip())
++        if parts.scheme not in ("http", "https") or not parts.hostname or parts.query or parts.fragment:
++            raise ValueError("invalid base")
++        current = [p for p in parts.path.split("/") if p]
++        target = [p for p in suffix.split("/") if p]
++        overlap = 0
++        for count in range(1, min(len(current), len(target)) + 1):
++            if current[-count:] == target[:count]:
++                overlap = count
++        path = "/" + "/".join(current + target[overlap:])
++        return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, "", ""))
++    except (ValueError, AttributeError):
++        raise EndpointError("contract", "url", None) from None
++
++
++def embedding_connection_id(cfg) -> str:
++    provider = provider_of(cfg)
++    suffix = QWEN_EMBEDDINGS_PATH if provider == "qwen" else "/v1/embeddings"
++    normalized = endpoint_url(str(getattr(cfg, "url", "") or ""), suffix)
++    model = str(getattr(cfg, "model", "") or "").strip()
++    return hashlib.sha256(json.dumps([provider, normalized, model]).encode()).hexdigest()[:24]
++
++
++def cloud_model_id(cfg, returned_model: str) -> str:
++    return f"qwen:{embedding_connection_id(cfg)}:{returned_model}"
++
++
++def face_model_id(cfg, returned_model: str) -> str:
++    endpoint = endpoint_url(str(cfg.url), "/chat/completions")
++    identity = hashlib.sha256(json.dumps([endpoint, cfg.model]).encode()).hexdigest()[:24]
++    return f"vision:{identity}:{returned_model}"
 --- a/core/anthropic_client.py
 +++ b/core/anthropic_client.py
 @@ -7,6 +7,7 @@
@@ -464,7 +524,7 @@
 +            cls._instance = None
 --- /dev/null
 +++ b/core/ai_services/embeddings.py
-@@ -0,0 +1,203 @@
+@@ -0,0 +1,226 @@
 +"""OpenAI-compatible image embeddings client (CD-186-6)."""
 +
 +from __future__ import annotations
@@ -473,6 +533,10 @@
 +from dataclasses import dataclass
 +
 +import httpx
++
++from core.ai_services.cloud_protocols import (
++    QWEN_EMBEDDINGS_PATH, cloud_model_id, endpoint_url, provider_of,
++)
 +
 +from core.logger import get_logger
 +
@@ -527,9 +591,16 @@
 +    if parsed.scheme not in ("http", "https"):
 +        raise EndpointError("unreachable", None, None)
 +
-+    url = f"{base.rstrip('/')}/v1/embeddings"
++    provider = provider_of(cfg)
++    if provider not in ("endpoint", "qwen"):
++        raise EndpointError("contract", "provider", None)
++    url = endpoint_url(base, QWEN_EMBEDDINGS_PATH if provider == "qwen" else "/v1/embeddings")
 +    model = (getattr(cfg, "model", None) or "").strip() or _DEFAULT_MODEL
 +    payload = {"model": model, "input": [data_uri]}
++    if provider == "qwen":
++        if not str(getattr(cfg, "model", "") or "").strip():
++            raise EndpointError("contract", "no_model", None)
++        payload = {"model": model, "input": {"contents": [{"image": data_uri}]}}
 +    headers: dict[str, str] = {}
 +    key = (getattr(cfg, "api_key", None) or "").strip()
 +    if key:
@@ -587,7 +658,7 @@
 +    return resp
 +
 +
-+def _parse_response(resp: httpx.Response) -> EmbedResult:
++def _parse_response(resp: httpx.Response, *, cfg=None) -> EmbedResult:
 +    status = resp.status_code
 +    body_text = ""
 +    try:
@@ -614,6 +685,16 @@
 +
 +    if not isinstance(data, dict):
 +        _fail("shape")
++
++    if cfg is not None and provider_of(cfg) == "qwen":
++        try:
++            items = data["output"]["embeddings"]
++            if not isinstance(items, list) or len(items) != 1:
++                _fail("shape")
++            data = {"model": data.get("model") or cfg.model,
++                    "data": [{"embedding": items[0]["embedding"]}]}
++        except (KeyError, IndexError, TypeError):
++            _fail("shape")
 +
 +    model = data.get("model")
 +    if not isinstance(model, str) or model == "":
@@ -655,6 +736,8 @@
 +        _fail("zero_norm")
 +
 +    vec = [x / norm for x in vec]
++    if cfg is not None and provider_of(cfg) == "qwen":
++        model = cloud_model_id(cfg, model)
 +    return EmbedResult(vector=vec, model=model, dim=dim)
 +
 +
@@ -667,21 +750,23 @@
 +    timeout = _timeout_for(first)
 +    with _new_client(timeout) as client:
 +        resp = _send_with_retry(client, url, headers, payload)
-+    return _parse_response(resp)
++    return _parse_response(resp, cfg=cfg)
 --- /dev/null
 +++ b/core/ai_services/faces.py
-@@ -0,0 +1,236 @@
+@@ -0,0 +1,290 @@
 +"""Faces detection client (CD-187a-4 / CD-187a-6)."""
 +
 +from __future__ import annotations
 +
 +import math
++import json
 +from dataclasses import dataclass
 +from typing import NamedTuple
 +
 +import httpx
 +
 +from core.ai_services.embeddings import EndpointError
++from core.ai_services.cloud_protocols import FACES_PROMPT, endpoint_url, provider_of, face_model_id
 +from core.logger import get_logger
 +
 +logger = get_logger(__name__)
@@ -747,11 +832,22 @@
 +    if parsed.scheme not in ("http", "https"):
 +        raise EndpointError("unreachable", None, None)
 +
-+    url = f"{base.rstrip('/')}/v1/faces"
++    provider = provider_of(cfg)
++    if provider not in ("endpoint", "openai"):
++        raise EndpointError("contract", "provider", None)
++    url = endpoint_url(base, "/chat/completions" if provider == "openai" else "/v1/faces")
 +    payload: dict = {"input": data_uri, "with_embedding": False}
 +    model = (getattr(cfg, "model", None) or "").strip()
 +    if model:
 +        payload["model"] = model
++    if provider == "openai":
++        if not model:
++            raise EndpointError("contract", "no_model", None)
++        payload = {"model": model, "stream": False, "max_tokens": 2048,
++                   "messages": [{"role": "system", "content": FACES_PROMPT},
++                                {"role": "user", "content": [
++                                    {"type": "text", "text": "Locate human faces in this image."},
++                                    {"type": "image_url", "image_url": {"url": data_uri}}]}]}
 +    headers: dict[str, str] = {}
 +    key = (getattr(cfg, "api_key", None) or "").strip()
 +    if key:
@@ -850,7 +946,7 @@
 +    return Box(nums[0], nums[1], nums[2], nums[3], score)
 +
 +
-+def _parse_response(resp: httpx.Response) -> FacesResult:
++def _parse_response(resp: httpx.Response, *, cfg=None) -> FacesResult:
 +    status = resp.status_code
 +    body_text = ""
 +    try:
@@ -878,6 +974,42 @@
 +    if not isinstance(data, dict):
 +        _fail("shape")
 +
++    if cfg is not None and provider_of(cfg) == "openai":
++        try:
++            choice = data["choices"][0]
++            message = choice["message"]
++            if message.get("refusal") or choice.get("finish_reason") in ("content_filter", "refusal"):
++                _fail("refused")
++            if choice.get("finish_reason") not in (None, "", "stop"):
++                _fail("truncated")
++            text = message.get("content")
++            if not isinstance(text, str) or not text.strip():
++                _fail("shape")
++            text = text.strip()
++            if text.startswith("```json\n") and text.endswith("```"):
++                text = text[8:-3].strip()
++            parsed = json.loads(text)
++            if not isinstance(parsed, dict) or not isinstance(parsed.get("faces"), list):
++                _fail("shape")
++            for entry in parsed["faces"]:
++                if not isinstance(entry, dict):
++                    _fail("box")
++                box = entry.get("box")
++                if not isinstance(box, list) or len(box) != 4:
++                    _fail("box")
++                values = [_finite_number(x) for x in box]
++                if any(v is None or v < 0 or v > 1 for v in values):
++                    _fail("box")
++                x, y, w, h = values
++                if w <= 0 or h <= 0 or x+w > 1.000001 or y+h > 1.000001:
++                    _fail("box")
++                score = _finite_number(entry.get("score"))
++                if score is None or not 0 <= score <= 1:
++                    _fail("score")
++            data = {"model": data.get("model") or cfg.model, "faces": parsed["faces"]}
++        except (KeyError, IndexError, TypeError, ValueError, AttributeError):
++            _fail("shape")
++
 +    model = data.get("model")
 +    if not isinstance(model, str) or model == "":
 +        _fail("no_model")
@@ -887,6 +1019,8 @@
 +        _fail("shape")
 +
 +    boxes = [_parse_box(entry, _fail) for entry in faces_raw]
++    if cfg is not None and provider_of(cfg) == "openai":
++        model = face_model_id(cfg, model)
 +    return FacesResult(boxes=boxes, model=model)
 +
 +
@@ -896,6 +1030,9 @@
 +    Raises ``EndpointError`` on unreachable transport or contract mismatch.
 +    """
 +    pcfg = _profile_cfg(profile)
++    if provider_of(cfg) == "openai":
++        pcfg = {**pcfg, "timeout": httpx.Timeout(90.0, connect=5.0),
++                "retry_timeout": False, "retry_5xx": False}
 +    url, headers, payload = _build_request(cfg, data_uri)
 +    with _new_client(pcfg["timeout"]) as client:
 +        resp = _send_with_retry(
@@ -906,7 +1043,7 @@
 +            retry_5xx=pcfg["retry_5xx"],
 +            retry_timeout=pcfg["retry_timeout"],
 +        )
-+    return _parse_response(resp)
++    return _parse_response(resp, cfg=cfg)
 --- /dev/null
 +++ b/core/ai_services/faces_config.py
 @@ -0,0 +1,11 @@
@@ -923,7 +1060,7 @@
 +    return bool((faces.get("url") or "").strip())
 --- /dev/null
 +++ b/core/ai_services/faces_detect.py
-@@ -0,0 +1,195 @@
+@@ -0,0 +1,196 @@
 +"""External faces detection entry (CD-187a-1 / -4 / -6 / -15).
 +
 +Never raises: unexpected errors log and return ``None`` (local path takes over).
@@ -971,6 +1108,7 @@
 +def _faces_cfg_object(cfg: dict) -> SimpleNamespace:
 +    faces_cfg = (cfg.get("ai_services") or {}).get("faces") or {}
 +    return SimpleNamespace(
++        provider=faces_cfg.get("provider", "endpoint"),
 +        url=(faces_cfg.get("url") or ""),
 +        api_key=(faces_cfg.get("api_key") or ""),
 +        model=(faces_cfg.get("model") or ""),
@@ -1085,7 +1223,7 @@
 +        return None
 +    faces_cfg = (cfg.get("ai_services") or {}).get("faces") or {}
 +    url = (faces_cfg.get("url") or "").strip()
-+    return (fs_path, mtime, url, faces_cfg.get("model") or "", ratio)
++    return (fs_path, mtime, faces_cfg.get("provider", "endpoint"), url, faces_cfg.get("model") or "", ratio)
 +
 +
 +def detect_focal_only(
@@ -1121,7 +1259,7 @@
 +        return None
 --- /dev/null
 +++ b/core/ai_services/faces_recompute.py
-@@ -0,0 +1,367 @@
+@@ -0,0 +1,378 @@
 +"""全庫人臉焦點重算工作（187a-T4a，CD-187a-11／-12／-14／-15）。
 +
 +公開介面：``ensure``／``resume``／``start_rebuild``／``request_stop``／``status``。
@@ -1183,6 +1321,7 @@
 +def _faces_cfg_object(config: dict) -> SimpleNamespace:
 +    raw = (config.get("ai_services") or {}).get("faces") or {}
 +    return SimpleNamespace(
++        provider=raw.get("provider", "endpoint"),
 +        url=(raw.get("url") or ""),
 +        api_key=(raw.get("api_key") or ""),
 +        model=(raw.get("model") or ""),
@@ -1256,6 +1395,11 @@
 +
 +def resume() -> dict:
 +    """繼續未完成的重算（讀 app_meta target）。"""
++    if ((load_config().get("ai_services") or {}).get("faces") or {}).get("provider") == "openai":
++        test = _run_rebuild_test()
++        if not test.ok:
++            return {"started": False, "reason": "test_failed", "kind": test.kind, "check": test.check}
++        faces_state.meta_set(META_TARGET, test.model)
 +    target = faces_state.meta_get(META_TARGET)
 +    if not target:
 +        return {"started": False, "reason": "no_target"}
@@ -1463,6 +1607,11 @@
 +    只呼叫 ``ensure``（對 ``_SHELL.job_lock`` 為 non-blocking），重算 thread 內呼叫不會死鎖。
 +    ``ensure`` 回 False（已在跑／待處理＝0）不重試。
 +    """
++    if model.startswith("vision:"):
++        if _SHELL.is_running():
++            faces_state.meta_set(META_TARGET, model)
++            _remember_target(model)
++        return
 +    with _TARGET_CACHE_LOCK:
 +        if model == _target_cache:
 +            return
@@ -1877,7 +2026,7 @@
 +            raise
 --- /dev/null
 +++ b/core/ai_services/samples.py
-@@ -0,0 +1,246 @@
+@@ -0,0 +1,251 @@
 +"""Consistency-test samples A/B and assertions (CD-186-7)."""
 +
 +from __future__ import annotations
@@ -2100,13 +2249,14 @@
 +    model: str | None = None
 +    elapsed_ms: int = 0
 +    boxes: list | None = None
++    detection_verified: bool = False
 +
 +
-+def run_faces_test(cfg) -> FacesTestResult:
++def run_faces_test(cfg, *, image_data_uri: str | None = None) -> FacesTestResult:
 +    """Sample → detect(profile=warmup) → consistency; stop on EndpointError."""
 +    t0 = time.perf_counter()
 +    try:
-+        uri = get_faces_sample_input()
++        uri = image_data_uri or get_faces_sample_input()
 +        result = detect(cfg, uri, profile="warmup")
 +    except EndpointError as e:
 +        elapsed = int((time.perf_counter() - t0) * 1000)
@@ -2115,7 +2265,10 @@
 +        )
 +
 +    elapsed = int((time.perf_counter() - t0) * 1000)
-+    ok, failed = check_faces_consistency(result)
++    if getattr(cfg, "provider", "endpoint") == "openai" or image_data_uri:
++        ok, failed = True, None
++    else:
++        ok, failed = check_faces_consistency(result)
 +    return FacesTestResult(
 +        ok=ok,
 +        kind=None if ok else "contract",
@@ -2123,10 +2276,11 @@
 +        model=result.model,
 +        elapsed_ms=elapsed,
 +        boxes=list(result.boxes),
++        detection_verified=bool(image_data_uri and result.boxes),
 +    )
 --- /dev/null
 +++ b/core/ai_services/similar_index.py
-@@ -0,0 +1,376 @@
+@@ -0,0 +1,384 @@
 +"""圖片相似索引工作核心（186-T4a，CD-186-9／-10／-11／-12）。
 +
 +公開介面（T4b／T5 依賴）：``start_build()``、``request_stop()``、``schedule_incremental()``、
@@ -2215,6 +2369,7 @@
 +
 +def _endpoint_cfg(raw: dict) -> SimpleNamespace:
 +    return SimpleNamespace(
++        provider=raw.get("provider", "endpoint"),
 +        url=raw.get("url", ""), api_key=raw.get("api_key", ""), model=raw.get("model", "")
 +    )
 +
@@ -2274,12 +2429,15 @@
 +        similar_state.observe_failure(test.kind, test.check)
 +        return None, {"ok": False, "status": "test_failed", "kind": test.kind, "check": test.check}
 +    similar_state.observe_success(test.model, test.dim)
-+    if rebuild:
++    from core.ai_services.cloud_protocols import embedding_connection_id
++    target_id = embedding_connection_id(cfg)
++    if rebuild or (repo.get_connection_id() and repo.get_connection_id() != target_id):
 +        repo.reset_index(test.model, test.dim)
 +        from core.ai_services.embedding_cache import EmbeddingMatrixCache
 +        EmbeddingMatrixCache.invalidate()  # 刪除之後不可能再讀到舊矩陣（仍在 _SHELL.job_lock 內）
 +    else:
 +        repo.begin_index(test.model, test.dim)
++    repo.set_connection_id(target_id)
 +    repo.clear_unreadable(test.model)  # 使用者發起的工作：讀不到的片重試一次（增量不做）
 +    return _Ctx("build", repo, cfg, _path_mappings(config), test.model, test.dim), None
 +
@@ -2302,7 +2460,7 @@
 +    config = load_config()
 +    repo = EmbeddingRepository()
 +    state = repo.get_index_state()
-+    if not _incremental_allowed(state):
++    if not _incremental_allowed(state, config, repo.db_path):
 +        built = state["model"] and state["dim"] is not None and state["complete"] == "1"
 +        return "model_changed" if built else "index_not_ready"
 +    video = VideoRepository().get_by_path(video_uri)
@@ -2355,7 +2513,7 @@
 +
 +def _prepare_incremental(repo: EmbeddingRepository, config: dict) -> Optional[_Ctx]:
 +    state = repo.get_index_state()
-+    if not _incremental_allowed(state):
++    if not _incremental_allowed(state, config, repo.db_path):
 +        return None
 +    _begin_job_locked("incremental")
 +    return _Ctx(
@@ -2364,9 +2522,11 @@
 +    )
 +
 +
-+def _incremental_allowed(state: dict) -> bool:
++def _incremental_allowed(state: dict, config=None, db_path=None) -> bool:
 +    """I9（含 2026-10-31 細化）：index_model 已設、索引已完成('1')、模型沒變。"""
 +    if not state["model"] or state["dim"] is None or state["complete"] != "1":
++        return False
++    if config is not None and similar_state.connection_changed(config, db_path):
 +        return False
 +    return not similar_state.model_changed(state["model"], state["dim"])
 +
@@ -2391,7 +2551,9 @@
 +        "check": snap["check"],
 +        "model": state["model"],
 +        "last_success_at": state["last_success_at"],
-+        "model_changed": similar_state.model_changed(state["model"], state["dim"]),
++        "model_changed": bool(state["model"]) and (
++            similar_state.connection_changed(load_config(), repo.db_path)
++            or similar_state.model_changed(state["model"], state["dim"])),
 +        "complete": state["complete"] == "1",
 +    }
 +
@@ -2505,7 +2667,7 @@
 +        logger.exception("[similar_index] notification sink failed")
 --- /dev/null
 +++ b/core/ai_services/similar_state.py
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,157 @@
 +"""圖片相似的記憶體觀察值與「融合閘」狀態半（186-T4a，CD-186-11／-13）。
 +
 +只放「最近一次跟端點互動看到什麼」：``observed_model``／``observed_dim``（最後一次
@@ -2517,9 +2679,11 @@
 +
 +from pathlib import Path
 +from typing import Optional
++from types import SimpleNamespace
 +
 +from core.ai_services import backfill_state
 +from core.database import EmbeddingRepository
++from core.ai_services.cloud_protocols import embedding_connection_id
 +
 +# 共用欄位（unreachable／job／鎖／入庫後掛勾旗標 hook_notified）在 ``_STATE``（189a-T8）。
 +_STATE = backfill_state.BackfillState(name="similar_state")
@@ -2588,7 +2752,38 @@
 +        return (observed_model, observed_dim) != (index_model, index_dim)
 +
 +
-+def fusion_gate_from_state(config: dict, state: dict) -> bool:
++def connection_changed(config: dict, db_path=None) -> bool:
++    cfg = (config.get("ai_services") or {}).get("image_similar") or {}
++    stored = EmbeddingRepository(db_path).get_connection_id()
++    if not stored:
++        return cfg.get("provider", "endpoint") != "endpoint"
++    try:
++        return stored != embedding_connection_id(SimpleNamespace(**cfg))
++    except Exception:
++        return True
++
++
++def preserve_legacy_connection(old: dict, new: dict) -> None:
++    """Before changing a legacy target, bind its existing index to its old address."""
++    if not old.get("url"):
++        return
++    from core.ai_services.embeddings import EndpointError
++    try:
++        old_id = embedding_connection_id(SimpleNamespace(**old))
++    except EndpointError:
++        old_id = "legacy-invalid"
++    try:
++        new_id = embedding_connection_id(SimpleNamespace(**new)) if new.get("url") else ""
++    except EndpointError:
++        new_id = ""
++    if old_id == new_id:
++        return
++    repo = EmbeddingRepository()
++    if repo.get_index_state()["model"] and not repo.get_connection_id():
++        repo.set_connection_id(old_id)
++
++
++def fusion_gate_from_state(config: dict, state: dict, *, db_path=None) -> bool:
 +    """CD-186-13 狀態半的純判斷：enabled ∧ model 已設 ∧ complete=='1' ∧ 觀察值相容。
 +
 +    ``state`` 須是呼叫端已讀好的 ``get_index_state()`` 結果；本函式不再讀 DB。
@@ -2598,7 +2793,7 @@
 +        return False
 +    if not state["model"] or state["complete"] != "1":
 +        return False
-+    return not model_changed(state["model"], state["dim"])
++    return not connection_changed(config, db_path) and not model_changed(state["model"], state["dim"])
 +
 +
 +def fusion_gate_open(config: dict, db_path: Optional[Path] = None) -> bool:
@@ -2606,7 +2801,7 @@
 +    cfg = (config.get("ai_services") or {}).get("image_similar") or {}
 +    if not cfg.get("enabled"):
 +        return False
-+    return fusion_gate_from_state(config, EmbeddingRepository(db_path).get_index_state())
++    return fusion_gate_from_state(config, EmbeddingRepository(db_path).get_index_state(), db_path=db_path)
 +
 +
 +def format_similar_model_id(index_model: Optional[str] = None, *, fused: bool = False) -> str:
@@ -2626,7 +2821,7 @@
 +    if not cfg.get("enabled"):
 +        return None
 +    state = EmbeddingRepository(db_path).get_index_state()
-+    if not fusion_gate_from_state(config, state):
++    if not fusion_gate_from_state(config, state, db_path=db_path):
 +        return None
 +    from core.ai_services.embedding_cache import EmbeddingMatrixCache
 +    return EmbeddingMatrixCache.get(state["model"], state["dim"], db_path)
@@ -5083,7 +5278,7 @@
      "TagAliasRecord",
 --- /dev/null
 +++ b/core/database/embeddings.py
-@@ -0,0 +1,207 @@
+@@ -0,0 +1,217 @@
 +"""core.database.embeddings — 圖片相似向量表與索引中繼（186-T4a，CD-186-9）。
 +
 +一部片一列（``video_embeddings.video_id`` 主鍵）；``app_meta`` 四個鍵記「現在用哪個
@@ -5139,6 +5334,16 @@
 +
 +    def __init__(self, db_path: Optional[Path] = None):
 +        self.db_path = db_path or connection.get_db_path()
++
++    def get_connection_id(self) -> Optional[str]:
++        with closing(connection.get_connection(self.db_path)) as conn:
++            row = conn.execute("SELECT value FROM app_meta WHERE key='ai.similar.connection'").fetchone()
++        return row[0] if row else None
++
++    def set_connection_id(self, value: str) -> None:
++        with closing(connection.get_connection(self.db_path)) as conn:
++            conn.execute("INSERT OR REPLACE INTO app_meta(key,value) VALUES('ai.similar.connection',?)", (value,))
++            conn.commit()
 +
 +    # ── app_meta ────────────────────────────────────────────────────────────
 +
@@ -5853,7 +6058,7 @@
 +        )
 --- /dev/null
 +++ b/web/routers/ai_services.py
-@@ -0,0 +1,293 @@
+@@ -0,0 +1,322 @@
 +"""AI services endpoints for embeddings samples and consistency test (186-T3 / 187-T1).
 +
 +- GET  /api/ai/sample/embeddings
@@ -5877,7 +6082,7 @@
 +from urllib.parse import urlsplit
 +
 +from fastapi import APIRouter
-+from pydantic import BaseModel
++from pydantic import BaseModel, Field
 +
 +from core.ai_services import faces_recompute, faces_state, similar_index, similar_state
 +from core.ai_services.samples import (
@@ -5923,6 +6128,7 @@
 +    url: Optional[str] = None
 +    api_key: Optional[str] = None
 +    model: Optional[str] = None
++    provider: Optional[str] = None
 +
 +
 +class FacesTestRequest(BaseModel):
@@ -5931,6 +6137,9 @@
 +    url: Optional[str] = None
 +    api_key: Optional[str] = None
 +    model: Optional[str] = None
++    provider: Optional[str] = None
++    image_data_uri: Optional[str] = Field(default=None, max_length=8*1024*1024,
++        pattern=r"^data:image/(jpeg|png|webp);base64,")
 +
 +
 +def _resolve_similar_cfg(body: SimilarTestRequest, config: dict) -> SimpleNamespace:
@@ -5942,7 +6151,8 @@
 +        api_key = stored_key
 +    else:
 +        api_key = resolve_secret(body.api_key, stored_key)
-+    return SimpleNamespace(url=url or "", api_key=api_key or "", model=model or "")
++    return SimpleNamespace(url=url or "", api_key=api_key or "", model=model or "",
++        provider=body.provider if body.provider is not None else stored.get("provider", "endpoint"))
 +
 +
 +def _resolve_faces_cfg(body: FacesTestRequest, config: dict) -> SimpleNamespace:
@@ -5954,7 +6164,8 @@
 +        api_key = stored_key
 +    else:
 +        api_key = resolve_secret(body.api_key, stored_key)
-+    return SimpleNamespace(url=url or "", api_key=api_key or "", model=model or "")
++    return SimpleNamespace(url=url or "", api_key=api_key or "", model=model or "",
++        provider=body.provider if body.provider is not None else stored.get("provider", "endpoint"))
 +
 +def _norm_url(url: str) -> str:
 +    """比對用正規化：去空白、scheme／host 小寫、去尾端 ``/``（path 大小寫保留）。"""
@@ -5968,6 +6179,8 @@
 +    """受測的 url＋model 是否等於已存設定（body 缺席的欄位即用已存值，故視為相同）。"""
 +    stored = (config.get("ai_services") or {}).get("image_similar") or {}
 +    return (
++        cfg.provider == stored.get("provider", "endpoint")
++        and
 +        _norm_url(cfg.url) == _norm_url(stored.get("url", "") or "")
 +        and (cfg.model or "").strip() == (stored.get("model", "") or "").strip()
 +    )
@@ -5985,6 +6198,8 @@
 +    """受測 url＋model 是否等於已存人臉設定（api_key 不比；body 缺席即用已存值）。"""
 +    stored = (config.get("ai_services") or {}).get("faces") or {}
 +    return (
++        cfg.provider == stored.get("provider", "endpoint")
++        and
 +        _norm_url(cfg.url) == _norm_url(stored.get("url", "") or "")
 +        and (cfg.model or "").strip() == (stored.get("model", "") or "").strip()
 +    )
@@ -6112,7 +6327,8 @@
 +    req = body or FacesTestRequest()
 +    config = await asyncio.to_thread(load_config)
 +    cfg = _resolve_faces_cfg(req, config)
-+    result = await asyncio.to_thread(run_faces_test, cfg)
++    kwargs = {"image_data_uri": req.image_data_uri} if req.image_data_uri else {}
++    result = await asyncio.to_thread(run_faces_test, cfg, **kwargs)
 +    if _is_stored_faces_target(cfg, config):
 +        await asyncio.to_thread(_observe_faces_test_result, result)
 +    out: dict = {"ok": result.ok, "elapsed_ms": result.elapsed_ms}
@@ -6122,7 +6338,25 @@
 +        out["check"] = result.check
 +    if result.model is not None:
 +        out["model"] = result.model
++    out["boxes"] = [list(box) for box in (result.boxes or [])]
++    out["detection_verified"] = result.detection_verified
 +    return out
++
++
++@router.post("/faces/models")
++async def faces_models(body: FacesTestRequest):
++    from core.ai_services.connections import fetch_provider_models
++    from core.ai_services.cloud_protocols import endpoint_url
++    cfg = _resolve_faces_cfg(body, await asyncio.to_thread(load_config))
++    if cfg.provider != "openai":
++        return {"success": False, "models": []}
++    try:
++        base = endpoint_url(cfg.url, "/chat/completions").removesuffix("/chat/completions")
++        models = await fetch_provider_models("openai", base, cfg.api_key)
++        return {"success": True, "models": models}
++    except Exception:
++        # Never return vendor bodies or exceptions which may contain credentials.
++        return {"success": False, "models": []}
 +
 +
 +@router.get("/faces/status")
@@ -6884,7 +7118,7 @@
 +}
 --- /dev/null
 +++ b/web/static/js/pages/settings/ai-faces-logic.js
-@@ -0,0 +1,167 @@
+@@ -0,0 +1,173 @@
 +/**
 + * ai-faces-logic.js — 人臉分頁純函式（TASK-187a-T5）
 + *
@@ -6894,6 +7128,12 @@
 +
 +/** check 值 → i18n key（含未知值的通用文案）。 */
 +export const CHECK_KEYS = {
++    url: 'settings.ai.cloud.check_url',
++    provider: 'settings.ai.cloud.check_provider',
++    refused: 'settings.ai.cloud.check_refused',
++    truncated: 'settings.ai.cloud.check_truncated',
++    box: 'settings.ai.cloud.check_box',
++    score: 'settings.ai.cloud.check_score',
 +    auth: 'settings.ai.faces.check_auth',
 +    http_4xx: 'settings.ai.faces.check_http_4xx',
 +    http_5xx: 'settings.ai.faces.check_http_5xx',
@@ -7054,7 +7294,7 @@
 +};
 --- /dev/null
 +++ b/web/static/js/pages/settings/ai-faces-panel.js
-@@ -0,0 +1,203 @@
+@@ -0,0 +1,257 @@
 +/**
 + * ai-faces-panel.js — 人臉分頁獨立 Alpine 元件（TASK-187a-T5；補跑邏輯 189a-T11b 起改走共用 mixin）
 + *
@@ -7110,6 +7350,57 @@
 +        aiFacesTestResultHtml: '',
 +        aiFacesTestBusy: false,
 +        aiFacesSaveRefreshTimer: null,
++        aiFacesTestImage: '',
++        aiFacesBoxes: [],
++        aiFacesModels: [],
++        aiFacesModelsBusy: false,
++        aiFacesModelsStatus: '',
++        aiFacesConnectionDrafts: {},
++
++        usePreset(name) {
++            const f=this.form;
++            const currentUrl=f.aiFacesUrl || '';
++            const known={'qwen':['https://dashscope.aliyuncs.com/compatible-mode/v1','qwen3-vl-plus'],
++                'deepseek':['https://api.deepseek.com','deepseek-flash'],
++                'bai':['https://api.b.ai/v1','']};
++            this.aiFacesConnectionDrafts[currentUrl]={url:currentUrl,key:f.aiFacesApiKey,model:f.aiFacesModel};
++            const preset=known[name];
++            if(!preset)return;
++            const draft=this.aiFacesConnectionDrafts[preset[0]] || {url:preset[0],key:'',model:preset[1]};
++            f.aiFacesProvider='openai';f.aiFacesUrl=draft.url;f.aiFacesApiKey=draft.key;f.aiFacesModel=draft.model;
++            this.aiFacesModels=[];this.aiFacesTestPassed=false;this.aiFacesTestResultHtml='';this.aiFacesBoxes=[];
++        },
++
++        connectionBody() {
++            return {provider:this.form.aiFacesProvider || 'endpoint',url:String(this.form.aiFacesUrl || '').trim(),
++                api_key:this.form.aiFacesApiKey || '',model:this.form.aiFacesModel || ''};
++        },
++
++        async loadModels() {
++            if(!this.form?.aiFacesEnabled || this.form.aiFacesProvider!=='openai' || this.aiFacesModelsBusy)return;
++            this.aiFacesModelsBusy=true;this.aiFacesModelsStatus='';
++            try {
++                const response=await fetch('/api/ai/faces/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.connectionBody())});
++                const data=await response.json();
++                if(!response.ok || !data.success)throw new Error('models');
++                this.aiFacesModels=data.models || [];
++                this.aiFacesModelsStatus=window.t('settings.ai.cloud.models_loaded',{n:this.aiFacesModels.length});
++            } catch {
++                this.aiFacesModelsStatus=window.t('settings.ai.cloud.models_failed');
++            } finally {this.aiFacesModelsBusy=false;}
++        },
++
++        async selectTestImage(event) {
++            const file=event.target.files?.[0];
++            this.aiFacesBoxes=[];this.aiFacesTestImage='';
++            if(!file)return;
++            if(!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size>5*1024*1024){
++                this.aiFacesTestResultHtml=window.t('settings.ai.cloud.image_limit');return;
++            }
++            this.aiFacesTestImage=await new Promise((resolve)=>{
++                const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>resolve('');reader.readAsDataURL(file);
++            });
++        },
 +
 +        init() {
 +            // 離開人臉分頁時清存檔後補查；輪詢停止由 mixin 的 $watch('aiTab') 負責
@@ -7124,6 +7415,7 @@
 +            this.$watch('isDirty', (dirty, prev) => {
 +                if (this.bfDestroyed) return;
 +                if (dirty || prev !== true) return;
++                this.aiFacesConnectionDrafts={};
 +                if (this.aiTab !== 'faces') return;
 +                this._aiFacesAfterSaveRefresh();
 +            });
@@ -7207,6 +7499,9 @@
 +                return window.t('settings.ai.faces.test_failed_generic');
 +            }
 +            if (data.ok) {
++                if(this.form.aiFacesProvider==='openai') {
++                    return window.t(data.detection_verified?'settings.ai.cloud.faces_detected':'settings.ai.cloud.connection_only', {n:(data.boxes || []).length});
++                }
 +                return window.t('settings.ai.faces.test_ok', {
 +                    model: data.model || '',
 +                });
@@ -7224,14 +7519,12 @@
 +
 +        async runTest() {
 +            if (this.testDisabled()) return;
++            this.aiFacesBoxes=[];
 +            this.aiFacesTestBusy = true;
 +            this.aiFacesTestResultHtml = '';
 +            try {
-+                const body = {
-+                    url: String(this.form.aiFacesUrl || '').trim(),
-+                    api_key: this.form.aiFacesApiKey || '',
-+                    model: this.form.aiFacesModel || '',
-+                };
++                const body = this.connectionBody();
++                if(this.aiFacesTestImage)body.image_data_uri=this.aiFacesTestImage;
 +                const res = await fetch(TEST_URL, {
 +                    method: 'POST',
 +                    headers: { 'Content-Type': 'application/json' },
@@ -7244,6 +7537,7 @@
 +                    this.aiFacesTestResultHtml = window.t('settings.ai.faces.test_failed_generic');
 +                    this.showToast(window.t('settings.ai.faces.test_http_error'), 'error');
 +                } else {
++                    this.aiFacesBoxes=data?.ok ? (data.boxes || []) : [];
 +                    this.aiFacesTestPassed = Boolean(data && data.ok);
 +                    this.aiFacesTestResultHtml = this._formatTestResult(data);
 +                }
@@ -7301,7 +7595,7 @@
 +}
 --- /dev/null
 +++ b/web/static/js/pages/settings/ai-similar-logic.js
-@@ -0,0 +1,174 @@
+@@ -0,0 +1,176 @@
 +/**
 + * ai-similar-logic.js — 圖片相似分頁純函式（TASK-186-T6）
 + *
@@ -7310,6 +7604,8 @@
 +
 +/** check 值 → i18n key（含未知值的通用文案）。 */
 +export const CHECK_KEYS = {
++    url: 'settings.ai.cloud.check_url',
++    provider: 'settings.ai.cloud.check_provider',
 +    auth: 'settings.ai.similar.check_auth',
 +    http_4xx: 'settings.ai.similar.check_http_4xx',
 +    http_5xx: 'settings.ai.similar.check_http_5xx',
@@ -7478,7 +7774,7 @@
 +};
 --- /dev/null
 +++ b/web/static/js/pages/settings/ai-similar-panel.js
-@@ -0,0 +1,148 @@
+@@ -0,0 +1,165 @@
 +/**
 + * ai-similar-panel.js — 圖片相似分頁獨立 Alpine 元件（TASK-186-T6；補跑邏輯 189a-T11b 起改走共用 mixin）
 + *
@@ -7534,8 +7830,24 @@
 +        aiSimTestPassed: false,
 +        aiSimTestResultHtml: '',
 +        aiSimTestBusy: false,
++        aiSimConnectionDrafts: {},
++        aiSimPreviousProvider: 'endpoint',
++
++        onProviderChange() {
++            const f = this.form;
++            this.aiSimConnectionDrafts[this.aiSimPreviousProvider] = {url:f.aiSimilarUrl,key:f.aiSimilarApiKey,model:f.aiSimilarModel};
++            const provider = f.aiSimilarProvider || 'endpoint';
++            const draft = this.aiSimConnectionDrafts[provider] || (provider === 'qwen'
++                ? {url:'https://dashscope.aliyuncs.com',key:'',model:'qwen3-vl-embedding'}
++                : {url:'',key:'',model:''});
++            f.aiSimilarUrl=draft.url;f.aiSimilarApiKey=draft.key;f.aiSimilarModel=draft.model;
++            this.aiSimPreviousProvider=provider;
++            this.aiSimTestPassed=false;this.aiSimTestResultHtml='';
++        },
 +
 +        init() {
++            this.aiSimPreviousProvider=this.form?.aiSimilarProvider || 'endpoint';
++            this.$watch('isDirty', (dirty,previous)=>{if(!dirty && previous)this.aiSimConnectionDrafts={};});
 +            this.bfOnInit();
 +        },
 +
@@ -7597,6 +7909,7 @@
 +            this.aiSimTestResultHtml = '';
 +            try {
 +                const body = {
++                    provider: this.form.aiSimilarProvider || 'endpoint',
 +                    url: String(this.form.aiSimilarUrl || '').trim(),
 +                    api_key: this.form.aiSimilarApiKey || '',
 +                    model: this.form.aiSimilarModel || '',

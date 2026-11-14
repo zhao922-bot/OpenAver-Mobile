@@ -74,3 +74,29 @@ def test_cloud_detection_test_returns_user_image_and_boxes(monkeypatch):
     assert seen[0]["image_data_uri"].startswith("data:image/")
     assert result["boxes"] == [[.1,.2,.3,.4,.9]]
     assert result["detection_verified"]
+
+
+def test_repairing_invalid_legacy_address_does_not_block_settings(monkeypatch):
+    bound = []
+    repo = SimpleNamespace(get_index_state=lambda: {"model": "legacy"},
+        get_connection_id=lambda: None, set_connection_id=bound.append)
+    monkeypatch.setattr(similar_state, "EmbeddingRepository", lambda: repo)
+    similar_state.preserve_legacy_connection({"url": "https://[broken"},
+        {"provider": "qwen", "url": "https://dashscope.aliyuncs.com", "model": "image"})
+    assert bound  # The old unusable index must remain isolated after the repair.
+
+
+def test_face_model_query_uses_own_masked_key_and_full_endpoint(monkeypatch):
+    from core.ai_services import connections
+    from core.secret_fields import mask_secret
+    cfg = {"ai_services": {"faces": {"provider": "openai", "url": "https://face.test/proxy/v1/chat/completions", "api_key": "face-test-key"}},
+           "translate": {"openai": {"api_key": "unrelated-key"}}}
+    monkeypatch.setattr(ai_services, "load_config", lambda: cfg)
+    seen = []
+    async def query(provider, base, key):
+        seen.append((provider, base, key))
+        return ["vision-model"]
+    monkeypatch.setattr(connections, "fetch_provider_models", query)
+    result = asyncio.run(ai_services.faces_models(ai_services.FacesTestRequest(api_key=mask_secret("face-test-key"))))
+    assert result == {"success": True, "models": ["vision-model"]}
+    assert seen == [("openai", "https://face.test/proxy/v1", "face-test-key")]

@@ -1087,6 +1087,29 @@
         "independent_hint": "此連線獨立於標題翻譯，修改這裡不會影響翻譯設定。",
         "similar_path_hint": "填寫基礎位址，例如 http://192.168.1.22:8765；自動附加 /v1/embeddings。",
         "faces_path_hint": "填寫基礎位址，例如 http://192.168.1.22:8765；自動附加 /v1/faces。"
+      },
+      "cloud": {
+        "service_type": "服務類型",
+        "legacy_embeddings": "自訂圖片向量端點",
+        "qwen_embeddings": "Qwen 雲端圖片向量",
+        "legacy_faces": "自訂人臉端點",
+        "vision_faces": "雲端視覺（OpenAI 相容）",
+        "presets": "廠商預設",
+        "embedding_help": "需要圖片向量模型，例如 qwen3-vl-embedding，一般聊天模型無法使用。更換服務或模型後需重建索引。",
+        "faces_help": "需要支援圖片輸入的視覺模型。只定位人臉，不辨識身分。雲端請求可能收費；僅在手動發起後重建。",
+        "test_image": "測試圖片",
+        "image_help": "可選 JPEG、PNG 或 WebP，不超過 5 MB。僅點擊測試時傳送，不儲存至設定。",
+        "image_limit": "請選擇不超過 5 MB 的 JPEG、PNG 或 WebP 圖片。",
+        "models_loaded": "已取得 {n} 個模型",
+        "models_failed": "取得模型失敗，請檢查連線或手動填寫模型名稱。",
+        "faces_detected": "測試圖片偵測到 {n} 張人臉。",
+        "connection_only": "介面回傳有效，但尚未驗證人臉偵測。請選擇人臉清晰的照片後再次測試。",
+        "check_url": "服務位址無效，請使用 HTTP(S) 基礎位址或完整端點，且不包含查詢參數或片段。",
+        "check_provider": "不支援此服務類型。",
+        "check_refused": "模型拒絕處理此圖片。",
+        "check_truncated": "回應遭截斷，請嘗試其他模型或圖片。",
+        "check_box": "人臉座標無效，正規化的偵測框必須位於圖片範圍內。",
+        "check_score": "人臉信心分數無效，應為 0 到 1 之間的數值。"
       }
     },
     "group": {

@@ -6,6 +6,8 @@
 
 /** check 值 → i18n key（含未知值的通用文案）。 */
 export const CHECK_KEYS = {
+    url: 'settings.ai.cloud.check_url',
+    provider: 'settings.ai.cloud.check_provider',
     auth: 'settings.ai.similar.check_auth',
     http_4xx: 'settings.ai.similar.check_http_4xx',
     http_5xx: 'settings.ai.similar.check_http_5xx',

@@ -7,6 +7,12 @@
 
 /** check 值 → i18n key（含未知值的通用文案）。 */
 export const CHECK_KEYS = {
+    url: 'settings.ai.cloud.check_url',
+    provider: 'settings.ai.cloud.check_provider',
+    refused: 'settings.ai.cloud.check_refused',
+    truncated: 'settings.ai.cloud.check_truncated',
+    box: 'settings.ai.cloud.check_box',
+    score: 'settings.ai.cloud.check_score',
     auth: 'settings.ai.faces.check_auth',
     http_4xx: 'settings.ai.faces.check_http_4xx',
     http_5xx: 'settings.ai.faces.check_http_5xx',

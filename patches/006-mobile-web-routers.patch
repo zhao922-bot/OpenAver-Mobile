@@ -133,7 +133,7 @@
 +def _after_faces_saved(old: dict, new: dict) -> threading.Thread | None:
 +    """Warm-test changed external face settings and start recompute if needed."""
 +    try:
-+        if old == new:
++        if old == new or new.get("provider") == "openai":
 +            return None
 +        from core.ai_services import faces_recompute
 +        from core.ai_services.faces_config import active_in
@@ -227,7 +227,14 @@
                  # Mask sentinels must be restored against disk under the same
                  # _config_write_lock critical section as server_mode preserve —
                  # handler-side load would be TOCTOU against concurrent writers.
-@@ -193,11 +241,17 @@
+@@ -190,14 +238,24 @@
+                         node[leaf] = resolve_secret(
+                             read_secret(payload, dotted), read_secret(cfg, dotted)
+                         )
++                from core.ai_services.similar_state import preserve_legacy_connection
++                preserve_legacy_connection(
++                    (cfg.get("ai_services") or {}).get("image_similar") or {},
++                    (payload.get("ai_services") or {}).get("image_similar") or {})
                  cfg.update(payload)
  
              mutate_config(_write_preserving_server_owned)
@@ -247,7 +254,7 @@
      finally:
          end_config_save(save_token)
  
-@@ -217,10 +271,10 @@
+@@ -217,10 +275,10 @@
              else:
                  lan_listener.stop()
          _reset_translate_service()  # 清除舊服務實例（與 server_mode 無關，鎖外）
@@ -260,7 +267,7 @@
  
  
  @router.get("/tutorial-status")
-@@ -264,25 +318,30 @@
+@@ -264,25 +322,30 @@
      註：保持同步 def —— body 內 mutate_config 走檔案 I/O，依 async-offload 守衛
      （feature/71）須在 Starlette threadpool 執行，不可改 async def 卡 event loop。
      """
@@ -295,7 +302,7 @@
  
          # server_mode 是主機決定，遠端連入的客人不得切換（spec「遠端自鎖不防護」的更乾淨版本）。
          # 僅允許 loopback 來源切換；fail-closed：client None → 視為非 loopback → 拒絕。
-@@ -296,7 +355,7 @@
+@@ -296,7 +359,7 @@
                  )
                  # reason 供前端對應專屬 i18n 訊息（remote_only），而非通用「請稍後再試」
                  return {"success": False, "reason": "remote_forbidden",
@@ -304,7 +311,7 @@
  
          # server_mode 專屬分支：start/stop LAN listener，確保 runtime ≠ persisted 不分離。
          # 整個交易在 _server_mode_toggle_lock 內序列化（Codex P2）：防併發 enable/disable
-@@ -311,7 +370,7 @@
+@@ -311,7 +374,7 @@
                          lan_port = lan_listener.start()
                      except Exception as e:                    # noqa: BLE001
                          logger.error("server_mode 啟用失敗: %s", e)
@@ -313,7 +320,7 @@
                      try:
                          mutate_config(lambda cfg: cfg.setdefault("general", {}).update({"server_mode": True}))
                      except Exception as e:                    # noqa: BLE001
-@@ -321,7 +380,7 @@
+@@ -321,7 +384,7 @@
                              lan_listener.stop()
                          except Exception:                     # noqa: BLE001,S110 — rollback best-effort
                              pass
@@ -322,7 +329,7 @@
                      from web.lan_listener import get_lan_ip, is_public_exposure
                      lan_ip = get_lan_ip()
                      return {
-@@ -340,14 +399,14 @@
+@@ -340,14 +403,14 @@
                          mutate_config(lambda cfg: cfg.setdefault("general", {}).update({"server_mode": False}))
                      except Exception as e:                    # noqa: BLE001
                          logger.error("server_mode disable persist 失敗: %s", e)
@@ -340,7 +347,7 @@
  
          def _mut(cfg):
              cfg.setdefault("general", {})[field] = request.value
-@@ -360,7 +419,7 @@
+@@ -360,7 +423,7 @@
          raise
      except Exception as e:
          logger.error("更新設定欄位失敗: %s", e)
@@ -349,7 +356,7 @@
  
  
  class FocalDeviceDisabledRequest(BaseModel):
-@@ -381,7 +440,7 @@
+@@ -381,7 +444,7 @@
          return {"success": True}
      except Exception as e:
          logger.error("更新 focal_device.disabled 失敗: %s", e)
@@ -358,7 +365,7 @@
  
  
  @router.get("/config/general/lan-port")
-@@ -440,14 +499,15 @@
+@@ -440,14 +503,15 @@
      #       成功佔住後必 end_switch()（finally 保證）。
      reason = try_begin_switch()
      if reason is not None:
@@ -377,7 +384,7 @@
          }
      try:
          return _switch_external_manager_locked(request)
-@@ -523,7 +583,7 @@
+@@ -523,7 +587,7 @@
          mutate_config(_mutator)
      except Exception as e:  # noqa: BLE001
          logger.error("switch_external_manager config 落盤失敗（卡已刪、離線仍在 config，可自癒）: %s", e)
@@ -386,7 +393,7 @@
  
      # Step 6：回傳（Step 5 = 零檔案系統刪除，全程未 rmtree/unlink/os.remove）
      return {
-@@ -601,7 +661,7 @@
+@@ -601,7 +665,7 @@
      # 此處再擋獨立/直接呼叫，防禦縱深）。dry_run 也擋，讓前端 heads-up 階段就明確拒絕。
      if is_generate_in_progress():
          return {"success": False, "reason": "generate_in_progress",
@@ -395,7 +402,7 @@
      try:
          cfg = load_config()
          scraper_cfg = cfg.get('scraper', {})
-@@ -628,7 +688,7 @@
+@@ -628,7 +692,7 @@
          return {"success": True, "rewritten": rewritten}
      except Exception as e:  # noqa: BLE001 — 端點層例外收斂為 success:False（比照 config.py 慣例）
          logger.error("rewrite_strm 失敗: %s", e)
@@ -404,7 +411,7 @@
  
  
  @router.get("/version")
-@@ -666,6 +726,7 @@
+@@ -666,6 +730,7 @@
  @router.get("/ollama/models")
  async def get_ollama_models(url: str) -> dict:
      """取得 Ollama 可用模型列表"""
@@ -412,7 +419,7 @@
      try:
          # 確保 URL 格式正確
          url = url.rstrip('/')
-@@ -680,43 +741,67 @@
+@@ -680,43 +745,67 @@
              return {"success": True, "models": models}
  
      except httpx.TimeoutException:

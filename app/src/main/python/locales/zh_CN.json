@@ -1087,6 +1087,29 @@
         "independent_hint": "此连接独立于标题翻译，修改这里不会影响翻译设置。",
         "similar_path_hint": "填写基础地址，例如 http://192.168.1.22:8765；自动追加 /v1/embeddings。",
         "faces_path_hint": "填写基础地址，例如 http://192.168.1.22:8765；自动追加 /v1/faces。"
+      },
+      "cloud": {
+        "service_type": "服务类型",
+        "legacy_embeddings": "自定义图片向量端点",
+        "qwen_embeddings": "Qwen 云端图片向量",
+        "legacy_faces": "自定义人脸端点",
+        "vision_faces": "云端视觉（OpenAI 兼容）",
+        "presets": "厂商预设",
+        "embedding_help": "需要图片向量模型，例如 qwen3-vl-embedding，普通聊天模型不可用。更换服务或模型后需重建索引。",
+        "faces_help": "需要支持图片输入的视觉模型。只定位人脸，不识别身份。云端请求可能收费；仅在手动发起后重建。",
+        "test_image": "测试图片",
+        "image_help": "可选 JPEG、PNG 或 WebP，不超过 5 MB。仅点击测试时发送，不保存到设置。",
+        "image_limit": "请选择不超过 5 MB 的 JPEG、PNG 或 WebP 图片。",
+        "models_loaded": "已获取 {n} 个模型",
+        "models_failed": "获取模型失败，请检查连接或手动填写模型名称。",
+        "faces_detected": "测试图片检出 {n} 张人脸。",
+        "connection_only": "接口返回有效，但尚未验证人脸检测。请选择人脸清晰的照片后再次测试。",
+        "check_url": "服务地址无效，请使用 HTTP(S) 基础地址或完整端点，且不包含查询参数或片段。",
+        "check_provider": "不支持此服务类型。",
+        "check_refused": "模型拒绝处理此图片。",
+        "check_truncated": "响应被截断，请尝试其他模型或图片。",
+        "check_box": "人脸坐标无效，归一化的检测框必须位于图片范围内。",
+        "check_score": "人脸置信度无效，应为 0 到 1 之间的数值。"
       }
     },
     "group": {

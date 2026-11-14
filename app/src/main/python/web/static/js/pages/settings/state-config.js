@@ -57,10 +57,12 @@ export function stateConfig() {
 
             // Remote AI services (mobile only connects to user-provided HTTP services)
             aiSimilarEnabled: false,
+            aiSimilarProvider: 'endpoint',
             aiSimilarUrl: '',
             aiSimilarApiKey: '',
             aiSimilarModel: '',
             aiFacesEnabled: false,
+            aiFacesProvider: 'endpoint',
             aiFacesUrl: '',
             aiFacesApiKey: '',
             aiFacesModel: '',
@@ -681,10 +683,12 @@ export function stateConfig() {
 
                     // Remote AI services
                     this.form.aiSimilarEnabled = config.ai_services?.image_similar?.enabled === true;
+                    this.form.aiSimilarProvider = config.ai_services?.image_similar?.provider || 'endpoint';
                     this.form.aiSimilarUrl = config.ai_services?.image_similar?.url || '';
                     this.form.aiSimilarApiKey = config.ai_services?.image_similar?.api_key || '';
                     this.form.aiSimilarModel = config.ai_services?.image_similar?.model || '';
                     this.form.aiFacesEnabled = config.ai_services?.faces?.enabled === true;
+                    this.form.aiFacesProvider = config.ai_services?.faces?.provider || 'endpoint';
                     this.form.aiFacesUrl = config.ai_services?.faces?.url || '';
                     this.form.aiFacesApiKey = config.ai_services?.faces?.api_key || '';
                     this.form.aiFacesModel = config.ai_services?.faces?.model || '';
@@ -1040,6 +1044,7 @@ export function stateConfig() {
                     image_similar: {
                         ...(config.ai_services?.image_similar || {}),
                         enabled: this.form.aiSimilarEnabled,
+                        provider: this.form.aiSimilarProvider || 'endpoint',
                         url: this.form.aiSimilarUrl.trim(),
                         api_key: this.form.aiSimilarApiKey,
                         model: this.form.aiSimilarModel.trim(),
@@ -1047,6 +1052,7 @@ export function stateConfig() {
                     faces: {
                         ...(config.ai_services?.faces || {}),
                         enabled: this.form.aiFacesEnabled,
+                        provider: this.form.aiFacesProvider || 'endpoint',
                         url: this.form.aiFacesUrl.trim(),
                         api_key: this.form.aiFacesApiKey,
                         model: this.form.aiFacesModel.trim(),
