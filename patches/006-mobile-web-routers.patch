@@ -1,3 +1,72 @@
+--- a/web/static_cache.py
++++ b/web/static_cache.py
+@@ -1,21 +1,9 @@
+-"""
+-NoCacheStaticFiles — StaticFiles subclass that injects Cache-Control: no-cache.
++"""Serve packaged UI code fresh and revalidate other static assets.
+ 
+-目的：根治 heuristic caching。Starlette 原生 StaticFiles 只送 ETag + Last-Modified；
+-瀏覽器對「有 Last-Modified 但無 Cache-Control」套用 heuristic freshness（約 (now − Last-Modified) × 10%），
+-在 freshness 窗口內不重驗 → 重新部署後同檔名仍吃舊 JS/CSS，直到窗口過期或使用者 hard-reload。
+-
+-`no-cache` 不是「不快取」；意為「可存快取，但每次必須帶 If-None-Match / If-Modified-Since 重驗」。
+-Starlette 已產 ETag + Last-Modified → 未變回 304（空 body），有變才回 200 新版，免 hard-reload。
+-
+-機制說明（post-construction mutation）：
+-  super().file_response(...) 回傳 200 FileResponse 或 304 NotModifiedResponse。
+-  對 200 路徑：直接是 FileResponse 物件，headers dict 可寫。
+-  對 304 路徑：是 NotModifiedResponse 物件，其 __init__ 在「建構時」已完成白名單過濾，
+-  建構後的 headers dict 仍可直接寫入（Python MutableHeaders 不設防）。
+-  我們在 super().file_response() 回傳後才 mutate，__init__ 早已執行完畢，
+-  白名單不再介入——header 直接寫入即生效。
+-  因此 200（FileResponse）與 304（NotModifiedResponse）兩條路均會帶 Cache-Control: no-cache。
++JavaScript, CSS and JSON use no-store and ignore conditional validators:
++APK updates can preserve both mtime and length, making metadata ETags stale.
++Images and fonts retain no-cache with ordinary ETag/Last-Modified validation.
++Canonical MIME overrides also apply to both 200 and 304 responses.
+ """
+ import os
+ 
+@@ -35,23 +23,29 @@
+ 
+ 
+ class NoCacheStaticFiles(StaticFiles):
+-    """對 /static 的所有回應加 Cache-Control: no-cache。
++    """Disable UI-code caching while preserving other asset revalidation."""
+ 
+-    override file_response（同步方法，200 和 304 都經此）。
+-    在 super().file_response() 回傳後做 post-construction headers mutation，
+-    兩條回應路徑（200 FileResponse / 304 NotModifiedResponse）均有效。
+-    """
+-
+-    def file_response(self, full_path, *args, **kwargs):
++    def file_response(self, full_path, stat_result, scope, status_code=200):
++        ext = os.path.splitext(str(full_path))[1].lower()
++        ui_code = ext in {'.js', '.mjs', '.css', '.json'}
++        if ui_code:
++            # Packaged files can retain the same mtime and byte length across
++            # APK updates. Starlette's metadata ETag then incorrectly returns
++            # 304 for changed code. Serve local UI code fresh, including imports;
++            # retain ordinary conditional caching for fonts and images.
++            scope = dict(scope)
++            scope['headers'] = [
++                (name, value) for name, value in scope.get('headers', [])
++                if name.lower() not in {b'if-none-match', b'if-modified-since'}
++            ]
+         # super 回傳 200 FileResponse 或 304 NotModifiedResponse；
+         # 兩者在 __init__ 執行後 headers dict 仍可直接寫入（post-construction mutation）。
+         # 注意：NotModifiedResponse.__init__ 的白名單過濾在「建構時」已完成；
+         # 我們在建構後才 mutate，故白名單不介入——header 直接寫入即生效。
+-        response = super().file_response(full_path, *args, **kwargs)
+-        response.headers["Cache-Control"] = "no-cache"
++        response = super().file_response(full_path, stat_result, scope, status_code)
++        response.headers["Cache-Control"] = "no-store" if ui_code else "no-cache"
+         # issue #66：依副檔名查表，命中才 post-construction 覆寫 Content-Type。
+         # header 寫死後不再走 guess_type，對任何 mimetypes.init() / registry 重讀免疫。
+-        ext = os.path.splitext(str(full_path))[1].lower()
+         forced = _FORCED_CONTENT_TYPES.get(ext)
+         if forced is not None:
+             response.headers["Content-Type"] = forced
 --- a/web/routers/capabilities.py
 +++ b/web/routers/capabilities.py
 @@ -161,6 +161,20 @@
@@ -94,15 +163,16 @@
  import httpx
  import threading
  
-@@ -28,6 +29,7 @@
+@@ -28,6 +29,8 @@
  from core.config import (
      AppConfig,
      FocalDeviceState,
++    ShowcaseDisplayConfig,
 +    add_computed_source_fields,
      load_config,
      mutate_config,
      reset_config_file,
-@@ -58,12 +60,23 @@
+@@ -58,12 +61,23 @@
  from core.translate_service import OllamaTranslateService
  from core.cloud_translate import TranslateError
  from core.platform_info import is_synology
@@ -126,7 +196,7 @@
  
  # 序列化「server_mode 切換交易」的單一鎖（Codex P2）：toggle（start/persist/stop）與
  # reset（clear/stop）共用此鎖，避免併發 enable/disable/reset 交錯導致 config↔listener
-@@ -78,6 +91,33 @@
+@@ -78,6 +92,33 @@
      reset_translate_service()
  
  
@@ -160,7 +230,7 @@
  @router.get("/config")
  def get_config() -> dict:
      """取得所有設定（三個不透明憑證以遮罩形狀回傳；CD-114c-2）
-@@ -85,7 +125,7 @@
+@@ -85,7 +126,7 @@
      ``resolved`` 是 response-only 頂層欄位（與 ``data`` 同層），前端不得把它
      寫進 ``config.gallery`` 再 PUT 回來。
      """
@@ -169,7 +239,7 @@
      gallery = data.get("gallery") or {}
      return {
          "success": True,
-@@ -103,6 +143,7 @@
+@@ -103,6 +144,7 @@
  @router.put("/config")
  def update_config(config: AppConfig) -> dict:
      """更新所有設定"""
@@ -177,7 +247,7 @@
      # PR #93 P2-e：整份設定儲存納入 switch 互斥窗口（owner 拍板：互斥鎖）。否則另一分頁帶
      # 「切模式前的舊 directories 快照」的整份存檔會與 purge 交錯、把剛被 purge 的離線來源
      # 條目寫回 gallery.directories（DB 卡已刪）→ 殭屍條目。
-@@ -126,7 +167,7 @@
+@@ -126,7 +168,7 @@
          != load_config().get("scraper", {}).get("strm_path_mappings", {})
      ):
          return {"success": False, "reason": "generate_in_progress_strm_mapping",
@@ -186,7 +256,7 @@
      # 程式區守衛（TASK-153b-T3 / spec §5.1）：非空自訂值解析後落在 get_project_root()
      # 之下 → 拒絕。更新時程式區會被整包換掉；要跟著資料根走請留空。
      custom_output_dir = (config.gallery.output_dir or "").strip()
-@@ -135,16 +176,19 @@
+@@ -135,16 +177,19 @@
          return {
              "success": False,
              "reason": "gallery_output_in_program_area",
@@ -209,7 +279,7 @@
      try:
          # Cap 守衛（CD-61-16，endpoint-level；非 model_validator）：
          # 同時啟用且非 manual_only 的來源數不得超過 MAX_ENABLED_SOURCES。
-@@ -157,6 +201,7 @@
+@@ -157,6 +202,7 @@
              )
          try:
              payload = config.model_dump()
@@ -217,7 +287,21 @@
              # server_mode is toggle-lifecycle state owned exclusively by
              # PUT /api/config/general/server_mode (which calls lan_listener.start/stop
              # atomically with the persist). A full-config save must NEVER overwrite the
-@@ -178,6 +223,9 @@
+@@ -168,6 +214,13 @@
+                 current_server_mode = cfg.get("general", {}).get("server_mode", False)
+                 payload["general"]["server_mode"] = current_server_mode
+                 payload["general"]["last_notified_update_version"] = cfg.get("general", {}).get("last_notified_update_version", "")
++                # Display controls save independently. An unrelated settings
++                # snapshot must not revert a newer library preference.
++                current_showcase = cfg.get('showcase') or {}
++                if 'display' in current_showcase:
++                    payload['showcase']['display'] = copy.deepcopy(current_showcase['display'])
++                else:
++                    payload['showcase'].pop('display', None)
+                 # focal_device 是**伺服器擁有狀態**：前端只透過專用 toggle 端點
+                 # PUT /api/config/focal-device/disabled 寫它（另有背景
+                 # core.focal.device_state.record_outcome），全量 PUT 一律不接受前端送來的值。
+@@ -178,6 +231,9 @@
                  # 空 dict」——而 load_config 的 migration 只在 key **不存在**時補，寫回一個空 dict
                  # 會焊死一個 migration 永遠修不好的殘缺值（BE-CONFIG-02 的鏡像）。
                  payload["focal_device"] = cfg.get("focal_device") or FocalDeviceState().model_dump()
@@ -227,7 +311,7 @@
                  # Mask sentinels must be restored against disk under the same
                  # _config_write_lock critical section as server_mode preserve —
                  # handler-side load would be TOCTOU against concurrent writers.
-@@ -190,14 +238,24 @@
+@@ -190,16 +246,40 @@
                          node[leaf] = resolve_secret(
                              read_secret(payload, dotted), read_secret(cfg, dotted)
                          )
@@ -253,8 +337,24 @@
 +            return {"success": False, "error": _config_text("save_failed", response_locale)}
      finally:
          end_config_save(save_token)
++
++
++@router.put('/config/showcase-display')
++def update_showcase_display(display: ShowcaseDisplayConfig) -> dict:
++    """Atomically update only live browsing preferences, never other settings."""
++    data = display.model_dump()
++
++    def _write(cfg):
++        if not isinstance(cfg.get('showcase'), dict):
++            cfg['showcase'] = {}
++        cfg['showcase']['display'] = data.copy()
++
++    mutate_config(_write)
++    return {'success': True, 'data': data}
  
-@@ -217,10 +275,10 @@
+ 
+ @router.delete("/config")
+@@ -217,10 +297,10 @@
              else:
                  lan_listener.stop()
          _reset_translate_service()  # 清除舊服務實例（與 server_mode 無關，鎖外）
@@ -267,7 +367,7 @@
  
  
  @router.get("/tutorial-status")
-@@ -264,25 +322,30 @@
+@@ -264,25 +344,30 @@
      註：保持同步 def —— body 內 mutate_config 走檔案 I/O，依 async-offload 守衛
      （feature/71）須在 Starlette threadpool 執行，不可改 async def 卡 event loop。
      """
@@ -302,7 +402,7 @@
  
          # server_mode 是主機決定，遠端連入的客人不得切換（spec「遠端自鎖不防護」的更乾淨版本）。
          # 僅允許 loopback 來源切換；fail-closed：client None → 視為非 loopback → 拒絕。
-@@ -296,7 +359,7 @@
+@@ -296,7 +381,7 @@
                  )
                  # reason 供前端對應專屬 i18n 訊息（remote_only），而非通用「請稍後再試」
                  return {"success": False, "reason": "remote_forbidden",
@@ -311,7 +411,7 @@
  
          # server_mode 專屬分支：start/stop LAN listener，確保 runtime ≠ persisted 不分離。
          # 整個交易在 _server_mode_toggle_lock 內序列化（Codex P2）：防併發 enable/disable
-@@ -311,7 +374,7 @@
+@@ -311,7 +396,7 @@
                          lan_port = lan_listener.start()
                      except Exception as e:                    # noqa: BLE001
                          logger.error("server_mode 啟用失敗: %s", e)
@@ -320,7 +420,7 @@
                      try:
                          mutate_config(lambda cfg: cfg.setdefault("general", {}).update({"server_mode": True}))
                      except Exception as e:                    # noqa: BLE001
-@@ -321,7 +384,7 @@
+@@ -321,7 +406,7 @@
                              lan_listener.stop()
                          except Exception:                     # noqa: BLE001,S110 — rollback best-effort
                              pass
@@ -329,7 +429,7 @@
                      from web.lan_listener import get_lan_ip, is_public_exposure
                      lan_ip = get_lan_ip()
                      return {
-@@ -340,14 +403,14 @@
+@@ -340,14 +425,14 @@
                          mutate_config(lambda cfg: cfg.setdefault("general", {}).update({"server_mode": False}))
                      except Exception as e:                    # noqa: BLE001
                          logger.error("server_mode disable persist 失敗: %s", e)
@@ -347,7 +447,7 @@
  
          def _mut(cfg):
              cfg.setdefault("general", {})[field] = request.value
-@@ -360,7 +423,7 @@
+@@ -360,7 +445,7 @@
          raise
      except Exception as e:
          logger.error("更新設定欄位失敗: %s", e)
@@ -356,7 +456,7 @@
  
  
  class FocalDeviceDisabledRequest(BaseModel):
-@@ -381,7 +444,7 @@
+@@ -381,7 +466,7 @@
          return {"success": True}
      except Exception as e:
          logger.error("更新 focal_device.disabled 失敗: %s", e)
@@ -365,7 +465,7 @@
  
  
  @router.get("/config/general/lan-port")
-@@ -440,14 +503,15 @@
+@@ -440,14 +525,15 @@
      #       成功佔住後必 end_switch()（finally 保證）。
      reason = try_begin_switch()
      if reason is not None:
@@ -384,7 +484,7 @@
          }
      try:
          return _switch_external_manager_locked(request)
-@@ -523,7 +587,7 @@
+@@ -523,7 +609,7 @@
          mutate_config(_mutator)
      except Exception as e:  # noqa: BLE001
          logger.error("switch_external_manager config 落盤失敗（卡已刪、離線仍在 config，可自癒）: %s", e)
@@ -393,7 +493,7 @@
  
      # Step 6：回傳（Step 5 = 零檔案系統刪除，全程未 rmtree/unlink/os.remove）
      return {
-@@ -601,7 +665,7 @@
+@@ -601,7 +687,7 @@
      # 此處再擋獨立/直接呼叫，防禦縱深）。dry_run 也擋，讓前端 heads-up 階段就明確拒絕。
      if is_generate_in_progress():
          return {"success": False, "reason": "generate_in_progress",
@@ -402,7 +502,7 @@
      try:
          cfg = load_config()
          scraper_cfg = cfg.get('scraper', {})
-@@ -628,7 +692,7 @@
+@@ -628,7 +714,7 @@
          return {"success": True, "rewritten": rewritten}
      except Exception as e:  # noqa: BLE001 — 端點層例外收斂為 success:False（比照 config.py 慣例）
          logger.error("rewrite_strm 失敗: %s", e)
@@ -411,7 +511,7 @@
  
  
  @router.get("/version")
-@@ -666,6 +730,7 @@
+@@ -666,6 +752,7 @@
  @router.get("/ollama/models")
  async def get_ollama_models(url: str) -> dict:
      """取得 Ollama 可用模型列表"""
@@ -419,7 +519,7 @@
      try:
          # 確保 URL 格式正確
          url = url.rstrip('/')
-@@ -680,43 +745,67 @@
+@@ -680,43 +767,67 @@
              return {"success": True, "models": models}
  
      except httpx.TimeoutException:

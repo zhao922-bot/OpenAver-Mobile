@@ -210,7 +210,32 @@
      claude: ClaudeConfig = ClaudeConfig()
  
      # 舊字段（保留向後兼容）
-@@ -220,7 +240,7 @@
+@@ -204,8 +224,24 @@
+     cover_badges: CoverBadgesConfig = CoverBadgesConfig()
+ 
+ 
++class ShowcaseDisplayConfig(BaseModel):
++    """Live library preferences, independently owned by the display endpoint."""
++
++    presentation: Literal['cover', 'poster', 'list', 'table'] = 'poster'
++    columns: Literal[2, 3, 5] = 2
++    items_per_page: int = Field(default=45, ge=1, le=500, strict=True)
++
++    @field_validator('columns', 'items_per_page', mode='before')
++    @classmethod
++    def _strict_counts(cls, value):
++        if type(value) is not int:
++            raise ValueError('display counts must be integers')
++        return value
++
++
+ class ShowcaseConfig(BaseModel):
+     player: str = ""  # 播放器路徑，空字串使用系統預設
++    display: ShowcaseDisplayConfig = Field(default_factory=ShowcaseDisplayConfig)
+ 
+ 
+ # Valid values for the window close-action preference（feature/82, single source of truth）.
+@@ -220,7 +256,7 @@
      sidebar_collapsed: bool = False  # 側邊欄預設收合 (僅影響 Desktop)
      tutorial_completed: bool = False  # 新手引導是否已完成
      font_size: str = "md"  # 全站字體大小: xs, sm, md, lg, xl
@@ -219,7 +244,7 @@
      server_mode: bool = False  # LAN 伺服器模式開關（feature/80）
      close_action: Literal["ask", "tray", "exit"] = "ask"  # 視窗關閉行為（feature/82）
      auto_check_update: bool = True  # 啟動時檢查更新（feature/107）
-@@ -237,6 +257,40 @@
+@@ -237,6 +273,40 @@
      consecutive_timeout_count: int = 0
      judged_at_version: str = ""   # 累積目前這個 streak／disabled 狀態時的 App 版本號
      set_by_user: bool = False  # True = 使用者決定；自動關閉／版本 reset 不得覆寫
@@ -260,7 +285,7 @@
  
  
  class AppConfig(BaseModel):
-@@ -251,6 +305,44 @@
+@@ -251,6 +321,44 @@
      thumbnail_cache_enabled: bool = False  # 縮圖快取開關（feature/71 T2）；預設關閉；top-level additive migration 補缺漏
      metatube: MetatubeConfig = MetatubeConfig()  # CD-63b-3；Pydantic default 自動補缺漏（no migration needed）
      focal_device: FocalDeviceState = FocalDeviceState()
@@ -305,7 +330,7 @@
  
  
  # ============ 載入 / 儲存 ============
-@@ -302,345 +394,431 @@
+@@ -302,345 +410,431 @@
          return False
  
  
@@ -1053,7 +1078,7 @@
              _save_config_unlocked(raw_config)
  
          return raw_config
-@@ -648,10 +826,37 @@
+@@ -648,10 +842,37 @@
      return AppConfig().model_dump()
  
  
@@ -1093,7 +1118,7 @@
  
  
  def _save_config_unlocked(config: dict) -> None:
-@@ -672,6 +877,7 @@
+@@ -672,6 +893,7 @@
  
      with atomic_write(CONFIG_PATH, mode='w', encoding='utf-8') as f:
          json.dump(config, f, indent=2, ensure_ascii=False)
@@ -1101,7 +1126,7 @@
  
  
  def save_config(config: dict) -> None:
-@@ -691,16 +897,19 @@
+@@ -691,16 +913,19 @@
      mutate_config / reset_config_file）—— 會在已持鎖時二次 acquire → 自我死鎖。
      """
      with _config_write_lock:
@@ -3619,7 +3644,7 @@
      },
      "pick": {
        "add_aria": "Add to picks",
-@@ -1410,10 +1963,90 @@
+@@ -1410,10 +1963,107 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -3627,6 +3652,23 @@
 +      "download_failed": "Stills were found, but all downloads failed",
 +      "db_write_failed": "Stills were downloaded, but the library database could not be updated. Please retry",
        "multi_video_error": "This folder contains other videos. Fetching stills here may affect them. Please move the video to its own folder first."
++    },
++    "display": {
++      "button": "Display",
++      "title": "Home display",
++      "presentation": "Presentation",
++      "columns": "Videos per row",
++      "columns_value": "{count} per row",
++      "grid_only": "Applies to poster and cover grids only",
++      "per_page": "Videos per page",
++      "page_value": "{count} per page",
++      "saving": "Saving…",
++      "remembered": "Choices are remembered automatically",
++      "save_failed": "Could not save. Please retry.",
++      "done": "Done",
++      "retry": "Retry",
++      "offline_title": "Offline export settings",
++      "offline_note": "These settings apply only to generated offline pages."
      }
    },
    "help": {
@@ -3710,7 +3752,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1434,7 +2067,8 @@
+@@ -1434,7 +2084,8 @@
        "this_computer_unavailable": "Cannot read this computer's update info right now. Please reopen the Help page and try again",
        "client_up_to_date": "OpenAver on this computer is up to date",
        "client_update_available_prefix": "This computer has a new version",
@@ -3720,7 +3762,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2081,7 @@
+@@ -1447,7 +2098,7 @@
        "title": "First time? Follow these 3 steps",
        "subtitle": "From adding your folder to filling metadata — three steps to get started",
        "step1_title": "Add Your Library Folder",
@@ -3729,7 +3771,7 @@
        "step2_title": "Generate Page",
        "step2_desc": "Scan and build a browsable collection page in one click",
        "step3_title": "NFO Fill",
-@@ -1464,7 +2098,7 @@
+@@ -1464,7 +2115,7 @@
      "tag_alias": {
        "title": "Tag Alias Management",
        "intro": "Manage Chinese/Japanese/English synonyms in one place so the search box, chip filters, and fuzzy exploration all speak the same language.",
@@ -3738,7 +3780,7 @@
        "scanner_chipwall": "The chip wall lists all tag alias groups. Click \"+\" to add an alias; the primary name is shown in pink, aliases in grey.",
        "scanner_ai_hint": "Click \"?\" to open the AI suggestion panel: describe your tag needs to the AI and it returns suggested alias groups for direct import.",
        "h6_showcase": "Auto-expand in Showcase",
-@@ -1501,16 +2135,16 @@
+@@ -1501,16 +2152,16 @@
      "batch": {
        "title": "Batch File Search",
        "h6_add": "Add Multiple Files",
@@ -3759,7 +3801,7 @@
        "fav_auto": "Automatically begins searching the first 20 files",
        "fav_nfo_skip": "If a same-name .nfo already exists, the file is treated as organized and the scraper is skipped",
        "pause_pause": "Click the 'Pause' button during batch search",
-@@ -1563,17 +2197,17 @@
+@@ -1563,17 +2214,17 @@
        "h6_manage": "Favorites Management",
        "manage_add": "Add favorites from Search or Showcase; profile photo is downloaded locally automatically",
        "manage_library": "The <strong>+</strong> next to the search bar opens an \"Add from library\" list: actresses already in your library sorted by title count, with aliases merged into a single person — tap the heart on any row to favorite her",
@@ -3781,7 +3823,7 @@
        "feat_nfo": "Automatically reads NFO files and displays metadata",
        "feat_nfo_fill": "Supports 'NFO Fill': automatically searches for missing NFO files",
        "feat_terminal": "Built-in Mini Terminal shows real-time processing progress",
-@@ -1587,7 +2221,7 @@
+@@ -1587,7 +2238,7 @@
        "jellyfin_canonical": "With a media-manager mode selected, OpenAver <strong>no longer writes a same-name cover file</strong> — Jellyfin / Emby prefer that file, which is what puts landscape images on the poster wall. Existing titles keep whatever cover location they already have (so manual focal crops are not wiped); to fix one, delete its same-name cover yourself and regenerate.",
        "jellyfin_showcase": "After scanning, browse results on the <code>/showcase</code> page",
        "h6_strm_deploy": "Read-only source + letting Emby / Jellyfin / Kodi find your titles (cross-machine setup)",
@@ -3790,7 +3832,7 @@
        "strm_deploy_step2": "Under \"Output to,\" specify a folder <strong>this machine can write to</strong> (which can be a writable NAS share mounted on this machine) — the generated <code>.strm</code> + NFO + covers go here, and you point Emby / Jellyfin / Kodi at it to build the library. This output folder is not the read-only source itself.",
        "strm_deploy_step4": "If you later change the mapping rules, the existing <code>.strm</code> files are rewritten automatically in one pass — no need to rebuild the whole library.",
        "h6_multiversion": "Multi-version manual merge (native Emby / Jellyfin feature)",
-@@ -1601,7 +2235,7 @@
+@@ -1601,7 +2252,7 @@
        "h6_modes": "Display Modes",
        "h6_sort": "Sort & Search",
        "h6_other": "Other Features",
@@ -3799,7 +3841,7 @@
        "mode_grid": "<strong>Full Cover</strong>: cover wall showing the whole cover image; click to open the Lightbox (default)",
        "mode_poster": "<strong>Poster</strong>: shows only the right half of the cover (the front), so cards are narrower and more fit per row; phones and narrow windows always use this layout",
        "mode_list": "<strong>List Mode</strong>: Compact list, ideal for quick browsing",
-@@ -1632,7 +2266,7 @@
+@@ -1632,7 +2283,7 @@
        "beta_compilation": "More complete tags (series / maker / cast) means better accuracy; videos with few tags should have their NFO filled in first",
        "h6_manage": "Tips",
        "manage_enable": "No configuration needed — works out of the box",
@@ -3808,7 +3850,7 @@
      },
      "shortcuts": {
        "title": "Keyboard Shortcuts",
-@@ -1809,6 +2443,66 @@
+@@ -1809,6 +2460,66 @@
        "client_title": "About to update OpenAver on this computer",
        "client_case_a_body": "This updates OpenAver on this computer, not the server. After you confirm, a terminal opens on this computer to run the installation. Please close OpenAver first, and reopen it yourself once the installation finishes.",
        "client_case_b_body": "OpenAver on this computer is not installed in the default location.\nThe installer will first install the new version to the default directory; you do not need to close the current OpenAver during installation.\n\nWhen the installation finishes, do the following in order:\n1. Close OpenAver\n2. Delete the python folder in the old installation directory\n3. Copy all files of the new version over your original installation location on this computer\n\nNo reinstall or reconfiguration is needed; just overwrite the files and use it."
@@ -3875,7 +3917,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2510,18 @@
+@@ -1816,20 +2527,18 @@
      "skip": "Skip",
      "next": "Next →",
      "done": "Done 🎉",
@@ -3908,7 +3950,7 @@
    },
    "updater": {
      "page_title": "Updater",
-@@ -1845,6 +2537,12 @@
+@@ -1845,6 +2554,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -3921,7 +3963,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2558,11 @@
+@@ -1860,7 +2575,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -3934,7 +3976,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2580,15 @@
+@@ -1878,11 +2597,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -3952,7 +3994,7 @@
      },
      "costar": {
        "count_label": "{n} videos"
-@@ -1957,7 +2663,7 @@
+@@ -1957,7 +2680,7 @@
        "intro": "The left column is the folder on the server; in the right column enter the path as seen from this computer. You can leave it empty and fill it in later.",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -3961,7 +4003,7 @@
        "readonly": "Read-only",
        "test_btn": "Test",
        "found": "Found",
-@@ -1968,7 +2674,7 @@
+@@ -1968,7 +2691,7 @@
        "loading": "Loading the server's scan sources...",
        "load_failed": "Could not read the server's scan sources",
        "reload_btn": "Reload",
@@ -3970,7 +4012,7 @@
        "stale": "(no longer on the server)",
        "remove": "Remove",
        "save_btn": "Save Mapping Table",
-@@ -1976,5 +2682,448 @@
+@@ -1976,5 +2699,448 @@
        "saved": "Mapping table saved",
        "save_failed": "Failed to save the mapping table"
      }
@@ -5414,7 +5456,7 @@
      },
      "pick": {
        "add_aria": "★を付ける",
-@@ -1410,10 +1963,90 @@
+@@ -1410,10 +1963,107 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -5422,6 +5464,23 @@
 +      "download_failed": "画像は見つかりましたが、すべてのダウンロードに失敗しました",
 +      "db_write_failed": "画像はダウンロードされましたが、ライブラリのデータベースを更新できませんでした。再試行してください",
        "multi_video_error": "このフォルダに他の動画があります。画像を取得すると他の動画に影響します。動画を専用フォルダに移動してからお試しください。"
++    },
++    "display": {
++      "button": "表示",
++      "title": "ホームの表示",
++      "presentation": "表示形式",
++      "columns": "1行の作品数",
++      "columns_value": "{count} 本",
++      "grid_only": "ポスター・カバーのグリッドのみ",
++      "per_page": "1ページの作品数",
++      "page_value": "{count} 本 / ページ",
++      "saving": "保存中…",
++      "remembered": "選択は自動的に保存されます",
++      "save_failed": "保存できませんでした。再試行してください。",
++      "done": "完了",
++      "retry": "再試行",
++      "offline_title": "オフライン出力の設定",
++      "offline_note": "生成するオフラインページにのみ適用されます。"
      }
    },
    "help": {
@@ -5505,7 +5564,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1434,7 +2067,8 @@
+@@ -1434,7 +2084,8 @@
        "this_computer_unavailable": "このPCの更新情報を一時的に読み取れません。ヘルプページを開き直してもう一度お試しください",
        "client_up_to_date": "このPCの OpenAver は最新です",
        "client_update_available_prefix": "このPCに新バージョン",
@@ -5515,7 +5574,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2081,7 @@
+@@ -1447,7 +2098,7 @@
        "title": "初めてですか？3ステップで始めましょう",
        "subtitle": "フォルダ追加からメタデータ補完まで、3ステップで始める",
        "step1_title": "ライブラリフォルダを追加",
@@ -5524,7 +5583,7 @@
        "step2_title": "ページを生成",
        "step2_desc": "ワンクリックでスキャンして閲覧可能なコレクションページを作成",
        "step3_title": "NFO 補完",
-@@ -1464,7 +2098,7 @@
+@@ -1464,7 +2115,7 @@
      "tag_alias": {
        "title": "Tag エイリアス管理",
        "intro": "中日英の同義語を一元管理することで、検索ボックス・chip フィルター・あいまい探索がすべて同じ言語で動きます。",
@@ -5533,7 +5592,7 @@
        "scanner_chipwall": "chip ウォールにすべての Tag エイリアスグループが表示されます。「+」をクリックして alias を追加。プライマリ名はピンク、エイリアスはグレーで表示されます。",
        "scanner_ai_hint": "「?」をクリックすると AI 提案パネルが開きます。tag の要件を AI に説明すると、提案エイリアスグループをそのままインポートできます。",
        "h6_showcase": "Showcase で自動展開",
-@@ -1501,16 +2135,16 @@
+@@ -1501,16 +2152,16 @@
      "batch": {
        "title": "バッチファイル検索",
        "h6_add": "複数ファイルの追加",
@@ -5554,7 +5613,7 @@
        "fav_auto": "自動的に最初の 20 ファイルの検索を開始",
        "fav_nfo_skip": "同名の .nfo が存在する場合は整理済みとみなし、scraper を再実行しません",
        "pause_pause": "バッチ検索中に「一時停止」ボタンをクリック",
-@@ -1563,17 +2197,17 @@
+@@ -1563,17 +2214,17 @@
        "h6_manage": "お気に入り管理",
        "manage_add": "検索ページまたはショーケースページからお気に入りに追加。プロフィール写真は自動でローカルに保存",
        "manage_library": "検索バー横の <strong>+</strong> で「ライブラリから女優を追加」一覧を開けます。ライブラリ内の女優が作品数の多い順に並び、別名は同一人物としてまとめられます。行のハートをタップすればお気に入りに追加されます",
@@ -5576,7 +5635,7 @@
        "feat_nfo": "NFO ファイルを自動で読み込みメタデータを表示",
        "feat_nfo_fill": "「NFO 補完」に対応：欠損した NFO ファイルを自動検索",
        "feat_terminal": "内蔵 Mini Terminal でリアルタイム処理進捗を表示",
-@@ -1587,7 +2221,7 @@
+@@ -1587,7 +2238,7 @@
        "jellyfin_canonical": "メディアマネージャーモードを選ぶと<strong>同名のカバー画像は生成されなくなります</strong>——そのファイルは Jellyfin／Emby が優先的に読み込むため、ポスターウォールに横長画像が並ぶ原因になります。既存の作品はカバーの場所をそのまま維持します（手動で調整したフォーカス位置を消さないため）。修正したい場合は該当作品の同名カバーを削除してから再生成してください。",
        "jellyfin_showcase": "スキャン完了後、<code>/showcase</code> ページで生成結果を閲覧可能",
        "h6_strm_deploy": "読み取り専用ソース + Emby／Jellyfin／Kodi に作品をスキャンさせる（マシンをまたぐ配置）",
@@ -5585,7 +5644,7 @@
        "strm_deploy_step2": "「出力先」に<strong>このマシンで書き込める</strong>フォルダー（このマシンにマウントした NAS の書き込み可能な共有でも可）を指定します——生成される <code>.strm</code>＋NFO＋表紙がここに置かれ、それを Emby／Jellyfin／Kodi に指定してライブラリを作らせます。この出力フォルダーは読み取り専用ソースそのものではありません。",
        "strm_deploy_step4": "その後マッピングルールを変更すると、既存の <code>.strm</code> が一括で自動的に書き換えられ、ライブラリ全体を作り直す必要はありません。",
        "h6_multiversion": "同一作品の複数版（流出 / 4K / 字幕）を Emby/Jellyfin で結合するには？",
-@@ -1601,7 +2235,7 @@
+@@ -1601,7 +2252,7 @@
        "h6_modes": "表示モード",
        "h6_sort": "ソートと検索",
        "h6_other": "その他の機能",
@@ -5594,7 +5653,7 @@
        "mode_grid": "<strong>カバー全体</strong>：ジャケット全体を並べるカバーウォール。クリックで Lightbox を開きます（既定）",
        "mode_poster": "<strong>縦型ポスター</strong>：ジャケットの右半分（表面）だけを表示。カードが細くなり 1 行に多く並びます。スマホ／狭いウィンドウでは常にこのレイアウトです",
        "mode_list": "<strong>リストモード</strong>：コンパクトなリスト、素早い閲覧に最適",
-@@ -1632,7 +2266,7 @@
+@@ -1632,7 +2283,7 @@
        "beta_compilation": "tag が多いほど（シリーズ / メーカー / cast）精度が上がる；tag が少ない動画は先に NFO を補完することを推奨",
        "h6_manage": "使用ヒント",
        "manage_enable": "設定不要、すぐ使える",
@@ -5603,7 +5662,7 @@
      },
      "shortcuts": {
        "title": "キーボードショートカット",
-@@ -1809,6 +2443,66 @@
+@@ -1809,6 +2460,66 @@
        "client_title": "このPCの OpenAver を更新します",
        "client_case_a_body": "更新するのはこのPCの OpenAver で、サーバーではありません。確認を押すとこのPCでターミナルが開いてインストールが実行されます。先に OpenAver を閉じ、インストール完了後に手動で開き直してください。",
        "client_case_b_body": "このPCの OpenAver は既定の場所にインストールされていません。\nインストーラーはまず新バージョンを既定のディレクトリにインストールします。インストール中に現在の OpenAver を閉じる必要はありません。\n\nインストール完了後、次の順に操作してください：\n1. OpenAver を閉じる\n2. 旧インストールディレクトリの python フォルダを削除する\n3. 新バージョンのすべてのファイルを、このPCの元のインストール場所にコピーして上書きする\n\n再インストールや再設定は不要で、ファイルを上書きするだけで使えます。"
@@ -5670,7 +5729,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2510,18 @@
+@@ -1816,20 +2527,18 @@
      "skip": "スキップ",
      "next": "次へ →",
      "done": "完了 🎉",
@@ -5703,7 +5762,7 @@
    },
    "updater": {
      "page_title": "アップデーター",
-@@ -1845,6 +2537,12 @@
+@@ -1845,6 +2554,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -5716,7 +5775,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2558,11 @@
+@@ -1860,7 +2575,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -5729,7 +5788,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2580,15 @@
+@@ -1878,11 +2597,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -5747,7 +5806,7 @@
      },
      "costar": {
        "count_label": "{n} 本"
-@@ -1957,7 +2663,7 @@
+@@ -1957,7 +2680,7 @@
        "intro": "左の欄はサーバー上のフォルダ、右の欄はこのPCから見えるパスです。後で入力することもできるので、空欄のままでも構いません。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -5756,7 +5815,7 @@
        "readonly": "読み取り専用",
        "test_btn": "テスト",
        "found": "見つかりました",
-@@ -1968,7 +2674,7 @@
+@@ -1968,7 +2691,7 @@
        "loading": "サーバーのスキャンソースを読み込み中…",
        "load_failed": "サーバーのスキャンソースを読み込めません",
        "reload_btn": "再読み込み",
@@ -5765,7 +5824,7 @@
        "stale": "（サーバーにこのソースはもうありません）",
        "remove": "削除",
        "save_btn": "パス対応表を保存",
-@@ -1976,5 +2682,448 @@
+@@ -1976,5 +2699,448 @@
        "saved": "パス対応表を保存しました",
        "save_failed": "パス対応表の保存に失敗しました"
      }
@@ -6216,7 +6275,7 @@
  }
 --- /dev/null
 +++ b/locales/ko.json
-@@ -0,0 +1,3129 @@
+@@ -0,0 +1,3146 @@
 +{
 +  "nav": {
 +    "search": "검색",
@@ -8186,6 +8245,23 @@
 +      "download_failed": "스틸을 찾았지만 모든 다운로드에 실패했습니다.",
 +      "db_write_failed": "스틸을 다운로드했지만 라이브러리 데이터베이스를 업데이트할 수 없습니다. 다시 시도해 주세요",
 +      "multi_video_error": "이 폴더에 다른 비디오가 있으므로 배경 사진 보정 시 다른 비디오가 손상될 수 있습니다. 먼저 비디오를 별도의 폴더로 옮긴 후 다시 시도해 주세요"
++    },
++    "display": {
++      "button": "표시",
++      "title": "홈 표시",
++      "presentation": "표시 방식",
++      "columns": "한 줄의 영상 수",
++      "columns_value": "{count}개",
++      "grid_only": "포스터 및 커버 격자에만 적용",
++      "per_page": "페이지당 영상 수",
++      "page_value": "페이지당 {count}개",
++      "saving": "저장 중…",
++      "remembered": "선택 사항이 자동으로 저장됩니다",
++      "save_failed": "저장하지 못했습니다. 다시 시도하세요.",
++      "done": "완료",
++      "retry": "다시 시도",
++      "offline_title": "오프라인 내보내기 설정",
++      "offline_note": "생성된 오프라인 페이지에만 적용됩니다."
 +    }
 +  },
 +  "help": {
@@ -10341,7 +10417,7 @@
      },
      "pick": {
        "add_aria": "加入精选",
-@@ -1410,10 +1963,90 @@
+@@ -1410,10 +1963,107 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -10349,6 +10425,23 @@
 +      "download_failed": "已找到剧照，但全部下载失败",
 +      "db_write_failed": "剧照已下载，但资料库更新失败，请再试一次",
        "multi_video_error": "此文件夹有其他视频，补抓剧照会污染其他片，请先将视频移至独立文件夹再试"
++    },
++    "display": {
++      "button": "显示",
++      "title": "主页显示",
++      "presentation": "展示样式",
++      "columns": "每行影片数",
++      "columns_value": "{count} 部",
++      "grid_only": "仅用于海报和封面网格",
++      "per_page": "每页影片数",
++      "page_value": "{count} 部 / 页",
++      "saving": "正在保存…",
++      "remembered": "选择会自动记住",
++      "save_failed": "未能保存，请重试",
++      "done": "完成",
++      "retry": "重试",
++      "offline_title": "导出网页设置",
++      "offline_note": "这些设置仅用于生成的离线网页。"
      }
    },
    "help": {
@@ -10432,7 +10525,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1434,7 +2067,8 @@
+@@ -1434,7 +2084,8 @@
        "this_computer_unavailable": "暂时读不到这台电脑的更新信息，请重新打开帮助页再试",
        "client_up_to_date": "这台电脑的 OpenAver 已是最新",
        "client_update_available_prefix": "这台电脑有新版",
@@ -10442,7 +10535,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2081,7 @@
+@@ -1447,7 +2098,7 @@
        "title": "第一次使用？先看这 3 步",
        "subtitle": "从加入文件夹到补全资料，三步上手",
        "step1_title": "加入片库文件夹",
@@ -10451,7 +10544,7 @@
        "step2_title": "生成网页",
        "step2_desc": "一键扫描并建立可浏览的收藏页",
        "step3_title": "NFO 补全",
-@@ -1464,7 +2098,7 @@
+@@ -1464,7 +2115,7 @@
      "tag_alias": {
        "title": "Tag 别名管理",
        "intro": "中日英同义词集中管理，让搜索框、chip 筛选、模糊探索全部说同一种语言。",
@@ -10460,7 +10553,7 @@
        "scanner_chipwall": "chip 墙列出所有 Tag 别名组。点「+」新增 alias，主名（primary）以粉红色显示，别名以灰色显示。",
        "scanner_ai_hint": "点「?」开启 AI 建议框：把你的 tag 需求描述给 AI，它会回传建议的别名组供你直接汇入。",
        "h6_showcase": "Showcase 自动展开",
-@@ -1501,16 +2135,16 @@
+@@ -1501,16 +2152,16 @@
      "batch": {
        "title": "批次文件搜索",
        "h6_add": "加入多个文件",
@@ -10481,7 +10574,7 @@
        "fav_auto": "自动开始搜索前 20 个文件",
        "fav_nfo_skip": "同名 .nfo 存在则视为已整理，不重打 scraper",
        "pause_pause": "批次搜索时可点击「暂停」按钮",
-@@ -1563,17 +2197,17 @@
+@@ -1563,17 +2214,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "从搜索页或浏览页加入收藏，照片自动下载至本地",
        "manage_library": "搜索栏旁的 <strong>+</strong> 可打开「从片库加入女优」列表：库内女优按片数由多到少排序，别名自动合并成同一人，逐行点爱心即可加入收藏",
@@ -10503,7 +10596,7 @@
        "feat_nfo": "自动读取 NFO 文件并显示元数据",
        "feat_nfo_fill": "支持「NFO 补全」：自动搜索缺失的 NFO 文件",
        "feat_terminal": "内建 Mini Terminal 显示即时处理进度",
-@@ -1587,7 +2221,7 @@
+@@ -1587,7 +2238,7 @@
        "jellyfin_canonical": "选了媒体管理器模式后<strong>不再另外生成同名封面</strong>——那张图会被 Jellyfin／Emby 优先读取，导致封面墙出现横版图。既有的片维持原本的封面位置（以免清掉你已调整过的对焦），要修正请自行删掉该片的同名封面后重新生成。",
        "jellyfin_showcase": "扫描完成后可至 <code>/showcase</code> 页面浏览生成结果",
        "h6_strm_deploy": "只读来源 + 让 Emby／Jellyfin／Kodi 扫到片（跨机器部署）",
@@ -10512,7 +10605,7 @@
        "strm_deploy_step2": "在「输出到」指定一个<strong>这台能写入</strong>的文件夹（可以是挂载到这台的 NAS 可写共享）——生成的 <code>.strm</code>＋NFO＋封面会放这里，再让 Emby／Jellyfin／Kodi 指向它建媒体库。这个输出夹不是只读来源本身。",
        "strm_deploy_step4": "之后改了映射规则，既有的 <code>.strm</code> 会自动一次改写，不用重建整个媒体库。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎么在 Emby/Jellyfin 合并？",
-@@ -1601,7 +2235,7 @@
+@@ -1601,7 +2252,7 @@
        "h6_modes": "显示模式",
        "h6_sort": "排序与搜索",
        "h6_other": "其他功能",
@@ -10521,7 +10614,7 @@
        "mode_grid": "<strong>完整封面</strong>：整张封面的封面墙，点击开启 Lightbox（默认）",
        "mode_poster": "<strong>竖版海报</strong>：只显示封面右半（正面），卡片变窄、一行放得更多；手机／窄窗口一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精简列表，适合快速浏览",
-@@ -1632,7 +2266,7 @@
+@@ -1632,7 +2283,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越准；tag 很少的视频建议先补完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "无需设置，开箱即用",
@@ -10530,7 +10623,7 @@
      },
      "shortcuts": {
        "title": "快捷键",
-@@ -1809,6 +2443,66 @@
+@@ -1809,6 +2460,66 @@
        "client_title": "即将更新这台电脑的 OpenAver",
        "client_case_a_body": "更新的是这台电脑上的 OpenAver，不是服务器。点击确认后会在这台电脑打开终端运行安装，请先关闭 OpenAver，安装完成后再自行重新打开。",
        "client_case_b_body": "这台电脑的 OpenAver 不是安装在默认位置。\n安装程序会先把新版本安装到默认目录，安装期间不需要先关闭当前的 OpenAver。\n\n安装完成后，请依次操作：\n1. 关闭 OpenAver\n2. 删除旧安装目录中的 python 文件夹\n3. 将新版本的所有文件复制覆盖回这台电脑原本的安装位置\n\n不需要重新安装或重新设置，直接覆盖文件即可使用。"
@@ -10597,7 +10690,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2510,18 @@
+@@ -1816,20 +2527,18 @@
      "skip": "跳过",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -10630,7 +10723,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1845,6 +2537,12 @@
+@@ -1845,6 +2554,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -10643,7 +10736,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2558,11 @@
+@@ -1860,7 +2575,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -10656,7 +10749,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2580,15 @@
+@@ -1878,11 +2597,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -10674,7 +10767,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1957,7 +2663,7 @@
+@@ -1957,7 +2680,7 @@
        "intro": "左栏是服务器上的文件夹，右栏填这台电脑看到的路径，可以先留空、之后再填。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -10683,7 +10776,7 @@
        "readonly": "只读",
        "test_btn": "测试",
        "found": "找得到",
-@@ -1968,7 +2674,7 @@
+@@ -1968,7 +2691,7 @@
        "loading": "正在读取服务器的扫描来源…",
        "load_failed": "读不到服务器的扫描来源",
        "reload_btn": "重新读取",
@@ -10692,7 +10785,7 @@
        "stale": "（服务器已无此来源）",
        "remove": "移除",
        "save_btn": "保存对照表",
-@@ -1976,5 +2682,448 @@
+@@ -1976,5 +2699,448 @@
        "saved": "对照表已保存",
        "save_failed": "对照表保存失败"
      }
@@ -12242,7 +12335,7 @@
      },
      "pick": {
        "add_aria": "加入精選",
-@@ -1410,12 +1963,92 @@
+@@ -1410,12 +1963,109 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -12250,6 +12343,23 @@
 +      "download_failed": "已找到劇照，但全部下載失敗",
 +      "db_write_failed": "劇照已下載，但資料庫更新失敗，請再試一次",
        "multi_video_error": "此資料夾有其他影片，補抓劇照會污染其他片，請先將影片搬到獨立資料夾再試"
++    },
++    "display": {
++      "button": "顯示",
++      "title": "首頁顯示",
++      "presentation": "展示樣式",
++      "columns": "每行影片數",
++      "columns_value": "{count} 部",
++      "grid_only": "僅用於海報與封面網格",
++      "per_page": "每頁影片數",
++      "page_value": "{count} 部 / 頁",
++      "saving": "正在儲存…",
++      "remembered": "選擇會自動記住",
++      "save_failed": "未能儲存，請重試",
++      "done": "完成",
++      "retry": "重試",
++      "offline_title": "匯出網頁設定",
++      "offline_note": "這些設定僅用於產生的離線網頁。"
      }
    },
    "help": {
@@ -12336,7 +12446,7 @@
        "copy_curl": "複製指令",
        "page_title": "使用說明",
        "subtitle": "JAV 影片元數據管理工具",
-@@ -1426,15 +2059,16 @@
+@@ -1426,15 +2076,16 @@
        "update_available_prefix": "新版本",
        "update_available_suffix": "可用",
        "up_to_date": "已是最新版本",
@@ -12356,7 +12466,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2081,7 @@
+@@ -1447,7 +2098,7 @@
        "title": "第一次使用？先看這 3 步",
        "subtitle": "從加入資料夾到補全資料，三步上手",
        "step1_title": "加入片庫資料夾",
@@ -12365,7 +12475,7 @@
        "step2_title": "產生網頁",
        "step2_desc": "一鍵掃描並建立可瀏覽的收藏頁",
        "step3_title": "NFO 補全",
-@@ -1464,7 +2098,7 @@
+@@ -1464,7 +2115,7 @@
      "tag_alias": {
        "title": "Tag 別名管理",
        "intro": "中日英同義詞集中管理，讓搜尋框、chip 篩選、模糊探索全部說同一種語言。",
@@ -12374,7 +12484,7 @@
        "scanner_chipwall": "chip 牆列出所有 Tag 別名組。點「+」新增 alias，主名（primary）以粉紅色顯示，別名以灰色顯示。",
        "scanner_ai_hint": "點「?」開啟 AI 建議框：把你的 tag 需求描述給 AI，它會回傳建議的別名組供你直接匯入。",
        "h6_showcase": "Showcase 自動展開",
-@@ -1501,16 +2135,16 @@
+@@ -1501,16 +2152,16 @@
      "batch": {
        "title": "批次檔案搜尋",
        "h6_add": "加入多個檔案",
@@ -12395,7 +12505,7 @@
        "fav_auto": "自動開始搜尋前 20 個檔案",
        "fav_nfo_skip": "同名 .nfo 存在則視為已整理，不重打 scraper",
        "pause_pause": "批次搜尋時可點擊「暫停」按鈕",
-@@ -1563,17 +2197,17 @@
+@@ -1563,17 +2214,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "從搜尋頁或瀏覽頁加入收藏，照片自動下載至本地",
        "manage_library": "搜尋列旁的 <strong>+</strong> 可開啟「從片庫加入女優」清單：庫內女優依片數由多到少排序，別名自動合併成同一人，逐列點愛心即可加入收藏",
@@ -12417,7 +12527,7 @@
        "feat_nfo": "自動讀取 NFO 檔案並顯示元數據",
        "feat_nfo_fill": "「就地補資料」：原地補缺失的 NFO + 封面，不改名、不搬位 — 適合唯讀網盤、已有自己的資料夾結構，或只想瀏覽不被改檔案",
        "feat_terminal": "內建 Mini Terminal 顯示即時處理進度",
-@@ -1587,9 +2221,9 @@
+@@ -1587,9 +2238,9 @@
        "jellyfin_canonical": "選了媒體管理器模式後<strong>不再另外產生同名封面</strong>——那張圖會被 Jellyfin／Emby 優先讀取，造成封面牆出現橫式圖。既有的片維持原本的封面位置（以免清掉你已調整過的對焦），要修正請自行刪掉該片的同名封面後重新產生。",
        "jellyfin_showcase": "掃描完成後可至 <code>/showcase</code> 頁面瀏覽生成結果",
        "h6_strm_deploy": "唯讀來源 + 讓 Emby／Jellyfin／Kodi 掃到片（跨機器部署）",
@@ -12429,7 +12539,7 @@
        "strm_deploy_step4": "之後改了映射規則，既有的 <code>.strm</code> 會自動一次改寫，不用重建整個媒體庫。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎麼在 Emby/Jellyfin 合併？",
        "multiversion_intro": "多版本合併是 Emby 與 Jellyfin 共同支援的原生功能（同一套「資料夾名 - 標籤」規則），不是哪一家獨有。把同一片各版本放進以番號命名的資料夾，檔名都以資料夾名開頭加「 - 標籤」：",
-@@ -1601,7 +2235,7 @@
+@@ -1601,7 +2252,7 @@
        "h6_modes": "顯示模式",
        "h6_sort": "排序與搜尋",
        "h6_other": "其他功能",
@@ -12438,7 +12548,7 @@
        "mode_grid": "<strong>完整封面</strong>：整張封面的封面牆，點擊開啟 Lightbox（預設）",
        "mode_poster": "<strong>直式海報</strong>：只顯示封面右半（正面），卡片變窄、一列放得更多；手機／窄視窗一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精簡列表，適合快速瀏覽（預設不顯示；可至「設定」→「列表顯示預設」開啟「顯示表格與清單」）",
-@@ -1632,7 +2266,7 @@
+@@ -1632,7 +2283,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越準；tag 很少的影片建議先補完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "無需設定，開箱即用",
@@ -12447,7 +12557,7 @@
      },
      "shortcuts": {
        "title": "快捷鍵",
-@@ -1736,26 +2370,26 @@
+@@ -1736,26 +2387,26 @@
      "server_mode": {
        "title": "伺服器模式 — 讓手機/平板連進來",
        "h6_what": "這是什麼",
@@ -12481,7 +12591,7 @@
        "h6_recover": "不小心按了「取消 / 拒絕」怎麼救回",
        "recover_win_intro": "Windows 救回步驟：",
        "recover_win_1": "按 <code>Win + R</code>，輸入 <code>wf.msc</code> 後 Enter，開啟「Windows Defender 防火牆 進階安全性」。",
-@@ -1800,15 +2434,75 @@
+@@ -1800,15 +2451,75 @@
      "update_modal": {
        "trigger_btn": "更新",
        "title": "即將開啟安裝視窗",
@@ -12560,7 +12670,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2510,18 @@
+@@ -1816,20 +2527,18 @@
      "skip": "跳過",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -12593,7 +12703,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1850,6 +2542,12 @@
+@@ -1850,6 +2559,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -12606,7 +12716,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1861,11 +2559,15 @@
+@@ -1861,11 +2576,15 @@
        "series": "系列",
        "deep_dive": "深入：女優與片商",
        "gantt": "主要片商年表",
@@ -12624,7 +12734,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2585,15 @@
+@@ -1883,11 +2602,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -12642,7 +12752,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1896,7 +2602,7 @@
+@@ -1896,7 +2619,7 @@
    },
    "connect": {
      "nobridge": "請在桌面版開啟",
@@ -12651,7 +12761,7 @@
      "status_connected": "已連線 {host}",
      "status_down": "連不到 {host}",
      "version_line": "版本 {version}（{kind}）",
-@@ -1906,69 +2612,69 @@
+@@ -1906,69 +2629,69 @@
      "kind_windows": "Windows 桌面版",
      "kind_mac": "Mac 桌面版",
      "last_ok": "上次成功連線：{time}",
@@ -12742,7 +12852,7 @@
        "stale": "（伺服器已無此來源）",
        "remove": "移除",
        "save_btn": "儲存對照表",
-@@ -1976,5 +2682,448 @@
+@@ -1976,5 +2699,448 @@
        "saved": "對照表已儲存",
        "save_failed": "對照表儲存失敗"
      }
@@ -13326,7 +13436,21 @@
      return message
 --- a/web/config.default.json
 +++ b/web/config.default.json
-@@ -84,9 +84,9 @@
+@@ -76,7 +76,12 @@
+     }
+   },
+   "showcase": {
+-    "player": ""
++    "player": "",
++    "display": {
++      "presentation": "poster",
++      "columns": 2,
++      "items_per_page": 45
++    }
+   },
+   "general": {
+     "default_page": "scanner",
+@@ -84,9 +89,9 @@
      "sidebar_collapsed": false,
      "tutorial_completed": false,
      "font_size": "md",
@@ -13338,7 +13462,7 @@
    },
    "sources": [
      {
-@@ -205,5 +205,24 @@
+@@ -205,5 +210,24 @@
      "consecutive_timeout_count": 0,
      "judged_at_version": "",
      "set_by_user": false
@@ -17183,7 +17307,311 @@
    --fluent-radius-sm: 2px;
 --- a/web/static/css/theme.css
 +++ b/web/static/css/theme.css
-@@ -1393,9 +1393,10 @@
+@@ -1,10 +1,8 @@
+-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap');
+ 
+ /* ========== 全局主題變數 ========== */
+ :root {
+     /* Display Font for Design System */
+-    --font-display: 'Space Grotesk', 'Plus Jakarta Sans', 'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
++    --font-display: system-ui, 'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+ 
+     /* ===== Error Colors ===== */
+     /* stylelint-disable-next-line color-no-hex -- Apple HIG palette source-of-truth token, 2026-05-03 */
+@@ -15,7 +13,7 @@
+     /* 背景色 */
+     --bg-body: var(--color-base-100);
+     --bg-card: var(--color-base-200);
+-    --bg-header: color-mix(in oklch, var(--color-base-200) 85%, transparent);
++    --bg-header: var(--surface-1);
+     --bg-overlay: color-mix(in oklch, var(--color-base-100) 88%, transparent);
+ 
+     /* 文字色 */
+@@ -122,7 +120,7 @@
+ /* 應用背景色過渡 */
+ body {
+     transition: background-color var(--duration-normal) var(--fluent-ease-standard), color var(--duration-normal) var(--fluent-ease-standard);
+-    font-family: "Plus Jakarta Sans", "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
++    font-family: system-ui, "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+ }
+ 
+ /* Utility: text-muted class */
+@@ -138,9 +136,9 @@
+ .glass {
+     background: var(--bg-header);
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Heavy glass 16px (per glass-hierarchy comment above), 2026-05-03 */
+-    backdrop-filter: blur(16px);
++    backdrop-filter: none;
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Safari prefix mirror, 2026-05-03 */
+-    -webkit-backdrop-filter: blur(16px);
++    backdrop-filter: none;
+     border-bottom: 1px solid var(--border-light);
+ }
+ 
+@@ -148,9 +146,9 @@
+ .fluent-toolbar {
+     background: var(--bg-header);
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Heavy acrylic toolbar standard, 2026-05-03 */
+-    backdrop-filter: blur(16px) saturate(130%);
++    backdrop-filter: none;
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Safari prefix mirror, 2026-05-03 */
+-    -webkit-backdrop-filter: blur(16px) saturate(130%);
++    backdrop-filter: none;
+ }
+ 
+ .noselect {
+@@ -185,7 +183,7 @@
+     background: var(--accent);
+     color: var(--color-primary-content);
+     /* 邊界分離感 */
+-    box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 40%, transparent);
++    box-shadow: none;
+     border: 1px solid color-mix(in oklch, var(--color-base-content) 30%, transparent);
+ }
+ 
+@@ -209,7 +207,7 @@
+     cursor: pointer;
+     transition: background var(--duration-fast) var(--fluent-ease-standard), border-color var(--duration-fast) var(--fluent-ease-standard), color var(--duration-fast) var(--fluent-ease-standard);
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Medium glass 4px on btn-glass, 2026-05-03 */
+-    backdrop-filter: blur(4px);
++    backdrop-filter: none;
+ }
+ 
+ .btn-glass:hover {
+@@ -258,14 +256,12 @@
+ 
+     /* Acrylic 玻璃效果 */
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Heavy acrylic 20px spotlight input, 2026-05-03 */
+-    backdrop-filter: blur(20px);
++    backdrop-filter: none;
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Safari prefix mirror, 2026-05-03 */
+-    -webkit-backdrop-filter: blur(20px); /* Safari 支援 */
++    backdrop-filter: none; /* Safari 支援 */
+ 
+     /* 內層高光線 + 外陰影 */
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 10%, transparent),
+-        var(--shadow-sm);
++    box-shadow: none;
+ 
+     transition: border-color var(--duration-normal) var(--ease-out), box-shadow var(--duration-normal) var(--ease-out), transform var(--duration-normal) var(--ease-out);
+ }
+@@ -274,11 +270,7 @@
+     border-color: var(--accent);
+ 
+     /* 內層高光線（強化）+ 發光環 + 外陰影 */
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 15%, transparent),
+-        0 0 0 4px color-mix(in oklch, var(--color-primary) 15%, transparent),
+-        0 0 20px var(--glow-primary),
+-        var(--shadow-md);
++    box-shadow: none;
+ 
+     /* 放大倍率提升 */
+     transform: scale(1.02);
+@@ -309,9 +301,7 @@
+     background: var(--bg-card);
+     border-radius: var(--card-radius);
+     overflow: hidden;
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--shadow-sm);
++    box-shadow: none;
+     border: 1px solid var(--border-card);
+     transition: transform var(--fluent-duration-fast) var(--fluent-ease-standard),
+         box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+@@ -321,10 +311,8 @@
+ }
+ 
+ .gallery-card:hover {
+-    transform: translateY(-4px) scale(1.01);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
+-        var(--shadow-card-hover);
++    transform: none;
++    box-shadow: none;
+     z-index: 10;
+ }
+ 
+@@ -497,7 +485,7 @@
+     gap: 0;
+     background: var(--bg-card);
+     border-radius: var(--fluent-radius-xl);
+-    box-shadow: var(--fluent-shadow-8);
++    box-shadow: none;
+     overflow: hidden;
+     border: 1px solid var(--border-light);
+ }
+@@ -754,12 +742,12 @@
+     padding: 0.5rem 1rem;
+     border-radius: var(--radius-sm);
+     transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+-    box-shadow: var(--fluent-shadow-2);
++    box-shadow: none;
+ }
+ 
+ .ds-page .empty-actions .btn:hover {
+     transform: translateY(-2px);
+-    box-shadow: var(--fluent-shadow-4);
++    box-shadow: none;
+ }
+ 
+ .ds-page .empty-actions .btn i {
+@@ -784,10 +772,7 @@
+ /* Error State 容器 - 紅色微光邊框 */
+ .ds-page .state-page.error {
+     border-radius: var(--radius-md);
+-    box-shadow:
+-        0 0 0 1px var(--color-error),
+-        0 0 20px var(--glow-error),
+-        var(--fluent-shadow-4);
++    box-shadow: none;
+     padding: 2.5rem;
+     background: color-mix(in oklch, var(--color-error) 3%, transparent);
+ }
+@@ -829,7 +814,7 @@
+     padding: 0.75rem 1.25rem;
+     background: var(--bg-card);
+     border-radius: var(--radius-md);
+-    box-shadow: var(--fluent-shadow-2);
++    box-shadow: none;
+     border: 1px solid var(--border-light);
+ }
+ 
+@@ -860,7 +845,7 @@
+ /* 導航按鈕 Hover */
+ .ds-page .error-nav .btn:hover {
+     transform: translateY(-2px);
+-    box-shadow: var(--fluent-shadow-4);
++    box-shadow: none;
+ }
+ 
+ /* 導航按鈕 Disabled */
+@@ -894,9 +879,7 @@
+ :is(#ds-gallery-components, .ds-gallery-composition) .avlist-card {
+     background: var(--bg-card);
+     border-radius: var(--radius-md);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-4);
++    box-shadow: none;
+     overflow: hidden;
+     margin-bottom: 1rem;
+     border: 1px solid var(--border-light);
+@@ -904,11 +887,7 @@
+ }
+ 
+ :is(#ds-gallery-components, .ds-gallery-composition) .avlist-card:hover {
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
+-        0 0 0 2px var(--accent),
+-        0 0 20px var(--glow-primary),
+-        var(--fluent-shadow-8);
++    box-shadow: none;
+ }
+ 
+ /* AVList Card Header */
+@@ -1035,9 +1014,7 @@
+ :is(#ds-gallery-components, .ds-gallery-composition) .av-card-preview {
+     background: var(--bg-card);
+     border-radius: var(--fluent-radius-xl);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-4);
++    box-shadow: none;
+     overflow: hidden;
+     transition: transform var(--fluent-duration-fast) var(--fluent-ease-standard),
+                 box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard),
+@@ -1063,7 +1040,7 @@
+ }
+ :is(.ds-gallery-composition .flip-guard, .ds-gallery-composition.flip-guard) .av-card-preview:hover {
+     transform: none !important;
+-    box-shadow: none !important;
++    box-shadow: none;
+ }
+ 
+ /* C21: GSAP cascade 進場期間關掉 CSS transition + 阻擋 hover 搶 transform */
+@@ -1074,12 +1051,8 @@
+ 
+ /* Preview Card - 發光邊 Hover */
+ :is(#ds-gallery-components, .ds-gallery-composition) .av-card-preview:hover {
+-    transform: translateY(-4px) scale(1.01);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
+-        0 0 0 2px var(--accent),
+-        0 0 20px var(--glow-primary),
+-        var(--fluent-shadow-16);
++    transform: none;
++    box-shadow: none;
+     border-color: var(--accent);
+ }
+ 
+@@ -1114,7 +1087,7 @@
+     font-weight: 600;
+     padding: 4px 10px;
+     border-radius: var(--fluent-radius-md);
+-    box-shadow: 0 2px 8px oklch(0% 0 0 / 0.25);
++    box-shadow: none;
+ }
+ 
+ :is(#ds-gallery-components, .ds-gallery-composition) .av-card-preview-badge.local {
+@@ -1179,14 +1152,14 @@
+     display: flex;
+     align-items: center;
+     justify-content: center;
+-    box-shadow: 0 4px 12px oklch(0% 0 0 / 0.3);
++    box-shadow: none;
+ }
+ 
+ :is(#ds-gallery-components, .ds-gallery-composition) .btn-glass-circle:not(:disabled):hover {
+     background: rgba(255, 255, 255, 0.3);
+     border-color: rgba(255, 255, 255, 0.6);
+     transform: scale(1.08);
+-    box-shadow: 0 6px 16px oklch(0% 0 0 / 0.4);
++    box-shadow: none;
+ }
+ 
+ :is(#ds-gallery-components, .ds-gallery-composition) .btn-glass-circle:active {
+@@ -1287,25 +1260,19 @@
+     display: inline-flex;
+     align-items: center;
+     gap: 0.5rem;
+-    box-shadow: var(--fluent-shadow-4);
++    box-shadow: none;
+ }
+ 
+ .btn-hero-primary {
+     background: var(--accent);
+     color: var(--color-primary-content);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        0 4px 12px var(--glow-primary);
++    box-shadow: none;
+ }
+ 
+ .btn-hero-primary:hover {
+     background: var(--accent-hover);
+     transform: translateY(-2px);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
+-        0 0 0 2px var(--accent),
+-        0 0 20px var(--glow-primary),
+-        var(--fluent-shadow-8);
++    box-shadow: none;
+ }
+ 
+ .btn-hero-primary:disabled {
+@@ -1350,7 +1317,7 @@
+     padding: 0.75rem 1rem;
+     font-size: 0.8rem;
+     color: var(--text-secondary);
+-    box-shadow: var(--fluent-shadow-4);
++    box-shadow: none;
+     border: 1px solid var(--border-light);
+ }
+ 
+@@ -1393,9 +1360,10 @@
      position: relative;  /* 支援 .help-popover 絕對定位 */
  }
  
@@ -17195,9 +17623,135 @@
  }
  
  /* 數字清單浮層開著時，把所在統計卡墊到後面的卡片之上（dim 主題 .stats-card 有 backdrop-filter，自成 stacking context；FE-CSS-24） */
+@@ -1430,13 +1398,13 @@
+     border-radius: var(--radius-pill);
+     cursor: pointer;
+     transition: background var(--fluent-duration-fast) var(--fluent-ease-standard), transform var(--fluent-duration-fast) var(--fluent-ease-standard), box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+-    box-shadow: 0 2px 8px color-mix(in oklch, var(--color-warning) 30%, transparent);
++    box-shadow: none;
+ }
+ 
+ :is(#ds-gallery-components, .ds-gallery-composition) .btn-nfo-update:hover {
+     background: linear-gradient(135deg, var(--color-warning-dark), var(--color-warning-darker));
+     transform: translateY(-1px);
+-    box-shadow: 0 4px 12px color-mix(in oklch, var(--color-warning) 40%, transparent);
++    box-shadow: none;
+ }
+ 
+ :is(#ds-gallery-components, .ds-gallery-composition) .btn-nfo-update:disabled {
+@@ -1460,19 +1428,13 @@
+     border-radius: var(--radius-md);
+     margin-top: 1rem;
+     overflow: hidden;
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-4);
++    box-shadow: none;
+     border: 1px solid var(--stroke-default);
+     transition: box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+ }
+ 
+ :is(#ds-gallery-components, .ds-gallery-composition) .actress-alias-card:hover {
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
+-        0 0 0 2px var(--accent),
+-        0 0 20px var(--glow-primary),
+-        var(--fluent-shadow-8);
++    box-shadow: none;
+ }
+ 
+ /* Actress Alias Header */
+@@ -1702,7 +1664,7 @@
+ 
+ :is(#ds-gallery-components, .ds-gallery-composition) .alias-add-inline input:focus {
+     border-color: var(--accent-pink);
+-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent-pink) 12%, transparent);
++    box-shadow: none;
+ }
+ 
+ :is(#ds-gallery-components, .ds-gallery-composition) .alias-add-inline button {
+@@ -1956,7 +1918,7 @@
+ 
+ :is(#settings-components, #ds-settings-components) .btn-variable:hover {
+     background: color-mix(in oklch, var(--accent) 15%, transparent);
+-    box-shadow: 0 0 0 2px var(--glow-subtle);
++    box-shadow: none;
+ }
+ 
+ :is(#settings-components, #ds-settings-components) .btn-variable i {
+@@ -1983,7 +1945,7 @@
+     background: var(--bg-card);
+     border: 1px solid var(--border-light);
+     border-radius: var(--radius-md);
+-    box-shadow: var(--fluent-shadow-8);
++    box-shadow: none;
+     padding: 8px;
+     display: flex;
+     flex-direction: column;
+@@ -2043,7 +2005,7 @@
+ 
+ :is(#settings-components, #ds-settings-components) .btn-variable-sm:hover:not(:disabled) {
+     background: color-mix(in oklch, var(--accent) 15%, transparent);
+-    box-shadow: 0 0 0 2px var(--glow-subtle);
++    box-shadow: none;
+ }
+ 
+ :is(#settings-components, #ds-settings-components) .btn-variable-sm:disabled {
+@@ -2155,7 +2117,7 @@
+ }
+ 
+ :is(#settings-components, #ds-settings-components) .save-btn:hover {
+-    box-shadow: 0 0 0 4px var(--glow-subtle);
++    box-shadow: none;
+     transform: translateY(-1px);
+ }
+ 
+@@ -2208,13 +2170,12 @@
+  * background fallback paints first so the dim survives even if backdrop-filter is dropped. */
+ .fluent-modal.modal-open {
+     background: var(--overlay-modal);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++    backdrop-filter: none;
+ }
+ 
+ /* Fluent Modal Box - 卡片樣式 */
+ .fluent-modal-box {
+-    box-shadow: var(--fluent-shadow-28);
++    box-shadow: none;
+     padding: 1.5rem;
+     background: var(--surface-2);
+     border: 1px solid var(--stroke-default);
+@@ -2283,7 +2244,7 @@
+ /* Fluent Toast - Alert 樣式增強 */
+ .fluent-toast {
+     border-radius: var(--fluent-radius-lg);
+-    box-shadow: var(--fluent-shadow-16);
++    box-shadow: none;
+     padding: 0.75rem 1.25rem;
+     font-size: 0.875rem;
+     display: flex;
+@@ -2353,7 +2314,7 @@
+ summary:focus-visible {
+     outline: 2px solid var(--color-primary);
+     outline-offset: 2px;
+-    box-shadow: 0 0 0 4px var(--glow-primary);
++    box-shadow: none;
+ }
+ 
+ /* 特殊狀態保留 - 只調整光圈顏色 */
+@@ -2362,7 +2323,7 @@
+     opacity: 1;
+     outline: 2px solid var(--color-primary);
+     outline-offset: 2px;
+-    box-shadow: 0 0 0 4px var(--glow-primary);
++    box-shadow: none;
+ }
+ 
+ /* ========== Reduced Motion (D.13 統一收斂) ========== */
 --- /dev/null
 +++ b/web/static/css/components/mobile-ui.css
-@@ -0,0 +1,829 @@
+@@ -0,0 +1,826 @@
 +/* r19: shared mobile state, touch, hierarchy, and density rules. */
 +
 +:root {
@@ -17226,11 +17780,8 @@
 +  padding: var(--ui-space-5);
 +  border: 1px solid var(--stroke-default);
 +  border-radius: var(--ui-state-radius);
-+  background:
-+    linear-gradient(145deg,
-+      color-mix(in oklch, var(--surface-1) 94%, transparent),
-+      color-mix(in oklch, var(--surface-0) 98%, transparent));
-+  box-shadow: var(--fluent-shadow-4);
++  background: var(--surface-1);
++  box-shadow: none;
 +  color: var(--text-primary);
 +}
 +
@@ -17444,7 +17995,7 @@
 +  border: 1px solid color-mix(in oklch, var(--color-warning) 55%, var(--stroke-default));
 +  border-radius: 12px;
 +  background: color-mix(in oklch, var(--surface-2) 96%, transparent);
-+  box-shadow: var(--fluent-shadow-16);
++  box-shadow: none;
 +  color: var(--text-primary);
 +  font-size: 0.84rem;
 +}
@@ -17611,7 +18162,7 @@
 +  border: 1px solid var(--stroke-default);
 +  border-radius: 14px;
 +  background: color-mix(in oklch, var(--surface-2) 96%, transparent);
-+  box-shadow: var(--fluent-shadow-16);
++  box-shadow: none;
 +  color: var(--text-primary);
 +}
 +
@@ -17721,7 +18272,7 @@
 +
 +@media (max-width: 1023.98px) {
 +  [data-is-android="true"] .main-content {
-+    padding-bottom: calc(var(--ui-space-5) + env(safe-area-inset-bottom));
++    padding-bottom: calc(var(--native-bottom-height, 0px) + 80px + env(safe-area-inset-bottom));
 +  }
 +
 +  [data-is-android="true"] .card,
@@ -17729,7 +18280,7 @@
 +  [data-is-android="true"] .stats-card,
 +  [data-is-android="true"] .mini-terminal {
 +    border-radius: var(--ui-state-radius);
-+    box-shadow: var(--fluent-shadow-2);
++    box-shadow: none;
 +  }
 +
 +  [data-is-android="true"] .settings-loading-card {
@@ -17856,15 +18407,15 @@
 +    font-size: 0.8rem;
 +  }
 +
-+  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > span,
 +  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > i {
 +    flex: 0 0 auto;
 +  }
 +
 +  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > span {
++    flex: 1 1 auto;
 +    min-width: 0;
-+    overflow: hidden;
-+    text-overflow: ellipsis;
++    white-space: normal;
++    overflow-wrap: anywhere;
 +  }
 +
 +  [data-is-android="true"] .scanner-generate-inline {
@@ -17943,7 +18494,7 @@
 +    background: var(--ui-primary-bg);
 +    border: 1px solid color-mix(in oklch, var(--ui-primary-bg) 82%, black);
 +    border-radius: var(--ui-control-radius);
-+    box-shadow: var(--fluent-shadow-2);
++    box-shadow: none;
 +    font-size: 1.15rem;
 +  }
 +
@@ -17960,7 +18511,7 @@
 +    color: var(--ui-primary-fg);
 +    background: color-mix(in oklch, var(--ui-primary-bg) 88%, white);
 +    border-color: color-mix(in oklch, var(--ui-primary-bg) 70%, black);
-+    box-shadow: var(--fluent-shadow-4);
++    box-shadow: none;
 +  }
 +
 +  [data-is-android="true"] .actress-picker-overlay .picker-refresh-btn:active:not(:disabled),
@@ -18029,7 +18580,7 @@
 +
 --- /dev/null
 +++ b/web/static/css/pages/help-mobile.css
-@@ -0,0 +1,620 @@
+@@ -0,0 +1,615 @@
 +.mobile-help {
 +    --mobile-help-ink: #102a2a;
 +    --mobile-help-teal: #0f766e;
@@ -18039,9 +18590,7 @@
 +    --mobile-help-border: color-mix(in oklch, var(--stroke-default) 82%, var(--mobile-help-teal) 18%);
 +    min-height: 100%;
 +    padding: 0 0 2rem;
-+    background:
-+        radial-gradient(circle at 8% 4%, color-mix(in oklch, var(--mobile-help-teal) 12%, transparent) 0, transparent 28rem),
-+        radial-gradient(circle at 92% 14%, color-mix(in oklch, var(--mobile-help-amber) 9%, transparent) 0, transparent 22rem);
++    background: var(--surface-0);
 +}
 +
 +[data-theme="dim"] .mobile-help {
@@ -18064,11 +18613,10 @@
 +    display: grid;
 +    gap: 1rem;
 +    padding: 1.35rem;
-+    color: #f4fffc;
++    color: var(--text-primary);
 +    border-radius: 1.35rem;
-+    background:
-+        linear-gradient(135deg, #0b3b3a 0%, #102a2a 54%, #172f3a 100%);
-+    box-shadow: 0 1rem 2.5rem color-mix(in oklch, #102a2a 24%, transparent);
++    background: var(--surface-1);
++    box-shadow: none;
 +}
 +
 +.mobile-help-hero::after {
@@ -18079,9 +18627,7 @@
 +    height: 15rem;
 +    border: 1px solid rgb(255 255 255 / 14%);
 +    border-radius: 50%;
-+    box-shadow:
-+        0 0 0 2.2rem rgb(255 255 255 / 5%),
-+        0 0 0 4.8rem rgb(255 255 255 / 3%);
++    box-shadow: none;
 +    pointer-events: none;
 +}
 +
@@ -18107,10 +18653,10 @@
 +
 +.mobile-help-hero h1 {
 +    margin: 0.8rem 0 0.45rem;
-+    color: #fff;
-+    font-size: clamp(1.7rem, 7vw, 2.6rem);
++    color: var(--text-primary);
++    font-size: 1.5rem;
 +    line-height: 1.08;
-+    letter-spacing: -0.04em;
++    letter-spacing: 0;
 +}
 +
 +.mobile-help-hero h1 span {
@@ -18120,7 +18666,7 @@
 +.mobile-help-hero p {
 +    max-width: 36rem;
 +    margin: 0;
-+    color: rgb(239 255 251 / 76%);
++    color: var(--text-secondary);
 +    font-size: 0.92rem;
 +    line-height: 1.65;
 +}
@@ -18130,7 +18676,7 @@
 +    flex-wrap: wrap;
 +    gap: 0.55rem 1rem;
 +    margin-top: 0.9rem;
-+    color: rgb(239 255 251 / 64%);
++    color: var(--text-secondary);
 +    font-size: 0.75rem;
 +}
 +
@@ -18156,7 +18702,7 @@
 +    padding: 0.65rem 0.85rem;
 +    border: 1px solid rgb(255 255 255 / 22%);
 +    border-radius: 0.85rem;
-+    color: #f4fffc;
++    color: var(--text-primary);
 +    background: rgb(255 255 255 / 8%);
 +    font-size: 0.86rem;
 +    font-weight: 700;
@@ -18164,9 +18710,9 @@
 +}
 +
 +.mobile-help-button--primary {
-+    color: #092c29;
-+    border-color: #8ce5d4;
-+    background: #8ce5d4;
++    color: var(--action-text);
++    border-color: var(--action-fill);
++    background: var(--action-fill);
 +}
 +
 +.mobile-help-hero__signal {
@@ -18186,7 +18732,7 @@
 +    border-radius: 1.4rem;
 +    color: #baf4e8;
 +    background: rgb(255 255 255 / 8%);
-+    box-shadow: 0 1rem 3rem rgb(0 0 0 / 18%);
++    box-shadow: none;
 +    font-size: 2.1rem;
 +}
 +
@@ -18196,7 +18742,7 @@
 +    height: 0.55rem;
 +    border-radius: 50%;
 +    background: #f5b85b;
-+    box-shadow: 0 0 0 0.35rem rgb(245 184 91 / 14%);
++    box-shadow: none;
 +}
 +
 +.mobile-help-hero__signal span:nth-child(1) { top: 18%; left: 20%; }
@@ -18240,7 +18786,7 @@
 +    border: 1px solid var(--mobile-help-border);
 +    border-radius: 1rem;
 +    background: var(--mobile-help-paper);
-+    box-shadow: 0 0.55rem 1.5rem color-mix(in oklch, var(--mobile-help-teal) 9%, transparent);
++    box-shadow: none;
 +}
 +
 +.mobile-help-tab {
@@ -18274,7 +18820,7 @@
 +        linear-gradient(145deg,
 +            color-mix(in oklch, var(--mobile-help-teal) 94%, #fff 6%),
 +            color-mix(in oklch, var(--mobile-help-teal) 76%, #000 24%));
-+    box-shadow: 0 0.45rem 1rem color-mix(in oklch, var(--mobile-help-teal) 24%, transparent);
++    box-shadow: none;
 +}
 +
 +.mobile-help-tab.is-active i {
@@ -18357,7 +18903,7 @@
 +    height: 2.4rem;
 +    place-items: center;
 +    border-radius: 50%;
-+    color: #092c29;
++    color: var(--action-text);
 +    background: #9ce9db;
 +    font-size: 0.72rem;
 +    font-weight: 800;
@@ -18679,7 +19225,31 @@
  }
  /* stylelint-enable color-no-hex */
  
-@@ -79,51 +85,38 @@
+@@ -37,11 +43,9 @@
+ .insights-container .card {
+     border: 1px solid var(--stroke-default);
+     border-radius: var(--radius-lg);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-4);
+-    overflow: hidden;
+-    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
++    box-shadow: none;
++    overflow: hidden;
++    background: var(--surface-1);
+     display: flex;
+     flex-direction: column;
+     min-height: 0;
+@@ -49,7 +53,7 @@
+ }
+ 
+ [data-theme="dim"] .insights-container .card {
+-    background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
++    background: var(--surface-1);
+ }
+ 
+ .insights-container .card-head {
+@@ -79,51 +83,38 @@
      color: var(--text-primary);
  }
  
@@ -18747,7 +19317,26 @@
      font-weight: 700;
      font-variant-numeric: tabular-nums;
      line-height: 1.05;
-@@ -206,10 +199,10 @@
+@@ -132,6 +123,7 @@
+ 
+ .insights-container .insights-big-number {
+     display: flex;
++    flex-wrap: wrap;
+     align-items: baseline;
+     gap: 0.375rem;
+ }
+@@ -164,9 +156,7 @@
+         color-mix(in oklch, var(--color-primary) 6%, transparent),
+         color-mix(in oklch, var(--color-primary) 6%, transparent)
+     );
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-8);
++    box-shadow: none;
+ }
+ 
+ /* 「↗」只在可點時顯示（純符號、aria-hidden；不用 x-show，FE-ALPINE-17） */
+@@ -206,10 +196,10 @@
  }
  
  .insights-container .insights-muted-big {
@@ -18760,7 +19349,7 @@
      letter-spacing: -0.01em;
  }
  
-@@ -230,6 +223,7 @@
+@@ -230,6 +220,7 @@
  }
  
  .insights-container .insights-focus-name {
@@ -18768,7 +19357,7 @@
      overflow: hidden;
      text-overflow: ellipsis;
      white-space: nowrap;
-@@ -237,8 +231,8 @@
+@@ -237,8 +228,8 @@
  }
  
  .insights-container .insights-focus-avatar {
@@ -18779,7 +19368,7 @@
      border-radius: 50%;
      flex: 0 0 auto;
      overflow: hidden;
-@@ -327,9 +321,57 @@
+@@ -327,9 +318,57 @@
  }
  
  .insights-container .donut-legend {
@@ -18837,7 +19426,16 @@
  }
  
  .insights-container .donut-chart-wrap {
-@@ -862,8 +904,20 @@
+@@ -746,7 +785,7 @@
+     pointer-events: none;
+     border-radius: var(--radius-md);
+     overflow: hidden;
+-    box-shadow: var(--fluent-shadow-16);
++    box-shadow: none;
+     background: var(--surface-1);
+     border: 1px solid var(--stroke-default);
+     box-sizing: border-box;
+@@ -862,8 +901,20 @@
  }
  
  .insights-container .gantt-card .card-head {
@@ -18860,7 +19458,7 @@
  }
  
  .insights-container .gantt-wrap {
-@@ -875,6 +929,7 @@
+@@ -875,6 +926,7 @@
  .insights-container .gantt-table {
      --gantt-name-w: 7.5rem;
      --gantt-cell-min-w: 1.5rem;
@@ -18868,7 +19466,7 @@
      display: flex;
      flex-direction: column;
      width: 100%;
-@@ -973,13 +1028,70 @@
+@@ -973,13 +1025,70 @@
      border-radius: var(--fluent-radius-md);
  }
  
@@ -18916,7 +19514,7 @@
 +}
 +
 +.insights-container .maker-marker--ring::after {
-+    box-shadow: inset 0 0 0 2px var(--surface-1);
++    box-shadow: none;
 +}
 +
 +.insights-container .maker-marker--bar::after {
@@ -18944,7 +19542,7 @@
  }
  
  .insights-container .gantt-legend {
-@@ -987,13 +1099,22 @@
+@@ -987,13 +1096,22 @@
      flex-wrap: wrap;
      align-items: center;
      gap: 0.5rem;
@@ -18970,7 +19568,7 @@
  .insights-container .gantt-legend-item {
      display: inline-flex;
      align-items: center;
-@@ -1002,10 +1123,47 @@
+@@ -1002,10 +1120,47 @@
  }
  
  .insights-container .gantt-legend-dot {
@@ -18992,7 +19590,7 @@
 +}
 +
 +.insights-container .gantt-legend-dot.maker-marker--ring {
-+    box-shadow: inset 0 0 0 2px var(--surface-1);
++    box-shadow: none;
 +}
 +
 +.insights-container .gantt-legend-dot.maker-marker--bar {
@@ -19020,7 +19618,20 @@
  }
  
  .insights-container .insights-gantt-toggle {
-@@ -1310,11 +1468,104 @@
+@@ -1041,10 +1196,9 @@
+ 
+ .insights-container .insights-gantt-toggle button.is-on {
+     background: color-mix(in oklch, var(--surface-2) 80%, transparent);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++    backdrop-filter: none;
+     color: var(--text-primary);
+-    box-shadow: var(--fluent-shadow-2);
++    box-shadow: none;
+ }
+ 
+ @media (prefers-reduced-motion: reduce) {
+@@ -1310,11 +1464,102 @@
  /* ===== 響應式斷點 ===== */
  @media (max-width: 1024px) {
      .insights-container .row1 {
@@ -19034,10 +19645,8 @@
 +        overflow: hidden;
 +        border: 1px solid var(--stroke-default);
 +        border-radius: var(--radius-lg);
-+        background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
-+        box-shadow:
-+            inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
-+            var(--fluent-shadow-4);
++        background: var(--surface-1);
++        box-shadow: none;
 +    }
 +
 +    .insights-container .row1 .card {
@@ -19130,7 +19739,7 @@
      }
  
      .insights-container .row2,
-@@ -1324,19 +1575,148 @@
+@@ -1324,19 +1569,148 @@
          grid-template-columns: 1fr;
      }
  
@@ -19293,7 +19902,45 @@
 +}
 --- a/web/static/css/pages/showcase/05-lightbox.css
 +++ b/web/static/css/pages/showcase/05-lightbox.css
-@@ -265,13 +265,21 @@
+@@ -12,8 +12,7 @@
+     /* Smoke Backdrop — 匹配 gallery_generator.py 舊版風格 */
+     background: var(--overlay-modal);
+     /* charter §2 仲裁：lightbox backdrop 用 floating-control 12px (非 overlay 30px)，保留 grid spatial reference UX */
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++    backdrop-filter: none;
+ 
+     /* 初始隱藏 */
+     opacity: 0;
+@@ -48,7 +47,7 @@
+     background: var(--surface-2);
+     border: 1px solid var(--stroke-default);
+     border-radius: var(--radius-lg);
+-    box-shadow: var(--fluent-shadow-28);
++    box-shadow: none;
+ 
+     /* Scale Pop-in 動畫 */
+     transform: scale(0.95);
+@@ -86,8 +85,7 @@
+     border: none;
+     border-radius: 50%;
+     background: var(--overlay-control);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++    backdrop-filter: none;
+     color: var(--text-inverse);
+     font-size: 1.25rem;
+     cursor: pointer;
+@@ -237,7 +235,7 @@
+     line-height: 1.4;
+     text-align: center;
+     border: 1px solid var(--stroke-subtle);
+-    box-shadow: var(--shadow-sm);
++    box-shadow: none;
+ }
+ 
+ /* Metadata Panel — 緊湊版（匹配原版 gallery） */
+@@ -265,13 +263,21 @@
  
  /* Title */
  .lightbox-metadata .lb-title {
@@ -19315,7 +19962,7 @@
  }
  
  /* Original Title */
-@@ -443,6 +451,8 @@
+@@ -443,6 +449,8 @@
      .lightbox-metadata .lb-title .pick-star {
          width: 44px;
          height: 44px;
@@ -19324,7 +19971,32 @@
          margin-right: calc(1.45em - 44px);   /* 同上：維持 0.45em 的視覺間距，換 44px 盒 */
      }
  }
-@@ -567,7 +577,8 @@
+@@ -541,13 +549,12 @@
+     border: 1px solid rgba(255,255,255,0.4);
+     border-radius: 50%;
+     background: rgba(255,255,255,0.15);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++    backdrop-filter: none;
+     color: white;
+     font-size: 1.125rem;
+     cursor: pointer;
+     display: flex; align-items: center; justify-content: center;
+-    box-shadow: var(--fluent-shadow-8);
++    box-shadow: none;
+     transition: background var(--duration-fast) var(--ease-out),
+                 border-color var(--duration-fast) var(--ease-out),
+                 transform var(--duration-fast) var(--ease-out),
+@@ -558,7 +565,7 @@
+     background: rgba(255,255,255,0.3);
+     border-color: rgba(255,255,255,0.6);
+     transform: scale(1.08);
+-    box-shadow: var(--fluent-shadow-16);
++    box-shadow: none;
+ }
+ 
+ .lb-action-btn:active {
+@@ -567,7 +574,8 @@
  
  /* 98b-T4：焦點裁切遮罩 toggle — styled-like .lb-action-btn（上方）但更小，掛 metadata .lb-header。
   * 低調玻璃圓鈕，退位不搶封面戲（feedback_ui_restraint_taste）。token only（§6）。 */
@@ -19334,7 +20006,22 @@
      flex-shrink: 0;
      display: inline-flex;
      align-items: center;
-@@ -591,20 +602,118 @@
+@@ -578,33 +586,130 @@
+     border: 1px solid var(--stroke-subtle);
+     border-radius: 50%;
+     background: var(--surface-1);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++    backdrop-filter: none;
+     color: var(--text-secondary);
+     font-size: 0.875rem;
+     line-height: 1;
+     cursor: pointer;
+-    box-shadow: var(--fluent-shadow-8);
++    box-shadow: none;
+     transition: background var(--duration-fast) var(--ease-out),
+                 border-color var(--duration-fast) var(--ease-out),
+                 color var(--duration-fast) var(--ease-out),
                  box-shadow var(--duration-fast) var(--ease-out);
  }
  
@@ -19343,10 +20030,13 @@
 +.lightbox-metadata .lb-plot-btn:hover {
      color: var(--text-primary);
      border-color: var(--stroke-default);
-     box-shadow: var(--fluent-shadow-16);
- }
- 
+-    box-shadow: var(--fluent-shadow-16);
+-}
+-
 -.lightbox-metadata .lb-mask-btn:active {
++    box-shadow: none;
++}
++
 +.lightbox-metadata .lb-mask-btn:active,
 +.lightbox-metadata .lb-plot-btn:active {
      transform: scale(0.95);
@@ -19357,7 +20047,8 @@
 +.lightbox-metadata .lb-plot-btn:focus-visible {
      outline: 2px solid var(--accent);
      outline-offset: 2px;
-     box-shadow: 0 0 0 4px var(--glow-subtle);   /* §6 #5 focus 4px glow */
+-    box-shadow: 0 0 0 4px var(--glow-subtle);   /* §6 #5 focus 4px glow */
++    box-shadow: none;   /* §6 #5 focus 4px glow */
 +}
 +
 +.lightbox-metadata .lb-plot-btn[aria-pressed="true"] {
@@ -19456,9 +20147,76 @@
  }
  
  /* 98b-T4：遮罩 overlay（疊在 .lightbox-cover 已 layout 的封面 rect 上，不裁圖）。 */
+@@ -626,7 +731,7 @@
+     left: 0;
+     box-sizing: border-box;
+     border: 1px solid rgba(255, 255, 255, 0.55);      /* 亮框：對齊 .lb-action-btn 玻璃邊 rgba 先例 */
+-    box-shadow: 0 0 0 100vmax var(--lb-mask-scrim);   /* 窗外壓暗 spotlight，隨 transform 一起滑 */
++    box-shadow: none;   /* 窗外壓暗 spotlight，隨 transform 一起滑 */
+     transition: transform var(--fluent-duration-medium) var(--ease-out);
+     touch-action: none;   /* 99a-T3：拖曳時防手機系統手勢（頁面捲動/swipe-to-back/左右換片）搶走 */
+     cursor: ew-resize;    /* 100c-T3a：Y 軸砍除後（CD-6）唯一可拖方向恆為橫向，游標契約併回基礎規則 */
+@@ -820,9 +925,8 @@
+     border: 1px solid rgba(255, 255, 255, 0.4);
+     border-radius: 50%;
+     background: rgba(255, 255, 255, 0.15);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+-    box-shadow: var(--fluent-shadow-8);
++    backdrop-filter: none;
++    box-shadow: none;
+     cursor: pointer;
+     display: flex;
+     align-items: center;
+@@ -838,7 +942,7 @@
+     background: rgba(255, 255, 255, 0.3);
+     border-color: rgba(255, 255, 255, 0.6);
+     transform: scale(1.08);
+-    box-shadow: var(--fluent-shadow-16);
++    box-shadow: none;
+ }
+ 
+ .lightbox-similar-btn:active {
 --- a/web/static/css/pages/showcase/06-responsive-and-lists.css
 +++ b/web/static/css/pages/showcase/06-responsive-and-lists.css
-@@ -350,6 +350,7 @@
+@@ -27,8 +27,7 @@
+         position: absolute;
+         inset: 0;
+         background-color: var(--overlay-modal);
+-        backdrop-filter: blur(var(--fluent-blur));
+-        -webkit-backdrop-filter: blur(var(--fluent-blur));
++        backdrop-filter: none;
+     }
+ 
+     /* stage：爆射 origin frame（cover 在中央，cards 從中央爆射） */
+@@ -136,15 +135,14 @@
+         border: 1px solid rgba(255, 255, 255, 0.4);
+         border-radius: 50%;
+         background: var(--overlay-control);
+-        backdrop-filter: blur(var(--fluent-blur-light));
+-        -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++        backdrop-filter: none;
+         color: white;
+         font-size: 1.25rem;
+         cursor: pointer;
+         display: flex;
+         align-items: center;
+         justify-content: center;
+-        box-shadow: var(--fluent-shadow-8);
++        box-shadow: none;
+         z-index: 12;
+         transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
+                     border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+@@ -155,7 +153,7 @@
+     .similar-mobile-play-btn:active {
+         background: rgba(0, 0, 0, 0.5);
+         border-color: rgba(255, 255, 255, 0.6);
+-        box-shadow: var(--fluent-shadow-16);
++        box-shadow: none;
+     }
+ 
+     .similar-mobile-play-btn:disabled {
+@@ -350,6 +348,7 @@
      width: 1.25rem;
      height: 1.25rem;
      margin-left: 4px;             /* micro spacing（§4 micro 子網格）*/
@@ -19466,12 +20224,114 @@
      padding: 0;
      border: 1px solid transparent;
      border-radius: var(--fluent-radius-md);   /* 互動小元件 4px（§1）*/
---- a/web/static/css/pages/showcase/08-remainder.css
-+++ b/web/static/css/pages/showcase/08-remainder.css
-@@ -560,6 +560,23 @@
-     font-size: 0.6875rem;
+@@ -379,7 +378,7 @@
+     outline: 2px solid var(--accent);
+     outline-offset: 2px;          /* stroke / focus 級（§4）*/
+     color: var(--accent);
+-    box-shadow: 0 0 0 4px var(--glow-subtle);   /* §6 #5 focus 4px glow */
++    box-shadow: none;   /* §6 #5 focus 4px glow */
  }
  
+ /* 172-T5: 燈箱標題翻譯鈕（標題行尾／原文行尾共用）。尺寸、色階、hover、focus 逐項鏡像 .lb-rescrape-gear。 */
+@@ -425,7 +424,7 @@
+     outline: 2px solid var(--accent);
+     outline-offset: 2px;
+     color: var(--accent);
+-    box-shadow: 0 0 0 4px var(--glow-subtle);
++    box-shadow: none;
+ }
+ 
+ /* 原文行外包：.lb-otitle 自帶 nowrap＋ellipsis，圖示放同列兄弟才不會被省略號吃掉 */
+@@ -478,7 +477,7 @@
+     outline: 2px solid var(--color-error-hover);
+     outline-offset: 2px;                              /* stroke / focus 級（§4）*/
+     color: var(--color-error-hover);
+-    box-shadow: 0 0 0 4px var(--glow-subtle);         /* §6 #5 focus 4px glow */
++    box-shadow: none;         /* §6 #5 focus 4px glow */
+ }
+ 
+ /* Responsive: 小螢幕 */
+@@ -622,7 +621,7 @@
+ .table-scroll-container {
+     overflow-x: auto;
+     border-radius: var(--radius-md);
+-    box-shadow: var(--shadow-sm);
++    box-shadow: none;
+ }
+ 
+ /* Table Base - DaisyUI .table 強化 */
+@@ -786,7 +785,7 @@
+     border: 1px solid var(--stroke-default);
+     border-radius: var(--radius-md);
+     overflow: hidden;
+-    box-shadow: var(--shadow-sm);
++    box-shadow: none;
+ }
+ 
+ /* List Item - Compact Single Line */
+--- a/web/static/css/pages/showcase/08-remainder.css
++++ b/web/static/css/pages/showcase/08-remainder.css
+@@ -1,14 +1,11 @@
+ /* ==================== Light / Dim 主題適配 ==================== */
+ /* 使用 theme.css 定義的 CSS 變數，無需額外覆寫 */
+-/* --bg-header 已在 theme.css 定義：color-mix(in oklch, var(--color-base-200) 85%, transparent) */
++/* --bg-header 已在 theme.css 定義：var(--surface-1) */
+ /* 主題切換時自動過渡（transition 在 theme.css body 定義）*/
+ 
+ /* Dim 模式：降低背景光暈透明度（對齊 design-system.css L18-23） */
+ [data-theme="dim"] .showcase-container {
+-    background:
+-        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(var(--ds-glow-rgb), 0.08), transparent),
+-        radial-gradient(ellipse 60% 40% at 80% 100%, oklch(55% 0.2 280 / 0.06), transparent),
+-        var(--bg-body);
++    background: var(--surface-0);
+ }
+ 
+ /* ==================== Showcase Footer 三段式 (49a-T4) ==================== */
+@@ -16,7 +13,7 @@
+ 
+ .showcase-footer {
+     position: fixed;
+-    bottom: 0;
++    bottom: calc(var(--native-bottom-height, 0px) + env(safe-area-inset-bottom));
+     /* 對齊 .main-content 的 margin-left 模式，避免被 sidebar (z-index 1000) 覆蓋左側 */
+     left: var(--sidebar-width, 200px);
+     right: 0;
+@@ -26,8 +23,7 @@
+ 
+     /* 背景 - 使用 Design System token */
+     background: var(--bg-header);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++    backdrop-filter: none;
+     border-top: 1px solid var(--stroke-subtle);
+ 
+     /* 間距 */
+@@ -131,7 +127,7 @@
+     background: var(--surface-1);
+     border: 1px solid var(--stroke-default);
+     border-radius: var(--radius-sm);
+-    box-shadow: var(--fluent-shadow-2);
++    box-shadow: none;
+ 
+     font-family: var(--font-mono);
+     font-size: 0.75rem;
+@@ -295,8 +291,7 @@
+     align-items: center;
+     justify-content: center;
+     background: var(--overlay-gallery);
+-    backdrop-filter: blur(var(--fluent-blur));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur));
++    backdrop-filter: none;
+ 
+     /* 初始隱藏 */
+     opacity: 0;
+@@ -558,6 +553,23 @@
+     color: var(--color-primary-content);
+     border-radius: var(--radius-pill);
+     font-size: 0.6875rem;
++}
++
 +/* user tag 文字連結 — 在 accent 實心底上，承襲字色 */
 +.lb-user-tag-link {
 +    color: inherit;
@@ -19487,12 +20347,10 @@
 +    outline: 2px solid currentColor;
 +    outline-offset: 1px;
 +    border-radius: var(--radius-sm);
-+}
-+
+ }
+ 
  /* × 刪除按鈕 */
- .lb-tag-remove {
-     cursor: pointer;
-@@ -592,6 +609,37 @@
+@@ -592,6 +604,37 @@
  .lb-tag-add-btn:hover {
      border-color: var(--accent);
      color: var(--accent);
@@ -19526,13 +20384,306 @@
 +.lb-tag-ai-btn:focus-visible {
 +    outline: 2px solid var(--accent);
 +    outline-offset: 2px;
-+    box-shadow: 0 0 0 4px var(--glow-subtle);
++    box-shadow: none;
  }
  
  /* 輸入框包裝 */
+@@ -737,10 +780,9 @@
+ 
+ .mode-toggle-btn.active {
+     background: rgba(255, 255, 255, 0.15);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++    backdrop-filter: none;
+     color: var(--text-primary);
+-    box-shadow: var(--fluent-shadow-2);
++    box-shadow: none;
+ }
+ 
+ .mode-toggle-btn:not(.active):hover {
+@@ -804,12 +846,10 @@
+     border-radius: var(--radius-pill);
+     background: var(--bg-card);
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Heavy acrylic 20px spotlight frame (mirrors theme.css .spotlight-search input), TASK-115-T6 */
+-    backdrop-filter: blur(20px);
++    backdrop-filter: none;
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Safari prefix mirror, TASK-115-T6 */
+-    -webkit-backdrop-filter: blur(20px);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 10%, transparent),
+-        var(--shadow-sm);
++    backdrop-filter: none;
++    box-shadow: none;
+     transition:
+         border-color var(--duration-normal) var(--ease-out),
+         box-shadow var(--duration-normal) var(--ease-out),
+@@ -819,11 +859,7 @@
+ /* Focus ring wraps the whole group (pills + input), not just the text field. */
+ .filter-pill-group:focus-within {
+     border-color: var(--accent);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 15%, transparent),
+-        0 0 0 4px color-mix(in oklch, var(--color-primary) 15%, transparent),
+-        0 0 20px var(--glow-primary),
+-        var(--shadow-md);
++    box-shadow: none;
+     transform: scale(1.02);
+ }
+ 
+@@ -907,7 +943,6 @@
+     border-radius: 0;
+     background: transparent;
+     backdrop-filter: none;
+-    -webkit-backdrop-filter: none;
+     box-shadow: none;
+     transform: none;
+ }
+@@ -935,7 +970,7 @@
+     background: var(--surface-2);
+     border: 1px solid var(--stroke-default);
+     border-radius: var(--radius-md);
+-    box-shadow: var(--shadow-md);
++    box-shadow: none;
+     padding: 0.75rem;
+     z-index: 200;
+ }
+@@ -1346,7 +1381,7 @@
+     border: 1px solid rgba(255, 255, 255, 0.2);
+     border-radius: var(--fluent-radius-md);
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (default state), 2026-05-03 */
+-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--fluent-shadow-2);
++    box-shadow: none;
+     cursor: pointer;
+     color: var(--text-inverse);
+     transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
+@@ -1356,7 +1391,7 @@
+     background: rgba(255, 255, 255, 0.15);
+     border-color: rgba(255, 255, 255, 0.3);
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (hover state), 2026-05-03 */
+-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), var(--fluent-shadow-4);
++    box-shadow: none;
+     transform: translateY(-1px);
+ }
+ 
+@@ -1364,7 +1399,7 @@
+     outline: 2px solid var(--accent);
+     outline-offset: 2px;
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight + Fluent shadow + glow ring (focus-visible), 2026-05-03 */
+-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--fluent-shadow-2), 0 0 0 4px var(--glow-primary);
++    box-shadow: none;
+ }
+ 
+ .picker-refresh-btn:active:not(:disabled) {
+@@ -1401,7 +1436,7 @@
+     border: 1px solid rgba(255, 255, 255, 0.2);
+     border-radius: var(--fluent-radius-md);
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (default state), 100b-T2b */
+-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--fluent-shadow-2);
++    box-shadow: none;
+     cursor: pointer;
+     color: var(--text-inverse);
+     transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
+@@ -1411,7 +1446,7 @@
+     background: rgba(255, 255, 255, 0.15);
+     border-color: rgba(255, 255, 255, 0.3);
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (hover state), 100b-T2b */
+-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), var(--fluent-shadow-4);
++    box-shadow: none;
+     transform: translateY(-1px);
+ }
+ 
+@@ -1419,7 +1454,7 @@
+     outline: 2px solid var(--accent);
+     outline-offset: 2px;
+     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight + Fluent shadow + glow ring (focus-visible), 100b-T2b */
+-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--fluent-shadow-2), 0 0 0 4px var(--glow-primary);
++    box-shadow: none;
+ }
+ 
+ .picker-upload-btn:active:not(:disabled) {
+@@ -1492,7 +1527,6 @@
+         position: static;
+         background: transparent;
+         backdrop-filter: none;
+-        -webkit-backdrop-filter: none;
+         color: inherit;
+         padding: 0;
+         margin-bottom: 8px;
+@@ -1540,9 +1574,7 @@
+     border-width: 1px;
+     border-style: solid;
+     /* Shadow: 底階 + dual-layer 內框 */
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-2);
++    box-shadow: none;
+     transition:
+         background var(--fluent-duration-fast) var(--fluent-ease-standard),
+         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+@@ -1552,9 +1584,7 @@
+ 
+ .showcase-container .btn:hover:not(:disabled) {
+     /* hover 不覆寫 border-color，DaisyUI variant 自管 (.btn-outline.btn-primary primary 強調保留) */
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
+-        var(--fluent-shadow-4);
++    box-shadow: none;
+     transform: translateY(-1px);
+ }
+ 
+@@ -1562,17 +1592,12 @@
+     /* Focus: 2px outline + 4px glow（charter §6 Checkpoint 5 精確規格） */
+     outline: 2px solid var(--accent);
+     outline-offset: 2px;
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-2),
+-        0 0 0 4px var(--glow-primary);
++    box-shadow: none;
+ }
+ 
+ .showcase-container .btn:active:not(:disabled) {
+     transform: translateY(0);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
+-        var(--fluent-shadow-2);
++    box-shadow: none;
+ }
+ 
+ .showcase-container .input {
+@@ -1583,9 +1608,7 @@
+     border-width: 1px;
+     border-style: solid;
+     /* Shadow: 輸入框底階（charter §6 Checkpoint 4） */
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
+-        var(--fluent-shadow-2);
++    box-shadow: none;
+     transition:
+         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+         box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+@@ -1597,10 +1620,7 @@
+     outline: 2px solid var(--accent);
+     outline-offset: 2px;
+     border-color: var(--accent);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-2),
+-        0 0 0 4px var(--glow-primary);
++    box-shadow: none;
+ }
+ 
+ /* ─── 57c-T4: Similar Stage — fullscreen takeover (z-index:1501) ─────────── */
+@@ -1672,8 +1692,7 @@
+     border: 1px solid rgba(255, 255, 255, 0.15);
+     border-radius: 50%;
+     background: var(--overlay-control);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++    backdrop-filter: none;
+     color: rgba(255, 255, 255, 0.8);
+     display: flex;
+     align-items: center;
+@@ -1821,7 +1840,7 @@
+     transform: translate(-50%, -50%);
+     background: var(--color-base-100);
+     border-radius: var(--fluent-radius-xl);
+-    box-shadow: var(--fluent-shadow-4);
++    box-shadow: none;
+     cursor: pointer;
+     display: flex;
+     align-items: center;
+@@ -1848,7 +1867,7 @@
+ }
+ 
+ .similar-slot:hover {
+-    box-shadow: var(--fluent-shadow-8);
++    box-shadow: none;
+ }
+ 
+ .similar-slot-img {
+@@ -1919,7 +1938,7 @@
+     object-position: right center;  /* 沿用 cropMode: 'right-half' 視覺一致 */
+     transform-origin: center center;
+     border-radius: var(--fluent-radius-lg);
+-    box-shadow: var(--fluent-shadow-16);
++    box-shadow: none;
+     z-index: 11;  /* > .similar-slot z=10；play button z=12 > 11 → button 在上 */
+     cursor: pointer;
+ }
+@@ -1946,15 +1965,14 @@
+     border: 1px solid rgba(255, 255, 255, 0.4);
+     border-radius: 50%;
+     background: var(--overlay-control);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++    backdrop-filter: none;
+     color: white;
+     font-size: 1.25rem;
+     cursor: pointer;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+-    box-shadow: var(--fluent-shadow-8);
++    box-shadow: none;
+     z-index: 12;  /* > .similar-main-static z=11 (inner stacking)；ghost 飛行期間蓋過 acceptable */
+     transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
+                 border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+@@ -1964,7 +1982,7 @@
+ .similar-play-button:hover {
+     background: rgba(0, 0, 0, 0.5);
+     border-color: rgba(255, 255, 255, 0.6);
+-    box-shadow: var(--fluent-shadow-16);
++    box-shadow: none;
+     transform: translate(-50%, -50%) scale(calc(1.1 / var(--similar-stage-scale, 1)));
+ }
+ 
 --- a/web/static/css/pages/scanner.css
 +++ b/web/static/css/pages/scanner.css
-@@ -365,3 +365,1118 @@
+@@ -16,8 +16,7 @@
+     align-items: center;
+     /* T8.2: Acrylic 材質 */
+     background: var(--bg-header);
+-    backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
++    backdrop-filter: none;
+     border-bottom: 1px solid var(--stroke-subtle);
+     padding-bottom: 1rem;
+     margin-bottom: 0.5rem;
+@@ -35,19 +34,17 @@
+ 
+ /* Mini Terminal - Compact Log */
+ .mini-terminal {
+-    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
++    background: var(--surface-1);
+     border: 1px solid var(--stroke-default);
+     border-radius: var(--fluent-radius-xl);
+     margin: 1rem;
+     overflow: hidden;
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-4);
++    box-shadow: none;
+     transition: background-color var(--fluent-duration-slow) var(--fluent-ease-standard);
+ }
+ 
+ [data-theme="dim"] .mini-terminal {
+-    background: color-mix(in oklch, var(--color-base-200) 55%, transparent);
++    background: var(--surface-1);
+ }
+ 
+ .mini-terminal-header {
+@@ -289,8 +286,7 @@
+     right: 0;
+     bottom: 0;
+     background: color-mix(in oklch, var(--color-base-100) 60%, transparent);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++    backdrop-filter: none;
+     z-index: 9999;
+     display: flex;
+     align-items: center;
+@@ -365,3 +361,1118 @@
      border-radius: var(--fluent-radius-md);
      color: var(--text-default, currentColor);
  }
@@ -19549,7 +20700,7 @@
 +    background: color-mix(in oklch, var(--bg-card) 92%, var(--color-base-200));
 +    border: 1px solid var(--border-light);
 +    border-radius: var(--radius-md);
-+    box-shadow: var(--fluent-shadow-4);
++    box-shadow: none;
 +}
 +
 +#progressSection .mini-terminal-header {
@@ -20191,12 +21342,12 @@
 +    color: var(--bg-card);
 +    border-color: var(--text-primary);
 +    background: var(--text-primary);
-+    box-shadow: 0 0.3rem 0.8rem color-mix(in oklch, var(--text-primary) 16%, transparent);
++    box-shadow: none;
 +}
 +
 +.scanner-action-primary:hover:not(:disabled) {
 +    background: color-mix(in oklch, var(--text-primary) 88%, var(--accent));
-+    box-shadow: 0 0.4rem 1rem color-mix(in oklch, var(--text-primary) 20%, transparent);
++    box-shadow: none;
 +}
 +
 +.scanner-action-cluster .path-copy-btn {
@@ -20653,7 +21804,88 @@
 +}
 --- a/web/static/css/pages/search.css
 +++ b/web/static/css/pages/search.css
-@@ -817,6 +817,10 @@
+@@ -14,8 +14,7 @@
+     padding: 0.75rem var(--layer-inset);   /* 129-T4 / CD-129-4：與 .showcase-toolbar 對齊（showcase.css:36）*/
+     background: var(--bg-header);
+     border-bottom: 1px solid var(--border-light);
+-    backdrop-filter: blur(var(--fluent-blur)) saturate(var(--fluent-saturate));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur)) saturate(var(--fluent-saturate));
++    backdrop-filter: none;
+     z-index: 100;
+ }
+ 
+@@ -258,7 +257,7 @@
+     transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
+     z-index: 10;
+     border-radius: var(--fluent-radius-md);
+-    box-shadow: var(--fluent-shadow-4);
++    box-shadow: none;
+ }
+ 
+ .av-card-full-cover-wrapper .nav-btn:hover {
+@@ -297,7 +296,7 @@
+ 
+ /* 檔案列表區（卡片下方獨立區塊） */
+ .file-list-section {
+-    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
++    background: var(--surface-1);
+     border: 1px solid var(--stroke-default);
+     border-radius: var(--fluent-radius-lg);
+     padding: 0.5rem 1rem;
+@@ -305,9 +304,7 @@
+     flex-shrink: 0;
+     overflow-y: auto;
+     max-height: 200px;
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-4);
++    box-shadow: none;
+ }
+ 
+ /* 92a-T5: 批次整理鈕常駐 — header sticky-top，長清單於 200px 捲動區內捲動時保持可見。
+@@ -405,19 +402,15 @@
+ 
+ /* T8.3: state-page Canvas 上的 surface 層 */
+ .search-container .state-page {
+-    background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
++    background: var(--surface-1);
+     border: 1px solid var(--stroke-subtle);
+     border-radius: var(--radius-md);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
+-        var(--fluent-shadow-2);
++    box-shadow: none;
+ }
+ 
+ /* T8.3: av-card-full 補 inner highlight */
+ .search-container .av-card-full {
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-8);
++    box-shadow: none;
+ }
+ 
+ /* .hidden 保護：search 頁內所有後代元素。
+@@ -560,7 +553,7 @@
+     padding: 1.5rem 2rem;
+     min-width: 320px;
+     max-width: 420px;
+-    box-shadow: var(--shadow-md);
++    box-shadow: none;
+     font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+     transition: background-color var(--fluent-duration-slow) var(--fluent-ease-standard);
+ }
+@@ -654,8 +647,7 @@
+     right: 0;
+     bottom: 0;
+     background: color-mix(in oklch, var(--color-base-100) 60%, transparent);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
++    backdrop-filter: none;
+     z-index: 9999;
+     display: flex;
+     align-items: center;
+@@ -817,6 +809,10 @@
      background: var(--color-primary);
      width: 0%;
      transition: width var(--fluent-duration-slow) var(--fluent-ease-standard), background-color var(--fluent-duration-slow) var(--fluent-ease-standard);
@@ -20664,7 +21896,89 @@
  }
  
  #scrapeProgressBar {
-@@ -1571,3 +1575,213 @@
+@@ -1274,7 +1270,7 @@
+ 
+ .search-toast-container .alert {
+     pointer-events: auto;  /* alert 本身可點擊（未來可能加關閉按鈕） */
+-    box-shadow: var(--fluent-shadow-16);  /* 大陰影，提升視覺層級 */
++    box-shadow: none;  /* 大陰影，提升視覺層級 */
+ }
+ 
+ /* Mobile 適配：toast 左右邊距 */
+@@ -1385,9 +1381,7 @@
+     border-width: 1px;
+     border-style: solid;
+     /* 不固定 border-color — 保留 DaisyUI variant (.btn-outline.btn-primary 等) */
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-2);
++    box-shadow: none;
+     transition:
+         background var(--fluent-duration-fast) var(--fluent-ease-standard),
+         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+@@ -1396,26 +1390,19 @@
+ }
+ 
+ .search-container .btn:hover:not(:disabled) {
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 12%, transparent),
+-        var(--fluent-shadow-4);
++    box-shadow: none;
+     transform: translateY(-1px);
+ }
+ 
+ .search-container .btn:focus-visible {
+     outline: 2px solid var(--accent);
+     outline-offset: 2px;
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-2),
+-        0 0 0 4px var(--glow-primary);
++    box-shadow: none;
+ }
+ 
+ .search-container .btn:active:not(:disabled) {
+     transform: translateY(0);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
+-        var(--fluent-shadow-2);
++    box-shadow: none;
+ }
+ 
+ /* 個案豁免：dashed transparent btn / link btn / tag inline icon-only btn 自有設計語言，不套 dual-layer shadow（視覺衝突）*/
+@@ -1457,7 +1444,7 @@
+ .search-container .btn.tag-cancel:focus-visible,
+ .search-container .btn-link:focus-visible {
+     /* 保留 focus glow（a11y 必需）但移除 dual-layer shadow */
+-    box-shadow: 0 0 0 4px var(--glow-primary);
++    box-shadow: none;
+ }
+ 
+ .search-container .textarea {
+@@ -1465,9 +1452,7 @@
+     background: var(--surface-1);
+     border-width: 1px;
+     border-style: solid;
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
+-        var(--fluent-shadow-2);
++    box-shadow: none;
+     transition:
+         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+         box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+@@ -1478,10 +1463,7 @@
+     outline: 2px solid var(--accent);
+     outline-offset: 2px;
+     border-color: var(--accent);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-2),
+-        0 0 0 4px var(--glow-primary);
++    box-shadow: none;
+ }
+ 
+ /* TASK-141b-T9（CD-17）＋ owner 2026-09-03 視覺改判（T11 六筆真資料驗收的產出）：
+@@ -1571,3 +1553,216 @@
  @keyframes wishlistEmptyFadeIn {
      to { opacity: 1; }
  }
@@ -20672,6 +21986,9 @@
 +/* Mobile-first image lookup entry. Kept outside the crowded spotlight action
 +   rail so it does not steal width from search, clear, source and view buttons. */
 +.image-search-entry {
++    width: 100%;
++    min-width: 0;
++    box-sizing: border-box;
 +    display: flex;
 +    justify-content: center;
 +    margin: -0.25rem auto 0.75rem;
@@ -20690,7 +22007,7 @@
 +    color: var(--text-secondary);
 +    font-size: 0.78rem;
 +    line-height: 1.2;
-+    box-shadow: var(--fluent-shadow-8);
++    box-shadow: none;
 +}
 +
 +.image-search-entry-btn:hover,
@@ -20769,7 +22086,7 @@
 +    background: color-mix(in oklch, var(--surface-1) 84%, transparent);
 +    color: var(--text-secondary);
 +    font-size: 0.8rem;
-+    backdrop-filter: blur(8px);
++    backdrop-filter: none;
 +}
 +
 +.image-search-error,
@@ -20865,9 +22182,9 @@
 +    }
 +
 +    .image-search-entry-btn span {
-+        overflow: hidden;
-+        text-overflow: ellipsis;
-+        white-space: nowrap;
++        min-width: 0;
++        white-space: normal;
++        overflow-wrap: anywhere;
 +    }
 +
 +    .image-search-candidate {
@@ -20880,7 +22197,26 @@
 +}
 --- a/web/static/css/pages/settings.css
 +++ b/web/static/css/pages/settings.css
-@@ -262,6 +262,11 @@
+@@ -20,15 +20,13 @@
+ #settings-components .card {
+     border: 1px solid var(--stroke-default);
+     border-radius: var(--radius-lg);
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
+-        var(--fluent-shadow-4);
++    box-shadow: none;
+     overflow: visible;
+-    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
++    background: var(--surface-1);
+ }
+ 
+ [data-theme="dim"] #settings-components .card {
+-    background: color-mix(in oklch, var(--color-base-200) 60%, transparent);
++    background: var(--surface-1);
+ }
+ 
+ #settings-components .settings-card-header {
+@@ -262,6 +260,11 @@
      border-bottom: 1px solid var(--stroke-subtle);  /* 視覺分隔線 */
  }
  
@@ -20892,7 +22228,7 @@
  /* 內含的 settings-form-group 維持 flex-col，不需覆蓋 */
  #settings-components .settings-quick-toggle-row .settings-form-group {
      flex-shrink: 0;                    /* 避免被 flex container 縮小 */
-@@ -271,6 +276,7 @@
+@@ -271,26 +274,74 @@
  
  .settings-header {
      display: flex;
@@ -20900,7 +22236,13 @@
      justify-content: space-between;
      align-items: center;
      gap: 1rem;
-@@ -283,14 +289,62 @@
+     /* T8.2: Acrylic 材質 */
+     background: var(--bg-header);
+-    backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
++    backdrop-filter: none;
+     border-bottom: 1px solid var(--stroke-subtle);
+     padding-bottom: 1rem;
      margin-bottom: 0.5rem;
      /* 64b-1: sticky header（tab-bar 移除後，header 接管釘頂；z-index 31 > 舊 tab-bar 30）*/
      position: sticky;
@@ -20965,7 +22307,69 @@
  }
  
  /* Locale Toggle Button — 與 theme toggle 同款 */
-@@ -392,34 +446,44 @@
+@@ -301,10 +352,10 @@
+ .settings-locale-toggle .locale-toggle-btn {
+     padding: 0.5rem 0.75rem;
+     min-width: 44px;
+-    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
++    background: var(--surface-1);
+     border: 1px solid var(--border-light);
+     border-radius: var(--fluent-radius-lg);
+-    box-shadow: var(--fluent-shadow-4);
++    box-shadow: none;
+     color: var(--text-primary);
+     font-weight: 600;
+     font-size: 0.85rem;
+@@ -319,7 +370,7 @@
+ .settings-locale-toggle .locale-toggle-btn:hover {
+     background: var(--color-base-200);
+     border-color: var(--accent);
+-    box-shadow: 0 0 0 1px var(--accent), var(--fluent-shadow-8);
++    box-shadow: none;
+     transform: translateY(-2px);
+ }
+ 
+@@ -332,7 +383,7 @@
+     align-items: center;
+     gap: 0.5rem;
+     padding: 0.5rem 1rem;
+-    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
++    background: var(--surface-1);
+     border: 1px solid var(--border-light);
+     border-radius: var(--fluent-radius-lg);
+     cursor: pointer;
+@@ -340,26 +391,23 @@
+                 border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+                 box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard),
+                 transform var(--fluent-duration-fast) var(--fluent-ease-standard);
+-    box-shadow: var(--fluent-shadow-4);
++    box-shadow: none;
+ }
+ 
+ [data-theme="dim"] .settings-theme-toggle .theme-toggle-btn {
+-    background: color-mix(in oklch, var(--color-base-200) 50%, transparent);
++    background: var(--surface-1);
+ }
+ 
+ .settings-theme-toggle .theme-toggle-btn:hover {
+     background: var(--color-base-200);
+     border-color: var(--accent);
+-    box-shadow:
+-        0 0 0 1px var(--accent),
+-        0 0 20px rgba(var(--ds-glow-rgb), 0.2),
+-        var(--fluent-shadow-8);
++    box-shadow: none;
+     transform: translateY(-2px);
+ }
+ 
+ .settings-theme-toggle .theme-toggle-btn:active {
+     transform: translateY(0);
+-    box-shadow: var(--fluent-shadow-2);
++    box-shadow: none;
+ }
+ 
+ .settings-theme-toggle .theme-toggle-btn i {
+@@ -392,34 +440,43 @@
  
      /* P2(Codex): settings-header 換行防溢出（需在 .settings-header base rule 之後，避免被 cascade 覆蓋）*/
  
@@ -20998,8 +22402,7 @@
 +        margin-bottom: 8px;
 +        background: var(--bg-header);
 +        border-bottom: 1px solid var(--stroke-subtle);
-+        backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
-+        -webkit-backdrop-filter: blur(var(--fluent-blur-light)) saturate(120%);
++        backdrop-filter: none;
 +    }
 +
 +    #settings-components .settings-header-left {
@@ -21035,7 +22438,7 @@
      }
  
      /* quick-toggle-row 子 form-group：窄屏允許縮小（覆蓋 flex-shrink:0），避免橫向溢出 */
-@@ -461,10 +525,56 @@
+@@ -461,10 +518,56 @@
      gap: 0.5rem;
  }
  
@@ -21092,7 +22495,168 @@
  }
  
  /* ─── Cap counter (tabular-nums prevents digit jitter on toggle) ─── */
-@@ -1729,3 +1839,438 @@
+@@ -541,7 +644,7 @@
+     height: 16px;
+     background: var(--surface-0);
+     border-radius: var(--radius-pill);
+-    box-shadow: var(--fluent-shadow-2);
++    box-shadow: none;
+     transition: transform var(--fluent-duration-fast) var(--fluent-ease-decel);
+ }
+ 
+@@ -764,10 +867,9 @@
+ 
+ #settings-components .settings-sources-segmented button.is-on {
+     background: color-mix(in oklch, var(--surface-2) 80%, transparent);
+-    backdrop-filter: blur(var(--fluent-blur-light));
+-    -webkit-backdrop-filter: blur(var(--fluent-blur-light));
+-    color: var(--text-primary);
+-    box-shadow: var(--fluent-shadow-2);
++    backdrop-filter: none;
++    color: var(--text-primary);
++    box-shadow: none;
+ }
+ 
+ @media (prefers-reduced-motion: reduce) {
+@@ -819,7 +921,7 @@
+ #settings-components .settings-mt-field input:focus-visible {
+     outline: none;
+     border-color: var(--accent);
+-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 22%, transparent);
++    box-shadow: none;
+ }
+ 
+ #settings-components .settings-mt-connect-btn {
+@@ -840,7 +942,7 @@
+ }
+ 
+ #settings-components .settings-mt-connect-btn:hover {
+-    box-shadow: var(--fluent-shadow-4);
++    box-shadow: none;
+     transform: translateY(-1px);
+ }
+ 
+@@ -1028,14 +1130,14 @@
+     align-items: center;
+     gap: 2px;
+     padding: 2px;
+-    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
++    background: var(--surface-1);
+     border: 1px solid var(--border-light);
+     border-radius: var(--fluent-radius-lg);
+     flex-shrink: 0;
+ }
+ 
+ [data-theme="dim"] .font-size-control {
+-    background: color-mix(in oklch, var(--color-base-200) 50%, transparent);
++    background: var(--surface-1);
+ }
+ 
+ .font-size-btn {
+@@ -1062,7 +1164,7 @@
+ .font-size-btn.active {
+     background: var(--accent);
+     color: var(--color-primary-content);
+-    box-shadow: var(--fluent-shadow-4);
++    box-shadow: none;
+ }
+ 
+ @media (max-width: 768px) {
+@@ -1120,9 +1222,7 @@
+     border-width: 1px;
+     border-style: solid;
+     /* §6 Checkpoint 4 Shadow — dual-layer: 頂部內高光 + 外縱深 */
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
+-        var(--fluent-shadow-2);
++    box-shadow: none;
+     /* §5 transition fluent 化 */
+     transition:
+         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+@@ -1140,9 +1240,7 @@
+     border-width: 1px;
+     border-style: solid;
+     /* §6 Checkpoint 4 Shadow — dual-layer: 頂部內高光 + 外縱深 */
+-    box-shadow:
+-        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 6%, transparent),
+-        var(--fluent-shadow-2);
++    box-shadow: none;
+     /* §5 transition fluent 化 */
+     transition:
+         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+@@ -1191,7 +1289,7 @@
+    亮面提對比（surface+white，無語義色不受插值影響）+ 1.5px inset accent 環作明確選中指示 */
+ [data-theme="dim"] #settings-components .settings-sources-segmented button.is-on {
+     background: color-mix(in oklch, var(--surface-2), white 16%);
+-    box-shadow: var(--fluent-shadow-2), inset 0 0 0 1.5px var(--accent);
++    box-shadow: none;
+ }
+ 
+ /* P16: suffix-tag（base 用 srgb 20% 無對比，dim 最糟）— 改 oklch 提 tint 28% + accent 邊 55% */
+@@ -1233,7 +1331,7 @@
+ 
+ /* P19: mt-field focus 環 — box-shadow 提至 40%（暗底上 22% 不可見；solid border 已救） */
+ [data-theme="dim"] #settings-components .settings-mt-field input:focus-visible {
+-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 40%, transparent);
++    box-shadow: none;
+ }
+ 
+ /* ─── Server Mode (80a-T3) ─── */
+@@ -1267,7 +1365,7 @@
+    否則 dim server active 仍顯藍環，與「曝露/live」語意衝突（對齊 L1048/L1050 機制）。 */
+ [data-theme="dim"] #settings-components .settings-server-mode .settings-sources-segmented button.is-on[data-mode="server"] {
+     background: color-mix(in oklch, var(--color-warning) 22%, transparent);
+-    box-shadow: var(--fluent-shadow-2), inset 0 0 0 1.5px var(--color-warning);
++    box-shadow: none;
+ }
+ 
+ /* ─── 存取密碼保護（114a-T5 markup / T7fix 補樣式）───────────────────────────
+@@ -1375,7 +1473,7 @@
+ #settings-components .settings-access-auth-pin-input:focus-visible {
+     --pin-cell-bg: color-mix(in oklch, var(--accent) 14%, var(--surface-2));
+     --pin-cell-line: var(--accent);
+-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 22%, transparent);
++    box-shadow: none;
+ }
+ 
+ #settings-components .settings-access-auth-pin-input:disabled {
+@@ -1533,7 +1631,7 @@
+     min-height: 42px;
+     padding: 0.4rem 0.6rem;
+     line-height: 2.2;
+-    background: color-mix(in oklch, var(--color-base-200) 70%, transparent);
++    background: var(--surface-1);
+     border: 1px solid var(--stroke-default);
+     border-radius: var(--radius-lg);
+     color: var(--text-primary);
+@@ -1548,7 +1646,7 @@
+ 
+ #settings-components .chip-editor:focus-within {
+     border-color: var(--accent);
+-    box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 55%, transparent);
++    box-shadow: none;
+ }
+ 
+ #settings-components .chip-editor:empty::before {
+@@ -1561,7 +1659,7 @@
+ #settings-components .chip-editor[aria-disabled="true"] {
+     opacity: 0.5;
+     pointer-events: none;
+-    background: color-mix(in oklch, var(--color-base-200) 40%, transparent);
++    background: var(--surface-1);
+ }
+ 
+ /* Inline adapt of .source-pill for in-flow contentEditable use. */
+@@ -1578,7 +1676,7 @@
+ /* Keep a subtle lift on hover but drop the translateY (caret math stays stable in text flow). */
+ #settings-components .source-pill--chip:hover {
+     transform: none;
+-    box-shadow: var(--fluent-shadow-2);
++    box-shadow: none;
+ }
+ 
+ #settings-components .source-pill--chip .chip-x {
+@@ -1729,3 +1827,440 @@
      background: color-mix(in oklch, var(--surface-2) 55%, transparent);
      border-radius: var(--radius-sm);
  }
@@ -21100,7 +22664,7 @@
 +/* r18: persistent save state and desktop bottom action bar */
 +#settings-components .save-btn-wrapper {
 +    position: sticky;
-+    bottom: 0.75rem;
++    bottom: calc(var(--native-bottom-height, 0px) + 8px + env(safe-area-inset-bottom));
 +    z-index: 20;
 +    align-items: center;
 +    justify-content: space-between;
@@ -21110,8 +22674,8 @@
 +    border: 1px solid var(--stroke-default);
 +    border-radius: var(--fluent-radius-md);
 +    background: color-mix(in oklch, var(--surface-1) 88%, transparent);
-+    box-shadow: var(--fluent-shadow-8);
-+    backdrop-filter: blur(16px);
++    box-shadow: none;
++    backdrop-filter: none;
 +}
 +
 +#settings-components .settings-mobile-save {
@@ -21148,8 +22712,8 @@
 +    border: 1px solid var(--stroke-default);
 +    border-radius: calc(var(--fluent-radius-md) + 0.2rem);
 +    background: color-mix(in oklch, var(--surface-1) 88%, transparent);
-+    box-shadow: var(--fluent-shadow-4);
-+    backdrop-filter: blur(14px);
++    box-shadow: none;
++    backdrop-filter: none;
 +}
 +
 +#settings-components .settings-tab {
@@ -21192,7 +22756,7 @@
 +        linear-gradient(145deg,
 +            color-mix(in oklch, var(--accent) 92%, #fff 8%),
 +            color-mix(in oklch, var(--accent) 82%, #000 18%));
-+    box-shadow: 0 0.45rem 1rem color-mix(in oklch, var(--accent) 25%, transparent);
++    box-shadow: none;
 +}
 +
 +#settings-components .settings-tab:focus-visible {
@@ -21276,8 +22840,9 @@
 +    }
 +
 +    #settings-components .settings-tabs {
-+        grid-template-columns: repeat(5, minmax(0, 1fr));
-+        overflow: visible;
++        display: flex;
++        overflow-x: auto;
++        overscroll-behavior-x: contain;
 +        position: relative;
 +        z-index: auto;
 +        gap: 0.2rem;
@@ -21285,7 +22850,8 @@
 +    }
 +
 +    #settings-components .settings-tab {
-+        flex-direction: column;
++        flex: 0 0 auto;
++        flex-direction: row;
 +        gap: 0.2rem;
 +        min-height: 3.5rem;
 +        padding: 0.4rem 0.2rem;
@@ -21297,7 +22863,7 @@
 +    #settings-components .settings-tab span {
 +        display: block;
 +        max-width: 100%;
-+        overflow-wrap: anywhere;
++        white-space: nowrap;
 +    }
 +
 +    #settings-components .card-body {
@@ -21533,7 +23099,7 @@
 +}
 --- /dev/null
 +++ b/web/static/js/components/mobile-back.js
-@@ -0,0 +1,248 @@
+@@ -0,0 +1,249 @@
 +/**
 + * Android hardware-back bridge for the embedded WebView.
 + *
@@ -21671,7 +23237,8 @@
 +
 +        // Layer order mirrors what is visually on top: toolbar/dialog, editor,
 +        // media overlay, then the page's own expanded information state.
-+        return closeFlag(ui, 'toolbarOpen', null)
++        return closeFlag(page, 'displayOpen', null)
++            || closeFlag(ui, 'toolbarOpen', null)
 +            || closeFlag(page, '_maskVisible', 'cancelMask')
 +            || closeFlag(page, '_pillEditor', '_cancelPillEditor')
 +            || closeFlag(page, '_releaseEditor', '_cancelReleaseEditor')
@@ -25411,8 +26978,9 @@
          if (json.success && json.data && json.data.length > 0) {
 --- a/web/static/js/pages/settings/state-config.js
 +++ b/web/static/js/pages/settings/state-config.js
-@@ -1,10 +1,13 @@
+@@ -1,10 +1,14 @@
  import { ChipEditor } from '@/settings/chip-editor.js';
++import { resolveDisplayPreferences, saveChangedDisplayPreferences, DISPLAY_PAGE_SIZES } from '../../shared/showcase-display.js';
  import { normalizeFolderLayers, buildNamingPreview, buildNfoTitlePreview } from '@/shared/naming-preview.js';
 -import { whenBridgeReady, callBridge } from '@/shared/shell-client.js';
  import {
@@ -25429,7 +26997,7 @@
  
  // 同時啟用來源數上限（前端鏡像；後端真理來源 core/source_config.py:MAX_ENABLED_SOURCES）
  const MAX_ENABLED_SOURCES = 10;
-@@ -32,6 +35,12 @@
+@@ -32,6 +36,12 @@
              thumbnailCacheEnabled: true,   // 縮圖快取開關（feature/71 T2，top-level config 欄位）；新安裝預設開啟（0.9.11+），舊用戶 migration 維持關閉
  
              // Translate
@@ -25442,7 +27010,7 @@
              translateEnabled: false,
              translateProvider: 'ollama',
              ollamaUrl: 'http://localhost:11434',
-@@ -41,11 +50,29 @@
+@@ -41,11 +51,29 @@
              openaiBaseUrl: '',
              openaiApiKey: '',
              openaiModel: 'gpt-4o-mini',
@@ -25472,11 +27040,14 @@
              // 資料夾層級：{id,value}[] 動態清單（外→內，上到下）。load 時 slice(0,3) 正規化
              // （後端只用前 3 層，CD-95a-7/12）。id 走 naming.layerSeq，x-for :key="layer.id"。
              folderLayerList: [],
-@@ -60,62 +87,27 @@
+@@ -60,62 +88,30 @@
              strmRules: [],   // strm 路徑映射編輯狀態（array of {local, remote}）；load/save 兩端與 dict 對稱轉換
  
              // Gallery
 -            avlistMode: 'image',
++            browsePresentation: 'poster',
++            browseColumns: 2,
++            browsePerPage: 45,
              avlistSort: 'date',
              avlistOrder: 'descending',
              avlistItemsPerPage: 90,
@@ -25544,7 +27115,7 @@
  
          // ===== 全域模式切換破壞性 confirm State (90c-T5) =====
          switchModeConfirmOpen: false,
-@@ -130,9 +122,13 @@
+@@ -130,9 +126,13 @@
  
          // ===== Dirty Check State =====
          savedState: null,
@@ -25558,7 +27129,7 @@
          // 95a-T8: filename 膠囊編輯器收斂式 hydrate 就緒旗標（響應式鏡像，供 x-effect 追蹤；
          // naming.ready 是 closure 布林、非響應式，x-effect 追不到）。loadConfig 開頭重設 false、
          // form 設妥後翻 true；由 hydrateFilenameEditor() 讀取觸發 reactive 補載。
-@@ -204,11 +200,41 @@
+@@ -204,11 +204,45 @@
          },
  
          // ===== Computed Properties =====
@@ -25576,6 +27147,10 @@
 +                is_beta: s.is_beta,
 +                manual_only: s.manual_only,
 +            }));
++        },
++
++        get browsePageSizeOptions() {
++            return [...new Set([...DISPLAY_PAGE_SIZES, this.form.browsePerPage])].sort((a, b) => a - b);
 +        },
 +
          get isDirty() {
@@ -25601,7 +27176,7 @@
          },
  
          // 命名預覽（依 data 套範例值）。誠實反映後端空值行為（U-A2）：空變數 → 空字串，
-@@ -299,7 +325,7 @@
+@@ -299,7 +333,7 @@
              const censored = this.sources.filter(s => this.CENSORED_SOURCES.includes(s.id));
              return censored.length > 0 && censored.every(s => !s.enabled);
          },
@@ -25610,7 +27185,7 @@
          // setter(false) = NO-OP + transient hint（EC-2：off 不自動重開有碼，由使用者手動重啟任一有碼 pill）。
          set uncensoredMode(v) {
              if (v === true) {
-@@ -308,7 +334,6 @@
+@@ -308,7 +342,6 @@
                          s.enabled = false;
                      }
                  });
@@ -25618,7 +27193,7 @@
              } else {
                  this._flashUncensoredOffHint();
              }
-@@ -344,15 +369,15 @@
+@@ -344,15 +377,15 @@
  
          // ===== Lifecycle =====
          init() {
@@ -25637,7 +27212,7 @@
  
              this.loadConfig().then(() => {
                  // B1: init scanner link state after config loaded
-@@ -389,108 +414,84 @@
+@@ -389,108 +422,84 @@
          },
  
          // ===== Methods =====
@@ -25823,7 +27398,7 @@
              try {
                  const resp = await fetch('/api/config/focal-device/disabled', {
                      method: 'PUT',
-@@ -498,51 +499,19 @@
+@@ -498,51 +507,19 @@
                      body: JSON.stringify({ value: disabled })
                  });
                  const result = await resp.json();
@@ -25884,7 +27459,7 @@
          // 90c-T5: 全域模式切換破壞性 confirm ─────────────────────────────────────
          // 攔截 external_manager segmented button：即時 fetch 判離線來源 → 有則跳破壞性
          // confirm（消費 T4 POST /api/config/switch-external-manager）→ 成功後同步三處。
-@@ -647,26 +616,13 @@
+@@ -647,26 +624,13 @@
              this.pendingRewriteCount = 0;
          },
  
@@ -25913,7 +27488,7 @@
              // 95a-T8: 對稱重設 hydrate 旗標（reset 設定 / 重跑 loadConfig 時需重新 hydrate，
              // 否則 one-shot 會擋住 filename editor 的重新載入）。
              this.namingConfigReady = false;
-@@ -683,7 +639,6 @@
+@@ -683,7 +647,6 @@
                  const resp = await fetch('/api/config');
                  const result = await resp.json();
                  if (result.success) {
@@ -25921,7 +27496,7 @@
                      const config = result.data;
  
                      // Search
-@@ -714,10 +669,38 @@
+@@ -714,10 +677,38 @@
                      this.form.openaiModel = config.translate.openai?.model || 'gpt-4o-mini';
                      this.openaiUseCustomModel = config.translate.openai?.use_custom_model || false;
  
@@ -25960,9 +27535,17 @@
  
                      // 自動測試 Gemini（如果有 API Key 且是 gemini provider）
                      if (config.translate.gemini?.api_key && config.translate.provider === 'gemini') {
-@@ -769,65 +752,28 @@
+@@ -768,66 +759,36 @@
+                     this.form.strmRules = Object.entries(config.scraper?.strm_path_mappings || {})
                          .map(([local, remote]) => ({ local, remote }));
  
++                    // Live browsing is separate from offline export preferences.
++                    let legacyDisplay = {};
++                    try { legacyDisplay = JSON.parse(localStorage.getItem('showcase_state') || '{}'); } catch (_) { /* ignore corrupt legacy state */ }
++                    const display = resolveDisplayPreferences(config.showcase?.display, legacyDisplay, config.gallery);
++                    this.form.browsePresentation = display.presentation;
++                    this.form.browseColumns = display.columns;
++                    this.form.browsePerPage = display.items_per_page;
                      // Gallery
 -                    this.form.avlistMode = config.gallery?.default_mode || 'image';
                      this.form.avlistSort = config.gallery?.default_sort || 'date';
@@ -26033,7 +27616,7 @@
  
                      // Sources（61c-2）：讀 config.sources 段填入 unified scope。
                      // FIELD-NAME TRAP：後端用 display_name_key / display_name_raw；
-@@ -850,12 +796,11 @@
+@@ -850,12 +811,11 @@
                              available: s.available ?? (s.type !== 'metatube'),  // builtins default available; metatube waits for /status
                          }))
                          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -26047,7 +27630,7 @@
                      // 解鎖表單（config hydrate 完成）
                      this._configLoading = false;
  
-@@ -875,6 +820,7 @@
+@@ -875,6 +835,7 @@
  
                      // Hydrate metatube fields from config + /status (CD-63b-3)
                      this.metatubeEnabled = config.metatube?.enabled || false;
@@ -26055,7 +27638,7 @@
                      this.metatubeServerUrl = config.metatube?.url || '';
                      this.metatubeToken = config.metatube?.token || '';
                      this.metatubeLanMode = !!config.metatube?.allow_lan;   // hydrate LAN opt-in so re-connect doesn't fail SSRF (Codex P2)
-@@ -886,9 +832,18 @@
+@@ -886,9 +847,18 @@
                      if (ollamaUrl && config.translate.provider === 'ollama') {
                          this.loadOllamaModels(ollamaUrl, ollamaModel);  // 不 await
                      }
@@ -26074,7 +27657,7 @@
              } finally {
                  this._configLoading = false;
              }
-@@ -921,60 +876,33 @@
+@@ -921,60 +891,33 @@
              }
          },
  
@@ -26157,7 +27740,7 @@
              try {
                  // 先載入現有設定
                  const currentResp = await fetch('/api/config');
-@@ -987,6 +915,13 @@
+@@ -987,6 +930,13 @@
                  // 71-T5: 存檔前的「已持久化」縮圖快取狀態（authoritative：剛從 server GET 的 config.json）。
                  // 用來在 PUT 成功後判定「這次儲存是否剛把它從開變關」→ 才清空 output/thumb/（現在只有 disable 半在用）。
                  const prevThumbEnabled = config.thumbnail_cache_enabled === true;
@@ -26171,7 +27754,7 @@
                  // 90c-T6: 存前「已持久化」的 strm 映射（authoritative：剛 GET 的 config.json）。
                  // PUT 成功後與新映射比對，判定「這次儲存是否改動了路徑規則」→ 才提示改寫既有 strm。
                  const prevStrmMappings = JSON.stringify(config.scraper?.strm_path_mappings || {});
-@@ -1077,10 +1012,12 @@
+@@ -1077,10 +1027,12 @@
                      enabled: this.form.translateEnabled,
                      provider: this.form.translateProvider,
                      ollama: {
@@ -26185,7 +27768,7 @@
                          api_key: this.form.geminiApiKey,
                          model: this.form.geminiModel || 'gemini-flash-lite-latest'
                      },
-@@ -1090,23 +1027,54 @@
+@@ -1090,23 +1042,54 @@
                          model: this.form.openaiModel.trim() || 'gpt-4o-mini',
                          use_custom_model: this.openaiUseCustomModel
                      },
@@ -26244,7 +27827,7 @@
                      show_table_list: this.form.showTableList,
                      cover_badges: {
                          enabled: this.form.coverBadgesEnabled,
-@@ -1118,12 +1086,12 @@
+@@ -1118,12 +1101,12 @@
                  config.general = {
                      ...config.general,
                      default_page: this.form.defaultPage,
@@ -26262,11 +27845,12 @@
  
                  // 更新 metatube enabled（CD-63b-3）：保留 url/token（GET 載入的），只更新 enabled。
                  config.metatube = { ...(config.metatube || {}), enabled: this.metatubeEnabled };
-@@ -1149,12 +1117,17 @@
+@@ -1149,12 +1132,18 @@
                  });
                  const result = await resp.json();
                  if (result.success) {
 +                    focalNeedsRevert = false;
++                    await saveChangedDisplayPreferences(this.form, this.savedState);
                      saved = true;
 -                    this.cfWindowProxyRestartNeeded = result.cf_window_proxy_restart_needed === true;
                      this.showToast(window.t('settings.toast.config_saved'), 'success');
@@ -26281,7 +27865,7 @@
                      // 71b-T2: 縮圖快取「剛被關閉」(persisted true → 現在 false) 才清空 output/thumb/。
                      // 必在 PUT 成功之後——先存才清（config.json 已寫 false）。confirmThumbCacheDisable
                      // 自身不 POST clear，統一收斂於此。
-@@ -1185,21 +1158,30 @@
+@@ -1185,21 +1174,30 @@
                              this.showToast(window.t('settings.scraper.strm_mapping.rewrite_failed'), 'error');
                          }
                      }
@@ -26323,7 +27907,7 @@
                  this.showToast(window.t('settings.toast.save_failed', { error: e.message }), 'error');
                  return saved;
              }
-@@ -1249,9 +1231,9 @@
+@@ -1249,9 +1247,9 @@
          },
  
          // ===== Thumbnail Cache Toggle Handler + Disable Modal (71b-T2) =====
@@ -26335,7 +27919,7 @@
          async onThumbCacheToggleChange() {
              // x-model 已先翻值 → 進來時 form.thumbnailCacheEnabled 已是使用者撥到的新值。
              if (this.form.thumbnailCacheEnabled !== true) {
-@@ -1267,10 +1249,8 @@
+@@ -1267,10 +1265,8 @@
              }
              // persisted 已 true（未存的 OFF 後撥回 ON）：不開 modal，讓 toggle 照常變 true。
              if (this.savedState?.thumbnailCacheEnabled === true) return;
@@ -26347,7 +27931,7 @@
          },
  
          // 71b-T2: 關閉確認取消 → 關 modal、toggle 維持 true（保持啟用）；不存檔、不清快取。
-@@ -1278,13 +1258,10 @@
+@@ -1278,13 +1274,10 @@
              this.thumbCacheDisableConfirmOpen = false;
          },
  
@@ -26362,7 +27946,7 @@
          },
  
          // ===== 命名區膠囊編輯器（feature/95 Part A）=====
-@@ -1518,7 +1495,7 @@
+@@ -1518,7 +1511,7 @@
          },
  
          // Builtin：原地翻轉 enabled（膠囊留 Active Row、停用 = inline 刪除線）。
@@ -26371,7 +27955,7 @@
          toggleBuiltin(id) {
              const s = this.sources.find(x => x.id === id);
              if (!s || s.type !== 'builtin') return;
-@@ -1527,7 +1504,6 @@
+@@ -1527,7 +1520,6 @@
                  return;
              }
              s.enabled = !s.enabled;
@@ -26379,7 +27963,7 @@
          },
  
          // Promote：Parts Bin → Active Row（enabled=true）。cap 檢查。splice 移到陣列末尾
-@@ -1555,7 +1531,6 @@
+@@ -1555,7 +1547,6 @@
                  const [moved] = this.sources.splice(idx, 1);
                  this.sources.push(moved);
              }
@@ -26387,7 +27971,7 @@
          },
  
          // Demote：Active Row → Parts Bin（enabled=false）。
-@@ -1563,7 +1538,6 @@
+@@ -1563,7 +1554,6 @@
              const s = this.sources.find(x => x.id === id);
              if (!s || s.type !== 'metatube') return;
              s.enabled = false;
@@ -26395,7 +27979,7 @@
          },
  
          // 斷線 metatube 點擊：toast 提示重連，無 state mutation（EC-9）。
-@@ -1682,41 +1656,6 @@
+@@ -1682,41 +1672,6 @@
              }
          },
  
@@ -26437,7 +28021,7 @@
          // 全開：builtin 先（依序），到 cap 即 break；不碰 metatube / manual_only。
          enableAllToCap() {
              for (const s of this.sources) {
-@@ -1725,7 +1664,6 @@
+@@ -1725,7 +1680,6 @@
                  if (this.enabledCount >= MAX_ENABLED_SOURCES) break;
                  s.enabled = true;
              }
@@ -26445,7 +28029,7 @@
          },
  
          _flashCapAlert() {
-@@ -1749,8 +1687,8 @@
+@@ -1749,8 +1703,8 @@
          },
          onDragEnd() { this.draggingId = null; this.dropTargetId = null; },
          onDragOver(e, id) {
@@ -26456,7 +28040,7 @@
              if (!this.draggingId || this.draggingId === id) return;
              const target = this.sources.find(x => x.id === id);
              if (!target || !this.isDraggable(target)) return;
-@@ -1771,7 +1709,6 @@
+@@ -1771,7 +1725,6 @@
              const insertAt = srcIdx < tgtIdx ? tgtIdx - 1 : tgtIdx;
              this.sources.splice(insertAt, 0, moved);
              this.onDragEnd();
@@ -26464,7 +28048,7 @@
          },
  
          // ═══════════════════════════════════════════════════════════════
-@@ -1785,9 +1722,8 @@
+@@ -1785,9 +1738,8 @@
              if (!src) return;
              if (!this.isDraggable(src)) { this.clickActiveRowPill(src); return; }
              if (this._grabbedId === src.id) {
@@ -26475,7 +28059,7 @@
              } else {
                  this._grabbedId = src.id;
              }
-@@ -1807,11 +1743,10 @@
+@@ -1807,11 +1759,10 @@
              this.sources.splice(targetIdx, 0, moved);
          },
  
@@ -27509,6 +29093,15 @@
                      Object.assign(video, data.video);
                      _recomputeVideoBadges(video);
                      _recomputeCardActorAges(video);
+@@ -1118,7 +1169,7 @@
+                 if (this.showFavoriteActresses) return;          // AC-5.3：女優牆整條早退
+                 const order = this._presentationOrder();
+                 const idx = order.indexOf(this._currentPresentation());
+-                this.selectPresentation(order[(idx + 1) % order.length]);
++                this.setDisplayPresentation(order[(idx + 1) % order.length]);
+             } else if (key === 'ARROWLEFT') {
+                 if (this.page > 1) {
+                     this.prevPage();
 --- a/web/static/js/pages/showcase/state-lightbox-picker.js
 +++ b/web/static/js/pages/showcase/state-lightbox-picker.js
 @@ -8,6 +8,7 @@
@@ -28043,17 +29636,16 @@
      };
 --- a/web/static/js/pages/showcase/state-base.js
 +++ b/web/static/js/pages/showcase/state-base.js
-@@ -13,6 +13,9 @@
+@@ -13,6 +13,8 @@
  import { computeBadges, resolveEnabledIds } from '@/shared/cover-badges.js';
  import { formatPartLabel } from '@/shared/part-label.js';
  import { computeActorAgesMap, singleActorAge } from '@/shared/actress-release-age.js';
 +
 +export const SHOWCASE_MAX_SERVER_PAGE_SIZE = 500;
-+export const SHOWCASE_MOBILE_GRID_PAGE_SIZE = 45;
  
  // 53a codex F3: $persist 對 localStorage 壞 JSON 沒 try/catch（會在 Alpine init 階段拋錯炸整頁），
  // 必須在 Alpine.data 註冊前先清掃壞值，讓 $persist fallback 走預設物件
-@@ -286,6 +289,7 @@
+@@ -286,6 +288,7 @@
              showFavoriteActresses: false,
              actressSort: null,
              actressOrder: null,
@@ -28061,7 +29653,7 @@
              actressSearch: '',
              pills: [],
              cardShape: 'cover',
-@@ -298,6 +302,13 @@
+@@ -298,6 +301,13 @@
          videoCount: 0,        // _videos.length 的 reactive scalar
          filteredCount: 0,     // _filteredVideos.length 的 reactive scalar
          paginatedVideos: [],  // 當前頁顯示的影片
@@ -28075,7 +29667,7 @@
          unreachableSources: [],  // /api/showcase/source-status（unreachable / no_permission）
  
          // Card Info 展開狀態 (M3i)
-@@ -328,13 +339,20 @@
+@@ -328,13 +338,20 @@
          _animGeneration: 0,  // B13: 防止 stale deferred callback
          _heroCardReconcilePending: false,  // TASK-138-T1（CD-C5）：init first-frame 窗口；非 $persist
  
@@ -28100,7 +29692,7 @@
  
              // 接入 page lifecycle：清理 lightbox timer 和 body class
              if (window.__registerPage) {
-@@ -342,6 +360,9 @@
+@@ -342,6 +359,9 @@
                      cleanup: () => {
                          this._animGeneration++;       // B13: 使 pending deferred callback 失效
                          this._lightboxGeneration++;   // B19: invalidate pending $nextTick lightbox callbacks
@@ -28110,7 +29702,7 @@
                          if (this.lightboxCloseTimer) clearTimeout(this.lightboxCloseTimer);  // F2: cleanup delayed clear timer
                          window.Alpine?.store?.('toast')?.hide?.();   // 131b-T3：cleanup 不得拋錯（拋了會跳過後面所有 teardown）
                          if (this.lightboxOpen) document.body.classList.remove('overflow-hidden');
-@@ -367,7 +388,10 @@
+@@ -367,7 +387,10 @@
              this._heroCardReconcilePending = true;   // CD-C5：init 作用域旗標，非持久化
              var heroCardPromise = this.showFavoriteActresses ? Promise.resolve() : this._reconcileHeroCard();  // 單行：pill-hero.test.mjs 以單行 regex 擷取本行並 eval，勿換行
  
@@ -28122,7 +29714,7 @@
              // 57e hotfix：fire-and-forget warm-up SimilarRankerCache，避免 magic icon 首次點擊 cold-start race。
              // 失敗靜默（端點不存在的舊 server / 網路斷線都不影響 showcase 主流程）。
              fetch('/api/similar/warmup').catch(() => {});
-@@ -389,9 +413,14 @@
+@@ -389,9 +412,14 @@
              await _awaitHeroCardWithTimeout(heroCardPromise);
              this._heroCardReconcilePending = false;   // CD-C5：first-frame 窗口結束
  
@@ -28140,33 +29732,38 @@
              this.updatePagination();        // 單次分頁（會 clamp 超出範圍的頁碼）
  
              // Settle: 初次載入用 settle（不碰 opacity → 不閃）
-@@ -535,7 +564,13 @@
+@@ -530,13 +558,9 @@
+             // 1. 從 config 取得預設值
+             const cfg = window.__SHOWCASE_CONFIG__ || {};
+             // TASK-133b-T2：嚴格 === true（FE-JS-01；宣告在 state-videos.js）
+-            this.showTableList = cfg.show_table_list === true;
++            this.showTableList = true;
+             const defaultSort = cfg.default_sort || 'date';
              const defaultOrder = cfg.default_order === 'ascending' ? 'asc' : 'desc';
-             // T3.2 P2 fix: `??` 而非 `||` — Settings 允許 items_per_page=0（"全部"語意），
-             // 必須保留 numeric 0 讓下方 grid+perPage=0→120 降級邏輯有機會觸發。
+-            // T3.2 P2 fix: `??` 而非 `||` — Settings 允許 items_per_page=0（"全部"語意），
+-            // 必須保留 numeric 0 讓下方 grid+perPage=0→120 降級邏輯有機會觸發。
 -            const defaultPerPage = cfg.items_per_page ?? 90;
-+            // The API caps server pages at 500; clamp here so older or
-+            // hand-edited configs cannot make the first request fail validation.
-+            const rawPerPage = cfg.items_per_page ?? 90;
-+            const parsedPerPage = parseInt(rawPerPage, 10);
-+            const defaultPerPage = Number.isFinite(parsedPerPage)
-+                ? Math.min(SHOWCASE_MAX_SERVER_PAGE_SIZE, Math.max(0, parsedPerPage))
-+                : 90;
- 
+-
              // 2. 從 _persistedShowcase（$persist 自動讀的 localStorage 'showcase_state'）取
              //    53a-T2: 取代手寫 localStorage.getItem + JSON.parse，格式向後相容
-@@ -563,10 +598,24 @@
-             if (this.mode === 'grid' && this.perPage === 0) {
-                 this.perPage = 120;
-             }
-+            // A 90-card mobile page keeps 30 rows of decoded covers alive.
-+            // Cap only the phone grid; desktop and table/list keep the configured value.
-+            const narrowGrid = typeof window !== 'undefined'
-+                && typeof window.matchMedia === 'function'
-+                && window.matchMedia('(max-width: 899px)').matches;
-+            if (narrowGrid && this.mode === 'grid') {
-+                this.perPage = Math.min(this.perPage, SHOWCASE_MOBILE_GRID_PAGE_SIZE);
-+            }
+             const state = this._persistedShowcase || {};
+@@ -550,29 +574,28 @@
+             const urlNum = (key) => { const v = urlParams.get(key); return v !== null && v !== '' ? v : undefined; };
+             this.sort = urlParams.get('sort') || state.sort || defaultSort;
+             this.order = urlParams.get('order') || state.order || defaultOrder;
+-            // T3.2 (CD-52-3): perPage 只從 cfg.items_per_page，URL params + localStorage 不再參與
+-            // 既有 user 的 localStorage state.perPage / URL ?perPage=N 被 silently 忽略（CD-52-4）
+-            this.perPage = defaultPerPage;
+             this.page = parseInt(urlNum('page') ?? state.page ?? 1) || 1;
+             this.search = urlParams.get('search') || state.search || '';
+             this.pills = deserializePills(state.pills);
+             this.mode = urlParams.get('mode') || state.mode || 'grid';
+             if (!['grid', 'table', 'list'].includes(this.mode)) this.mode = 'grid';
+-            if (!this.showTableList && this.mode !== 'grid') this.mode = 'grid';
+-            // F2: grid + perPage=0 組合降級（settings 若存 items_per_page=0 之防呆）
+-            if (this.mode === 'grid' && this.perPage === 0) {
+-                this.perPage = 120;
+-            }
              // ★ 44a: 女優模式 — 只從 _persistedShowcase，不加 URL params（避免汙染 shareable link）
              this.showFavoriteActresses = state.showFavoriteActresses === true;  // 嚴格 === true
 -            this.actressSort = state.actressSort || 'video_count';
@@ -28182,7 +29779,23 @@
              // 129-T2 / CD-129-6：女優分頁的搜尋字比照影片分頁持久化（spec S5）。
              // 不走 URL params（與 showFavoriteActresses/actressSort/actressOrder 一致，
              // 避免污染分享連結）；也**不**還原 actressPills——CD-116a-5 不翻案。
-@@ -589,6 +638,7 @@
+             this.actressSearch = state.actressSearch || '';
+             // TASK-119-T3: 只走 localStorage，白名單比對（FE-JS-01：不可 || fallback）
+             this.cardShape = state.cardShape === 'poster' ? 'poster' : 'cover';
++            this.restoreDisplayPreferences(state, cfg);
+             // TASK-124b-T1: 嚴格 === true（鏡射 showFavoriteActresses 慣例，FE-JS-01：不可 || fallback）
+             this.infoVisible = state.infoVisible === true;
+         },
+@@ -580,7 +603,7 @@
+         // --- 狀態持久化 (M2c) ---
+         saveState() {
+             // 53a-T2: 寫入 reactive _persistedShowcase，$persist 自動同步 localStorage 'showcase_state'
+-            // T3.2 (CD-52-3): perPage 不寫入（每次 init 重讀 cfg.items_per_page）
++            // Display is saved through its canonical endpoint; local state holds navigation and filters.
+             this._persistedShowcase.sort = this.sort;
+             this._persistedShowcase.order = this.order;
+             this._persistedShowcase.page = this.page;
+@@ -589,6 +612,7 @@
              this._persistedShowcase.showFavoriteActresses = this.showFavoriteActresses;  // ★ 44a
              this._persistedShowcase.actressSort = this.actressSort;                      // ★ 44a
              this._persistedShowcase.actressOrder = this.actressOrder;                    // ★ 44a
@@ -28190,7 +29803,7 @@
              this._persistedShowcase.actressSearch = this.actressSearch;                  // ★ 129-T2
              this._persistedShowcase.pills = serializePills(this.pills);
              this._persistedShowcase.cardShape = this.cardShape;
-@@ -642,6 +692,17 @@
+@@ -642,6 +666,17 @@
          // 點 enrich 後自動走 refresh_full 補封面。
          handleCoverError(video, event) {
              if (!video) return;
@@ -28208,18 +29821,102 @@
              video.has_cover = false;  // 觸發 reactive — enrich icon 自動出現 + missing-cover class 套用
              // 67/Codex P2（broken cover）：grid 三態淡入讓 .av-card-preview-img img 預設 opacity:0、靠
              // .cover-loaded(=_imgLoaded) 才可見。stale/404 換 placeholder 後，可見性原本只依賴 placeholder
+--- /dev/null
++++ b/web/static/js/pages/showcase/state-display.js
+@@ -0,0 +1,80 @@
++import { resolveDisplayPreferences, createDisplaySaver, writeDisplayPreferences, DISPLAY_COLUMNS, DISPLAY_PAGE_SIZES, DISPLAY_PRESENTATIONS } from '../../shared/showcase-display.js';
++
++export function stateDisplay(write = writeDisplayPreferences) {
++    const save = createDisplaySaver(write);
++    let saveGeneration = 0;
++    let pageGeneration = 0;
++    return {
++        displayOpen: false,
++        displaySaving: false,
++        displayError: false,
++        gridColumns: 2,
++        get displayPresentation() {
++            return this.mode === 'grid' ? this.cardShape : this.mode;
++        },
++        get displayPageSizeOptions() {
++            return [...new Set([...DISPLAY_PAGE_SIZES, this.perPage])].sort((a, b) => a - b);
++        },
++        restoreDisplayPreferences(legacy, gallery) {
++            const stored = typeof window !== 'undefined' ? window.__SHOWCASE_DISPLAY__ : null;
++            const preference = resolveDisplayPreferences(stored, legacy, gallery);
++            this.mode = ['cover', 'poster'].includes(preference.presentation) ? 'grid' : preference.presentation;
++            this.cardShape = this.mode === 'grid' ? preference.presentation : 'poster';
++            this.gridColumns = preference.columns;
++            this.perPage = preference.items_per_page;
++            this.showTableList = true;
++        },
++        openDisplaySettings() {
++            this.sortOpen = false;
++            this.modeOpen = false;
++            this.displayOpen = true;
++        },
++        currentDisplayPreferences() {
++            return { presentation: this.displayPresentation, columns: this.gridColumns, items_per_page: this.perPage };
++        },
++        async persistDisplayPreferences() {
++            const generation = ++saveGeneration;
++            const preference = this.currentDisplayPreferences();
++            this.displaySaving = true;
++            this.displayError = false;
++            try {
++                await save(preference);
++                if (generation === saveGeneration && typeof window !== 'undefined') {
++                    window.__SHOWCASE_DISPLAY__ = preference;
++                }
++                return true;
++            } catch (_) {
++                if (generation === saveGeneration) this.displayError = true;
++                return false;
++            } finally {
++                if (generation === saveGeneration) this.displaySaving = false;
++            }
++        },
++        async setDisplayColumns(value) {
++            if (!DISPLAY_COLUMNS.includes(value)) return;
++            this.gridColumns = value;
++            return this.persistDisplayPreferences();
++        },
++        async setDisplayPresentation(value) {
++            if (!DISPLAY_PRESENTATIONS.includes(value)) return;
++            this.selectPresentation(value);
++            return this.persistDisplayPreferences();
++        },
++        async setDisplayPageSize(raw) {
++            const value = Number(raw);
++            if (!Number.isInteger(value) || value < 1 || value > 500 || value === this.perPage) return;
++            const generation = ++pageGeneration;
++            this.perPage = value;
++            this.page = 1;
++            const saved = this.persistDisplayPreferences();
++            if (this._serverPaged && !this._fullVideosLoaded) {
++                const loaded = await this.fetchVideos({ page: 1 });
++                if (!loaded || generation !== pageGeneration) return saved;
++            }
++            if (generation !== pageGeneration) return saved;
++            this.updatePagination();
++            this.saveState();
++            return saved;
++        },
++    };
++}
 --- a/web/static/js/pages/showcase/main.js
 +++ b/web/static/js/pages/showcase/main.js
-@@ -10,7 +10,7 @@
+@@ -10,14 +10,17 @@
   * plain spread 會丟失 getter descriptor，必須用 Object.defineProperties。
   */
  
 -import { stateBase }     from '@/showcase/state-base.js';
 +import { stateBase }     from '@/showcase/state-base.js?v=17035-2';
  import { stateVideos }   from '@/showcase/state-videos.js';
++import { stateDisplay } from '@/showcase/state-display.js';
  import { stateActress }  from '@/showcase/state-actress.js';
  import { stateLightbox } from '@/showcase/state-lightbox.js';
-@@ -18,6 +18,8 @@
+ import { stateLightboxMask } from '@/showcase/state-lightbox-mask.js';
  import { stateLightboxPicker } from '@/showcase/state-lightbox-picker.js';
  import { stateLightboxTags } from '@/showcase/state-lightbox-tags.js';
  import { stateLightboxTranslate } from '@/showcase/state-lightbox-translate.js';
@@ -28228,7 +29925,14 @@
  import { stateLightboxSamples } from '@/showcase/state-lightbox-samples.js';
  import { stateSimilar }  from '@/showcase/state-similar.js';
  import { stateDelete }   from '@/showcase/state-delete.js';
-@@ -35,6 +37,8 @@
+@@ -29,12 +32,15 @@
+     return mergeState(
+         stateBase.call(this),
+         stateVideos.call(this),
++        stateDisplay.call(this),
+         stateActress.call(this),
+         stateLightbox.call(this),
+         stateLightboxMask.call(this),
          stateLightboxPicker.call(this),
          stateLightboxTags.call(this),
          stateLightboxTranslate.call(this),
@@ -28575,6 +30279,72 @@
 +    },
 +};
 --- /dev/null
++++ b/web/static/js/shared/showcase-display.js
+@@ -0,0 +1,63 @@
++/** Live browsing preferences. Offline HTML export has independent defaults. */
++export const DISPLAY_PRESENTATIONS = ['poster', 'cover', 'list', 'table'];
++export const DISPLAY_COLUMNS = [2, 3, 5];
++export const DISPLAY_PAGE_SIZES = [30, 45, 60, 90, 120];
++
++export function resolveDisplayPreferences(display, legacyState = {}, gallery = {}) {
++    const explicit = display && typeof display === 'object';
++    let presentation = explicit ? display.presentation : (
++        ['list', 'table'].includes(legacyState?.mode) ? legacyState.mode : 'poster');
++    if (!DISPLAY_PRESENTATIONS.includes(presentation)) presentation = 'poster';
++    const columns = explicit && DISPLAY_COLUMNS.includes(display.columns) ? display.columns : 2;
++    const raw = explicit ? display.items_per_page : Number(gallery?.items_per_page);
++    let count = Number.isInteger(raw) && raw >= 1 && raw <= 500 ? raw : 45;
++    if (!explicit) count = Math.min(count, 45); // Preserve the old effective mobile size once.
++    return { presentation, columns, items_per_page: count };
++}
++
++/** Only one write in flight. Queued changes coalesce to the latest snapshot. */
++export function createDisplaySaver(write) {
++    let running = false;
++    let pending = null;
++    async function drain() {
++        running = true;
++        while (pending) {
++            const current = pending;
++            pending = null;
++            try {
++                const result = await write(current.value);
++                current.waiters.forEach(w => w.resolve(result));
++            } catch (error) {
++                current.waiters.forEach(w => w.reject(error));
++            }
++        }
++        running = false;
++    }
++    return value => new Promise((resolve, reject) => {
++        const waiters = pending ? pending.waiters : [];
++        waiters.push({ resolve, reject });
++        pending = { value: { ...value }, waiters };
++        if (!running) void drain();
++    });
++}
++
++export async function writeDisplayPreferences(value) {
++    const response = await fetch('/api/config/showcase-display', {
++        method: 'PUT', headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify(value), keepalive: true,
++    });
++    if (!response.ok) throw new Error(String(response.status));
++    const data = await response.json();
++    if (!data.success) throw new Error(data.error || 'Display settings could not be saved');
++    return data.data;
++}
++
++export function displayPreferencesFromForm(form) {
++    return { presentation: form.browsePresentation, columns: form.browseColumns, items_per_page: form.browsePerPage };
++}
++
++export async function saveChangedDisplayPreferences(form, snapshot, write = writeDisplayPreferences) {
++    const value = displayPreferencesFromForm(form);
++    if (snapshot && JSON.stringify(value) === JSON.stringify(displayPreferencesFromForm(snapshot))) return;
++    await write(value);
++}
+--- /dev/null
 +++ b/web/static/js/shared/video-player.js
 @@ -0,0 +1,54 @@
 +const ANDROID_SHELL_UA = /(?:^|\s)OpenAverMobile\/\S+/;
@@ -28750,7 +30520,8 @@
        data-theme="{{ theme|default('light') }}"
        style="font-size: {{ font_size_px|default(16) }}px"
        x-data="{ theme: '{{ theme|default('light') }}', fontSize: '{{ font_size|default('md') }}' }"
-       x-init="$watch('theme', configSync('theme')); $watch('theme', v => { document.querySelector('meta[name=&quot;theme-color&quot;]').content = (v === 'dim' ? '#2a303c' : '#ffffff'); }); $watch('fontSize', configSync('font_size'))"
+-      x-init="$watch('theme', configSync('theme')); $watch('theme', v => { document.querySelector('meta[name=&quot;theme-color&quot;]').content = (v === 'dim' ? '#2a303c' : '#ffffff'); }); $watch('fontSize', configSync('font_size'))"
++      x-init="$watch('theme', configSync('theme')); $watch('theme', v => { document.querySelector('meta[name=&quot;theme-color&quot;]').content = (v === 'dim' ? '#212429' : '#ffffff'); }); $watch('fontSize', configSync('font_size'))"
        :data-theme="theme"
        :style="'font-size:' + {xs:'13px',sm:'14px',md:'16px',lg:'18px',xl:'20px'}[fontSize]">
 +
@@ -28780,11 +30551,15 @@
            clearTimeout(tid);
            if (ctrl) ctrl.abort();
            tid = setTimeout(function() {
-@@ -113,14 +121,13 @@
-     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-     <meta name="theme-color" content="{{ '#2a303c' if theme == 'dim' else '#ffffff' }}">
+@@ -111,16 +119,15 @@
  
+     <!-- iOS add-to-home-screen icon + 動態狀態列色（隨 theme dim/light 切換，見 x-init $watch） -->
+     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+-    <meta name="theme-color" content="{{ '#2a303c' if theme == 'dim' else '#ffffff' }}">
+-
 -    <!-- Theme CSS -->
++    <meta name="theme-color" content="{{ '#212429' if theme == 'dim' else '#ffffff' }}">
++
 +    <!-- Shared source theme. -->
      <link href="/static/css/theme.css" rel="stylesheet">
 -    <!-- Tailwind + DaisyUI CSS -->
@@ -29136,7 +30911,24 @@
              <li class="nav-item">
                  <a class="nav-link {% if page == 'settings' %}active{% endif %}" href="/settings" title="{{ t('nav.settings') }}"
                     @click="handleNavClick($event, $el.href)">
-@@ -840,48 +849,67 @@
+@@ -829,6 +838,16 @@
+     <main id="main-content" class="main-content">
+         {% block content %}{% endblock %}
+     </main>
++
++    <nav class="native-bottom-nav" aria-label="{{ t('nav.showcase') }} / {{ t('nav.scanner') }} / {{ t('nav.settings') }}">
++        {% for route, icon in [('showcase', 'bi-grid'), ('scanner', 'bi-collection-play'), ('settings', 'bi-sliders')] %}
++        <a href="/{{ route }}" {% if page == route %}aria-current="page"{% endif %}
++           @click="handleNavClick($event, $el.href)">
++            <i class="bi {{ icon }}" aria-hidden="true"></i><span>{{ t('nav.' + route) }}</span>
++        </a>
++        {% endfor %}
++    </nav>
++
+ 
+     <!-- ESM Import Maps (54a) — must appear before all type="module" scripts -->
+     <script type="importmap">
+@@ -840,48 +859,67 @@
          "@/scanner/":    "/static/js/pages/scanner/",
          "@/settings/":   "/static/js/pages/settings/",
          "@/search/":     "/static/js/pages/search/",
@@ -29217,7 +31009,7 @@
  
      {% block pre_alpine_module %}{% endblock %}
  
-@@ -915,9 +943,8 @@
+@@ -915,9 +953,8 @@
      <script defer src="/static/vendor/alpine/anchor.min.js"></script>
      <!-- Alpine Core -->
      <script defer src="/static/vendor/alpine/alpine.min.js"></script>
@@ -29229,7 +31021,7 @@
      {% block extra_js %}{% endblock %}
  
      <!-- 53b-T4: 通知抽屜（單例，fixed 浮動，anchor 由 toggleDrawer 決定） -->
-@@ -936,17 +963,17 @@
+@@ -936,17 +973,17 @@
           class="w-80 bg-base-100 border border-base-300 rounded-xl shadow-lg notification-drawer"
           style="z-index: 1010; position: fixed;"
           role="dialog"
@@ -32291,7 +34083,7 @@
                                  <div class="flex-1 flex flex-col gap-1">
                                      <div class="variable-input-group">
                                          <input type="text" class="input input-bordered input-sm flex-1"
-@@ -979,338 +1204,302 @@
+@@ -979,344 +1204,331 @@
                              </div>
                          </div>
                      </div>
@@ -32912,10 +34704,49 @@
 +
 +                 data-settings-panel="gallery"
 +                 x-show="settingsTab === 'gallery'">
++          <div class="card mb-4 native-browse-settings">
++            <div class="settings-card-header"><i class="bi bi-grid" aria-hidden="true"></i> {{ t('showcase.display.title') }}</div>
++            <div class="card-body">
++              <div class="settings-form-row">
++                <label class="row-label" for="settingsBrowsePresentation">{{ t('showcase.display.presentation') }}</label>
++                <select id="settingsBrowsePresentation" class="select select-bordered" x-model="form.browsePresentation">
++                  {% for view in ['poster', 'cover', 'list', 'table'] %}<option value="{{ view }}">{{ t('showcase.mode.' + view) }}</option>{% endfor %}
++                </select>
++              </div>
++              <div class="settings-form-row">
++                <label class="row-label" for="settingsBrowseColumns">{{ t('showcase.display.columns') }}</label>
++                <select id="settingsBrowseColumns" class="select select-bordered" x-model.number="form.browseColumns">
++                  {% for count in [2,3,5] %}<option value="{{ count }}">{{ t('showcase.display.columns_value', count=count) }}</option>{% endfor %}
++                </select>
++              </div>
++              <div class="settings-form-row">
++                <label class="row-label" for="settingsBrowsePerPage">{{ t('showcase.display.per_page') }}</label>
++                <select id="settingsBrowsePerPage" class="select select-bordered" x-model.number="form.browsePerPage">
++                  <template x-for="size in browsePageSizeOptions" :key="size"><option :value="size" x-text="size"></option></template>
++                </select>
++              </div>
++            </div>
++          </div>
            <div class="card mb-4">
              <div class="settings-card-header"><i class="bi bi-list-ul"></i> {{ t('nav.scanner') }}</div>
              <div class="card-body">
-@@ -1433,67 +1622,19 @@
+ 
+                     <!-- ── 外層（常顯）：列表顯示預設 tier（G-B1/CD-95b-1）── -->
+-                    <p class="settings-tier-label">{{ t('settings.gallery.tier_display') }}</p>
++                    <p class="settings-tier-label">{{ t('showcase.display.offline_title') }}</p>
+ 
+                     <!-- 顯示表格與清單（TASK-133b-T1） -->
+                     <div class="settings-form-row">
+@@ -1381,7 +1593,7 @@
+                                 <option value="120">120</option>
+                                 <option value="0">{{ t('settings.gallery.all') }}</option>
+                             </select>
+-                            <small class="settings-note-inline">{{ t('settings.gallery.also_showcase_note') }}</small>
++                            <small class="settings-note-inline">{{ t('showcase.display.offline_note') }}</small>
+                         </div>
+                     </div>
+ 
+@@ -1433,67 +1645,19 @@
                                          </button>
                                      </template>
                                  </div>
@@ -32990,7 +34821,7 @@
            <div class="card mb-4">
              <div class="settings-card-header"><i class="bi bi-sliders"></i> {{ t('settings.section.system') }}</div>
              <div class="card-body">
-@@ -1506,26 +1647,34 @@
+@@ -1506,26 +1670,34 @@
                              <option value="showcase">{{ t('nav.showcase') }}</option>
                          </select>
                      </div>
@@ -33043,7 +34874,7 @@
                      </div>
                      <hr class="my-3">
  
-@@ -1543,14 +1692,30 @@
+@@ -1543,14 +1715,30 @@
              </div>
            </div>
          </section><!-- /sec-system -->
@@ -33081,7 +34912,7 @@
  
      <!-- Dirty Check Modal -->
      <dialog class="modal fluent-modal"
-@@ -1629,38 +1794,6 @@
+@@ -1629,38 +1817,6 @@
          </div>
      </dialog>
  
@@ -33120,7 +34951,7 @@
      <!-- 90c-T5: 全域模式切換（破壞性重設）Confirm Modal -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': switchModeConfirmOpen }"
-@@ -1709,20 +1842,13 @@
+@@ -1709,20 +1865,13 @@
      </dialog>
  
  <!-- Toast 容器（Alpine controlled）-->
@@ -33151,7 +34982,7 @@
  
  {% block title %}{{ t('showcase.page_title') }} - OpenAver{% endblock %}
  
-@@ -9,7 +10,7 @@
+@@ -9,24 +10,48 @@
  {% block pre_alpine_module %}
  {# 進階搜尋 SSR 注入（TASK-62a-0）。放 main.js 之前確保 __ADVANCED_SEARCH__ 就緒。 #}
  {% include '_advanced_search_bootstrap.html' %}
@@ -33160,9 +34991,27 @@
  {% endblock %}
  
  {% block content %}
-@@ -20,13 +21,22 @@
+ <div class="showcase-container ds-gallery-composition page-layer"
+      x-data="showcase"
++     :data-browse-columns="gridColumns"
++     :data-browse-shape="cardShape"
++     :style="'--browse-columns:' + gridColumns"
+      @keydown.window="handleKeydown($event)"
+      @wheel="handleWheel($event)"
       x-on:showcase:clear-search.window="clearAllFilters()">
  
++    <div class="native-browse-bar">
++        <span class="native-browse-count" x-show="!showFavoriteActresses">
++            {{ t('showcase.status.total_prefix') }} <b x-text="videoCount"></b> {{ t('showcase.status.total_suffix') }}
++        </span>
++                    <button type="button" class="btn native-display-trigger"
++                            @click="openDisplaySettings()" aria-haspopup="dialog"
++                            :aria-expanded="displayOpen.toString()">
++                        <i class="bi bi-grid" aria-hidden="true"></i>
++                        <span>{{ t('showcase.display.button') }}</span>
++                    </button>
++    </div>
++
      <!-- Loading State (初始顯示) -->
 -    <div class="state-page" x-cloak x-show="!showFavoriteActresses && loading && videoCount === 0">
 -        <i class="bi bi-hourglass-split state-page-icon"></i>
@@ -33187,7 +35036,7 @@
          <i class="bi bi-collection-play state-page-icon"></i>
          <p class="state-page-text">{{ t('showcase.state.empty') }}</p>
          <div class="empty-actions">
-@@ -37,15 +47,16 @@
+@@ -37,15 +62,16 @@
      </div>
  
      <!-- Error State (API 錯誤時) -->
@@ -33213,7 +35062,47 @@
  
      <!-- Main Content (API 載入後顯示) -->
      <div x-show="!error && (videoCount > 0 || showFavoriteActresses)" x-cloak>
-@@ -410,6 +421,9 @@
+@@ -354,38 +380,7 @@
+                     <button class="btn-icon" @click="toggleOrder()" title="{{ t('showcase.action.toggle_order') }}">
+                         <i class="bi" :class="order === 'asc' ? 'bi-sort-up' : 'bi-sort-down'"></i>
+                     </button>
+-                    <!-- 顯示模式 -->
+-                    <button class="btn-icon"
+-                            x-show="!showTableList && !_isNarrow"
+-                            @click="selectPresentation(cardShape === 'poster' ? 'cover' : 'poster')"
+-                            :title="t('showcase.toolbar.mode_prefix') + ': ' + (cardShape === 'poster' ? t('showcase.mode.poster') : t('showcase.mode.cover'))">
+-                        <i class="bi" :class="cardShape === 'poster' ? 'bi-person-badge' : 'bi-person-vcard icon-mirror-x'"></i>
+-                    </button>
+-                    <div class="toolbar-dropdown-wrap" x-show="showTableList" @click.outside="modeOpen = false">
+-                        <button class="btn-icon"
+-                                @click="modeOpen = !modeOpen; sortOpen = false"
+-                                :title="t('showcase.toolbar.mode_prefix') + ': ' + (mode === 'grid' ? (_isNarrow ? t('showcase.mode.grid') : (cardShape === 'poster' ? t('showcase.mode.poster') : t('showcase.mode.cover'))) : mode === 'table' ? t('showcase.mode.table') : t('showcase.mode.list'))"
+-                                :class="{ 'active': modeOpen }">
+-                            <i class="bi" :class="mode === 'grid' ? 'bi-grid-3x3' : mode === 'table' ? 'bi-table' : 'bi-list-ul'"></i>
+-                        </button>
+-                        <div class="toolbar-dropdown" x-show="modeOpen" x-transition.opacity.duration.150ms @click.stop>
+-                            <a href="#" class="dropdown-item" x-show="showTableList && _isNarrow" :class="{ 'active': mode === 'grid' }"
+-                               @click.prevent="selectPresentation(_gridTarget()); modeOpen = false">
+-                                <i class="bi bi-grid-3x3"></i> {{ t('showcase.mode.grid') }}</a>
+-                            <a href="#" class="dropdown-item" x-show="showTableList && !_isNarrow" :class="{ 'active': mode === 'grid' && cardShape === 'cover' }"
+-                               @click.prevent="selectPresentation('cover'); modeOpen = false">
+-                                <i class="bi bi-person-vcard icon-mirror-x"></i> {{ t('showcase.mode.cover') }}</a>
+-                            <a href="#" class="dropdown-item" x-show="showTableList && !_isNarrow" :class="{ 'active': mode === 'grid' && cardShape === 'poster' }"
+-                               @click.prevent="selectPresentation('poster'); modeOpen = false">
+-                                <i class="bi bi-person-badge"></i> {{ t('showcase.mode.poster') }}</a>
+-                            <a href="#" class="dropdown-item" x-show="showTableList" :class="{ 'active': mode === 'table' }"
+-                               @click.prevent="selectPresentation('table'); modeOpen = false">
+-                                <i class="bi bi-table"></i> {{ t('showcase.mode.table') }}</a>
+-                            <a href="#" class="dropdown-item" x-show="showTableList" :class="{ 'active': mode === 'list' }"
+-                               @click.prevent="selectPresentation('list'); modeOpen = false">
+-                                <i class="bi bi-list-ul"></i> {{ t('showcase.mode.list') }}</a>
+-                        </div>
+-                    </div>
++
+                     <!-- 資訊顯示開關 (僅 Grid 模式) -->
+                     <button class="btn-icon toggle-info-eye-btn"
+                             x-show="mode === 'grid'"
+@@ -410,6 +405,9 @@
                              <i class="bi bi-funnel"></i>
                          </button>
                          <div class="toolbar-dropdown" x-show="actressSortOpen" x-transition.opacity.duration.150ms @click.stop>
@@ -33223,7 +35112,7 @@
                              <a href="#" class="dropdown-item" :class="{ 'active': actressSort === 'video_count' }"
                                 @click.prevent="actressSort = 'video_count'; onActressSortChange(); actressSortOpen = false">
                                  <i class="bi bi-film"></i> {{ t('showcase.sort.actress.video_count') }}</a>
-@@ -449,6 +463,37 @@
+@@ -449,6 +447,37 @@
  
          <!-- 81-T3: 行動工具列透明 backdrop（≤480，點擊收合）。用 @click（非 @click.outside，避子元素 .stop 吃掉觸發）-->
          <div class="mobile-toolbar-backdrop" x-show="$store.ui.toolbarOpen" @click="$store.ui.toolbarOpen = false" x-cloak></div>
@@ -33261,7 +35150,7 @@
  
          <!-- 影片模式：status bar + grid / table / list (CD-2: x-if 避免 Alpine 追蹤隱藏陣列 DOM) -->
          <template x-if="!showFavoriteActresses">
-@@ -542,22 +587,33 @@
+@@ -542,22 +571,33 @@
                       @click="openLightbox(getCurrentFilteredIndex(index))"
                       :style="`--card-index: ${index}`"
                       :data-flip-id="video.path">
@@ -33308,7 +35197,7 @@
                          <!-- 67-A2: skeleton overlay（pending 時，gate 含 has_cover → stale @error 後 has_cover=false 自動退出）-->
                          <div class="skeleton-cover shimmer"
                               x-show="video.cover_url && video.has_cover && !video._imgLoaded && video._coverRequested"></div>
-@@ -581,7 +637,7 @@
+@@ -581,7 +621,7 @@
                          </template>
                          <div class="av-card-preview-overlay">
                              <button class="btn-glass-circle"
@@ -33317,7 +35206,18 @@
                                      title="{{ t('showcase.action.play_video') }}">
                                  <i class="bi bi-play-fill"></i>
                              </button>
-@@ -779,15 +835,18 @@
+@@ -609,9 +649,7 @@
+                             </span>
+                             <span class="av-actress"><span x-text="video.actresses || t('showcase.grid.unknown_actor')"></span><span class="lb-actor-age" x-show="singleActorAge(video) != null" x-text="' (' + singleActorAge(video) + t('showcase.unit.age_suffix') + ')'"></span></span>
+                         </div>
+-                        <div class="footer-hover" x-show="!infoVisible">
+-                            <div class="hover-title" x-text="video.title || t('showcase.grid.unknown_title')"></div>
+-                        </div>
++                        <div class="native-card-title" x-text="video.title || t('showcase.grid.unknown_title')"></div>
+                     </div>
+                     <!-- Card Info 展開區 (M3i) — footer 同層，展開時撐高卡片 -->
+                     <div class="card-info" x-cloak @click.stop>
+@@ -779,15 +817,18 @@
                           :data-flip-id="'actress:' + actress.name"
                           @click="openActressLightbox(index)">
                          <!-- Photo -->
@@ -33339,7 +35239,7 @@
                                       @load="applyCellFocal($el, actress, '--actress-crop-ratio')"
                                       x-init="$watch('actress.auto_focal', () => applyCellFocal($el, actress, '--actress-crop-ratio'));
                                               $watch('actress.crop_mode', () => applyCellFocal($el, actress, '--actress-crop-ratio'))">
-@@ -1131,7 +1190,7 @@
+@@ -1131,7 +1172,7 @@
                                   similar-exit mode (path undefined) — regular lightbox items always have
                                   path so existing behavior is unaffected. -->
                              <div class="cover-actions" x-show="!!currentLightboxVideo?.path" :class="{'cover-actions--focal-edit': _maskVisible}">
@@ -33348,7 +35248,7 @@
                                      <i class="bi bi-play-fill"></i>
                                  </button>
                                  <button class="lb-action-btn js-open-folder" x-show="!_maskVisible" @click="openLocal(currentLightboxVideo?.path)" data-tooltip="{{ t('search.action.open_folder') }}" aria-label="{{ t('search.action.open_folder') }}">
-@@ -1184,7 +1243,7 @@
+@@ -1184,7 +1225,7 @@
                                          :aria-label="(currentLightboxVideo?.user_rating||0) > 0 ? t('showcase.pick.remove_aria') : t('showcase.pick.add_aria')"
                                          :aria-busy="!!_pickInFlight[currentLightboxVideo?.path]"
                                          @click.stop="togglePickStar()"><i class="bi bi-star pick-star-outline" aria-hidden="true"></i><i class="bi bi-star-fill pick-star-fill" aria-hidden="true"
@@ -33357,7 +35257,7 @@
                                          x-show="lbTrShowOnTitle()"
                                          @click.stop="lbTranslate()"
                                          :disabled="lbTrIsBusy()"
-@@ -1200,12 +1259,21 @@
+@@ -1200,12 +1241,21 @@
                                  <!-- §b3: 劇照補抓入口（無劇照時顯示） -->
                                  <button class="fetch-samples-btn"
                                          x-show="(currentLightboxVideo?.sample_images || []).length === 0 && !_fetchSamplesLoading"
@@ -33380,7 +35280,7 @@
                                  <!-- 98b-T4：焦點裁切遮罩 toggle（低調圓鈕，styled-like .lb-action-btn 但更小）-->
                                  <!-- 101d-T2：影片焦點 gate 綁 _posterModeActive()（窄/poster 模式才顯示）。與女優
                                       _focalIconVisible() 的 per-image 門檻刻意不同——根因：影片只在 ≤899px 裁、
-@@ -1218,18 +1286,15 @@
+@@ -1218,18 +1268,15 @@
                                      <i class="bi bi-person-bounding-box" aria-hidden="true"></i>
                                  </button>
                              </div>
@@ -33403,7 +35303,7 @@
                              </div>
                              <!-- Row 3: Actresses -->
                              <div class="lb-actor" x-show="currentLightboxVideo?.actresses">
-@@ -1316,7 +1381,7 @@
+@@ -1316,7 +1363,7 @@
                                  <!-- User tag badges with × remove button -->
                                  <template x-for="tag in (currentLightboxVideo?.user_tags || [])" :key="tag">
                                      <span class="lb-user-tag">
@@ -33412,7 +35312,7 @@
                                          <button class="lb-tag-remove"
                                                  @click.stop="removeLbUserTag(tag)"
                                                  :title="tag">×</button>
-@@ -1328,6 +1393,17 @@
+@@ -1328,6 +1375,17 @@
                                          x-show="!addingLbTag && !!currentLightboxVideo?.path"
                                          @click.stop="showAddLbTagInput()"
                                          :title="t('showcase.lightbox.add_tag')">+</button>
@@ -33430,7 +35330,7 @@
  
                                  <!-- Inline 輸入框 -->
                                  <span class="lb-tag-input-wrapper" x-show="addingLbTag">
-@@ -1347,7 +1423,58 @@
+@@ -1347,7 +1405,58 @@
                                              title="✕">✕</button>
                                  </span>
                              </div>
@@ -33490,7 +35390,7 @@
                          </div>
                      </div>
                  </template>
-@@ -1730,7 +1857,7 @@
+@@ -1730,7 +1839,7 @@
                  <button class="similar-mobile-play-btn"
                          x-show="!!currentLightboxVideo?.path"
                          :disabled="similarModeAnimating"
@@ -33499,7 +35399,7 @@
                          :aria-label="t('showcase.action.play')">
                      <i class="bi bi-play-fill" aria-hidden="true"></i>
                  </button>
-@@ -1900,34 +2027,7 @@
+@@ -1900,34 +2009,7 @@
      </dialog>
  
      <!-- Toast (M3h) -->
@@ -33535,9 +35435,71 @@
  
      <!-- Footer 三段式 (49a-T4)：左 count + 中 shortcut + 右 pager -->
      <!-- ⚠️ 不可加 x-data（會建立 nested Alpine scope，讓 showFavoriteActresses / totalPages / filteredCount 等 state 全變 undefined）。
-@@ -2034,6 +2134,7 @@
+@@ -2025,6 +2107,59 @@
+     </div>
+ 
+     {# 進階重新刮削彈窗（62a-2）。放 showcase x-data 作用域內，使 rescrape* hook 在 showcase Alpine root 求值。 #}
++    <div x-show="displayOpen" x-cloak class="fluent-modal-overlay native-display-overlay"
++         x-trap.inert.noscroll="displayOpen" @click.self="displayOpen = false"
++         @keydown.escape.window="if (displayOpen) { displayOpen = false; $event.preventDefault(); }">
++        <section class="fluent-modal-box native-display-panel" role="dialog" aria-modal="true"
++                 aria-labelledby="nativeDisplayTitle">
++            <header class="native-panel-header">
++                <h3 id="nativeDisplayTitle">{{ t('showcase.display.title') }}</h3>
++                <button type="button" class="btn btn-ghost btn-square" @click="displayOpen = false"
++                        aria-label="{{ t('common.close') }}"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
++            </header>
++            <fieldset class="native-display-field">
++                <legend>{{ t('showcase.display.presentation') }}</legend>
++                <div class="native-option-group native-view-options">
++                    <template x-for="view in ['poster', 'cover', 'list', 'table']" :key="view">
++                        <button type="button" class="native-option"
++                                :aria-pressed="(displayPresentation === view).toString()"
++                                @click="setDisplayPresentation(view)" x-text="window.t('showcase.mode.' + view)"></button>
++                    </template>
++                </div>
++            </fieldset>
++            <fieldset class="native-display-field" :disabled="mode !== 'grid'">
++                <legend>{{ t('showcase.display.columns') }}</legend>
++                <div class="native-option-group">
++                    <template x-for="columns in [2,3,5]" :key="columns">
++                        <button type="button" class="native-option"
++                                :aria-pressed="(gridColumns === columns).toString()"
++                                @click="setDisplayColumns(columns)"
++                                x-text="window.t('showcase.display.columns_value', {count: columns})"></button>
++                    </template>
++                </div>
++                <p class="native-hint" x-show="mode !== 'grid'">{{ t('showcase.display.grid_only') }}</p>
++            </fieldset>
++            <label class="native-display-field" for="browsePageSize">
++                <span>{{ t('showcase.display.per_page') }}</span>
++                <select id="browsePageSize" class="select select-bordered" :value="perPage"
++                        @change="setDisplayPageSize($event.target.value)">
++                    <template x-for="size in displayPageSizeOptions" :key="size">
++                        <option :value="size" :selected="perPage === size"
++                                x-text="window.t('showcase.display.page_value', {count: size})"></option>
++                    </template>
++                </select>
++            </label>
++            <div class="native-display-status" role="status" aria-live="polite">
++                <span x-show="displaySaving">{{ t('showcase.display.saving') }}</span>
++                <span x-show="!displaySaving && !displayError">{{ t('showcase.display.remembered') }}</span>
++                <div x-show="displayError" class="native-save-error">
++                    <span>{{ t('showcase.display.save_failed') }}</span>
++                    <button type="button" class="btn btn-sm" @click="persistDisplayPreferences()">{{ t('showcase.display.retry') }}</button>
++                </div>
++            </div>
++            <button type="button" class="btn btn-primary native-panel-done" @click="displayOpen = false">{{ t('showcase.display.done') }}</button>
++        </section>
++    </div>
+     {% include '_rescrape_modal.html' %}
+ </div>
+ {% endblock %}
+@@ -2033,7 +2168,9 @@
+ <!-- M2c: 傳遞 config 給 JS -->
  <script>
  window.__SHOWCASE_CONFIG__ = {{ (config.gallery or {}) | tojson | safe }};
++window.__SHOWCASE_DISPLAY__ = {{ ((config.showcase or {}).get('display')) | tojson | safe }};
  window.__SHOWCASE_TRANSLATE__ = {{ {'enabled': ((config.translate or {}).get('enabled', False) is true)} | tojson | safe }};
 +window.__SHOWCASE_AI_TAGS__ = {{ {'enabled': ((((config.ai_services or {}).get('tags') or {}).get('enabled', False) is true) and ((((config.ai_services or {}).get('tags') or {}).get('provider') or '') != '')), 'provider': (((((config.ai_services or {}).get('tags') or {}).get('provider') or '') if ((((config.ai_services or {}).get('tags') or {}).get('enabled', False) is true) and ((((config.ai_services or {}).get('tags') or {}).get('provider') or '') != '')) else ''))} | tojson | safe }};
  </script>

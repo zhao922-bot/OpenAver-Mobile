@@ -78,6 +78,7 @@ body .fluent-modal-box {max-width:min(560px,100%);max-height:calc(100dvh - 32px)
 .fluent-modal-title {line-height:1.4;}
 .fluent-modal-actions {gap:8px;flex-wrap:wrap;}
 .native-display-panel {width:440px;padding:20px;display:grid;gap:20px;}
+.native-display-overlay {position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:1600;}
 .native-panel-header {display:flex;justify-content:space-between;align-items:center;gap:12px;}
 .native-panel-header h3 {margin:0;font-size:1.125rem;font-weight:650;}
 .native-display-field {display:grid;gap:10px;padding:0;margin:0;border:0;min-width:0;}

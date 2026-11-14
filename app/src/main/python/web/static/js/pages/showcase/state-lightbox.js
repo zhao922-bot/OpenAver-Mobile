@@ -1169,7 +1169,7 @@ export function stateLightbox() {
                 if (this.showFavoriteActresses) return;          // AC-5.3：女優牆整條早退
                 const order = this._presentationOrder();
                 const idx = order.indexOf(this._currentPresentation());
-                this.selectPresentation(order[(idx + 1) % order.length]);
+                this.setDisplayPresentation(order[(idx + 1) % order.length]);
             } else if (key === 'ARROWLEFT') {
                 if (this.page > 1) {
                     this.prevPage();

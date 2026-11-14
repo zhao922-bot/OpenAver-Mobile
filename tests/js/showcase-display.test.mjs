@@ -19,15 +19,18 @@ test('settings saves display only when its controls changed, preserving edits el
 test('Android back closes display panel before navigating', async () => {
     const { readFile } = await import('node:fs/promises');
     const { runInNewContext } = await import('node:vm');
-    const page={displayOpen:true};
+    const page={displayOpen:true,infoVisible:true};
+    const ui={toolbarOpen:true};
     const root={};
     const body={classList:{contains:name=>name==='page-showcase'}};
-    const window={Alpine:{$data:el=>el===root?page:{},store:()=>({})}};
+    const window={Alpine:{$data:el=>el===root?page:{},store:()=>ui}};
     const document={body,documentElement:{},querySelector:()=>root,querySelectorAll:()=>[]};
     const source=await readFile(new URL('../../app/src/main/python/web/static/js/components/mobile-back.js',import.meta.url),'utf8');
     runInNewContext(source,{window,document,console});
     assert.equal(window.OpenAverMobileBack(),true);
     assert.equal(page.displayOpen,false);
+    assert.equal(page.infoVisible,true);
+    assert.equal(ui.toolbarOpen,true);
 });
 
 test('saved live preferences override stale legacy layout and retain 120 films', async () => {

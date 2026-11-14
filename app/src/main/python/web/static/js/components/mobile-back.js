@@ -135,7 +135,8 @@
 
         // Layer order mirrors what is visually on top: toolbar/dialog, editor,
         // media overlay, then the page's own expanded information state.
-        return closeFlag(ui, 'toolbarOpen', null)
+        return closeFlag(page, 'displayOpen', null)
+            || closeFlag(ui, 'toolbarOpen', null)
             || closeFlag(page, '_maskVisible', 'cancelMask')
             || closeFlag(page, '_pillEditor', '_cancelPillEditor')
             || closeFlag(page, '_releaseEditor', '_cancelReleaseEditor')
@@ -149,7 +150,6 @@
             || closeFlag(page, 'sampleGalleryOpen', 'closeSampleGallery')
             || closeFlag(page, 'lightboxOpen', 'closeLightbox')
             || closeFlag(page, 'infoVisible', null)
-            || closeFlag(page, 'displayOpen', null)
             || closeFlag(page, 'sortOpen', null)
             || closeFlag(page, 'modeOpen', null);
     }

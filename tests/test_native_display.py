@@ -50,6 +50,7 @@ def test_unrelated_full_settings_save_cannot_overwrite_live_display(monkeypatch,
     monkeypatch.setattr(config_router, '_after_faces_saved', lambda *args: None)
     monkeypatch.setattr(config_router, '_reset_translate_service', lambda: None)
     monkeypatch.setattr(config_router, 'cf_window_proxy_restart_needed', lambda: False)
+    monkeypatch.setattr(config_router, 'current_settings', lambda: None)
     monkeypatch.setattr(config_router.cf_handoff, 'restart_needed_here', lambda _: False)
     result = config_router.update_config(config_core.AppConfig(sources=[]))
     assert result['success'] is True

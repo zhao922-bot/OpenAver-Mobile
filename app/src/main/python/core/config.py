@@ -231,11 +231,11 @@ class ShowcaseDisplayConfig(BaseModel):
     columns: Literal[2, 3, 5] = 2
     items_per_page: int = Field(default=45, ge=1, le=500, strict=True)
 
-    @field_validator('columns', mode='before')
+    @field_validator('columns', 'items_per_page', mode='before')
     @classmethod
-    def _strict_columns(cls, value):
+    def _strict_counts(cls, value):
         if type(value) is not int:
-            raise ValueError('columns must be 2, 3 or 5')
+            raise ValueError('display counts must be integers')
         return value
 
 

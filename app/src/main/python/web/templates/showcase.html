@@ -2108,7 +2108,7 @@
 
     {# 進階重新刮削彈窗（62a-2）。放 showcase x-data 作用域內，使 rescrape* hook 在 showcase Alpine root 求值。 #}
     <div x-show="displayOpen" x-cloak class="fluent-modal-overlay native-display-overlay"
-         x-trap.inert="displayOpen" @click.self="displayOpen = false"
+         x-trap.inert.noscroll="displayOpen" @click.self="displayOpen = false"
          @keydown.escape.window="if (displayOpen) { displayOpen = false; $event.preventDefault(); }">
         <section class="fluent-modal-box native-display-panel" role="dialog" aria-modal="true"
                  aria-labelledby="nativeDisplayTitle">
