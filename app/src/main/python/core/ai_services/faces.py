@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import math
+import json
 from dataclasses import dataclass
 from typing import NamedTuple
 
 import httpx
 
 from core.ai_services.embeddings import EndpointError
+from core.ai_services.cloud_protocols import FACES_PROMPT, endpoint_url, provider_of
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -74,11 +76,22 @@ def _build_request(cfg, data_uri: str) -> tuple[str, dict[str, str], dict]:
     if parsed.scheme not in ("http", "https"):
         raise EndpointError("unreachable", None, None)
 
-    url = f"{base.rstrip('/')}/v1/faces"
+    provider = provider_of(cfg)
+    if provider not in ("endpoint", "openai"):
+        raise EndpointError("contract", "provider", None)
+    url = endpoint_url(base, "/chat/completions" if provider == "openai" else "/v1/faces")
     payload: dict = {"input": data_uri, "with_embedding": False}
     model = (getattr(cfg, "model", None) or "").strip()
     if model:
         payload["model"] = model
+    if provider == "openai":
+        if not model:
+            raise EndpointError("contract", "no_model", None)
+        payload = {"model": model, "stream": False, "max_tokens": 2048,
+                   "messages": [{"role": "system", "content": FACES_PROMPT},
+                                {"role": "user", "content": [
+                                    {"type": "text", "text": "Locate human faces in this image."},
+                                    {"type": "image_url", "image_url": {"url": data_uri}}]}]}
     headers: dict[str, str] = {}
     key = (getattr(cfg, "api_key", None) or "").strip()
     if key:
@@ -177,7 +190,7 @@ def _parse_box(entry: object, fail) -> Box:
     return Box(nums[0], nums[1], nums[2], nums[3], score)
 
 
-def _parse_response(resp: httpx.Response) -> FacesResult:
+def _parse_response(resp: httpx.Response, *, cfg=None) -> FacesResult:
     status = resp.status_code
     body_text = ""
     try:
@@ -205,6 +218,42 @@ def _parse_response(resp: httpx.Response) -> FacesResult:
     if not isinstance(data, dict):
         _fail("shape")
 
+    if cfg is not None and provider_of(cfg) == "openai":
+        try:
+            choice = data["choices"][0]
+            message = choice["message"]
+            if message.get("refusal") or choice.get("finish_reason") in ("content_filter", "refusal"):
+                _fail("refused")
+            if choice.get("finish_reason") not in (None, "", "stop"):
+                _fail("truncated")
+            text = message.get("content")
+            if not isinstance(text, str) or not text.strip():
+                _fail("shape")
+            text = text.strip()
+            if text.startswith("```json\n") and text.endswith("```"):
+                text = text[8:-3].strip()
+            parsed = json.loads(text)
+            if not isinstance(parsed, dict) or not isinstance(parsed.get("faces"), list):
+                _fail("shape")
+            for entry in parsed["faces"]:
+                if not isinstance(entry, dict):
+                    _fail("box")
+                box = entry.get("box")
+                if not isinstance(box, list) or len(box) != 4:
+                    _fail("box")
+                values = [_finite_number(x) for x in box]
+                if any(v is None or v < 0 or v > 1 for v in values):
+                    _fail("box")
+                x, y, w, h = values
+                if w <= 0 or h <= 0 or x+w > 1.000001 or y+h > 1.000001:
+                    _fail("box")
+                score = _finite_number(entry.get("score"))
+                if score is None or not 0 <= score <= 1:
+                    _fail("score")
+            data = {"model": data.get("model") or cfg.model, "faces": parsed["faces"]}
+        except (KeyError, IndexError, TypeError, ValueError, AttributeError):
+            _fail("shape")
+
     model = data.get("model")
     if not isinstance(model, str) or model == "":
         _fail("no_model")
@@ -223,6 +272,9 @@ def detect(cfg, data_uri: str, *, profile: str = "background") -> FacesResult:
     Raises ``EndpointError`` on unreachable transport or contract mismatch.
     """
     pcfg = _profile_cfg(profile)
+    if provider_of(cfg) == "openai":
+        pcfg = {**pcfg, "timeout": httpx.Timeout(90.0, connect=5.0),
+                "retry_timeout": False, "retry_5xx": False}
     url, headers, payload = _build_request(cfg, data_uri)
     with _new_client(pcfg["timeout"]) as client:
         resp = _send_with_retry(
@@ -233,4 +285,4 @@ def detect(cfg, data_uri: str, *, profile: str = "background") -> FacesResult:
             retry_5xx=pcfg["retry_5xx"],
             retry_timeout=pcfg["retry_timeout"],
         )
-    return _parse_response(resp)
+    return _parse_response(resp, cfg=cfg)

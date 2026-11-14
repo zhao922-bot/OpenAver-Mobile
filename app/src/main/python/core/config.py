@@ -262,6 +262,7 @@ class FocalDeviceState(BaseModel):
 class ImageSimilarConfig(BaseModel):
     """Remote image-embedding endpoint used for cover-similarity fusion."""
     enabled: bool = False
+    provider: str = "endpoint"
     url: str = ""
     api_key: str = ""
     model: str = ""
@@ -270,6 +271,7 @@ class ImageSimilarConfig(BaseModel):
 class FacesConfig(BaseModel):
     """Remote face-detection endpoint with local detector fallback."""
     enabled: bool = False
+    provider: str = "endpoint"
     url: str = ""
     api_key: str = ""
     model: str = ""

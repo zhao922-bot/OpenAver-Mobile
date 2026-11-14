@@ -7,6 +7,10 @@ from dataclasses import dataclass
 
 import httpx
 
+from core.ai_services.cloud_protocols import (
+    QWEN_EMBEDDINGS_PATH, cloud_model_id, endpoint_url, provider_of,
+)
+
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -60,9 +64,16 @@ def _build_request(cfg, data_uri: str) -> tuple[str, dict[str, str], dict]:
     if parsed.scheme not in ("http", "https"):
         raise EndpointError("unreachable", None, None)
 
-    url = f"{base.rstrip('/')}/v1/embeddings"
+    provider = provider_of(cfg)
+    if provider not in ("endpoint", "qwen"):
+        raise EndpointError("contract", "provider", None)
+    url = endpoint_url(base, QWEN_EMBEDDINGS_PATH if provider == "qwen" else "/v1/embeddings")
     model = (getattr(cfg, "model", None) or "").strip() or _DEFAULT_MODEL
     payload = {"model": model, "input": [data_uri]}
+    if provider == "qwen":
+        if not str(getattr(cfg, "model", "") or "").strip():
+            raise EndpointError("contract", "no_model", None)
+        payload = {"model": model, "input": {"contents": [{"image": data_uri}]}}
     headers: dict[str, str] = {}
     key = (getattr(cfg, "api_key", None) or "").strip()
     if key:
@@ -120,7 +131,7 @@ def _send_with_retry(
     return resp
 
 
-def _parse_response(resp: httpx.Response) -> EmbedResult:
+def _parse_response(resp: httpx.Response, *, cfg=None) -> EmbedResult:
     status = resp.status_code
     body_text = ""
     try:
@@ -147,6 +158,16 @@ def _parse_response(resp: httpx.Response) -> EmbedResult:
 
     if not isinstance(data, dict):
         _fail("shape")
+
+    if cfg is not None and provider_of(cfg) == "qwen":
+        try:
+            items = data["output"]["embeddings"]
+            if not isinstance(items, list) or len(items) != 1:
+                _fail("shape")
+            data = {"model": data.get("model") or cfg.model,
+                    "data": [{"embedding": items[0]["embedding"]}]}
+        except (KeyError, IndexError, TypeError):
+            _fail("shape")
 
     model = data.get("model")
     if not isinstance(model, str) or model == "":
@@ -188,6 +209,8 @@ def _parse_response(resp: httpx.Response) -> EmbedResult:
         _fail("zero_norm")
 
     vec = [x / norm for x in vec]
+    if cfg is not None and provider_of(cfg) == "qwen":
+        model = cloud_model_id(cfg, model)
     return EmbedResult(vector=vec, model=model, dim=dim)
 
 
@@ -200,4 +223,4 @@ def embed(cfg, data_uri: str, *, first: bool = False) -> EmbedResult:
     timeout = _timeout_for(first)
     with _new_client(timeout) as client:
         resp = _send_with_retry(client, url, headers, payload)
-    return _parse_response(resp)
+    return _parse_response(resp, cfg=cfg)
