@@ -1,4 +1,5 @@
 import { ChipEditor } from '@/settings/chip-editor.js';
+import { resolveDisplayPreferences, saveChangedDisplayPreferences, DISPLAY_PAGE_SIZES } from '../../shared/showcase-display.js';
 import { normalizeFolderLayers, buildNamingPreview, buildNfoTitlePreview } from '@/shared/naming-preview.js';
 import {
     currentSettingsHash,
@@ -87,6 +88,9 @@ export function stateConfig() {
             strmRules: [],   // strm 路徑映射編輯狀態（array of {local, remote}）；load/save 兩端與 dict 對稱轉換
 
             // Gallery
+            browsePresentation: 'poster',
+            browseColumns: 2,
+            browsePerPage: 45,
             avlistSort: 'date',
             avlistOrder: 'descending',
             avlistItemsPerPage: 90,
@@ -214,6 +218,10 @@ export function stateConfig() {
                 is_beta: s.is_beta,
                 manual_only: s.manual_only,
             }));
+        },
+
+        get browsePageSizeOptions() {
+            return [...new Set([...DISPLAY_PAGE_SIZES, this.form.browsePerPage])].sort((a, b) => a - b);
         },
 
         get isDirty() {
@@ -751,6 +759,13 @@ export function stateConfig() {
                     this.form.strmRules = Object.entries(config.scraper?.strm_path_mappings || {})
                         .map(([local, remote]) => ({ local, remote }));
 
+                    // Live browsing is separate from offline export preferences.
+                    let legacyDisplay = {};
+                    try { legacyDisplay = JSON.parse(localStorage.getItem('showcase_state') || '{}'); } catch (_) { /* ignore corrupt legacy state */ }
+                    const display = resolveDisplayPreferences(config.showcase?.display, legacyDisplay, config.gallery);
+                    this.form.browsePresentation = display.presentation;
+                    this.form.browseColumns = display.columns;
+                    this.form.browsePerPage = display.items_per_page;
                     // Gallery
                     this.form.avlistSort = config.gallery?.default_sort || 'date';
                     this.form.avlistOrder = config.gallery?.default_order || 'descending';
@@ -1118,6 +1133,7 @@ export function stateConfig() {
                 const result = await resp.json();
                 if (result.success) {
                     focalNeedsRevert = false;
+                    await saveChangedDisplayPreferences(this.form, this.savedState);
                     saved = true;
                     this.showToast(window.t('settings.toast.config_saved'), 'success');
                     // 更新快照（避免儲存後仍為 dirty）

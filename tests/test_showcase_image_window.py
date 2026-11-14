@@ -19,14 +19,6 @@ def test_showcase_video_covers_use_a_bounded_image_window():
     assert "v._imgLoaded = !!v.cover_url && sameCover" in state
     assert "v._coverRequested = index < 8" in state
     assert "|| (!!previous && previous.requested)" in state
-    assert "SHOWCASE_MOBILE_GRID_PAGE_SIZE = 45" in (
-        ROOT
-        / "app/src/main/python/web/static/js/pages/showcase/state-base.js"
-    ).read_text(encoding="utf-8")
-    assert "this.perPage = Math.min(this.perPage, SHOWCASE_MOBILE_GRID_PAGE_SIZE)" in (
-        ROOT
-        / "app/src/main/python/web/static/js/pages/showcase/state-base.js"
-    ).read_text(encoding="utf-8")
     assert '<template x-if="video._coverRequested && video.cover_url">' in template
     assert 'x-intersect.margin.300px="video._coverRequested = true"' in template
     assert (

@@ -1500,12 +1500,35 @@
 
                  data-settings-panel="gallery"
                  x-show="settingsTab === 'gallery'">
+          <div class="card mb-4 native-browse-settings">
+            <div class="settings-card-header"><i class="bi bi-grid" aria-hidden="true"></i> {{ t('showcase.display.title') }}</div>
+            <div class="card-body">
+              <div class="settings-form-row">
+                <label class="row-label" for="settingsBrowsePresentation">{{ t('showcase.display.presentation') }}</label>
+                <select id="settingsBrowsePresentation" class="select select-bordered" x-model="form.browsePresentation">
+                  {% for view in ['poster', 'cover', 'list', 'table'] %}<option value="{{ view }}">{{ t('showcase.mode.' + view) }}</option>{% endfor %}
+                </select>
+              </div>
+              <div class="settings-form-row">
+                <label class="row-label" for="settingsBrowseColumns">{{ t('showcase.display.columns') }}</label>
+                <select id="settingsBrowseColumns" class="select select-bordered" x-model.number="form.browseColumns">
+                  {% for count in [2,3,5] %}<option value="{{ count }}">{{ t('showcase.display.columns_value', count=count) }}</option>{% endfor %}
+                </select>
+              </div>
+              <div class="settings-form-row">
+                <label class="row-label" for="settingsBrowsePerPage">{{ t('showcase.display.per_page') }}</label>
+                <select id="settingsBrowsePerPage" class="select select-bordered" x-model.number="form.browsePerPage">
+                  <template x-for="size in browsePageSizeOptions" :key="size"><option :value="size" x-text="size"></option></template>
+                </select>
+              </div>
+            </div>
+          </div>
           <div class="card mb-4">
             <div class="settings-card-header"><i class="bi bi-list-ul"></i> {{ t('nav.scanner') }}</div>
             <div class="card-body">
 
                     <!-- ── 外層（常顯）：列表顯示預設 tier（G-B1/CD-95b-1）── -->
-                    <p class="settings-tier-label">{{ t('settings.gallery.tier_display') }}</p>
+                    <p class="settings-tier-label">{{ t('showcase.display.offline_title') }}</p>
 
                     <!-- 顯示表格與清單（TASK-133b-T1） -->
                     <div class="settings-form-row">
@@ -1570,7 +1593,7 @@
                                 <option value="120">120</option>
                                 <option value="0">{{ t('settings.gallery.all') }}</option>
                             </select>
-                            <small class="settings-note-inline">{{ t('settings.gallery.also_showcase_note') }}</small>
+                            <small class="settings-note-inline">{{ t('showcase.display.offline_note') }}</small>
                         </div>
                     </div>
 

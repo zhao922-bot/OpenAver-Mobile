@@ -1967,6 +1967,23 @@
       "download_failed": "스틸을 찾았지만 모든 다운로드에 실패했습니다.",
       "db_write_failed": "스틸을 다운로드했지만 라이브러리 데이터베이스를 업데이트할 수 없습니다. 다시 시도해 주세요",
       "multi_video_error": "이 폴더에 다른 비디오가 있으므로 배경 사진 보정 시 다른 비디오가 손상될 수 있습니다. 먼저 비디오를 별도의 폴더로 옮긴 후 다시 시도해 주세요"
+    },
+    "display": {
+      "button": "표시",
+      "title": "홈 표시",
+      "presentation": "표시 방식",
+      "columns": "한 줄의 영상 수",
+      "columns_value": "{count}개",
+      "grid_only": "포스터 및 커버 격자에만 적용",
+      "per_page": "페이지당 영상 수",
+      "page_value": "페이지당 {count}개",
+      "saving": "저장 중…",
+      "remembered": "선택 사항이 자동으로 저장됩니다",
+      "save_failed": "저장하지 못했습니다. 다시 시도하세요.",
+      "done": "완료",
+      "retry": "다시 시도",
+      "offline_title": "오프라인 내보내기 설정",
+      "offline_note": "생성된 오프라인 페이지에만 적용됩니다."
     }
   },
   "help": {

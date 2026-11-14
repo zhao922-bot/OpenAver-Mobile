@@ -1967,6 +1967,23 @@
       "download_failed": "画像は見つかりましたが、すべてのダウンロードに失敗しました",
       "db_write_failed": "画像はダウンロードされましたが、ライブラリのデータベースを更新できませんでした。再試行してください",
       "multi_video_error": "このフォルダに他の動画があります。画像を取得すると他の動画に影響します。動画を専用フォルダに移動してからお試しください。"
+    },
+    "display": {
+      "button": "表示",
+      "title": "ホームの表示",
+      "presentation": "表示形式",
+      "columns": "1行の作品数",
+      "columns_value": "{count} 本",
+      "grid_only": "ポスター・カバーのグリッドのみ",
+      "per_page": "1ページの作品数",
+      "page_value": "{count} 本 / ページ",
+      "saving": "保存中…",
+      "remembered": "選択は自動的に保存されます",
+      "save_failed": "保存できませんでした。再試行してください。",
+      "done": "完了",
+      "retry": "再試行",
+      "offline_title": "オフライン出力の設定",
+      "offline_note": "生成するオフラインページにのみ適用されます。"
     }
   },
   "help": {

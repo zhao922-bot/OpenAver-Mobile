@@ -1967,6 +1967,23 @@
       "download_failed": "Stills were found, but all downloads failed",
       "db_write_failed": "Stills were downloaded, but the library database could not be updated. Please retry",
       "multi_video_error": "This folder contains other videos. Fetching stills here may affect them. Please move the video to its own folder first."
+    },
+    "display": {
+      "button": "Display",
+      "title": "Home display",
+      "presentation": "Presentation",
+      "columns": "Videos per row",
+      "columns_value": "{count} per row",
+      "grid_only": "Applies to poster and cover grids only",
+      "per_page": "Videos per page",
+      "page_value": "{count} per page",
+      "saving": "Saving…",
+      "remembered": "Choices are remembered automatically",
+      "save_failed": "Could not save. Please retry.",
+      "done": "Done",
+      "retry": "Retry",
+      "offline_title": "Offline export settings",
+      "offline_note": "These settings apply only to generated offline pages."
     }
   },
   "help": {

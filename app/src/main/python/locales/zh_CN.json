@@ -1967,6 +1967,23 @@
       "download_failed": "已找到剧照，但全部下载失败",
       "db_write_failed": "剧照已下载，但资料库更新失败，请再试一次",
       "multi_video_error": "此文件夹有其他视频，补抓剧照会污染其他片，请先将视频移至独立文件夹再试"
+    },
+    "display": {
+      "button": "显示",
+      "title": "主页显示",
+      "presentation": "展示样式",
+      "columns": "每行影片数",
+      "columns_value": "{count} 部",
+      "grid_only": "仅用于海报和封面网格",
+      "per_page": "每页影片数",
+      "page_value": "{count} 部 / 页",
+      "saving": "正在保存…",
+      "remembered": "选择会自动记住",
+      "save_failed": "未能保存，请重试",
+      "done": "完成",
+      "retry": "重试",
+      "offline_title": "导出网页设置",
+      "offline_note": "这些设置仅用于生成的离线网页。"
     }
   },
   "help": {

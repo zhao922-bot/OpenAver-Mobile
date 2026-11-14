@@ -12,6 +12,7 @@
 
 import { stateBase }     from '@/showcase/state-base.js?v=17035-2';
 import { stateVideos }   from '@/showcase/state-videos.js';
+import { stateDisplay } from '@/showcase/state-display.js';
 import { stateActress }  from '@/showcase/state-actress.js';
 import { stateLightbox } from '@/showcase/state-lightbox.js';
 import { stateLightboxMask } from '@/showcase/state-lightbox-mask.js';
@@ -31,6 +32,7 @@ window.showcaseState = function() {
     return mergeState(
         stateBase.call(this),
         stateVideos.call(this),
+        stateDisplay.call(this),
         stateActress.call(this),
         stateLightbox.call(this),
         stateLightboxMask.call(this),

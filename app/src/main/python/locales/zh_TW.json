@@ -1967,6 +1967,23 @@
       "download_failed": "已找到劇照，但全部下載失敗",
       "db_write_failed": "劇照已下載，但資料庫更新失敗，請再試一次",
       "multi_video_error": "此資料夾有其他影片，補抓劇照會污染其他片，請先將影片搬到獨立資料夾再試"
+    },
+    "display": {
+      "button": "顯示",
+      "title": "首頁顯示",
+      "presentation": "展示樣式",
+      "columns": "每行影片數",
+      "columns_value": "{count} 部",
+      "grid_only": "僅用於海報與封面網格",
+      "per_page": "每頁影片數",
+      "page_value": "{count} 部 / 頁",
+      "saving": "正在儲存…",
+      "remembered": "選擇會自動記住",
+      "save_failed": "未能儲存，請重試",
+      "done": "完成",
+      "retry": "重試",
+      "offline_title": "匯出網頁設定",
+      "offline_note": "這些設定僅用於產生的離線網頁。"
     }
   },
   "help": {

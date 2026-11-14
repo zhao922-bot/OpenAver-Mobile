@@ -51,3 +51,13 @@ export async function writeDisplayPreferences(value) {
     if (!data.success) throw new Error(data.error || 'Display settings could not be saved');
     return data.data;
 }
+
+export function displayPreferencesFromForm(form) {
+    return { presentation: form.browsePresentation, columns: form.browseColumns, items_per_page: form.browsePerPage };
+}
+
+export async function saveChangedDisplayPreferences(form, snapshot, write = writeDisplayPreferences) {
+    const value = displayPreferencesFromForm(form);
+    if (snapshot && JSON.stringify(value) === JSON.stringify(displayPreferencesFromForm(snapshot))) return;
+    await write(value);
+}

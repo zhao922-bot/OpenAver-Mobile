@@ -15,7 +15,6 @@ import { formatPartLabel } from '@/shared/part-label.js';
 import { computeActorAgesMap, singleActorAge } from '@/shared/actress-release-age.js';
 
 export const SHOWCASE_MAX_SERVER_PAGE_SIZE = 500;
-export const SHOWCASE_MOBILE_GRID_PAGE_SIZE = 45;
 
 // 53a codex F3: $persist 對 localStorage 壞 JSON 沒 try/catch（會在 Alpine init 階段拋錯炸整頁），
 // 必須在 Alpine.data 註冊前先清掃壞值，讓 $persist fallback 走預設物件
@@ -559,19 +558,9 @@ export function stateBase() {
             // 1. 從 config 取得預設值
             const cfg = window.__SHOWCASE_CONFIG__ || {};
             // TASK-133b-T2：嚴格 === true（FE-JS-01；宣告在 state-videos.js）
-            this.showTableList = cfg.show_table_list === true;
+            this.showTableList = true;
             const defaultSort = cfg.default_sort || 'date';
             const defaultOrder = cfg.default_order === 'ascending' ? 'asc' : 'desc';
-            // T3.2 P2 fix: `??` 而非 `||` — Settings 允許 items_per_page=0（"全部"語意），
-            // 必須保留 numeric 0 讓下方 grid+perPage=0→120 降級邏輯有機會觸發。
-            // The API caps server pages at 500; clamp here so older or
-            // hand-edited configs cannot make the first request fail validation.
-            const rawPerPage = cfg.items_per_page ?? 90;
-            const parsedPerPage = parseInt(rawPerPage, 10);
-            const defaultPerPage = Number.isFinite(parsedPerPage)
-                ? Math.min(SHOWCASE_MAX_SERVER_PAGE_SIZE, Math.max(0, parsedPerPage))
-                : 90;
-
             // 2. 從 _persistedShowcase（$persist 自動讀的 localStorage 'showcase_state'）取
             //    53a-T2: 取代手寫 localStorage.getItem + JSON.parse，格式向後相容
             const state = this._persistedShowcase || {};
@@ -585,27 +574,11 @@ export function stateBase() {
             const urlNum = (key) => { const v = urlParams.get(key); return v !== null && v !== '' ? v : undefined; };
             this.sort = urlParams.get('sort') || state.sort || defaultSort;
             this.order = urlParams.get('order') || state.order || defaultOrder;
-            // T3.2 (CD-52-3): perPage 只從 cfg.items_per_page，URL params + localStorage 不再參與
-            // 既有 user 的 localStorage state.perPage / URL ?perPage=N 被 silently 忽略（CD-52-4）
-            this.perPage = defaultPerPage;
             this.page = parseInt(urlNum('page') ?? state.page ?? 1) || 1;
             this.search = urlParams.get('search') || state.search || '';
             this.pills = deserializePills(state.pills);
             this.mode = urlParams.get('mode') || state.mode || 'grid';
             if (!['grid', 'table', 'list'].includes(this.mode)) this.mode = 'grid';
-            if (!this.showTableList && this.mode !== 'grid') this.mode = 'grid';
-            // F2: grid + perPage=0 組合降級（settings 若存 items_per_page=0 之防呆）
-            if (this.mode === 'grid' && this.perPage === 0) {
-                this.perPage = 120;
-            }
-            // A 90-card mobile page keeps 30 rows of decoded covers alive.
-            // Cap only the phone grid; desktop and table/list keep the configured value.
-            const narrowGrid = typeof window !== 'undefined'
-                && typeof window.matchMedia === 'function'
-                && window.matchMedia('(max-width: 899px)').matches;
-            if (narrowGrid && this.mode === 'grid') {
-                this.perPage = Math.min(this.perPage, SHOWCASE_MOBILE_GRID_PAGE_SIZE);
-            }
             // ★ 44a: 女優模式 — 只從 _persistedShowcase，不加 URL params（避免汙染 shareable link）
             this.showFavoriteActresses = state.showFavoriteActresses === true;  // 嚴格 === true
             // 184: 一次性切換到「最近常收」。`|| 0` 是刻意（舊存檔缺旗標 ＝ undefined，FE-JS-01 勿改 ??）
@@ -622,6 +595,7 @@ export function stateBase() {
             this.actressSearch = state.actressSearch || '';
             // TASK-119-T3: 只走 localStorage，白名單比對（FE-JS-01：不可 || fallback）
             this.cardShape = state.cardShape === 'poster' ? 'poster' : 'cover';
+            this.restoreDisplayPreferences(state, cfg);
             // TASK-124b-T1: 嚴格 === true（鏡射 showFavoriteActresses 慣例，FE-JS-01：不可 || fallback）
             this.infoVisible = state.infoVisible === true;
         },
@@ -629,7 +603,7 @@ export function stateBase() {
         // --- 狀態持久化 (M2c) ---
         saveState() {
             // 53a-T2: 寫入 reactive _persistedShowcase，$persist 自動同步 localStorage 'showcase_state'
-            // T3.2 (CD-52-3): perPage 不寫入（每次 init 重讀 cfg.items_per_page）
+            // Display is saved through its canonical endpoint; local state holds navigation and filters.
             this._persistedShowcase.sort = this.sort;
             this._persistedShowcase.order = this.order;
             this._persistedShowcase.page = this.page;

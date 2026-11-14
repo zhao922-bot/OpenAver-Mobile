@@ -149,6 +149,7 @@
             || closeFlag(page, 'sampleGalleryOpen', 'closeSampleGallery')
             || closeFlag(page, 'lightboxOpen', 'closeLightbox')
             || closeFlag(page, 'infoVisible', null)
+            || closeFlag(page, 'displayOpen', null)
             || closeFlag(page, 'sortOpen', null)
             || closeFlag(page, 'modeOpen', null);
     }

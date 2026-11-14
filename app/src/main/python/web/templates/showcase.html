@@ -16,6 +16,9 @@
 {% block content %}
 <div class="showcase-container ds-gallery-composition page-layer"
      x-data="showcase"
+     :data-browse-columns="gridColumns"
+     :data-browse-shape="cardShape"
+     :style="'--browse-columns:' + gridColumns"
      @keydown.window="handleKeydown($event)"
      @wheel="handleWheel($event)"
      x-on:showcase:clear-search.window="clearAllFilters()">
@@ -365,38 +368,12 @@
                     <button class="btn-icon" @click="toggleOrder()" title="{{ t('showcase.action.toggle_order') }}">
                         <i class="bi" :class="order === 'asc' ? 'bi-sort-up' : 'bi-sort-down'"></i>
                     </button>
-                    <!-- 顯示模式 -->
-                    <button class="btn-icon"
-                            x-show="!showTableList && !_isNarrow"
-                            @click="selectPresentation(cardShape === 'poster' ? 'cover' : 'poster')"
-                            :title="t('showcase.toolbar.mode_prefix') + ': ' + (cardShape === 'poster' ? t('showcase.mode.poster') : t('showcase.mode.cover'))">
-                        <i class="bi" :class="cardShape === 'poster' ? 'bi-person-badge' : 'bi-person-vcard icon-mirror-x'"></i>
+                    <button type="button" class="btn native-display-trigger"
+                            @click="openDisplaySettings()" aria-haspopup="dialog"
+                            :aria-expanded="displayOpen.toString()">
+                        <i class="bi bi-grid" aria-hidden="true"></i>
+                        <span>{{ t('showcase.display.button') }}</span>
                     </button>
-                    <div class="toolbar-dropdown-wrap" x-show="showTableList" @click.outside="modeOpen = false">
-                        <button class="btn-icon"
-                                @click="modeOpen = !modeOpen; sortOpen = false"
-                                :title="t('showcase.toolbar.mode_prefix') + ': ' + (mode === 'grid' ? (_isNarrow ? t('showcase.mode.grid') : (cardShape === 'poster' ? t('showcase.mode.poster') : t('showcase.mode.cover'))) : mode === 'table' ? t('showcase.mode.table') : t('showcase.mode.list'))"
-                                :class="{ 'active': modeOpen }">
-                            <i class="bi" :class="mode === 'grid' ? 'bi-grid-3x3' : mode === 'table' ? 'bi-table' : 'bi-list-ul'"></i>
-                        </button>
-                        <div class="toolbar-dropdown" x-show="modeOpen" x-transition.opacity.duration.150ms @click.stop>
-                            <a href="#" class="dropdown-item" x-show="showTableList && _isNarrow" :class="{ 'active': mode === 'grid' }"
-                               @click.prevent="selectPresentation(_gridTarget()); modeOpen = false">
-                                <i class="bi bi-grid-3x3"></i> {{ t('showcase.mode.grid') }}</a>
-                            <a href="#" class="dropdown-item" x-show="showTableList && !_isNarrow" :class="{ 'active': mode === 'grid' && cardShape === 'cover' }"
-                               @click.prevent="selectPresentation('cover'); modeOpen = false">
-                                <i class="bi bi-person-vcard icon-mirror-x"></i> {{ t('showcase.mode.cover') }}</a>
-                            <a href="#" class="dropdown-item" x-show="showTableList && !_isNarrow" :class="{ 'active': mode === 'grid' && cardShape === 'poster' }"
-                               @click.prevent="selectPresentation('poster'); modeOpen = false">
-                                <i class="bi bi-person-badge"></i> {{ t('showcase.mode.poster') }}</a>
-                            <a href="#" class="dropdown-item" x-show="showTableList" :class="{ 'active': mode === 'table' }"
-                               @click.prevent="selectPresentation('table'); modeOpen = false">
-                                <i class="bi bi-table"></i> {{ t('showcase.mode.table') }}</a>
-                            <a href="#" class="dropdown-item" x-show="showTableList" :class="{ 'active': mode === 'list' }"
-                               @click.prevent="selectPresentation('list'); modeOpen = false">
-                                <i class="bi bi-list-ul"></i> {{ t('showcase.mode.list') }}</a>
-                        </div>
-                    </div>
                     <!-- 資訊顯示開關 (僅 Grid 模式) -->
                     <button class="btn-icon toggle-info-eye-btn"
                             x-show="mode === 'grid'"
@@ -2125,6 +2102,59 @@
     </div>
 
     {# 進階重新刮削彈窗（62a-2）。放 showcase x-data 作用域內，使 rescrape* hook 在 showcase Alpine root 求值。 #}
+    <div x-show="displayOpen" x-cloak class="fluent-modal-overlay native-display-overlay"
+         x-trap.inert="displayOpen" @click.self="displayOpen = false"
+         @keydown.escape.window="if (displayOpen) { displayOpen = false; $event.preventDefault(); }">
+        <section class="fluent-modal-box native-display-panel" role="dialog" aria-modal="true"
+                 aria-labelledby="nativeDisplayTitle">
+            <header class="native-panel-header">
+                <h3 id="nativeDisplayTitle">{{ t('showcase.display.title') }}</h3>
+                <button type="button" class="btn btn-ghost btn-square" @click="displayOpen = false"
+                        aria-label="{{ t('common.close') }}"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+            </header>
+            <fieldset class="native-display-field">
+                <legend>{{ t('showcase.display.presentation') }}</legend>
+                <div class="native-option-group native-view-options">
+                    <template x-for="view in ['poster', 'cover', 'list', 'table']" :key="view">
+                        <button type="button" class="native-option"
+                                :aria-pressed="(displayPresentation === view).toString()"
+                                @click="setDisplayPresentation(view)" x-text="window.t('showcase.mode.' + view)"></button>
+                    </template>
+                </div>
+            </fieldset>
+            <fieldset class="native-display-field" :disabled="mode !== 'grid'">
+                <legend>{{ t('showcase.display.columns') }}</legend>
+                <div class="native-option-group">
+                    <template x-for="columns in [2,3,5]" :key="columns">
+                        <button type="button" class="native-option"
+                                :aria-pressed="(gridColumns === columns).toString()"
+                                @click="setDisplayColumns(columns)"
+                                x-text="window.t('showcase.display.columns_value', {count: columns})"></button>
+                    </template>
+                </div>
+                <p class="native-hint" x-show="mode !== 'grid'">{{ t('showcase.display.grid_only') }}</p>
+            </fieldset>
+            <label class="native-display-field" for="browsePageSize">
+                <span>{{ t('showcase.display.per_page') }}</span>
+                <select id="browsePageSize" class="select select-bordered" :value="perPage"
+                        @change="setDisplayPageSize($event.target.value)">
+                    <template x-for="size in displayPageSizeOptions" :key="size">
+                        <option :value="size" :selected="perPage === size"
+                                x-text="window.t('showcase.display.page_value', {count: size})"></option>
+                    </template>
+                </select>
+            </label>
+            <div class="native-display-status" role="status" aria-live="polite">
+                <span x-show="displaySaving">{{ t('showcase.display.saving') }}</span>
+                <span x-show="!displaySaving && !displayError">{{ t('showcase.display.remembered') }}</span>
+                <div x-show="displayError" class="native-save-error">
+                    <span>{{ t('showcase.display.save_failed') }}</span>
+                    <button type="button" class="btn btn-sm" @click="persistDisplayPreferences()">{{ t('showcase.display.retry') }}</button>
+                </div>
+            </div>
+            <button type="button" class="btn btn-primary native-panel-done" @click="displayOpen = false">{{ t('showcase.display.done') }}</button>
+        </section>
+    </div>
     {% include '_rescrape_modal.html' %}
 </div>
 {% endblock %}
@@ -2133,6 +2163,7 @@
 <!-- M2c: 傳遞 config 給 JS -->
 <script>
 window.__SHOWCASE_CONFIG__ = {{ (config.gallery or {}) | tojson | safe }};
+window.__SHOWCASE_DISPLAY__ = {{ ((config.showcase or {}).get('display')) | tojson | safe }};
 window.__SHOWCASE_TRANSLATE__ = {{ {'enabled': ((config.translate or {}).get('enabled', False) is true)} | tojson | safe }};
 window.__SHOWCASE_AI_TAGS__ = {{ {'enabled': ((((config.ai_services or {}).get('tags') or {}).get('enabled', False) is true) and ((((config.ai_services or {}).get('tags') or {}).get('provider') or '') != '')), 'provider': (((((config.ai_services or {}).get('tags') or {}).get('provider') or '') if ((((config.ai_services or {}).get('tags') or {}).get('enabled', False) is true) and ((((config.ai_services or {}).get('tags') or {}).get('provider') or '') != '')) else ''))} | tojson | safe }};
 </script>
