@@ -1,6 +1,6 @@
 # 清爽原生 UI 改版验证
 
-基线：`8ab7285c`（v0.18.17-android-r10）。本次为本地预览，未升版、发布或合并 main。
+基线：`8ab7285c`（v0.18.17-android-r10）。下列记录为改版验收阶段的本地预览验证；验收后用户已授权以 r11 打包发布，见 [r11 发布说明](../../releases/v0.18.17-android-r11.md)。
 
 ## 实现
 
@@ -49,6 +49,6 @@
 - 审阅修正后，x86_64 Debug 与 arm64 Debug/Release 构建及 Android 单元测试均通过。arm64 Debug 的 v2 签名、18010 / 0.18.17-r10-debug、arm64-v8a、minSdk29 已校验。
 - 本地可安装预览：`app/build/ui-redesign-audit/openaver-native-ui-arm64-v8a-debug.apk`，SHA-256：`064411d9f47138980e8788b31c1a7e0af2798b2d214bb230df1eb2dd3f48c87a`。独立 debug 包；本地 Release 未签名，不作为安装下载提供。
 - 模拟器原数据库和配置已按字节验证恢复；原偏好/WebView 目录从归档恢复。只删除本轮创建的外部测试目录、临时文件和端口映射，历史诊断文件保留。
-- 所有审阅发现均已处理，无延期项。代码保留在本地 `feature/cloud-vision-adapters`，本轮不发布 GitHub 或更改版本。
+- 所有审阅发现均已处理，无延期项。改版验收时保留在本地 `feature/cloud-vision-adapters`，随后按用户的新指令准备 r11 正式发布。
 
 原始报告和截图保留于忽略目录 `app/build/ui-redesign-audit/`，不提交测试数据库或配置。

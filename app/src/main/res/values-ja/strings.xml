@@ -30,7 +30,7 @@
     <string name="local_step3_title">ローカルでスキャンして再生</string>
     <string name="local_step3_body">ページ生成、メタデータ検索、NFO とカバーの書き込み、再生はすべてスマートフォン上で実行されます。ネットワークは、有効にしたメタデータ取得元を使うときだけ利用します。</string>
     <string name="privacy_note">Python サーバー、SQLite データベース、ログ、生成データは本アプリのプライベートストレージ内に保存されます。動画ファイルは元のスマートフォンのフォルダーに残ります。</string>
-    <string name="disclaimer">非公式 Android ビルド · OpenAver Mobile v0.18.17-r10 · MIT ライセンス</string>
+    <string name="disclaimer">非公式 Android ビルド · OpenAver Mobile v0.18.17-r11 · MIT ライセンス</string>
     <string name="starting_local">ローカル OpenAver を起動しています…</string>
     <string name="starting_python">Python ランタイムを初期化しています…</string>
     <string name="loading_openaver_service">OpenAver サービスを読み込んでいます…</string>
