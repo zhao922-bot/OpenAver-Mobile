@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
+from types import SimpleNamespace
 
 from core.ai_services import backfill_state
 from core.database import EmbeddingRepository
+from core.ai_services.cloud_protocols import embedding_connection_id
 
 # 共用欄位（unreachable／job／鎖／入庫後掛勾旗標 hook_notified）在 ``_STATE``（189a-T8）。
 _STATE = backfill_state.BackfillState(name="similar_state")
@@ -80,7 +82,31 @@ def model_changed(index_model: Optional[str], index_dim: Optional[int]) -> bool:
         return (observed_model, observed_dim) != (index_model, index_dim)
 
 
-def fusion_gate_from_state(config: dict, state: dict) -> bool:
+def connection_changed(config: dict, db_path=None) -> bool:
+    cfg = (config.get("ai_services") or {}).get("image_similar") or {}
+    stored = EmbeddingRepository(db_path).get_connection_id()
+    if not stored:
+        return cfg.get("provider", "endpoint") != "endpoint"
+    try:
+        return stored != embedding_connection_id(SimpleNamespace(**cfg))
+    except Exception:
+        return True
+
+
+def preserve_legacy_connection(old: dict, new: dict) -> None:
+    """Before changing a legacy target, bind its existing index to its old address."""
+    if not old.get("url"):
+        return
+    old_id = embedding_connection_id(SimpleNamespace(**old))
+    new_id = embedding_connection_id(SimpleNamespace(**new)) if new.get("url") else ""
+    if old_id == new_id:
+        return
+    repo = EmbeddingRepository()
+    if repo.get_index_state()["model"] and not repo.get_connection_id():
+        repo.set_connection_id(old_id)
+
+
+def fusion_gate_from_state(config: dict, state: dict, *, db_path=None) -> bool:
     """CD-186-13 狀態半的純判斷：enabled ∧ model 已設 ∧ complete=='1' ∧ 觀察值相容。
 
     ``state`` 須是呼叫端已讀好的 ``get_index_state()`` 結果；本函式不再讀 DB。
@@ -90,7 +116,7 @@ def fusion_gate_from_state(config: dict, state: dict) -> bool:
         return False
     if not state["model"] or state["complete"] != "1":
         return False
-    return not model_changed(state["model"], state["dim"])
+    return not connection_changed(config, db_path) and not model_changed(state["model"], state["dim"])
 
 
 def fusion_gate_open(config: dict, db_path: Optional[Path] = None) -> bool:
@@ -98,7 +124,7 @@ def fusion_gate_open(config: dict, db_path: Optional[Path] = None) -> bool:
     cfg = (config.get("ai_services") or {}).get("image_similar") or {}
     if not cfg.get("enabled"):
         return False
-    return fusion_gate_from_state(config, EmbeddingRepository(db_path).get_index_state())
+    return fusion_gate_from_state(config, EmbeddingRepository(db_path).get_index_state(), db_path=db_path)
 
 
 def format_similar_model_id(index_model: Optional[str] = None, *, fused: bool = False) -> str:
@@ -118,7 +144,7 @@ def fusion_vectors(config: dict, db_path: Optional[Path] = None):
     if not cfg.get("enabled"):
         return None
     state = EmbeddingRepository(db_path).get_index_state()
-    if not fusion_gate_from_state(config, state):
+    if not fusion_gate_from_state(config, state, db_path=db_path):
         return None
     from core.ai_services.embedding_cache import EmbeddingMatrixCache
     return EmbeddingMatrixCache.get(state["model"], state["dim"], db_path)

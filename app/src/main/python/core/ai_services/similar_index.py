@@ -86,6 +86,7 @@ def _image_cfg(config: dict) -> dict:
 
 def _endpoint_cfg(raw: dict) -> SimpleNamespace:
     return SimpleNamespace(
+        provider=raw.get("provider", "endpoint"),
         url=raw.get("url", ""), api_key=raw.get("api_key", ""), model=raw.get("model", "")
     )
 
@@ -145,12 +146,15 @@ def _prepare_build(rebuild: bool = False) -> tuple:
         similar_state.observe_failure(test.kind, test.check)
         return None, {"ok": False, "status": "test_failed", "kind": test.kind, "check": test.check}
     similar_state.observe_success(test.model, test.dim)
-    if rebuild:
+    from core.ai_services.cloud_protocols import embedding_connection_id
+    target_id = embedding_connection_id(cfg)
+    if rebuild or (repo.get_connection_id() and repo.get_connection_id() != target_id):
         repo.reset_index(test.model, test.dim)
         from core.ai_services.embedding_cache import EmbeddingMatrixCache
         EmbeddingMatrixCache.invalidate()  # 刪除之後不可能再讀到舊矩陣（仍在 _SHELL.job_lock 內）
     else:
         repo.begin_index(test.model, test.dim)
+    repo.set_connection_id(target_id)
     repo.clear_unreadable(test.model)  # 使用者發起的工作：讀不到的片重試一次（增量不做）
     return _Ctx("build", repo, cfg, _path_mappings(config), test.model, test.dim), None
 
@@ -173,7 +177,7 @@ def _index_one(video_uri: str) -> str:
     config = load_config()
     repo = EmbeddingRepository()
     state = repo.get_index_state()
-    if not _incremental_allowed(state):
+    if not _incremental_allowed(state, config, repo.db_path):
         built = state["model"] and state["dim"] is not None and state["complete"] == "1"
         return "model_changed" if built else "index_not_ready"
     video = VideoRepository().get_by_path(video_uri)
@@ -226,7 +230,7 @@ def _schedule_incremental() -> None:
 
 def _prepare_incremental(repo: EmbeddingRepository, config: dict) -> Optional[_Ctx]:
     state = repo.get_index_state()
-    if not _incremental_allowed(state):
+    if not _incremental_allowed(state, config, repo.db_path):
         return None
     _begin_job_locked("incremental")
     return _Ctx(
@@ -235,9 +239,11 @@ def _prepare_incremental(repo: EmbeddingRepository, config: dict) -> Optional[_C
     )
 
 
-def _incremental_allowed(state: dict) -> bool:
+def _incremental_allowed(state: dict, config=None, db_path=None) -> bool:
     """I9（含 2026-10-31 細化）：index_model 已設、索引已完成('1')、模型沒變。"""
     if not state["model"] or state["dim"] is None or state["complete"] != "1":
+        return False
+    if config is not None and similar_state.connection_changed(config, db_path):
         return False
     return not similar_state.model_changed(state["model"], state["dim"])
 
@@ -262,7 +268,9 @@ def status() -> dict:
         "check": snap["check"],
         "model": state["model"],
         "last_success_at": state["last_success_at"],
-        "model_changed": similar_state.model_changed(state["model"], state["dim"]),
+        "model_changed": bool(state["model"]) and (
+            similar_state.connection_changed(load_config(), repo.db_path)
+            or similar_state.model_changed(state["model"], state["dim"])),
         "complete": state["complete"] == "1",
     }
 

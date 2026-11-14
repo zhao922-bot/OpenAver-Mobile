@@ -49,3 +49,9 @@ def embedding_connection_id(cfg) -> str:
 
 def cloud_model_id(cfg, returned_model: str) -> str:
     return f"qwen:{embedding_connection_id(cfg)}:{returned_model}"
+
+
+def face_model_id(cfg, returned_model: str) -> str:
+    endpoint = endpoint_url(str(cfg.url), "/chat/completions")
+    identity = hashlib.sha256(json.dumps([endpoint, cfg.model]).encode()).hexdigest()[:24]
+    return f"vision:{identity}:{returned_model}"

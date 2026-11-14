@@ -21,7 +21,7 @@ from typing import Optional
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.ai_services import faces_recompute, faces_state, similar_index, similar_state
 from core.ai_services.samples import (
@@ -67,6 +67,7 @@ class SimilarTestRequest(BaseModel):
     url: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
+    provider: Optional[str] = None
 
 
 class FacesTestRequest(BaseModel):
@@ -75,6 +76,9 @@ class FacesTestRequest(BaseModel):
     url: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
+    provider: Optional[str] = None
+    image_data_uri: Optional[str] = Field(default=None, max_length=8*1024*1024,
+        pattern=r"^data:image/(jpeg|png|webp);base64,")
 
 
 def _resolve_similar_cfg(body: SimilarTestRequest, config: dict) -> SimpleNamespace:
@@ -86,7 +90,8 @@ def _resolve_similar_cfg(body: SimilarTestRequest, config: dict) -> SimpleNamesp
         api_key = stored_key
     else:
         api_key = resolve_secret(body.api_key, stored_key)
-    return SimpleNamespace(url=url or "", api_key=api_key or "", model=model or "")
+    return SimpleNamespace(url=url or "", api_key=api_key or "", model=model or "",
+        provider=body.provider if body.provider is not None else stored.get("provider", "endpoint"))
 
 
 def _resolve_faces_cfg(body: FacesTestRequest, config: dict) -> SimpleNamespace:
@@ -98,7 +103,8 @@ def _resolve_faces_cfg(body: FacesTestRequest, config: dict) -> SimpleNamespace:
         api_key = stored_key
     else:
         api_key = resolve_secret(body.api_key, stored_key)
-    return SimpleNamespace(url=url or "", api_key=api_key or "", model=model or "")
+    return SimpleNamespace(url=url or "", api_key=api_key or "", model=model or "",
+        provider=body.provider if body.provider is not None else stored.get("provider", "endpoint"))
 
 def _norm_url(url: str) -> str:
     """比對用正規化：去空白、scheme／host 小寫、去尾端 ``/``（path 大小寫保留）。"""
@@ -112,6 +118,8 @@ def _is_stored_target(cfg: SimpleNamespace, config: dict) -> bool:
     """受測的 url＋model 是否等於已存設定（body 缺席的欄位即用已存值，故視為相同）。"""
     stored = (config.get("ai_services") or {}).get("image_similar") or {}
     return (
+        cfg.provider == stored.get("provider", "endpoint")
+        and
         _norm_url(cfg.url) == _norm_url(stored.get("url", "") or "")
         and (cfg.model or "").strip() == (stored.get("model", "") or "").strip()
     )
@@ -129,6 +137,8 @@ def _is_stored_faces_target(cfg: SimpleNamespace, config: dict) -> bool:
     """受測 url＋model 是否等於已存人臉設定（api_key 不比；body 缺席即用已存值）。"""
     stored = (config.get("ai_services") or {}).get("faces") or {}
     return (
+        cfg.provider == stored.get("provider", "endpoint")
+        and
         _norm_url(cfg.url) == _norm_url(stored.get("url", "") or "")
         and (cfg.model or "").strip() == (stored.get("model", "") or "").strip()
     )
@@ -256,7 +266,8 @@ async def faces_test(body: FacesTestRequest | None = None):
     req = body or FacesTestRequest()
     config = await asyncio.to_thread(load_config)
     cfg = _resolve_faces_cfg(req, config)
-    result = await asyncio.to_thread(run_faces_test, cfg)
+    kwargs = {"image_data_uri": req.image_data_uri} if req.image_data_uri else {}
+    result = await asyncio.to_thread(run_faces_test, cfg, **kwargs)
     if _is_stored_faces_target(cfg, config):
         await asyncio.to_thread(_observe_faces_test_result, result)
     out: dict = {"ok": result.ok, "elapsed_ms": result.elapsed_ms}
@@ -266,7 +277,25 @@ async def faces_test(body: FacesTestRequest | None = None):
         out["check"] = result.check
     if result.model is not None:
         out["model"] = result.model
+    out["boxes"] = [list(box) for box in (result.boxes or [])]
+    out["detection_verified"] = result.detection_verified
     return out
+
+
+@router.post("/faces/models")
+async def faces_models(body: FacesTestRequest):
+    from core.ai_services.connections import fetch_provider_models
+    from core.ai_services.cloud_protocols import endpoint_url
+    cfg = _resolve_faces_cfg(body, await asyncio.to_thread(load_config))
+    if cfg.provider != "openai":
+        return {"success": False, "models": []}
+    try:
+        base = endpoint_url(cfg.url, "/chat/completions").removesuffix("/chat/completions")
+        models = await fetch_provider_models("openai", base, cfg.api_key)
+        return {"success": True, "models": models}
+    except Exception:
+        # Never return vendor bodies or exceptions which may contain credentials.
+        return {"success": False, "models": []}
 
 
 @router.get("/faces/status")

@@ -94,7 +94,7 @@ def _reset_translate_service():
 def _after_faces_saved(old: dict, new: dict) -> threading.Thread | None:
     """Warm-test changed external face settings and start recompute if needed."""
     try:
-        if old == new:
+        if old == new or new.get("provider") == "openai":
             return None
         from core.ai_services import faces_recompute
         from core.ai_services.faces_config import active_in
@@ -238,6 +238,10 @@ def update_config(config: AppConfig) -> dict:
                         node[leaf] = resolve_secret(
                             read_secret(payload, dotted), read_secret(cfg, dotted)
                         )
+                from core.ai_services.similar_state import preserve_legacy_connection
+                preserve_legacy_connection(
+                    (cfg.get("ai_services") or {}).get("image_similar") or {},
+                    (payload.get("ai_services") or {}).get("image_similar") or {})
                 cfg.update(payload)
 
             mutate_config(_write_preserving_server_owned)

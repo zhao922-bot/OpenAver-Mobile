@@ -45,6 +45,7 @@ def observe_model(model: str) -> None:
 def _faces_cfg_object(cfg: dict) -> SimpleNamespace:
     faces_cfg = (cfg.get("ai_services") or {}).get("faces") or {}
     return SimpleNamespace(
+        provider=faces_cfg.get("provider", "endpoint"),
         url=(faces_cfg.get("url") or ""),
         api_key=(faces_cfg.get("api_key") or ""),
         model=(faces_cfg.get("model") or ""),
@@ -159,7 +160,7 @@ def _detect_cache_key(fs_path: str, ratio: float, cfg: dict) -> Optional[tuple]:
         return None
     faces_cfg = (cfg.get("ai_services") or {}).get("faces") or {}
     url = (faces_cfg.get("url") or "").strip()
-    return (fs_path, mtime, url, faces_cfg.get("model") or "", ratio)
+    return (fs_path, mtime, faces_cfg.get("provider", "endpoint"), url, faces_cfg.get("model") or "", ratio)
 
 
 def detect_focal_only(

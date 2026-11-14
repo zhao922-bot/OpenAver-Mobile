@@ -54,6 +54,16 @@ class EmbeddingRepository:
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path or connection.get_db_path()
 
+    def get_connection_id(self) -> Optional[str]:
+        with closing(connection.get_connection(self.db_path)) as conn:
+            row = conn.execute("SELECT value FROM app_meta WHERE key='ai.similar.connection'").fetchone()
+        return row[0] if row else None
+
+    def set_connection_id(self, value: str) -> None:
+        with closing(connection.get_connection(self.db_path)) as conn:
+            conn.execute("INSERT OR REPLACE INTO app_meta(key,value) VALUES('ai.similar.connection',?)", (value,))
+            conn.commit()
+
     # ── app_meta ────────────────────────────────────────────────────────────
 
     def get_index_state(self) -> dict:

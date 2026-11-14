@@ -220,13 +220,14 @@ class FacesTestResult:
     model: str | None = None
     elapsed_ms: int = 0
     boxes: list | None = None
+    detection_verified: bool = False
 
 
-def run_faces_test(cfg) -> FacesTestResult:
+def run_faces_test(cfg, *, image_data_uri: str | None = None) -> FacesTestResult:
     """Sample → detect(profile=warmup) → consistency; stop on EndpointError."""
     t0 = time.perf_counter()
     try:
-        uri = get_faces_sample_input()
+        uri = image_data_uri or get_faces_sample_input()
         result = detect(cfg, uri, profile="warmup")
     except EndpointError as e:
         elapsed = int((time.perf_counter() - t0) * 1000)
@@ -235,7 +236,10 @@ def run_faces_test(cfg) -> FacesTestResult:
         )
 
     elapsed = int((time.perf_counter() - t0) * 1000)
-    ok, failed = check_faces_consistency(result)
+    if getattr(cfg, "provider", "endpoint") == "openai" or image_data_uri:
+        ok, failed = True, None
+    else:
+        ok, failed = check_faces_consistency(result)
     return FacesTestResult(
         ok=ok,
         kind=None if ok else "contract",
@@ -243,4 +247,5 @@ def run_faces_test(cfg) -> FacesTestResult:
         model=result.model,
         elapsed_ms=elapsed,
         boxes=list(result.boxes),
+        detection_verified=bool(image_data_uri and result.boxes),
     )

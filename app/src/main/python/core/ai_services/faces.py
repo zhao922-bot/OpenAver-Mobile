@@ -10,7 +10,7 @@ from typing import NamedTuple
 import httpx
 
 from core.ai_services.embeddings import EndpointError
-from core.ai_services.cloud_protocols import FACES_PROMPT, endpoint_url, provider_of
+from core.ai_services.cloud_protocols import FACES_PROMPT, endpoint_url, provider_of, face_model_id
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -263,6 +263,8 @@ def _parse_response(resp: httpx.Response, *, cfg=None) -> FacesResult:
         _fail("shape")
 
     boxes = [_parse_box(entry, _fail) for entry in faces_raw]
+    if cfg is not None and provider_of(cfg) == "openai":
+        model = face_model_id(cfg, model)
     return FacesResult(boxes=boxes, model=model)
 
 

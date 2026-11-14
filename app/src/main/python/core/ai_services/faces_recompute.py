@@ -59,6 +59,7 @@ def _release_unlaunched(outcome: str) -> None:
 def _faces_cfg_object(config: dict) -> SimpleNamespace:
     raw = (config.get("ai_services") or {}).get("faces") or {}
     return SimpleNamespace(
+        provider=raw.get("provider", "endpoint"),
         url=(raw.get("url") or ""),
         api_key=(raw.get("api_key") or ""),
         model=(raw.get("model") or ""),
@@ -132,6 +133,11 @@ def ensure(model: str, kind: str = "model_change") -> bool:
 
 def resume() -> dict:
     """繼續未完成的重算（讀 app_meta target）。"""
+    if ((load_config().get("ai_services") or {}).get("faces") or {}).get("provider") == "openai":
+        test = _run_rebuild_test()
+        if not test.ok:
+            return {"started": False, "reason": "test_failed", "kind": test.kind, "check": test.check}
+        faces_state.meta_set(META_TARGET, test.model)
     target = faces_state.meta_get(META_TARGET)
     if not target:
         return {"started": False, "reason": "no_target"}
@@ -339,6 +345,11 @@ def observe_model(model: str) -> None:
     只呼叫 ``ensure``（對 ``_SHELL.job_lock`` 為 non-blocking），重算 thread 內呼叫不會死鎖。
     ``ensure`` 回 False（已在跑／待處理＝0）不重試。
     """
+    if model.startswith("vision:"):
+        if _SHELL.is_running():
+            faces_state.meta_set(META_TARGET, model)
+            _remember_target(model)
+        return
     with _TARGET_CACHE_LOCK:
         if model == _target_cache:
             return
