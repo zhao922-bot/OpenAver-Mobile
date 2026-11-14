@@ -118,7 +118,6 @@ public final class MainActivity extends Activity {
     private TextView webErrorBody;
     private Button webErrorRetryButton;
     private Button webErrorSecondaryButton;
-    private MenuHandleController menuHandleController;
     private FrameLayout loadingOverlay;
     private TextView loadingText;
     private FrameLayout fullscreenContainer;
@@ -175,16 +174,6 @@ public final class MainActivity extends Activity {
         };
 
         bindViews();
-        menuHandleController = new MenuHandleController(
-                this,
-                root,
-                webContainer,
-                findViewById(R.id.menuHandle),
-                preferences,
-                mainHandler,
-                this::showWebMenu
-        );
-        menuHandleController.configure();
         configureSystemBars();
         configureSetupUi();
         configureErrorUi();
@@ -233,7 +222,6 @@ public final class MainActivity extends Activity {
                         WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
                 );
                 view.setPadding(0, bars.top, 0, bars.bottom);
-                view.post(menuHandleController::applySavedPosition);
                 return insets;
             });
             root.requestApplyInsets();
@@ -1120,6 +1108,10 @@ public final class MainActivity extends Activity {
             );
             return true;
         }
+        if ("openaver-tools".equals(scheme)) {
+            showWebMenu();
+            return true;
+        }
         if ("openaver-theme".equals(scheme)) {
             NativeUiTheme.apply(this, uri.getHost());
             return true;
@@ -1369,14 +1361,6 @@ public final class MainActivity extends Activity {
     }
 
     @Override
-    public void onConfigurationChanged(Configuration newConfig) {
-        super.onConfigurationChanged(newConfig);
-        if (root != null) {
-            root.post(menuHandleController::applySavedPosition);
-        }
-    }
-
-    @Override
     protected void onPause() {
         if (cfTransport != null) {
             cfTransport.onPause();
@@ -1406,9 +1390,6 @@ public final class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         TaskKeepAliveService.stop(this);
-        if (menuHandleController != null) {
-            menuHandleController.destroy();
-        }
         mainHandler.removeCallbacksAndMessages(null);
         runtimeExecutor.shutdownNow();
         if (localAuthCookieName != null && !localAuthCookieName.isEmpty()) {

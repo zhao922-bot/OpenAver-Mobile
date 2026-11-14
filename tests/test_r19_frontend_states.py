@@ -117,25 +117,19 @@ def test_back_navigation_consumes_page_layers_before_history():
     assert "return true only when this call consumed one visible layer" in script
 
 
-def test_floating_handle_snaps_and_respects_safe_inset():
+def test_app_tools_remain_reachable_after_removing_floating_handle():
     activity = read(ROOT / "app/src/main/java/dev/openaver/mobile/MainActivity.java")
-    controller = read(
-        ROOT / "app/src/main/java/dev/openaver/mobile/MenuHandleController.java"
-    )
     layout = read(ROOT / "app/src/main/res/layout/activity_main.xml")
+    base = read(PYTHON_WEB / "templates/base.html")
 
-    assert "new MenuHandleController" in activity
-    assert "MENU_HANDLE_IDLE_MS" in controller
-    assert "MENU_HANDLE_VERTICAL_SAFE_INSET_DP" in controller
-    assert "snapToEdge" in controller
-    assert "scheduleCollapse" in controller
-    assert "translationX" in controller
-    assert "TouchDelegate" in controller
-    assert "bg_edge_handle_left" in controller
-    assert "menuHandle.addOnLayoutChangeListener" in controller
-    assert "savePosition(targetLeft, top)" in controller
-    assert 'android:layout_width="34dp"' in layout
-    assert 'android:layout_height="64dp"' in layout
+    assert "MenuHandleController" not in activity
+    assert '@+id/menuHandle' not in layout
+    assert 'href="openaver-tools://menu"' in base
+    assert "{% if is_android %}" in base
+    assert '"openaver-tools".equals(scheme)' in activity
+    assert "showWebMenu();" in activity
+    for action in ['menuRefresh', 'menuStorageSettings', 'menuStorageTree']:
+        assert f'R.id.{action}' in activity
 
 
 def test_theme_is_loaded_once_and_tailwind_excludes_embedded_copy():

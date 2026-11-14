@@ -1,5 +1,6 @@
 {
   "nav": {
+    "app_tools": "應用工具",
     "search": "搜尋",
     "scanner": "片庫管理",
     "showcase": "瀏覽",
@@ -2839,7 +2840,7 @@
       "error_no_nfo": "找不到 NFO",
       "error_nfo_ambiguous": "輸出夾有多份 NFO，無法判斷要改哪一份",
       "error_nfo_unreadable": "NFO 無法讀取或解析",
-      "error_storage_permission_required": "外置儲存尚未授權寫入，請從右上角選單選擇「授權可寫目錄」並選中影片所在的儲存卡目錄",
+      "error_storage_permission_required": "外部儲存空間無法寫入。請開啟左上角選單的「應用工具」，授權影片所在的 SD 卡資料夾。",
       "error_nfo_write_failed": "NFO 寫入失敗",
       "error_db_write_failed": "資料庫寫入失敗（NFO 已更新，請再試一次）",
       "error_invalid_path": "檔案路徑格式無效"
@@ -2860,7 +2861,7 @@
       "error_no_sample_images": "沒有找到可下載的劇照",
       "error_db_write_failed": "劇照已下載，但資料庫更新失敗，請再試一次",
       "error_sample_download_failed": "已找到劇照，但全部下載失敗",
-      "error_storage_permission_required": "外置儲存尚未授權寫入，請從右上角選單選擇「授權可寫目錄」並選中影片所在的儲存卡目錄",
+      "error_storage_permission_required": "外部儲存空間無法寫入。請開啟左上角選單的「應用工具」，授權影片所在的 SD 卡資料夾。",
       "error_sample_write_failed": "劇照寫入外置儲存失敗",
       "error_multi_video_folder": "此資料夾有無關影片，補抓劇照會污染其他片；只有同一作品的完整分集（例如 cd1/cd2）可以共用劇照",
       "error_internal": "劇照補齊處理失敗，請查閱日誌",
@@ -2886,7 +2887,7 @@
       "error_no_nfo": "NFO 檔案已不存在",
       "error_nfo_unreadable": "無法讀取或解析 NFO 檔案",
       "error_nfo_write_failed": "簡介寫入 NFO 失敗",
-      "error_storage_permission_required": "外置儲存尚未授權寫入，請從右上角選單選擇「授權可寫目錄」並選中影片所在的儲存卡目錄",
+      "error_storage_permission_required": "外部儲存空間無法寫入。請開啟左上角選單的「應用工具」，授權影片所在的 SD 卡資料夾。",
       "error_db_write_failed": "NFO 已更新，但資料庫重新整理失敗，請再試一次",
       "translation_failed": "簡介翻譯失敗",
       "translation_refused": "模型拒絕翻譯該簡介",
@@ -3133,7 +3134,7 @@
       "error_no_nfo": "NFO 檔案已不存在",
       "error_nfo_unreadable": "無法讀取或解析 NFO 檔案",
       "error_nfo_write_failed": "簡介寫入 NFO 失敗",
-      "error_storage_permission_required": "外置儲存尚未授權寫入，請從右上角選單選擇「授權可寫目錄」並選中影片所在的儲存卡目錄",
+      "error_storage_permission_required": "外部儲存空間無法寫入。請開啟左上角選單的「應用工具」，授權影片所在的 SD 卡資料夾。",
       "error_db_write_failed": "NFO 已更新，但資料庫重新整理失敗，請再試一次",
       "translation_failed": "簡介翻譯失敗",
       "translation_refused": "模型拒絕翻譯該簡介",

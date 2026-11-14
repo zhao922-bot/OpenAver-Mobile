@@ -1,0 +1,157 @@
+/* The similarity scene has its own night palette in both application themes. */
+.similar-stage,
+.similar-mobile-panel .similar-mobile-scrim {
+    background: #040817;
+}
+
+.similar-sky {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+    background: linear-gradient(rgb(3 7 18 / .08), rgb(3 7 18 / .16)),
+        url('/static/img/similar-sky.webp') center / cover no-repeat #030817;
+}
+
+.similar-sky-star {
+    position: absolute;
+    left: var(--sky-x);
+    top: var(--sky-y);
+    opacity: var(--sky-opacity);
+    border-radius: 50%;
+    background: #d6e8ff;
+}
+
+.similar-sky-star:nth-child(5n) {background: #f7dfbb;}
+
+.similar-sky-star.is-bright {
+    width: 3.5px;
+    height: 3.5px;
+    background: #f5faff;
+    box-shadow: 0 0 10px rgb(186 219 255 / .7);
+}
+
+.similar-sky-star.is-bright::before,
+.similar-sky-star.is-bright::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(90deg, transparent, #d7ebff, transparent);
+}
+
+.similar-sky-star.is-bright::before {width: 19px;height: 1px;}
+.similar-sky-star.is-bright::after {width: 1px;height: 19px;background: linear-gradient(transparent, #d7ebff, transparent);}
+
+.similar-sky-star:nth-child(7n),
+.similar-sky-star.is-bright {
+    animation: similar-sky-twinkle 5s ease-in-out var(--sky-delay) infinite;
+    animation-play-state: paused;
+}
+
+.similar-stage.show .similar-sky-star:nth-child(7n),
+.similar-stage.show .similar-sky-star.is-bright,
+.similar-mobile-panel.show .similar-sky-star:nth-child(7n),
+.similar-mobile-panel.show .similar-sky-star.is-bright {
+    animation-play-state: running;
+}
+
+@keyframes similar-sky-twinkle {
+    0%, 100% {opacity: .25;transform: scale(.8);}
+    50% {opacity: 1;transform: scale(1.15);}
+}
+
+.similar-stage-inner,
+.similar-mobile-stage {z-index: 1;}
+
+@media (max-width: 959px) {
+    .similar-mobile-cover {
+        top: 28vh;
+        width: min(50vw, 30vh * var(--poster-crop-ratio));
+    }
+
+    .similar-mobile-cards {
+        bottom: calc(8vh + env(safe-area-inset-bottom));
+        gap: 20px 10px;
+    }
+
+    .similar-mobile-cover::before {
+        content: "";
+        position: absolute;
+        inset: -14px -24px;
+        border: 1px solid rgb(151 197 255 / .15);
+        border-radius: 50%;
+        box-shadow: 0 0 0 9px rgb(126 172 230 / .035), 0 0 70px rgb(84 139 218 / .13);
+        pointer-events: none;
+        z-index: -1;
+    }
+
+    .similar-mobile-cover img {
+        border: 1px solid rgb(188 216 255 / .45);
+        box-shadow: 0 14px 48px rgb(0 0 0 / .5), 0 0 34px rgb(100 160 235 / .18);
+    }
+
+    .similar-mobile-burst-card {
+        max-width: min(104px, 17vh * var(--poster-crop-ratio));
+        border: 1px solid rgb(154 190 235 / .4);
+        background: #101c2e;
+        box-shadow: 0 7px 22px rgb(0 0 0 / .4);
+    }
+
+    .similar-mobile-number {
+        position: absolute;
+        inset: auto 0 0;
+        padding: 16px 4px 5px;
+        color: #edf6ff;
+        background: linear-gradient(transparent, rgb(3 8 18 / .92));
+        font-family: var(--font-mono);
+        font-size: .6875rem;
+        font-weight: 600;
+        line-height: 1.3;
+        text-align: center;
+        overflow-wrap: anywhere;
+        pointer-events: none;
+    }
+
+    .similar-mobile-main-number {
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 0;
+        right: 0;
+        color: #d4e5fb;
+        font-family: var(--font-mono);
+        font-size: .75rem;
+        text-align: center;
+        overflow-wrap: anywhere;
+        pointer-events: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .similar-sky-star:nth-child(7n),
+    .similar-sky-star.is-bright {animation: none;}
+}
+
+@media (max-width: 959px) and (orientation: landscape) and (max-height: 540px) {
+    .similar-mobile-cover {
+        left: 24%;
+        top: 50%;
+        width: min(28vw, 54vh * var(--poster-crop-ratio));
+    }
+
+    .similar-mobile-cards {
+        left: 44%;
+        right: 0;
+        bottom: 50%;
+        transform: translateY(50%);
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        padding: 0 20px 0 4px;
+    }
+
+    .similar-mobile-burst-card {
+        max-width: min(120px, (100vh - 144px) * var(--poster-crop-ratio) / 2);
+    }
+}

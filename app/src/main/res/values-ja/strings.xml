@@ -26,11 +26,11 @@
     <string name="local_step1_title_legacy">Android 10 のストレージ権限を許可</string>
     <string name="local_step1_body_legacy">Android 10 では従来のストレージ権限を使い、OpenAver が通常のファイルパスへ直接アクセスできるようにします。</string>
     <string name="local_step2_title">スマートフォンのフォルダーを追加</string>
-    <string name="local_step2_body">「リスト生成」でフォルダーボタンを押し、/storage/emulated/0 または SD カードを開いて、動画が入っているフォルダーを選択します。SD カードへ書き込む場合は、右側のメニューから「書き込み可能なフォルダーを許可」を一度実行し、同じフォルダーを選択してください。</string>
+    <string name="local_step2_body">「リスト生成」でフォルダーボタンを押し、/storage/emulated/0 または SD カードを開いて、動画が入っているフォルダーを選択します。SD カードへ書き込む場合は、左上のメニューの「アプリツール」から「書き込み可能なフォルダーを許可」を一度実行し、同じフォルダーを選択してください。</string>
     <string name="local_step3_title">ローカルでスキャンして再生</string>
     <string name="local_step3_body">ページ生成、メタデータ検索、NFO とカバーの書き込み、再生はすべてスマートフォン上で実行されます。ネットワークは、有効にしたメタデータ取得元を使うときだけ利用します。</string>
     <string name="privacy_note">Python サーバー、SQLite データベース、ログ、生成データは本アプリのプライベートストレージ内に保存されます。動画ファイルは元のスマートフォンのフォルダーに残ります。</string>
-    <string name="disclaimer">非公式 Android ビルド · OpenAver Mobile v0.18.17-r11 · MIT ライセンス</string>
+    <string name="disclaimer">非公式 Android ビルド · OpenAver Mobile v0.18.17-r12 · MIT ライセンス</string>
     <string name="starting_local">ローカル OpenAver を起動しています…</string>
     <string name="starting_python">Python ランタイムを初期化しています…</string>
     <string name="loading_openaver_service">OpenAver サービスを読み込んでいます…</string>

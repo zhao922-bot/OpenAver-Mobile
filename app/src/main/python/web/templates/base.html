@@ -733,6 +733,13 @@
                         <i class="bi bi-gear"></i> {{ t('nav.settings') }}
                     </a>
                 </li>
+                {% if is_android %}
+                <li class="nav-item">
+                    <a class="nav-link" href="openaver-tools://menu" @click="mobileMenuOpen = false">
+                        <i class="bi bi-tools" aria-hidden="true"></i> {{ t('nav.app_tools') }}
+                    </a>
+                </li>
+                {% endif %}
             </ul>
         </div>
     </div>
@@ -831,6 +838,14 @@
                     <span class="nav-text">{{ t('nav.settings') }}</span>
                 </a>
             </li>
+            {% if is_android %}
+            <li class="nav-item">
+                <a class="nav-link" href="openaver-tools://menu" title="{{ t('nav.app_tools') }}">
+                    <i class="bi bi-tools" aria-hidden="true"></i>
+                    <span class="nav-text">{{ t('nav.app_tools') }}</span>
+                </a>
+            </li>
+            {% endif %}
         </ul>
     </nav>
 

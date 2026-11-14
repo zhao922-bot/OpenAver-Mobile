@@ -133,10 +133,8 @@
             ? window.Alpine.store('ui')
             : null;
 
-        // Layer order mirrors what is visually on top: toolbar/dialog, editor,
-        // media overlay, then the page's own expanded information state.
+        // Close dialogs and media before the page's sorting menu and toolbar.
         return closeFlag(page, 'displayOpen', null)
-            || closeFlag(ui, 'toolbarOpen', null)
             || closeFlag(page, '_maskVisible', 'cancelMask')
             || closeFlag(page, '_pillEditor', '_cancelPillEditor')
             || closeFlag(page, '_releaseEditor', '_cancelReleaseEditor')
@@ -149,8 +147,9 @@
             || closeFlag(page, 'deleteVideoModalOpen', 'cancelDeleteVideo')
             || closeFlag(page, 'sampleGalleryOpen', 'closeSampleGallery')
             || closeFlag(page, 'lightboxOpen', 'closeLightbox')
-            || closeFlag(page, 'infoVisible', null)
             || closeFlag(page, 'sortOpen', null)
+            || closeFlag(ui, 'toolbarOpen', null)
+            || closeFlag(page, 'infoVisible', null)
             || closeFlag(page, 'modeOpen', null);
     }
 

@@ -1,5 +1,6 @@
 {
   "nav": {
+    "app_tools": "앱 도구",
     "search": "검색",
     "scanner": "라이브러리 관리",
     "showcase": "보기",
@@ -2839,7 +2840,7 @@
       "error_no_nfo": "NFO를 찾을 수 없습니다",
       "error_nfo_ambiguous": "출력 폴더에서 여러 NFO 파일이 발견되었습니다.",
       "error_nfo_unreadable": "NFO를 읽거나 구문 분석할 수 없습니다.",
-      "error_storage_permission_required": "외부 저장소에 쓸 수 없습니다. 오른쪽 상단 메뉴를 사용하여 비디오가 포함된 SD 카드 폴더를 승인합니다.",
+      "error_storage_permission_required": "외부 저장소에 쓸 수 없습니다. 왼쪽 상단 메뉴의 앱 도구에서 동영상이 있는 SD 카드 폴더를 승인하세요.",
       "error_nfo_write_failed": "NFO를 작성하지 못했습니다.",
       "error_db_write_failed": "데이터베이스 쓰기 실패(NFO가 업데이트되었습니다. 다시 시도하십시오)",
       "error_invalid_path": "잘못된 파일 경로"
@@ -2860,7 +2861,7 @@
       "error_no_sample_images": "다운로드 가능한 샘플 이미지를 찾을 수 없습니다.",
       "error_db_write_failed": "샘플 이미지를 다운로드했지만 데이터베이스 업데이트에 실패했습니다. 다시 시도",
       "error_sample_download_failed": "샘플 이미지를 찾았지만 모든 다운로드에 실패했습니다.",
-      "error_storage_permission_required": "외부 저장소에 쓸 수 없습니다. 오른쪽 상단 메뉴를 사용하여 비디오가 포함된 SD 카드 폴더를 승인합니다.",
+      "error_storage_permission_required": "외부 저장소에 쓸 수 없습니다. 왼쪽 상단 메뉴의 앱 도구에서 동영상이 있는 SD 카드 폴더를 승인하세요.",
       "error_sample_write_failed": "외부 저장소에 샘플 이미지를 쓰지 못했습니다.",
       "error_multi_video_folder": "이 폴더에는 관련 없는 비디오가 포함되어 있습니다. 공유된 샘플 이미지는 영향을 미칩니다. 동일한 제목의 전체 부분(예: cd1/cd2)만 샘플을 공유할 수 있습니다.",
       "error_internal": "샘플 이미지 처리에 실패했습니다. 로그를 확인하세요",
@@ -2886,7 +2887,7 @@
       "error_no_nfo": "NFO 파일을 찾을 수 없습니다",
       "error_nfo_unreadable": "NFO 파일을 읽거나 분석할 수 없습니다",
       "error_nfo_write_failed": "줄거리를 NFO에 쓰지 못했습니다",
-      "error_storage_permission_required": "외부 저장소에 쓸 수 없습니다. 오른쪽 상단 메뉴에서 동영상이 있는 SD 카드 폴더를 승인하세요.",
+      "error_storage_permission_required": "외부 저장소에 쓸 수 없습니다. 왼쪽 상단 메뉴의 앱 도구에서 동영상이 있는 SD 카드 폴더를 승인하세요.",
       "error_db_write_failed": "NFO는 업데이트했지만 데이터베이스 갱신에 실패했습니다. 다시 시도하세요",
       "translation_failed": "줄거리 번역에 실패했습니다",
       "translation_refused": "모델이 이 줄거리의 번역을 거부했습니다",
@@ -3133,7 +3134,7 @@
       "error_no_nfo": "NFO 파일을 찾을 수 없습니다",
       "error_nfo_unreadable": "NFO 파일을 읽거나 분석할 수 없습니다",
       "error_nfo_write_failed": "줄거리를 NFO에 쓰지 못했습니다",
-      "error_storage_permission_required": "외부 저장소에 쓸 수 없습니다. 오른쪽 상단 메뉴에서 동영상이 있는 SD 카드 폴더를 승인하세요.",
+      "error_storage_permission_required": "외부 저장소에 쓸 수 없습니다. 왼쪽 상단 메뉴의 앱 도구에서 동영상이 있는 SD 카드 폴더를 승인하세요.",
       "error_db_write_failed": "NFO는 업데이트했지만 데이터베이스 갱신에 실패했습니다. 다시 시도하세요",
       "translation_failed": "줄거리 번역에 실패했습니다",
       "translation_refused": "모델이 이 줄거리의 번역을 거부했습니다",

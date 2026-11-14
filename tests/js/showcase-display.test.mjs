@@ -31,6 +31,13 @@ test('Android back closes display panel before navigating', async () => {
     assert.equal(page.displayOpen,false);
     assert.equal(page.infoVisible,true);
     assert.equal(ui.toolbarOpen,true);
+    page.sortOpen = true;
+    assert.equal(window.OpenAverMobileBack(), true);
+    assert.equal(page.sortOpen, false);
+    assert.equal(ui.toolbarOpen, true);
+    assert.equal(page.infoVisible, true);
+    assert.equal(window.OpenAverMobileBack(), true);
+    assert.equal(ui.toolbarOpen, false);
 });
 
 test('saved live preferences override stale legacy layout and retain 120 films', async () => {

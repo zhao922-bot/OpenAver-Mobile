@@ -213,6 +213,8 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "web/static/css/pages/showcase/05-lightbox.css",
             "web/static/css/pages/showcase/06-responsive-and-lists.css",
             "web/static/css/pages/showcase/08-remainder.css",
+            "web/static/css/pages/showcase/09-similar-sky.css",
+            "web/static/img/similar-sky.webp",
             "web/static/css/pages/scanner.css",
             "web/static/css/pages/search.css",
             "web/static/css/pages/settings.css",
@@ -272,6 +274,8 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "web/templates/search.html",
             "web/templates/settings.html",
             "web/templates/showcase.html",
+            "web/templates/_similar_sky.html",
+            "web/templates/_showcase_css.html",
         ),
     ),
     (
@@ -493,20 +497,20 @@ def patch_for_file(upstream_root: Path, source_root: Path, rel: str) -> str:
     old_path = upstream_root / rel
     new_path = source_root / rel
     if (
-        old_path.is_file()
-        and not new_path.is_file()
+        old_path.is_file() != new_path.is_file()
         and Path(rel).suffix.lower() in BINARY_SUFFIXES
     ):
+        paths = [rel, "/dev/null"] if old_path.is_file() else ["/dev/null", rel]
         result = subprocess.run(
-            ["git", "diff", "--no-index", "--binary", "--", rel, "/dev/null"],
-            cwd=upstream_root,
+            ["git", "diff", "--no-index", "--binary", "--", *paths],
+            cwd=upstream_root if old_path.is_file() else source_root,
             check=False,
             capture_output=True,
             text=True,
         )
         if result.returncode != 1:
             raise RuntimeError(
-                f"unable to generate binary deletion patch for {rel}: "
+                f"unable to generate binary patch for {rel}: "
                 f"{result.stderr.strip()}"
             )
         return result.stdout

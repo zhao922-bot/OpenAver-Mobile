@@ -251,7 +251,7 @@
     overflow-y: auto;
 }
 
-/* Header row: title + sample gallery button */
+/* Give the title a full row, with video actions underneath. */
 .lightbox-metadata .lb-header {
     display: flex;
     align-items: flex-start;
@@ -269,8 +269,54 @@
     font-weight: 600;
     color: var(--text-primary);
     line-height: 1.4;
-    flex: 1;
+    flex: 1 1 100%;
     min-width: 0;
+}
+
+.lightbox-metadata .lb-header-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    padding-block: 5px;
+}
+
+.lightbox-metadata .lb-header-actions > button {
+    position: relative;
+    flex-shrink: 0;
+}
+
+/* Keep the touch area generous around the compact visible controls. */
+.lightbox-metadata .lb-header-actions > button::before {
+    content: "";
+    position: absolute;
+    inset: -5px;
+}
+
+.lightbox-metadata .lb-header-actions :is(.lb-translate-btn,.lb-plot-btn,.lb-mask-btn) {
+    width: 34px;
+    height: 34px;
+    margin: 0;
+    border: 1px solid var(--stroke-subtle);
+    border-radius: 8px;
+    background: var(--surface-1);
+    font-size: .875rem;
+}
+
+.lightbox-metadata .lb-header-actions :is(.sg-open-btn,.fetch-samples-btn) {
+    min-height: 34px;
+    padding: 5px 10px;
+    font-size: .8125rem;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.lightbox-metadata .lb-header-actions > span {
+    font-size: .8125rem;
+    overflow-wrap: anywhere;
 }
 
 .lightbox-metadata .lb-title-text {

@@ -1524,7 +1524,7 @@
      return {
 --- a/web/static/css/components/fluent-materials.css
 +++ b/web/static/css/components/fluent-materials.css
-@@ -1,1038 +1,141 @@
+@@ -1,1038 +1,178 @@
 -/* fluent-materials.css — Fluent Material Token System (77a-T1)
 - *
 - * PURPOSE: Declares all 6 Fluent material role tokens for the dim theme.
@@ -1571,6 +1571,7 @@
 + --bg-header:var(--surface-1); --bg-overlay:var(--surface-1);
 + --border-card:var(--stroke-default); --border-light:var(--stroke-subtle);
 + --native-control-height:44px; --native-bottom-height:0px;
++ --overlay-control:rgb(0 0 0 / .68);
 + --font-display:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",sans-serif;
 + --fluent-shadow-2:none; --fluent-shadow-4:none; --fluent-shadow-8:none;
 + --fluent-shadow-16:none; --fluent-shadow-28:none; --fluent-shadow-64:none;
@@ -1629,7 +1630,7 @@
 +body :is(.btn-primary,.btn-warning):hover:not(:disabled):not(.btn-outline) {filter:brightness(.95);}
 +body .btn-ghost {color:var(--text-secondary);background:transparent;}
 +body .btn-outline {color:var(--text-primary);border-color:var(--stroke-default);background:var(--surface-1);}
-+body .btn:disabled,.native-option:disabled {opacity:.45;}
++body .btn:disabled,.native-option:disabled {opacity:.65;}
 +:where(button,a,input,select,textarea,[tabindex]):focus-visible {outline:2px solid var(--accent);outline-offset:3px;}
 +body :is(.input,.select,.textarea) {color:var(--text-primary);background:var(--surface-1);border:1px solid var(--stroke-default);border-radius:10px;box-shadow:none;max-width:100%;min-width:0;font:inherit;}
 +body :is(.input,.select) {min-height:var(--native-control-height);height:auto;padding-block:8px;}
@@ -1660,7 +1661,7 @@
 +.native-display-field {display:grid;gap:10px;padding:0;margin:0;border:0;min-width:0;}
 +.native-display-field legend {padding:0 0 10px;font-weight:600;font-size:.875rem;}
 +.native-display-field>span {font-weight:600;font-size:.875rem;}
-+.native-display-field:disabled {opacity:.5;}
++.native-display-field:disabled {opacity:1;}
 +.native-option-group {display:flex;gap:8px;}
 +.native-option {flex:1;min-width:0;min-height:44px;padding:8px 4px;background:var(--surface-2);color:var(--text-primary);border:1px solid transparent;}
 +.native-option[aria-pressed="true"] {color:var(--accent);border-color:var(--accent);background:var(--accent-soft);}
@@ -1668,10 +1669,36 @@
 +.native-hint,.native-display-status {font-size:.8125rem;color:var(--text-secondary);line-height:1.5;}
 +.native-save-error {display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:var(--color-error);}
 +.native-panel-done {width:100%;}
-+.native-browse-bar {display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px var(--layer-inset);}
++.native-browse-bar {display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:8px var(--layer-inset);}
 +.native-browse-count {font-size:.875rem;color:var(--text-secondary);}
 +.native-browse-count b {font-weight:650;color:var(--text-primary);}
-+.native-display-trigger {margin-inline-start:auto;display:inline-flex;align-items:center;gap:6px;border-color:var(--stroke-default);background:var(--surface-1);}
++.native-browse-actions {
++ display:flex;
++ flex-wrap:wrap;
++ align-items:center;
++ justify-content:flex-end;
++ gap:8px;
++ margin-inline-start:auto;
++}
++.native-browse-actions .btn {
++ display:inline-flex;
++ align-items:center;
++ justify-content:center;
++ gap:6px;
++ min-height:44px;
++ padding-inline:12px;
++ color:var(--text-primary);
++ border:1px solid var(--stroke-default);
++ background:var(--surface-1);
++}
++.native-browse-actions .toolbar-dropdown {
++ z-index:220;
++ left:0;
++ right:auto;
++ max-height:calc(100dvh - 180px);
++ overflow-y:auto;
++}
++.native-sort-order {min-width:44px;}
  
 -  /* ── Glass panel (Settings/Help/Scanner/Search reading pane) ── S3 ── */
 -  --glass-panel-gradient: linear-gradient(145deg,
@@ -1686,30 +1713,7 @@
 -  --glass-panel-header-tint:   color-mix(in oklch, white 4%,  transparent);
 -  --glass-panel-header-border: color-mix(in oklch, white 10%, transparent);
 -  /* shadow: --fluent-shadow-16 */
-+/* Page rhythm and typography. Specialized controls keep their existing behavior. */
-+#settings-components .settings-card-header {padding:16px;font-weight:650;}
-+#settings-components .card-body {padding:16px;gap:0;}
-+#settings-components .settings-form-row {padding-block:14px;gap:12px;}
-+#settings-components .settings-form-row:first-child {padding-top:0;}
-+#settings-components .settings-form-row:last-child {padding-bottom:0;}
-+#settings-components :is(.row-label,.settings-label) {color:var(--text-primary);font-weight:550;}
-+#settings-components :is(.settings-hint,.settings-note-inline) {color:var(--text-secondary);line-height:1.55;}
-+#settings-components .settings-tabs {background:var(--surface-1);padding:4px;border:1px solid var(--stroke-subtle);border-radius:12px;}
-+#settings-components .settings-tab {border-radius:8px;}
-+#settings-components .settings-tab.is-active {color:var(--accent);background:var(--accent-soft);box-shadow:none;}
-+#settings-components .save-btn-wrapper {background:var(--surface-1);border-color:var(--stroke-default);}
-+.insights-container .card {border-radius:16px;}
-+.insights-container .card-head {padding:16px;}
-+.insights-container .card-head h2 {font-size:1rem;font-weight:650;}
-+.insights-container .card-body {padding:16px;}
-+.mobile-help,[data-theme="dim"] .mobile-help {
-+ --mobile-help-ink:var(--text-primary);--mobile-help-teal:var(--accent);--mobile-help-teal-soft:var(--accent-soft);
-+ --mobile-help-paper:var(--surface-1);--mobile-help-border:var(--stroke-subtle);background:transparent;
-+}
-+.mobile-help-hero {background:var(--surface-1);color:var(--text-primary);border:1px solid var(--stroke-subtle);border-radius:16px;box-shadow:none;}
-+.mobile-help-hero::after {display:none;}
-+.mobile-help-hero :is(p,h1,h2,.mobile-help-eyebrow) {color:var(--text-primary);}
- 
+-
 -  /* ── Glass caption (grid card title bar; 77b) ── S5 ── */
 -  --glass-caption-gradient: linear-gradient(150deg,
 -      color-mix(in oklch, white 16%, transparent) 0%, color-mix(in oklch, var(--color-primary) 8%, transparent) 36%,
@@ -1744,24 +1748,16 @@
 -  --glass-edge-lowlight-strong:  color-mix(in oklch, black 24%, transparent);
 -  --glass-edge-lowlight-mid:     color-mix(in oklch, black 16%, transparent);
 -  --glass-edge-lowlight-soft:    color-mix(in oklch, black 10%, transparent);
-+@media(max-width:1023px) {
-+ :root, :root[data-theme] {--native-bottom-height:max(64px, 4.5rem);--page-gutter:12px;--layer-inset:12px;--layer-inset-mobile:12px;--mobile-topbar-height:56px;}
-+ body .main-content {padding:68px 0 calc(var(--native-bottom-height) + 20px + env(safe-area-inset-bottom));}
-+ .native-bottom-nav {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));position:fixed;z-index:45;inset:auto 0 0;padding:4px 8px calc(4px + env(safe-area-inset-bottom));min-height:var(--native-bottom-height);background:var(--surface-1);border-top:1px solid var(--stroke-subtle);}
-+ .native-bottom-nav a {display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px;min-width:0;text-align:center;text-decoration:none;color:var(--text-secondary);font-size:.75rem;line-height:1.3;border-radius:12px;overflow-wrap:anywhere;}
-+ .native-bottom-nav i {display:grid;place-items:center;width:48px;height:28px;border-radius:10px;font-size:1.15rem;}
-+ .native-bottom-nav a[aria-current="page"] {color:var(--accent);font-weight:650;}
-+ .native-bottom-nav a[aria-current="page"] i {background:var(--accent-soft);}
-+ #settings-components .save-btn-wrapper {bottom:calc(var(--native-bottom-height) + env(safe-area-inset-bottom));}
-+ body .avlist-container {padding-inline:12px;}
-+ body .settings-container {padding-inline:0;}
-+ #settings-components .settings-form-row {flex-wrap:wrap;}
-+ #settings-components .settings-form-row>.row-label {flex:0 0 100%;width:100%;}
-+ #settings-components .settings-form-row>:is(.select,.input,.textarea,.flex-1) {width:100%;min-width:0;}
-+ .native-display-overlay {align-items:flex-end;}
-+ .native-display-panel {width:100%;}
++/* Media controls keep a translucent background with readable contrast. */
++body :is(.lb-action-btn,.lightbox-close,.lightbox-similar-btn,.similar-close-btn,.similar-mobile-panel-close) {
++ background:var(--overlay-control);
++ border-color:rgb(255 255 255 / .6);
++ color:#fff;
++}
++body :is(.lb-action-btn,.lightbox-close,.lightbox-similar-btn,.similar-close-btn,.similar-mobile-panel-close):hover:not(:disabled) {
++ background:rgb(0 0 0 / .8);
  }
--
+ 
 -/* ──────────────────────────────────────────────────────────────────────────
 - * 77d-T2: Light shell tokens — chrome top-bars ONLY (CD-D2)
 - *
@@ -1795,8 +1791,30 @@
 -  --glass-shell-edge-top:    color-mix(in oklch, white 75%, transparent);
 -  --glass-shell-edge-bottom: color-mix(in oklch, var(--color-base-content) 9%, transparent);
 -  --glass-shell-border:      color-mix(in oklch, var(--color-base-content) 13%, transparent);
--}
--
++/* Page rhythm and typography. Specialized controls keep their existing behavior. */
++#settings-components .settings-card-header {padding:16px;font-weight:650;}
++#settings-components .card-body {padding:16px;gap:0;}
++#settings-components .settings-form-row {padding-block:14px;gap:12px;}
++#settings-components .settings-form-row:first-child {padding-top:0;}
++#settings-components .settings-form-row:last-child {padding-bottom:0;}
++#settings-components :is(.row-label,.settings-label) {color:var(--text-primary);font-weight:550;}
++#settings-components :is(.settings-hint,.settings-note-inline) {color:var(--text-secondary);line-height:1.55;}
++#settings-components .settings-tabs {background:var(--surface-1);padding:4px;border:1px solid var(--stroke-subtle);border-radius:12px;}
++#settings-components .settings-tab {border-radius:8px;}
++#settings-components .settings-tab.is-active {color:var(--accent);background:var(--accent-soft);box-shadow:none;}
++#settings-components .save-btn-wrapper {background:var(--surface-1);border-color:var(--stroke-default);}
++.insights-container .card {border-radius:16px;}
++.insights-container .card-head {padding:16px;}
++.insights-container .card-head h2 {font-size:1rem;font-weight:650;}
++.insights-container .card-body {padding:16px;}
++.mobile-help,[data-theme="dim"] .mobile-help {
++ --mobile-help-ink:var(--text-primary);--mobile-help-teal:var(--accent);--mobile-help-teal-soft:var(--accent-soft);
++ --mobile-help-paper:var(--surface-1);--mobile-help-border:var(--stroke-subtle);background:transparent;
+ }
++.mobile-help-hero {background:var(--surface-1);color:var(--text-primary);border:1px solid var(--stroke-subtle);border-radius:16px;box-shadow:none;}
++.mobile-help-hero::after {display:none;}
++.mobile-help-hero :is(p,h1,h2,.mobile-help-eyebrow) {color:var(--text-primary);}
+ 
 -/* ==========================================================================
 - * A-T2: Mica canvas — dim-scoped surface application (CD-A3 / CD-A4)
 - *
@@ -1819,7 +1837,23 @@
 -[data-theme="dim"] body.fluent-canvas.fluent-canvas {
 -    background: var(--mica-canvas);
 -    background-attachment: fixed;
--}
++@media(max-width:1023px) {
++ :root, :root[data-theme] {--native-bottom-height:max(64px, 4.5rem);--page-gutter:12px;--layer-inset:12px;--layer-inset-mobile:12px;--mobile-topbar-height:56px;}
++ body .main-content {padding:68px 0 calc(var(--native-bottom-height) + 20px + env(safe-area-inset-bottom));}
++ .native-bottom-nav {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));position:fixed;z-index:45;inset:auto 0 0;padding:4px 8px calc(4px + env(safe-area-inset-bottom));min-height:var(--native-bottom-height);background:var(--surface-1);border-top:1px solid var(--stroke-subtle);}
++ .native-bottom-nav a {display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px;min-width:0;text-align:center;text-decoration:none;color:var(--text-secondary);font-size:.75rem;line-height:1.3;border-radius:12px;overflow-wrap:anywhere;}
++ .native-bottom-nav i {display:grid;place-items:center;width:48px;height:28px;border-radius:10px;font-size:1.15rem;}
++ .native-bottom-nav a[aria-current="page"] {color:var(--accent);font-weight:650;}
++ .native-bottom-nav a[aria-current="page"] i {background:var(--accent-soft);}
++ #settings-components .save-btn-wrapper {bottom:calc(var(--native-bottom-height) + env(safe-area-inset-bottom));}
++ body .avlist-container {padding-inline:12px;}
++ body .settings-container {padding-inline:0;}
++ #settings-components .settings-form-row {flex-wrap:wrap;}
++ #settings-components .settings-form-row>.row-label {flex:0 0 100%;width:100%;}
++ #settings-components .settings-form-row>:is(.select,.input,.textarea,.flex-1) {width:100%;min-width:0;}
++ .native-display-overlay {align-items:flex-end;}
++ .native-display-panel {width:100%;}
+ }
 -
 -/* Rule 2 — main-content transparent (dim-scoped)
 - * Overrides base.html inline <style> L213: .main-content { background-color: var(--surface-0); }
@@ -3046,7 +3080,7 @@
  
  /* 預設層：番號（左）+ 女優（右） */
  .footer-default {
-@@ -99,3 +108,10 @@
+@@ -99,3 +108,37 @@
      text-overflow: ellipsis;
  }
  
@@ -3057,6 +3091,33 @@
 +.showcase-grid .av-num { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 +.showcase-container[data-browse-columns="5"] .showcase-grid .av-card-preview-footer { padding: 6px 4px; }
 +.showcase-container[data-browse-columns="5"] .showcase-grid .native-card-title { -webkit-line-clamp: 2; }
++
++/* Dense layouts show the entire ID, wrapping long IDs at hyphens or digits. */
++:is(#ds-gallery-components,.ds-gallery-composition)[data-browse-columns="3"] .showcase-grid .av-num {
++    font-size: .75rem;
++}
++:is(#ds-gallery-components,.ds-gallery-composition)[data-browse-columns="5"] .showcase-grid .av-num {
++    font-size: clamp(9px, .625rem, 12px);
++}
++:is(#ds-gallery-components,.ds-gallery-composition):is([data-browse-columns="3"],[data-browse-columns="5"]) .showcase-grid .av-num {
++    white-space: normal;
++    overflow-wrap: anywhere;
++    overflow: visible;
++    text-overflow: clip;
++    line-height: 1.35;
++}
++:is(#ds-gallery-components,.ds-gallery-composition)[data-browse-columns="3"] .showcase-grid .av-card-preview-footer {
++    padding: 8px 6px;
++}
++:is(#ds-gallery-components,.ds-gallery-composition)[data-browse-columns="5"] .showcase-grid .av-card-preview-footer {
++    padding: 6px 3px;
++}
++.showcase-container[data-browse-columns="3"] .showcase-grid .native-card-title {
++    font-size: .75rem;
++}
++.showcase-container[data-browse-columns="5"] .showcase-grid .native-card-title {
++    font-size: .625rem;
++}
 --- a/web/static/css/pages/connect.css
 +++ /dev/null
 @@ -1,170 +0,0 @@

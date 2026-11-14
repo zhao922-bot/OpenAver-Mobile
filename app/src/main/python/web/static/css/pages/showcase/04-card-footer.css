@@ -115,3 +115,30 @@
 .showcase-grid .av-num { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .showcase-container[data-browse-columns="5"] .showcase-grid .av-card-preview-footer { padding: 6px 4px; }
 .showcase-container[data-browse-columns="5"] .showcase-grid .native-card-title { -webkit-line-clamp: 2; }
+
+/* Dense layouts show the entire ID, wrapping long IDs at hyphens or digits. */
+:is(#ds-gallery-components,.ds-gallery-composition)[data-browse-columns="3"] .showcase-grid .av-num {
+    font-size: .75rem;
+}
+:is(#ds-gallery-components,.ds-gallery-composition)[data-browse-columns="5"] .showcase-grid .av-num {
+    font-size: clamp(9px, .625rem, 12px);
+}
+:is(#ds-gallery-components,.ds-gallery-composition):is([data-browse-columns="3"],[data-browse-columns="5"]) .showcase-grid .av-num {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.35;
+}
+:is(#ds-gallery-components,.ds-gallery-composition)[data-browse-columns="3"] .showcase-grid .av-card-preview-footer {
+    padding: 8px 6px;
+}
+:is(#ds-gallery-components,.ds-gallery-composition)[data-browse-columns="5"] .showcase-grid .av-card-preview-footer {
+    padding: 6px 3px;
+}
+.showcase-container[data-browse-columns="3"] .showcase-grid .native-card-title {
+    font-size: .75rem;
+}
+.showcase-container[data-browse-columns="5"] .showcase-grid .native-card-title {
+    font-size: .625rem;
+}

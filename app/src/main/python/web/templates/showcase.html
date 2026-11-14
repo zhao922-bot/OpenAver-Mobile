@@ -27,12 +27,65 @@
         <span class="native-browse-count" x-show="!showFavoriteActresses">
             {{ t('showcase.status.total_prefix') }} <b x-text="videoCount"></b> {{ t('showcase.status.total_suffix') }}
         </span>
-                    <button type="button" class="btn native-display-trigger"
-                            @click="openDisplaySettings()" aria-haspopup="dialog"
-                            :aria-expanded="displayOpen.toString()">
-                        <i class="bi bi-grid" aria-hidden="true"></i>
-                        <span>{{ t('showcase.display.button') }}</span>
+        <div class="native-browse-actions">
+            <div class="control-group native-sort-controls" x-show="!showFavoriteActresses">
+                <!-- 排序 -->
+                <div class="toolbar-dropdown-wrap" @click.outside="sortOpen = false">
+                    <button type="button" class="btn native-sort-trigger"
+                            aria-haspopup="true" :aria-expanded="sortOpen.toString()"
+                            @click="sortOpen = !sortOpen; modeOpen = false"
+                            :title="t('showcase.toolbar.sort_prefix') + ' · ' + t('showcase.sort.' + sort)"
+                            :class="{ 'active': sortOpen || _hasPickPill() }">
+                        <i class="bi bi-sort-down" aria-hidden="true"></i>
+                        <span>{{ t('showcase.toolbar.sort_prefix') }}</span>
                     </button>
+                    <div class="toolbar-dropdown" x-cloak x-show="sortOpen" x-transition.opacity.duration.150ms @click.stop>
+                        <a href="#" class="dropdown-item dropdown-item-pick" :class="{ 'is-checked': _hasPickPill() }"
+                           @click.prevent="togglePickPill(); sortOpen = false">
+                            <i class="bi bi-star-fill"></i> {{ t('showcase.filter.pick_only') }}
+                            <i class="bi bi-check2 dropdown-item-pick-check" x-show="_hasPickPill()"></i>
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a href="#" class="dropdown-item" :class="{ 'active': sort === 'date' }"
+                           @click.prevent="sort = 'date'; onSortChange(); sortOpen = false">
+                            <i class="bi bi-calendar"></i> {{ t('showcase.sort.date') }}</a>
+                        <a href="#" class="dropdown-item" :class="{ 'active': sort === 'num' }"
+                           @click.prevent="sort = 'num'; onSortChange(); sortOpen = false">
+                            <i class="bi bi-hash"></i> {{ t('showcase.sort.num') }}</a>
+                        <a href="#" class="dropdown-item" :class="{ 'active': sort === 'title' }"
+                           @click.prevent="sort = 'title'; onSortChange(); sortOpen = false">
+                            <i class="bi bi-type"></i> {{ t('showcase.sort.title') }}</a>
+                        <a href="#" class="dropdown-item" :class="{ 'active': sort === 'actor' }"
+                           @click.prevent="sort = 'actor'; onSortChange(); sortOpen = false">
+                            <i class="bi bi-person-circle"></i> {{ t('showcase.sort.actor') }}</a>
+                        <a href="#" class="dropdown-item" :class="{ 'active': sort === 'maker' }"
+                           @click.prevent="sort = 'maker'; onSortChange(); sortOpen = false">
+                            <i class="bi bi-building"></i> {{ t('showcase.sort.maker') }}</a>
+                        <a href="#" class="dropdown-item" :class="{ 'active': sort === 'size' }"
+                           @click.prevent="sort = 'size'; onSortChange(); sortOpen = false">
+                            <i class="bi bi-file-earmark"></i> {{ t('showcase.sort.size') }}</a>
+                        <a href="#" class="dropdown-item" :class="{ 'active': sort === 'mdate' }"
+                           @click.prevent="sort = 'mdate'; onSortChange(); sortOpen = false">
+                            <i class="bi bi-clock"></i> {{ t('showcase.sort.mdate') }}</a>
+                        <a href="#" class="dropdown-item" :class="{ 'active': sort === 'random' }"
+                           @click.prevent="sort = 'random'; onSortChange(); sortOpen = false">
+                            <i class="bi bi-shuffle"></i> {{ t('showcase.sort.random') }}</a>
+                    </div>
+                </div>
+                <button type="button" class="btn native-sort-order" @click="toggleOrder()"
+                        :aria-label="t('settings.gallery.order_' + order)"
+                        :disabled="sort === 'random'" title="{{ t('showcase.action.toggle_order') }}">
+                    <i class="bi" :class="order === 'asc' ? 'bi-sort-up' : 'bi-sort-down'"></i>
+                </button>
+
+            </div>
+            <button type="button" class="btn native-display-trigger"
+                    @click="openDisplaySettings()" aria-haspopup="dialog"
+                    :aria-expanded="displayOpen.toString()">
+                <i class="bi bi-grid" aria-hidden="true"></i>
+                <span>{{ t('showcase.display.button') }}</span>
+            </button>
+        </div>
     </div>
 
     <!-- Loading State (初始顯示) -->
@@ -336,51 +389,6 @@
 
             <div class="toolbar-section toolbar-controls" x-show="!showFavoriteActresses">
                 <div class="control-group">
-                    <!-- 排序 -->
-                    <div class="toolbar-dropdown-wrap" @click.outside="sortOpen = false">
-                        <button class="btn-icon"
-                                @click="sortOpen = !sortOpen; modeOpen = false"
-                                :title="t('showcase.toolbar.sort_prefix') + ': ' + sort"
-                                :class="{ 'active': sortOpen || _hasPickPill() }">
-                            <i class="bi bi-funnel"></i>
-                        </button>
-                        <div class="toolbar-dropdown" x-show="sortOpen" x-transition.opacity.duration.150ms @click.stop>
-                            <a href="#" class="dropdown-item dropdown-item-pick" :class="{ 'is-checked': _hasPickPill() }"
-                               @click.prevent="togglePickPill(); sortOpen = false">
-                                <i class="bi bi-star-fill"></i> {{ t('showcase.filter.pick_only') }}
-                                <i class="bi bi-check2 dropdown-item-pick-check" x-show="_hasPickPill()"></i>
-                            </a>
-                            <div class="dropdown-divider"></div>
-                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'date' }"
-                               @click.prevent="sort = 'date'; onSortChange(); sortOpen = false">
-                                <i class="bi bi-calendar"></i> {{ t('showcase.sort.date') }}</a>
-                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'num' }"
-                               @click.prevent="sort = 'num'; onSortChange(); sortOpen = false">
-                                <i class="bi bi-hash"></i> {{ t('showcase.sort.num') }}</a>
-                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'title' }"
-                               @click.prevent="sort = 'title'; onSortChange(); sortOpen = false">
-                                <i class="bi bi-type"></i> {{ t('showcase.sort.title') }}</a>
-                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'actor' }"
-                               @click.prevent="sort = 'actor'; onSortChange(); sortOpen = false">
-                                <i class="bi bi-person-circle"></i> {{ t('showcase.sort.actor') }}</a>
-                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'maker' }"
-                               @click.prevent="sort = 'maker'; onSortChange(); sortOpen = false">
-                                <i class="bi bi-building"></i> {{ t('showcase.sort.maker') }}</a>
-                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'size' }"
-                               @click.prevent="sort = 'size'; onSortChange(); sortOpen = false">
-                                <i class="bi bi-file-earmark"></i> {{ t('showcase.sort.size') }}</a>
-                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'mdate' }"
-                               @click.prevent="sort = 'mdate'; onSortChange(); sortOpen = false">
-                                <i class="bi bi-clock"></i> {{ t('showcase.sort.mdate') }}</a>
-                            <a href="#" class="dropdown-item" :class="{ 'active': sort === 'random' }"
-                               @click.prevent="sort = 'random'; onSortChange(); sortOpen = false">
-                                <i class="bi bi-shuffle"></i> {{ t('showcase.sort.random') }}</a>
-                        </div>
-                    </div>
-                    <button class="btn-icon" @click="toggleOrder()" title="{{ t('showcase.action.toggle_order') }}">
-                        <i class="bi" :class="order === 'asc' ? 'bi-sort-up' : 'bi-sort-down'"></i>
-                    </button>
-
                     <!-- 資訊顯示開關 (僅 Grid 模式) -->
                     <button class="btn-icon toggle-info-eye-btn"
                             x-show="mode === 'grid'"
@@ -1212,7 +1220,7 @@
 
                         <!-- Metadata Panel（緊湊版，匹配原版 gallery） -->
                         <div class="lightbox-metadata">
-                            <!-- Row 1: Header (title + sample gallery button) -->
+                            <!-- Title followed by a separate row of video actions. -->
                             <div class="lb-header">
                                 <!-- 123-T8：精選星掛在標題行最前面（owner 拍板：標題前比番號前更清楚，
                                      與標題有沒有番號前綴無關——scraper 本來就會剝掉前綴，見
@@ -1225,48 +1233,54 @@
                                         :aria-label="(currentLightboxVideo?.user_rating||0) > 0 ? t('showcase.pick.remove_aria') : t('showcase.pick.add_aria')"
                                         :aria-busy="!!_pickInFlight[currentLightboxVideo?.path]"
                                         @click.stop="togglePickStar()"><i class="bi bi-star pick-star-outline" aria-hidden="true"></i><i class="bi bi-star-fill pick-star-fill" aria-hidden="true"
-                                       :style="{ '--pick-fill': (currentLightboxVideo?.user_rating || 0) > 0 ? '0%' : '100%' }"></i></button><span class="lb-title-text" x-text="currentLightboxVideo?.title || t('showcase.grid.unknown_title')"></span><button type="button" class="lb-translate-btn"
-                                        x-show="lbTrShowOnTitle()"
-                                        @click.stop="lbTranslate()"
-                                        :disabled="lbTrIsBusy()"
-                                        :aria-busy="lbTrIsBusy()"
-                                        data-tooltip="{{ t('showcase.lightbox.translate_tooltip') }}"
-                                        aria-label="{{ t('showcase.lightbox.translate_tooltip') }}"><i class="bi bi-translate" x-show="!lbTrIsBusy()" aria-hidden="true"></i><i class="bi bi-arrow-repeat spin" x-show="lbTrIsBusy()" aria-hidden="true"></i></button></div>
-                                <!-- Sample Gallery 入口按鈕 (T7) -->
-                                <button class="sg-open-btn"
-                                        x-show="(currentLightboxVideo?.sample_images || []).length > 0"
-                                        @click="openSampleGallery(currentLightboxVideo.sample_images, 0)"
-                                        x-text="t('showcase.gallery.sample_prefix') + ' (' + (currentLightboxVideo?.sample_images || []).length + ')'">
-                                </button>
-                                <!-- §b3: 劇照補抓入口（無劇照時顯示） -->
-                                <button class="fetch-samples-btn"
-                                        x-show="(currentLightboxVideo?.sample_images || []).length === 0 && !_fetchSamplesLoading"
-                                        @click="fetchSamples(currentLightboxVideo)">
-                                    <i class="bi bi-cloud-download" aria-hidden="true"></i>
-                                    <span x-text="t('showcase.samples.fetch_btn')"></span>
-                                </button>
-                                <span x-show="_fetchSamplesLoading" x-text="t('showcase.samples.fetching')"></span>
-                                <!-- Lazy NFO plot entry. The button follows cached NFO presence;
-                                     clicking is the only action that reads the sidecar. -->
-                                <button type="button" class="lb-plot-btn"
-                                        x-show="lbPlotShowButton()"
-                                        :aria-pressed="lbPlotOpen"
-                                        @click.stop="lbPlotToggle()"
-                                        data-tooltip="{{ t('showcase.lightbox.plot_tooltip') }}"
-                                        aria-label="{{ t('showcase.lightbox.plot_tooltip') }}">
-                                    <i class="bi bi-card-text" aria-hidden="true"></i>
-                                </button>
-                                <!-- 98b-T4：焦點裁切遮罩 toggle（低調圓鈕，styled-like .lb-action-btn 但更小）-->
-                                <!-- 101d-T2：影片焦點 gate 綁 _posterModeActive()（窄/poster 模式才顯示）。與女優
-                                     _focalIconVisible() 的 per-image 門檻刻意不同——根因：影片只在 ≤899px 裁、
-                                     女優牆全寬度都裁（見 plan-101d §2.2）。改任一邊前先讀那張表，別「對齊」成同一套。 -->
-                                <button class="lb-mask-btn"
-                                        x-show="!!currentLightboxVideo?.path && _lbFullLoaded && _posterModeActive()"
-                                        @click="openMask()"
-                                        :title="t('showcase.lightbox.mask_toggle')"
-                                        :aria-label="t('showcase.lightbox.mask_toggle')">
-                                    <i class="bi bi-person-bounding-box" aria-hidden="true"></i>
-                                </button>
+                                       :style="{ '--pick-fill': (currentLightboxVideo?.user_rating || 0) > 0 ? '0%' : '100%' }"></i></button><span class="lb-title-text" x-text="currentLightboxVideo?.title || t('showcase.grid.unknown_title')"></span></div>
+                                <div class="lb-header-actions">
+                                    <!-- Lazy NFO plot entry. The button follows cached NFO presence;
+                                         clicking is the only action that reads the sidecar. -->
+                                    <button type="button" class="lb-plot-btn"
+                                            x-show="lbPlotShowButton()"
+                                            :aria-pressed="lbPlotOpen"
+                                            @click.stop="lbPlotToggle()"
+                                            data-tooltip="{{ t('showcase.lightbox.plot_tooltip') }}"
+                                            aria-label="{{ t('showcase.lightbox.plot_tooltip') }}">
+                                        <i class="bi bi-card-text" aria-hidden="true"></i>
+                                    </button>
+                                    <!-- 98b-T4：焦點裁切遮罩 toggle（低調圓鈕，styled-like .lb-action-btn 但更小）-->
+                                    <!-- 101d-T2：影片焦點 gate 綁 _posterModeActive()（窄/poster 模式才顯示）。與女優
+                                         _focalIconVisible() 的 per-image 門檻刻意不同——根因：影片只在 ≤899px 裁、
+                                         女優牆全寬度都裁（見 plan-101d §2.2）。改任一邊前先讀那張表，別「對齊」成同一套。 -->
+                                    <button class="lb-mask-btn"
+                                            x-show="!!currentLightboxVideo?.path && _lbFullLoaded && _posterModeActive()"
+                                            @click="openMask()"
+                                            :title="t('showcase.lightbox.mask_toggle')"
+                                            :aria-label="t('showcase.lightbox.mask_toggle')">
+                                        <i class="bi bi-person-bounding-box" aria-hidden="true"></i>
+                                    </button>
+                                    <button type="button" class="lb-translate-btn"
+                                            x-show="lbTrShowOnTitle()"
+                                            @click.stop="lbTranslate()"
+                                            :disabled="lbTrIsBusy()"
+                                            :aria-busy="lbTrIsBusy()"
+                                            data-tooltip="{{ t('showcase.lightbox.translate_tooltip') }}"
+                                            aria-label="{{ t('showcase.lightbox.translate_tooltip') }}">
+                                        <i class="bi bi-translate" x-show="!lbTrIsBusy()" aria-hidden="true"></i>
+                                        <i class="bi bi-arrow-repeat spin" x-show="lbTrIsBusy()" aria-hidden="true"></i>
+                                    </button>
+                                    <!-- Sample Gallery 入口按鈕 (T7) -->
+                                    <button class="sg-open-btn"
+                                            x-show="(currentLightboxVideo?.sample_images || []).length > 0"
+                                            @click="openSampleGallery(currentLightboxVideo.sample_images, 0)"
+                                            x-text="t('showcase.gallery.sample_prefix') + ' (' + (currentLightboxVideo?.sample_images || []).length + ')'">
+                                    </button>
+                                    <!-- §b3: 劇照補抓入口（無劇照時顯示） -->
+                                    <button class="fetch-samples-btn"
+                                            x-show="(currentLightboxVideo?.sample_images || []).length === 0 && !_fetchSamplesLoading"
+                                            @click="fetchSamples(currentLightboxVideo)">
+                                        <i class="bi bi-cloud-download" aria-hidden="true"></i>
+                                        <span x-text="t('showcase.samples.fetch_btn')"></span>
+                                    </button>
+                                    <span x-show="_fetchSamplesLoading" x-text="t('showcase.samples.fetching')"></span>
+                                </div>
                             </div>
                             <div class="lb-faces">
                             <div class="lb-info-face"
@@ -1641,6 +1655,8 @@
          x-effect="similarModeOpen ? initSimilarStage() : destroySimilarStage()"
          @click.self="closeSimilarMode()">
 
+        {% include '_similar_sky.html' %}
+
         <!-- X 關閉按鈕（backdrop scope，相對 viewport 角，不在 inner 內） -->
         <button class="similar-close-btn"
                 @click="closeSimilarMode()"
@@ -1829,12 +1845,15 @@
          :aria-hidden="!similarModeMobileOpen">
         <!-- scrim：overlay 30px 模糊完全遮住 lightbox（CD-10） -->
         <div class="similar-mobile-scrim" @click="closeMobilePanel()"></div>
+        {% include '_similar_sky.html' %}
         <!-- stage：burst origin frame -->
         <div class="similar-mobile-stage">
             <!-- 中央右半裁切主圖（FlipReplace 落點 + Burst 原點；點主圖關面板，無文字） -->
             <!-- T4: cover 不設 overflow:hidden（已移至 img），讓 play-btn 子元素不被裁切 -->
             <div class="similar-mobile-cover" @click="closeMobilePanel()">
                 <img x-ref="mobilePanelCoverImg" alt="" aria-hidden="true">
+                <span class="similar-mobile-main-number"
+                      x-text="_mobileLastDrilledNumber || currentLightboxVideo?.number || ''"></span>
                 <!-- T4: 播放按鈕 — cover 子元素；@click.stop 阻冒泡防觸發 cover 的 closeMobilePanel() -->
                 <button class="similar-mobile-play-btn"
                         x-show="!!currentLightboxVideo?.path"
@@ -1859,6 +1878,7 @@
                              @load="applyCellFocal($el, item)"
                              x-init="$watch('item.auto_focal', () => applyCellFocal($el, item));
                                      $watch('item.crop_mode', () => applyCellFocal($el, item))">
+                        <span class="similar-mobile-number" x-text="item.number || ''"></span>
                     </div>
                 </template>
             </div>

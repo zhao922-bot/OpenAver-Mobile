@@ -14,6 +14,7 @@
  --bg-header:var(--surface-1); --bg-overlay:var(--surface-1);
  --border-card:var(--stroke-default); --border-light:var(--stroke-subtle);
  --native-control-height:44px; --native-bottom-height:0px;
+ --overlay-control:rgb(0 0 0 / .68);
  --font-display:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",sans-serif;
  --fluent-shadow-2:none; --fluent-shadow-4:none; --fluent-shadow-8:none;
  --fluent-shadow-16:none; --fluent-shadow-28:none; --fluent-shadow-64:none;
@@ -61,7 +62,7 @@ body :is(.btn-primary,.btn-warning):not(.btn-outline) {background:var(--action-f
 body :is(.btn-primary,.btn-warning):hover:not(:disabled):not(.btn-outline) {filter:brightness(.95);}
 body .btn-ghost {color:var(--text-secondary);background:transparent;}
 body .btn-outline {color:var(--text-primary);border-color:var(--stroke-default);background:var(--surface-1);}
-body .btn:disabled,.native-option:disabled {opacity:.45;}
+body .btn:disabled,.native-option:disabled {opacity:.65;}
 :where(button,a,input,select,textarea,[tabindex]):focus-visible {outline:2px solid var(--accent);outline-offset:3px;}
 body :is(.input,.select,.textarea) {color:var(--text-primary);background:var(--surface-1);border:1px solid var(--stroke-default);border-radius:10px;box-shadow:none;max-width:100%;min-width:0;font:inherit;}
 body :is(.input,.select) {min-height:var(--native-control-height);height:auto;padding-block:8px;}
@@ -84,7 +85,7 @@ body .fluent-modal-box {max-width:min(560px,100%);max-height:calc(100dvh - 32px)
 .native-display-field {display:grid;gap:10px;padding:0;margin:0;border:0;min-width:0;}
 .native-display-field legend {padding:0 0 10px;font-weight:600;font-size:.875rem;}
 .native-display-field>span {font-weight:600;font-size:.875rem;}
-.native-display-field:disabled {opacity:.5;}
+.native-display-field:disabled {opacity:1;}
 .native-option-group {display:flex;gap:8px;}
 .native-option {flex:1;min-width:0;min-height:44px;padding:8px 4px;background:var(--surface-2);color:var(--text-primary);border:1px solid transparent;}
 .native-option[aria-pressed="true"] {color:var(--accent);border-color:var(--accent);background:var(--accent-soft);}
@@ -92,10 +93,46 @@ body .fluent-modal-box {max-width:min(560px,100%);max-height:calc(100dvh - 32px)
 .native-hint,.native-display-status {font-size:.8125rem;color:var(--text-secondary);line-height:1.5;}
 .native-save-error {display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:var(--color-error);}
 .native-panel-done {width:100%;}
-.native-browse-bar {display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px var(--layer-inset);}
+.native-browse-bar {display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:8px var(--layer-inset);}
 .native-browse-count {font-size:.875rem;color:var(--text-secondary);}
 .native-browse-count b {font-weight:650;color:var(--text-primary);}
-.native-display-trigger {margin-inline-start:auto;display:inline-flex;align-items:center;gap:6px;border-color:var(--stroke-default);background:var(--surface-1);}
+.native-browse-actions {
+ display:flex;
+ flex-wrap:wrap;
+ align-items:center;
+ justify-content:flex-end;
+ gap:8px;
+ margin-inline-start:auto;
+}
+.native-browse-actions .btn {
+ display:inline-flex;
+ align-items:center;
+ justify-content:center;
+ gap:6px;
+ min-height:44px;
+ padding-inline:12px;
+ color:var(--text-primary);
+ border:1px solid var(--stroke-default);
+ background:var(--surface-1);
+}
+.native-browse-actions .toolbar-dropdown {
+ z-index:220;
+ left:0;
+ right:auto;
+ max-height:calc(100dvh - 180px);
+ overflow-y:auto;
+}
+.native-sort-order {min-width:44px;}
+
+/* Media controls keep a translucent background with readable contrast. */
+body :is(.lb-action-btn,.lightbox-close,.lightbox-similar-btn,.similar-close-btn,.similar-mobile-panel-close) {
+ background:var(--overlay-control);
+ border-color:rgb(255 255 255 / .6);
+ color:#fff;
+}
+body :is(.lb-action-btn,.lightbox-close,.lightbox-similar-btn,.similar-close-btn,.similar-mobile-panel-close):hover:not(:disabled) {
+ background:rgb(0 0 0 / .8);
+}
 
 /* Page rhythm and typography. Specialized controls keep their existing behavior. */
 #settings-components .settings-card-header {padding:16px;font-weight:650;}

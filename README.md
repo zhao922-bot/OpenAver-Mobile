@@ -3,7 +3,7 @@
 [![Build APK](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml/badge.svg)](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml)
 
 OpenAver Mobile 是 [OpenAver](https://github.com/slive777/OpenAver) 的非官方
-Android 移植版。当前移动端开发版本为 `v0.18.17-android-r11`，已对齐上游
+Android 移植版。当前移动端开发版本为 `v0.18.17-android-r12`，已对齐上游
 `v0.18.17` 的补完性能、批次搜索、来源修复、片库浏览和 AI 后处理体验；
 后续差异会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)继续收敛。
 内嵌代码基线为上游 `v0.18.17` 加本仓库补丁。
@@ -15,26 +15,26 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 ## 下载
 
 - [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r11-arm64-v8a.apk)
+- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r12-arm64-v8a.apk)
 
 当前发布包：
 
-- 文件名：`openaver-v0.18.17-android-r11-arm64-v8a.apk`
+- 文件名：`openaver-v0.18.17-android-r12-arm64-v8a.apk`
 - 包名：`dev.openaver.mobile`
-- 版本：`0.18.17-r11`（versionCode `18011`）
+- 版本：`0.18.17-r12`（versionCode `18012`）
 - 架构：仅 `arm64-v8a`
 - 最低系统：Android 10（API 29）
 - 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
 - SHA-256：发布后以 Release 附件中的 `SHA256SUMS.txt` 为准
 
-本版变更见 [r11 发布说明](docs/releases/v0.18.17-android-r11.md)。
+本版变更见 [r12 发布说明](docs/releases/v0.18.17-android-r12.md)。
 
 ## 安装
 
 1. 在 64 位 ARM Android 10+ 手机上打开 APK，并允许安装未知应用。
 2. Android 11+：授予“所有文件访问权限”。
 3. Android 10：授予读取和写入手机存储权限。
-4. 如果视频在 SD 卡，打开右侧菜单 → “授权可写目录”，在系统目录选择器中选中
+4. 如果视频在 SD 卡，打开左上角菜单 → “应用工具” → “授权可写目录”，在系统目录选择器中选中
    与扫描目录相同的 SD 卡文件夹。Android 10 的传统存储权限可读取外置 SD 卡，
    但任意文件写入仍需要这一步目录授权。
 5. 进入“列表生成”，点击文件夹按钮。
@@ -78,7 +78,7 @@ App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，�
 - r50：改名流程会在 NFO 目标路径过期或缺失时重新定位或补建标题 NFO，不再因 `nfo_missing_after_rename` 中止
 - r50：统一命名会保留已有译文和 `original_title`，并改用不会触发 Android 去掉尾点的 `…` 截断标记，避免实际路径与数据库路径不一致
 - 修复灯箱多行标题第一、二行间距异常过大的问题
-- 右侧灰色菜单按钮支持拖动，位置会持久化，并在旋转或窗口尺寸变化后保持在屏幕内
+- 左上角菜单的“应用工具”集中提供刷新、存储权限和 SD 卡目录授权入口
 - 补抓剧照增加来源 URL 规范化、JavDB Referer、图片内容校验、下载诊断和可重复重试
 - 补抓剧照区分“来源无剧照”“全部下载失败”“数据库写入失败”，不再显示模糊错误
 - Android 手动脸部对焦改由 arm64 NDK 原生级联检测执行，实测单张封面约 0.16–0.40 秒

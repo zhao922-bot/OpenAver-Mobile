@@ -26,11 +26,11 @@
     <string name="local_step1_title_legacy">授予 Android 10 存储权限</string>
     <string name="local_step1_body_legacy">Android 10 使用传统存储读写权限，让 OpenAver 可以直接访问手机真实文件路径。</string>
     <string name="local_step2_title">添加手机文件夹</string>
-    <string name="local_step2_body">在“列表生成”页点文件夹按钮，浏览到 /storage/emulated/0 或存储卡，再选择存放视频的目录。若视频在 SD 卡，还需打开右侧菜单，使用一次“授权可写目录”选中同一目录。</string>
+    <string name="local_step2_body">在“列表生成”页点文件夹按钮，浏览到 /storage/emulated/0 或存储卡，再选择存放视频的目录。若视频在 SD 卡，还需打开左上角菜单中的“应用工具”，使用一次“授权可写目录”选中同一目录。</string>
     <string name="local_step3_title">本地扫描与播放</string>
     <string name="local_step3_body">网页生成、元数据搜索、NFO/封面写入和播放都在手机上完成。只有你启用的元数据来源会使用网络。</string>
     <string name="privacy_note">Python 服务、SQLite 数据库、日志和生成数据都保存在 App 私有目录；视频仍留在手机原文件夹中。</string>
-    <string name="disclaimer">非官方 Android 构建 · OpenAver Mobile v0.18.17-r11 · MIT 授权</string>
+    <string name="disclaimer">非官方 Android 构建 · OpenAver Mobile v0.18.17-r12 · MIT 授权</string>
     <string name="starting_local">正在启动本地 OpenAver…</string>
     <string name="starting_python">正在初始化 Python 环境…</string>
     <string name="loading_openaver_service">正在加载 OpenAver 服务…</string>

@@ -1,5 +1,6 @@
 {
   "nav": {
+    "app_tools": "应用工具",
     "search": "搜索",
     "scanner": "片库管理",
     "showcase": "浏览",
@@ -2839,7 +2840,7 @@
       "error_no_nfo": "找不到 NFO",
       "error_nfo_ambiguous": "输出文件夹中有多个 NFO，无法确定要修改哪一个",
       "error_nfo_unreadable": "无法读取或解析 NFO",
-      "error_storage_permission_required": "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
+      "error_storage_permission_required": "外部存储不可写。请打开左上角菜单的“应用工具”，授权视频所在的 SD 卡文件夹。",
       "error_nfo_write_failed": "NFO 写入失败",
       "error_db_write_failed": "数据库写入失败（NFO 已更新，请重试）",
       "error_invalid_path": "文件路径格式无效"
@@ -2860,7 +2861,7 @@
       "error_no_sample_images": "没有找到可下载的剧照",
       "error_db_write_failed": "剧照已下载，但数据库更新失败，请重试",
       "error_sample_download_failed": "已找到剧照，但全部下载失败",
-      "error_storage_permission_required": "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
+      "error_storage_permission_required": "外部存储不可写。请打开左上角菜单的“应用工具”，授权视频所在的 SD 卡文件夹。",
       "error_sample_write_failed": "剧照写入外置存储失败",
       "error_multi_video_folder": "此文件夹有无关联影片，补抓剧照会污染其他视频；只有同一作品的完整分集（例如 cd1/cd2）可以共用剧照",
       "error_internal": "剧照补齐处理失败，请查看日志",
@@ -2886,7 +2887,7 @@
       "error_no_nfo": "NFO 文件已不存在",
       "error_nfo_unreadable": "无法读取或解析 NFO 文件",
       "error_nfo_write_failed": "简介写入 NFO 失败",
-      "error_storage_permission_required": "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
+      "error_storage_permission_required": "外部存储不可写。请打开左上角菜单的“应用工具”，授权视频所在的 SD 卡文件夹。",
       "error_db_write_failed": "NFO 已更新，但数据库刷新失败，请重试",
       "translation_failed": "简介翻译失败",
       "translation_refused": "模型拒绝翻译该简介",
@@ -3133,7 +3134,7 @@
       "error_no_nfo": "NFO 文件已不存在",
       "error_nfo_unreadable": "无法读取或解析 NFO 文件",
       "error_nfo_write_failed": "简介写入 NFO 失败",
-      "error_storage_permission_required": "外置存储尚未授权写入，请从右上角菜单选择“授权可写目录”并选中视频所在的存储卡目录",
+      "error_storage_permission_required": "外部存储不可写。请打开左上角菜单的“应用工具”，授权视频所在的 SD 卡文件夹。",
       "error_db_write_failed": "NFO 已更新，但数据库刷新失败，请重试",
       "translation_failed": "简介翻译失败",
       "translation_refused": "模型拒绝翻译该简介",

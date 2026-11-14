@@ -1,5 +1,6 @@
 {
   "nav": {
+    "app_tools": "App tools",
     "search": "Search",
     "scanner": "Library Manager",
     "showcase": "Showcase",
@@ -2839,7 +2840,7 @@
       "error_no_nfo": "NFO not found",
       "error_nfo_ambiguous": "Multiple NFO files found in the output folder",
       "error_nfo_unreadable": "NFO could not be read or parsed",
-      "error_storage_permission_required": "External storage is not writable. Use the top-right menu to authorize the SD-card folder containing the videos.",
+      "error_storage_permission_required": "External storage is not writable. Open the top-left menu, choose App tools, and authorize the SD-card folder containing the videos.",
       "error_nfo_write_failed": "Failed to write NFO",
       "error_db_write_failed": "Database write failed (NFO was updated; try again)",
       "error_invalid_path": "Invalid file path"
@@ -2860,7 +2861,7 @@
       "error_no_sample_images": "No downloadable sample images were found",
       "error_db_write_failed": "Sample images were downloaded, but the database update failed; try again",
       "error_sample_download_failed": "Sample images were found, but all downloads failed",
-      "error_storage_permission_required": "External storage is not writable. Use the top-right menu to authorize the SD-card folder containing the videos.",
+      "error_storage_permission_required": "External storage is not writable. Open the top-left menu, choose App tools, and authorize the SD-card folder containing the videos.",
       "error_sample_write_failed": "Failed to write sample images to external storage",
       "error_multi_video_folder": "This folder contains unrelated videos. Shared sample images would affect them; only complete parts of the same title (for example cd1/cd2) may share samples.",
       "error_internal": "Sample-image processing failed; check the log",
@@ -2886,7 +2887,7 @@
       "error_no_nfo": "The NFO file no longer exists",
       "error_nfo_unreadable": "The NFO file could not be read or parsed",
       "error_nfo_write_failed": "Failed to write the synopsis to the NFO",
-      "error_storage_permission_required": "External storage is not writable. Use the top-right menu to authorize the SD-card folder containing the videos.",
+      "error_storage_permission_required": "External storage is not writable. Open the top-left menu, choose App tools, and authorize the SD-card folder containing the videos.",
       "error_db_write_failed": "The NFO was updated, but the database refresh failed; try again",
       "translation_failed": "Synopsis translation failed",
       "translation_refused": "The model refused to translate this synopsis",
@@ -3133,7 +3134,7 @@
       "error_no_nfo": "The NFO file no longer exists",
       "error_nfo_unreadable": "The NFO file could not be read or parsed",
       "error_nfo_write_failed": "Failed to write the synopsis to the NFO",
-      "error_storage_permission_required": "External storage is not writable. Use the top-right menu to authorize the SD-card folder containing the videos.",
+      "error_storage_permission_required": "External storage is not writable. Open the top-left menu, choose App tools, and authorize the SD-card folder containing the videos.",
       "error_db_write_failed": "The NFO was updated, but the database refresh failed; try again",
       "translation_failed": "Synopsis translation failed",
       "translation_refused": "The model refused to translate this synopsis",

@@ -26,11 +26,11 @@
     <string name="local_step1_title_legacy">授予 Android 10 儲存空間權限</string>
     <string name="local_step1_body_legacy">Android 10 使用傳統儲存空間讀寫權限，讓 OpenAver 可以直接存取手機真實檔案路徑。</string>
     <string name="local_step2_title">加入手機資料夾</string>
-    <string name="local_step2_body">在「列表生成」頁點資料夾按鈕，瀏覽到 /storage/emulated/0 或記憶卡，再選擇存放影片的目錄。若影片在 SD 卡，還需開啟右側選單，使用一次「授權可寫目錄」選中同一目錄。</string>
+    <string name="local_step2_body">在「列表生成」頁點資料夾按鈕，瀏覽到 /storage/emulated/0 或記憶卡，再選擇存放影片的目錄。若影片在 SD 卡，還需開啟左上角選單中的「應用工具」，使用一次「授權可寫目錄」選中同一目錄。</string>
     <string name="local_step3_title">本機掃描與播放</string>
     <string name="local_step3_body">網頁生成、中繼資料搜尋、NFO/封面寫入和播放都在手機上完成。只有你啟用的中繼資料來源會使用網路。</string>
     <string name="privacy_note">Python 服務、SQLite 資料庫、日誌和生成資料都保存在 App 私有目錄；影片仍留在手機原資料夾中。</string>
-    <string name="disclaimer">非官方 Android 建置 · OpenAver Mobile v0.18.17-r11 · MIT 授權</string>
+    <string name="disclaimer">非官方 Android 建置 · OpenAver Mobile v0.18.17-r12 · MIT 授權</string>
     <string name="starting_local">正在啟動本機 OpenAver…</string>
     <string name="starting_python">正在初始化 Python 環境…</string>
     <string name="loading_openaver_service">正在載入 OpenAver 服務…</string>

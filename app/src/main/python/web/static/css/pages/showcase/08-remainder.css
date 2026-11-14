@@ -422,7 +422,7 @@ body.sidebar-collapsed .showcase-footer {
 }
 
 .sample-gallery .sg-close:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.8);
     color: rgba(255, 255, 255, 1);
 }
 
@@ -450,7 +450,7 @@ body.sidebar-collapsed .showcase-footer {
 }
 
 .sample-gallery .sg-nav:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.8);
     color: rgba(255, 255, 255, 1);
 }
 

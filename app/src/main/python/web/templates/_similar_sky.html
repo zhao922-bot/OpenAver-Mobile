@@ -1,0 +1,6 @@
+<div class="similar-sky" aria-hidden="true">
+    {% for i in range(12) %}
+    <span class="similar-sky-star is-bright"
+          style="--sky-x:{{ 6 + (i * 47 + 13) % 89 }}%;--sky-y:{{ 4 + (i * i * 7 + i * 31 + 17) % 91 }}%;--sky-opacity:{{ 0.4 + (i % 5) * 0.12 }};--sky-delay:-{{ i % 7 }}s"></span>
+    {% endfor %}
+</div>
