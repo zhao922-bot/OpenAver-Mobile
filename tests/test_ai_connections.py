@@ -169,6 +169,44 @@ def test_translation_and_vision_use_own_custom_connection(monkeypatch, provider,
             assert call[2]["model"] == "my-model"
 
 
+def test_disabled_ai_panels_do_not_test_saved_connections():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js unavailable")
+    script = r'''
+const fs=require('node:fs'), assert=require('node:assert/strict');
+const dir='app/src/main/python/web/static/js/pages/settings/';
+const source=file=>fs.readFileSync(dir+file,'utf8').replace(/^import [\s\S]*?;\r?$/mg,'').replace(/export /g,'');
+global.window={t:key=>key};
+global.aiBackfillControls=()=>({bfRefresh:async()=>{}});
+global.SIMILAR_ADAPTER={};global.FACES_ADAPTER={};global.TAGS_ADAPTER={};
+Object.assign(global,new Function(source('ai-tags-logic.js')+';return {buildTagsTestBody,testResultLine};')());
+const calls=[];
+global.fetch=async(url,options)=>{calls.push({url,body:JSON.parse(options.body)});return {ok:true,json:async()=>({ok:false,kind:'unreachable'})};};
+(async()=>{
+    for(const [file,factory,enabled,url,key,model] of [
+        ['ai-similar-panel.js','aiSimilarPanel','aiSimilarEnabled','aiSimilarUrl','aiSimilarApiKey','aiSimilarModel'],
+        ['ai-faces-panel.js','aiFacesPanel','aiFacesEnabled','aiFacesUrl','aiFacesApiKey','aiFacesModel'],
+        ['ai-tags-panel.js','aiTagsPanel','aiTagsEnabled','aiTagsBaseUrl','aiTagsApiKey','aiTagsModel'],
+    ]){
+        const vm=new Function(source(file)+`;return ${factory};`)()();
+        vm.form={[enabled]:false,[url]:'https://saved.example/v1',[key]:'own-key',[model]:'own-model',aiTagsProvider:'openai'};
+        vm.showToast=()=>{};
+        calls.length=0;
+        await vm.runTest();
+        assert.deepEqual(calls,[],`${factory}: a disabled feature must not contact its saved service`);
+        vm.form[enabled]=true;
+        await vm.runTest();
+        assert.equal(calls.length,1,`${factory}: enabling must allow a connection test`);
+        assert.equal(calls[0].body.api_key,'own-key');
+        assert.equal(calls[0].body.model,'own-model');
+    }
+})().catch(e=>{console.error(e);process.exitCode=1;});
+'''
+    result = subprocess.run([node, "-e", script], cwd=Path(__file__).resolve().parents[1], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_settings_js_uses_independent_unsaved_connections():
     node = shutil.which("node")
     if not node:

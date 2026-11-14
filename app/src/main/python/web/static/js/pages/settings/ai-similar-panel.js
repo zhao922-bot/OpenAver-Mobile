@@ -67,7 +67,7 @@ export function aiSimilarPanel() {
         },
 
         testDisabled() {
-            if (this.aiSimTestBusy) return true;
+            if (this.aiSimTestBusy || !this.form?.aiSimilarEnabled) return true;
             const url = (this.form && this.form.aiSimilarUrl) || '';
             return !String(url).trim();
         },

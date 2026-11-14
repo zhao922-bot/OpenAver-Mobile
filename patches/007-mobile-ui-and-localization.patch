@@ -3035,7 +3035,7 @@
 +      "title": "AI Features",
 +      "tab_translate": "Translate",
 +      "tab_similar": "Image Similarity",
-+      "help_body": "This card manages translation and image similarity in one place. Keys and URLs go in the Connections section below; the Translate tab only picks the engine and model. Image similarity needs a self-hosted vector endpoint — skip it if you don't have one.",
++      "help_body": "Each of the four AI features has its own service address, API Key and model name. Enable a feature to enter its connection details. Leave the API Key blank if the service does not require authentication.",
 +      "help_docs_link": "External AI guide (GitHub: docs/external-ai.md)",
 +      "connections_title": "Connections",
 +      "backfill": {
@@ -3050,7 +3050,7 @@
 +      },
 +      "similar": {
 +        "enabled_label": "Enable image similarity",
-+        "empty_desc": "This needs a small service you host yourself (or ask your AI assistant to set one up). OpenAver sends covers to it to turn them into vectors, so Constellation can tell when covers look alike. If you don't have one, just skip it — nothing else is affected.",
++        "empty_desc": "Convert covers into image vectors to find similar covers. Connect a local or cloud service that supports image embeddings, using its own service address, API Key and model name.",
 +        "btn_docs": "View docs",
 +        "url_label": "Service URL",
 +        "url_placeholder": "http://127.0.0.1:8000",
@@ -3094,7 +3094,7 @@
 +      "tab_faces": "Faces",
 +      "faces": {
 +        "enabled_label": "Enable face endpoint",
-+        "empty_desc": "This needs a small service you host yourself (or ask your AI assistant to set one up). OpenAver sends covers to it to find faces and set the focus. While the external endpoint is on, this phone's processing-power limits don't apply. If you don't have one, just skip it — nothing else is affected.",
++        "empty_desc": "Send covers to a face detection service for automatic focus. Connect a compatible local or cloud service using its own address, API Key and model name. When detection runs on an external service, this phone's processing-power limits don't apply.",
 +        "url_label": "Service URL",
 +        "url_placeholder": "http://127.0.0.1:8000",
 +        "api_key_label": "API Key",
@@ -4769,7 +4769,7 @@
 +      "title": "AI 機能",
 +      "tab_translate": "翻訳",
 +      "tab_similar": "画像の類似",
-+      "help_body": "このカードでは翻訳と画像の類似をまとめて管理します。キーと URL は下の接続エリアに入力し、翻訳タブではエンジンとモデルを選ぶだけです。画像の類似には自前のベクトルエンドポイントが必要です。なければ省略できます。",
++      "help_body": "4 つの AI 機能で、サービス URL、API Key、モデル名をそれぞれ設定できます。機能を有効にして接続情報を入力してください。認証不要のサービスでは API Key を空欄にできます。",
 +      "help_docs_link": "外部 AI の説明（GitHub：docs/external-ai.md）",
 +      "connections_title": "接続",
 +      "backfill": {
@@ -4784,7 +4784,7 @@
 +      },
 +      "similar": {
 +        "enabled_label": "画像の類似を有効にする",
-+        "empty_desc": "この機能には、自分で小さなサービスを立てる必要があります（AI アシスタントに頼んでもOK）。OpenAver がカバーを送ってベクトルに変換することで、星空でも「カバーが似ている」ことが分かるようになります。なければ省略できます。ほかの機能には影響しません。",
++        "empty_desc": "カバーを画像ベクトルに変換して、似たカバーを探します。画像埋め込みに対応するローカルまたはクラウドのサービスを接続し、専用のサービス URL、API Key、モデル名を設定できます。",
 +        "btn_docs": "ドキュメントを見る",
 +        "url_label": "サービス URL",
 +        "url_placeholder": "http://127.0.0.1:8000",
@@ -4828,7 +4828,7 @@
 +      "tab_faces": "顔",
 +      "faces": {
 +        "enabled_label": "顔エンドポイントを有効にする",
-+        "empty_desc": "この機能には、自分で小さなサービスを立てる必要があります（AI アシスタントに頼んでもOK）。OpenAver がカバーを送って顔を検出し、フォーカスを合わせます。外部エンドポイントがオンの間は、この端末の処理能力による制限は適用されません。なければ省略できます。ほかの機能には影響しません。",
++        "empty_desc": "カバーを顔検出サービスに送信して、自動でフォーカスを合わせます。対応するローカルまたはクラウドのサービスに、専用の URL、API Key、モデル名を設定して接続できます。外部サービスで検出する場合、この端末の処理能力による制限は適用されません。",
 +        "url_label": "サービス URL",
 +        "url_placeholder": "http://127.0.0.1:8000",
 +        "api_key_label": "API Key",
@@ -7035,7 +7035,7 @@
 +      "title": "AI 기능",
 +      "tab_translate": "번역",
 +      "tab_similar": "이미지 유사성",
-+      "help_body": "이 카드는 번역 및 이미지 유사성을 중앙에서 관리합니다. 키와 URL은 아래 연결 영역에 있습니다. 번역 탭에서는 엔진과 모델만 선택합니다. 이미지 유사성은 자체 호스팅 벡터 엔드포인트가 필요하며, 이는 건너뛸 수 없습니다.",
++      "help_body": "네 가지 AI 기능은 각각 서비스 주소, API Key, 모델 이름을 설정할 수 있습니다. 기능을 켠 다음 연결 정보를 입력하세요. 인증이 필요 없는 서비스는 API Key를 비워 두면 됩니다.",
 +      "help_docs_link": "외부 AI 설명 (GitHub: docs/external-ai.md)",
 +      "connections_title": "연결",
 +      "backfill": {
@@ -7050,7 +7050,7 @@
 +      },
 +      "similar": {
 +        "enabled_label": "이미지 유사성 활성화",
-+        "empty_desc": "이 기능은 사용자께서 직접 소규모 서비스를 구축해야 합니다 (또는 AI 어시스턴트에게 요청). OpenAver가 커버 이미지를 벡터로 변환하여 Xingkong이 '커버의 모양'을 이해할 수 있게 합니다. 없으시면 건너뛰셔도 되며, 다른 기능에는 영향을 미치지 않습니다.",
++        "empty_desc": "표지를 이미지 벡터로 변환해 비슷한 표지를 찾습니다. 이미지 임베딩을 지원하는 로컬 또는 클라우드 서비스에 연결하고, 별도의 서비스 주소, API Key, 모델 이름을 설정할 수 있습니다.",
 +        "btn_docs": "문서 보기",
 +        "url_label": "서비스 URL",
 +        "url_placeholder": "http://127.0.0.1:8000",
@@ -7094,7 +7094,7 @@
 +      "tab_faces": "얼굴",
 +      "faces": {
 +        "enabled_label": "얼굴 엔드포인트 활성화",
-+        "empty_desc": "이 기능은 직접 소규모 서비스를 구축하거나(또는 AI 어시스턴트에게 요청) 구축해야 합니다. OpenAver가 커버 이미지를 보내 얼굴을 찾고 초점을 맞춥니다. 외부 엔드포인트가 실행 중일 때는 휴대폰의 컴퓨팅 제한이 적용되지 않습니다. 없어도 무방하며, 다른 기능에는 영향을 미치지 않습니다.",
++        "empty_desc": "표지를 얼굴 감지 서비스에 보내 자동으로 초점을 맞춥니다. 호환되는 로컬 또는 클라우드 서비스에 별도의 주소, API Key, 모델 이름으로 연결할 수 있습니다. 외부 서비스에서 감지하면 휴대폰의 컴퓨팅 제한이 적용되지 않습니다.",
 +        "url_label": "서비스 URL",
 +        "url_placeholder": "http://127.0.0.1:8000",
 +        "api_key_label": "API 키",
@@ -9577,7 +9577,7 @@
 +      "title": "AI 功能",
 +      "tab_translate": "翻译",
 +      "tab_similar": "图片相似",
-+      "help_body": "这张卡集中管理翻译与图片相似。密钥与网址放在下方连接区；翻译分页只选引擎与模型。图片相似需要自建向量端点，没有可以略过。",
++      "help_body": "四项 AI 功能均可独立填写服务地址、API Key 和模型名称。先启用对应功能，再填写连接资料；无需认证的服务可留空 API Key。",
 +      "help_docs_link": "外部 AI 说明（GitHub：docs/external-ai.md）",
 +      "connections_title": "连接",
 +      "backfill": {
@@ -9592,7 +9592,7 @@
 +      },
 +      "similar": {
 +        "enabled_label": "启用图片相似",
-+        "empty_desc": "这个能力需要你自己架一个小服务（或请 AI 助理帮你架），OpenAver 会把封面送过去换成向量，让星空也看得懂「封面长得像」。没有的话可以略过，其他功能不受影响。",
++        "empty_desc": "将封面转换为图像向量，用于查找相似封面。可连接支持图像向量接口的本地或云端服务，独立填写服务地址、API Key 和模型名称。",
 +        "btn_docs": "看文档",
 +        "url_label": "服务地址",
 +        "url_placeholder": "http://127.0.0.1:8000",
@@ -9636,7 +9636,7 @@
 +      "tab_faces": "人脸",
 +      "faces": {
 +        "enabled_label": "启用人脸端点",
-+        "empty_desc": "这个能力需要你自己架一个小服务（或请 AI 助理帮你架），OpenAver 会把封面送过去找脸并对焦。外部端点开着时，手机的算力限制不适用。没有的话可以略过，其他功能不受影响。",
++        "empty_desc": "将封面发送到人脸检测服务，用于自动对焦。可连接兼容的本地或云端服务，独立填写服务地址、API Key 和模型名称。由外部服务执行检测时，手机的算力限制不适用。",
 +        "url_label": "服务地址",
 +        "url_placeholder": "http://127.0.0.1:8000",
 +        "api_key_label": "API Key",
@@ -11397,7 +11397,7 @@
 +      "title": "AI 功能",
 +      "tab_translate": "翻譯",
 +      "tab_similar": "圖片相似",
-+      "help_body": "這張卡集中管理翻譯與圖片相似。金鑰與網址放在下方連線區；翻譯分頁只選引擎與模型。圖片相似需要自架向量端點，沒有可略過。",
++      "help_body": "四項 AI 功能皆可獨立填寫服務位址、API Key 和模型名稱。先啟用對應功能，再填寫連線資料；無需驗證的服務可將 API Key 留空。",
 +      "help_docs_link": "外部 AI 說明（GitHub：docs/external-ai.md）",
 +      "connections_title": "連線",
 +      "backfill": {
@@ -11412,7 +11412,7 @@
 +      },
 +      "similar": {
 +        "enabled_label": "啟用圖片相似",
-+        "empty_desc": "這個能力需要你自己架一個小服務（或請 AI 助理替你架），OpenAver 會把封面送過去換成向量，讓星空也看得懂「封面長得像」。沒有的話可以略過，其他功能不受影響。",
++        "empty_desc": "將封面轉換為影像向量，用於尋找相似封面。可連接支援影像向量介面的本機或雲端服務，獨立填寫服務位址、API Key 和模型名稱。",
 +        "btn_docs": "看文件",
 +        "url_label": "服務位址",
 +        "url_placeholder": "http://127.0.0.1:8000",
@@ -11456,7 +11456,7 @@
 +      "tab_faces": "人臉",
 +      "faces": {
 +        "enabled_label": "啟用人臉端點",
-+        "empty_desc": "這個能力需要你自己架一個小服務（或請 AI 助理替你架），OpenAver 會把封面送過去找臉並對焦。外部端點開著時，手機的算力限制不適用。沒有的話可以略過，其他功能不受影響。",
++        "empty_desc": "將封面傳送到人臉偵測服務，用於自動對焦。可連接相容的本機或雲端服務，獨立填寫服務位址、API Key 和模型名稱。由外部服務執行偵測時，手機的算力限制不適用。",
 +        "url_label": "服務位址",
 +        "url_placeholder": "http://127.0.0.1:8000",
 +        "api_key_label": "API Key",
@@ -32070,7 +32070,17 @@
                      <!-- 翻譯三引擎（Ollama/Gemini/OpenAI-compat 完整欄位） -->
                      <div class="settings-form-group">
                          <label class="settings-label">
-@@ -712,6 +879,7 @@
+@@ -702,8 +869,7 @@
+                     </div>
+ 
+                     <!-- 翻譯選項 (動態顯示) -->
+-                    <div id="translateOptions"
+-                         :class="{ 'opacity-50': !form.translateEnabled }">
++                    <div id="translateOptions">
+                         <div class="settings-form-row">
+                             <label class="row-label">{{ t('settings.translate.provider_label') }}</label>
+                             <select class="select select-bordered select-sm" id="translateProvider"
+@@ -712,6 +878,7 @@
                                  <option value="ollama">Ollama{{ t('settings.translate.ollama_local') }}</option>
                                  <option value="gemini">Gemini{{ t('settings.translate.gemini_cloud') }}</option>
                                  <option value="claude">Claude{{ t('settings.translate.claude_cloud') }}</option>
@@ -32078,7 +32088,7 @@
                                  <option value="openai" x-text="t('settings.translate.openai_compatible')">OpenAI Compatible</option>
                              </select>
                          </div>
-@@ -719,7 +887,7 @@
+@@ -719,7 +886,7 @@
                          <!-- Ollama 設定 -->
                          <div id="ollamaFields" x-show="form.translateProvider === 'ollama'">
                              <div class="settings-form-row">
@@ -32087,7 +32097,17 @@
                                  <div class="flex-1 flex flex-col gap-1">
                                      <div class="variable-input-group">
                                          <input type="text" class="input input-bordered input-sm flex-1" id="ollamaUrl"
-@@ -743,13 +911,8 @@
+@@ -740,16 +907,18 @@
+                             </div>
+ 
+                             <div class="settings-form-row">
++                                <label class="row-label" for="ollamaApiKey">{{ t('settings.ai.connection.api_key_label') }}</label>
++                                <div class="flex-1 min-w-0 flex flex-col gap-1">
++                                    <input type="password" id="ollamaApiKey" class="input input-bordered input-sm w-full min-w-0" x-model="form.ollamaApiKey" placeholder="" :disabled="!form.translateEnabled" autocomplete="off">
++                                    <small class="settings-hint">{{ t('settings.ai.connection.api_key_hint') }}</small>
++                                </div>
++                            </div>
++                            <div class="settings-form-row">
                                  <label class="row-label">{{ t('settings.translate.model_label') }}</label>
                                  <div class="flex-1 flex flex-col gap-1">
                                      <div class="variable-input-group">
@@ -32103,18 +32123,7 @@
                                          <button class="btn btn-sm btn-outline" type="button" id="testModelBtn"
                                              @click="testModel()" title="{{ t('settings.translate.test_model_title') }}"
                                              :disabled="!form.translateEnabled || testModelLoading">
-@@ -763,10 +926,24 @@
-                                     <small class="settings-hint" x-html="modelStatus"></small>
-                                 </div>
-                             </div>
-+                            <div class="settings-form-row">
-+                                <label class="row-label" for="ollamaApiKey">{{ t('settings.ai.connection.api_key_label') }}</label>
-+                                <div class="flex-1 min-w-0 flex flex-col gap-1">
-+                                    <input type="password" id="ollamaApiKey" class="input input-bordered input-sm w-full min-w-0" x-model="form.ollamaApiKey" placeholder="" :disabled="!form.translateEnabled" autocomplete="off">
-+                                    <small class="settings-hint">{{ t('settings.ai.connection.api_key_hint') }}</small>
-+                                </div>
-+                            </div>
-                         </div>
+@@ -767,6 +936,13 @@
  
                          <!-- Gemini 設定 (初始隱藏) -->
                          <div id="geminiFields" x-show="form.translateProvider === 'gemini'">
@@ -32128,7 +32137,7 @@
                              <div class="settings-form-row">
                                  <label class="row-label">API Key</label>
                                  <div class="flex-1 flex flex-col gap-1">
-@@ -810,16 +987,11 @@
+@@ -810,16 +986,11 @@
                                  <label class="row-label">{{ t('settings.translate.model_label') }}</label>
                                  <div class="flex-1 flex flex-col gap-1">
                                      <div class="variable-input-group">
@@ -32148,7 +32157,7 @@
                                              <span x-show="testGeminiTranslateLoading" class="loading loading-spinner loading-sm"></span>
                                              <template x-if="!testGeminiTranslateLoading">
                                                  <i class="bi bi-chat-dots"></i>
-@@ -834,6 +1006,13 @@
+@@ -834,6 +1005,13 @@
  
                          <!-- Claude 設定 -->
                          <div id="claudeFields" x-show="form.translateProvider === 'claude'" x-cloak>
@@ -32162,7 +32171,7 @@
                              <div class="settings-form-row">
                                  <label class="row-label">API Key</label>
                                  <div class="flex-1 flex flex-col gap-1">
-@@ -873,16 +1052,11 @@
+@@ -873,16 +1051,11 @@
                                  <label class="row-label">{{ t('settings.translate.model_label') }}</label>
                                  <div class="flex-1 flex flex-col gap-1">
                                      <div class="variable-input-group">
@@ -32182,7 +32191,7 @@
                                              <span x-show="testingClaudeTranslate" class="loading loading-spinner loading-sm"></span>
                                              <template x-if="!testingClaudeTranslate">
                                                  <i class="bi bi-chat-dots"></i>
-@@ -895,11 +1069,63 @@
+@@ -895,11 +1068,63 @@
                              </div>
                          </div>
  
@@ -32247,7 +32256,7 @@
                                  <div class="flex-1 flex flex-col gap-1">
                                      <div class="variable-input-group">
                                          <input type="text" class="input input-bordered input-sm flex-1"
-@@ -979,338 +1205,255 @@
+@@ -979,338 +1204,255 @@
                              </div>
                          </div>
                      </div>
@@ -32428,7 +32437,44 @@
 -                                <button class="btn-add-layer" type="button" @click="addFolderLayer()"
 -                                    :disabled="form.folderLayerList.length >= 3 || !form.createFolder">
 -                                    <i class="bi bi-plus-lg"></i> {{ t('settings.scraper.add_layer') }}
--                                </button>
++                        <div class="ai-similar-fields">
++                            <div class="settings-form-row">
++                                <label class="row-label" for="aiSimilarUrl">{{ t('settings.ai.similar.url_label') }}</label>
++                                <div class="flex-1 flex flex-col gap-1 min-w-0">
++                                    <input type="text" class="input input-bordered input-sm w-full min-w-0"
++                                           id="aiSimilarUrl"
++                                           x-model="form.aiSimilarUrl"
++                                           :disabled="!form.aiSimilarEnabled"
++                                           :placeholder="window.t('settings.ai.similar.url_placeholder')">
++                                </div>
++                            </div>
++                            <div class="settings-form-row">
++                                <label class="row-label" for="aiSimilarApiKey">{{ t('settings.ai.similar.api_key_label') }}</label>
++                                <div class="flex-1 min-w-0">
++                                    <input type="password" class="input input-bordered input-sm w-full"
++                                           id="aiSimilarApiKey"
++                                           x-model="form.aiSimilarApiKey"
++                                           :disabled="!form.aiSimilarEnabled"
++                                           :placeholder="window.t('settings.ai.similar.api_key_placeholder')">
++                                </div>
++                            </div>
++                            <div class="settings-form-row">
++                                <label class="row-label" for="aiSimilarModel">{{ t('settings.ai.similar.model_label') }}</label>
++                                <div class="flex-1 min-w-0">
++                                    <input type="text" class="input input-bordered input-sm w-full"
++                                           id="aiSimilarModel"
++                                           x-model="form.aiSimilarModel"
++                                           :disabled="!form.aiSimilarEnabled"
++                                           :placeholder="window.t('settings.ai.similar.model_placeholder')">
++                                </div>
++                            </div>
++
++                            <div class="ai-connection-actions">
++                                <button class="btn btn-sm btn-outline" type="button"
++                                        id="aiSimilarTestBtn" @click="runTest()" :disabled="testDisabled()">
++                                    <span x-show="aiSimTestBusy" class="loading loading-spinner loading-sm"></span>
++                                    <span x-show="!aiSimTestBusy" x-text="window.t('settings.action.test')"></span>
+                                 </button>
 -                                <div class="folder-preview naming-preview">
 -                                    <div class="preview-line">
 -                                        <i class="bi bi-file-earmark-play"></i>
@@ -32534,7 +32580,79 @@
 -                                        aria-controls="pathLengthHelp"
 -                                        aria-label="{{ t('settings.scraper.path_length_help_aria') }}">
 -                                    <i class="bi bi-question-circle"></i>
--                                </button>
++                            </div>
++                            <small class="settings-hint">{{ t('settings.ai.connection.similar_path_hint') }}</small>
++                            <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.similar.empty_desc') }}</p>
++
++                            <p class="settings-hint ai-similar-status"
++                               id="aiSimilarStatusLine"
++                               x-show="bfStatus !== null && statusLineText()"
++                               x-text="statusLineText()"></p>
++
++                            {{ ai_backfill_controls('aiSimilar', 'ai-similar', retry=true) }}
++
++                            <pre class="ai-similar-test-result"
++                                 id="aiSimilarTestResult"
++                                 x-show="aiSimTestResultHtml"
++                                 x-text="aiSimTestResultHtml"></pre>
++                        </div>
++
++                        <div class="ai-similar-empty-actions">
++                            <a class="btn btn-sm btn-ghost"
++                               href="https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md"
++                               target="_blank" rel="noopener noreferrer">{{ t('settings.ai.similar.btn_docs') }}</a>
++                        </div>
++                    </div>
++
++                    <div id="aiPanelFaces" role="tabpanel"
++                         x-show="aiTab === 'faces'" x-cloak
++                         x-data="aiFacesPanel">
++                        <div class="settings-form-group">
++                            <label class="settings-label">
++                                <input type="checkbox" class="toggle toggle-primary"
++                                       id="aiFacesEnabled"
++                                       x-model="form.aiFacesEnabled">
++                                <span class="label-text">{{ t('settings.ai.faces.enabled_label') }}</span>
++                            </label>
++                        </div>
++                        <div class="ai-similar-fields">
++                            <div class="settings-form-row">
++                                <label class="row-label" for="aiFacesUrl">{{ t('settings.ai.faces.url_label') }}</label>
++                                <div class="flex-1 flex flex-col gap-1 min-w-0">
++                                    <input type="text" class="input input-bordered input-sm w-full min-w-0"
++                                           id="aiFacesUrl"
++                                           x-model="form.aiFacesUrl"
++                                           :disabled="!form.aiFacesEnabled"
++                                           :placeholder="window.t('settings.ai.faces.url_placeholder')">
++                                </div>
++                            </div>
++                            <div class="settings-form-row">
++                                <label class="row-label" for="aiFacesApiKey">{{ t('settings.ai.faces.api_key_label') }}</label>
++                                <div class="flex-1 min-w-0">
++                                    <input type="password" class="input input-bordered input-sm w-full"
++                                           id="aiFacesApiKey"
++                                           x-model="form.aiFacesApiKey"
++                                           :disabled="!form.aiFacesEnabled"
++                                           :placeholder="window.t('settings.ai.faces.api_key_placeholder')">
++                                </div>
++                            </div>
++                            <div class="settings-form-row">
++                                <label class="row-label" for="aiFacesModel">{{ t('settings.ai.faces.model_label') }}</label>
++                                <div class="flex-1 min-w-0">
++                                    <input type="text" class="input input-bordered input-sm w-full"
++                                           id="aiFacesModel"
++                                           x-model="form.aiFacesModel"
++                                           :disabled="!form.aiFacesEnabled"
++                                           :placeholder="window.t('settings.ai.faces.model_placeholder')">
++                                </div>
++                            </div>
++
++                            <div class="ai-connection-actions">
++                                <button class="btn btn-sm btn-outline" type="button"
++                                        id="aiFacesTestBtn" @click="runTest()" :disabled="testDisabled()">
++                                    <span x-show="aiFacesTestBusy" class="loading loading-spinner loading-sm"></span>
++                                    <span x-show="!aiFacesTestBusy" x-text="window.t('settings.action.test')"></span>
+                                 </button>
 -                                <div id="pathLengthHelp" x-show="open" x-cloak x-transition
 -                                     @click.outside="close()"
 -                                     class="help-popover">
@@ -32562,137 +32680,9 @@
 -
 -                        {# 人臉自動對焦開關（152d-T-D3，CD-152d-3b）：伺服器端算好的 focal_auto_enabled 作初始 checked；@change 寫專用端點 #}
 -                        <div class="settings-form-group popover-anchor" x-data="helpPopover">
-+                        <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.similar.empty_desc') }}</p>
-+
-+                        <div class="ai-similar-fields" x-show="panelMode() === 'fields'">
-+                            <div class="settings-form-row">
-+                                <label class="row-label" for="aiSimilarUrl">{{ t('settings.ai.similar.url_label') }}</label>
-+                                <div class="flex-1 flex flex-col gap-1 min-w-0">
-+                                    <div class="variable-input-group">
-+                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
-+                                               id="aiSimilarUrl"
-+                                               x-model="form.aiSimilarUrl"
-+                                               :placeholder="window.t('settings.ai.similar.url_placeholder')">
-+                                        <button class="btn btn-sm btn-outline" type="button"
-+                                                id="aiSimilarTestBtn"
-+                                                @click="runTest()"
-+                                                :disabled="testDisabled()">
-+                                            <span x-show="aiSimTestBusy" class="loading loading-spinner loading-sm"></span>
-+                                            <span x-show="!aiSimTestBusy" x-text="window.t('settings.action.test')"></span>
-+                                        </button>
-+                                    </div>
-+                                    <small class="settings-hint">{{ t('settings.ai.connection.similar_path_hint') }}</small>
-+                                </div>
 +                            </div>
-+                            <div class="settings-form-row">
-+                                <label class="row-label" for="aiSimilarApiKey">{{ t('settings.ai.similar.api_key_label') }}</label>
-+                                <div class="flex-1 min-w-0">
-+                                    <input type="password" class="input input-bordered input-sm w-full"
-+                                           id="aiSimilarApiKey"
-+                                           x-model="form.aiSimilarApiKey"
-+                                           :placeholder="window.t('settings.ai.similar.api_key_placeholder')">
-+                                </div>
-+                            </div>
-+                            <div class="settings-form-row">
-+                                <label class="row-label" for="aiSimilarModel">{{ t('settings.ai.similar.model_label') }}</label>
-+                                <div class="flex-1 min-w-0">
-+                                    <input type="text" class="input input-bordered input-sm w-full"
-+                                           id="aiSimilarModel"
-+                                           x-model="form.aiSimilarModel"
-+                                           :placeholder="window.t('settings.ai.similar.model_placeholder')">
-+                                </div>
-+                            </div>
-+
-+                            <p class="settings-hint ai-similar-status"
-+                               id="aiSimilarStatusLine"
-+                               x-show="bfStatus !== null && statusLineText()"
-+                               x-text="statusLineText()"></p>
-+
-+                            {{ ai_backfill_controls('aiSimilar', 'ai-similar', retry=true) }}
-+
-+                            <pre class="ai-similar-test-result"
-+                                 id="aiSimilarTestResult"
-+                                 x-show="aiSimTestResultHtml"
-+                                 x-text="aiSimTestResultHtml"></pre>
-+                        </div>
-+
-+                        <div class="ai-similar-empty-actions">
-+                            <a class="btn btn-sm btn-ghost"
-+                               href="https://github.com/slive777/OpenAver/blob/main/docs/external-ai.md"
-+                               target="_blank" rel="noopener noreferrer">{{ t('settings.ai.similar.btn_docs') }}</a>
-+                        </div>
-+                    </div>
-+
-+                    <div id="aiPanelFaces" role="tabpanel"
-+                         x-show="aiTab === 'faces'" x-cloak
-+                         x-data="aiFacesPanel">
-+                        <div class="settings-form-group">
-                             <label class="settings-label">
--                                <input type="checkbox" data-focal-auto-pill class="toggle toggle-primary"
--                                       {% if focal_auto_enabled %}checked{% endif %}
--                                       @change="setFocalDeviceDisabled($event)">
--                                <span class="label-text">{{ t('settings.scraper.focal_pill_label') }}</span>
--                                <button type="button" class="help-popover-btn"
--                                        @click.prevent="toggle()"
--                                        :aria-expanded="open">
--                                    <i class="bi bi-question-circle"></i>
--                                </button>
-+                                <input type="checkbox" class="toggle toggle-primary"
-+                                       id="aiFacesEnabled"
-+                                       x-model="form.aiFacesEnabled">
-+                                <span class="label-text">{{ t('settings.ai.faces.enabled_label') }}</span>
-                             </label>
--                            <div x-show="open" x-cloak x-transition
--                                 @click.outside="close()"
--                                 class="help-popover help-popover--up">
--                                <small class="help-popover__body">
--                                    {{ t('settings.scraper.focal_help') }}
--                                </small>
--                            </div>
--                        </div>
--
--                    </div><!-- /collapsible-content scraperAdvanced -->
-+                        </div>
-+                        <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.faces.empty_desc') }}</p>
-+
-+                        <div class="ai-similar-fields" x-show="panelMode() === 'fields'">
-+                            <div class="settings-form-row">
-+                                <label class="row-label" for="aiFacesUrl">{{ t('settings.ai.faces.url_label') }}</label>
-+                                <div class="flex-1 flex flex-col gap-1 min-w-0">
-+                                    <div class="variable-input-group">
-+                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
-+                                               id="aiFacesUrl"
-+                                               x-model="form.aiFacesUrl"
-+                                               :placeholder="window.t('settings.ai.faces.url_placeholder')">
-+                                        <button class="btn btn-sm btn-outline" type="button"
-+                                                id="aiFacesTestBtn"
-+                                                @click="runTest()"
-+                                                :disabled="testDisabled()">
-+                                            <span x-show="aiFacesTestBusy" class="loading loading-spinner loading-sm"></span>
-+                                            <span x-show="!aiFacesTestBusy" x-text="window.t('settings.action.test')"></span>
-+                                        </button>
-+                                    </div>
-+                                    <small class="settings-hint">{{ t('settings.ai.connection.faces_path_hint') }}</small>
-+                                </div>
-+                            </div>
-+                            <div class="settings-form-row">
-+                                <label class="row-label" for="aiFacesApiKey">{{ t('settings.ai.faces.api_key_label') }}</label>
-+                                <div class="flex-1 min-w-0">
-+                                    <input type="password" class="input input-bordered input-sm w-full"
-+                                           id="aiFacesApiKey"
-+                                           x-model="form.aiFacesApiKey"
-+                                           :placeholder="window.t('settings.ai.faces.api_key_placeholder')">
-+                                </div>
-+                            </div>
-+                            <div class="settings-form-row">
-+                                <label class="row-label" for="aiFacesModel">{{ t('settings.ai.faces.model_label') }}</label>
-+                                <div class="flex-1 min-w-0">
-+                                    <input type="text" class="input input-bordered input-sm w-full"
-+                                           id="aiFacesModel"
-+                                           x-model="form.aiFacesModel"
-+                                           :placeholder="window.t('settings.ai.faces.model_placeholder')">
-+                                </div>
-+                            </div>
++                            <small class="settings-hint">{{ t('settings.ai.connection.faces_path_hint') }}</small>
++                            <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.faces.empty_desc') }}</p>
 +
 +                            <p class="settings-hint ai-similar-status"
 +                               id="aiFacesStatusLine"
@@ -32722,25 +32712,39 @@
 +                         x-show="aiTab === 'tags'" x-cloak
 +                         x-data="aiTagsPanel">
 +                        <div class="settings-form-group">
-+                            <label class="settings-label">
+                             <label class="settings-label">
+-                                <input type="checkbox" data-focal-auto-pill class="toggle toggle-primary"
+-                                       {% if focal_auto_enabled %}checked{% endif %}
+-                                       @change="setFocalDeviceDisabled($event)">
+-                                <span class="label-text">{{ t('settings.scraper.focal_pill_label') }}</span>
+-                                <button type="button" class="help-popover-btn"
+-                                        @click.prevent="toggle()"
+-                                        :aria-expanded="open">
+-                                    <i class="bi bi-question-circle"></i>
+-                                </button>
 +                                <input type="checkbox" class="toggle toggle-primary"
 +                                       id="aiTagsEnabled"
 +                                       x-model="form.aiTagsEnabled">
 +                                <span class="label-text">{{ t('settings.ai.tags.enabled_label') }}</span>
-+                            </label>
+                             </label>
+-                            <div x-show="open" x-cloak x-transition
+-                                 @click.outside="close()"
+-                                 class="help-popover help-popover--up">
+-                                <small class="help-popover__body">
+-                                    {{ t('settings.scraper.focal_help') }}
+-                                </small>
+-                            </div>
+-                        </div>
+-
+-                    </div><!-- /collapsible-content scraperAdvanced -->
 +                        </div>
-+                        <p class="settings-hint ai-tags-empty-desc"
-+                           x-show="panelMode() === 'empty'">{{ t('settings.ai.tags.empty_desc') }}</p>
-+                        <p class="settings-hint ai-tags-first-run"
-+                           id="aiTagsFirstRunHint"
-+                           x-text="firstRunHint()"></p>
-+
-+                        <div class="ai-tags-fields" x-show="panelMode() === 'fields'">
++                        <div class="ai-tags-fields">
 +                            <div class="settings-form-row">
 +                                <label class="row-label" for="aiTagsProvider">{{ t('settings.ai.tags.provider_label') }}</label>
 +                                <div class="flex-1 min-w-0">
 +                                    <select class="select select-bordered select-sm w-full"
 +                                            id="aiTagsProvider"
++                                            :disabled="!form.aiTagsEnabled"
 +                                            @focus="rememberConnection()"
 +                                            x-model="form.aiTagsProvider"
 +                                            @change="onProviderChange()">
@@ -32756,14 +32760,14 @@
 +                            <div class="settings-form-row">
 +                                <label class="row-label" for="aiTagsBaseUrl">{{ t('settings.ai.connection.url_label') }}</label>
 +                                <div class="flex-1 min-w-0 flex flex-col gap-1">
-+                                    <input type="text" id="aiTagsBaseUrl" class="input input-bordered input-sm w-full min-w-0" x-model="form.aiTagsBaseUrl" placeholder="" :disabled="form.aiTagsProvider === ''" autocomplete="off">
++                                    <input type="text" id="aiTagsBaseUrl" class="input input-bordered input-sm w-full min-w-0" x-model="form.aiTagsBaseUrl" placeholder="" :disabled="!form.aiTagsEnabled || form.aiTagsProvider === ''" autocomplete="off">
 +                                    <small class="settings-hint">{{ t('settings.ai.connection.base_url_hint') }}</small>
 +                                </div>
 +                            </div>
 +                            <div class="settings-form-row">
 +                                <label class="row-label" for="aiTagsApiKey">{{ t('settings.ai.connection.api_key_label') }}</label>
 +                                <div class="flex-1 min-w-0 flex flex-col gap-1">
-+                                    <input type="password" id="aiTagsApiKey" class="input input-bordered input-sm w-full min-w-0" x-model="form.aiTagsApiKey" placeholder="" :disabled="form.aiTagsProvider === ''" autocomplete="off">
++                                    <input type="password" id="aiTagsApiKey" class="input input-bordered input-sm w-full min-w-0" x-model="form.aiTagsApiKey" placeholder="" :disabled="!form.aiTagsEnabled || form.aiTagsProvider === ''" autocomplete="off">
 +                                    <small class="settings-hint">{{ t('settings.ai.connection.api_key_hint') }}</small>
 +                                </div>
 +                            </div>
@@ -32771,7 +32775,7 @@
 +                                <label class="row-label" for="aiTagsModel">{{ t('settings.ai.tags.model_label') }}</label>
 +                                <div class="flex-1 flex flex-col gap-1 min-w-0">
 +                                    <div class="variable-input-group">
-+                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0" id="aiTagsModel" x-model="form.aiTagsModel" list="aiTagsModelChoices" :disabled="form.aiTagsProvider === ''" :placeholder="window.t('settings.ai.connection.model_hint')">
++                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0" id="aiTagsModel" x-model="form.aiTagsModel" list="aiTagsModelChoices" :disabled="!form.aiTagsEnabled || form.aiTagsProvider === ''" :placeholder="window.t('settings.ai.connection.model_hint')">
 +                                        <datalist id="aiTagsModelChoices"><template x-for="m in modelOptions()" :key="m"><option :value="m"></option></template></datalist>
 +                                        <button class="btn btn-sm btn-outline" type="button"
 +                                                id="aiTagsTestBtn"
@@ -32787,7 +32791,7 @@
 +
 +                            <div class="settings-form-row">
 +                                <div class="flex-1 min-w-0">
-+                                    <button type="button" class="btn btn-sm btn-outline" @click="loadModels()" :disabled="aiTagsModelsBusy || form.aiTagsProvider === ''">
++                                    <button type="button" class="btn btn-sm btn-outline" @click="loadModels()" :disabled="!form.aiTagsEnabled || aiTagsModelsBusy || form.aiTagsProvider === ''">
 +                                        <span x-show="aiTagsModelsBusy" class="loading loading-spinner loading-sm"></span>
 +                                        {{ t('settings.ai.connection.fetch_models') }}
 +                                    </button>
@@ -32795,6 +32799,9 @@
 +                                    <small class="settings-hint">{{ t('settings.ai.connection.independent_hint') }}</small>
 +                                </div>
 +                            </div>
++                            <p class="settings-hint ai-tags-empty-desc">{{ t('settings.ai.tags.empty_desc') }}</p>
++                            <p class="settings-hint ai-tags-first-run"
++                               id="aiTagsFirstRunHint" x-text="firstRunHint()"></p>
 +                            <p class="settings-hint ai-tags-status"
 +                               id="aiTagsStatusLine"
 +                               x-show="bfStatus !== null && statusLineText()"
@@ -32826,7 +32833,7 @@
            <div class="card mb-4">
              <div class="settings-card-header"><i class="bi bi-list-ul"></i> {{ t('nav.scanner') }}</div>
              <div class="card-body">
-@@ -1433,67 +1576,19 @@
+@@ -1433,67 +1575,19 @@
                                          </button>
                                      </template>
                                  </div>
@@ -32901,7 +32908,7 @@
            <div class="card mb-4">
              <div class="settings-card-header"><i class="bi bi-sliders"></i> {{ t('settings.section.system') }}</div>
              <div class="card-body">
-@@ -1506,26 +1601,34 @@
+@@ -1506,26 +1600,34 @@
                              <option value="showcase">{{ t('nav.showcase') }}</option>
                          </select>
                      </div>
@@ -32954,7 +32961,7 @@
                      </div>
                      <hr class="my-3">
  
-@@ -1543,14 +1646,30 @@
+@@ -1543,14 +1645,30 @@
              </div>
            </div>
          </section><!-- /sec-system -->
@@ -32992,7 +32999,7 @@
  
      <!-- Dirty Check Modal -->
      <dialog class="modal fluent-modal"
-@@ -1629,38 +1748,6 @@
+@@ -1629,38 +1747,6 @@
          </div>
      </dialog>
  
@@ -33031,7 +33038,7 @@
      <!-- 90c-T5: 全域模式切換（破壞性重設）Confirm Modal -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': switchModeConfirmOpen }"
-@@ -1709,20 +1796,13 @@
+@@ -1709,20 +1795,13 @@
      </dialog>
  
  <!-- Toast 容器（Alpine controlled）-->

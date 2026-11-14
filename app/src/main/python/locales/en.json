@@ -940,7 +940,7 @@
       "title": "AI Features",
       "tab_translate": "Translate",
       "tab_similar": "Image Similarity",
-      "help_body": "This card manages translation and image similarity in one place. Keys and URLs go in the Connections section below; the Translate tab only picks the engine and model. Image similarity needs a self-hosted vector endpoint — skip it if you don't have one.",
+      "help_body": "Each of the four AI features has its own service address, API Key and model name. Enable a feature to enter its connection details. Leave the API Key blank if the service does not require authentication.",
       "help_docs_link": "External AI guide (GitHub: docs/external-ai.md)",
       "connections_title": "Connections",
       "backfill": {
@@ -955,7 +955,7 @@
       },
       "similar": {
         "enabled_label": "Enable image similarity",
-        "empty_desc": "This needs a small service you host yourself (or ask your AI assistant to set one up). OpenAver sends covers to it to turn them into vectors, so Constellation can tell when covers look alike. If you don't have one, just skip it — nothing else is affected.",
+        "empty_desc": "Convert covers into image vectors to find similar covers. Connect a local or cloud service that supports image embeddings, using its own service address, API Key and model name.",
         "btn_docs": "View docs",
         "url_label": "Service URL",
         "url_placeholder": "http://127.0.0.1:8000",
@@ -999,7 +999,7 @@
       "tab_faces": "Faces",
       "faces": {
         "enabled_label": "Enable face endpoint",
-        "empty_desc": "This needs a small service you host yourself (or ask your AI assistant to set one up). OpenAver sends covers to it to find faces and set the focus. While the external endpoint is on, this phone's processing-power limits don't apply. If you don't have one, just skip it — nothing else is affected.",
+        "empty_desc": "Send covers to a face detection service for automatic focus. Connect a compatible local or cloud service using its own address, API Key and model name. When detection runs on an external service, this phone's processing-power limits don't apply.",
         "url_label": "Service URL",
         "url_placeholder": "http://127.0.0.1:8000",
         "api_key_label": "API Key",

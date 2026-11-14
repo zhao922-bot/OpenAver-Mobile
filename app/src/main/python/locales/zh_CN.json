@@ -940,7 +940,7 @@
       "title": "AI 功能",
       "tab_translate": "翻译",
       "tab_similar": "图片相似",
-      "help_body": "这张卡集中管理翻译与图片相似。密钥与网址放在下方连接区；翻译分页只选引擎与模型。图片相似需要自建向量端点，没有可以略过。",
+      "help_body": "四项 AI 功能均可独立填写服务地址、API Key 和模型名称。先启用对应功能，再填写连接资料；无需认证的服务可留空 API Key。",
       "help_docs_link": "外部 AI 说明（GitHub：docs/external-ai.md）",
       "connections_title": "连接",
       "backfill": {
@@ -955,7 +955,7 @@
       },
       "similar": {
         "enabled_label": "启用图片相似",
-        "empty_desc": "这个能力需要你自己架一个小服务（或请 AI 助理帮你架），OpenAver 会把封面送过去换成向量，让星空也看得懂「封面长得像」。没有的话可以略过，其他功能不受影响。",
+        "empty_desc": "将封面转换为图像向量，用于查找相似封面。可连接支持图像向量接口的本地或云端服务，独立填写服务地址、API Key 和模型名称。",
         "btn_docs": "看文档",
         "url_label": "服务地址",
         "url_placeholder": "http://127.0.0.1:8000",
@@ -999,7 +999,7 @@
       "tab_faces": "人脸",
       "faces": {
         "enabled_label": "启用人脸端点",
-        "empty_desc": "这个能力需要你自己架一个小服务（或请 AI 助理帮你架），OpenAver 会把封面送过去找脸并对焦。外部端点开着时，手机的算力限制不适用。没有的话可以略过，其他功能不受影响。",
+        "empty_desc": "将封面发送到人脸检测服务，用于自动对焦。可连接兼容的本地或云端服务，独立填写服务地址、API Key 和模型名称。由外部服务执行检测时，手机的算力限制不适用。",
         "url_label": "服务地址",
         "url_placeholder": "http://127.0.0.1:8000",
         "api_key_label": "API Key",

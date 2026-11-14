@@ -60,6 +60,7 @@ tools/*
 !tools/minify-release-web-assets.py
 !tools/prepare_python_tree.py
 !tools/verify_python_sync.py
+!tools/verify_python_payload.py
 !tools/echarts-build/
 !tools/echarts-build/**
 

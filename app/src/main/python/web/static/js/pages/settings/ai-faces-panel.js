@@ -111,7 +111,7 @@ export function aiFacesPanel() {
         },
 
         testDisabled() {
-            if (this.aiFacesTestBusy) return true;
+            if (this.aiFacesTestBusy || !this.form?.aiFacesEnabled) return true;
             const url = (this.form && this.form.aiFacesUrl) || '';
             return !String(url).trim();
         },

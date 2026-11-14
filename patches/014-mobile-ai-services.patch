@@ -7168,7 +7168,7 @@
 +        },
 +
 +        testDisabled() {
-+            if (this.aiFacesTestBusy) return true;
++            if (this.aiFacesTestBusy || !this.form?.aiFacesEnabled) return true;
 +            const url = (this.form && this.form.aiFacesUrl) || '';
 +            return !String(url).trim();
 +        },
@@ -7548,7 +7548,7 @@
 +        },
 +
 +        testDisabled() {
-+            if (this.aiSimTestBusy) return true;
++            if (this.aiSimTestBusy || !this.form?.aiSimilarEnabled) return true;
 +            const url = (this.form && this.form.aiSimilarUrl) || '';
 +            return !String(url).trim();
 +        },
@@ -8049,7 +8049,7 @@
 +        },
 +
 +        async loadModels() {
-+            if (this.aiTagsModelsBusy) return;
++            if (this.aiTagsModelsBusy || !this.form.aiTagsEnabled || !this.form.aiTagsProvider) return;
 +            const body = buildTagsTestBody(this.form);
 +            this.aiTagsModelsBusy = true;
 +            this.aiTagsModelsStatus = '';
@@ -8074,7 +8074,7 @@
 +        },
 +
 +        testDisabled() {
-+            return this.aiTagsTestBusy || this.form.aiTagsProvider === '';
++            return this.aiTagsTestBusy || !this.form.aiTagsEnabled || this.form.aiTagsProvider === '';
 +        },
 +
 +        /** 舊狀態行文字；key 為 null（跑中／閒置未完成）時只串 extra 並去掉前導「・」。 */

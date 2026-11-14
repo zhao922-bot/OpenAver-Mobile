@@ -869,8 +869,7 @@
                     </div>
 
                     <!-- 翻譯選項 (動態顯示) -->
-                    <div id="translateOptions"
-                         :class="{ 'opacity-50': !form.translateEnabled }">
+                    <div id="translateOptions">
                         <div class="settings-form-row">
                             <label class="row-label">{{ t('settings.translate.provider_label') }}</label>
                             <select class="select select-bordered select-sm" id="translateProvider"
@@ -908,6 +907,13 @@
                             </div>
 
                             <div class="settings-form-row">
+                                <label class="row-label" for="ollamaApiKey">{{ t('settings.ai.connection.api_key_label') }}</label>
+                                <div class="flex-1 min-w-0 flex flex-col gap-1">
+                                    <input type="password" id="ollamaApiKey" class="input input-bordered input-sm w-full min-w-0" x-model="form.ollamaApiKey" placeholder="" :disabled="!form.translateEnabled" autocomplete="off">
+                                    <small class="settings-hint">{{ t('settings.ai.connection.api_key_hint') }}</small>
+                                </div>
+                            </div>
+                            <div class="settings-form-row">
                                 <label class="row-label">{{ t('settings.translate.model_label') }}</label>
                                 <div class="flex-1 flex flex-col gap-1">
                                     <div class="variable-input-group">
@@ -924,13 +930,6 @@
                                         </button>
                                     </div>
                                     <small class="settings-hint" x-html="modelStatus"></small>
-                                </div>
-                            </div>
-                            <div class="settings-form-row">
-                                <label class="row-label" for="ollamaApiKey">{{ t('settings.ai.connection.api_key_label') }}</label>
-                                <div class="flex-1 min-w-0 flex flex-col gap-1">
-                                    <input type="password" id="ollamaApiKey" class="input input-bordered input-sm w-full min-w-0" x-model="form.ollamaApiKey" placeholder="" :disabled="!form.translateEnabled" autocomplete="off">
-                                    <small class="settings-hint">{{ t('settings.ai.connection.api_key_hint') }}</small>
                                 </div>
                             </div>
                         </div>
@@ -1217,26 +1216,15 @@
                                 <span class="label-text">{{ t('settings.ai.similar.enabled_label') }}</span>
                             </label>
                         </div>
-                        <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.similar.empty_desc') }}</p>
-
-                        <div class="ai-similar-fields" x-show="panelMode() === 'fields'">
+                        <div class="ai-similar-fields">
                             <div class="settings-form-row">
                                 <label class="row-label" for="aiSimilarUrl">{{ t('settings.ai.similar.url_label') }}</label>
                                 <div class="flex-1 flex flex-col gap-1 min-w-0">
-                                    <div class="variable-input-group">
-                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
-                                               id="aiSimilarUrl"
-                                               x-model="form.aiSimilarUrl"
-                                               :placeholder="window.t('settings.ai.similar.url_placeholder')">
-                                        <button class="btn btn-sm btn-outline" type="button"
-                                                id="aiSimilarTestBtn"
-                                                @click="runTest()"
-                                                :disabled="testDisabled()">
-                                            <span x-show="aiSimTestBusy" class="loading loading-spinner loading-sm"></span>
-                                            <span x-show="!aiSimTestBusy" x-text="window.t('settings.action.test')"></span>
-                                        </button>
-                                    </div>
-                                    <small class="settings-hint">{{ t('settings.ai.connection.similar_path_hint') }}</small>
+                                    <input type="text" class="input input-bordered input-sm w-full min-w-0"
+                                           id="aiSimilarUrl"
+                                           x-model="form.aiSimilarUrl"
+                                           :disabled="!form.aiSimilarEnabled"
+                                           :placeholder="window.t('settings.ai.similar.url_placeholder')">
                                 </div>
                             </div>
                             <div class="settings-form-row">
@@ -1245,6 +1233,7 @@
                                     <input type="password" class="input input-bordered input-sm w-full"
                                            id="aiSimilarApiKey"
                                            x-model="form.aiSimilarApiKey"
+                                           :disabled="!form.aiSimilarEnabled"
                                            :placeholder="window.t('settings.ai.similar.api_key_placeholder')">
                                 </div>
                             </div>
@@ -1254,9 +1243,20 @@
                                     <input type="text" class="input input-bordered input-sm w-full"
                                            id="aiSimilarModel"
                                            x-model="form.aiSimilarModel"
+                                           :disabled="!form.aiSimilarEnabled"
                                            :placeholder="window.t('settings.ai.similar.model_placeholder')">
                                 </div>
                             </div>
+
+                            <div class="ai-connection-actions">
+                                <button class="btn btn-sm btn-outline" type="button"
+                                        id="aiSimilarTestBtn" @click="runTest()" :disabled="testDisabled()">
+                                    <span x-show="aiSimTestBusy" class="loading loading-spinner loading-sm"></span>
+                                    <span x-show="!aiSimTestBusy" x-text="window.t('settings.action.test')"></span>
+                                </button>
+                            </div>
+                            <small class="settings-hint">{{ t('settings.ai.connection.similar_path_hint') }}</small>
+                            <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.similar.empty_desc') }}</p>
 
                             <p class="settings-hint ai-similar-status"
                                id="aiSimilarStatusLine"
@@ -1289,26 +1289,15 @@
                                 <span class="label-text">{{ t('settings.ai.faces.enabled_label') }}</span>
                             </label>
                         </div>
-                        <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.faces.empty_desc') }}</p>
-
-                        <div class="ai-similar-fields" x-show="panelMode() === 'fields'">
+                        <div class="ai-similar-fields">
                             <div class="settings-form-row">
                                 <label class="row-label" for="aiFacesUrl">{{ t('settings.ai.faces.url_label') }}</label>
                                 <div class="flex-1 flex flex-col gap-1 min-w-0">
-                                    <div class="variable-input-group">
-                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0"
-                                               id="aiFacesUrl"
-                                               x-model="form.aiFacesUrl"
-                                               :placeholder="window.t('settings.ai.faces.url_placeholder')">
-                                        <button class="btn btn-sm btn-outline" type="button"
-                                                id="aiFacesTestBtn"
-                                                @click="runTest()"
-                                                :disabled="testDisabled()">
-                                            <span x-show="aiFacesTestBusy" class="loading loading-spinner loading-sm"></span>
-                                            <span x-show="!aiFacesTestBusy" x-text="window.t('settings.action.test')"></span>
-                                        </button>
-                                    </div>
-                                    <small class="settings-hint">{{ t('settings.ai.connection.faces_path_hint') }}</small>
+                                    <input type="text" class="input input-bordered input-sm w-full min-w-0"
+                                           id="aiFacesUrl"
+                                           x-model="form.aiFacesUrl"
+                                           :disabled="!form.aiFacesEnabled"
+                                           :placeholder="window.t('settings.ai.faces.url_placeholder')">
                                 </div>
                             </div>
                             <div class="settings-form-row">
@@ -1317,6 +1306,7 @@
                                     <input type="password" class="input input-bordered input-sm w-full"
                                            id="aiFacesApiKey"
                                            x-model="form.aiFacesApiKey"
+                                           :disabled="!form.aiFacesEnabled"
                                            :placeholder="window.t('settings.ai.faces.api_key_placeholder')">
                                 </div>
                             </div>
@@ -1326,9 +1316,20 @@
                                     <input type="text" class="input input-bordered input-sm w-full"
                                            id="aiFacesModel"
                                            x-model="form.aiFacesModel"
+                                           :disabled="!form.aiFacesEnabled"
                                            :placeholder="window.t('settings.ai.faces.model_placeholder')">
                                 </div>
                             </div>
+
+                            <div class="ai-connection-actions">
+                                <button class="btn btn-sm btn-outline" type="button"
+                                        id="aiFacesTestBtn" @click="runTest()" :disabled="testDisabled()">
+                                    <span x-show="aiFacesTestBusy" class="loading loading-spinner loading-sm"></span>
+                                    <span x-show="!aiFacesTestBusy" x-text="window.t('settings.action.test')"></span>
+                                </button>
+                            </div>
+                            <small class="settings-hint">{{ t('settings.ai.connection.faces_path_hint') }}</small>
+                            <p class="settings-hint ai-similar-empty-desc">{{ t('settings.ai.faces.empty_desc') }}</p>
 
                             <p class="settings-hint ai-similar-status"
                                id="aiFacesStatusLine"
@@ -1365,18 +1366,13 @@
                                 <span class="label-text">{{ t('settings.ai.tags.enabled_label') }}</span>
                             </label>
                         </div>
-                        <p class="settings-hint ai-tags-empty-desc"
-                           x-show="panelMode() === 'empty'">{{ t('settings.ai.tags.empty_desc') }}</p>
-                        <p class="settings-hint ai-tags-first-run"
-                           id="aiTagsFirstRunHint"
-                           x-text="firstRunHint()"></p>
-
-                        <div class="ai-tags-fields" x-show="panelMode() === 'fields'">
+                        <div class="ai-tags-fields">
                             <div class="settings-form-row">
                                 <label class="row-label" for="aiTagsProvider">{{ t('settings.ai.tags.provider_label') }}</label>
                                 <div class="flex-1 min-w-0">
                                     <select class="select select-bordered select-sm w-full"
                                             id="aiTagsProvider"
+                                            :disabled="!form.aiTagsEnabled"
                                             @focus="rememberConnection()"
                                             x-model="form.aiTagsProvider"
                                             @change="onProviderChange()">
@@ -1392,14 +1388,14 @@
                             <div class="settings-form-row">
                                 <label class="row-label" for="aiTagsBaseUrl">{{ t('settings.ai.connection.url_label') }}</label>
                                 <div class="flex-1 min-w-0 flex flex-col gap-1">
-                                    <input type="text" id="aiTagsBaseUrl" class="input input-bordered input-sm w-full min-w-0" x-model="form.aiTagsBaseUrl" placeholder="" :disabled="form.aiTagsProvider === ''" autocomplete="off">
+                                    <input type="text" id="aiTagsBaseUrl" class="input input-bordered input-sm w-full min-w-0" x-model="form.aiTagsBaseUrl" placeholder="" :disabled="!form.aiTagsEnabled || form.aiTagsProvider === ''" autocomplete="off">
                                     <small class="settings-hint">{{ t('settings.ai.connection.base_url_hint') }}</small>
                                 </div>
                             </div>
                             <div class="settings-form-row">
                                 <label class="row-label" for="aiTagsApiKey">{{ t('settings.ai.connection.api_key_label') }}</label>
                                 <div class="flex-1 min-w-0 flex flex-col gap-1">
-                                    <input type="password" id="aiTagsApiKey" class="input input-bordered input-sm w-full min-w-0" x-model="form.aiTagsApiKey" placeholder="" :disabled="form.aiTagsProvider === ''" autocomplete="off">
+                                    <input type="password" id="aiTagsApiKey" class="input input-bordered input-sm w-full min-w-0" x-model="form.aiTagsApiKey" placeholder="" :disabled="!form.aiTagsEnabled || form.aiTagsProvider === ''" autocomplete="off">
                                     <small class="settings-hint">{{ t('settings.ai.connection.api_key_hint') }}</small>
                                 </div>
                             </div>
@@ -1407,7 +1403,7 @@
                                 <label class="row-label" for="aiTagsModel">{{ t('settings.ai.tags.model_label') }}</label>
                                 <div class="flex-1 flex flex-col gap-1 min-w-0">
                                     <div class="variable-input-group">
-                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0" id="aiTagsModel" x-model="form.aiTagsModel" list="aiTagsModelChoices" :disabled="form.aiTagsProvider === ''" :placeholder="window.t('settings.ai.connection.model_hint')">
+                                        <input type="text" class="input input-bordered input-sm flex-1 min-w-0" id="aiTagsModel" x-model="form.aiTagsModel" list="aiTagsModelChoices" :disabled="!form.aiTagsEnabled || form.aiTagsProvider === ''" :placeholder="window.t('settings.ai.connection.model_hint')">
                                         <datalist id="aiTagsModelChoices"><template x-for="m in modelOptions()" :key="m"><option :value="m"></option></template></datalist>
                                         <button class="btn btn-sm btn-outline" type="button"
                                                 id="aiTagsTestBtn"
@@ -1423,7 +1419,7 @@
 
                             <div class="settings-form-row">
                                 <div class="flex-1 min-w-0">
-                                    <button type="button" class="btn btn-sm btn-outline" @click="loadModels()" :disabled="aiTagsModelsBusy || form.aiTagsProvider === ''">
+                                    <button type="button" class="btn btn-sm btn-outline" @click="loadModels()" :disabled="!form.aiTagsEnabled || aiTagsModelsBusy || form.aiTagsProvider === ''">
                                         <span x-show="aiTagsModelsBusy" class="loading loading-spinner loading-sm"></span>
                                         {{ t('settings.ai.connection.fetch_models') }}
                                     </button>
@@ -1431,6 +1427,9 @@
                                     <small class="settings-hint">{{ t('settings.ai.connection.independent_hint') }}</small>
                                 </div>
                             </div>
+                            <p class="settings-hint ai-tags-empty-desc">{{ t('settings.ai.tags.empty_desc') }}</p>
+                            <p class="settings-hint ai-tags-first-run"
+                               id="aiTagsFirstRunHint" x-text="firstRunHint()"></p>
                             <p class="settings-hint ai-tags-status"
                                id="aiTagsStatusLine"
                                x-show="bfStatus !== null && statusLineText()"

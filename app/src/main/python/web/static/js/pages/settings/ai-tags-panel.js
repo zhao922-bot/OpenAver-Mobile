@@ -128,7 +128,7 @@ export function aiTagsPanel() {
         },
 
         async loadModels() {
-            if (this.aiTagsModelsBusy) return;
+            if (this.aiTagsModelsBusy || !this.form.aiTagsEnabled || !this.form.aiTagsProvider) return;
             const body = buildTagsTestBody(this.form);
             this.aiTagsModelsBusy = true;
             this.aiTagsModelsStatus = '';
@@ -153,7 +153,7 @@ export function aiTagsPanel() {
         },
 
         testDisabled() {
-            return this.aiTagsTestBusy || this.form.aiTagsProvider === '';
+            return this.aiTagsTestBusy || !this.form.aiTagsEnabled || this.form.aiTagsProvider === '';
         },
 
         /** 舊狀態行文字；key 為 null（跑中／閒置未完成）時只串 extra 並去掉前導「・」。 */

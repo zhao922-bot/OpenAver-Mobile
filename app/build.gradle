@@ -3,7 +3,7 @@ plugins {
     id "com.chaquo.python"
 }
 
-def openaverRelease = "v0.18.17-r8"
+def openaverRelease = "v0.18.17-r9"
 def openaverCommit = "af0d99741e63e71980773c9ade04c473407a60b7"
 def requestedAbis = (project.findProperty("abi") ?: "arm64-v8a")
         .split(",")
@@ -31,8 +31,8 @@ android {
         applicationId "dev.openaver.mobile"
         minSdk 29
         targetSdk 29
-        versionCode 18008
-        versionName "0.18.17-r8"
+        versionCode 18009
+        versionName "0.18.17-r9"
 
         buildConfigField "String", "OPENAVER_RELEASE", "\"${openaverRelease}\""
         buildConfigField "String", "OPENAVER_COMMIT", "\"${openaverCommit}\""
@@ -117,6 +117,12 @@ dependencies {
 }
 
 chaquopy {
+    sourceSets {
+        getByName("main") {
+            // Runtime files in a developer checkout must never enter an APK.
+            exclude("output", "output/**", "logs", "logs/**", "web/config.json")
+        }
+    }
     defaultConfig {
         version = "3.13"
         if (openaverBuildPython) {
@@ -177,6 +183,21 @@ def minifyReleaseWebAssets = tasks.register("minifyReleaseWebAssets") {
 }
 
 tasks.configureEach { task ->
+    if (task.name.startsWith("generate") && task.name.endsWith("PythonBuildAssets")) {
+        def variantName = task.name.substring("generate".length(),
+                task.name.length() - "PythonBuildAssets".length())
+        def variantDir = variantName.substring(0, 1).toLowerCase() + variantName.substring(1)
+        task.doLast {
+            project.exec {
+                commandLine(
+                        releaseAssetPython.toString(),
+                        rootProject.file("tools/verify_python_payload.py"),
+                        "--archive",
+                        layout.buildDirectory.file("python/assets/source/${variantDir}/chaquopy/app.imy").get().asFile,
+                )
+            }
+        }
+    }
     if (task.name == "mergeReleaseAssets") {
         task.dependsOn(minifyReleaseWebAssets)
     }
