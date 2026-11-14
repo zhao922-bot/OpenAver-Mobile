@@ -1060,7 +1060,7 @@
 +    return bool((faces.get("url") or "").strip())
 --- /dev/null
 +++ b/core/ai_services/faces_detect.py
-@@ -0,0 +1,196 @@
+@@ -0,0 +1,197 @@
 +"""External faces detection entry (CD-187a-1 / -4 / -6 / -15).
 +
 +Never raises: unexpected errors log and return ``None`` (local path takes over).
@@ -1115,9 +1115,9 @@
 +    )
 +
 +
-+def _prepare(fs_path: str) -> tuple[dict, str, tuple[int, int]] | None:
++def _prepare(fs_path: str, config: dict | None = None) -> tuple[dict, str, tuple[int, int]] | None:
 +    """Config + preprocess. ``None`` = external not applicable."""
-+    cfg = load_config()
++    cfg = load_config() if config is None else config
 +    if not active_in(cfg):
 +        return None
 +    prepared = cover_to_faces_data_uri(fs_path)
@@ -1184,6 +1184,7 @@
 +    profile: str = "background",
 +    *,
 +    notify: bool = True,
++    config: dict | None = None,
 +) -> ExternalResult | None:
 +    """Ask the faces endpoint for a cover. Never raises.
 +
@@ -1191,7 +1192,7 @@
 +    ``notify=False`` skips sidebar emit on failure (recompute path, CD-187a-15).
 +    """
 +    try:
-+        prepared = _prepare(fs_path)
++        prepared = _prepare(fs_path, config)
 +        if prepared is None:
 +            return None
 +        cfg, uri, size = prepared
@@ -1259,7 +1260,7 @@
 +        return None
 --- /dev/null
 +++ b/core/ai_services/faces_recompute.py
-@@ -0,0 +1,378 @@
+@@ -0,0 +1,404 @@
 +"""全庫人臉焦點重算工作（187a-T4a，CD-187a-11／-12／-14／-15）。
 +
 +公開介面：``ensure``／``resume``／``start_rebuild``／``request_stop``／``status``。
@@ -1268,6 +1269,7 @@
 +from __future__ import annotations
 +
 +import os
++import copy
 +import threading
 +from types import SimpleNamespace
 +from typing import Optional
@@ -1293,12 +1295,14 @@
 +_stopped_reason: Optional[str] = None
 +_stopped_kind: Optional[str] = None
 +_stopped_check: Optional[str] = None
++_job_config: Optional[dict] = None
 +
 +
 +# ── 鎖 ───────────────────────────────────────────────────────────────────────
 +
-+def _begin_job(kind: str) -> None:
-+    global _unreadable, _stopped_reason, _stopped_kind, _stopped_check
++def _begin_job(kind: str, config: Optional[dict] = None) -> None:
++    global _unreadable, _stopped_reason, _stopped_kind, _stopped_check, _job_config
++    _job_config = copy.deepcopy(load_config() if config is None else config)
 +    _SHELL.begin_locked()
 +    _unreadable = 0
 +    _stopped_reason = _stopped_kind = _stopped_check = None
@@ -1306,9 +1310,11 @@
 +
 +
 +def _release_job(outcome: str) -> None:
++    global _job_config
 +    faces_state.job_end(outcome)
 +    if _SHELL.is_running():
 +        _SHELL.release_locked()
++    _job_config = None
 +
 +
 +def _release_unlaunched(outcome: str) -> None:
@@ -1380,6 +1386,9 @@
 +
 +def ensure(model: str, kind: str = "model_change") -> bool:
 +    """設 target＝model；待處理＝0 → 不開工；已在跑 → 只更新 target；否則起 thread。"""
++    config = load_config()
++    if _faces_cfg_object(config).provider == 'openai':
++        return False  # Automatic hooks cannot initiate a cloud library job.
 +    faces_state.meta_set(META_TARGET, model)
 +    repo = VideoRepository()
 +    counts = _counts(repo, model)
@@ -1388,15 +1397,18 @@
 +    with _SHELL.state_lock:
 +        if not _SHELL.try_acquire():
 +            return False  # 已在跑：target 已更新，迴圈每張重讀
-+        _begin_job(kind)
++        _begin_job(kind, config)
 +    _start_thread(kind)
 +    return True
 +
 +
 +def resume() -> dict:
 +    """繼續未完成的重算（讀 app_meta target）。"""
-+    if ((load_config().get("ai_services") or {}).get("faces") or {}).get("provider") == "openai":
-+        test = _run_rebuild_test()
++    config = load_config()
++    if not active_in(config):
++        return {"started": False, "reason": "disabled"}
++    if _faces_cfg_object(config).provider == "openai":
++        test = _run_rebuild_test(config)
 +        if not test.ok:
 +            return {"started": False, "reason": "test_failed", "kind": test.kind, "check": test.check}
 +        faces_state.meta_set(META_TARGET, test.model)
@@ -1409,17 +1421,20 @@
 +    with _SHELL.state_lock:
 +        if not _SHELL.try_acquire():
 +            return {"started": False, "reason": "already_running"}
-+        _begin_job("resume")
++        _begin_job("resume", config)
 +    _start_thread("resume")
 +    return {"started": True, "reason": "started"}
 +
 +
 +def start_rebuild() -> dict:
 +    """「刪除並重新對焦」：先測後清（CD-187a-14）。"""
++    config = load_config()
++    if not active_in(config):
++        return {"ok": False, "reason": "disabled"}
 +    with _SHELL.state_lock:
 +        if not _SHELL.try_acquire():
 +            return {"ok": False, "reason": "already_running"}
-+        _begin_job("rebuild")
++        _begin_job("rebuild", config)
 +    try:
 +        return _start_rebuild_after_lock()
 +    except BaseException:
@@ -1428,7 +1443,7 @@
 +
 +
 +def _start_rebuild_after_lock() -> dict:
-+    test = _run_rebuild_test()
++    test = _run_rebuild_test(_job_config)
 +    if not test.ok:
 +        _release_unlaunched("test_failed")
 +        return {
@@ -1443,8 +1458,8 @@
 +    return {"ok": True, "reason": "started"}
 +
 +
-+def _run_rebuild_test():
-+    config = load_config()
++def _run_rebuild_test(config: Optional[dict] = None):
++    config = load_config() if config is None else config
 +    cfg = _faces_cfg_object(config)
 +    test = samples.run_faces_test(cfg)
 +    if test.ok:
@@ -1539,7 +1554,7 @@
 +        pending = _pending_rows(repo, pass_target)
 +        if not pending:
 +            return "drained"
-+        config = load_config()
++        config = _job_config if _job_config is not None else load_config()
 +        mappings = _path_mappings(config)
 +        for row in pending:
 +            if _SHELL.stop.is_set():
@@ -1559,6 +1574,11 @@
 +def _process_one(repo: VideoRepository, row: tuple, mappings: dict) -> Optional[str]:
 +    """處理一張。回 stop_reason 字串＝工作須停；None＝繼續。"""
 +    global _unreadable, _stopped_reason, _stopped_kind, _stopped_check
++    config = _job_config if _job_config is not None else load_config()
++    current = load_config()
++    if not active_in(current) or (current.get('ai_services') or {}).get('faces') != (config.get('ai_services') or {}).get('faces'):
++        _stopped_reason = 'connection_changed'
++        return _stopped_reason
 +    path, _number, _maker, cover_path, _focal_model, _has_result = row
 +    fs = uri_to_local_fs_path(cover_path, mappings)
 +    if not fs or not os.path.exists(fs):
@@ -1566,7 +1586,7 @@
 +        return None
 +
 +    result = faces_detect.detect(
-+        fs, _DETECT_RATIO, profile="background", notify=False
++        fs, _DETECT_RATIO, profile="background", notify=False, config=config
 +    )
 +    if result is None:
 +        if not active_in(load_config()):
@@ -1581,6 +1601,10 @@
 +        _stopped_reason = _failure_to_stop_reason(result.failure)
 +        snap = faces_state.snapshot()
 +        _stopped_kind, _stopped_check = snap["kind"], snap["check"]
++        return _stopped_reason
++
++    if (load_config().get('ai_services') or {}).get('faces') != (config.get('ai_services') or {}).get('faces'):
++        _stopped_reason = 'connection_changed'
 +        return _stopped_reason
 +
 +    focal_str = format_focal(result.focal)
@@ -1608,7 +1632,10 @@
 +    ``ensure`` 回 False（已在跑／待處理＝0）不重試。
 +    """
 +    if model.startswith("vision:"):
-+        if _SHELL.is_running():
++        from core.ai_services.cloud_protocols import face_model_id
++        job_cfg = _faces_cfg_object(_job_config or {})
++        if (_SHELL.is_running() and job_cfg.provider == 'openai'
++                and model.startswith(face_model_id(job_cfg, ''))):
 +            faces_state.meta_set(META_TARGET, model)
 +            _remember_target(model)
 +        return
@@ -1626,7 +1653,7 @@
 +    """儲存人臉設定後：伺服器端自己再測一次；通過且有 ``focal_model != 回報 model``
 +    的候選才 ``ensure``。沒過＝什麼都不做、不動 target。回傳是否起了工作。"""
 +    config = load_config()
-+    if not active_in(config):
++    if not active_in(config) or _faces_cfg_object(config).provider == 'openai':
 +        return False
 +    test = samples.run_faces_test(_faces_cfg_object(config))
 +    if not test.ok or not test.model:
@@ -2280,7 +2307,7 @@
 +    )
 --- /dev/null
 +++ b/core/ai_services/similar_index.py
-@@ -0,0 +1,384 @@
+@@ -0,0 +1,396 @@
 +"""圖片相似索引工作核心（186-T4a，CD-186-9／-10／-11／-12）。
 +
 +公開介面（T4b／T5 依賴）：``start_build()``、``request_stop()``、``schedule_incremental()``、
@@ -2298,7 +2325,7 @@
 +"""
 +from __future__ import annotations
 +
-+from dataclasses import dataclass
++from dataclasses import dataclass, field
 +from types import SimpleNamespace
 +from typing import Callable, Optional
 +
@@ -2333,6 +2360,13 @@
 +    dim: int
 +    first: bool = False
 +    released: bool = False
++    write_identity: tuple = field(init=False)
++
++    def __post_init__(self):
++        self.write_identity = self.repo.get_write_identity()
++        if self.write_identity[0] and getattr(self.cfg, 'url', ''):
++            from core.ai_services.cloud_protocols import embedding_connection_id
++            self.write_identity = (embedding_connection_id(self.cfg), *self.write_identity[1:])
 +
 +
 +def set_notification_sink(fn: Callable[..., None]) -> None:
@@ -2630,15 +2664,20 @@
 +    回 ``"indexed"``／``"unreadable"``／``"model_changed"``；``EndpointError`` 原樣外拋。"""
 +    uri = _cover_data_uri(ctx, cover_path)
 +    if uri is None:  # 封面讀不到：本機檔案問題，不算端點錯誤（I7）
-+        ctx.repo.write_unreadable(video_id, ctx.model, cover_path)
-+        return "unreadable"
++        written = ctx.repo.write_unreadable(video_id, ctx.model, cover_path,
++            expected_identity=ctx.write_identity)
++        return "unreadable" if written else "model_changed"
 +    first, ctx.first = ctx.first, False
 +    result = embeddings.embed(ctx.cfg, uri, first=first)
-+    similar_state.observe_success(result.model, result.dim)
 +    index_model, index_dim = ctx.model, ctx.dim
 +    if result.model != index_model or result.dim != index_dim:
++        if ctx.repo.get_write_identity() == ctx.write_identity:
++            similar_state.observe_success(result.model, result.dim)
 +        return "model_changed"
-+    ctx.repo.write_vector(video_id, result.model, result.dim, pack_vector(result.vector), cover_path)
++    if not ctx.repo.write_vector(video_id, result.model, result.dim, pack_vector(result.vector), cover_path,
++            expected_identity=ctx.write_identity):
++        return "model_changed"
++    similar_state.observe_success(result.model, result.dim)
 +    return "indexed"
 +
 +
@@ -5278,7 +5317,7 @@
      "TagAliasRecord",
 --- /dev/null
 +++ b/core/database/embeddings.py
-@@ -0,0 +1,217 @@
+@@ -0,0 +1,242 @@
 +"""core.database.embeddings — 圖片相似向量表與索引中繼（186-T4a，CD-186-9）。
 +
 +一部片一列（``video_embeddings.video_id`` 主鍵）；``app_meta`` 四個鍵記「現在用哪個
@@ -5292,6 +5331,7 @@
 +
 +import struct
 +import time
++import uuid
 +from array import array
 +from contextlib import closing
 +from pathlib import Path
@@ -5345,6 +5385,17 @@
 +            conn.execute("INSERT OR REPLACE INTO app_meta(key,value) VALUES('ai.similar.connection',?)", (value,))
 +            conn.commit()
 +
++    @staticmethod
++    def _write_identity(conn) -> tuple:
++        rows = dict(conn.execute("SELECT key,value FROM app_meta WHERE key IN "
++            "('ai.similar.connection','ai.similar.generation',?,?)", (META_MODEL, META_DIM)))
++        return tuple(rows.get(key) for key in
++            ('ai.similar.connection', 'ai.similar.generation', META_MODEL, META_DIM))
++
++    def get_write_identity(self) -> tuple:
++        with closing(connection.get_connection(self.db_path)) as conn:
++            return self._write_identity(conn)
++
 +    # ── app_meta ────────────────────────────────────────────────────────────
 +
 +    def get_index_state(self) -> dict:
@@ -5375,7 +5426,8 @@
 +                return False
 +            conn.executemany(
 +                "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
-+                [(META_MODEL, model), (META_DIM, str(int(dim))), (META_COMPLETE, "0")],
++                [(META_MODEL, model), (META_DIM, str(int(dim))), (META_COMPLETE, "0"),
++                 ('ai.similar.generation', uuid.uuid4().hex)],
 +            )
 +            conn.commit()
 +        return True
@@ -5387,7 +5439,8 @@
 +            n = conn.execute("DELETE FROM video_embeddings").rowcount
 +            conn.executemany(
 +                "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
-+                [(META_MODEL, model), (META_DIM, str(int(dim))), (META_COMPLETE, "0")],
++                [(META_MODEL, model), (META_DIM, str(int(dim))), (META_COMPLETE, "0"),
++                 ('ai.similar.generation', uuid.uuid4().hex)],
 +            )
 +            conn.commit()
 +        return n
@@ -5403,10 +5456,14 @@
 +    # ── rows ────────────────────────────────────────────────────────────────
 +
 +    def write_vector(self, video_id: int, model: str, dim: int, vec: bytes,
-+                     cover_path: str) -> None:
++                     cover_path: str, *, expected_identity: tuple | None = None) -> bool:
 +        """寫（覆寫）一列，並在同一個 transaction 記 ``last_success_at``。"""
 +        now = time.time()
 +        with closing(connection.get_connection(self.db_path)) as conn:
++            conn.execute('BEGIN IMMEDIATE')
++            if expected_identity is not None and self._write_identity(conn) != expected_identity:
++                conn.rollback()
++                return False
 +            conn.execute(
 +                "INSERT OR REPLACE INTO video_embeddings "
 +                "(video_id, model, dim, vec, cover_path, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -5417,16 +5474,23 @@
 +                (META_LAST_SUCCESS, repr(now)),
 +            )
 +            conn.commit()
++        return True
 +
-+    def write_unreadable(self, video_id: int, model: str, cover_path: str) -> None:
++    def write_unreadable(self, video_id: int, model: str, cover_path: str,
++                         *, expected_identity: tuple | None = None) -> bool:
 +        """封面讀不到、試過了：``dim=0``、``vec=b''``（不算待處理、不進融合）。"""
 +        with closing(connection.get_connection(self.db_path)) as conn:
++            conn.execute('BEGIN IMMEDIATE')
++            if expected_identity is not None and self._write_identity(conn) != expected_identity:
++                conn.rollback()
++                return False
 +            conn.execute(
 +                "INSERT OR REPLACE INTO video_embeddings "
 +                "(video_id, model, dim, vec, cover_path, updated_at) VALUES (?, ?, 0, ?, ?, ?)",
 +                (video_id, model, b"", cover_path, time.time()),
 +            )
 +            conn.commit()
++        return True
 +
 +    def clear_unreadable(self, model: str) -> int:
 +        """刪掉該模型下 ``dim=0``（封面讀不到、試過了）的列，讓它們回到待處理。
@@ -7118,7 +7182,7 @@
 +}
 --- /dev/null
 +++ b/web/static/js/pages/settings/ai-faces-logic.js
-@@ -0,0 +1,173 @@
+@@ -0,0 +1,176 @@
 +/**
 + * ai-faces-logic.js — 人臉分頁純函式（TASK-187a-T5）
 + *
@@ -7223,6 +7287,9 @@
 +    }
 +    // 尚未有目標模型（開關剛開未存）時 pending 會是全部候選——不顯示未完成／已停止。
 +    if (!status.target_model) return null;
++    if (status.stopped_reason === 'connection_changed') {
++        return {key:'settings.ai.cloud.connection_changed',params:{},extra:null};
++    }
 +    // 只有 contract／unreachable 顯示「已停止」句；disabled（使用者關端點）走下方未完成。
 +    if (status.stopped_reason === 'contract') {
 +        return {
@@ -7294,7 +7361,7 @@
 +};
 --- /dev/null
 +++ b/web/static/js/pages/settings/ai-faces-panel.js
-@@ -0,0 +1,257 @@
+@@ -0,0 +1,277 @@
 +/**
 + * ai-faces-panel.js — 人臉分頁獨立 Alpine 元件（TASK-187a-T5；補跑邏輯 189a-T11b 起改走共用 mixin）
 + *
@@ -7356,6 +7423,12 @@
 +        aiFacesModelsBusy: false,
 +        aiFacesModelsStatus: '',
 +        aiFacesConnectionDrafts: {},
++        aiFacesInputGeneration: 0,
++
++        invalidateTest() {
++            this.aiFacesInputGeneration++;
++            this.aiFacesTestPassed=false;this.aiFacesTestResultHtml='';this.aiFacesBoxes=[];
++        },
 +
 +        usePreset(name) {
 +            const f=this.form;
@@ -7368,7 +7441,7 @@
 +            if(!preset)return;
 +            const draft=this.aiFacesConnectionDrafts[preset[0]] || {url:preset[0],key:'',model:preset[1]};
 +            f.aiFacesProvider='openai';f.aiFacesUrl=draft.url;f.aiFacesApiKey=draft.key;f.aiFacesModel=draft.model;
-+            this.aiFacesModels=[];this.aiFacesTestPassed=false;this.aiFacesTestResultHtml='';this.aiFacesBoxes=[];
++            this.aiFacesModels=[];this.aiFacesModelsStatus='';this.invalidateTest();
 +        },
 +
 +        connectionBody() {
@@ -7379,30 +7452,38 @@
 +        async loadModels() {
 +            if(!this.form?.aiFacesEnabled || this.form.aiFacesProvider!=='openai' || this.aiFacesModelsBusy)return;
 +            this.aiFacesModelsBusy=true;this.aiFacesModelsStatus='';
++            const body=this.connectionBody();
++            const current=()=>this.form.aiFacesEnabled && JSON.stringify(this.connectionBody())===JSON.stringify(body);
 +            try {
-+                const response=await fetch('/api/ai/faces/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.connectionBody())});
++                const response=await fetch('/api/ai/faces/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 +                const data=await response.json();
++                if(!current())return;
 +                if(!response.ok || !data.success)throw new Error('models');
 +                this.aiFacesModels=data.models || [];
 +                this.aiFacesModelsStatus=window.t('settings.ai.cloud.models_loaded',{n:this.aiFacesModels.length});
 +            } catch {
-+                this.aiFacesModelsStatus=window.t('settings.ai.cloud.models_failed');
++                if(current())this.aiFacesModelsStatus=window.t('settings.ai.cloud.models_failed');
 +            } finally {this.aiFacesModelsBusy=false;}
 +        },
 +
 +        async selectTestImage(event) {
 +            const file=event.target.files?.[0];
-+            this.aiFacesBoxes=[];this.aiFacesTestImage='';
++            this.invalidateTest();this.aiFacesTestImage='';
++            const generation=this.aiFacesInputGeneration;
 +            if(!file)return;
 +            if(!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size>5*1024*1024){
 +                this.aiFacesTestResultHtml=window.t('settings.ai.cloud.image_limit');return;
 +            }
-+            this.aiFacesTestImage=await new Promise((resolve)=>{
++            const image=await new Promise((resolve)=>{
 +                const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>resolve('');reader.readAsDataURL(file);
 +            });
++            if(this.aiFacesInputGeneration===generation)this.aiFacesTestImage=image;
 +        },
 +
 +        init() {
++            for(const name of ['aiFacesEnabled','aiFacesProvider','aiFacesUrl','aiFacesApiKey','aiFacesModel']) {
++                this.$watch('form.'+name,()=>{this.invalidateTest();this.aiFacesModels=[];this.aiFacesModelsStatus='';});
++            }
 +            // 離開人臉分頁時清存檔後補查；輪詢停止由 mixin 的 $watch('aiTab') 負責
 +            this.$watch('aiTab', (val) => {
 +                if (this.bfDestroyed) return;
@@ -7522,16 +7603,21 @@
 +            this.aiFacesBoxes=[];
 +            this.aiFacesTestBusy = true;
 +            this.aiFacesTestResultHtml = '';
++            this.aiFacesTestPassed=false;
++            const body = this.connectionBody();
++            const image = this.aiFacesTestImage;
++            const generation=this.aiFacesInputGeneration;
++            const current=()=>this.form.aiFacesEnabled && this.aiFacesInputGeneration===generation
++                && this.aiFacesTestImage===image && JSON.stringify(this.connectionBody())===JSON.stringify(body);
 +            try {
-+                const body = this.connectionBody();
-+                if(this.aiFacesTestImage)body.image_data_uri=this.aiFacesTestImage;
 +                const res = await fetch(TEST_URL, {
 +                    method: 'POST',
 +                    headers: { 'Content-Type': 'application/json' },
-+                    body: JSON.stringify(body),
++                    body: JSON.stringify(image ? {...body,image_data_uri:image} : body),
 +                });
 +                let data = null;
 +                try { data = await res.json(); } catch { data = null; }
++                if(!current())return;
 +                if (!res.ok) {
 +                    this.aiFacesTestPassed = false;
 +                    this.aiFacesTestResultHtml = window.t('settings.ai.faces.test_failed_generic');
@@ -7542,6 +7628,7 @@
 +                    this.aiFacesTestResultHtml = this._formatTestResult(data);
 +                }
 +            } catch {
++                if(!current())return;
 +                this.aiFacesTestPassed = false;
 +                this.aiFacesTestResultHtml = window.t('settings.ai.faces.test_unreachable');
 +            } finally {

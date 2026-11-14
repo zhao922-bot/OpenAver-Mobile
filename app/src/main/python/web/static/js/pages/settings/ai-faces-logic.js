@@ -102,6 +102,9 @@ export function recomputeLine(status) {
     }
     // 尚未有目標模型（開關剛開未存）時 pending 會是全部候選——不顯示未完成／已停止。
     if (!status.target_model) return null;
+    if (status.stopped_reason === 'connection_changed') {
+        return {key:'settings.ai.cloud.connection_changed',params:{},extra:null};
+    }
     // 只有 contract／unreachable 顯示「已停止」句；disabled（使用者關端點）走下方未完成。
     if (status.stopped_reason === 'contract') {
         return {

@@ -6,6 +6,7 @@ HTTP 入口在 T4b；這裡全是 core 邏輯。鎖／停止骨架抄 ``similar_
 from __future__ import annotations
 
 import os
+import copy
 import threading
 from types import SimpleNamespace
 from typing import Optional
@@ -31,12 +32,14 @@ _unreadable: int = 0
 _stopped_reason: Optional[str] = None
 _stopped_kind: Optional[str] = None
 _stopped_check: Optional[str] = None
+_job_config: Optional[dict] = None
 
 
 # ── 鎖 ───────────────────────────────────────────────────────────────────────
 
-def _begin_job(kind: str) -> None:
-    global _unreadable, _stopped_reason, _stopped_kind, _stopped_check
+def _begin_job(kind: str, config: Optional[dict] = None) -> None:
+    global _unreadable, _stopped_reason, _stopped_kind, _stopped_check, _job_config
+    _job_config = copy.deepcopy(load_config() if config is None else config)
     _SHELL.begin_locked()
     _unreadable = 0
     _stopped_reason = _stopped_kind = _stopped_check = None
@@ -44,9 +47,11 @@ def _begin_job(kind: str) -> None:
 
 
 def _release_job(outcome: str) -> None:
+    global _job_config
     faces_state.job_end(outcome)
     if _SHELL.is_running():
         _SHELL.release_locked()
+    _job_config = None
 
 
 def _release_unlaunched(outcome: str) -> None:
@@ -118,6 +123,9 @@ def _failure_to_stop_reason(failure: Optional[str]) -> str:
 
 def ensure(model: str, kind: str = "model_change") -> bool:
     """設 target＝model；待處理＝0 → 不開工；已在跑 → 只更新 target；否則起 thread。"""
+    config = load_config()
+    if _faces_cfg_object(config).provider == 'openai':
+        return False  # Automatic hooks cannot initiate a cloud library job.
     faces_state.meta_set(META_TARGET, model)
     repo = VideoRepository()
     counts = _counts(repo, model)
@@ -126,15 +134,18 @@ def ensure(model: str, kind: str = "model_change") -> bool:
     with _SHELL.state_lock:
         if not _SHELL.try_acquire():
             return False  # 已在跑：target 已更新，迴圈每張重讀
-        _begin_job(kind)
+        _begin_job(kind, config)
     _start_thread(kind)
     return True
 
 
 def resume() -> dict:
     """繼續未完成的重算（讀 app_meta target）。"""
-    if ((load_config().get("ai_services") or {}).get("faces") or {}).get("provider") == "openai":
-        test = _run_rebuild_test()
+    config = load_config()
+    if not active_in(config):
+        return {"started": False, "reason": "disabled"}
+    if _faces_cfg_object(config).provider == "openai":
+        test = _run_rebuild_test(config)
         if not test.ok:
             return {"started": False, "reason": "test_failed", "kind": test.kind, "check": test.check}
         faces_state.meta_set(META_TARGET, test.model)
@@ -147,17 +158,20 @@ def resume() -> dict:
     with _SHELL.state_lock:
         if not _SHELL.try_acquire():
             return {"started": False, "reason": "already_running"}
-        _begin_job("resume")
+        _begin_job("resume", config)
     _start_thread("resume")
     return {"started": True, "reason": "started"}
 
 
 def start_rebuild() -> dict:
     """「刪除並重新對焦」：先測後清（CD-187a-14）。"""
+    config = load_config()
+    if not active_in(config):
+        return {"ok": False, "reason": "disabled"}
     with _SHELL.state_lock:
         if not _SHELL.try_acquire():
             return {"ok": False, "reason": "already_running"}
-        _begin_job("rebuild")
+        _begin_job("rebuild", config)
     try:
         return _start_rebuild_after_lock()
     except BaseException:
@@ -166,7 +180,7 @@ def start_rebuild() -> dict:
 
 
 def _start_rebuild_after_lock() -> dict:
-    test = _run_rebuild_test()
+    test = _run_rebuild_test(_job_config)
     if not test.ok:
         _release_unlaunched("test_failed")
         return {
@@ -181,8 +195,8 @@ def _start_rebuild_after_lock() -> dict:
     return {"ok": True, "reason": "started"}
 
 
-def _run_rebuild_test():
-    config = load_config()
+def _run_rebuild_test(config: Optional[dict] = None):
+    config = load_config() if config is None else config
     cfg = _faces_cfg_object(config)
     test = samples.run_faces_test(cfg)
     if test.ok:
@@ -277,7 +291,7 @@ def _work_loop() -> str:
         pending = _pending_rows(repo, pass_target)
         if not pending:
             return "drained"
-        config = load_config()
+        config = _job_config if _job_config is not None else load_config()
         mappings = _path_mappings(config)
         for row in pending:
             if _SHELL.stop.is_set():
@@ -297,6 +311,11 @@ def _work_loop() -> str:
 def _process_one(repo: VideoRepository, row: tuple, mappings: dict) -> Optional[str]:
     """處理一張。回 stop_reason 字串＝工作須停；None＝繼續。"""
     global _unreadable, _stopped_reason, _stopped_kind, _stopped_check
+    config = _job_config if _job_config is not None else load_config()
+    current = load_config()
+    if not active_in(current) or (current.get('ai_services') or {}).get('faces') != (config.get('ai_services') or {}).get('faces'):
+        _stopped_reason = 'connection_changed'
+        return _stopped_reason
     path, _number, _maker, cover_path, _focal_model, _has_result = row
     fs = uri_to_local_fs_path(cover_path, mappings)
     if not fs or not os.path.exists(fs):
@@ -304,7 +323,7 @@ def _process_one(repo: VideoRepository, row: tuple, mappings: dict) -> Optional[
         return None
 
     result = faces_detect.detect(
-        fs, _DETECT_RATIO, profile="background", notify=False
+        fs, _DETECT_RATIO, profile="background", notify=False, config=config
     )
     if result is None:
         if not active_in(load_config()):
@@ -319,6 +338,10 @@ def _process_one(repo: VideoRepository, row: tuple, mappings: dict) -> Optional[
         _stopped_reason = _failure_to_stop_reason(result.failure)
         snap = faces_state.snapshot()
         _stopped_kind, _stopped_check = snap["kind"], snap["check"]
+        return _stopped_reason
+
+    if (load_config().get('ai_services') or {}).get('faces') != (config.get('ai_services') or {}).get('faces'):
+        _stopped_reason = 'connection_changed'
         return _stopped_reason
 
     focal_str = format_focal(result.focal)
@@ -346,7 +369,10 @@ def observe_model(model: str) -> None:
     ``ensure`` 回 False（已在跑／待處理＝0）不重試。
     """
     if model.startswith("vision:"):
-        if _SHELL.is_running():
+        from core.ai_services.cloud_protocols import face_model_id
+        job_cfg = _faces_cfg_object(_job_config or {})
+        if (_SHELL.is_running() and job_cfg.provider == 'openai'
+                and model.startswith(face_model_id(job_cfg, ''))):
             faces_state.meta_set(META_TARGET, model)
             _remember_target(model)
         return
@@ -364,7 +390,7 @@ def on_settings_saved() -> bool:
     """儲存人臉設定後：伺服器端自己再測一次；通過且有 ``focal_model != 回報 model``
     的候選才 ``ensure``。沒過＝什麼都不做、不動 target。回傳是否起了工作。"""
     config = load_config()
-    if not active_in(config):
+    if not active_in(config) or _faces_cfg_object(config).provider == 'openai':
         return False
     test = samples.run_faces_test(_faces_cfg_object(config))
     if not test.ok or not test.model:

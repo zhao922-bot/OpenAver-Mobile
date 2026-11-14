@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import asyncio
+import pytest
 
 from core.ai_services import faces, samples, similar_index, similar_state, faces_detect, faces_recompute
 from core.ai_services.cloud_protocols import embedding_connection_id
 from core.database import EmbeddingRepository, connection
+from core.database import Video, VideoRepository
+from core.database.embeddings import pack_vector
 from web.routers import ai_services, config as config_router
 
 
@@ -100,3 +103,94 @@ def test_face_model_query_uses_own_masked_key_and_full_endpoint(monkeypatch):
     result = asyncio.run(ai_services.faces_models(ai_services.FacesTestRequest(api_key=mask_secret("face-test-key"))))
     assert result == {"success": True, "models": ["vision-model"]}
     assert seen == [("openai", "https://face.test/proxy/v1", "face-test-key")]
+
+
+@pytest.mark.parametrize("unreadable", [False, True])
+def test_inflight_old_index_write_cannot_overwrite_rebuilt_connection(tmp_path, monkeypatch, unreadable):
+    db = tmp_path / 'race.db'
+    connection.init_db(db)
+    video_id = VideoRepository(db).upsert(Video(path='/test.mp4', cover_path='/cover.jpg'))
+    repo = EmbeddingRepository(db)
+    repo.begin_index('same-model', 256)
+    repo.set_connection_id('connection-A')
+    old = similar_index._Ctx('incremental', repo, SimpleNamespace(), {}, 'same-model', 256)
+    new_vector = pack_vector([0., 1.] + [0.] * 254)
+    def rebuild():
+        repo.reset_index('same-model', 256)
+        repo.set_connection_id('connection-B')
+        repo.write_vector(video_id, 'same-model', 256, new_vector, '/cover.jpg')
+        repo.mark_complete()
+    if unreadable:
+        def cover(*_):
+            rebuild()
+            return None
+        monkeypatch.setattr(similar_index, '_cover_data_uri', cover)
+    else:
+        monkeypatch.setattr(similar_index, '_cover_data_uri', lambda *_: 'image-A')
+        def embed(*_, **kwargs):
+            rebuild()
+            return SimpleNamespace(model='same-model', dim=256, vector=[1.] + [0.] * 255)
+        monkeypatch.setattr(similar_index.embeddings, 'embed', embed)
+    assert similar_index._embed_and_store(old, video_id, '/cover.jpg') == 'model_changed'
+    assert repo.get_row(video_id)['vec'] == new_vector
+    assert repo.get_row(video_id)['dim'] == 256
+
+
+def test_delayed_legacy_faces_save_hook_does_not_call_cloud(monkeypatch):
+    cloud = {'ai_services': {'faces': {'enabled': True, 'provider': 'openai', 'url': 'https://cloud.test/v1', 'model': 'vision'}}}
+    monkeypatch.setattr(faces_recompute, 'load_config', lambda: cloud)
+    monkeypatch.setattr(samples, 'run_faces_test', lambda *_: pytest.fail('unrequested cloud call'))
+    assert not faces_recompute.on_settings_saved()
+
+
+def test_old_face_job_stops_before_detecting_with_changed_connection(tmp_path, monkeypatch):
+    image = tmp_path / 'cover.jpg'
+    image.write_bytes(b'test')
+    old = {'ai_services': {'faces': {'enabled': True, 'provider': 'endpoint', 'url': 'https://old.test', 'model': 'local'}}}
+    cloud = {'ai_services': {'faces': {'enabled': True, 'provider': 'openai', 'url': 'https://cloud.test/v1', 'model': 'vision'}}}
+    monkeypatch.setattr(faces_recompute, 'load_config', lambda: old)
+    faces_recompute._begin_job('model_change')
+    monkeypatch.setattr(faces_recompute, 'load_config', lambda: cloud)
+    monkeypatch.setattr(faces_detect, 'detect', lambda *_, **kw: pytest.fail('legacy job used new cloud connection'))
+    try:
+        result = faces_recompute._process_one(SimpleNamespace(), ('/test.mp4', 'FC2', '', str(image), '', False), {})
+        assert result == 'connection_changed'
+    finally:
+        faces_recompute._release_job('stopped')
+
+
+def test_old_config_context_cannot_capture_new_connection_identity(tmp_path, monkeypatch):
+    db = tmp_path / 'late-context.db'
+    connection.init_db(db)
+    video_id = VideoRepository(db).upsert(Video(path='/test.mp4', cover_path='/cover.jpg'))
+    repo = EmbeddingRepository(db)
+    repo.begin_index('same', 256)
+    cfg_a = SimpleNamespace(provider='endpoint', url='https://a.test', model='same')
+    cfg_b = SimpleNamespace(provider='endpoint', url='https://b.test', model='same')
+    repo.set_connection_id(embedding_connection_id(cfg_b))
+    new_vector = pack_vector([0., 1.] + [0.] * 254)
+    repo.write_vector(video_id, 'same', 256, new_vector, '/cover.jpg')
+    old = similar_index._Ctx('incremental', repo, cfg_a, {}, 'same', 256)
+    monkeypatch.setattr(similar_index, '_cover_data_uri', lambda *_: 'image')
+    monkeypatch.setattr(similar_index.embeddings, 'embed', lambda *_, **kw:
+        SimpleNamespace(model='same', dim=256, vector=[1.] + [0.] * 255))
+    assert similar_index._embed_and_store(old, video_id, '/cover.jpg') == 'model_changed'
+    assert repo.get_row(video_id)['vec'] == new_vector
+
+
+def test_faces_background_detection_uses_authorized_snapshot(monkeypatch):
+    old = {'ai_services': {'faces': {'enabled': True, 'provider': 'endpoint', 'url': 'https://old.test'}}}
+    monkeypatch.setattr(faces_detect, 'load_config', lambda: pytest.fail('reread current connection'))
+    monkeypatch.setattr(faces_detect, 'cover_to_faces_data_uri', lambda _: ('image', (100, 100)))
+    assert faces_detect._prepare('/cover.jpg', old)[0] == old
+
+
+def test_cloud_automatic_ensure_and_disabled_jobs_do_not_make_requests(monkeypatch):
+    cloud = {'ai_services': {'faces': {'enabled': True, 'provider': 'openai', 'url': 'https://cloud.test'}}}
+    monkeypatch.setattr(faces_recompute, 'load_config', lambda: cloud)
+    monkeypatch.setattr(faces_recompute.faces_state, 'meta_set', lambda *_: pytest.fail('automatic target update'))
+    monkeypatch.setattr(samples, 'run_faces_test', lambda *_: pytest.fail('unrequested request'))
+    assert not faces_recompute.ensure('vision:old')
+    cloud['ai_services']['faces']['enabled'] = False
+    assert faces_recompute.resume()['reason'] == 'disabled'
+    assert faces_recompute.start_rebuild()['reason'] == 'disabled'

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import struct
 import time
+import uuid
 from array import array
 from contextlib import closing
 from pathlib import Path
@@ -64,6 +65,17 @@ class EmbeddingRepository:
             conn.execute("INSERT OR REPLACE INTO app_meta(key,value) VALUES('ai.similar.connection',?)", (value,))
             conn.commit()
 
+    @staticmethod
+    def _write_identity(conn) -> tuple:
+        rows = dict(conn.execute("SELECT key,value FROM app_meta WHERE key IN "
+            "('ai.similar.connection','ai.similar.generation',?,?)", (META_MODEL, META_DIM)))
+        return tuple(rows.get(key) for key in
+            ('ai.similar.connection', 'ai.similar.generation', META_MODEL, META_DIM))
+
+    def get_write_identity(self) -> tuple:
+        with closing(connection.get_connection(self.db_path)) as conn:
+            return self._write_identity(conn)
+
     # ── app_meta ────────────────────────────────────────────────────────────
 
     def get_index_state(self) -> dict:
@@ -94,7 +106,8 @@ class EmbeddingRepository:
                 return False
             conn.executemany(
                 "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
-                [(META_MODEL, model), (META_DIM, str(int(dim))), (META_COMPLETE, "0")],
+                [(META_MODEL, model), (META_DIM, str(int(dim))), (META_COMPLETE, "0"),
+                 ('ai.similar.generation', uuid.uuid4().hex)],
             )
             conn.commit()
         return True
@@ -106,7 +119,8 @@ class EmbeddingRepository:
             n = conn.execute("DELETE FROM video_embeddings").rowcount
             conn.executemany(
                 "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
-                [(META_MODEL, model), (META_DIM, str(int(dim))), (META_COMPLETE, "0")],
+                [(META_MODEL, model), (META_DIM, str(int(dim))), (META_COMPLETE, "0"),
+                 ('ai.similar.generation', uuid.uuid4().hex)],
             )
             conn.commit()
         return n
@@ -122,10 +136,14 @@ class EmbeddingRepository:
     # ── rows ────────────────────────────────────────────────────────────────
 
     def write_vector(self, video_id: int, model: str, dim: int, vec: bytes,
-                     cover_path: str) -> None:
+                     cover_path: str, *, expected_identity: tuple | None = None) -> bool:
         """寫（覆寫）一列，並在同一個 transaction 記 ``last_success_at``。"""
         now = time.time()
         with closing(connection.get_connection(self.db_path)) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            if expected_identity is not None and self._write_identity(conn) != expected_identity:
+                conn.rollback()
+                return False
             conn.execute(
                 "INSERT OR REPLACE INTO video_embeddings "
                 "(video_id, model, dim, vec, cover_path, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -136,16 +154,23 @@ class EmbeddingRepository:
                 (META_LAST_SUCCESS, repr(now)),
             )
             conn.commit()
+        return True
 
-    def write_unreadable(self, video_id: int, model: str, cover_path: str) -> None:
+    def write_unreadable(self, video_id: int, model: str, cover_path: str,
+                         *, expected_identity: tuple | None = None) -> bool:
         """封面讀不到、試過了：``dim=0``、``vec=b''``（不算待處理、不進融合）。"""
         with closing(connection.get_connection(self.db_path)) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            if expected_identity is not None and self._write_identity(conn) != expected_identity:
+                conn.rollback()
+                return False
             conn.execute(
                 "INSERT OR REPLACE INTO video_embeddings "
                 "(video_id, model, dim, vec, cover_path, updated_at) VALUES (?, ?, 0, ?, ?, ?)",
                 (video_id, model, b"", cover_path, time.time()),
             )
             conn.commit()
+        return True
 
     def clear_unreadable(self, model: str) -> int:
         """刪掉該模型下 ``dim=0``（封面讀不到、試過了）的列，讓它們回到待處理。

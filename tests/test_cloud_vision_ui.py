@@ -58,3 +58,32 @@ def test_cloud_ui_strings_exist_in_every_language():
             for segment in key.split('.'):
                 value = value[segment]
             assert isinstance(value, str) and value
+
+
+def test_pending_face_response_is_discarded_after_image_or_preset_changes():
+    root = Path(__file__).resolve().parents[1]
+    js = (root / 'app/src/main/python/web/static/js/pages/settings').as_uri()
+    script = r'''
+import assert from 'node:assert/strict';
+import {aiFacesPanel} from 'JS/ai-faces-panel.js';
+global.window={t:k=>k};
+const vm=aiFacesPanel();
+vm.form={aiFacesEnabled:true,aiFacesProvider:'openai',aiFacesUrl:'https://own.test/v1',aiFacesApiKey:'test',aiFacesModel:'vision'};
+vm.bfRefresh=async()=>{};vm.showToast=()=>{};
+let respond;
+global.fetch=()=>new Promise(resolve=>{respond=resolve;});
+vm.aiFacesTestImage='image-A';
+const pending=vm.runTest();
+vm.aiFacesTestImage='image-B';
+respond({ok:true,json:async()=>({ok:true,detection_verified:true,boxes:[[.1,.1,.4,.4,.9]]})});
+await pending;
+assert.equal(vm.aiFacesTestPassed,false);
+assert.deepEqual(vm.aiFacesBoxes,[]);
+const models=vm.loadModels();
+vm.usePreset('bai');
+respond({ok:true,json:async()=>({success:true,models:['old-connection-model']})});
+await models;
+assert.deepEqual(vm.aiFacesModels,[]);
+'''.replace('JS/', js + '/')
+    result = subprocess.run(['node','--input-type=module','-e',script],capture_output=True,text=True)
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -59,6 +59,12 @@ export function aiFacesPanel() {
         aiFacesModelsBusy: false,
         aiFacesModelsStatus: '',
         aiFacesConnectionDrafts: {},
+        aiFacesInputGeneration: 0,
+
+        invalidateTest() {
+            this.aiFacesInputGeneration++;
+            this.aiFacesTestPassed=false;this.aiFacesTestResultHtml='';this.aiFacesBoxes=[];
+        },
 
         usePreset(name) {
             const f=this.form;
@@ -71,7 +77,7 @@ export function aiFacesPanel() {
             if(!preset)return;
             const draft=this.aiFacesConnectionDrafts[preset[0]] || {url:preset[0],key:'',model:preset[1]};
             f.aiFacesProvider='openai';f.aiFacesUrl=draft.url;f.aiFacesApiKey=draft.key;f.aiFacesModel=draft.model;
-            this.aiFacesModels=[];this.aiFacesTestPassed=false;this.aiFacesTestResultHtml='';this.aiFacesBoxes=[];
+            this.aiFacesModels=[];this.aiFacesModelsStatus='';this.invalidateTest();
         },
 
         connectionBody() {
@@ -82,30 +88,38 @@ export function aiFacesPanel() {
         async loadModels() {
             if(!this.form?.aiFacesEnabled || this.form.aiFacesProvider!=='openai' || this.aiFacesModelsBusy)return;
             this.aiFacesModelsBusy=true;this.aiFacesModelsStatus='';
+            const body=this.connectionBody();
+            const current=()=>this.form.aiFacesEnabled && JSON.stringify(this.connectionBody())===JSON.stringify(body);
             try {
-                const response=await fetch('/api/ai/faces/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this.connectionBody())});
+                const response=await fetch('/api/ai/faces/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
                 const data=await response.json();
+                if(!current())return;
                 if(!response.ok || !data.success)throw new Error('models');
                 this.aiFacesModels=data.models || [];
                 this.aiFacesModelsStatus=window.t('settings.ai.cloud.models_loaded',{n:this.aiFacesModels.length});
             } catch {
-                this.aiFacesModelsStatus=window.t('settings.ai.cloud.models_failed');
+                if(current())this.aiFacesModelsStatus=window.t('settings.ai.cloud.models_failed');
             } finally {this.aiFacesModelsBusy=false;}
         },
 
         async selectTestImage(event) {
             const file=event.target.files?.[0];
-            this.aiFacesBoxes=[];this.aiFacesTestImage='';
+            this.invalidateTest();this.aiFacesTestImage='';
+            const generation=this.aiFacesInputGeneration;
             if(!file)return;
             if(!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size>5*1024*1024){
                 this.aiFacesTestResultHtml=window.t('settings.ai.cloud.image_limit');return;
             }
-            this.aiFacesTestImage=await new Promise((resolve)=>{
+            const image=await new Promise((resolve)=>{
                 const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>resolve('');reader.readAsDataURL(file);
             });
+            if(this.aiFacesInputGeneration===generation)this.aiFacesTestImage=image;
         },
 
         init() {
+            for(const name of ['aiFacesEnabled','aiFacesProvider','aiFacesUrl','aiFacesApiKey','aiFacesModel']) {
+                this.$watch('form.'+name,()=>{this.invalidateTest();this.aiFacesModels=[];this.aiFacesModelsStatus='';});
+            }
             // 離開人臉分頁時清存檔後補查；輪詢停止由 mixin 的 $watch('aiTab') 負責
             this.$watch('aiTab', (val) => {
                 if (this.bfDestroyed) return;
@@ -225,16 +239,21 @@ export function aiFacesPanel() {
             this.aiFacesBoxes=[];
             this.aiFacesTestBusy = true;
             this.aiFacesTestResultHtml = '';
+            this.aiFacesTestPassed=false;
+            const body = this.connectionBody();
+            const image = this.aiFacesTestImage;
+            const generation=this.aiFacesInputGeneration;
+            const current=()=>this.form.aiFacesEnabled && this.aiFacesInputGeneration===generation
+                && this.aiFacesTestImage===image && JSON.stringify(this.connectionBody())===JSON.stringify(body);
             try {
-                const body = this.connectionBody();
-                if(this.aiFacesTestImage)body.image_data_uri=this.aiFacesTestImage;
                 const res = await fetch(TEST_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body),
+                    body: JSON.stringify(image ? {...body,image_data_uri:image} : body),
                 });
                 let data = null;
                 try { data = await res.json(); } catch { data = null; }
+                if(!current())return;
                 if (!res.ok) {
                     this.aiFacesTestPassed = false;
                     this.aiFacesTestResultHtml = window.t('settings.ai.faces.test_failed_generic');
@@ -245,6 +264,7 @@ export function aiFacesPanel() {
                     this.aiFacesTestResultHtml = this._formatTestResult(data);
                 }
             } catch {
+                if(!current())return;
                 this.aiFacesTestPassed = false;
                 this.aiFacesTestResultHtml = window.t('settings.ai.faces.test_unreachable');
             } finally {

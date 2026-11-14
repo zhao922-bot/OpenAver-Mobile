@@ -52,9 +52,9 @@ def _faces_cfg_object(cfg: dict) -> SimpleNamespace:
     )
 
 
-def _prepare(fs_path: str) -> tuple[dict, str, tuple[int, int]] | None:
+def _prepare(fs_path: str, config: dict | None = None) -> tuple[dict, str, tuple[int, int]] | None:
     """Config + preprocess. ``None`` = external not applicable."""
-    cfg = load_config()
+    cfg = load_config() if config is None else config
     if not active_in(cfg):
         return None
     prepared = cover_to_faces_data_uri(fs_path)
@@ -121,6 +121,7 @@ def detect(
     profile: str = "background",
     *,
     notify: bool = True,
+    config: dict | None = None,
 ) -> ExternalResult | None:
     """Ask the faces endpoint for a cover. Never raises.
 
@@ -128,7 +129,7 @@ def detect(
     ``notify=False`` skips sidebar emit on failure (recompute path, CD-187a-15).
     """
     try:
-        prepared = _prepare(fs_path)
+        prepared = _prepare(fs_path, config)
         if prepared is None:
             return None
         cfg, uri, size = prepared

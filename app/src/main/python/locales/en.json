@@ -1109,7 +1109,8 @@
         "check_refused": "The model refused to process this image.",
         "check_truncated": "The response was truncated; try another model or image.",
         "check_box": "Invalid face coordinates; normalized boxes must fit inside the image.",
-        "check_score": "Invalid face confidence score; expected a value from 0 to 1."
+        "check_score": "Invalid face confidence score; expected a value from 0 to 1.",
+        "connection_changed": "The service connection changed and the task stopped. Start or rebuild manually to use the new connection."
       }
     },
     "group": {

@@ -15,7 +15,7 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Callable, Optional
 
@@ -50,6 +50,13 @@ class _Ctx:
     dim: int
     first: bool = False
     released: bool = False
+    write_identity: tuple = field(init=False)
+
+    def __post_init__(self):
+        self.write_identity = self.repo.get_write_identity()
+        if self.write_identity[0] and getattr(self.cfg, 'url', ''):
+            from core.ai_services.cloud_protocols import embedding_connection_id
+            self.write_identity = (embedding_connection_id(self.cfg), *self.write_identity[1:])
 
 
 def set_notification_sink(fn: Callable[..., None]) -> None:
@@ -347,15 +354,20 @@ def _embed_and_store(ctx: _Ctx, video_id: int, cover_path: str) -> str:
     回 ``"indexed"``／``"unreadable"``／``"model_changed"``；``EndpointError`` 原樣外拋。"""
     uri = _cover_data_uri(ctx, cover_path)
     if uri is None:  # 封面讀不到：本機檔案問題，不算端點錯誤（I7）
-        ctx.repo.write_unreadable(video_id, ctx.model, cover_path)
-        return "unreadable"
+        written = ctx.repo.write_unreadable(video_id, ctx.model, cover_path,
+            expected_identity=ctx.write_identity)
+        return "unreadable" if written else "model_changed"
     first, ctx.first = ctx.first, False
     result = embeddings.embed(ctx.cfg, uri, first=first)
-    similar_state.observe_success(result.model, result.dim)
     index_model, index_dim = ctx.model, ctx.dim
     if result.model != index_model or result.dim != index_dim:
+        if ctx.repo.get_write_identity() == ctx.write_identity:
+            similar_state.observe_success(result.model, result.dim)
         return "model_changed"
-    ctx.repo.write_vector(video_id, result.model, result.dim, pack_vector(result.vector), cover_path)
+    if not ctx.repo.write_vector(video_id, result.model, result.dim, pack_vector(result.vector), cover_path,
+            expected_identity=ctx.write_identity):
+        return "model_changed"
+    similar_state.observe_success(result.model, result.dim)
     return "indexed"
 
 
