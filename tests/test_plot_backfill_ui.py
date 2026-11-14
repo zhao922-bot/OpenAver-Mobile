@@ -18,10 +18,15 @@ assert.equal(calls.length,1);assert.equal(calls[0].url,'/api/gallery/backfill-pl
 assert.equal(vm.plotTranslationConfirmOpen,true);assert.equal(vm.pendingPlotTranslation.count,2);
 vm.keepOriginalPlots();assert.equal(vm.plotTranslationConfirmOpen,false);assert.equal(calls.length,1);
 const restored=make();assert.equal(restored.pendingPlotTranslation.batch_id,'a'.repeat(32));
+vm._runBackfillStream=async options=>{calls.push(options);return {type:'done',summary:{success:1,failed:0,translation_batch:'b'.repeat(32),translation_count:1}}};
+await vm.runPlotBackfill();
+assert.deepEqual(vm.pendingPlotTranslations.map(b=>b.batch_id).sort(),['a'.repeat(32),'b'.repeat(32)]);
+assert.equal(make().pendingPlotTranslations.length,2);
 vm.config.translate.enabled=true;await vm.runPlotTranslation();
-assert.equal(calls.length,2);assert.equal(calls[1].url,'/api/gallery/translate-backfilled-plots');
-assert.equal(calls[1].body.batch_id,'a'.repeat(32));assert.equal(calls[1].source,undefined);
+assert.equal(calls.length,3);assert.equal(calls[2].url,'/api/gallery/translate-backfilled-plots');
+assert.equal(calls[2].body.batch_id,'b'.repeat(32));assert.equal(calls[2].source,undefined);
 assert.equal(vm.pendingPlotTranslation,null);
+assert.equal(vm.pendingPlotTranslations[0].batch_id,'a'.repeat(32));
 })().catch(e=>{console.error(e);process.exitCode=1});
 '''
     result=subprocess.run(['node','-e',script],cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True)

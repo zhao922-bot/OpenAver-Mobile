@@ -557,10 +557,12 @@
                     x-html="plotBackfillButtonText"
                     :title="window.t('scanner.stats.plot_backfill_hint')">
             </button>
-                <button type="button" class="btn btn-warning btn-sm"
-                        x-show="pendingPlotTranslation" :disabled="isBusy"
-                        @click="plotTranslationConfirmOpen = true"
-                        x-text="window.t('scanner.plot_flow.pending', {n:pendingPlotTranslation?.count || 0})"></button>
+                <template x-for="batch in pendingPlotTranslations" :key="batch.batch_id">
+                    <button type="button" class="btn btn-warning btn-sm"
+                            :disabled="isBusy" :title="batch.numbers || ''"
+                            @click="pendingPlotTranslation=batch; plotTranslationConfirmOpen = true"
+                            x-text="window.t('scanner.plot_flow.pending', {n:batch.count}) + (batch.numbers ? ' · '+batch.numbers : '')"></button>
+                </template>
         </div>
 
         <!-- T10: Resume Pill (未完成提示) -->

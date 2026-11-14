@@ -50,6 +50,7 @@ from core.nfo_updater import (
 )
 from core.plot_backfill import (
     PlotTranslationBatch, PlotBackfillError,
+    pending_plot_translation_batches,
     clean_summary_text,
     find_missing_plot_candidates,
 )
@@ -2639,6 +2640,7 @@ def check_missing():
                     "untranslated_title_items": [],
                     "missing_sample_items": [],
                     "missing_plot_items": [],
+                    "pending_plot_translations": [],
                 },
             }
 
@@ -2786,6 +2788,7 @@ def check_missing():
                 "untranslated_title_items": untranslated_title_items,
                 "missing_sample_items": missing_sample_items,
                 "missing_plot_items": missing_plot_items,
+                "pending_plot_translations": pending_plot_translation_batches(db_path, locale),
             },
         }
     except Exception as e:
@@ -3798,9 +3801,8 @@ def _plot_backfill_generator(
                         "error_code": "translate_failed",
                     }
 
-            translated_plot = normalize_translation_text(
-                translated_plot
-            ).strip()
+            if translating:
+                translated_plot = normalize_translation_text(translated_plot).strip()
             if not translated_plot:
                 return {
                     "success": False,

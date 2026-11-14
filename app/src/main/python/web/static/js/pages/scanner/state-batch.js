@@ -21,13 +21,15 @@ export function estimateEnrichMinutes(noNfoCount, coverOnlyCount) {
 }
 
 export function stateBatch() {
-    let pendingPlotTranslation = null;
+    let pendingPlotTranslations = [];
     try {
-        const saved = JSON.parse(localStorage.getItem('avlist_plot_translation_pending') || 'null');
-        if (/^[0-9a-f]{32}$/.test(saved?.batch_id || '') && saved.count > 0) pendingPlotTranslation = saved;
+        let saved = JSON.parse(localStorage.getItem('avlist_plot_translation_pending') || 'null');
+        if (saved && !Array.isArray(saved)) saved = [saved];
+        pendingPlotTranslations = (saved || []).filter(b=>/^[0-9a-f]{32}$/.test(b?.batch_id || '') && b.count > 0);
     } catch { /* A damaged local draft must not block the scanner. */ }
     return {
-        pendingPlotTranslation,
+        pendingPlotTranslation: pendingPlotTranslations[0] || null,
+        pendingPlotTranslations,
         plotTranslationConfirmOpen: false,
         // ===== T10: Missing NFO/Cover Enrich =====
         missingPillVisible: false,
@@ -572,6 +574,10 @@ export function stateBatch() {
                 this.untranslatedTitleCount = d.untranslated_titles || 0;
                 this.missingSampleCount = d.missing_samples || 0;
                 this.missingPlotCount = d.missing_plots || 0;
+                if (Array.isArray(d.pending_plot_translations)) {
+                    this.pendingPlotTranslations = d.pending_plot_translations;
+                    this._savePendingPlotTranslations();
+                }
                 this.untranslatedTitleItems = Array.isArray(d.untranslated_title_items)
                     ? d.untranslated_title_items
                     : [];
@@ -662,9 +668,17 @@ export function stateBatch() {
         },
 
         _setPendingPlotTranslation(value) {
+            const batchId = value?.batch_id || this.pendingPlotTranslation?.batch_id;
+            if (value) value = {...this.pendingPlotTranslations.find(b=>b.batch_id === batchId), ...value};
+            this.pendingPlotTranslations = this.pendingPlotTranslations.filter(b=>b.batch_id !== batchId);
+            if (value) this.pendingPlotTranslations.unshift(value);
             this.pendingPlotTranslation = value;
+            this._savePendingPlotTranslations();
+        },
+
+        _savePendingPlotTranslations() {
             try {
-                if (value) localStorage.setItem('avlist_plot_translation_pending', JSON.stringify(value));
+                if (this.pendingPlotTranslations.length) localStorage.setItem('avlist_plot_translation_pending', JSON.stringify(this.pendingPlotTranslations));
                 else localStorage.removeItem('avlist_plot_translation_pending');
             } catch { /* The current in-memory batch is still usable. */ }
         },

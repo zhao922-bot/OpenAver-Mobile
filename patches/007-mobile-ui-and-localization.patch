@@ -23880,7 +23880,7 @@
  /** TASK-147b-T3 / CD-147b-5：四項判準——真的補到 NFO／封面／欄位／劇照才算成功。
   * 與 core/enrich_contract.py 的 did_enrich_something() 同一判準；改一邊必須改另一邊。
   *
-@@ -11,8 +13,22 @@
+@@ -11,8 +13,24 @@
          || (event.fields_filled?.length > 0) || event.extrafanart_written > 0);
  }
  
@@ -23892,18 +23892,20 @@
 +}
 +
  export function stateBatch() {
-+    let pendingPlotTranslation = null;
++    let pendingPlotTranslations = [];
 +    try {
-+        const saved = JSON.parse(localStorage.getItem('avlist_plot_translation_pending') || 'null');
-+        if (/^[0-9a-f]{32}$/.test(saved?.batch_id || '') && saved.count > 0) pendingPlotTranslation = saved;
++        let saved = JSON.parse(localStorage.getItem('avlist_plot_translation_pending') || 'null');
++        if (saved && !Array.isArray(saved)) saved = [saved];
++        pendingPlotTranslations = (saved || []).filter(b=>/^[0-9a-f]{32}$/.test(b?.batch_id || '') && b.count > 0);
 +    } catch { /* A damaged local draft must not block the scanner. */ }
      return {
-+        pendingPlotTranslation,
++        pendingPlotTranslation: pendingPlotTranslations[0] || null,
++        pendingPlotTranslations,
 +        plotTranslationConfirmOpen: false,
          // ===== T10: Missing NFO/Cover Enrich =====
          missingPillVisible: false,
          missingBothCount: 0,
-@@ -22,9 +38,113 @@
+@@ -22,9 +40,113 @@
          missingEnrichOffset: 0,     // batch offset
          missingEnrichSuccess: 0,
          missingEnrichFailed: 0,
@@ -24017,7 +24019,7 @@
  
          // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
          currentCard: null,          // {number, status, source, reason, coverSrc} | null
-@@ -66,6 +186,106 @@
+@@ -66,6 +188,106 @@
          get missingCoverDrilldownPayload() {
              return { title: window.t('scanner.stats.missing_cover_prefix'), items: this.missingCoverDrilldownItems, footnote: window.t('scanner.stats.missing_list_footnote') };
          },
@@ -24124,7 +24126,7 @@
  
          get missingEnrichButtonText() {
              if (this.state === 'enriching') {
-@@ -74,13 +294,293 @@
+@@ -74,13 +296,297 @@
              return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
          },
  
@@ -24406,6 +24408,10 @@
 +                this.untranslatedTitleCount = d.untranslated_titles || 0;
 +                this.missingSampleCount = d.missing_samples || 0;
 +                this.missingPlotCount = d.missing_plots || 0;
++                if (Array.isArray(d.pending_plot_translations)) {
++                    this.pendingPlotTranslations = d.pending_plot_translations;
++                    this._savePendingPlotTranslations();
++                }
 +                this.untranslatedTitleItems = Array.isArray(d.untranslated_title_items)
 +                    ? d.untranslated_title_items
 +                    : [];
@@ -24418,7 +24424,7 @@
                  if (d.total_missing > 0) {
                      // TASK-13: 後端永遠回傳完整 items 清單；前端於 runMissingEnrich 內做 > 500 confirm gate
                      this.missingBothCount = d.missing_both || 0;
-@@ -88,16 +588,284 @@
+@@ -88,16 +594,292 @@
                      this.missingCoverCount = d.missing_cover || 0;
                      this.missingItems = Array.isArray(d.items) ? d.items : [];
                      this.missingPillVisible = true;
@@ -24496,9 +24502,17 @@
 +        },
 +
 +        _setPendingPlotTranslation(value) {
++            const batchId = value?.batch_id || this.pendingPlotTranslation?.batch_id;
++            if (value) value = {...this.pendingPlotTranslations.find(b=>b.batch_id === batchId), ...value};
++            this.pendingPlotTranslations = this.pendingPlotTranslations.filter(b=>b.batch_id !== batchId);
++            if (value) this.pendingPlotTranslations.unshift(value);
 +            this.pendingPlotTranslation = value;
++            this._savePendingPlotTranslations();
++        },
++
++        _savePendingPlotTranslations() {
 +            try {
-+                if (value) localStorage.setItem('avlist_plot_translation_pending', JSON.stringify(value));
++                if (this.pendingPlotTranslations.length) localStorage.setItem('avlist_plot_translation_pending', JSON.stringify(this.pendingPlotTranslations));
 +                else localStorage.removeItem('avlist_plot_translation_pending');
 +            } catch { /* The current in-memory batch is still usable. */ }
 +        },
@@ -24703,7 +24717,7 @@
  
              // TASK-13: 大批量 confirm gate — > 500 筆彈 modal，等用戶按確認才繼續
              if (!skipConfirm && this.missingItems.length > 500) {
-@@ -109,14 +877,17 @@
+@@ -109,14 +891,17 @@
              this.missingEnrichOffset = 0;
              this.missingEnrichSuccess = 0;
              this.missingEnrichFailed = 0;
@@ -24724,7 +24738,7 @@
              this.clearLogs();
  
              const controller = new AbortController();
-@@ -136,7 +907,10 @@
+@@ -136,7 +921,10 @@
                          resp = await fetch('/api/batch-enrich', {
                              method: 'POST',
                              headers: { 'Content-Type': 'application/json' },
@@ -24736,7 +24750,7 @@
                              signal: controller.signal,
                          });
                      } catch (fetchErr) {
-@@ -146,7 +920,7 @@
+@@ -146,7 +934,7 @@
                          }
                          this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
                          this.flushLogs();
@@ -24745,7 +24759,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          // Save remaining
-@@ -159,7 +933,7 @@
+@@ -159,7 +947,7 @@
                          const errText = await resp.text().catch(() => '');
                          this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
                          this.flushLogs();
@@ -24754,7 +24768,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -200,6 +974,12 @@
+@@ -200,6 +988,12 @@
                                  this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
                                  this.progressTotal = items.length;
                                  this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
@@ -24767,7 +24781,7 @@
                              } else if (event.type === 'result-item') {
                                  // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
                                  // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
-@@ -234,7 +1014,18 @@
+@@ -234,7 +1028,18 @@
                                      this.missingEnrichSuccess++;
                                  } else {
                                      this.missingEnrichFailed++;
@@ -24786,7 +24800,7 @@
                                  // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
                                  if (event.reason === 'error') {
                                      this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
-@@ -246,7 +1037,7 @@
+@@ -246,7 +1051,7 @@
                              } else if (event.type === 'error') {
                                  this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
                                  this.flushLogs();
@@ -24795,7 +24809,7 @@
                                  this.currentCard = null;
                                  this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -258,7 +1049,7 @@
+@@ -258,7 +1063,7 @@
  
                      // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
                      if (!batchDone) {
@@ -24804,7 +24818,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -284,11 +1075,19 @@
+@@ -284,11 +1089,19 @@
                      if (lastCover) {
                          this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
                      }
@@ -24826,7 +24840,7 @@
                      const summary = this.missingEnrichFailed > 0
                          ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
                          : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
-@@ -312,7 +1111,7 @@
+@@ -312,7 +1125,7 @@
                  if (e.name === 'AbortError') return;
                  console.error('runMissingEnrich error:', e);
                  this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
@@ -30401,7 +30415,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -288,21 +495,83 @@
+@@ -288,21 +495,85 @@
                      {{ t('scanner.stats.missing_suffix') }}
                  </span>
              </span>
@@ -30468,10 +30482,12 @@
 +                    x-html="plotBackfillButtonText"
 +                    :title="window.t('scanner.stats.plot_backfill_hint')">
 +            </button>
-+                <button type="button" class="btn btn-warning btn-sm"
-+                        x-show="pendingPlotTranslation" :disabled="isBusy"
-+                        @click="plotTranslationConfirmOpen = true"
-+                        x-text="window.t('scanner.plot_flow.pending', {n:pendingPlotTranslation?.count || 0})"></button>
++                <template x-for="batch in pendingPlotTranslations" :key="batch.batch_id">
++                    <button type="button" class="btn btn-warning btn-sm"
++                            :disabled="isBusy" :title="batch.numbers || ''"
++                            @click="pendingPlotTranslation=batch; plotTranslationConfirmOpen = true"
++                            x-text="window.t('scanner.plot_flow.pending', {n:batch.count}) + (batch.numbers ? ' · '+batch.numbers : '')"></button>
++                </template>
 +        </div>
 +
          <!-- T10: Resume Pill (未完成提示) -->
@@ -30488,7 +30504,7 @@
                      x-bind:disabled="isBusy">
                  {{ t('scanner.stats.missing_resume_btn') }}
              </button>
-@@ -313,7 +582,7 @@
+@@ -313,7 +584,7 @@
  
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
          <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
@@ -30497,7 +30513,7 @@
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +608,7 @@
+@@ -339,7 +610,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -30506,7 +30522,7 @@
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +643,8 @@
+@@ -374,6 +645,8 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
@@ -30515,7 +30531,7 @@
          </div>
      </div>
  
-@@ -519,26 +790,6 @@
+@@ -519,26 +792,6 @@
               @keydown.space.prevent="toggleTagAliasCard()">
              <div class="title">
                  <i class="bi bi-tags"></i> <span>{{ t('scanner.tag_alias.section_title') }}</span>
@@ -30542,7 +30558,7 @@
              </div>
              <span class="btn-collapse" aria-hidden="true">
                  <i class="bi" :class="tagAliasCardCollapsed ? 'bi-chevron-down' : 'bi-chevron-up'"></i>
-@@ -782,6 +1033,248 @@
+@@ -782,6 +1035,248 @@
          </div>
      </dialog>
  
@@ -30791,7 +30807,7 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -792,7 +1285,7 @@
+@@ -792,7 +1287,7 @@
                  <span x-text="window.t('scanner.stats.missing_enrich_confirm_title')"></span>
              </h3>
              <p class="fluent-modal-body">
@@ -30800,7 +30816,7 @@
              </p>
              <div class="modal-action fluent-modal-actions">
                  <button type="button" class="btn btn-ghost" @click="cancelLargeMissingEnrich()">
-@@ -805,26 +1298,164 @@
+@@ -805,26 +1300,164 @@
          </div>
      </dialog>
  

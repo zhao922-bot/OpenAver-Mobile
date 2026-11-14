@@ -361,3 +361,26 @@ def test_edit_during_translation_is_not_overwritten(saved_plot_batch,monkeypatch
     events=_drain_events(scanner_router._plot_backfill_generator(threading.Event(),translation_batch=batch))
     assert events[-1]['summary']['skipped']==1
     assert ET.fromstring(nfo.read_bytes()).findtext('plot')=='Manually edited'
+
+
+def test_saved_batch_is_discoverable_without_a_browser_token(saved_plot_batch,monkeypatch):
+    from core.plot_backfill import pending_plot_translation_batches
+    batch,nfo,_old,_config=saved_plot_batch
+    # Simulate loss of the SSE done response/localStorage. Discovery uses saved NFOs.
+    found=pending_plot_translation_batches(scanner_router.get_db_path(), 'zh-CN')
+    assert [(item['batch_id'],item['count']) for item in found]==[(batch,1)]
+    assert scanner_router.check_missing()['data']['pending_plot_translations'][0]['batch_id']==batch
+
+
+def test_search_preserves_quoted_source_and_keeps_it_eligible(saved_plot_batch,monkeypatch):
+    from core.plot_backfill import PlotTranslationBatch
+    _batch,nfo,_old,_config=saved_plot_batch
+    nfo.write_text('<movie><plot /></movie>',encoding='utf-8')
+    source='"'+JAPANESE_SUMMARY+'"'
+    monkeypatch.setattr(scanner_router,'search_jav',lambda *_args,**_kw:{'_summary':source})
+    events=_drain_events(scanner_router._plot_backfill_generator(threading.Event()))
+    token=events[-1]['summary']['translation_batch']
+    root=ET.fromstring(nfo.read_bytes())
+    assert root.findtext('plot')==source
+    assert root.findtext('originalplot')==source
+    assert len(PlotTranslationBatch(scanner_router.get_db_path(),token).pending()[0])==1

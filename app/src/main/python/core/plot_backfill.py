@@ -13,6 +13,7 @@ from core.atomic_write import atomic_write
 
 from core.nfo_locator import locate_nfo_for_video
 from core.plot_writeback import read_nfo_plots
+from core.title_language import plot_needs_translation
 from core.scrapers.utils import extract_number
 
 
@@ -92,6 +93,30 @@ class PlotTranslationBatch:
                 ))
                 sources[item['file_path']] = item['source_plot']
         return result, sources
+
+
+def pending_plot_translation_batches(db_path, locale: str) -> list[dict]:
+    """Recover saved scopes after a cancelled stream or a page/app restart."""
+    directory = Path(db_path).parent / 'plot_translation_batches'
+    found = []
+    seen = set()
+    for path in sorted(directory.glob('*.json'), key=lambda p:p.stat().st_mtime, reverse=True):
+        try:
+            batch = PlotTranslationBatch(db_path, path.stem)
+            candidates, sources = batch.pending()
+            numbers = []
+            for candidate in candidates:
+                if not plot_needs_translation(sources[candidate.file_path], locale, proper_terms=candidate.actors):
+                    continue
+                paths = set(candidate.nfo_paths)
+                if paths - seen:
+                    numbers.append(candidate.number)
+                    seen.update(paths)
+            if numbers:
+                found.append({'batch_id':batch.id,'count':len(numbers),'numbers':', '.join(numbers[:3])})
+        except Exception:
+            continue  # One damaged/obsolete record must not hide other saved batches.
+    return found
 
 
 def clean_summary_text(value: object) -> str:
