@@ -24,7 +24,7 @@ def _cache_entry(number: str) -> dict:
 
 
 @pytest.mark.parametrize("source", ["auto", "javbus"])
-def test_nfo_update_backs_up_before_fill(tmp_path, monkeypatch, source):
+def test_nfo_update_fills_without_creating_backup(tmp_path, monkeypatch, source):
     video = tmp_path / "ABC-126.mp4"
     video.write_bytes(b"video")
     nfo = tmp_path / "ABC-126.nfo"
@@ -47,7 +47,6 @@ def test_nfo_update_backs_up_before_fill(tmp_path, monkeypatch, source):
     generator = update_videos_generator(
         {str(video): _cache_entry("ABC-126")},
         [str(video)],
-        backup=True,
         source=source,
     )
     events = []
@@ -60,9 +59,8 @@ def test_nfo_update_backs_up_before_fill(tmp_path, monkeypatch, source):
 
     backup = tmp_path / "ABC-126.nfo.openaver-backup"
     assert stats["success"] == 1
-    assert stats["backed_up"] == 1
     assert stats["updated_paths"] == [str(video)]
-    assert backup.read_text(encoding="utf-8") == original
+    assert not backup.exists()
     assert "<title>Filled title</title>" in nfo.read_text(encoding="utf-8")
 
 

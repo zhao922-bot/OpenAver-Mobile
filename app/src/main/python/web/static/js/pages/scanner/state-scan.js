@@ -45,7 +45,7 @@ export function stateScan() {
         copyFailDump: '',
 
         // ===== T7b: State Machine =====
-        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | titleBackfilling | sampleBackfilling | plotBackfilling | done | error | cancelled
+        state: 'idle',  // idle | generating | nfoUpdating | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | titleBackfilling | sampleBackfilling | plotBackfilling | done | error | cancelled
 
         // ===== T7b: Progress =====
         progressStatus: '',
@@ -88,18 +88,10 @@ export function stateScan() {
 
         // ===== r16: Batch tag source update =====
         tagSourceUpdateSource: '',
-        tagSourceConfirmModalOpen: false,
-        tagSourcePreviewSource: '',
-        tagSourcePreviewSourceLabel: '',
-        tagSourcePreviewData: null,
-        tagSourcePreviewNumbers: [],
-        tagSourcePreviewPage: 1,
-        tagSourcePreviewOnly: false,
-        tagSourceBackupEnabled: true,
+        tagSourceTaskSource: '',
 
         // ===== r18: NFO confirmation =====
         nfoUpdateConfirmModalOpen: false,
-        nfoUpdateBackupEnabled: true,
 
         // ===== T6d: Jellyfin Image Update =====
         jellyfinImageCount: 0,
@@ -159,7 +151,7 @@ export function stateScan() {
         },
 
         get taskEtaText() {
-            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind)) {
+            if (!this.isGenerating || !['nfo-update', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind)) {
                 return '';
             }
             let seconds = this.taskEtaSeconds;
@@ -177,7 +169,7 @@ export function stateScan() {
         get taskCanRetry() {
             return !this.isGenerating
                 && this.taskFailedItems.length > 0
-                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind);
+                && ['nfo-update', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind);
         },
 
         get maintenanceSummaryText() {
@@ -188,46 +180,6 @@ export function stateScan() {
                 + (this.missingPlotCount || 0);
             const images = this.jellyfinImageCount || 0;
             return window.t('scanner.stats.maintenance_summary', { nfo, missing, backfill, images });
-        },
-
-        get tagSourcePreviewChangedItems() {
-            const items = this.tagSourcePreviewData?.items || [];
-            return items.filter(item => item.status === 'changed');
-        },
-
-        get tagSourcePreviewFailureItems() {
-            return this.tagSourcePreviewData?.failed_items || [];
-        },
-
-        get tagSourcePreviewChangedCount() {
-            return this.tagSourcePreviewData?.changed || 0;
-        },
-
-        get tagSourcePreviewPageSize() {
-            return 6;
-        },
-
-        get tagSourcePreviewPageCount() {
-            return Math.max(
-                1,
-                Math.ceil(this.tagSourcePreviewChangedItems.length / this.tagSourcePreviewPageSize)
-            );
-        },
-
-        get tagSourcePreviewPageItems() {
-            const start = (this.tagSourcePreviewPage - 1) * this.tagSourcePreviewPageSize;
-            return this.tagSourcePreviewChangedItems.slice(start, start + this.tagSourcePreviewPageSize);
-        },
-
-        get tagSourceSelectedChangedCount() {
-            const changed = new Set(this.tagSourcePreviewChangedItems.map((item) => item.number));
-            return [...new Set(this.tagSourcePreviewNumbers)].filter((number) => changed.has(number)).length;
-        },
-
-        get tagSourceConfirmButtonDisabled() {
-            return this.isGenerating
-                || this.tagSourcePreviewOnly
-                || this.tagSourceSelectedChangedCount === 0;
         },
 
         get nfoUpdatePageSize() {
@@ -253,7 +205,6 @@ export function stateScan() {
 
         get isGenerating() {
             return this.state === 'generating' || this.state === 'nfoUpdating'
-                || this.state === 'tagSourcePreviewing'
                 || this.state === 'tagSourceUpdating'
                 || this.state === 'renamePreviewing'
                 || this.state === 'jellyfinUpdating' || this.state === 'enriching'
@@ -323,10 +274,6 @@ export function stateScan() {
             return !!selected?.requires_cf;
         },
 
-        get tagSourceModalSourceLabel() {
-            return this.tagSourcePreviewSourceLabel || this.selectedTagSourceLabel;
-        },
-
         get tagSourceUpdateButtonDisabled() {
             return this.isBusy || !this.tagSourceUpdateSource || this.statTotal === 0;
         },
@@ -336,21 +283,8 @@ export function stateScan() {
                 return '<span class="loading loading-spinner loading-sm"></span> '
                     + window.t('scanner.stats.tag_source_updating');
             }
-            if (this.state === 'tagSourcePreviewing') {
-                return '<i class="bi bi-hourglass-split"></i> '
-                    + window.t('scanner.stats.tag_source_preview_update_btn');
-            }
             return '<i class="bi bi-tags"></i> '
-                + window.t('scanner.stats.tag_source_preview_update_btn');
-        },
-
-        get tagSourcePreviewButtonText() {
-            if (this.state === 'tagSourcePreviewing') {
-                return '<span class="loading loading-spinner loading-sm"></span> '
-                    + window.t('scanner.stats.tag_source_previewing');
-            }
-            return '<i class="bi bi-eye"></i> '
-                + window.t('scanner.stats.tag_source_preview_btn');
+                + window.t('scanner.stats.tag_source_update_btn');
         },
 
         get generateButtonText() {
@@ -1177,12 +1111,8 @@ export function stateScan() {
                 this.openNfoUpdateConfirm(paths);
                 return;
             }
-            if (['tag-preview', 'tag-update'].includes(this.taskKind) && numbers.length > 0) {
-                this.startTagSourcePreview({
-                    numbers,
-                    applyAfter: false,
-                    retryMode: true,
-                });
+            if (this.taskKind === 'tag-update' && numbers.length > 0) {
+                this.startTagSourceUpdate({ numbers, source: this.tagSourceTaskSource });
                 return;
             }
             if (this.taskKind === 'jellyfin-update') {
@@ -1417,7 +1347,6 @@ export function stateScan() {
 
             try {
                 const params = new URLSearchParams({
-                    backup: this.nfoUpdateBackupEnabled ? 'true' : 'false',
                     source: this.nfoUpdateSource,
                 });
                 for (const path of selectedPaths) params.append('path', path);
@@ -1511,133 +1440,9 @@ export function stateScan() {
         },
 
         // ===== r16: Batch tag source update =====
-        openTagSourceUpdateConfirm() {
-            if (this.tagSourceUpdateButtonDisabled) return;
-            this.startTagSourcePreview({ applyAfter: true });
-        },
-
-        previewTagSourceUpdate() {
-            if (this.tagSourceUpdateButtonDisabled) return;
-            this.startTagSourcePreview({ applyAfter: false });
-        },
-
-        cancelTagSourceUpdate() {
-            this.tagSourceConfirmModalOpen = false;
-            this.tagSourcePreviewOnly = false;
-        },
-
-        setTagSourcePreviewPage(delta) {
-            this.tagSourcePreviewPage = Math.min(
-                this.tagSourcePreviewPageCount,
-                Math.max(1, this.tagSourcePreviewPage + delta)
-            );
-        },
-
-        toggleTagSourceSelection() {
-            const changed = [...new Set(this.tagSourcePreviewChangedItems.map((item) => item.number))];
-            if (this.tagSourceSelectedChangedCount === changed.length) {
-                this.tagSourcePreviewNumbers = [];
-            } else {
-                this.tagSourcePreviewNumbers = changed;
-            }
-        },
-
-        confirmTagSourceUpdate() {
-            if (this.tagSourceConfirmButtonDisabled) return;
-            this.tagSourceConfirmModalOpen = false;
-            this.startTagSourceUpdate({
-                numbers: this.tagSourcePreviewNumbers,
-                backup: this.tagSourceBackupEnabled,
-            });
-        },
-
-        async startTagSourcePreview({ applyAfter = false, numbers = [], retryMode = false } = {}) {
-            if (this.isGenerating || !this.tagSourceUpdateSource) return;
-
-            const sourceId = this.tagSourceUpdateSource;
-            const sourceLabel = this.selectedTagSourceLabel;
-            this.tagSourcePreviewSource = sourceId;
-            this.tagSourcePreviewSourceLabel = sourceLabel;
-            this.tagSourcePreviewOnly = !applyAfter;
-            this.tagSourcePreviewNumbers = numbers.slice();
-            this.state = 'tagSourcePreviewing';
-            this._startTask(
-                'tag-preview',
-                retryMode
-                    ? window.t('scanner.stats.tag_source_retry_previewing')
-                    : window.t('scanner.stats.tag_source_previewing'),
-                numbers.length || this.statTotal
-            );
-            this.clearLogs();
-            localStorage.setItem('avlist_generating', 'true');
-
-            const params = new URLSearchParams({ source: sourceId });
-            if (numbers.length > 0) params.set('numbers', numbers.join(','));
-            this.eventSource = new EventSource(`/api/gallery/tag-source-preview?${params.toString()}`);
-
-            this.eventSource.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-
-                if (data.type === 'progress') {
-                    this.progressStatus = data.status || window.t('scanner.stats.tag_source_previewing');
-                    this.progressCurrent = data.current || 0;
-                    this.progressTotal = data.total || this.progressTotal;
-                    this._applyTaskMetrics(data);
-                    this._saveLastStatus(this.progressStatus);
-                } else if (data.type === 'log') {
-                    this.addLog(data.level || 'info', data.message || '');
-                } else if (data.type === 'done') {
-                    this.eventSource.close();
-                    this.eventSource = null;
-                    this.progressCurrent = this.progressTotal;
-                    this.tagSourcePreviewData = data.summary || null;
-                    const changedNumbers = Array.isArray(data.summary?.changed_numbers)
-                        ? data.summary.changed_numbers
-                        : (data.summary?.items || [])
-                            .filter((item) => item.status === 'changed')
-                            .map((item) => item.number);
-                    this.tagSourcePreviewNumbers = [...new Set(changedNumbers.filter(Boolean))];
-                    this.tagSourcePreviewPage = 1;
-                    this._finishTask(
-                        data.summary?.cancelled ? 'cancelled' : 'done',
-                        data.message || window.t('scanner.stats.tag_source_preview_done'),
-                        data.summary || null
-                    );
-                    this.tagSourceConfirmModalOpen = true;
-                    const failed = data.summary?.failed || 0;
-                    this.showToast(
-                        data.message || window.t('scanner.stats.tag_source_preview_done'),
-                        failed > 0 ? 'warn' : 'success',
-                        4000
-                    );
-                    if (data.message) this.addLog('info', data.message);
-                    this.flushLogs();
-                } else if (data.type === 'error') {
-                    this.eventSource.close();
-                    this.eventSource = null;
-                    this.addLog(
-                        'error',
-                        window.t('scanner.stats.log_error_prefix', { message: data.message || '' })
-                    );
-                    this._finishTask('error', data.message || window.t('scanner.task.failed'));
-                    this.flushLogs();
-                    this.showToast(window.t('scanner.toast.tag_source_update_error'), 'error', 4000);
-                }
-            };
-
-            this.eventSource.onerror = () => {
-                if (this.state === 'done' || this.state === 'error' || this.state === 'cancelled') return;
-                this.eventSource.close();
-                this.eventSource = null;
-                this.addLog('error', window.t('scanner.stats.log_disconnected'));
-                this._finishTask('error', window.t('scanner.task.failed'));
-                this.flushLogs();
-                this.showToast(window.t('scanner.toast.tag_source_update_error'), 'error', 4000);
-            };
-        },
-
-        async startTagSourceUpdate({ numbers = [], backup = true } = {}) {
-            if (this.isGenerating || !this.tagSourcePreviewSource) return;
+        async startTagSourceUpdate({ numbers = [], source = this.tagSourceUpdateSource } = {}) {
+            if (this.isGenerating || !source) return;
+            this.tagSourceTaskSource = source;
 
             this.state = 'tagSourceUpdating';
             this._startTask(
@@ -1649,8 +1454,7 @@ export function stateScan() {
             localStorage.setItem('avlist_generating', 'true');
 
             const params = new URLSearchParams({
-                source: this.tagSourcePreviewSource,
-                backup: backup ? 'true' : 'false',
+                source,
             });
             if (numbers.length > 0) params.set('numbers', numbers.join(','));
             this.eventSource = new EventSource(`/api/gallery/tag-source-update?${params.toString()}`);
@@ -1675,7 +1479,6 @@ export function stateScan() {
                         data.message || window.t('scanner.stats.tag_source_done'),
                         data.summary || null
                     );
-                    this.tagSourcePreviewData = data.summary || this.tagSourcePreviewData;
                     localStorage.setItem('avlist_generating', 'false');
                     const failed = data.summary?.failed || 0;
                     this.showToast(

@@ -1168,7 +1168,7 @@
  from datetime import datetime
  from pathlib import Path
  from typing import Any, Callable, Dict, Generator, List, Optional
-@@ -32,31 +34,92 @@
+@@ -32,31 +34,91 @@
  from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
  from starlette.background import BackgroundTask
  
@@ -1181,7 +1181,6 @@
  from core.path_utils import to_file_uri, is_path_under_dir, uri_to_fs_path, coerce_to_file_uri, uri_to_local_fs_path
 -from core.nfo_updater import check_cache_needs_update, update_videos_generator
 +from core.nfo_updater import (
-+    backup_nfo_file,
 +    check_cache_needs_update,
 +    get_nfo_path_from_video,
 +    read_nfo_tags,
@@ -1266,7 +1265,7 @@
  
  logger = get_logger(__name__)
  
-@@ -65,11 +128,52 @@
+@@ -65,11 +127,52 @@
  # T3(40c): Jellyfin check TTL 快取（60 秒）
  _jellyfin_cache_result: dict | None = None
  _jellyfin_cache_time: float = 0
@@ -1319,7 +1318,7 @@
  
  
  def _collect_long_paths(
-@@ -97,21 +201,36 @@
+@@ -97,21 +200,36 @@
  # TASK-88c-T2: readonly 來源分流 + SSE thread/queue 橋接 + 四數摘要
  # ---------------------------------------------------------------------------
  
@@ -1368,7 +1367,7 @@
      return {"type": "log", "level": "warn" if o.status == "failed" else "info", "message": msg}
  
  
-@@ -142,7 +261,7 @@
+@@ -142,7 +260,7 @@
          summary["partial"] += 1
  
  
@@ -1377,7 +1376,7 @@
      """該來源小結（產生器）。
  
      no_output_path → 「請先設定輸出夾」提示（Acceptance #11）。
-@@ -153,25 +272,39 @@
+@@ -153,25 +271,39 @@
      if result.aborted_reason == "no_output_path":
          yield _sse_event({
              "type": "log", "level": "warn",
@@ -1423,7 +1422,7 @@
              })
  
  
-@@ -188,6 +321,7 @@
+@@ -188,6 +320,7 @@
      q: "queue.Queue" = queue.Queue()  # 無界：worker 永不阻塞於 put，client 斷線 daemon 自然退出
      _SENTINEL = object()
      box: dict = {}
@@ -1431,7 +1430,7 @@
  
      def _work():
          try:
-@@ -206,39 +340,58 @@
+@@ -206,39 +339,58 @@
  
      t = threading.Thread(target=_work, daemon=True)
      t.start()
@@ -1501,7 +1500,7 @@
      """根目錄不可存取時回傳警告；可存取時回傳 None。
  
      白名單：只有明確的「不存在」才說資料夾不存在，其餘 OSError 一律「無法存取」（NAS 斷線不誤導成打錯字）。
-@@ -246,29 +399,379 @@
+@@ -246,29 +398,379 @@
      try:
          os.stat(normalized_dir)
      except PermissionError:
@@ -1891,7 +1890,7 @@
          gallery_config = config.get('gallery', {})
  
          directories = get_gallery_source_paths(gallery_config)
-@@ -287,7 +790,12 @@
+@@ -287,7 +789,12 @@
          default_theme = config.get('general', {}).get('theme', 'light')
  
          if not directories:
@@ -1905,7 +1904,7 @@
              return
  
          # 53b-T3: 確認 directories 有值才 emit 掃描開始通知
-@@ -302,19 +810,49 @@
+@@ -302,19 +809,49 @@
          cache_path = output_path / output_filename.replace('.html', '_cache.json')
          db_path = get_db_path()
  
@@ -1959,7 +1958,7 @@
  
          # 初始化掃描器
          scanner = VideoScanner(path_mappings=path_mappings, nfo_title_format=config.get('scraper', {}).get('nfo_title_format', '[{num}]{title}'))
-@@ -323,6 +861,7 @@
+@@ -323,6 +860,7 @@
          total_inserted = 0
          total_updated = 0
          total_deleted = 0
@@ -1967,7 +1966,7 @@
          scan_error_count = 0
          session_added_paths = []  # 追蹤本次新增/變更的影片路徑
          long_paths: list[str] = []  # a5: Windows 長路徑收集（只在 win32 填充）
-@@ -369,161 +908,39 @@
+@@ -369,161 +907,39 @@
                  normalized_dir = uri_to_fs_path(directory)  # uri-no-reverse: native config path (DirectoryConfig.path), no DB-mapped namespace
              except ValueError:
                  logger.exception("路徑轉換失敗: %s", directory)
@@ -2155,7 +2154,7 @@
  
          # TASK-90b-T4 / PR#90b Codex P1: 尾段每個外顯副作用（HTML 檔、完成通知、
          # done event）之前各自 fresh 查一次 should_abort()，而非迴圈結束時單次
-@@ -550,9 +967,36 @@
+@@ -550,9 +966,36 @@
          all_db_videos = [v for v in repo.get_all()
                           if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
  
@@ -2193,7 +2192,7 @@
              info = VideoInfo(
                  path=v.path,
                  title=v.title,
-@@ -562,6 +1006,7 @@
+@@ -562,6 +1005,7 @@
                  maker=v.maker,
                  date=v.release_date,
                  genre=','.join(v.tags) if v.tags else '',
@@ -2201,7 +2200,7 @@
                  size=v.size_bytes,
                  mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
                  img=v.cover_path
-@@ -593,19 +1038,57 @@
+@@ -593,19 +1037,57 @@
                      }
              if session_cache:
                  session_stats = check_cache_needs_update(session_cache)
@@ -2264,7 +2263,7 @@
  
          # TASK-90b-T4: abort 時跳過 orphan 清理（全庫 pass，非本次掃描範圍新增
          # 的成本，abort 時執行拿不到「這次掃描結果更完整」的好處，純屬多做一次
-@@ -615,7 +1098,16 @@
+@@ -615,7 +1097,16 @@
              try:
                  cleaned = _run_sample_images_cleanup_pass(repo, path_mappings)
                  if cleaned > 0:
@@ -2282,7 +2281,7 @@
              except Exception as e:
                  logger.warning("sample_images cleanup pass failed: %s: %s", type(e).__name__, e)
                  # 失敗不中斷 scan 流程
-@@ -627,7 +1119,9 @@
+@@ -627,7 +1118,9 @@
              # 產生 HTML
              yield _sse_event({
                  "type": "progress",
@@ -2293,7 +2292,7 @@
                  "current": total_dirs,
                  "total": total_dirs + 1
              })
-@@ -641,12 +1135,13 @@
+@@ -641,12 +1134,13 @@
                  sort=default_sort,
                  order=default_order,
                  items_per_page=items_per_page,
@@ -2309,7 +2308,7 @@
                  "current": total_dirs + 1,
                  "total": total_dirs + 1
              })
-@@ -704,7 +1199,7 @@
+@@ -704,7 +1198,7 @@
          if _wl_removed:
              _emit_notif(
                  "info", "notif.wishlist_auto_removed",
@@ -2318,7 +2317,7 @@
                  task_type="wishlist_reconcile",
              )
  
-@@ -723,28 +1218,73 @@
+@@ -723,28 +1217,73 @@
                      or _readonly_no_output > 0 or _readonly_unreachable > 0 or _readonly_partial > 0):
                  _err_parts = []
                  if scan_error_count > 0:
@@ -2400,7 +2399,7 @@
  
              # TASK-90b-T4: abort 時跳過 done event——client 已斷線收不到，且
              # payload 的 output_path/video_count 語意上宣稱「已完成產生」，
-@@ -754,6 +1294,7 @@
+@@ -754,6 +1293,7 @@
                  "video_count": len(all_videos),
                  "output_path": str(html_path),
                  "session_update": session_update,
@@ -2408,7 +2407,7 @@
                  "long_paths": long_paths,  # a5
                  "stats": {
                      "inserted": total_inserted,
-@@ -772,10 +1313,15 @@
+@@ -772,10 +1312,15 @@
          # 53b-T3: 掃描失敗通知（不洩漏 str(e) 到前端）
          _emit_notif(
              "error", "notif.scanner_failed",
@@ -2426,7 +2425,7 @@
  
  
  # TASK-90b-T2: 斷線偵測輪詢間隔（秒）。定案依據見 plan-90b.md CD-90b-5/6：
-@@ -786,6 +1332,66 @@
+@@ -786,6 +1331,66 @@
  # `request.is_disconnected()`，非搶 iterate_in_threadpool 的同一組 receive
  # channel（該輪詢與 StreamingResponse 內部行為互不干擾，spike 已驗證）。
  _DISCONNECT_POLL_INTERVAL_SEC = 0.5
@@ -2493,7 +2492,7 @@
  
  
  @router.get("/generate")
-@@ -803,8 +1409,13 @@
+@@ -803,8 +1408,13 @@
      # 反方向——若設定頁正在切換模式（purge 窗口中），回 False → 拒絕開始產生，避免背景
      # producer 讀到舊唯讀來源、把剛被 purge 的卡 _upsert 補回（切模式後殭屍卡）。
      if not try_mark_generate_active(cancel_event):
@@ -2508,7 +2507,7 @@
          return StreamingResponse(
              _refuse_switching(),
              media_type="text/event-stream",
-@@ -874,7 +1485,11 @@
+@@ -874,7 +1484,11 @@
              return {"success": True, "data": {"total": 0, "last_run": None, "last_added": None}}
  
          repo = VideoRepository(db_path)
@@ -2521,7 +2520,7 @@
  
          return {
              "success": True,
-@@ -887,7 +1502,10 @@
+@@ -887,7 +1501,10 @@
          }
      except Exception as e:
          logger.error("取得統計資訊失敗: %s", e)
@@ -2533,7 +2532,7 @@
  
  
  @router.delete("/cache")
-@@ -897,9 +1515,21 @@
+@@ -897,9 +1514,21 @@
          db_path = get_db_path()
  
          if not db_path.exists():
@@ -2556,7 +2555,7 @@
          deleted = repo.clear_all()
          # feature/71 T8: 清空整個縮圖快取目錄（CD-11 / spec 2.A.9）
          thumbnail_cache.clear_all()
-@@ -907,10 +1537,17 @@
+@@ -907,10 +1536,17 @@
          global _jellyfin_cache_result, _jellyfin_cache_time
          _jellyfin_cache_result = None
          _jellyfin_cache_time = 0
@@ -2576,7 +2575,7 @@
  
  
  def _build_nfo_update_cache(all_videos, config) -> tuple:
-@@ -959,6 +1596,886 @@
+@@ -959,6 +1595,853 @@
      return cache, skipped_readonly, path_mappings
  
  
@@ -2903,7 +2902,6 @@
 +    *,
 +    dry_run: bool = False,
 +    numbers: Optional[set[str]] = None,
-+    backup: bool = False,
 +) -> Generator[str, None, None]:
 +    """Preview or replace only ordinary NFO/DB tags from one selected source."""
 +    locale = _active_locale()
@@ -2916,7 +2914,6 @@
 +        "changed": 0,
 +        "unchanged": 0,
 +        "no_nfo": 0,
-+        "backed_up": 0,
 +        "cancelled": False,
 +        "failed_items": [],
 +        "items": [],
@@ -3287,37 +3284,6 @@
 +                })
 +                continue
 +
-+            if nfo_path and backup:
-+                try:
-+                    backup_path = backup_nfo_file(nfo_path)
-+                    if backup_path:
-+                        summary["backed_up"] += 1
-+                except Exception as exc:
-+                    summary["failed"] += 1
-+                    summary["failed_items"].append({
-+                        "path": video.path,
-+                        "number": video.number,
-+                        "error": _runtime_text(
-+                            "scanner",
-+                            "tag_source_nfo_backup_failed",
-+                            locale,
-+                            number=video.number,
-+                            error=str(exc),
-+                        ),
-+                    })
-+                    yield _sse_event({
-+                        "type": "log",
-+                        "level": "error",
-+                        "message": _runtime_text(
-+                            "scanner",
-+                            "tag_source_nfo_backup_failed",
-+                            locale,
-+                            number=video.number,
-+                            error=str(exc),
-+                        ),
-+                    })
-+                    continue
-+
 +            if nfo_path and not replace_nfo_tags(nfo_path, merged_tags):
 +                summary["failed"] += 1
 +                summary["failed_items"].append({
@@ -3463,7 +3429,7 @@
  @router.get("/update-check")
  def check_update():
      """檢查需要更新的影片數量（從 SQLite 讀取）"""
-@@ -971,73 +2488,292 @@
+@@ -971,73 +2454,292 @@
          repo = VideoRepository(db_path)
          all_videos = repo.get_all()
  
@@ -3788,7 +3754,7 @@
          return {
              "success": True,
              "data": {
-@@ -1046,75 +2782,2176 @@
+@@ -1046,75 +2748,2170 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
@@ -5665,7 +5631,6 @@
 +def generate_nfo_update(
 +    cancel_event: Optional[threading.Event] = None,
 +    selected_paths: Optional[list[str]] = None,
-+    backup: bool = False,
 +    source: str = "auto",
 +) -> Generator[str, None, None]:
 +    """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
@@ -5807,7 +5772,6 @@
 +            grouped_paths,
 +            path_mappings,
 +            should_abort=cancel_event.is_set if cancel_event is not None else None,
-+            backup=backup,
 +            source=source,
 +        )
 +        update_stats = None
@@ -5927,7 +5891,6 @@
 +async def run_update(
 +    request: Request,
 +    path: Optional[list[str]] = Query(default=None),
-+    backup: bool = Query(default=True),
 +    source: str = Query("auto", min_length=1),
 +):
      """執行 NFO 更新（SSE 串流回傳進度）"""
@@ -5943,7 +5906,6 @@
 +        lambda cancel_event: generate_nfo_update(
 +            cancel_event,
 +            selected_paths=path,
-+            backup=backup,
 +            source=source,
 +        ),
 +    )
@@ -5954,7 +5916,6 @@
 +    request: Request,
 +    source: str = Query(..., min_length=1),
 +    numbers: Optional[str] = Query(default=None),
-+    backup: bool = Query(default=True),
 +):
 +    """Batch replace ordinary tags using one explicitly selected source."""
 +    selected_numbers = {
@@ -5966,7 +5927,6 @@
 +            source,
 +            cancel_event,
 +            numbers=selected_numbers,
-+            backup=backup,
 +        ),
 +    )
 +
@@ -5992,7 +5952,7 @@
      )
  
  
-@@ -1123,6 +4960,7 @@
+@@ -1123,6 +4920,7 @@
      """取得產生的 HTML 列表檔案（修改圖片路徑為 API 代理）"""
      try:
          config = load_config()
@@ -6000,7 +5960,7 @@
          gallery_config = config.get('gallery', {})
          output_dir = gallery_config.get('output_dir', '') or ''
          output_filename = gallery_config.get('output_filename', 'gallery_output.html')
-@@ -1131,7 +4969,10 @@
+@@ -1131,7 +4929,10 @@
  
          if not html_path.exists():
              return HTMLResponse(
@@ -6012,7 +5972,7 @@
                  status_code=404
              )
  
-@@ -1161,8 +5002,12 @@
+@@ -1161,8 +4962,12 @@
          return HTMLResponse(content=content)
      except Exception:
          logger.exception("view_list 讀取失敗")
@@ -6026,7 +5986,7 @@
              status_code=500
          )
  
-@@ -1177,12 +5022,25 @@
+@@ -1177,12 +4982,25 @@
              return {"success": True, "data": {"count": 0}}
  
          repo = VideoRepository(db_path)
@@ -6054,7 +6014,7 @@
  
  
  # === Jellyfin 圖片批次補齊 ===
-@@ -1191,30 +5049,43 @@
+@@ -1191,30 +5009,43 @@
      """檢查 DB 中有多少影片缺少 poster/fanart"""
      videos = repo.get_all()
      need_update = []
@@ -6116,7 +6076,7 @@
      try:
          # Codex PR#123 P2：gate 必須排在 get_db_path() 之前——get_db_path() 內部會
          # mkdir 建立 output/ 資料夾（core/database/connection.py:15-22），是有副作用
-@@ -1224,17 +5095,29 @@
+@@ -1224,17 +5055,29 @@
          # done + updated:0（off 時零寫入），且與 _check_jellyfin_needed() 的順序
          # 不對稱。config 只讀一次，下面 path_mappings 沿用同一個 config。
          config = load_config()
@@ -6148,7 +6108,7 @@
              return
  
          repo = VideoRepository(db_path)
-@@ -1246,13 +5129,31 @@
+@@ -1246,13 +5089,31 @@
          if total == 0:
              _jellyfin_cache_result = None
              _jellyfin_cache_time = 0
@@ -6182,7 +6142,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,45 +5162,129 @@
+@@ -1261,45 +5122,129 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -6329,7 +6289,7 @@
  
  
  def _check_jellyfin_needed() -> dict | None:
-@@ -1359,15 +5344,11 @@
+@@ -1359,15 +5304,11 @@
  
  
  @router.get("/jellyfin-update")
@@ -6349,7 +6309,7 @@
      )
  
  
-@@ -1463,26 +5444,49 @@
+@@ -1463,26 +5404,49 @@
      ```
      """
      numbers = [n.strip() for n in body.numbers if isinstance(n, str) and n.strip()]
@@ -6404,7 +6364,7 @@
      gallery_config = config.get('gallery', {})
      output_dir = gallery_config.get('output_dir', '') or ''
      theme = config.get('general', {}).get('theme', 'light')
-@@ -1494,7 +5498,13 @@
+@@ -1494,7 +5458,13 @@
          db_results = repo.get_by_numbers(numbers)
      except Exception as e:
          logger.error('generate_from_ids: DB 查詢失敗: %s', e)
@@ -6419,7 +6379,7 @@
  
      all_videos: List[VideoInfo] = []
      missing: List[str] = []
-@@ -1577,7 +5587,13 @@
+@@ -1577,7 +5547,13 @@
          )
      except Exception as e:
          logger.error('generate_from_ids: HTML 產生失敗: %s', e)
@@ -6434,7 +6394,7 @@
  
      result = {
          "success": True,
-@@ -1621,6 +5637,11 @@
+@@ -1621,6 +5597,11 @@
  
  
  def _browse_start_dir(config: dict) -> str:

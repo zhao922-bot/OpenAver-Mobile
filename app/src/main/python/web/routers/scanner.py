@@ -41,7 +41,6 @@ from core.video_extensions import get_video_extensions
 from core.gallery_generator import HTMLGenerator
 from core.path_utils import to_file_uri, is_path_under_dir, uri_to_fs_path, coerce_to_file_uri, uri_to_local_fs_path
 from core.nfo_updater import (
-    backup_nfo_file,
     check_cache_needs_update,
     get_nfo_path_from_video,
     read_nfo_tags,
@@ -1919,7 +1918,6 @@ def generate_tag_source_update(
     *,
     dry_run: bool = False,
     numbers: Optional[set[str]] = None,
-    backup: bool = False,
 ) -> Generator[str, None, None]:
     """Preview or replace only ordinary NFO/DB tags from one selected source."""
     locale = _active_locale()
@@ -1932,7 +1930,6 @@ def generate_tag_source_update(
         "changed": 0,
         "unchanged": 0,
         "no_nfo": 0,
-        "backed_up": 0,
         "cancelled": False,
         "failed_items": [],
         "items": [],
@@ -2302,37 +2299,6 @@ def generate_tag_source_update(
                     ),
                 })
                 continue
-
-            if nfo_path and backup:
-                try:
-                    backup_path = backup_nfo_file(nfo_path)
-                    if backup_path:
-                        summary["backed_up"] += 1
-                except Exception as exc:
-                    summary["failed"] += 1
-                    summary["failed_items"].append({
-                        "path": video.path,
-                        "number": video.number,
-                        "error": _runtime_text(
-                            "scanner",
-                            "tag_source_nfo_backup_failed",
-                            locale,
-                            number=video.number,
-                            error=str(exc),
-                        ),
-                    })
-                    yield _sse_event({
-                        "type": "log",
-                        "level": "error",
-                        "message": _runtime_text(
-                            "scanner",
-                            "tag_source_nfo_backup_failed",
-                            locale,
-                            number=video.number,
-                            error=str(exc),
-                        ),
-                    })
-                    continue
 
             if nfo_path and not replace_nfo_tags(nfo_path, merged_tags):
                 summary["failed"] += 1
@@ -4645,7 +4611,6 @@ async def preview_source_rename(
 def generate_nfo_update(
     cancel_event: Optional[threading.Event] = None,
     selected_paths: Optional[list[str]] = None,
-    backup: bool = False,
     source: str = "auto",
 ) -> Generator[str, None, None]:
     """NFO 更新生成器（SSE 串流）- 使用 SQLite"""
@@ -4780,7 +4745,6 @@ def generate_nfo_update(
             grouped_paths,
             path_mappings,
             should_abort=cancel_event.is_set if cancel_event is not None else None,
-            backup=backup,
             source=source,
         )
         update_stats = None
@@ -4897,7 +4861,6 @@ def generate_nfo_update(
 async def run_update(
     request: Request,
     path: Optional[list[str]] = Query(default=None),
-    backup: bool = Query(default=True),
     source: str = Query("auto", min_length=1),
 ):
     """執行 NFO 更新（SSE 串流回傳進度）"""
@@ -4906,7 +4869,6 @@ async def run_update(
         lambda cancel_event: generate_nfo_update(
             cancel_event,
             selected_paths=path,
-            backup=backup,
             source=source,
         ),
     )
@@ -4917,7 +4879,6 @@ async def run_tag_source_update(
     request: Request,
     source: str = Query(..., min_length=1),
     numbers: Optional[str] = Query(default=None),
-    backup: bool = Query(default=True),
 ):
     """Batch replace ordinary tags using one explicitly selected source."""
     selected_numbers = {
@@ -4929,7 +4890,6 @@ async def run_tag_source_update(
             source,
             cancel_event,
             numbers=selected_numbers,
-            backup=backup,
         ),
     )
 

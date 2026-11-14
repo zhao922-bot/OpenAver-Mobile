@@ -1365,36 +1365,6 @@
     flex-wrap: wrap;
 }
 
-.tag-backup-option {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.65rem;
-    margin: 0.8rem 0 0;
-    padding: 0.7rem 0.75rem;
-    border: 1px solid var(--border-light);
-    border-radius: var(--fluent-radius-md);
-    background: color-mix(in oklch, var(--bg-body) 58%, transparent);
-    cursor: pointer;
-}
-
-.tag-backup-option > span {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-    min-width: 0;
-}
-
-.tag-backup-option strong {
-    color: var(--text-primary);
-    font-size: 0.78rem;
-}
-
-.tag-backup-option small {
-    color: var(--text-secondary);
-    font-size: 0.7rem;
-    line-height: 1.4;
-}
-
 @media (min-width: 720px) {
     .terminal-toggle {
         flex-basis: auto;

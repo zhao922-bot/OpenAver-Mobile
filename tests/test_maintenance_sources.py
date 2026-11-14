@@ -56,7 +56,8 @@ state.config = {sources: [], gallery: {directories: ['keep']}};
 state.state = 'idle';
 state.statTotal = 5;
 let called = [];
-for (const fn of ['openNfoUpdateConfirm', 'previewRenamePlan', 'previewTagSourceUpdate', 'openTagSourceUpdateConfirm', 'runMissingEnrich', 'runSampleBackfill', 'runPlotBackfill', 'resumeMissingEnrich']) {
+state.openTagSourceUpdateConfirm = () => called.push('obsoleteConfirmation');
+for (const fn of ['openNfoUpdateConfirm', 'previewRenamePlan', 'startTagSourceUpdate', 'runMissingEnrich', 'runSampleBackfill', 'runPlotBackfill', 'resumeMissingEnrich']) {
     state[fn] = () => called.push(fn);
 }
 (async () => {
@@ -73,18 +74,18 @@ for (const fn of ['openNfoUpdateConfirm', 'previewRenamePlan', 'previewTagSource
     await state.chooseMaintenanceSource('dmm');
     assert.equal(called.length, 1);
     sources = [{id: 'javdb', enabled: true}];
-    for (const action of ['nfo', 'tag-preview', 'tag-update', 'enrich', 'samples', 'plots', 'resume']) {
+    for (const action of ['nfo', 'tag-update', 'enrich', 'samples', 'plots', 'resume']) {
         await state.openMaintenanceSourcePicker(action);
         assert.deepEqual(state.tagSourceOptions.map(x => x.id), ['javdb', 'javlibrary', 'fc-javten', 'jable']);
         await state.chooseMaintenanceSource('javdb');
     }
     for (const prop of ['nfoUpdateSource', 'tagSourceUpdateSource', 'missingEnrichSource', 'sampleBackfillSource', 'plotBackfillSource']) assert.equal(state[prop], 'javdb');
-    assert.deepEqual(called.slice(1), ['openNfoUpdateConfirm', 'previewTagSourceUpdate', 'openTagSourceUpdateConfirm', 'runMissingEnrich', 'runSampleBackfill', 'runPlotBackfill', 'resumeMissingEnrich']);
+    assert.deepEqual(called.slice(1), ['openNfoUpdateConfirm', 'startTagSourceUpdate', 'runMissingEnrich', 'runSampleBackfill', 'runPlotBackfill', 'resumeMissingEnrich']);
     sources = [];
     await state.openMaintenanceSourcePicker('plots');
     assert.equal(state.tagSourceOptions.length, 3);
     await state.chooseMaintenanceSource('jable');
-    assert.equal(called.length, 9);
+    assert.equal(called.length, 8);
     called=[];
     for (const id of ['javlibrary', 'fc-javten', 'jable']) {
         await state.openMaintenanceSourcePicker('rename');

@@ -191,22 +191,6 @@ def read_nfo_tags(nfo_path: str) -> List[str]:
     return tags
 
 
-def backup_nfo_file(nfo_path: str) -> Optional[str]:
-    """Create a same-folder ``.openaver-backup`` copy through the shared SAF path."""
-    if not os.path.exists(nfo_path):
-        return None
-    backup_path = str(nfo_path) + ".openaver-backup"
-    payload = Path(nfo_path).read_bytes()
-    with atomic_write(
-        backup_path,
-        mode="wb",
-        suffix=".nfo-backup.tmp",
-        mobile_fallback=True,
-    ) as handle:
-        handle.write(payload)
-    return backup_path
-
-
 def parse_nfo(nfo_path: str) -> Tuple[Optional[ET.ElementTree], Optional[ET.Element]]:
     """解析 NFO 檔案"""
     try:
@@ -465,7 +449,6 @@ def update_videos_generator(
     paths: List[str],
     path_mappings: dict = None,
     should_abort: Optional[Callable[[], bool]] = None,
-    backup: bool = False,
     source: str = "auto",
 ) -> Generator[dict, None, dict]:
     """更新影片的生成器（用於 SSE 串流）
@@ -489,7 +472,6 @@ def update_videos_generator(
         'no_nfo': 0,
         'no_metadata': 0,
         'cancelled': False,
-        'backed_up': 0,
         'failed_items': [],
         'updated_paths': [],
     }
@@ -526,26 +508,6 @@ def update_videos_generator(
             stats['no_nfo'] += 1
             stats['skipped'] += 1
             continue
-
-        if backup:
-            try:
-                backup_path = backup_nfo_file(nfo_path)
-                if backup_path:
-                    stats['backed_up'] += 1
-            except Exception:
-                logger.exception("備份 NFO 失敗: %s", nfo_path)
-                yield {
-                    'type': 'log',
-                    'level': 'error',
-                    'message': f'[{i}] {num}: NFO 備份失敗，未更新'
-                }
-                stats['failed'] += 1
-                stats['failed_items'].append({
-                    'path': path,
-                    'number': num,
-                    'error': 'NFO 备份失败',
-                })
-                continue
 
         # 從網路取得 metadata
         yield {

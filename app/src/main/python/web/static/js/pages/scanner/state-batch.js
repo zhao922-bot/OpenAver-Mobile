@@ -76,7 +76,6 @@ export function stateBatch() {
             const keys = {
                 nfo: 'scanner.stats.nfo_update_title',
                 rename: 'scanner.rename.source_row_title',
-                'tag-preview': 'scanner.stats.tag_source_label',
                 'tag-update': 'scanner.stats.tag_source_label',
                 enrich: 'scanner.stats.missing_enrich_idle',
                 samples: 'scanner.stats.sample_backfill_idle',
@@ -125,11 +124,9 @@ export function stateBatch() {
                     this.renameSource = sourceId;
                     await this.previewRenamePlan();
                     break;
-                case 'tag-preview':
                 case 'tag-update':
                     this.tagSourceUpdateSource = sourceId;
-                    if (action === 'tag-preview') await this.previewTagSourceUpdate();
-                    else this.openTagSourceUpdateConfirm();
+                    await this.startTagSourceUpdate();
                     break;
                 case 'enrich':
                 case 'resume':

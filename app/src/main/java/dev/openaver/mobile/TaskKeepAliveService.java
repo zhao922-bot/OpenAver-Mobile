@@ -24,6 +24,7 @@ public final class TaskKeepAliveService extends Service {
     private static final String DEFAULT_UI_LOCALE = "zh-CN";
 
     private static volatile boolean running = false;
+    private static volatile boolean requested = false;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -42,6 +43,7 @@ public final class TaskKeepAliveService extends Service {
     }
 
     static void start(Context context) {
+        requested = true;
         createNotificationChannel(context);
         startNow(context);
     }
@@ -56,6 +58,12 @@ public final class TaskKeepAliveService extends Service {
     }
 
     static void stop(Context context) {
+        requested = false;
+        // A pending foreground start must reach startForeground before being
+        // stopped, otherwise Android can kill the app for missing its deadline.
+        if (!running) {
+            return;
+        }
         try {
             context.stopService(new Intent(context, TaskKeepAliveService.class));
         } catch (RuntimeException error) {
@@ -68,6 +76,9 @@ public final class TaskKeepAliveService extends Service {
         createNotificationChannel(this);
         startForeground(NOTIFICATION_ID, buildNotification());
         running = true;
+        if (!requested) {
+            stopSelf();
+        }
         return START_NOT_STICKY;
     }
 

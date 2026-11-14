@@ -19,7 +19,7 @@
      data-is-android="{{ 'true' if is_android else 'false' }}"
      @dragover.document.prevent="handleDragOver($event)"
      @drop.document.prevent="handleDrop($event)"
-     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); nfoUpdateConfirmModalOpen && cancelNfoUpdate(); tagSourceConfirmModalOpen && cancelTagSourceUpdate(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel(); renamePreviewOpen && closeRenamePreview();">
+     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); nfoUpdateConfirmModalOpen && cancelNfoUpdate(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel(); renamePreviewOpen && closeRenamePreview();">
     <!-- Drag Overlay (must be inside x-data scope) -->
     <div class="drag-overlay" id="dragOverlay" :class="{ active: showDragOverlay }">
         <div class="drag-overlay-content">
@@ -288,7 +288,7 @@
             </div>
             <div class="task-control-actions">
                 <div class="task-metrics"
-                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(taskKind)">
+                     x-show="['nfo-update', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(taskKind)">
                     <span class="task-metric is-success">
                         <i class="bi bi-check2"></i>
                         <span x-text="window.t('scanner.task.success_count', { count: taskSuccessDisplay })"></span>
@@ -437,11 +437,6 @@
             </div>
             <div class="maintenance-controls">
                 <div class="tag-source-actions">
-                    <button class="btn-tag-preview"
-                            @click="openMaintenanceSourcePicker('tag-preview')"
-                            :disabled="isBusy || statTotal === 0"
-                            x-html="tagSourcePreviewButtonText">
-                    </button>
                     <button class="btn-nfo-update"
                             @click="openMaintenanceSourcePicker('tag-update')"
                             :disabled="isBusy || statTotal === 0"
@@ -1135,13 +1130,6 @@
                     <i class="bi bi-chevron-right"></i>
                 </button>
             </div>
-            <label class="tag-backup-option">
-                <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="nfoUpdateBackupEnabled">
-                <span>
-                    <strong>{{ t('scanner.stats.nfo_backup_label') }}</strong>
-                    <small>{{ t('scanner.stats.nfo_backup_hint') }}</small>
-                </span>
-            </label>
             <div class="modal-action fluent-modal-actions">
                 <button type="button" class="btn btn-ghost" @click="cancelNfoUpdate()">
                     {{ t('scanner.stats.tag_source_confirm_cancel') }}
@@ -1149,129 +1137,8 @@
                 <button type="button" class="btn btn-primary"
                         :disabled="nfoUpdateConfirmDisabled"
                         @click="confirmNfoUpdate()">
-                    <i class="bi bi-shield-check"></i>
-                    <span x-text="window.t(nfoUpdateBackupEnabled
-                        ? 'scanner.stats.nfo_confirm_backup_ok'
-                        : 'scanner.stats.nfo_confirm_ok')"></span>
-                </button>
-            </div>
-        </div>
-    </dialog>
-
-    <!-- r16: Batch Tag Source Confirm Modal -->
-    <dialog class="modal fluent-modal"
-            :class="{ 'modal-open': tagSourceConfirmModalOpen }"
-            @click.self="cancelTagSourceUpdate()">
-        <div class="modal-box fluent-modal-box">
-            <h3 class="fluent-modal-title">
-                <i class="bi text-warning" :class="tagSourcePreviewOnly ? 'bi-eye' : 'bi-tags'"></i>
-                <span x-text="window.t(tagSourcePreviewOnly
-                    ? 'scanner.stats.tag_source_preview_title'
-                    : 'scanner.stats.tag_source_confirm_title')"></span>
-            </h3>
-            <div class="batch-confirm-summary">
-                <div class="batch-confirm-summary-item">
-                    <span>{{ t('scanner.stats.tag_source_confirm_source_label') }}</span>
-                    <strong x-text="tagSourceModalSourceLabel"></strong>
-                </div>
-                <div class="batch-confirm-summary-item">
-                    <span>{{ t('scanner.stats.tag_source_confirm_count_label') }}</span>
-                    <strong x-text="window.t('scanner.stats.tag_source_confirm_count_value', { count: tagSourcePreviewData?.total || 0 })"></strong>
-                </div>
-                <div class="batch-confirm-summary-item">
-                    <span>{{ t('scanner.stats.tag_source_preview_changed_label') }}</span>
-                    <strong x-text="window.t('scanner.stats.tag_source_preview_changed_value', { count: tagSourcePreviewChangedCount })"></strong>
-                </div>
-                <div class="batch-confirm-summary-item">
-                    <span>{{ t('scanner.stats.tag_source_selected_label') }}</span>
-                    <strong x-text="window.t('scanner.stats.tag_source_confirm_count_value', { count: tagSourceSelectedChangedCount })"></strong>
-                </div>
-            </div>
-            <p class="fluent-modal-body"
-               x-text="window.t(tagSourcePreviewOnly
-                   ? 'scanner.stats.tag_source_preview_body'
-                   : 'scanner.stats.tag_source_confirm_body', {
-                       source: tagSourceModalSourceLabel,
-                       count: tagSourcePreviewData?.total || 0
-                   })"></p>
-            <div class="batch-preview-selection" x-show="tagSourcePreviewChangedItems.length > 0">
-                <button type="button" class="btn btn-ghost btn-xs" @click="toggleTagSourceSelection()">
-                    <i class="bi" :class="tagSourceSelectedChangedCount === tagSourcePreviewChangedItems.length
-                        ? 'bi-x-square' : 'bi-check2-square'"></i>
-                    <span x-text="window.t(tagSourceSelectedChangedCount === tagSourcePreviewChangedItems.length
-                        ? 'scanner.stats.selection_clear'
-                        : 'scanner.stats.selection_all')"></span>
-                </button>
-                <span x-text="window.t('scanner.stats.selection_count', {
-                    selected: tagSourceSelectedChangedCount,
-                    total: tagSourcePreviewChangedItems.length
-                })"></span>
-            </div>
-            <div class="tag-preview-list" x-show="tagSourcePreviewChangedItems.length > 0">
-                <template x-for="item in tagSourcePreviewPageItems" :key="item.path">
-                    <label class="tag-preview-item batch-preview-option">
-                        <input type="checkbox" class="checkbox checkbox-sm checkbox-primary"
-                               :value="item.number" x-model="tagSourcePreviewNumbers">
-                        <span>
-                            <strong x-text="item.number"></strong>
-                            <span class="tag-preview-diff">
-                                <span class="tag-preview-add" x-show="item.added.length > 0"
-                                      x-text="window.t('scanner.stats.tag_source_preview_added', { tags: item.added.join('、') })"></span>
-                                <span class="tag-preview-remove" x-show="item.removed.length > 0"
-                                      x-text="window.t('scanner.stats.tag_source_preview_removed', { tags: item.removed.join('、') })"></span>
-                            </span>
-                        </span>
-                    </label>
-                </template>
-            </div>
-            <div class="batch-preview-pager" x-show="tagSourcePreviewPageCount > 1">
-                <button type="button" class="btn btn-ghost btn-xs"
-                        :disabled="tagSourcePreviewPage <= 1" @click="setTagSourcePreviewPage(-1)">
-                    <i class="bi bi-chevron-left"></i>
-                </button>
-                <span x-text="window.t('scanner.stats.preview_page', {
-                    current: tagSourcePreviewPage,
-                    total: tagSourcePreviewPageCount
-                })"></span>
-                <button type="button" class="btn btn-ghost btn-xs"
-                        :disabled="tagSourcePreviewPage >= tagSourcePreviewPageCount" @click="setTagSourcePreviewPage(1)">
-                    <i class="bi bi-chevron-right"></i>
-                </button>
-            </div>
-            <div class="tag-preview-empty"
-                 x-show="tagSourcePreviewChangedItems.length === 0 && tagSourcePreviewFailureItems.length === 0">
-                <i class="bi bi-check2-circle"></i>
-                <span>{{ t('scanner.stats.tag_source_preview_no_changes') }}</span>
-            </div>
-            <p class="batch-confirm-note is-warning"
-               x-show="tagSourcePreviewFailureItems.length > 0"
-               x-text="window.t('scanner.stats.tag_source_preview_failures', { count: tagSourcePreviewFailureItems.length })"></p>
-            <p class="fluent-modal-body batch-confirm-note">
-                <i class="bi bi-info-circle"></i>
-                <span>{{ t('scanner.stats.tag_source_confirm_note') }}</span>
-            </p>
-            <label class="tag-backup-option" x-show="!tagSourcePreviewOnly">
-                <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="tagSourceBackupEnabled">
-                <span>
-                    <strong>{{ t('scanner.stats.tag_source_backup_label') }}</strong>
-                    <small>{{ t('scanner.stats.tag_source_backup_hint') }}</small>
-                </span>
-            </label>
-            <div class="modal-action fluent-modal-actions">
-                <button type="button" class="btn btn-ghost" @click="cancelTagSourceUpdate()">
-                    <span x-text="window.t(tagSourcePreviewOnly
-                        ? 'scanner.stats.tag_source_preview_close'
-                        : 'scanner.stats.tag_source_confirm_cancel')"></span>
-                </button>
-                <button type="button"
-                        class="btn btn-primary"
-                        x-show="!tagSourcePreviewOnly"
-                        :disabled="tagSourceConfirmButtonDisabled"
-                        @click="confirmTagSourceUpdate()">
-                    <i class="bi bi-shield-check"></i>
-                    <span x-text="window.t(tagSourceBackupEnabled
-                        ? 'scanner.stats.tag_source_confirm_backup_ok'
-                        : 'scanner.stats.tag_source_confirm_ok')"></span>
+                    <i class="bi bi-file-earmark-text"></i>
+                    <span>{{ t('scanner.stats.nfo_confirm_ok') }}</span>
                 </button>
             </div>
         </div>

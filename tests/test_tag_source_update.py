@@ -303,7 +303,10 @@ def test_batch_tag_source_preview_does_not_write(tmp_path, monkeypatch):
     assert not (tmp_path / "ABC-124.nfo.openaver-backup").exists()
 
 
-def test_batch_tag_source_update_creates_nfo_backup(tmp_path, monkeypatch):
+def test_batch_tag_source_update_ignores_old_backup_option(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from starlette.responses import StreamingResponse
     video_file = tmp_path / "ABC-125.mp4"
     video_file.write_bytes(b"video")
     nfo = tmp_path / "ABC-125.nfo"
@@ -363,14 +366,27 @@ def test_batch_tag_source_update_creates_nfo_backup(tmp_path, monkeypatch):
         lambda *_args, **_kwargs: set(),
     )
 
-    events = _sse_payloads(
-        scanner_router.generate_tag_source_update("javbus", backup=True)
-    )
-
     backup = tmp_path / "ABC-125.nfo.openaver-backup"
-    assert events[-1]["summary"]["backed_up"] == 1
-    assert backup.exists()
-    assert backup.read_text(encoding="utf-8") == original_nfo
+    backup.write_text('User backup must be left alone', encoding='utf-8')
+
+    async def stream(request, generate):
+        import threading
+        return StreamingResponse(generate(threading.Event()), media_type='text/event-stream')
+
+    monkeypatch.setattr(scanner_router, '_cancelable_sse_response', stream)
+    app = FastAPI()
+    app.include_router(scanner_router.router)
+    with TestClient(app) as client:
+        response = client.get('/api/gallery/tag-source-update?source=javbus&backup=true')
+    assert response.status_code == 200
+    events = _sse_payloads(response.text.strip().split('\n\n'))
+    assert events[-1]['summary']['success'] == 1
+    assert backup.read_text(encoding='utf-8') == 'User backup must be left alone'
+    backup.unlink()
+    with TestClient(app) as client:
+        response = client.get('/api/gallery/tag-source-update?source=javbus')
+    assert response.status_code == 200
+    assert not backup.exists()
     assert "<tag>new</tag>" in nfo.read_text(encoding="utf-8")
 
 

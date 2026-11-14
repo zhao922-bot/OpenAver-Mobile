@@ -3337,7 +3337,7 @@
        "cross_machine_hint": "(Unrelated to the \"Output to\" folder above) The strm file contains the read-only source's video path as seen on this machine. If the Emby / Jellyfin / Kodi that plays it runs on another machine and sees a different path, set a path-mapping rule on the Settings page.",
        "cross_machine_settings_link": "Set path mapping"
      },
-@@ -868,20 +1270,92 @@
+@@ -868,20 +1270,85 @@
        "clear_display_title": "Clear display (restored on reload)",
        "clear_all_title": "Clear all (including history)"
      },
@@ -3375,9 +3375,8 @@
 +      "tag_source_hint": "Choose one source to replace ordinary tags and genres while preserving title, cover, plot, and user tags",
 +      "tag_source_cf_hint": "The first Jable run opens Cloudflare verification and continues automatically when complete",
 +      "tag_source_auto": "Auto (source order)",
-+      "tag_source_update_btn": "Replace Tags",
 +      "tag_source_preview_btn": "Preview only",
-+      "tag_source_preview_update_btn": "Preview & Replace",
++      "tag_source_update_btn": "Replace tags",
 +      "tag_source_previewing": "Previewing tag changes...",
 +      "tag_source_retry_previewing": "Previewing failed items again...",
 +      "tag_source_preview_done": "Tag change preview complete",
@@ -3392,7 +3391,6 @@
 +      "tag_source_confirm_count_value": "{count} videos",
 +      "tag_source_confirm_cancel": "Cancel",
 +      "tag_source_confirm_ok": "Replace Tags",
-+      "tag_source_confirm_backup_ok": "Back up & Replace",
 +      "tag_source_preview_title": "Tag change preview",
 +      "tag_source_preview_body": "Compared tags from \"{source}\" for {count} videos. No database or NFO files were written.",
 +      "tag_source_preview_changed_label": "Tag changes",
@@ -3404,8 +3402,6 @@
 +      "tag_source_preview_no_changes": "The selected source produced no tag changes",
 +      "tag_source_preview_failures": "{count} videos failed to preview. You can apply the remaining changes and retry the failures later.",
 +      "tag_source_preview_close": "Close",
-+      "tag_source_backup_label": "Back up NFO before applying",
-+      "tag_source_backup_hint": "Each NFO gets an .openaver-backup beside it. A video is skipped if its backup fails.",
 +      "selection_all": "Select all",
 +      "selection_clear": "Clear selection",
 +      "selection_count": "Selected {selected}/{total}",
@@ -3416,10 +3412,7 @@
 +      "nfo_confirm_write_value": "NFO beside each video",
 +      "nfo_confirm_body": "Missing fields will be searched online. Only empty fields are filled; existing titles, covers, plots, and user tags are preserved.",
 +      "nfo_confirm_note": "You can cancel during the task. Completed videos keep their results.",
-+      "nfo_backup_label": "Back up NFO before applying",
-+      "nfo_backup_hint": "Each NFO gets an .openaver-backup beside it. A video is skipped if its backup fails.",
 +      "nfo_confirm_ok": "Start Update",
-+      "nfo_confirm_backup_ok": "Back up & Update",
        "jellyfin_prefix": "Jellyfin cover format missing:",
        "jellyfin_suffix": " videos",
        "jellyfin_update_title": "Generate Jellyfin poster + fanart",
@@ -3432,7 +3425,7 @@
        "nfo_idle": "Fill Fields",
        "nfo_loading": "Filling...",
        "jellyfin_help_line1": "Jellyfin / Emby media servers require additional cover formats:",
-@@ -928,7 +1402,41 @@
+@@ -928,7 +1395,41 @@
        "missing_enrich_confirm_body_suffix": " minutes. Continue?",
        "missing_enrich_confirm_cancel": "Cancel",
        "missing_enrich_confirm_confirm": "Confirm",
@@ -3475,7 +3468,7 @@
        "status_preparing": "Preparing...",
        "status_done_count": "Done! {count} videos",
        "status_done": "Done",
-@@ -1019,7 +1527,7 @@
+@@ -1019,7 +1520,7 @@
      },
      "dirty_modal": {
        "title": "Unsaved Changes",
@@ -3484,7 +3477,7 @@
        "cancel": "Cancel",
        "discard": "Discard Changes",
        "save": "Save and Leave"
-@@ -1041,10 +1549,22 @@
+@@ -1041,10 +1542,22 @@
        "confirm": "Delete"
      },
      "leave_warning": {
@@ -3508,7 +3501,7 @@
      }
    },
    "scraper": {
-@@ -1072,16 +1592,21 @@
+@@ -1072,16 +1585,21 @@
      "update_available": "A new version of OpenAver is available",
      "auto_organize_summary": "Scheduled Organize",
      "auto_organize_aborted": "Scheduled organize aborted",
@@ -3534,7 +3527,7 @@
    },
    "similar_mode": {
      "button_aria_label": "Explore similar videos",
-@@ -1092,9 +1617,10 @@
+@@ -1092,9 +1610,10 @@
      "page_title": "Browse",
      "state": {
        "loading": "Loading video list...",
@@ -3548,7 +3541,7 @@
      },
      "error": {
        "server_error": "Server error ({status})",
-@@ -1197,6 +1723,7 @@
+@@ -1197,6 +1716,7 @@
        "mdate": "Modified",
        "random": "Random",
        "actress": {
@@ -3556,7 +3549,7 @@
          "video_count": "Film Count",
          "name": "Name",
          "added_at": "Date Added",
-@@ -1246,7 +1773,13 @@
+@@ -1246,7 +1766,13 @@
        "source_unreachable_list": "Unreachable: {list}",
        "source_unreachable_count": "{n} location(s) unreachable",
        "source_no_permission_list": "No permission to read: {list}",
@@ -3571,7 +3564,7 @@
      },
      "nav": {
        "prev_page": "Previous",
-@@ -1291,6 +1824,7 @@
+@@ -1291,6 +1817,7 @@
        "tag_nfo_write_blocked": "Tag saved, but there's no permission to write the NFO",
        "translate_tooltip": "Translate title",
        "translate_done": "Title translated",
@@ -3579,7 +3572,7 @@
        "translate_undo": "Undo",
        "translate_skipped": "Nothing in the title needs translating",
        "translate_undone": "Title restored",
-@@ -1298,7 +1832,7 @@
+@@ -1298,7 +1825,7 @@
        "translate_no_nfo": "This title has no NFO yet. Enrich it first, then translate the title",
        "user_tags_label": "Custom Tags",
        "alias_label": "Aliases",
@@ -3588,7 +3581,7 @@
        "mask_toggle": "Cover crop preview",
        "mask_detect_failed": "Focal detection failed. Please try again later.",
        "mask_focal_too_slow_auto_disabled": "Detecting the face on this cover took longer than 5 seconds, so we've turned off Auto Face Focus for you. Just drag to adjust the position directly — you can turn it back on anytime in Settings.",
-@@ -1307,9 +1841,35 @@
+@@ -1307,9 +1834,35 @@
        "mask_save_failed": "Failed to save crop settings. Please try again later.",
        "mask_cover_changed": "Cover has changed. Please reopen the crop tool and try again.",
        "cover_unavailable": "This cover can’t be loaded right now — the file location may be unreachable, or the cover file may be missing",
@@ -3626,7 +3619,7 @@
      },
      "pick": {
        "add_aria": "Add to picks",
-@@ -1410,10 +1970,90 @@
+@@ -1410,10 +1963,90 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -3717,7 +3710,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1434,7 +2074,8 @@
+@@ -1434,7 +2067,8 @@
        "this_computer_unavailable": "Cannot read this computer's update info right now. Please reopen the Help page and try again",
        "client_up_to_date": "OpenAver on this computer is up to date",
        "client_update_available_prefix": "This computer has a new version",
@@ -3727,7 +3720,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2088,7 @@
+@@ -1447,7 +2081,7 @@
        "title": "First time? Follow these 3 steps",
        "subtitle": "From adding your folder to filling metadata — three steps to get started",
        "step1_title": "Add Your Library Folder",
@@ -3736,7 +3729,7 @@
        "step2_title": "Generate Page",
        "step2_desc": "Scan and build a browsable collection page in one click",
        "step3_title": "NFO Fill",
-@@ -1464,7 +2105,7 @@
+@@ -1464,7 +2098,7 @@
      "tag_alias": {
        "title": "Tag Alias Management",
        "intro": "Manage Chinese/Japanese/English synonyms in one place so the search box, chip filters, and fuzzy exploration all speak the same language.",
@@ -3745,7 +3738,7 @@
        "scanner_chipwall": "The chip wall lists all tag alias groups. Click \"+\" to add an alias; the primary name is shown in pink, aliases in grey.",
        "scanner_ai_hint": "Click \"?\" to open the AI suggestion panel: describe your tag needs to the AI and it returns suggested alias groups for direct import.",
        "h6_showcase": "Auto-expand in Showcase",
-@@ -1501,16 +2142,16 @@
+@@ -1501,16 +2135,16 @@
      "batch": {
        "title": "Batch File Search",
        "h6_add": "Add Multiple Files",
@@ -3766,7 +3759,7 @@
        "fav_auto": "Automatically begins searching the first 20 files",
        "fav_nfo_skip": "If a same-name .nfo already exists, the file is treated as organized and the scraper is skipped",
        "pause_pause": "Click the 'Pause' button during batch search",
-@@ -1563,17 +2204,17 @@
+@@ -1563,17 +2197,17 @@
        "h6_manage": "Favorites Management",
        "manage_add": "Add favorites from Search or Showcase; profile photo is downloaded locally automatically",
        "manage_library": "The <strong>+</strong> next to the search bar opens an \"Add from library\" list: actresses already in your library sorted by title count, with aliases merged into a single person — tap the heart on any row to favorite her",
@@ -3788,7 +3781,7 @@
        "feat_nfo": "Automatically reads NFO files and displays metadata",
        "feat_nfo_fill": "Supports 'NFO Fill': automatically searches for missing NFO files",
        "feat_terminal": "Built-in Mini Terminal shows real-time processing progress",
-@@ -1587,7 +2228,7 @@
+@@ -1587,7 +2221,7 @@
        "jellyfin_canonical": "With a media-manager mode selected, OpenAver <strong>no longer writes a same-name cover file</strong> — Jellyfin / Emby prefer that file, which is what puts landscape images on the poster wall. Existing titles keep whatever cover location they already have (so manual focal crops are not wiped); to fix one, delete its same-name cover yourself and regenerate.",
        "jellyfin_showcase": "After scanning, browse results on the <code>/showcase</code> page",
        "h6_strm_deploy": "Read-only source + letting Emby / Jellyfin / Kodi find your titles (cross-machine setup)",
@@ -3797,7 +3790,7 @@
        "strm_deploy_step2": "Under \"Output to,\" specify a folder <strong>this machine can write to</strong> (which can be a writable NAS share mounted on this machine) — the generated <code>.strm</code> + NFO + covers go here, and you point Emby / Jellyfin / Kodi at it to build the library. This output folder is not the read-only source itself.",
        "strm_deploy_step4": "If you later change the mapping rules, the existing <code>.strm</code> files are rewritten automatically in one pass — no need to rebuild the whole library.",
        "h6_multiversion": "Multi-version manual merge (native Emby / Jellyfin feature)",
-@@ -1601,7 +2242,7 @@
+@@ -1601,7 +2235,7 @@
        "h6_modes": "Display Modes",
        "h6_sort": "Sort & Search",
        "h6_other": "Other Features",
@@ -3806,7 +3799,7 @@
        "mode_grid": "<strong>Full Cover</strong>: cover wall showing the whole cover image; click to open the Lightbox (default)",
        "mode_poster": "<strong>Poster</strong>: shows only the right half of the cover (the front), so cards are narrower and more fit per row; phones and narrow windows always use this layout",
        "mode_list": "<strong>List Mode</strong>: Compact list, ideal for quick browsing",
-@@ -1632,7 +2273,7 @@
+@@ -1632,7 +2266,7 @@
        "beta_compilation": "More complete tags (series / maker / cast) means better accuracy; videos with few tags should have their NFO filled in first",
        "h6_manage": "Tips",
        "manage_enable": "No configuration needed — works out of the box",
@@ -3815,7 +3808,7 @@
      },
      "shortcuts": {
        "title": "Keyboard Shortcuts",
-@@ -1809,6 +2450,66 @@
+@@ -1809,6 +2443,66 @@
        "client_title": "About to update OpenAver on this computer",
        "client_case_a_body": "This updates OpenAver on this computer, not the server. After you confirm, a terminal opens on this computer to run the installation. Please close OpenAver first, and reopen it yourself once the installation finishes.",
        "client_case_b_body": "OpenAver on this computer is not installed in the default location.\nThe installer will first install the new version to the default directory; you do not need to close the current OpenAver during installation.\n\nWhen the installation finishes, do the following in order:\n1. Close OpenAver\n2. Delete the python folder in the old installation directory\n3. Copy all files of the new version over your original installation location on this computer\n\nNo reinstall or reconfiguration is needed; just overwrite the files and use it."
@@ -3882,7 +3875,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2517,18 @@
+@@ -1816,20 +2510,18 @@
      "skip": "Skip",
      "next": "Next →",
      "done": "Done 🎉",
@@ -3915,7 +3908,7 @@
    },
    "updater": {
      "page_title": "Updater",
-@@ -1845,6 +2544,12 @@
+@@ -1845,6 +2537,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -3928,7 +3921,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2565,11 @@
+@@ -1860,7 +2558,11 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -3941,7 +3934,7 @@
        "other": "Other",
        "unknown": "Unknown",
        "library_wide": "Library-wide"
-@@ -1878,11 +2587,15 @@
+@@ -1878,11 +2580,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -3959,7 +3952,7 @@
      },
      "costar": {
        "count_label": "{n} videos"
-@@ -1957,7 +2670,7 @@
+@@ -1957,7 +2663,7 @@
        "intro": "The left column is the folder on the server; in the right column enter the path as seen from this computer. You can leave it empty and fill it in later.",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -3968,7 +3961,7 @@
        "readonly": "Read-only",
        "test_btn": "Test",
        "found": "Found",
-@@ -1968,7 +2681,7 @@
+@@ -1968,7 +2674,7 @@
        "loading": "Loading the server's scan sources...",
        "load_failed": "Could not read the server's scan sources",
        "reload_btn": "Reload",
@@ -3977,7 +3970,7 @@
        "stale": "(no longer on the server)",
        "remove": "Remove",
        "save_btn": "Save Mapping Table",
-@@ -1976,5 +2689,449 @@
+@@ -1976,5 +2682,448 @@
        "saved": "Mapping table saved",
        "save_failed": "Failed to save the mapping table"
      }
@@ -4061,7 +4054,6 @@
 +      "readonly_videos_skipped": "Skipped {count} read-only source videos (source folders are not written)",
 +      "nfo_no_retry": "No NFO files need retrying",
 +      "nfo_rows_synced": "Synced database data for {count} videos",
-+      "tag_source_nfo_backup_failed": "{number}: NFO backup failed; nothing was written ({error})",
 +      "tag_preview_cancelled": "Tag preview cancelled",
 +      "tag_update_cancelled": "Tag update cancelled",
 +      "tag_preview_done": "Tag preview complete: {changed} changed, {unchanged} unchanged, {failed} failed, {skipped} skipped",
@@ -5140,7 +5132,7 @@
        "cross_machine_hint": "（上の「出力先」フォルダーとは無関係）strm ファイルには、このマシンから見た読み取り専用ソースの動画パスが書き込まれます。再生する Emby／Jellyfin／Kodi が別のマシンにあり、見えるパスが異なる場合は、設定ページでパス置換ルールを設定してください。",
        "cross_machine_settings_link": "パス置換を設定"
      },
-@@ -868,20 +1270,92 @@
+@@ -868,20 +1270,85 @@
        "clear_display_title": "画面をクリア（リロード後に復元）",
        "clear_all_title": "すべてクリア（履歴含む）"
      },
@@ -5178,9 +5170,8 @@
 +      "tag_source_hint": "1つの取得元を選び、通常タグとジャンルだけを置換します。タイトル、カバー、あらすじ、ユーザータグは保持します",
 +      "tag_source_cf_hint": "Jable の初回実行時は Cloudflare 認証が開き、完了後は自動的に続行します",
 +      "tag_source_auto": "自動（取得元の順序）",
-+      "tag_source_update_btn": "タグを変更",
 +      "tag_source_preview_btn": "プレビューのみ",
-+      "tag_source_preview_update_btn": "プレビューして変更",
++      "tag_source_update_btn": "一括変更",
 +      "tag_source_previewing": "タグ差分をプレビュー中...",
 +      "tag_source_retry_previewing": "失敗項目を再プレビュー中...",
 +      "tag_source_preview_done": "タグ差分のプレビューが完了しました",
@@ -5195,7 +5186,6 @@
 +      "tag_source_confirm_count_value": "{count} 本の動画",
 +      "tag_source_confirm_cancel": "キャンセル",
 +      "tag_source_confirm_ok": "変更する",
-+      "tag_source_confirm_backup_ok": "バックアップして変更",
 +      "tag_source_preview_title": "タグ差分プレビュー",
 +      "tag_source_preview_body": "「{source}」と {count} 本の動画タグを比較しました。プレビュー中はデータベースや NFO に書き込んでいません。",
 +      "tag_source_preview_changed_label": "タグ変更",
@@ -5207,8 +5197,6 @@
 +      "tag_source_preview_no_changes": "選択した取得元によるタグ変更はありません",
 +      "tag_source_preview_failures": "{count} 本のプレビューに失敗しました。残りを実行し、後で失敗項目だけ再試行できます。",
 +      "tag_source_preview_close": "閉じる",
-+      "tag_source_backup_label": "実行前に NFO をバックアップ",
-+      "tag_source_backup_hint": "各 NFO と同じ場所に .openaver-backup を作成します。バックアップに失敗した動画は書き込みません。",
 +      "selection_all": "すべて選択",
 +      "selection_clear": "選択を解除",
 +      "selection_count": "{selected}/{total} 件選択",
@@ -5219,10 +5207,7 @@
 +      "nfo_confirm_write_value": "各動画の横の NFO",
 +      "nfo_confirm_body": "不足項目をオンライン検索し、空欄だけを補完します。既存のタイトル、カバー、あらすじ、ユーザータグは上書きしません。",
 +      "nfo_confirm_note": "実行中はキャンセルできます。完了済みの動画の結果は保持されます。",
-+      "nfo_backup_label": "実行前に NFO をバックアップ",
-+      "nfo_backup_hint": "各 NFO と同じ場所に .openaver-backup を作成します。バックアップに失敗した動画は更新しません。",
 +      "nfo_confirm_ok": "補完を開始",
-+      "nfo_confirm_backup_ok": "バックアップして補完",
        "jellyfin_prefix": "Jellyfin 専用カバー形式が不足:",
        "jellyfin_suffix": "本",
        "jellyfin_update_title": "Jellyfin poster + fanart を補完",
@@ -5235,7 +5220,7 @@
        "nfo_idle": "項目補完",
        "nfo_loading": "補完中...",
        "jellyfin_help_line1": "Jellyfin / Emby などのメディアサーバーには追加のカバー形式が必要です：",
-@@ -928,7 +1402,41 @@
+@@ -928,7 +1395,41 @@
        "missing_enrich_confirm_body_suffix": " 分です。続行しますか？",
        "missing_enrich_confirm_cancel": "キャンセル",
        "missing_enrich_confirm_confirm": "補完を確認",
@@ -5278,7 +5263,7 @@
        "status_preparing": "準備中...",
        "status_done_count": "完了！{count} 本の動画",
        "status_done": "完了",
-@@ -1019,7 +1527,7 @@
+@@ -1019,7 +1520,7 @@
      },
      "dirty_modal": {
        "title": "未保存の変更",
@@ -5287,7 +5272,7 @@
        "cancel": "キャンセル",
        "discard": "変更を破棄",
        "save": "保存して終了"
-@@ -1041,10 +1549,22 @@
+@@ -1041,10 +1542,22 @@
        "confirm": "削除する"
      },
      "leave_warning": {
@@ -5311,7 +5296,7 @@
      }
    },
    "scraper": {
-@@ -1072,16 +1592,21 @@
+@@ -1072,16 +1585,21 @@
      "update_available": "OpenAver の新しいバージョンがあります",
      "auto_organize_summary": "定期整理",
      "auto_organize_aborted": "定期整理を中止しました",
@@ -5337,7 +5322,7 @@
    },
    "similar_mode": {
      "button_aria_label": "類似動画を探索",
-@@ -1092,9 +1617,10 @@
+@@ -1092,9 +1610,10 @@
      "page_title": "動画ブラウズ",
      "state": {
        "loading": "動画リストを読み込み中...",
@@ -5351,7 +5336,7 @@
      },
      "error": {
        "server_error": "サーバーエラー ({status})",
-@@ -1197,6 +1723,7 @@
+@@ -1197,6 +1716,7 @@
        "mdate": "更新日時",
        "random": "ランダム",
        "actress": {
@@ -5359,7 +5344,7 @@
          "video_count": "作品数",
          "name": "名前",
          "added_at": "追加日時",
-@@ -1246,7 +1773,13 @@
+@@ -1246,7 +1766,13 @@
        "source_unreachable_list": "アクセスできません：{list}",
        "source_unreachable_count": "{n} 件の場所にアクセスできません",
        "source_no_permission_list": "読み取り権限がありません：{list}",
@@ -5374,7 +5359,7 @@
      },
      "nav": {
        "prev_page": "前のページ",
-@@ -1291,6 +1824,7 @@
+@@ -1291,6 +1817,7 @@
        "tag_nfo_write_blocked": "タグは保存されましたが、NFO への書き込み権限がありません",
        "translate_tooltip": "タイトルを翻訳",
        "translate_done": "タイトルを翻訳しました",
@@ -5382,7 +5367,7 @@
        "translate_undo": "元に戻す",
        "translate_skipped": "翻訳が必要な内容はありません",
        "translate_undone": "タイトルを元に戻しました",
-@@ -1298,7 +1832,7 @@
+@@ -1298,7 +1825,7 @@
        "translate_no_nfo": "この作品にはまだ NFO がありません。先に補完してから翻訳してください",
        "user_tags_label": "カスタムタグ",
        "alias_label": "別名",
@@ -5391,7 +5376,7 @@
        "mask_toggle": "カバーの切り抜きプレビュー",
        "mask_detect_failed": "焦点の検出に失敗しました。しばらくしてからもう一度お試しください。",
        "mask_focal_too_slow_auto_disabled": "このカバーの顔検出に5秒以上かかったため、自動フォーカスを先にオフにしました。位置を調整したい場合は直接ドラッグしてください。いつでも設定から再度オンにできます。",
-@@ -1307,9 +1841,35 @@
+@@ -1307,9 +1834,35 @@
        "mask_save_failed": "切り抜き設定の保存に失敗しました。しばらくしてからもう一度お試しください。",
        "mask_cover_changed": "カバーが変更されました。切り抜きツールを開き直してもう一度お試しください。",
        "cover_unavailable": "このカバー画像を読み込めません。ファイルの場所にアクセスできないか、カバー画像自体が失われている可能性があります",
@@ -5429,7 +5414,7 @@
      },
      "pick": {
        "add_aria": "★を付ける",
-@@ -1410,10 +1970,90 @@
+@@ -1410,10 +1963,90 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -5520,7 +5505,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1434,7 +2074,8 @@
+@@ -1434,7 +2067,8 @@
        "this_computer_unavailable": "このPCの更新情報を一時的に読み取れません。ヘルプページを開き直してもう一度お試しください",
        "client_up_to_date": "このPCの OpenAver は最新です",
        "client_update_available_prefix": "このPCに新バージョン",
@@ -5530,7 +5515,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2088,7 @@
+@@ -1447,7 +2081,7 @@
        "title": "初めてですか？3ステップで始めましょう",
        "subtitle": "フォルダ追加からメタデータ補完まで、3ステップで始める",
        "step1_title": "ライブラリフォルダを追加",
@@ -5539,7 +5524,7 @@
        "step2_title": "ページを生成",
        "step2_desc": "ワンクリックでスキャンして閲覧可能なコレクションページを作成",
        "step3_title": "NFO 補完",
-@@ -1464,7 +2105,7 @@
+@@ -1464,7 +2098,7 @@
      "tag_alias": {
        "title": "Tag エイリアス管理",
        "intro": "中日英の同義語を一元管理することで、検索ボックス・chip フィルター・あいまい探索がすべて同じ言語で動きます。",
@@ -5548,7 +5533,7 @@
        "scanner_chipwall": "chip ウォールにすべての Tag エイリアスグループが表示されます。「+」をクリックして alias を追加。プライマリ名はピンク、エイリアスはグレーで表示されます。",
        "scanner_ai_hint": "「?」をクリックすると AI 提案パネルが開きます。tag の要件を AI に説明すると、提案エイリアスグループをそのままインポートできます。",
        "h6_showcase": "Showcase で自動展開",
-@@ -1501,16 +2142,16 @@
+@@ -1501,16 +2135,16 @@
      "batch": {
        "title": "バッチファイル検索",
        "h6_add": "複数ファイルの追加",
@@ -5569,7 +5554,7 @@
        "fav_auto": "自動的に最初の 20 ファイルの検索を開始",
        "fav_nfo_skip": "同名の .nfo が存在する場合は整理済みとみなし、scraper を再実行しません",
        "pause_pause": "バッチ検索中に「一時停止」ボタンをクリック",
-@@ -1563,17 +2204,17 @@
+@@ -1563,17 +2197,17 @@
        "h6_manage": "お気に入り管理",
        "manage_add": "検索ページまたはショーケースページからお気に入りに追加。プロフィール写真は自動でローカルに保存",
        "manage_library": "検索バー横の <strong>+</strong> で「ライブラリから女優を追加」一覧を開けます。ライブラリ内の女優が作品数の多い順に並び、別名は同一人物としてまとめられます。行のハートをタップすればお気に入りに追加されます",
@@ -5591,7 +5576,7 @@
        "feat_nfo": "NFO ファイルを自動で読み込みメタデータを表示",
        "feat_nfo_fill": "「NFO 補完」に対応：欠損した NFO ファイルを自動検索",
        "feat_terminal": "内蔵 Mini Terminal でリアルタイム処理進捗を表示",
-@@ -1587,7 +2228,7 @@
+@@ -1587,7 +2221,7 @@
        "jellyfin_canonical": "メディアマネージャーモードを選ぶと<strong>同名のカバー画像は生成されなくなります</strong>——そのファイルは Jellyfin／Emby が優先的に読み込むため、ポスターウォールに横長画像が並ぶ原因になります。既存の作品はカバーの場所をそのまま維持します（手動で調整したフォーカス位置を消さないため）。修正したい場合は該当作品の同名カバーを削除してから再生成してください。",
        "jellyfin_showcase": "スキャン完了後、<code>/showcase</code> ページで生成結果を閲覧可能",
        "h6_strm_deploy": "読み取り専用ソース + Emby／Jellyfin／Kodi に作品をスキャンさせる（マシンをまたぐ配置）",
@@ -5600,7 +5585,7 @@
        "strm_deploy_step2": "「出力先」に<strong>このマシンで書き込める</strong>フォルダー（このマシンにマウントした NAS の書き込み可能な共有でも可）を指定します——生成される <code>.strm</code>＋NFO＋表紙がここに置かれ、それを Emby／Jellyfin／Kodi に指定してライブラリを作らせます。この出力フォルダーは読み取り専用ソースそのものではありません。",
        "strm_deploy_step4": "その後マッピングルールを変更すると、既存の <code>.strm</code> が一括で自動的に書き換えられ、ライブラリ全体を作り直す必要はありません。",
        "h6_multiversion": "同一作品の複数版（流出 / 4K / 字幕）を Emby/Jellyfin で結合するには？",
-@@ -1601,7 +2242,7 @@
+@@ -1601,7 +2235,7 @@
        "h6_modes": "表示モード",
        "h6_sort": "ソートと検索",
        "h6_other": "その他の機能",
@@ -5609,7 +5594,7 @@
        "mode_grid": "<strong>カバー全体</strong>：ジャケット全体を並べるカバーウォール。クリックで Lightbox を開きます（既定）",
        "mode_poster": "<strong>縦型ポスター</strong>：ジャケットの右半分（表面）だけを表示。カードが細くなり 1 行に多く並びます。スマホ／狭いウィンドウでは常にこのレイアウトです",
        "mode_list": "<strong>リストモード</strong>：コンパクトなリスト、素早い閲覧に最適",
-@@ -1632,7 +2273,7 @@
+@@ -1632,7 +2266,7 @@
        "beta_compilation": "tag が多いほど（シリーズ / メーカー / cast）精度が上がる；tag が少ない動画は先に NFO を補完することを推奨",
        "h6_manage": "使用ヒント",
        "manage_enable": "設定不要、すぐ使える",
@@ -5618,7 +5603,7 @@
      },
      "shortcuts": {
        "title": "キーボードショートカット",
-@@ -1809,6 +2450,66 @@
+@@ -1809,6 +2443,66 @@
        "client_title": "このPCの OpenAver を更新します",
        "client_case_a_body": "更新するのはこのPCの OpenAver で、サーバーではありません。確認を押すとこのPCでターミナルが開いてインストールが実行されます。先に OpenAver を閉じ、インストール完了後に手動で開き直してください。",
        "client_case_b_body": "このPCの OpenAver は既定の場所にインストールされていません。\nインストーラーはまず新バージョンを既定のディレクトリにインストールします。インストール中に現在の OpenAver を閉じる必要はありません。\n\nインストール完了後、次の順に操作してください：\n1. OpenAver を閉じる\n2. 旧インストールディレクトリの python フォルダを削除する\n3. 新バージョンのすべてのファイルを、このPCの元のインストール場所にコピーして上書きする\n\n再インストールや再設定は不要で、ファイルを上書きするだけで使えます。"
@@ -5685,7 +5670,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2517,18 @@
+@@ -1816,20 +2510,18 @@
      "skip": "スキップ",
      "next": "次へ →",
      "done": "完了 🎉",
@@ -5718,7 +5703,7 @@
    },
    "updater": {
      "page_title": "アップデーター",
-@@ -1845,6 +2544,12 @@
+@@ -1845,6 +2537,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -5731,7 +5716,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2565,11 @@
+@@ -1860,7 +2558,11 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -5744,7 +5729,7 @@
        "other": "その他",
        "unknown": "不明",
        "library_wide": "ライブラリ全体"
-@@ -1878,11 +2587,15 @@
+@@ -1878,11 +2580,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -5762,7 +5747,7 @@
      },
      "costar": {
        "count_label": "{n} 本"
-@@ -1957,7 +2670,7 @@
+@@ -1957,7 +2663,7 @@
        "intro": "左の欄はサーバー上のフォルダ、右の欄はこのPCから見えるパスです。後で入力することもできるので、空欄のままでも構いません。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -5771,7 +5756,7 @@
        "readonly": "読み取り専用",
        "test_btn": "テスト",
        "found": "見つかりました",
-@@ -1968,7 +2681,7 @@
+@@ -1968,7 +2674,7 @@
        "loading": "サーバーのスキャンソースを読み込み中…",
        "load_failed": "サーバーのスキャンソースを読み込めません",
        "reload_btn": "再読み込み",
@@ -5780,7 +5765,7 @@
        "stale": "（サーバーにこのソースはもうありません）",
        "remove": "削除",
        "save_btn": "パス対応表を保存",
-@@ -1976,5 +2689,449 @@
+@@ -1976,5 +2682,448 @@
        "saved": "パス対応表を保存しました",
        "save_failed": "パス対応表の保存に失敗しました"
      }
@@ -5864,7 +5849,6 @@
 +      "readonly_videos_skipped": "読み取り専用ソースの動画を {count} 本スキップしました（ソースフォルダーには書き込みません）",
 +      "nfo_no_retry": "再試行が必要な NFO はありません",
 +      "nfo_rows_synced": "{count} 本のデータベース情報を同期しました",
-+      "tag_source_nfo_backup_failed": "{number}：NFO のバックアップに失敗したため書き込みませんでした（{error}）",
 +      "tag_preview_cancelled": "タグプレビューをキャンセルしました",
 +      "tag_update_cancelled": "タグ更新をキャンセルしました",
 +      "tag_preview_done": "タグプレビュー完了：変更 {changed}、変更なし {unchanged}、失敗 {failed}、スキップ {skipped}",
@@ -6232,7 +6216,7 @@
  }
 --- /dev/null
 +++ b/locales/ko.json
-@@ -0,0 +1,3137 @@
+@@ -0,0 +1,3129 @@
 +{
 +  "nav": {
 +    "search": "검색",
@@ -7539,9 +7523,8 @@
 +      "tag_source_hint": "제목, 표지, 줄거리, 사용자 태그를 유지하면서 일반 태그와 장르를 대체할 하나의 소스를 선택하세요.",
 +      "tag_source_cf_hint": "첫 번째 Jable 실행은 Cloudflare 확인을 열고 완료되면 자동으로 계속됩니다.",
 +      "tag_source_auto": "자동(소스 순서)",
-+      "tag_source_update_btn": "태그 교체",
 +      "tag_source_preview_btn": "미리보기만 가능",
-+      "tag_source_preview_update_btn": "미리보기 및 바꾸기",
++      "tag_source_update_btn": "일괄 변경",
 +      "tag_source_previewing": "태그 변경사항 미리보기 중...",
 +      "tag_source_retry_previewing": "실패한 항목을 다시 미리보는 중...",
 +      "tag_source_preview_done": "태그 변경 미리보기 완료",
@@ -7556,7 +7539,6 @@
 +      "tag_source_confirm_count_value": "{count} 동영상",
 +      "tag_source_confirm_cancel": "취소",
 +      "tag_source_confirm_ok": "태그 교체",
-+      "tag_source_confirm_backup_ok": "백업 및 교체",
 +      "tag_source_preview_title": "태그 변경 미리보기",
 +      "tag_source_preview_body": "{count} 동영상에 대한 \"{source}\"의 태그를 비교했습니다. 데이터베이스나 NFO 파일이 기록되지 않았습니다.",
 +      "tag_source_preview_changed_label": "태그 변경",
@@ -7568,8 +7550,6 @@
 +      "tag_source_preview_no_changes": "선택한 소스에서 태그가 변경되지 않았습니다.",
 +      "tag_source_preview_failures": "{count} 비디오를 미리 볼 수 없습니다. 나머지 변경 사항을 적용하고 나중에 실패를 다시 시도할 수 있습니다.",
 +      "tag_source_preview_close": "닫다",
-+      "tag_source_backup_label": "신청하기 전에 NFO를 백업하세요",
-+      "tag_source_backup_hint": "각 NFO는 옆에 .openaver-backup을 가져옵니다. 백업이 실패하면 비디오를 건너뜁니다.",
 +      "selection_all": "모두 선택",
 +      "selection_clear": "선택 취소",
 +      "selection_count": "{selected}/{total}를 선택했습니다.",
@@ -7580,10 +7560,7 @@
 +      "nfo_confirm_write_value": "각 영상 옆의 NFO",
 +      "nfo_confirm_body": "누락된 필드는 온라인으로 검색됩니다. 빈 필드만 채워집니다. 기존 제목, 표지, 줄거리 및 사용자 태그는 유지됩니다.",
 +      "nfo_confirm_note": "작업 중에 취소할 수 있습니다. 완료된 비디오에는 결과가 유지됩니다.",
-+      "nfo_backup_label": "신청하기 전에 NFO를 백업하세요",
-+      "nfo_backup_hint": "각 NFO는 옆에 .openaver-backup을 가져옵니다. 백업이 실패하면 비디오를 건너뜁니다.",
 +      "nfo_confirm_ok": "업데이트 시작",
-+      "nfo_confirm_backup_ok": "백업 및 업데이트",
 +      "jellyfin_prefix": "외부 미디어 관리자 커버 누락:",
 +      "jellyfin_suffix": "부",
 +      "jellyfin_update_title": "포스터 + 팬아트 보완",
@@ -9004,7 +8981,6 @@
 +      "readonly_videos_skipped": "건너뛴 {count} 읽기 전용 소스 비디오(소스 폴더는 기록되지 않음)",
 +      "nfo_no_retry": "NFO 파일을 다시 시도할 필요가 없습니다.",
 +      "nfo_rows_synced": "{count} 비디오에 대한 동기화된 데이터베이스 데이터",
-+      "tag_source_nfo_backup_failed": "{number}: NFO 백업이 실패했습니다. 아무것도 쓰여지지 않았습니다 ({error})",
 +      "tag_preview_cancelled": "태그 미리보기가 취소되었습니다.",
 +      "tag_update_cancelled": "태그 업데이트가 취소되었습니다.",
 +      "tag_preview_done": "태그 미리보기 완료: {changed} 변경됨, {unchanged} 변경되지 않음, {failed} 실패, {skipped} 건너뛰기",
@@ -10083,7 +10059,7 @@
        "cross_machine_hint": "（与上面「输出到」文件夹无关）strm 文件里写的是这台看到的只读来源视频路径。若播放的 Emby／Jellyfin／Kodi 在别台机器、看到的路径不同，请到设置页设路径替换规则。",
        "cross_machine_settings_link": "设置路径替换"
      },
-@@ -868,20 +1270,92 @@
+@@ -868,20 +1270,85 @@
        "clear_display_title": "清除画面（刷新后恢复）",
        "clear_all_title": "清除全部（包含历史）"
      },
@@ -10121,9 +10097,8 @@
 +      "tag_source_hint": "选择一个来源，仅替换普通标签与类型，保留标题、封面、简介和用户标签",
 +      "tag_source_cf_hint": "Jable 首次使用会打开 Cloudflare 验证；完成后会自动继续",
 +      "tag_source_auto": "自动（按来源顺序）",
-+      "tag_source_update_btn": "更换标签",
 +      "tag_source_preview_btn": "仅预览",
-+      "tag_source_preview_update_btn": "预览并更换",
++      "tag_source_update_btn": "一键更换",
 +      "tag_source_previewing": "预览标签差异中...",
 +      "tag_source_retry_previewing": "重新预览失败项...",
 +      "tag_source_preview_done": "标签差异预览完成",
@@ -10138,7 +10113,6 @@
 +      "tag_source_confirm_count_value": "{count} 部影片",
 +      "tag_source_confirm_cancel": "取消",
 +      "tag_source_confirm_ok": "确认更换",
-+      "tag_source_confirm_backup_ok": "备份并更换",
 +      "tag_source_preview_title": "标签差异预览",
 +      "tag_source_preview_body": "已比较「{source}」与 {count} 部影片的标签；预览过程没有写入数据库或 NFO。",
 +      "tag_source_preview_changed_label": "标签有变化",
@@ -10150,8 +10124,6 @@
 +      "tag_source_preview_no_changes": "所选来源没有产生标签变化",
 +      "tag_source_preview_failures": "有 {count} 部预览失败，可先执行其余项目，之后再重试失败项。",
 +      "tag_source_preview_close": "关闭",
-+      "tag_source_backup_label": "执行前备份 NFO",
-+      "tag_source_backup_hint": "每份 NFO 会在同目录生成 .openaver-backup；备份失败时不会写入该影片。",
 +      "selection_all": "全选",
 +      "selection_clear": "清空选择",
 +      "selection_count": "已选 {selected}/{total}",
@@ -10162,10 +10134,7 @@
 +      "nfo_confirm_write_value": "视频旁的 NFO",
 +      "nfo_confirm_body": "将联网搜索缺失字段，只补充空字段，不覆盖已有标题、封面、简介或用户标签。",
 +      "nfo_confirm_note": "执行期间可取消；已完成影片会保留结果。",
-+      "nfo_backup_label": "执行前备份 NFO",
-+      "nfo_backup_hint": "每份 NFO 会在同目录生成 .openaver-backup；备份失败时不会更新该影片。",
 +      "nfo_confirm_ok": "确认补齐",
-+      "nfo_confirm_backup_ok": "备份并补齐",
        "jellyfin_prefix": "Jellyfin 专用封面格式缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "补齐 Jellyfin poster + fanart",
@@ -10178,7 +10147,7 @@
        "nfo_idle": "补齐字段",
        "nfo_loading": "补齐中...",
        "jellyfin_help_line1": "Jellyfin / Emby 等媒体服务器需要额外封面格式：",
-@@ -928,7 +1402,41 @@
+@@ -928,7 +1395,41 @@
        "missing_enrich_confirm_body_suffix": " 分钟，是否继续？",
        "missing_enrich_confirm_cancel": "取消",
        "missing_enrich_confirm_confirm": "确认补全",
@@ -10221,7 +10190,7 @@
        "status_preparing": "准备中...",
        "status_done_count": "完成！{count} 部视频",
        "status_done": "完成",
-@@ -1019,7 +1527,7 @@
+@@ -1019,7 +1520,7 @@
      },
      "dirty_modal": {
        "title": "尚未保存的更改",
@@ -10230,7 +10199,7 @@
        "cancel": "取消",
        "discard": "放弃更改",
        "save": "保存并离开"
-@@ -1041,10 +1549,22 @@
+@@ -1041,10 +1542,22 @@
        "confirm": "确认删除"
      },
      "leave_warning": {
@@ -10254,7 +10223,7 @@
      }
    },
    "scraper": {
-@@ -1072,16 +1592,21 @@
+@@ -1072,16 +1585,21 @@
      "update_available": "OpenAver 有新版本",
      "auto_organize_summary": "定时整理",
      "auto_organize_aborted": "定时整理已中止",
@@ -10280,7 +10249,7 @@
    },
    "similar_mode": {
      "button_aria_label": "探索相似视频",
-@@ -1092,9 +1617,10 @@
+@@ -1092,9 +1610,10 @@
      "page_title": "视频浏览",
      "state": {
        "loading": "加载视频列表中...",
@@ -10294,7 +10263,7 @@
      },
      "error": {
        "server_error": "服务器错误 ({status})",
-@@ -1197,6 +1723,7 @@
+@@ -1197,6 +1716,7 @@
        "mdate": "修改时间",
        "random": "随机",
        "actress": {
@@ -10302,7 +10271,7 @@
          "video_count": "作品数",
          "name": "姓名",
          "added_at": "收藏时间",
-@@ -1246,7 +1773,13 @@
+@@ -1246,7 +1766,13 @@
        "source_unreachable_list": "无法访问：{list}",
        "source_unreachable_count": "{n} 个位置无法访问",
        "source_no_permission_list": "没有权限读取：{list}",
@@ -10317,7 +10286,7 @@
      },
      "nav": {
        "prev_page": "上一页",
-@@ -1291,6 +1824,7 @@
+@@ -1291,6 +1817,7 @@
        "tag_nfo_write_blocked": "标签已保存，但没有权限写入 NFO",
        "translate_tooltip": "翻译标题",
        "translate_done": "已翻译标题",
@@ -10325,7 +10294,7 @@
        "translate_undo": "复原",
        "translate_skipped": "标题没有需要翻译的内容",
        "translate_undone": "已复原标题",
-@@ -1298,7 +1832,7 @@
+@@ -1298,7 +1825,7 @@
        "translate_no_nfo": "这部影片还没有 NFO，请先补全再翻译标题",
        "user_tags_label": "自定义标签",
        "alias_label": "别名",
@@ -10334,7 +10303,7 @@
        "mask_toggle": "封面裁切预览",
        "mask_detect_failed": "焦点检测失败，请稍后再试",
        "mask_focal_too_slow_auto_disabled": "这张封面找脸花了超过 5 秒，已经先帮你关掉自动对焦。想调整位置直接拖就可以，随时能到设置开回来。",
-@@ -1307,9 +1841,35 @@
+@@ -1307,9 +1834,35 @@
        "mask_save_failed": "裁切设置保存失败，请稍后再试",
        "mask_cover_changed": "封面已变更，请重新打开裁切工具再试一次",
        "cover_unavailable": "这部视频的封面现在读不到——可能是文件位置目前无法访问，或者封面文件本身不见了",
@@ -10372,7 +10341,7 @@
      },
      "pick": {
        "add_aria": "加入精选",
-@@ -1410,10 +1970,90 @@
+@@ -1410,10 +1963,90 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -10463,7 +10432,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1434,7 +2074,8 @@
+@@ -1434,7 +2067,8 @@
        "this_computer_unavailable": "暂时读不到这台电脑的更新信息，请重新打开帮助页再试",
        "client_up_to_date": "这台电脑的 OpenAver 已是最新",
        "client_update_available_prefix": "这台电脑有新版",
@@ -10473,7 +10442,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2088,7 @@
+@@ -1447,7 +2081,7 @@
        "title": "第一次使用？先看这 3 步",
        "subtitle": "从加入文件夹到补全资料，三步上手",
        "step1_title": "加入片库文件夹",
@@ -10482,7 +10451,7 @@
        "step2_title": "生成网页",
        "step2_desc": "一键扫描并建立可浏览的收藏页",
        "step3_title": "NFO 补全",
-@@ -1464,7 +2105,7 @@
+@@ -1464,7 +2098,7 @@
      "tag_alias": {
        "title": "Tag 别名管理",
        "intro": "中日英同义词集中管理，让搜索框、chip 筛选、模糊探索全部说同一种语言。",
@@ -10491,7 +10460,7 @@
        "scanner_chipwall": "chip 墙列出所有 Tag 别名组。点「+」新增 alias，主名（primary）以粉红色显示，别名以灰色显示。",
        "scanner_ai_hint": "点「?」开启 AI 建议框：把你的 tag 需求描述给 AI，它会回传建议的别名组供你直接汇入。",
        "h6_showcase": "Showcase 自动展开",
-@@ -1501,16 +2142,16 @@
+@@ -1501,16 +2135,16 @@
      "batch": {
        "title": "批次文件搜索",
        "h6_add": "加入多个文件",
@@ -10512,7 +10481,7 @@
        "fav_auto": "自动开始搜索前 20 个文件",
        "fav_nfo_skip": "同名 .nfo 存在则视为已整理，不重打 scraper",
        "pause_pause": "批次搜索时可点击「暂停」按钮",
-@@ -1563,17 +2204,17 @@
+@@ -1563,17 +2197,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "从搜索页或浏览页加入收藏，照片自动下载至本地",
        "manage_library": "搜索栏旁的 <strong>+</strong> 可打开「从片库加入女优」列表：库内女优按片数由多到少排序，别名自动合并成同一人，逐行点爱心即可加入收藏",
@@ -10534,7 +10503,7 @@
        "feat_nfo": "自动读取 NFO 文件并显示元数据",
        "feat_nfo_fill": "支持「NFO 补全」：自动搜索缺失的 NFO 文件",
        "feat_terminal": "内建 Mini Terminal 显示即时处理进度",
-@@ -1587,7 +2228,7 @@
+@@ -1587,7 +2221,7 @@
        "jellyfin_canonical": "选了媒体管理器模式后<strong>不再另外生成同名封面</strong>——那张图会被 Jellyfin／Emby 优先读取，导致封面墙出现横版图。既有的片维持原本的封面位置（以免清掉你已调整过的对焦），要修正请自行删掉该片的同名封面后重新生成。",
        "jellyfin_showcase": "扫描完成后可至 <code>/showcase</code> 页面浏览生成结果",
        "h6_strm_deploy": "只读来源 + 让 Emby／Jellyfin／Kodi 扫到片（跨机器部署）",
@@ -10543,7 +10512,7 @@
        "strm_deploy_step2": "在「输出到」指定一个<strong>这台能写入</strong>的文件夹（可以是挂载到这台的 NAS 可写共享）——生成的 <code>.strm</code>＋NFO＋封面会放这里，再让 Emby／Jellyfin／Kodi 指向它建媒体库。这个输出夹不是只读来源本身。",
        "strm_deploy_step4": "之后改了映射规则，既有的 <code>.strm</code> 会自动一次改写，不用重建整个媒体库。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎么在 Emby/Jellyfin 合并？",
-@@ -1601,7 +2242,7 @@
+@@ -1601,7 +2235,7 @@
        "h6_modes": "显示模式",
        "h6_sort": "排序与搜索",
        "h6_other": "其他功能",
@@ -10552,7 +10521,7 @@
        "mode_grid": "<strong>完整封面</strong>：整张封面的封面墙，点击开启 Lightbox（默认）",
        "mode_poster": "<strong>竖版海报</strong>：只显示封面右半（正面），卡片变窄、一行放得更多；手机／窄窗口一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精简列表，适合快速浏览",
-@@ -1632,7 +2273,7 @@
+@@ -1632,7 +2266,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越准；tag 很少的视频建议先补完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "无需设置，开箱即用",
@@ -10561,7 +10530,7 @@
      },
      "shortcuts": {
        "title": "快捷键",
-@@ -1809,6 +2450,66 @@
+@@ -1809,6 +2443,66 @@
        "client_title": "即将更新这台电脑的 OpenAver",
        "client_case_a_body": "更新的是这台电脑上的 OpenAver，不是服务器。点击确认后会在这台电脑打开终端运行安装，请先关闭 OpenAver，安装完成后再自行重新打开。",
        "client_case_b_body": "这台电脑的 OpenAver 不是安装在默认位置。\n安装程序会先把新版本安装到默认目录，安装期间不需要先关闭当前的 OpenAver。\n\n安装完成后，请依次操作：\n1. 关闭 OpenAver\n2. 删除旧安装目录中的 python 文件夹\n3. 将新版本的所有文件复制覆盖回这台电脑原本的安装位置\n\n不需要重新安装或重新设置，直接覆盖文件即可使用。"
@@ -10628,7 +10597,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2517,18 @@
+@@ -1816,20 +2510,18 @@
      "skip": "跳过",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -10661,7 +10630,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1845,6 +2544,12 @@
+@@ -1845,6 +2537,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -10674,7 +10643,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2565,11 @@
+@@ -1860,7 +2558,11 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -10687,7 +10656,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全库"
-@@ -1878,11 +2587,15 @@
+@@ -1878,11 +2580,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -10705,7 +10674,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1957,7 +2670,7 @@
+@@ -1957,7 +2663,7 @@
        "intro": "左栏是服务器上的文件夹，右栏填这台电脑看到的路径，可以先留空、之后再填。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -10714,7 +10683,7 @@
        "readonly": "只读",
        "test_btn": "测试",
        "found": "找得到",
-@@ -1968,7 +2681,7 @@
+@@ -1968,7 +2674,7 @@
        "loading": "正在读取服务器的扫描来源…",
        "load_failed": "读不到服务器的扫描来源",
        "reload_btn": "重新读取",
@@ -10723,7 +10692,7 @@
        "stale": "（服务器已无此来源）",
        "remove": "移除",
        "save_btn": "保存对照表",
-@@ -1976,5 +2689,449 @@
+@@ -1976,5 +2682,448 @@
        "saved": "对照表已保存",
        "save_failed": "对照表保存失败"
      }
@@ -10807,7 +10776,6 @@
 +      "readonly_videos_skipped": "跳过 {count} 部只读来源视频（不写回来源文件夹）",
 +      "nfo_no_retry": "没有需要重试的 NFO",
 +      "nfo_rows_synced": "已同步 {count} 部视频的数据库数据",
-+      "tag_source_nfo_backup_failed": "{number}：NFO 备份失败，未写入（{error}）",
 +      "tag_preview_cancelled": "标签预览已取消",
 +      "tag_update_cancelled": "标签更新已取消",
 +      "tag_preview_done": "标签预览完成：{changed} 部有变化，{unchanged} 部无变化，失败 {failed}，跳过 {skipped}",
@@ -11976,7 +11944,7 @@
        "cross_machine_settings_link": "設定路徑替換"
      },
      "terminal": {
-@@ -868,20 +1270,92 @@
+@@ -868,20 +1270,85 @@
        "clear_display_title": "清除畫面（重整後恢復）",
        "clear_all_title": "清除全部（包含歷史）"
      },
@@ -12014,9 +11982,8 @@
 +      "tag_source_hint": "選擇一個來源，只替換一般標籤與類型，保留標題、封面、簡介和自訂標籤",
 +      "tag_source_cf_hint": "Jable 首次使用會開啟 Cloudflare 驗證；完成後會自動繼續",
 +      "tag_source_auto": "自動（依來源順序）",
-+      "tag_source_update_btn": "更換標籤",
 +      "tag_source_preview_btn": "僅預覽",
-+      "tag_source_preview_update_btn": "預覽並更換",
++      "tag_source_update_btn": "一鍵更換",
 +      "tag_source_previewing": "預覽標籤差異中...",
 +      "tag_source_retry_previewing": "重新預覽失敗項目...",
 +      "tag_source_preview_done": "標籤差異預覽完成",
@@ -12031,7 +11998,6 @@
 +      "tag_source_confirm_count_value": "{count} 部影片",
 +      "tag_source_confirm_cancel": "取消",
 +      "tag_source_confirm_ok": "確認更換",
-+      "tag_source_confirm_backup_ok": "備份並更換",
 +      "tag_source_preview_title": "標籤差異預覽",
 +      "tag_source_preview_body": "已比較「{source}」與 {count} 部影片的標籤；預覽過程沒有寫入資料庫或 NFO。",
 +      "tag_source_preview_changed_label": "標籤有變化",
@@ -12043,8 +12009,6 @@
 +      "tag_source_preview_no_changes": "所選來源沒有產生標籤變化",
 +      "tag_source_preview_failures": "有 {count} 部預覽失敗，可先執行其餘項目，之後再重試失敗項目。",
 +      "tag_source_preview_close": "關閉",
-+      "tag_source_backup_label": "執行前備份 NFO",
-+      "tag_source_backup_hint": "每份 NFO 會在同目錄產生 .openaver-backup；備份失敗時不會寫入該影片。",
 +      "selection_all": "全選",
 +      "selection_clear": "清除選取",
 +      "selection_count": "已選 {selected}/{total}",
@@ -12055,10 +12019,7 @@
 +      "nfo_confirm_write_value": "影片旁的 NFO",
 +      "nfo_confirm_body": "將連網搜尋缺失欄位，只補充空白欄位，不覆蓋既有標題、封面、簡介或使用者標籤。",
 +      "nfo_confirm_note": "執行期間可取消；已完成影片會保留結果。",
-+      "nfo_backup_label": "執行前備份 NFO",
-+      "nfo_backup_hint": "每份 NFO 會在同目錄產生 .openaver-backup；備份失敗時不會更新該影片。",
 +      "nfo_confirm_ok": "確認補齊",
-+      "nfo_confirm_backup_ok": "備份並補齊",
        "jellyfin_prefix": "外部媒體管理器封面缺失:",
        "jellyfin_suffix": "部",
        "jellyfin_update_title": "補齊 poster + fanart",
@@ -12071,7 +12032,7 @@
        "nfo_idle": "補齊欄位",
        "nfo_loading": "補齊中...",
        "jellyfin_help_line1": "Jellyfin / Emby / Kodi 等媒體伺服器需要額外封面格式：",
-@@ -928,7 +1402,41 @@
+@@ -928,7 +1395,41 @@
        "missing_enrich_confirm_body_suffix": " 分鐘，是否繼續？",
        "missing_enrich_confirm_cancel": "取消",
        "missing_enrich_confirm_confirm": "確認補完",
@@ -12114,7 +12075,7 @@
        "status_preparing": "準備中...",
        "status_done_count": "完成！{count} 部影片",
        "status_done": "完成",
-@@ -1019,7 +1527,7 @@
+@@ -1019,7 +1520,7 @@
      },
      "dirty_modal": {
        "title": "尚未儲存的變更",
@@ -12123,7 +12084,7 @@
        "cancel": "取消",
        "discard": "放棄變更",
        "save": "儲存並離開"
-@@ -1030,7 +1538,7 @@
+@@ -1030,7 +1531,7 @@
        "confirm": "確認設為唯讀",
        "intro": "唯讀來源代表 OpenAver 不會改動這個資料夾裡的任何檔案（不搬移、不改名、不寫入 NFO 或封面），改為在輸出夾另外生成一份本地媒體庫（每片一資料夾：NFO＋封面）供 OpenAver 自己瀏覽與播放。適合塞滿影片的唯讀網盤、NAS 分享、SMB 掛載等不可寫入的位置。若你只是本機一般收藏、資料夾可正常寫入，就不需要勾這個。",
        "output_hint_offline": "目前為預設模式，產物會自動落在 App 內建的固定本地夾，不需要另外指定輸出夾。",
@@ -12132,7 +12093,7 @@
        "nas_hint": "想餵給 NAS 上的 Emby／Jellyfin／Kodi？預設模式只生成 OpenAver 自己瀏覽用的本地庫、不會產生 .strm 捷徑檔。若你要讓媒體伺服器掃這批片，請先到「設定」把模式切到 Emby·Jellyfin·Kodi 模式。"
      },
      "clear_cache_modal": {
-@@ -1041,10 +1549,22 @@
+@@ -1041,10 +1542,22 @@
        "confirm": "確認刪除"
      },
      "leave_warning": {
@@ -12156,7 +12117,7 @@
      }
    },
    "scraper": {
-@@ -1073,15 +1593,20 @@
+@@ -1073,15 +1586,20 @@
      "update_available": "OpenAver 有新版本",
      "auto_organize_summary": "定時整理",
      "auto_organize_aborted": "定時整理已中止",
@@ -12181,7 +12142,7 @@
    },
    "similar_mode": {
      "button_aria_label": "探索相似影片",
-@@ -1093,8 +1618,9 @@
+@@ -1093,8 +1611,9 @@
      "state": {
        "loading": "載入影片列表中...",
        "empty": "尚未產生影片列表",
@@ -12193,7 +12154,7 @@
      },
      "error": {
        "server_error": "伺服器錯誤 ({status})",
-@@ -1123,7 +1649,7 @@
+@@ -1123,7 +1642,7 @@
        "fail": "重新刮削失敗，請稍後再試。",
        "jl_desktop_only": "僅限桌面應用程式（standalone）可用",
        "cf_window_restart": "這個來源的驗證視窗沒有啟動成功，請重新啟動 OpenAver 再試。若重啟仍不行，到「連線」頁看原因",
@@ -12202,7 +12163,7 @@
        "cf_window_preparing": "驗證視窗正在準備，請幾秒後再試",
        "jl_cf_solving": "Cloudflare 驗證中……通過後將自動繼續",
        "versions_found": "找到 {count} 部同番號作品",
-@@ -1197,6 +1723,7 @@
+@@ -1197,6 +1716,7 @@
        "mdate": "修改時間",
        "random": "隨機",
        "actress": {
@@ -12210,7 +12171,7 @@
          "video_count": "作品數",
          "name": "姓名",
          "added_at": "收藏時間",
-@@ -1246,7 +1773,13 @@
+@@ -1246,7 +1766,13 @@
        "source_unreachable_list": "無法存取：{list}",
        "source_unreachable_count": "{n} 個位置無法存取",
        "source_no_permission_list": "沒有權限讀取：{list}",
@@ -12225,7 +12186,7 @@
      },
      "nav": {
        "prev_page": "上一頁",
-@@ -1291,6 +1824,7 @@
+@@ -1291,6 +1817,7 @@
        "tag_nfo_write_blocked": "標籤已存，但沒有權限寫入 NFO",
        "translate_tooltip": "翻譯標題",
        "translate_done": "已翻譯標題",
@@ -12233,7 +12194,7 @@
        "translate_undo": "復原",
        "translate_skipped": "標題沒有需要翻譯的內容",
        "translate_undone": "已復原標題",
-@@ -1298,18 +1832,44 @@
+@@ -1298,18 +1825,44 @@
        "translate_no_nfo": "這部片還沒有 NFO，請先補完再翻譯標題",
        "user_tags_label": "自訂標籤",
        "alias_label": "別名",
@@ -12281,7 +12242,7 @@
      },
      "pick": {
        "add_aria": "加入精選",
-@@ -1410,12 +1970,92 @@
+@@ -1410,12 +1963,92 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -12375,7 +12336,7 @@
        "copy_curl": "複製指令",
        "page_title": "使用說明",
        "subtitle": "JAV 影片元數據管理工具",
-@@ -1426,15 +2066,16 @@
+@@ -1426,15 +2059,16 @@
        "update_available_prefix": "新版本",
        "update_available_suffix": "可用",
        "up_to_date": "已是最新版本",
@@ -12395,7 +12356,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2088,7 @@
+@@ -1447,7 +2081,7 @@
        "title": "第一次使用？先看這 3 步",
        "subtitle": "從加入資料夾到補全資料，三步上手",
        "step1_title": "加入片庫資料夾",
@@ -12404,7 +12365,7 @@
        "step2_title": "產生網頁",
        "step2_desc": "一鍵掃描並建立可瀏覽的收藏頁",
        "step3_title": "NFO 補全",
-@@ -1464,7 +2105,7 @@
+@@ -1464,7 +2098,7 @@
      "tag_alias": {
        "title": "Tag 別名管理",
        "intro": "中日英同義詞集中管理，讓搜尋框、chip 篩選、模糊探索全部說同一種語言。",
@@ -12413,7 +12374,7 @@
        "scanner_chipwall": "chip 牆列出所有 Tag 別名組。點「+」新增 alias，主名（primary）以粉紅色顯示，別名以灰色顯示。",
        "scanner_ai_hint": "點「?」開啟 AI 建議框：把你的 tag 需求描述給 AI，它會回傳建議的別名組供你直接匯入。",
        "h6_showcase": "Showcase 自動展開",
-@@ -1501,16 +2142,16 @@
+@@ -1501,16 +2135,16 @@
      "batch": {
        "title": "批次檔案搜尋",
        "h6_add": "加入多個檔案",
@@ -12434,7 +12395,7 @@
        "fav_auto": "自動開始搜尋前 20 個檔案",
        "fav_nfo_skip": "同名 .nfo 存在則視為已整理，不重打 scraper",
        "pause_pause": "批次搜尋時可點擊「暫停」按鈕",
-@@ -1563,17 +2204,17 @@
+@@ -1563,17 +2197,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "從搜尋頁或瀏覽頁加入收藏，照片自動下載至本地",
        "manage_library": "搜尋列旁的 <strong>+</strong> 可開啟「從片庫加入女優」清單：庫內女優依片數由多到少排序，別名自動合併成同一人，逐列點愛心即可加入收藏",
@@ -12456,7 +12417,7 @@
        "feat_nfo": "自動讀取 NFO 檔案並顯示元數據",
        "feat_nfo_fill": "「就地補資料」：原地補缺失的 NFO + 封面，不改名、不搬位 — 適合唯讀網盤、已有自己的資料夾結構，或只想瀏覽不被改檔案",
        "feat_terminal": "內建 Mini Terminal 顯示即時處理進度",
-@@ -1587,9 +2228,9 @@
+@@ -1587,9 +2221,9 @@
        "jellyfin_canonical": "選了媒體管理器模式後<strong>不再另外產生同名封面</strong>——那張圖會被 Jellyfin／Emby 優先讀取，造成封面牆出現橫式圖。既有的片維持原本的封面位置（以免清掉你已調整過的對焦），要修正請自行刪掉該片的同名封面後重新產生。",
        "jellyfin_showcase": "掃描完成後可至 <code>/showcase</code> 頁面瀏覽生成結果",
        "h6_strm_deploy": "唯讀來源 + 讓 Emby／Jellyfin／Kodi 掃到片（跨機器部署）",
@@ -12468,7 +12429,7 @@
        "strm_deploy_step4": "之後改了映射規則，既有的 <code>.strm</code> 會自動一次改寫，不用重建整個媒體庫。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎麼在 Emby/Jellyfin 合併？",
        "multiversion_intro": "多版本合併是 Emby 與 Jellyfin 共同支援的原生功能（同一套「資料夾名 - 標籤」規則），不是哪一家獨有。把同一片各版本放進以番號命名的資料夾，檔名都以資料夾名開頭加「 - 標籤」：",
-@@ -1601,7 +2242,7 @@
+@@ -1601,7 +2235,7 @@
        "h6_modes": "顯示模式",
        "h6_sort": "排序與搜尋",
        "h6_other": "其他功能",
@@ -12477,7 +12438,7 @@
        "mode_grid": "<strong>完整封面</strong>：整張封面的封面牆，點擊開啟 Lightbox（預設）",
        "mode_poster": "<strong>直式海報</strong>：只顯示封面右半（正面），卡片變窄、一列放得更多；手機／窄視窗一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精簡列表，適合快速瀏覽（預設不顯示；可至「設定」→「列表顯示預設」開啟「顯示表格與清單」）",
-@@ -1632,7 +2273,7 @@
+@@ -1632,7 +2266,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越準；tag 很少的影片建議先補完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "無需設定，開箱即用",
@@ -12486,7 +12447,7 @@
      },
      "shortcuts": {
        "title": "快捷鍵",
-@@ -1736,26 +2377,26 @@
+@@ -1736,26 +2370,26 @@
      "server_mode": {
        "title": "伺服器模式 — 讓手機/平板連進來",
        "h6_what": "這是什麼",
@@ -12520,7 +12481,7 @@
        "h6_recover": "不小心按了「取消 / 拒絕」怎麼救回",
        "recover_win_intro": "Windows 救回步驟：",
        "recover_win_1": "按 <code>Win + R</code>，輸入 <code>wf.msc</code> 後 Enter，開啟「Windows Defender 防火牆 進階安全性」。",
-@@ -1800,15 +2441,75 @@
+@@ -1800,15 +2434,75 @@
      "update_modal": {
        "trigger_btn": "更新",
        "title": "即將開啟安裝視窗",
@@ -12599,7 +12560,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2517,18 @@
+@@ -1816,20 +2510,18 @@
      "skip": "跳過",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -12632,7 +12593,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1850,6 +2549,12 @@
+@@ -1850,6 +2542,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -12645,7 +12606,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1861,11 +2566,15 @@
+@@ -1861,11 +2559,15 @@
        "series": "系列",
        "deep_dive": "深入：女優與片商",
        "gantt": "主要片商年表",
@@ -12663,7 +12624,7 @@
        "other": "其他",
        "unknown": "未知",
        "library_wide": "全庫"
-@@ -1883,11 +2592,15 @@
+@@ -1883,11 +2585,15 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -12681,7 +12642,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1896,7 +2609,7 @@
+@@ -1896,7 +2602,7 @@
    },
    "connect": {
      "nobridge": "請在桌面版開啟",
@@ -12690,7 +12651,7 @@
      "status_connected": "已連線 {host}",
      "status_down": "連不到 {host}",
      "version_line": "版本 {version}（{kind}）",
-@@ -1906,69 +2619,69 @@
+@@ -1906,69 +2612,69 @@
      "kind_windows": "Windows 桌面版",
      "kind_mac": "Mac 桌面版",
      "last_ok": "上次成功連線：{time}",
@@ -12781,7 +12742,7 @@
        "stale": "（伺服器已無此來源）",
        "remove": "移除",
        "save_btn": "儲存對照表",
-@@ -1976,5 +2689,449 @@
+@@ -1976,5 +2682,448 @@
        "saved": "對照表已儲存",
        "save_failed": "對照表儲存失敗"
      }
@@ -12865,7 +12826,6 @@
 +      "readonly_videos_skipped": "略過 {count} 部唯讀來源影片（不寫回來源資料夾）",
 +      "nfo_no_retry": "沒有需要重試的 NFO",
 +      "nfo_rows_synced": "已同步 {count} 部影片的資料庫資料",
-+      "tag_source_nfo_backup_failed": "{number}：NFO 備份失敗，未寫入（{error}）",
 +      "tag_preview_cancelled": "標籤預覽已取消",
 +      "tag_update_cancelled": "標籤更新已取消",
 +      "tag_preview_done": "標籤預覽完成：{changed} 部有變化，{unchanged} 部無變化，失敗 {failed}，跳過 {skipped}",
@@ -19572,7 +19532,7 @@
  /* 輸入框包裝 */
 --- a/web/static/css/pages/scanner.css
 +++ b/web/static/css/pages/scanner.css
-@@ -365,3 +365,1148 @@
+@@ -365,3 +365,1118 @@
      border-radius: var(--fluent-radius-md);
      color: var(--text-default, currentColor);
  }
@@ -20576,36 +20536,6 @@
 +    flex-wrap: wrap;
 +}
 +
-+.tag-backup-option {
-+    display: flex;
-+    align-items: flex-start;
-+    gap: 0.65rem;
-+    margin: 0.8rem 0 0;
-+    padding: 0.7rem 0.75rem;
-+    border: 1px solid var(--border-light);
-+    border-radius: var(--fluent-radius-md);
-+    background: color-mix(in oklch, var(--bg-body) 58%, transparent);
-+    cursor: pointer;
-+}
-+
-+.tag-backup-option > span {
-+    display: flex;
-+    flex-direction: column;
-+    gap: 0.15rem;
-+    min-width: 0;
-+}
-+
-+.tag-backup-option strong {
-+    color: var(--text-primary);
-+    font-size: 0.78rem;
-+}
-+
-+.tag-backup-option small {
-+    color: var(--text-secondary);
-+    font-size: 0.7rem;
-+    line-height: 1.4;
-+}
-+
 +@media (min-width: 720px) {
 +    .terminal-toggle {
 +        flex-basis: auto;
@@ -21603,7 +21533,7 @@
 +}
 --- /dev/null
 +++ b/web/static/js/components/mobile-back.js
-@@ -0,0 +1,249 @@
+@@ -0,0 +1,248 @@
 +/**
 + * Android hardware-back bridge for the embedded WebView.
 + *
@@ -21803,7 +21733,6 @@
 +            || closeFlag(page, 'maintenanceSourceModalOpen', 'closeMaintenanceSourcePicker')
 +            || closeFlag(page, 'missingConfirmModalOpen', 'cancelLargeMissingEnrich')
 +            || closeFlag(page, 'nfoUpdateConfirmModalOpen', 'cancelNfoUpdate')
-+            || closeFlag(page, 'tagSourceConfirmModalOpen', 'cancelTagSourceUpdate')
 +            || closeFlag(page, 'deleteAliasGroupModalOpen', 'cancelDeleteAliasGroupModal')
 +            || closeFlag(page, 'deleteTagAliasGroupModalOpen', 'cancelDeleteTagAliasGroupModal')
 +            || closeFlag(page, 'copyFailModalOpen', 'closeCopyFailModal')
@@ -22626,7 +22555,7 @@
  
          // ===== T7b: State Machine =====
 -        state: 'idle',  // 'idle' | 'generating' | 'nfoUpdating' | 'done' | 'error'
-+        state: 'idle',  // idle | generating | nfoUpdating | tagSourcePreviewing | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | titleBackfilling | sampleBackfilling | plotBackfilling | done | error | cancelled
++        state: 'idle',  // idle | generating | nfoUpdating | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | titleBackfilling | sampleBackfilling | plotBackfilling | done | error | cancelled
  
          // ===== T7b: Progress =====
          progressStatus: '',
@@ -22656,7 +22585,7 @@
  
          // ===== T7b: Done Actions =====
          outputPath: '',        // 輸出路徑（供複製）
-@@ -69,6 +83,23 @@
+@@ -69,6 +83,15 @@
          nfoUpdatePaths: [],
          nfoUpdateItems: [],
          nfoUpdateVisible: false,
@@ -22665,22 +22594,14 @@
 +
 +        // ===== r16: Batch tag source update =====
 +        tagSourceUpdateSource: '',
-+        tagSourceConfirmModalOpen: false,
-+        tagSourcePreviewSource: '',
-+        tagSourcePreviewSourceLabel: '',
-+        tagSourcePreviewData: null,
-+        tagSourcePreviewNumbers: [],
-+        tagSourcePreviewPage: 1,
-+        tagSourcePreviewOnly: false,
-+        tagSourceBackupEnabled: true,
++        tagSourceTaskSource: '',
 +
 +        // ===== r18: NFO confirmation =====
 +        nfoUpdateConfirmModalOpen: false,
-+        nfoUpdateBackupEnabled: true,
  
          // ===== T6d: Jellyfin Image Update =====
          jellyfinImageCount: 0,
-@@ -102,9 +133,132 @@
+@@ -102,9 +125,91 @@
              return (this.progressCurrent / this.progressTotal) * 100;
          },
  
@@ -22710,7 +22631,7 @@
 +        },
 +
 +        get taskEtaText() {
-+            if (!this.isGenerating || !['nfo-update', 'tag-preview', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind)) {
++            if (!this.isGenerating || !['nfo-update', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind)) {
 +                return '';
 +            }
 +            let seconds = this.taskEtaSeconds;
@@ -22728,7 +22649,7 @@
 +        get taskCanRetry() {
 +            return !this.isGenerating
 +                && this.taskFailedItems.length > 0
-+                && ['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind);
++                && ['nfo-update', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind);
 +        },
 +
 +        get maintenanceSummaryText() {
@@ -22739,46 +22660,6 @@
 +                + (this.missingPlotCount || 0);
 +            const images = this.jellyfinImageCount || 0;
 +            return window.t('scanner.stats.maintenance_summary', { nfo, missing, backfill, images });
-+        },
-+
-+        get tagSourcePreviewChangedItems() {
-+            const items = this.tagSourcePreviewData?.items || [];
-+            return items.filter(item => item.status === 'changed');
-+        },
-+
-+        get tagSourcePreviewFailureItems() {
-+            return this.tagSourcePreviewData?.failed_items || [];
-+        },
-+
-+        get tagSourcePreviewChangedCount() {
-+            return this.tagSourcePreviewData?.changed || 0;
-+        },
-+
-+        get tagSourcePreviewPageSize() {
-+            return 6;
-+        },
-+
-+        get tagSourcePreviewPageCount() {
-+            return Math.max(
-+                1,
-+                Math.ceil(this.tagSourcePreviewChangedItems.length / this.tagSourcePreviewPageSize)
-+            );
-+        },
-+
-+        get tagSourcePreviewPageItems() {
-+            const start = (this.tagSourcePreviewPage - 1) * this.tagSourcePreviewPageSize;
-+            return this.tagSourcePreviewChangedItems.slice(start, start + this.tagSourcePreviewPageSize);
-+        },
-+
-+        get tagSourceSelectedChangedCount() {
-+            const changed = new Set(this.tagSourcePreviewChangedItems.map((item) => item.number));
-+            return [...new Set(this.tagSourcePreviewNumbers)].filter((number) => changed.has(number)).length;
-+        },
-+
-+        get tagSourceConfirmButtonDisabled() {
-+            return this.isGenerating
-+                || this.tagSourcePreviewOnly
-+                || this.tagSourceSelectedChangedCount === 0;
 +        },
 +
 +        get nfoUpdatePageSize() {
@@ -22805,7 +22686,6 @@
          get isGenerating() {
              return this.state === 'generating' || this.state === 'nfoUpdating'
 -                || this.state === 'jellyfinUpdating' || this.state === 'enriching';
-+                || this.state === 'tagSourcePreviewing'
 +                || this.state === 'tagSourceUpdating'
 +                || this.state === 'renamePreviewing'
 +                || this.state === 'jellyfinUpdating' || this.state === 'enriching'
@@ -22814,7 +22694,7 @@
          },
  
          get isBusy() {
-@@ -119,6 +273,84 @@
+@@ -119,6 +224,67 @@
  
          get doneActionsVisible() {
              return this.state === 'done' && this.outputPath !== '';
@@ -22868,10 +22748,6 @@
 +            return !!selected?.requires_cf;
 +        },
 +
-+        get tagSourceModalSourceLabel() {
-+            return this.tagSourcePreviewSourceLabel || this.selectedTagSourceLabel;
-+        },
-+
 +        get tagSourceUpdateButtonDisabled() {
 +            return this.isBusy || !this.tagSourceUpdateSource || this.statTotal === 0;
 +        },
@@ -22881,25 +22757,12 @@
 +                return '<span class="loading loading-spinner loading-sm"></span> '
 +                    + window.t('scanner.stats.tag_source_updating');
 +            }
-+            if (this.state === 'tagSourcePreviewing') {
-+                return '<i class="bi bi-hourglass-split"></i> '
-+                    + window.t('scanner.stats.tag_source_preview_update_btn');
-+            }
 +            return '<i class="bi bi-tags"></i> '
-+                + window.t('scanner.stats.tag_source_preview_update_btn');
-+        },
-+
-+        get tagSourcePreviewButtonText() {
-+            if (this.state === 'tagSourcePreviewing') {
-+                return '<span class="loading loading-spinner loading-sm"></span> '
-+                    + window.t('scanner.stats.tag_source_previewing');
-+            }
-+            return '<i class="bi bi-eye"></i> '
-+                + window.t('scanner.stats.tag_source_preview_btn');
++                + window.t('scanner.stats.tag_source_update_btn');
          },
  
          get generateButtonText() {
-@@ -173,14 +405,6 @@
+@@ -173,14 +339,6 @@
  
          // ===== Lifecycle =====
          async init() {
@@ -22914,7 +22777,7 @@
              // T5.1: 接入統一 page lifecycle
              // 提前到所有 await 之前註冊：closure 讀的都是 this.* runtime state，
              // 提前註冊不改變行為；但避免 loadConfig fetch 卡住時離頁 dirty-guard /
-@@ -212,13 +436,18 @@
+@@ -212,13 +370,18 @@
                      },
                      onBeforeUnload: () => {
                          const guard = this.shouldWarnBeforeLeave();
@@ -22934,7 +22797,7 @@
                          // T2(40c): abort jellyfin check fetch
                          if (this._jellyfinCheckController) {
                              this._jellyfinCheckController.abort();
-@@ -233,6 +462,10 @@
+@@ -233,6 +396,10 @@
                              this._enrichAbortController.abort();
                              this._enrichAbortController = null;
                          }
@@ -22945,7 +22808,7 @@
                          // TASK-94 Codex P1：離頁時清最後一片 flush dwell timer，避免 timer 事後
                          // 觸發 finalize（checkMissing fetch / state 變更）clobber 已離頁狀態。
                          if (this._flushTimer) {
-@@ -246,6 +479,7 @@
+@@ -246,6 +413,7 @@
              // 初始載入
              await this.loadConfig();
              this.loadStats();
@@ -22953,7 +22816,7 @@
  
              // T7b: 恢復日誌（logOutput 為 scanner.html 靜態 x-ref 元素，
              // init 時早已 mount，直接同步還原、無需等 $nextTick）
-@@ -305,6 +539,14 @@
+@@ -305,6 +473,14 @@
                  if (result.success) {
                      this.config = result.data;
                      this.directories = this.config.gallery?.directories || [];
@@ -22968,7 +22831,7 @@
                      // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                      this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
  
-@@ -358,7 +600,8 @@
+@@ -358,7 +534,8 @@
  
                          if (stats.last_run) {
                              const lastRun = new Date(stats.last_run);
@@ -22978,7 +22841,7 @@
                                  month: 'numeric',
                                  day: 'numeric',
                                  hour: '2-digit',
-@@ -377,6 +620,25 @@
+@@ -377,6 +554,25 @@
              }
          },
  
@@ -23004,7 +22867,7 @@
          async clearCache() {
              this.clearCacheLoading = true;
              try {
-@@ -387,6 +649,10 @@
+@@ -387,6 +583,10 @@
                      this.statTotal = 0;
                      this.statsVisible = false;
                      this.nfoUpdateVisible = false;
@@ -23015,7 +22878,7 @@
                      this.jellyfinImageVisible = false;
                      this.jellyfinCheckState = 'idle';
                      this.clearCacheModalOpen = false;
-@@ -455,27 +721,7 @@
+@@ -455,27 +655,7 @@
  
          // ===== Folder Management =====
          async selectFolder() {
@@ -23044,7 +22907,7 @@
          },
  
          addFolderPath(folderPath) {
-@@ -536,8 +782,6 @@
+@@ -536,8 +716,6 @@
              clearTimeout(_dragTimeoutHandle);
              _dragTimeoutHandle = null;
              if (this.showDragOverlay) this.showDragOverlay = false;
@@ -23053,7 +22916,7 @@
              this.showToast(window.t('scanner.toast.browse_dir_fallback'), 'info');
              this.openBrowseDir('scanner', (path) => { this.addFolderPath(path); });
          },
-@@ -636,6 +880,9 @@
+@@ -636,6 +814,9 @@
          addLog(level, message) {
              // T7d: 加入結構化陣列
              this.logEntries.push({ level, message, timestamp: Date.now() });
@@ -23063,7 +22926,7 @@
  
              const cls = level === 'error' ? 'log-error' :
                          level === 'warn' ? 'log-warn' : 'log-info';
-@@ -662,13 +909,30 @@
+@@ -662,13 +843,30 @@
  
              // 儲存到 localStorage
              localStorage.setItem('avlist_logs', this.logHtml);
@@ -23094,7 +22957,7 @@
              const wasGenerating = localStorage.getItem('avlist_generating') === 'true';
  
              if (savedLogs) {
-@@ -709,14 +973,27 @@
+@@ -709,14 +907,27 @@
  
          clearLogs() {
              localStorage.removeItem('avlist_logs');
@@ -23122,7 +22985,7 @@
          clearLogsDisplay() {
              this.logHtml = '';
              this.logEntries = [];
-@@ -758,7 +1035,11 @@
+@@ -758,7 +969,11 @@
          },
  
          confirmClearAll() {
@@ -23135,7 +22998,7 @@
              if (!hasLogs) {
                  this.showToast(window.t('scanner.toast.no_logs'), 'info');
                  return;
-@@ -768,6 +1049,161 @@
+@@ -768,6 +983,157 @@
              if (confirm(window.t('scanner.toast.confirm_clear_logs'))) {
                  this.clearLogs();
                  this.showToast(window.t('scanner.toast.logs_cleared'), 'success');
@@ -23267,12 +23130,8 @@
 +                this.openNfoUpdateConfirm(paths);
 +                return;
 +            }
-+            if (['tag-preview', 'tag-update'].includes(this.taskKind) && numbers.length > 0) {
-+                this.startTagSourcePreview({
-+                    numbers,
-+                    applyAfter: false,
-+                    retryMode: true,
-+                });
++            if (this.taskKind === 'tag-update' && numbers.length > 0) {
++                this.startTagSourceUpdate({ numbers, source: this.tagSourceTaskSource });
 +                return;
 +            }
 +            if (this.taskKind === 'jellyfin-update') {
@@ -23297,7 +23156,7 @@
              }
          },
  
-@@ -792,9 +1228,7 @@
+@@ -792,9 +1158,7 @@
  
              // 重置狀態
              this.state = 'generating';
@@ -23308,7 +23167,7 @@
              this.outputPath = '';
              this.nfoUpdateVisible = false;
              this.clearLogs();
-@@ -812,19 +1246,24 @@
+@@ -812,19 +1176,24 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -23336,7 +23195,7 @@
                          localStorage.removeItem('avlist_state');  // 清除 viewer 狀態
  
                          // 處理 NFO 更新提示
-@@ -868,6 +1307,15 @@
+@@ -868,6 +1237,15 @@
                              this.showToast(window.t('scanner.toast.generate_success', { count: data.video_count }), 'success');
                          }
  
@@ -23352,7 +23211,7 @@
                          // a5: Windows 長路徑警告
                          if (data.long_paths && data.long_paths.length > 0) {
                              this.showToast(
-@@ -890,24 +1338,24 @@
+@@ -890,24 +1268,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -23381,7 +23240,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] generate error:', e);
                  this.showToast(window.t('scanner.toast.generate_error'), 'error', 4000);
-@@ -915,26 +1363,65 @@
+@@ -915,26 +1293,64 @@
          },
  
          // ===== T7b: NFO Update Flow =====
@@ -23446,7 +23305,6 @@
              try {
 -                this.eventSource = new EventSource('/api/gallery/update');
 +                const params = new URLSearchParams({
-+                    backup: this.nfoUpdateBackupEnabled ? 'true' : 'false',
 +                    source: this.nfoUpdateSource,
 +                });
 +                for (const path of selectedPaths) params.append('path', path);
@@ -23454,7 +23312,7 @@
  
                  this.eventSource.onmessage = (event) => {
                      const data = JSON.parse(event.data);
-@@ -943,55 +1430,288 @@
+@@ -943,55 +1359,162 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -23551,133 +23409,9 @@
 +        },
 +
 +        // ===== r16: Batch tag source update =====
-+        openTagSourceUpdateConfirm() {
-+            if (this.tagSourceUpdateButtonDisabled) return;
-+            this.startTagSourcePreview({ applyAfter: true });
-+        },
-+
-+        previewTagSourceUpdate() {
-+            if (this.tagSourceUpdateButtonDisabled) return;
-+            this.startTagSourcePreview({ applyAfter: false });
-+        },
-+
-+        cancelTagSourceUpdate() {
-+            this.tagSourceConfirmModalOpen = false;
-+            this.tagSourcePreviewOnly = false;
-+        },
-+
-+        setTagSourcePreviewPage(delta) {
-+            this.tagSourcePreviewPage = Math.min(
-+                this.tagSourcePreviewPageCount,
-+                Math.max(1, this.tagSourcePreviewPage + delta)
-+            );
-+        },
-+
-+        toggleTagSourceSelection() {
-+            const changed = [...new Set(this.tagSourcePreviewChangedItems.map((item) => item.number))];
-+            if (this.tagSourceSelectedChangedCount === changed.length) {
-+                this.tagSourcePreviewNumbers = [];
-+            } else {
-+                this.tagSourcePreviewNumbers = changed;
-+            }
-+        },
-+
-+        confirmTagSourceUpdate() {
-+            if (this.tagSourceConfirmButtonDisabled) return;
-+            this.tagSourceConfirmModalOpen = false;
-+            this.startTagSourceUpdate({
-+                numbers: this.tagSourcePreviewNumbers,
-+                backup: this.tagSourceBackupEnabled,
-+            });
-+        },
-+
-+        async startTagSourcePreview({ applyAfter = false, numbers = [], retryMode = false } = {}) {
-+            if (this.isGenerating || !this.tagSourceUpdateSource) return;
-+
-+            const sourceId = this.tagSourceUpdateSource;
-+            const sourceLabel = this.selectedTagSourceLabel;
-+            this.tagSourcePreviewSource = sourceId;
-+            this.tagSourcePreviewSourceLabel = sourceLabel;
-+            this.tagSourcePreviewOnly = !applyAfter;
-+            this.tagSourcePreviewNumbers = numbers.slice();
-+            this.state = 'tagSourcePreviewing';
-+            this._startTask(
-+                'tag-preview',
-+                retryMode
-+                    ? window.t('scanner.stats.tag_source_retry_previewing')
-+                    : window.t('scanner.stats.tag_source_previewing'),
-+                numbers.length || this.statTotal
-+            );
-+            this.clearLogs();
-+            localStorage.setItem('avlist_generating', 'true');
-+
-+            const params = new URLSearchParams({ source: sourceId });
-+            if (numbers.length > 0) params.set('numbers', numbers.join(','));
-+            this.eventSource = new EventSource(`/api/gallery/tag-source-preview?${params.toString()}`);
-+
-+            this.eventSource.onmessage = (event) => {
-+                const data = JSON.parse(event.data);
-+
-+                if (data.type === 'progress') {
-+                    this.progressStatus = data.status || window.t('scanner.stats.tag_source_previewing');
-+                    this.progressCurrent = data.current || 0;
-+                    this.progressTotal = data.total || this.progressTotal;
-+                    this._applyTaskMetrics(data);
-+                    this._saveLastStatus(this.progressStatus);
-+                } else if (data.type === 'log') {
-+                    this.addLog(data.level || 'info', data.message || '');
-+                } else if (data.type === 'done') {
-+                    this.eventSource.close();
-+                    this.eventSource = null;
-+                    this.progressCurrent = this.progressTotal;
-+                    this.tagSourcePreviewData = data.summary || null;
-+                    const changedNumbers = Array.isArray(data.summary?.changed_numbers)
-+                        ? data.summary.changed_numbers
-+                        : (data.summary?.items || [])
-+                            .filter((item) => item.status === 'changed')
-+                            .map((item) => item.number);
-+                    this.tagSourcePreviewNumbers = [...new Set(changedNumbers.filter(Boolean))];
-+                    this.tagSourcePreviewPage = 1;
-+                    this._finishTask(
-+                        data.summary?.cancelled ? 'cancelled' : 'done',
-+                        data.message || window.t('scanner.stats.tag_source_preview_done'),
-+                        data.summary || null
-+                    );
-+                    this.tagSourceConfirmModalOpen = true;
-+                    const failed = data.summary?.failed || 0;
-+                    this.showToast(
-+                        data.message || window.t('scanner.stats.tag_source_preview_done'),
-+                        failed > 0 ? 'warn' : 'success',
-+                        4000
-+                    );
-+                    if (data.message) this.addLog('info', data.message);
-+                    this.flushLogs();
-+                } else if (data.type === 'error') {
-+                    this.eventSource.close();
-+                    this.eventSource = null;
-+                    this.addLog(
-+                        'error',
-+                        window.t('scanner.stats.log_error_prefix', { message: data.message || '' })
-+                    );
-+                    this._finishTask('error', data.message || window.t('scanner.task.failed'));
-+                    this.flushLogs();
-+                    this.showToast(window.t('scanner.toast.tag_source_update_error'), 'error', 4000);
-+                }
-+            };
-+
-+            this.eventSource.onerror = () => {
-+                if (this.state === 'done' || this.state === 'error' || this.state === 'cancelled') return;
-+                this.eventSource.close();
-+                this.eventSource = null;
-+                this.addLog('error', window.t('scanner.stats.log_disconnected'));
-+                this._finishTask('error', window.t('scanner.task.failed'));
-+                this.flushLogs();
-+                this.showToast(window.t('scanner.toast.tag_source_update_error'), 'error', 4000);
-+            };
-+        },
-+
-+        async startTagSourceUpdate({ numbers = [], backup = true } = {}) {
-+            if (this.isGenerating || !this.tagSourcePreviewSource) return;
++        async startTagSourceUpdate({ numbers = [], source = this.tagSourceUpdateSource } = {}) {
++            if (this.isGenerating || !source) return;
++            this.tagSourceTaskSource = source;
 +
 +            this.state = 'tagSourceUpdating';
 +            this._startTask(
@@ -23689,8 +23423,7 @@
 +            localStorage.setItem('avlist_generating', 'true');
 +
 +            const params = new URLSearchParams({
-+                source: this.tagSourcePreviewSource,
-+                backup: backup ? 'true' : 'false',
++                source,
 +            });
 +            if (numbers.length > 0) params.set('numbers', numbers.join(','));
 +            this.eventSource = new EventSource(`/api/gallery/tag-source-update?${params.toString()}`);
@@ -23715,7 +23448,6 @@
 +                        data.message || window.t('scanner.stats.tag_source_done'),
 +                        data.summary || null
 +                    );
-+                    this.tagSourcePreviewData = data.summary || this.tagSourcePreviewData;
 +                    localStorage.setItem('avlist_generating', 'false');
 +                    const failed = data.summary?.failed || 0;
 +                    this.showToast(
@@ -23755,7 +23487,7 @@
          // ===== T6d: Jellyfin Image Update Flow =====
          async runJellyfinImageUpdate() {
              if (this.isGenerating) return;
-@@ -1002,9 +1722,7 @@
+@@ -1002,9 +1525,7 @@
              }
  
              this.state = 'jellyfinUpdating';
@@ -23766,7 +23498,7 @@
              this.clearLogs();
  
              localStorage.setItem('avlist_generating', 'true');
-@@ -1019,14 +1737,13 @@
+@@ -1019,14 +1540,13 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -23783,7 +23515,7 @@
                          // TASK-111 P2-b 後續（codex delta review）：done 不再必然代表「全數完成」——
                          // 批次跑到一半若把 external_manager 切成 off，後端會在下一部片 break 並送
                          // done(updated=已完成筆數)。這裡若無條件補滿 progressTotal，UI 會顯示 3/3
-@@ -1035,9 +1752,14 @@
+@@ -1035,9 +1555,14 @@
                          this.progressCurrent = (typeof data.updated === 'number')
                              ? data.updated
                              : this.progressTotal;
@@ -23799,7 +23531,7 @@
  
                          // T3(40c) Codex fix: update 完成後重設 jellyfin check 狀態，讓觸發列重新出現
                          this.jellyfinImageVisible = false;
-@@ -1045,7 +1767,13 @@
+@@ -1045,7 +1570,13 @@
                          this.jellyfinItems = [];
                          this.jellyfinCheckState = 'idle';
  
@@ -23814,7 +23546,7 @@
                          if (data.message) {
                              this.addLog('info', data.message);
                          }
-@@ -1053,24 +1781,24 @@
+@@ -1053,24 +1584,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -23843,7 +23575,7 @@
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] runJellyfinImageUpdate error:', e);
                  this.showToast(window.t('scanner.toast.jellyfin_update_error'), 'error', 4000);
-@@ -1078,6 +1806,21 @@
+@@ -1078,6 +1609,21 @@
          },
  
          // ===== T7b: Utility =====
@@ -23865,7 +23597,7 @@
          copyOutputPath() {
              if (!this.outputPath) return;
  
-@@ -1097,5 +1840,6 @@
+@@ -1097,5 +1643,6 @@
                  }
              });
          },
@@ -23905,7 +23637,7 @@
          // ===== T10: Missing NFO/Cover Enrich =====
          missingPillVisible: false,
          missingBothCount: 0,
-@@ -22,9 +40,113 @@
+@@ -22,9 +40,110 @@
          missingEnrichOffset: 0,     // batch offset
          missingEnrichSuccess: 0,
          missingEnrichFailed: 0,
@@ -23945,7 +23677,6 @@
 +            const keys = {
 +                nfo: 'scanner.stats.nfo_update_title',
 +                rename: 'scanner.rename.source_row_title',
-+                'tag-preview': 'scanner.stats.tag_source_label',
 +                'tag-update': 'scanner.stats.tag_source_label',
 +                enrich: 'scanner.stats.missing_enrich_idle',
 +                samples: 'scanner.stats.sample_backfill_idle',
@@ -23994,11 +23725,9 @@
 +                    this.renameSource = sourceId;
 +                    await this.previewRenamePlan();
 +                    break;
-+                case 'tag-preview':
 +                case 'tag-update':
 +                    this.tagSourceUpdateSource = sourceId;
-+                    if (action === 'tag-preview') await this.previewTagSourceUpdate();
-+                    else this.openTagSourceUpdateConfirm();
++                    await this.startTagSourceUpdate();
 +                    break;
 +                case 'enrich':
 +                case 'resume':
@@ -24019,7 +23748,7 @@
  
          // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
          currentCard: null,          // {number, status, source, reason, coverSrc} | null
-@@ -66,6 +188,106 @@
+@@ -66,6 +185,106 @@
          get missingCoverDrilldownPayload() {
              return { title: window.t('scanner.stats.missing_cover_prefix'), items: this.missingCoverDrilldownItems, footnote: window.t('scanner.stats.missing_list_footnote') };
          },
@@ -24126,7 +23855,7 @@
  
          get missingEnrichButtonText() {
              if (this.state === 'enriching') {
-@@ -74,13 +296,297 @@
+@@ -74,13 +293,297 @@
              return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
          },
  
@@ -24424,7 +24153,7 @@
                  if (d.total_missing > 0) {
                      // TASK-13: 後端永遠回傳完整 items 清單；前端於 runMissingEnrich 內做 > 500 confirm gate
                      this.missingBothCount = d.missing_both || 0;
-@@ -88,16 +594,292 @@
+@@ -88,16 +591,292 @@
                      this.missingCoverCount = d.missing_cover || 0;
                      this.missingItems = Array.isArray(d.items) ? d.items : [];
                      this.missingPillVisible = true;
@@ -24717,7 +24446,7 @@
  
              // TASK-13: 大批量 confirm gate — > 500 筆彈 modal，等用戶按確認才繼續
              if (!skipConfirm && this.missingItems.length > 500) {
-@@ -109,14 +891,17 @@
+@@ -109,14 +888,17 @@
              this.missingEnrichOffset = 0;
              this.missingEnrichSuccess = 0;
              this.missingEnrichFailed = 0;
@@ -24738,7 +24467,7 @@
              this.clearLogs();
  
              const controller = new AbortController();
-@@ -136,7 +921,10 @@
+@@ -136,7 +918,10 @@
                          resp = await fetch('/api/batch-enrich', {
                              method: 'POST',
                              headers: { 'Content-Type': 'application/json' },
@@ -24750,7 +24479,7 @@
                              signal: controller.signal,
                          });
                      } catch (fetchErr) {
-@@ -146,7 +934,7 @@
+@@ -146,7 +931,7 @@
                          }
                          this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
                          this.flushLogs();
@@ -24759,7 +24488,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          // Save remaining
-@@ -159,7 +947,7 @@
+@@ -159,7 +944,7 @@
                          const errText = await resp.text().catch(() => '');
                          this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
                          this.flushLogs();
@@ -24768,7 +24497,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -200,6 +988,12 @@
+@@ -200,6 +985,12 @@
                                  this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
                                  this.progressTotal = items.length;
                                  this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
@@ -24781,7 +24510,7 @@
                              } else if (event.type === 'result-item') {
                                  // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
                                  // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
-@@ -234,7 +1028,18 @@
+@@ -234,7 +1025,18 @@
                                      this.missingEnrichSuccess++;
                                  } else {
                                      this.missingEnrichFailed++;
@@ -24800,7 +24529,7 @@
                                  // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
                                  if (event.reason === 'error') {
                                      this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
-@@ -246,7 +1051,7 @@
+@@ -246,7 +1048,7 @@
                              } else if (event.type === 'error') {
                                  this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
                                  this.flushLogs();
@@ -24809,7 +24538,7 @@
                                  this.currentCard = null;
                                  this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -258,7 +1063,7 @@
+@@ -258,7 +1060,7 @@
  
                      // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
                      if (!batchDone) {
@@ -24818,7 +24547,7 @@
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -284,11 +1089,19 @@
+@@ -284,11 +1086,19 @@
                      if (lastCover) {
                          this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
                      }
@@ -24840,7 +24569,7 @@
                      const summary = this.missingEnrichFailed > 0
                          ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
                          : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
-@@ -312,7 +1125,7 @@
+@@ -312,7 +1122,7 @@
                  if (e.name === 'AbortError') return;
                  console.error('runMissingEnrich error:', e);
                  this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
@@ -30042,7 +29771,7 @@
       @dragover.document.prevent="handleDragOver($event)"
       @drop.document.prevent="handleDrop($event)"
 -     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel();">
-+     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); nfoUpdateConfirmModalOpen && cancelNfoUpdate(); tagSourceConfirmModalOpen && cancelTagSourceUpdate(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel(); renamePreviewOpen && closeRenamePreview();">
++     @keydown.escape.window="dirtyCheckModalOpen && dirtyCheckCancel(); missingConfirmModalOpen && cancelLargeMissingEnrich(); nfoUpdateConfirmModalOpen && cancelNfoUpdate(); deleteAliasGroupModalOpen && cancelDeleteAliasGroupModal(); deleteTagAliasGroupModalOpen && cancelDeleteTagAliasGroupModal(); copyFailModalOpen && closeCopyFailModal(); readonlyConfirmModalOpen && readonlyConfirmCancel(); renamePreviewOpen && closeRenamePreview();">
      <!-- Drag Overlay (must be inside x-data scope) -->
      <div class="drag-overlay" id="dragOverlay" :class="{ active: showDragOverlay }">
          <div class="drag-overlay-content">
@@ -30235,7 +29964,7 @@
 +            </div>
 +            <div class="task-control-actions">
 +                <div class="task-metrics"
-+                     x-show="['nfo-update', 'tag-preview', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(taskKind)">
++                     x-show="['nfo-update', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(taskKind)">
 +                    <span class="task-metric is-success">
 +                        <i class="bi bi-check2"></i>
 +                        <span x-text="window.t('scanner.task.success_count', { count: taskSuccessDisplay })"></span>
@@ -30349,7 +30078,7 @@
              <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
                  <i class="bi bi-exclamation-circle"></i>
                  {{ t('scanner.stats.nfo_prefix') }}
-@@ -238,14 +396,63 @@
+@@ -238,14 +396,58 @@
                  {{ t('scanner.stats.nfo_suffix') }}
                  {{ number_drilldown_panel() }}
              </span>
@@ -30395,11 +30124,6 @@
 +            </div>
 +            <div class="maintenance-controls">
 +                <div class="tag-source-actions">
-+                    <button class="btn-tag-preview"
-+                            @click="openMaintenanceSourcePicker('tag-preview')"
-+                            :disabled="isBusy || statTotal === 0"
-+                            x-html="tagSourcePreviewButtonText">
-+                    </button>
 +                    <button class="btn-nfo-update"
 +                            @click="openMaintenanceSourcePicker('tag-update')"
 +                            :disabled="isBusy || statTotal === 0"
@@ -30415,7 +30139,7 @@
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -288,21 +495,85 @@
+@@ -288,21 +490,85 @@
                      {{ t('scanner.stats.missing_suffix') }}
                  </span>
              </span>
@@ -30504,7 +30228,7 @@
                      x-bind:disabled="isBusy">
                  {{ t('scanner.stats.missing_resume_btn') }}
              </button>
-@@ -313,7 +584,7 @@
+@@ -313,7 +579,7 @@
  
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
          <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
@@ -30513,7 +30237,7 @@
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +610,7 @@
+@@ -339,7 +605,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -30522,7 +30246,7 @@
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +645,8 @@
+@@ -374,6 +640,8 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
@@ -30531,7 +30255,7 @@
          </div>
      </div>
  
-@@ -519,26 +792,6 @@
+@@ -519,26 +787,6 @@
               @keydown.space.prevent="toggleTagAliasCard()">
              <div class="title">
                  <i class="bi bi-tags"></i> <span>{{ t('scanner.tag_alias.section_title') }}</span>
@@ -30558,7 +30282,7 @@
              </div>
              <span class="btn-collapse" aria-hidden="true">
                  <i class="bi" :class="tagAliasCardCollapsed ? 'bi-chevron-down' : 'bi-chevron-up'"></i>
-@@ -782,6 +1035,248 @@
+@@ -782,6 +1030,120 @@
          </div>
      </dialog>
  
@@ -30662,13 +30386,6 @@
 +                    <i class="bi bi-chevron-right"></i>
 +                </button>
 +            </div>
-+            <label class="tag-backup-option">
-+                <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="nfoUpdateBackupEnabled">
-+                <span>
-+                    <strong>{{ t('scanner.stats.nfo_backup_label') }}</strong>
-+                    <small>{{ t('scanner.stats.nfo_backup_hint') }}</small>
-+                </span>
-+            </label>
 +            <div class="modal-action fluent-modal-actions">
 +                <button type="button" class="btn btn-ghost" @click="cancelNfoUpdate()">
 +                    {{ t('scanner.stats.tag_source_confirm_cancel') }}
@@ -30676,129 +30393,8 @@
 +                <button type="button" class="btn btn-primary"
 +                        :disabled="nfoUpdateConfirmDisabled"
 +                        @click="confirmNfoUpdate()">
-+                    <i class="bi bi-shield-check"></i>
-+                    <span x-text="window.t(nfoUpdateBackupEnabled
-+                        ? 'scanner.stats.nfo_confirm_backup_ok'
-+                        : 'scanner.stats.nfo_confirm_ok')"></span>
-+                </button>
-+            </div>
-+        </div>
-+    </dialog>
-+
-+    <!-- r16: Batch Tag Source Confirm Modal -->
-+    <dialog class="modal fluent-modal"
-+            :class="{ 'modal-open': tagSourceConfirmModalOpen }"
-+            @click.self="cancelTagSourceUpdate()">
-+        <div class="modal-box fluent-modal-box">
-+            <h3 class="fluent-modal-title">
-+                <i class="bi text-warning" :class="tagSourcePreviewOnly ? 'bi-eye' : 'bi-tags'"></i>
-+                <span x-text="window.t(tagSourcePreviewOnly
-+                    ? 'scanner.stats.tag_source_preview_title'
-+                    : 'scanner.stats.tag_source_confirm_title')"></span>
-+            </h3>
-+            <div class="batch-confirm-summary">
-+                <div class="batch-confirm-summary-item">
-+                    <span>{{ t('scanner.stats.tag_source_confirm_source_label') }}</span>
-+                    <strong x-text="tagSourceModalSourceLabel"></strong>
-+                </div>
-+                <div class="batch-confirm-summary-item">
-+                    <span>{{ t('scanner.stats.tag_source_confirm_count_label') }}</span>
-+                    <strong x-text="window.t('scanner.stats.tag_source_confirm_count_value', { count: tagSourcePreviewData?.total || 0 })"></strong>
-+                </div>
-+                <div class="batch-confirm-summary-item">
-+                    <span>{{ t('scanner.stats.tag_source_preview_changed_label') }}</span>
-+                    <strong x-text="window.t('scanner.stats.tag_source_preview_changed_value', { count: tagSourcePreviewChangedCount })"></strong>
-+                </div>
-+                <div class="batch-confirm-summary-item">
-+                    <span>{{ t('scanner.stats.tag_source_selected_label') }}</span>
-+                    <strong x-text="window.t('scanner.stats.tag_source_confirm_count_value', { count: tagSourceSelectedChangedCount })"></strong>
-+                </div>
-+            </div>
-+            <p class="fluent-modal-body"
-+               x-text="window.t(tagSourcePreviewOnly
-+                   ? 'scanner.stats.tag_source_preview_body'
-+                   : 'scanner.stats.tag_source_confirm_body', {
-+                       source: tagSourceModalSourceLabel,
-+                       count: tagSourcePreviewData?.total || 0
-+                   })"></p>
-+            <div class="batch-preview-selection" x-show="tagSourcePreviewChangedItems.length > 0">
-+                <button type="button" class="btn btn-ghost btn-xs" @click="toggleTagSourceSelection()">
-+                    <i class="bi" :class="tagSourceSelectedChangedCount === tagSourcePreviewChangedItems.length
-+                        ? 'bi-x-square' : 'bi-check2-square'"></i>
-+                    <span x-text="window.t(tagSourceSelectedChangedCount === tagSourcePreviewChangedItems.length
-+                        ? 'scanner.stats.selection_clear'
-+                        : 'scanner.stats.selection_all')"></span>
-+                </button>
-+                <span x-text="window.t('scanner.stats.selection_count', {
-+                    selected: tagSourceSelectedChangedCount,
-+                    total: tagSourcePreviewChangedItems.length
-+                })"></span>
-+            </div>
-+            <div class="tag-preview-list" x-show="tagSourcePreviewChangedItems.length > 0">
-+                <template x-for="item in tagSourcePreviewPageItems" :key="item.path">
-+                    <label class="tag-preview-item batch-preview-option">
-+                        <input type="checkbox" class="checkbox checkbox-sm checkbox-primary"
-+                               :value="item.number" x-model="tagSourcePreviewNumbers">
-+                        <span>
-+                            <strong x-text="item.number"></strong>
-+                            <span class="tag-preview-diff">
-+                                <span class="tag-preview-add" x-show="item.added.length > 0"
-+                                      x-text="window.t('scanner.stats.tag_source_preview_added', { tags: item.added.join('、') })"></span>
-+                                <span class="tag-preview-remove" x-show="item.removed.length > 0"
-+                                      x-text="window.t('scanner.stats.tag_source_preview_removed', { tags: item.removed.join('、') })"></span>
-+                            </span>
-+                        </span>
-+                    </label>
-+                </template>
-+            </div>
-+            <div class="batch-preview-pager" x-show="tagSourcePreviewPageCount > 1">
-+                <button type="button" class="btn btn-ghost btn-xs"
-+                        :disabled="tagSourcePreviewPage <= 1" @click="setTagSourcePreviewPage(-1)">
-+                    <i class="bi bi-chevron-left"></i>
-+                </button>
-+                <span x-text="window.t('scanner.stats.preview_page', {
-+                    current: tagSourcePreviewPage,
-+                    total: tagSourcePreviewPageCount
-+                })"></span>
-+                <button type="button" class="btn btn-ghost btn-xs"
-+                        :disabled="tagSourcePreviewPage >= tagSourcePreviewPageCount" @click="setTagSourcePreviewPage(1)">
-+                    <i class="bi bi-chevron-right"></i>
-+                </button>
-+            </div>
-+            <div class="tag-preview-empty"
-+                 x-show="tagSourcePreviewChangedItems.length === 0 && tagSourcePreviewFailureItems.length === 0">
-+                <i class="bi bi-check2-circle"></i>
-+                <span>{{ t('scanner.stats.tag_source_preview_no_changes') }}</span>
-+            </div>
-+            <p class="batch-confirm-note is-warning"
-+               x-show="tagSourcePreviewFailureItems.length > 0"
-+               x-text="window.t('scanner.stats.tag_source_preview_failures', { count: tagSourcePreviewFailureItems.length })"></p>
-+            <p class="fluent-modal-body batch-confirm-note">
-+                <i class="bi bi-info-circle"></i>
-+                <span>{{ t('scanner.stats.tag_source_confirm_note') }}</span>
-+            </p>
-+            <label class="tag-backup-option" x-show="!tagSourcePreviewOnly">
-+                <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="tagSourceBackupEnabled">
-+                <span>
-+                    <strong>{{ t('scanner.stats.tag_source_backup_label') }}</strong>
-+                    <small>{{ t('scanner.stats.tag_source_backup_hint') }}</small>
-+                </span>
-+            </label>
-+            <div class="modal-action fluent-modal-actions">
-+                <button type="button" class="btn btn-ghost" @click="cancelTagSourceUpdate()">
-+                    <span x-text="window.t(tagSourcePreviewOnly
-+                        ? 'scanner.stats.tag_source_preview_close'
-+                        : 'scanner.stats.tag_source_confirm_cancel')"></span>
-+                </button>
-+                <button type="button"
-+                        class="btn btn-primary"
-+                        x-show="!tagSourcePreviewOnly"
-+                        :disabled="tagSourceConfirmButtonDisabled"
-+                        @click="confirmTagSourceUpdate()">
-+                    <i class="bi bi-shield-check"></i>
-+                    <span x-text="window.t(tagSourceBackupEnabled
-+                        ? 'scanner.stats.tag_source_confirm_backup_ok'
-+                        : 'scanner.stats.tag_source_confirm_ok')"></span>
++                    <i class="bi bi-file-earmark-text"></i>
++                    <span>{{ t('scanner.stats.nfo_confirm_ok') }}</span>
 +                </button>
 +            </div>
 +        </div>
@@ -30807,7 +30403,7 @@
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -792,7 +1287,7 @@
+@@ -792,7 +1154,7 @@
                  <span x-text="window.t('scanner.stats.missing_enrich_confirm_title')"></span>
              </h3>
              <p class="fluent-modal-body">
@@ -30816,7 +30412,7 @@
              </p>
              <div class="modal-action fluent-modal-actions">
                  <button type="button" class="btn btn-ghost" @click="cancelLargeMissingEnrich()">
-@@ -805,26 +1300,164 @@
+@@ -805,26 +1167,164 @@
          </div>
      </dialog>
  

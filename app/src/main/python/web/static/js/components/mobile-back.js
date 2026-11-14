@@ -197,7 +197,6 @@
             || closeFlag(page, 'maintenanceSourceModalOpen', 'closeMaintenanceSourcePicker')
             || closeFlag(page, 'missingConfirmModalOpen', 'cancelLargeMissingEnrich')
             || closeFlag(page, 'nfoUpdateConfirmModalOpen', 'cancelNfoUpdate')
-            || closeFlag(page, 'tagSourceConfirmModalOpen', 'cancelTagSourceUpdate')
             || closeFlag(page, 'deleteAliasGroupModalOpen', 'cancelDeleteAliasGroupModal')
             || closeFlag(page, 'deleteTagAliasGroupModalOpen', 'cancelDeleteTagAliasGroupModal')
             || closeFlag(page, 'copyFailModalOpen', 'closeCopyFailModal')
