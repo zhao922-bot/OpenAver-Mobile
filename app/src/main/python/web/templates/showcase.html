@@ -1482,19 +1482,34 @@
                                         <span>{{ t('showcase.lightbox.plot_face_title') }}</span>
                                     </span>
                                     <div class="lb-mobile-section-tools">
+                                        <button type="button" class="lb-translate-btn lb-plot-refetch-btn"
+                                                x-show="!_lbPlotView.loading && lbPlotShowButton()"
+                                                @click.stop="lbPlotToggleRefetchSources()"
+                                                :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                                :aria-busy="lbPlotIsActionBusy('refetch')"
+                                                :aria-expanded="_lbPlotSourceOpen"
+                                                data-tooltip="{{ t('showcase.lightbox.plot_refetch_tooltip') }}"
+                                                aria-label="{{ t('showcase.lightbox.plot_refetch_tooltip') }}">
+                                            <i class="bi bi-cloud-arrow-down"
+                                               x-show="!lbPlotIsActionBusy('refetch')"
+                                               aria-hidden="true"></i>
+                                            <i class="bi bi-arrow-repeat spin"
+                                               x-show="lbPlotIsActionBusy('refetch')"
+                                               aria-hidden="true"></i>
+                                        </button>
                                         <button type="button" class="lb-translate-btn"
                                                 x-show="!_lbPlotView.error && !_lbPlotView.loading && (lbPlotButtons.includes('translate') || lbPlotButtons.includes('retranslate'))"
                                                 @click.stop="lbPlotTranslate()"
                                                 :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
-                                                :aria-busy="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                                :aria-busy="lbPlotIsActionBusy('translate')"
                                                 :data-tooltip="lbPlotButtons.includes('retranslate') ? t('showcase.lightbox.plot_retranslate_tooltip') : t('showcase.lightbox.plot_translate_tooltip')"
                                                 :aria-label="lbPlotButtons.includes('retranslate') ? t('showcase.lightbox.plot_retranslate_tooltip') : t('showcase.lightbox.plot_translate_tooltip')">
                                             <i class="bi"
                                                :class="lbPlotButtons.includes('retranslate') ? 'bi-arrow-repeat' : 'bi-translate'"
-                                               x-show="!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                               x-show="!lbPlotIsActionBusy('translate')"
                                                aria-hidden="true"></i>
                                             <i class="bi bi-arrow-repeat spin"
-                                               x-show="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                               x-show="lbPlotIsActionBusy('translate')"
                                                aria-hidden="true"></i>
                                         </button>
                                         <button type="button" class="lb-translate-btn"
@@ -1506,6 +1521,23 @@
                                         </button>
                                     </div>
                                 </div>
+                                <div class="lb-plot-source-bar" x-show="_lbPlotSourceOpen" x-cloak>
+                                    <span class="lb-plot-source-label">{{ t('showcase.lightbox.plot_refetch_source_label') }}</span>
+                                    <div class="lb-plot-source-pills">
+                                        <button type="button" class="lb-plot-source-pill lb-plot-source-pill--auto"
+                                                :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                                @click.stop="lbPlotRefetch('auto')">
+                                            <i class="bi bi-stars" aria-hidden="true"></i>
+                                            <span>{{ t('showcase.lightbox.plot_refetch_auto') }}</span>
+                                        </button>
+                                        <template x-for="src in lbPlotRefetchSources()" :key="src.id">
+                                            <button type="button" class="lb-plot-source-pill"
+                                                    :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                                    @click.stop="lbPlotRefetch(src.id)"
+                                                    x-text="src.display_name_raw || src.display_name_key || src.id"></button>
+                                        </template>
+                                    </div>
+                                </div>
                                 <div class="lb-mobile-plot-card">
                                     <div class="lb-plot-skeleton"
                                          x-show="_lbPlotView.loading"
@@ -1513,9 +1545,23 @@
                                         <span class="lb-plot-skeleton-line"></span>
                                         <span class="lb-plot-skeleton-line"></span>
                                     </div>
-                                    <p class="lb-plot-unavailable"
-                                       x-show="!_lbPlotView.loading && _lbPlotView.error"
-                                       x-text="t('showcase.lightbox.plot_unavailable')"></p>
+                                    <div class="lb-plot-empty-wrap" x-show="!_lbPlotView.loading && _lbPlotView.error">
+                                        <p class="lb-plot-unavailable"
+                                           x-text="t('showcase.lightbox.plot_unavailable')"></p>
+                                        <div class="lb-plot-empty-actions">
+                                            <button type="button" class="lb-plot-empty-btn"
+                                                    :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                                    @click.stop="lbPlotRefetch('auto')">
+                                                <i class="bi" :class="lbPlotIsActionBusy('refetch') ? 'bi-arrow-repeat spin' : 'bi-cloud-arrow-down'" aria-hidden="true"></i>
+                                                <span>{{ t('showcase.lightbox.plot_refetch_empty_cta') }}</span>
+                                            </button>
+                                            <button type="button" class="lb-plot-empty-btn lb-plot-empty-btn--ghost"
+                                                    :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                                    @click.stop="lbPlotToggleRefetchSources()">
+                                                <span>{{ t('showcase.lightbox.plot_refetch_pick_source') }}</span>
+                                            </button>
+                                        </div>
+                                    </div>
                                     <p class="lb-plot-text"
                                        x-show="!_lbPlotView.loading && !_lbPlotView.error && _lbPlotView.path === currentLightboxVideo?.path"
                                        x-text="_lbPlotView.showing === 'original' ? _lbPlotView.original : _lbPlotView.plot"></p>
@@ -1597,19 +1643,34 @@
                                  :aria-hidden="!lbPlotOpen">
                                 <div class="lb-plot-face-head">
                                     <span class="lb-plot-face-title">{{ t('showcase.lightbox.plot_face_title') }}</span>
+                                    <button type="button" class="lb-translate-btn lb-plot-refetch-btn"
+                                            x-show="!_lbPlotView.loading && lbPlotShowButton()"
+                                            @click.stop="lbPlotToggleRefetchSources()"
+                                            :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                            :aria-busy="lbPlotIsActionBusy('refetch')"
+                                            :aria-expanded="_lbPlotSourceOpen"
+                                            data-tooltip="{{ t('showcase.lightbox.plot_refetch_tooltip') }}"
+                                            aria-label="{{ t('showcase.lightbox.plot_refetch_tooltip') }}">
+                                        <i class="bi bi-cloud-arrow-down"
+                                           x-show="!lbPlotIsActionBusy('refetch')"
+                                           aria-hidden="true"></i>
+                                        <i class="bi bi-arrow-repeat spin"
+                                           x-show="lbPlotIsActionBusy('refetch')"
+                                           aria-hidden="true"></i>
+                                    </button>
                                     <button type="button" class="lb-translate-btn"
                                             x-show="!_lbPlotView.error && !_lbPlotView.loading && (lbPlotButtons.includes('translate') || lbPlotButtons.includes('retranslate'))"
                                             @click.stop="lbPlotTranslate()"
                                             :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
-                                            :aria-busy="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                            :aria-busy="lbPlotIsActionBusy('translate')"
                                             :data-tooltip="lbPlotButtons.includes('retranslate') ? t('showcase.lightbox.plot_retranslate_tooltip') : t('showcase.lightbox.plot_translate_tooltip')"
                                             :aria-label="lbPlotButtons.includes('retranslate') ? t('showcase.lightbox.plot_retranslate_tooltip') : t('showcase.lightbox.plot_translate_tooltip')">
                                         <i class="bi"
                                            :class="lbPlotButtons.includes('retranslate') ? 'bi-arrow-repeat' : 'bi-translate'"
-                                           x-show="!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                           x-show="!lbPlotIsActionBusy('translate')"
                                            aria-hidden="true"></i>
                                         <i class="bi bi-arrow-repeat spin"
-                                           x-show="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                           x-show="lbPlotIsActionBusy('translate')"
                                            aria-hidden="true"></i>
                                     </button>
                                     <button type="button" class="lb-translate-btn"
@@ -1626,6 +1687,23 @@
                                         <i class="bi bi-x-lg" aria-hidden="true"></i>
                                     </button>
                                 </div>
+                                <div class="lb-plot-source-bar" x-show="_lbPlotSourceOpen" x-cloak>
+                                    <span class="lb-plot-source-label">{{ t('showcase.lightbox.plot_refetch_source_label') }}</span>
+                                    <div class="lb-plot-source-pills">
+                                        <button type="button" class="lb-plot-source-pill lb-plot-source-pill--auto"
+                                                :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                                @click.stop="lbPlotRefetch('auto')">
+                                            <i class="bi bi-stars" aria-hidden="true"></i>
+                                            <span>{{ t('showcase.lightbox.plot_refetch_auto') }}</span>
+                                        </button>
+                                        <template x-for="src in lbPlotRefetchSources()" :key="src.id">
+                                            <button type="button" class="lb-plot-source-pill"
+                                                    :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                                    @click.stop="lbPlotRefetch(src.id)"
+                                                    x-text="src.display_name_raw || src.display_name_key || src.id"></button>
+                                        </template>
+                                    </div>
+                                </div>
                                 <div class="lb-plot-body">
                                     <div class="lb-plot-skeleton"
                                          x-show="_lbPlotView.loading"
@@ -1633,9 +1711,23 @@
                                         <span class="lb-plot-skeleton-line"></span>
                                         <span class="lb-plot-skeleton-line"></span>
                                     </div>
-                                    <p class="lb-plot-unavailable"
-                                       x-show="!_lbPlotView.loading && _lbPlotView.error"
-                                       x-text="t('showcase.lightbox.plot_unavailable')"></p>
+                                    <div class="lb-plot-empty-wrap" x-show="!_lbPlotView.loading && _lbPlotView.error">
+                                        <p class="lb-plot-unavailable"
+                                           x-text="t('showcase.lightbox.plot_unavailable')"></p>
+                                        <div class="lb-plot-empty-actions">
+                                            <button type="button" class="lb-plot-empty-btn"
+                                                    :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                                    @click.stop="lbPlotRefetch('auto')">
+                                                <i class="bi" :class="lbPlotIsActionBusy('refetch') ? 'bi-arrow-repeat spin' : 'bi-cloud-arrow-down'" aria-hidden="true"></i>
+                                                <span>{{ t('showcase.lightbox.plot_refetch_empty_cta') }}</span>
+                                            </button>
+                                            <button type="button" class="lb-plot-empty-btn lb-plot-empty-btn--ghost"
+                                                    :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                                    @click.stop="lbPlotToggleRefetchSources()">
+                                                <span>{{ t('showcase.lightbox.plot_refetch_pick_source') }}</span>
+                                            </button>
+                                        </div>
+                                    </div>
                                     <p class="lb-plot-text"
                                        x-show="!_lbPlotView.loading && !_lbPlotView.error"
                                        x-text="_lbPlotView.showing === 'original' ? _lbPlotView.original : _lbPlotView.plot"></p>

@@ -827,6 +827,10 @@ body.similar-mobile-active [data-picker-ghost] {
         cursor: pointer;
     }
 
+    .showcase-container .lb-mobile-plot .lb-plot-source-bar {
+        margin: 0 0 8px;
+    }
+
     .showcase-container .lb-mobile-plot-card {
         padding: 12px 14px;
         border: 1px solid var(--stroke-subtle);

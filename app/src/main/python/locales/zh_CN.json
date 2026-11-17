@@ -1863,7 +1863,17 @@
       "ai_tags_not_configured": "请先到设置页的 AI 标签设置好",
       "ai_tags_failed": "AI 标签失败，请稍后再试",
       "plot_already_zh": "简介已是中文",
-      "mask_focal_endpoint_down": "人脸端点没有响应，这次用内置方式找脸"
+      "mask_focal_endpoint_down": "人脸端点没有响应，这次用内置方式找脸",
+      "plot_refetch_tooltip": "重新获取简介",
+      "plot_refetch_source_label": "选择来源重新获取：",
+      "plot_refetch_auto": "自动搜索",
+      "plot_refetch_empty_cta": "获取简介",
+      "plot_refetch_pick_source": "选择来源",
+      "plot_refetch_done": "已重新获取简介",
+      "plot_refetch_done_source": "已从 {source} 重新获取简介",
+      "plot_refetch_not_found": "未找到这部片的简介",
+      "plot_refetch_missing_number": "缺少番号，无法搜索简介",
+      "plot_refetch_failed": "重新获取简介失败，请重试"
     },
     "pick": {
       "add_aria": "加入精选",

@@ -384,3 +384,84 @@ def test_search_preserves_quoted_source_and_keeps_it_eligible(saved_plot_batch,m
     assert root.findtext('plot')==source
     assert root.findtext('originalplot')==source
     assert len(PlotTranslationBatch(scanner_router.get_db_path(),token).pending()[0])==1
+
+
+def test_refetch_video_plot_replaces_wrong_plot_and_clears_stale_original(
+    tmp_path,
+    monkeypatch,
+):
+    from web.routers import showcase_plot
+
+    _configure_empty_output_root(monkeypatch)
+    db = tmp_path / "library.db"
+    init_db(db)
+    video_path = tmp_path / "ABC-301.mp4"
+    video_path.write_bytes(b"video")
+    nfo = tmp_path / "ABC-301.nfo"
+    nfo.write_text(
+        "<movie><title>T</title><plot>错误简介</plot><originalplot>間違った紹介文</originalplot></movie>",
+        encoding="utf-8",
+    )
+    repo = VideoRepository(db)
+    file_uri = to_file_uri(str(video_path))
+    repo.upsert(Video(path=file_uri, number="ABC-301", title="T"))
+    config = {"general": {"locale": "zh-CN"}, "gallery": {"directories": [to_file_uri(str(tmp_path))], "path_mappings": {}}}
+    monkeypatch.setattr(showcase_plot, "load_config", lambda: config)
+    monkeypatch.setattr(showcase_plot, "get_db_path", lambda: db)
+    monkeypatch.setattr(showcase_plot, "get_javbus_lang", lambda: "ja")
+    seen_sources = []
+
+    def fake_search(number, source="auto", **_kw):
+        seen_sources.append((number, source))
+        return {"_summary": "<p>全新的正确简介</p>", "source": "jav321"}
+
+    monkeypatch.setattr(showcase_plot, "search_jav", fake_search)
+
+    res = showcase_plot.refetch_video_plot(
+        showcase_plot.PlotRefetchRequest(file_path=file_uri, source="jav321")
+    )
+
+    assert res["success"] is True
+    assert res["plot"] == "全新的正确简介"
+    assert res["original_plot"] == ""
+    assert res["has_original"] is False
+    assert res["source"] == "jav321"
+    assert seen_sources == [("ABC-301", "jav321")]
+    root = ET.fromstring(nfo.read_bytes())
+    assert root.findtext("plot") == "全新的正确简介"
+    assert root.find("originalplot") is None
+
+
+def test_refetch_video_plot_fills_empty_plot_and_preserves_existing_on_miss(
+    tmp_path,
+    monkeypatch,
+):
+    from web.routers import showcase_plot
+
+    _configure_empty_output_root(monkeypatch)
+    db = tmp_path / "library.db"
+    init_db(db)
+    video_path = tmp_path / "ABC-302.mp4"
+    video_path.write_bytes(b"video")
+    nfo = tmp_path / "ABC-302.nfo"
+    nfo.write_text("<movie><title>T</title><plot /></movie>", encoding="utf-8")
+    repo = VideoRepository(db)
+    file_uri = to_file_uri(str(video_path))
+    repo.upsert(Video(path=file_uri, number="ABC-302", title="T"))
+    config = {"general": {"locale": "zh-CN"}, "gallery": {"directories": [to_file_uri(str(tmp_path))], "path_mappings": {}}}
+    monkeypatch.setattr(showcase_plot, "load_config", lambda: config)
+    monkeypatch.setattr(showcase_plot, "get_db_path", lambda: db)
+    monkeypatch.setattr(showcase_plot, "get_javbus_lang", lambda: "ja")
+
+    # 1. Empty NFO plot can be fetched on demand
+    monkeypatch.setattr(showcase_plot, "search_jav", lambda *_a, **_kw: {"_summary": "补抓简介", "source": "dmm"})
+    res = showcase_plot.refetch_video_plot(showcase_plot.PlotRefetchRequest(file_path=file_uri))
+    assert res["success"] is True
+    assert ET.fromstring(nfo.read_bytes()).findtext("plot") == "补抓简介"
+
+    # 2. Failed/empty lookup keeps existing synopsis intact
+    monkeypatch.setattr(showcase_plot, "search_jav", lambda *_a, **_kw: {"_summary": ""})
+    miss = showcase_plot.refetch_video_plot(showcase_plot.PlotRefetchRequest(file_path=file_uri))
+    assert miss["success"] is False
+    assert miss["error"] == "no_summary"
+    assert ET.fromstring(nfo.read_bytes()).findtext("plot") == "补抓简介"

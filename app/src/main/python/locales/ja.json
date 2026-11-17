@@ -1863,7 +1863,17 @@
       "ai_tags_not_configured": "先に設定ページで AI タグを設定してください",
       "ai_tags_failed": "AI タグ付けに失敗しました。しばらくしてからお試しください",
       "plot_already_zh": "あらすじはすでに中国語です",
-      "mask_focal_endpoint_down": "顔エンドポイントが応答しません。今回は内蔵の方法で顔を検出します"
+      "mask_focal_endpoint_down": "顔エンドポイントが応答しません。今回は内蔵の方法で顔を検出します",
+      "plot_refetch_tooltip": "あらすじを再取得",
+      "plot_refetch_source_label": "取得元を選択：",
+      "plot_refetch_auto": "自動検索",
+      "plot_refetch_empty_cta": "あらすじを取得",
+      "plot_refetch_pick_source": "取得元を選ぶ",
+      "plot_refetch_done": "あらすじを再取得しました",
+      "plot_refetch_done_source": "{source} からあらすじを再取得しました",
+      "plot_refetch_not_found": "この作品のあらすじが見つかりません",
+      "plot_refetch_missing_number": "品番がないため検索できません",
+      "plot_refetch_failed": "あらすじの再取得に失敗しました"
     },
     "pick": {
       "add_aria": "★を付ける",

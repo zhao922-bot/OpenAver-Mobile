@@ -1863,7 +1863,17 @@
       "ai_tags_not_configured": "Set up AI tags in Settings first",
       "ai_tags_failed": "AI tagging failed. Please try again later",
       "plot_already_zh": "Plot is already in Chinese",
-      "mask_focal_endpoint_down": "The face endpoint isn't responding. Using the built-in method to find faces this time"
+      "mask_focal_endpoint_down": "The face endpoint isn't responding. Using the built-in method to find faces this time",
+      "plot_refetch_tooltip": "Re-fetch synopsis",
+      "plot_refetch_source_label": "Re-fetch from source:",
+      "plot_refetch_auto": "Auto search",
+      "plot_refetch_empty_cta": "Fetch synopsis",
+      "plot_refetch_pick_source": "Choose source",
+      "plot_refetch_done": "Synopsis updated",
+      "plot_refetch_done_source": "Updated synopsis from {source}",
+      "plot_refetch_not_found": "No synopsis found for this video",
+      "plot_refetch_missing_number": "Missing code; cannot search synopsis",
+      "plot_refetch_failed": "Failed to re-fetch synopsis"
     },
     "pick": {
       "add_aria": "Add to picks",

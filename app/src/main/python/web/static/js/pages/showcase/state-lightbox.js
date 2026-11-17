@@ -197,6 +197,24 @@ export function stateLightbox() {
             return this._isNarrow || this.cardShape === 'poster';
         },
 
+        _resetSampleStripScroll() {
+            const reset = () => {
+                for (const sel of ['.showcase-lightbox .lb-mobile-sample-strip', '.sample-gallery .sg-thumbs']) {
+                    const el = document.querySelector(sel);
+                    if (el) el.scrollLeft = 0;
+                }
+            };
+            reset();
+            if (typeof this.$nextTick === 'function') {
+                this.$nextTick(() => {
+                    reset();
+                    if (typeof requestAnimationFrame === 'function') {
+                        requestAnimationFrame(reset);
+                    }
+                });
+            }
+        },
+
         // F1: helper — 更新 lightboxIndex + currentLightboxVideo 一致性
         _setLightboxIndex(idx) {
             // 123-T4 / C27：燈箱星是常駐節點，切換影片必須先殺掉進行中的 --pick-fill
@@ -219,6 +237,7 @@ export function stateLightbox() {
             this._refreshLbActorAges();
             if (this.currentLightboxVideo) {
                 this._lbPlotAutoLoad?.();
+                this._resetSampleStripScroll();
             }
         },
 

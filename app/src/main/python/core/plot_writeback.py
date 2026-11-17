@@ -49,6 +49,7 @@ def rewrite_nfo_plot(
     new_plot: str,
     new_original: Optional[str],
     expected_source: Optional[str] = None,
+    allow_empty_existing: bool = False,
 ) -> bytes:
     """Rewrite plot fields and return the serialized XML.
 
@@ -75,10 +76,10 @@ def rewrite_nfo_plot(
         or (root.findtext('originalplot') or '').strip() != expected_source
     ):
         raise PlotChangedError(str(nfo_path))
-    if plot_elem is None or not (plot_elem.text or "").strip():
+    if not allow_empty_existing and (plot_elem is None or not (plot_elem.text or "").strip()):
         raise PlotEmptyError(str(nfo_path))
 
-    old_plot = plot_elem.text or ""
+    old_plot = plot_elem.text or "" if plot_elem is not None else ""
     old_original_elem = root.find("originalplot")
     old_original = (
         old_original_elem.text or ""
@@ -86,7 +87,7 @@ def rewrite_nfo_plot(
         else None
     )
 
-    plot_same = old_plot == new_plot
+    plot_same = plot_elem is not None and old_plot == new_plot
     if new_original is None:
         original_same = True
     elif new_original == "":
@@ -98,7 +99,7 @@ def rewrite_nfo_plot(
     if plot_same and original_same:
         return raw
 
-    set_element_text(root, "plot", new_plot)
+    set_element_text(root, "plot", new_plot, after_tag="premiered")
     if new_original is None:
         pass
     elif new_original == "":

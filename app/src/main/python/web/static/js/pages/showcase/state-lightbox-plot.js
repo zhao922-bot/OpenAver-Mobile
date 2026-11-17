@@ -31,8 +31,10 @@ export function stateLightboxPlot() {
     return {
         lbPlotOpen: false,
         _lbPlotInline: false,
+        _lbPlotSourceOpen: false,
         _lbPlotView: emptyPlotView(),
         _lbPlotInFlight: {},
+        _lbPlotBusyAction: {},
         _lbPlotGen: 0,
         _lbPlotAbort: null,
 
@@ -47,6 +49,27 @@ export function stateLightboxPlot() {
                 hasOriginal: this._lbPlotView.hasOriginal,
                 showing: this._lbPlotView.showing,
             });
+        },
+
+        lbPlotRefetchSources() {
+            const builtin = typeof this.rescrapeBuiltinSources === 'function'
+                ? this.rescrapeBuiltinSources()
+                : [];
+            const custom = typeof this.rescrapeCustomSources === 'function'
+                ? this.rescrapeCustomSources()
+                : [];
+            return [...builtin, ...custom].filter((s) => (
+                s && s.id && !(typeof this.isJlUnavailable === 'function' && this.isJlUnavailable(s))
+            ));
+        },
+
+        lbPlotToggleRefetchSources() {
+            this._lbPlotSourceOpen = !this._lbPlotSourceOpen;
+        },
+
+        lbPlotIsActionBusy(action) {
+            const path = this.currentLightboxVideo?.path;
+            return !!(path && this._lbPlotInFlight[path] && this._lbPlotBusyAction[path] === action);
         },
 
         lbPlotShowButton() {
@@ -95,6 +118,7 @@ export function stateLightboxPlot() {
             }
             this.lbPlotOpen = false;
             this._lbPlotInline = false;
+            this._lbPlotSourceOpen = false;
             this._lbPlotView = emptyPlotView();
         },
 
@@ -157,6 +181,7 @@ export function stateLightboxPlot() {
             if (this._lbPlotInFlight[path]) return;
 
             this._lbPlotInFlight[path] = true;
+            this._lbPlotBusyAction[path] = 'translate';
             const sourceText = view.showing === 'original'
                 ? (view.original || '')
                 : view.plot;
@@ -258,6 +283,79 @@ export function stateLightboxPlot() {
                 );
             } finally {
                 delete this._lbPlotInFlight[path];
+                delete this._lbPlotBusyAction[path];
+            }
+        },
+
+        async lbPlotRefetch(source = 'auto') {
+            const video = this.currentLightboxVideo;
+            const view = this._lbPlotView;
+            const path = video?.path;
+            if (!path || view.loading || this._lbPlotInFlight[path]) return;
+            const generation = this._lbPlotGen;
+            const hadPreviousPlot = !view.error && !!view.plot;
+            const snapshot = hadPreviousPlot
+                ? { plot: view.plot, original: view.original || '' }
+                : null;
+
+            this._lbPlotSourceOpen = false;
+            this._lbPlotInFlight[path] = true;
+            this._lbPlotBusyAction[path] = 'refetch';
+            try {
+                let data;
+                try {
+                    const response = await fetch('/api/showcase/video/plot/refetch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ file_path: path, source: source || 'auto' }),
+                    });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    data = await response.json();
+                } catch (_err) {
+                    this.showToast(
+                        window.t('showcase.lightbox.plot_refetch_failed'),
+                        'error',
+                    );
+                    return;
+                }
+
+                if (data?.success !== true) {
+                    const warnErrors = new Set(['no_summary', 'missing_number', 'search_blocked', 'search_unreachable']);
+                    const toastType = warnErrors.has(data?.error) ? 'warning' : 'error';
+                    this.showToast(
+                        data?.message || window.t('showcase.lightbox.plot_refetch_failed'),
+                        toastType,
+                    );
+                    return;
+                }
+
+                if (
+                    generation === this._lbPlotGen
+                    && (this.lbPlotOpen || this._lbPlotInline)
+                    && this._lbPlotView.path === path
+                ) {
+                    this._lbPlotApply(this._lbPlotView, data);
+                }
+
+                const doneMsg = data.source_label
+                    ? window.t('showcase.lightbox.plot_refetch_done_source', { source: data.source_label })
+                    : window.t('showcase.lightbox.plot_refetch_done');
+                if (snapshot && !sameAfterNormalize(data.plot, snapshot.plot)) {
+                    this.showToast(
+                        doneMsg,
+                        'success',
+                        UNDO_TOAST_MS,
+                        {
+                            label: window.t('showcase.lightbox.plot_translate_undo'),
+                            onClick: () => this._lbPlotUndo(path, snapshot),
+                        },
+                    );
+                } else {
+                    this.showToast(doneMsg, 'success');
+                }
+            } finally {
+                delete this._lbPlotInFlight[path];
+                delete this._lbPlotBusyAction[path];
             }
         },
 
@@ -300,6 +398,7 @@ export function stateLightboxPlot() {
                 );
             } finally {
                 delete this._lbPlotInFlight[path];
+                delete this._lbPlotBusyAction[path];
             }
         },
     };

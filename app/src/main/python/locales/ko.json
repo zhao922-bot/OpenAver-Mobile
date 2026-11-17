@@ -1863,7 +1863,17 @@
       "ai_tags_not_configured": "먼저 설정 페이지에서 AI 태그를 설정해 주세요",
       "ai_tags_failed": "AI 태그 실패, 나중에 다시 시도해 주세요",
       "plot_already_zh": "정보는 이미 중국어입니다",
-      "mask_focal_endpoint_down": "얼굴 랜드마크 응답 없음, 이번에는 내장 방식으로 얼굴을 찾습니다"
+      "mask_focal_endpoint_down": "얼굴 랜드마크 응답 없음, 이번에는 내장 방식으로 얼굴을 찾습니다",
+      "plot_refetch_tooltip": "줄거리 다시 가져오기",
+      "plot_refetch_source_label": "가져올 소스 선택:",
+      "plot_refetch_auto": "자동 검색",
+      "plot_refetch_empty_cta": "줄거리 가져오기",
+      "plot_refetch_pick_source": "소스 선택",
+      "plot_refetch_done": "줄거리를 다시 가져왔습니다",
+      "plot_refetch_done_source": "{source}에서 줄거리를 다시 가져왔습니다",
+      "plot_refetch_not_found": "이 작품의 줄거리를 찾을 수 없습니다",
+      "plot_refetch_missing_number": "품번이 없어 줄거리를 검색할 수 없습니다",
+      "plot_refetch_failed": "줄거리 다시 가져오기에 실패했습니다"
     },
     "pick": {
       "add_aria": "엄선작에 추가",

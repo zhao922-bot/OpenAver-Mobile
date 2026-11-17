@@ -1863,7 +1863,17 @@
       "ai_tags_not_configured": "請先到設定頁的 AI 標籤設定好",
       "ai_tags_failed": "AI 標籤失敗，請稍後再試",
       "plot_already_zh": "簡介已是中文",
-      "mask_focal_endpoint_down": "人臉端點沒有回應，這次用內建方式找臉"
+      "mask_focal_endpoint_down": "人臉端點沒有回應，這次用內建方式找臉",
+      "plot_refetch_tooltip": "重新取得簡介",
+      "plot_refetch_source_label": "選擇來源重新取得：",
+      "plot_refetch_auto": "自動搜尋",
+      "plot_refetch_empty_cta": "取得簡介",
+      "plot_refetch_pick_source": "選擇來源",
+      "plot_refetch_done": "已重新取得簡介",
+      "plot_refetch_done_source": "已從 {source} 重新取得簡介",
+      "plot_refetch_not_found": "找不到這部片的簡介",
+      "plot_refetch_missing_number": "缺少番號，無法搜尋簡介",
+      "plot_refetch_failed": "重新取得簡介失敗，請重試"
     },
     "pick": {
       "add_aria": "加入精選",

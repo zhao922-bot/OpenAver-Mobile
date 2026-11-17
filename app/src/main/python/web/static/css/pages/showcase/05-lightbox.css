@@ -747,8 +747,96 @@
     flex: none;
     display: flex;
     align-items: center;
+    gap: 0.35rem;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--stroke-subtle);
+}
+
+.lightbox-metadata .lb-plot-refetch-btn[aria-expanded="true"] {
+    border-color: color-mix(in oklch, var(--accent) 50%, var(--stroke-default));
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 12%, var(--surface-1));
+}
+
+.lightbox-metadata .lb-plot-source-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.55rem 0.65rem;
+    margin-top: 0.45rem;
+    border-radius: 10px;
+    background: var(--surface-1);
+    border: 1px solid var(--stroke-subtle);
+}
+
+.lightbox-metadata .lb-plot-source-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.lightbox-metadata .lb-plot-source-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.lightbox-metadata .lb-plot-source-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-height: 28px;
+    padding: 0 0.58rem;
+    border-radius: 999px;
+    border: 1px solid var(--stroke-default);
+    background: var(--surface-2);
+    color: var(--text-primary);
+    font-size: 0.74rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.lightbox-metadata .lb-plot-source-pill:hover:not(:disabled) {
+    border-color: color-mix(in oklch, var(--accent) 45%, var(--stroke-default));
+}
+
+.lightbox-metadata .lb-plot-source-pill--auto {
+    background: color-mix(in oklch, var(--accent) 14%, var(--surface-2));
+    border-color: color-mix(in oklch, var(--accent) 36%, var(--stroke-default));
+    color: var(--accent);
+}
+
+.lightbox-metadata .lb-plot-empty-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.lightbox-metadata .lb-plot-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.lightbox-metadata .lb-plot-empty-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-height: 32px;
+    padding: 0 0.7rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklch, var(--accent) 38%, var(--stroke-default));
+    background: color-mix(in oklch, var(--accent) 13%, var(--surface-1));
+    color: var(--accent);
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.lightbox-metadata .lb-plot-empty-btn--ghost {
+    border-color: var(--stroke-default);
+    background: var(--surface-1);
+    color: var(--text-secondary);
 }
 
 .lightbox-metadata .lb-plot-face-title {

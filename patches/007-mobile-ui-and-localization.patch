@@ -3607,7 +3607,7 @@
        "mask_toggle": "Cover crop preview",
        "mask_detect_failed": "Focal detection failed. Please try again later.",
        "mask_focal_too_slow_auto_disabled": "Detecting the face on this cover took longer than 5 seconds, so we've turned off Auto Face Focus for you. Just drag to adjust the position directly — you can turn it back on anytime in Settings.",
-@@ -1307,9 +1835,35 @@
+@@ -1307,9 +1835,45 @@
        "mask_save_failed": "Failed to save crop settings. Please try again later.",
        "mask_cover_changed": "Cover has changed. Please reopen the crop tool and try again.",
        "cover_unavailable": "This cover can’t be loaded right now — the file location may be unreachable, or the cover file may be missing",
@@ -3641,11 +3641,21 @@
 +      "ai_tags_not_configured": "Set up AI tags in Settings first",
 +      "ai_tags_failed": "AI tagging failed. Please try again later",
 +      "plot_already_zh": "Plot is already in Chinese",
-+      "mask_focal_endpoint_down": "The face endpoint isn't responding. Using the built-in method to find faces this time"
++      "mask_focal_endpoint_down": "The face endpoint isn't responding. Using the built-in method to find faces this time",
++      "plot_refetch_tooltip": "Re-fetch synopsis",
++      "plot_refetch_source_label": "Re-fetch from source:",
++      "plot_refetch_auto": "Auto search",
++      "plot_refetch_empty_cta": "Fetch synopsis",
++      "plot_refetch_pick_source": "Choose source",
++      "plot_refetch_done": "Synopsis updated",
++      "plot_refetch_done_source": "Updated synopsis from {source}",
++      "plot_refetch_not_found": "No synopsis found for this video",
++      "plot_refetch_missing_number": "Missing code; cannot search synopsis",
++      "plot_refetch_failed": "Failed to re-fetch synopsis"
      },
      "pick": {
        "add_aria": "Add to picks",
-@@ -1410,10 +1964,107 @@
+@@ -1410,10 +1974,107 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -3753,7 +3763,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1434,7 +2085,8 @@
+@@ -1434,7 +2095,8 @@
        "this_computer_unavailable": "Cannot read this computer's update info right now. Please reopen the Help page and try again",
        "client_up_to_date": "OpenAver on this computer is up to date",
        "client_update_available_prefix": "This computer has a new version",
@@ -3763,7 +3773,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2099,7 @@
+@@ -1447,7 +2109,7 @@
        "title": "First time? Follow these 3 steps",
        "subtitle": "From adding your folder to filling metadata — three steps to get started",
        "step1_title": "Add Your Library Folder",
@@ -3772,7 +3782,7 @@
        "step2_title": "Generate Page",
        "step2_desc": "Scan and build a browsable collection page in one click",
        "step3_title": "NFO Fill",
-@@ -1464,7 +2116,7 @@
+@@ -1464,7 +2126,7 @@
      "tag_alias": {
        "title": "Tag Alias Management",
        "intro": "Manage Chinese/Japanese/English synonyms in one place so the search box, chip filters, and fuzzy exploration all speak the same language.",
@@ -3781,7 +3791,7 @@
        "scanner_chipwall": "The chip wall lists all tag alias groups. Click \"+\" to add an alias; the primary name is shown in pink, aliases in grey.",
        "scanner_ai_hint": "Click \"?\" to open the AI suggestion panel: describe your tag needs to the AI and it returns suggested alias groups for direct import.",
        "h6_showcase": "Auto-expand in Showcase",
-@@ -1501,16 +2153,16 @@
+@@ -1501,16 +2163,16 @@
      "batch": {
        "title": "Batch File Search",
        "h6_add": "Add Multiple Files",
@@ -3802,7 +3812,7 @@
        "fav_auto": "Automatically begins searching the first 20 files",
        "fav_nfo_skip": "If a same-name .nfo already exists, the file is treated as organized and the scraper is skipped",
        "pause_pause": "Click the 'Pause' button during batch search",
-@@ -1563,17 +2215,17 @@
+@@ -1563,17 +2225,17 @@
        "h6_manage": "Favorites Management",
        "manage_add": "Add favorites from Search or Showcase; profile photo is downloaded locally automatically",
        "manage_library": "The <strong>+</strong> next to the search bar opens an \"Add from library\" list: actresses already in your library sorted by title count, with aliases merged into a single person — tap the heart on any row to favorite her",
@@ -3824,7 +3834,7 @@
        "feat_nfo": "Automatically reads NFO files and displays metadata",
        "feat_nfo_fill": "Supports 'NFO Fill': automatically searches for missing NFO files",
        "feat_terminal": "Built-in Mini Terminal shows real-time processing progress",
-@@ -1587,7 +2239,7 @@
+@@ -1587,7 +2249,7 @@
        "jellyfin_canonical": "With a media-manager mode selected, OpenAver <strong>no longer writes a same-name cover file</strong> — Jellyfin / Emby prefer that file, which is what puts landscape images on the poster wall. Existing titles keep whatever cover location they already have (so manual focal crops are not wiped); to fix one, delete its same-name cover yourself and regenerate.",
        "jellyfin_showcase": "After scanning, browse results on the <code>/showcase</code> page",
        "h6_strm_deploy": "Read-only source + letting Emby / Jellyfin / Kodi find your titles (cross-machine setup)",
@@ -3833,7 +3843,7 @@
        "strm_deploy_step2": "Under \"Output to,\" specify a folder <strong>this machine can write to</strong> (which can be a writable NAS share mounted on this machine) — the generated <code>.strm</code> + NFO + covers go here, and you point Emby / Jellyfin / Kodi at it to build the library. This output folder is not the read-only source itself.",
        "strm_deploy_step4": "If you later change the mapping rules, the existing <code>.strm</code> files are rewritten automatically in one pass — no need to rebuild the whole library.",
        "h6_multiversion": "Multi-version manual merge (native Emby / Jellyfin feature)",
-@@ -1601,7 +2253,7 @@
+@@ -1601,7 +2263,7 @@
        "h6_modes": "Display Modes",
        "h6_sort": "Sort & Search",
        "h6_other": "Other Features",
@@ -3842,7 +3852,7 @@
        "mode_grid": "<strong>Full Cover</strong>: cover wall showing the whole cover image; click to open the Lightbox (default)",
        "mode_poster": "<strong>Poster</strong>: shows only the right half of the cover (the front), so cards are narrower and more fit per row; phones and narrow windows always use this layout",
        "mode_list": "<strong>List Mode</strong>: Compact list, ideal for quick browsing",
-@@ -1632,7 +2284,7 @@
+@@ -1632,7 +2294,7 @@
        "beta_compilation": "More complete tags (series / maker / cast) means better accuracy; videos with few tags should have their NFO filled in first",
        "h6_manage": "Tips",
        "manage_enable": "No configuration needed — works out of the box",
@@ -3851,7 +3861,7 @@
      },
      "shortcuts": {
        "title": "Keyboard Shortcuts",
-@@ -1809,6 +2461,66 @@
+@@ -1809,6 +2471,66 @@
        "client_title": "About to update OpenAver on this computer",
        "client_case_a_body": "This updates OpenAver on this computer, not the server. After you confirm, a terminal opens on this computer to run the installation. Please close OpenAver first, and reopen it yourself once the installation finishes.",
        "client_case_b_body": "OpenAver on this computer is not installed in the default location.\nThe installer will first install the new version to the default directory; you do not need to close the current OpenAver during installation.\n\nWhen the installation finishes, do the following in order:\n1. Close OpenAver\n2. Delete the python folder in the old installation directory\n3. Copy all files of the new version over your original installation location on this computer\n\nNo reinstall or reconfiguration is needed; just overwrite the files and use it."
@@ -3918,7 +3928,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2528,18 @@
+@@ -1816,20 +2538,18 @@
      "skip": "Skip",
      "next": "Next →",
      "done": "Done 🎉",
@@ -3951,7 +3961,7 @@
    },
    "updater": {
      "page_title": "Updater",
-@@ -1845,6 +2555,12 @@
+@@ -1845,6 +2565,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -3964,7 +3974,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,16 +2576,24 @@
+@@ -1860,16 +2586,24 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -3992,7 +4002,7 @@
      },
      "age": {
        "median": "Median {age}"
-@@ -1878,11 +2602,15 @@
+@@ -1878,11 +2612,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -4010,7 +4020,7 @@
      },
      "costar": {
        "count_label": "{n} videos"
-@@ -1892,7 +2620,17 @@
+@@ -1892,7 +2630,17 @@
      "all_maker": "All studios",
      "clear_actress": "Clear actress",
      "clear_maker": "Clear studio",
@@ -4029,7 +4039,7 @@
    },
    "connect": {
      "nobridge": "Please open this in the desktop version",
-@@ -1957,7 +2695,7 @@
+@@ -1957,7 +2705,7 @@
        "intro": "The left column is the folder on the server; in the right column enter the path as seen from this computer. You can leave it empty and fill it in later.",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -4038,7 +4048,7 @@
        "readonly": "Read-only",
        "test_btn": "Test",
        "found": "Found",
-@@ -1968,7 +2706,7 @@
+@@ -1968,7 +2716,7 @@
        "loading": "Loading the server's scan sources...",
        "load_failed": "Could not read the server's scan sources",
        "reload_btn": "Reload",
@@ -4047,7 +4057,7 @@
        "stale": "(no longer on the server)",
        "remove": "Remove",
        "save_btn": "Save Mapping Table",
-@@ -1976,5 +2714,448 @@
+@@ -1976,5 +2724,448 @@
        "saved": "Mapping table saved",
        "save_failed": "Failed to save the mapping table"
      }
@@ -5454,7 +5464,7 @@
        "mask_toggle": "カバーの切り抜きプレビュー",
        "mask_detect_failed": "焦点の検出に失敗しました。しばらくしてからもう一度お試しください。",
        "mask_focal_too_slow_auto_disabled": "このカバーの顔検出に5秒以上かかったため、自動フォーカスを先にオフにしました。位置を調整したい場合は直接ドラッグしてください。いつでも設定から再度オンにできます。",
-@@ -1307,9 +1835,35 @@
+@@ -1307,9 +1835,45 @@
        "mask_save_failed": "切り抜き設定の保存に失敗しました。しばらくしてからもう一度お試しください。",
        "mask_cover_changed": "カバーが変更されました。切り抜きツールを開き直してもう一度お試しください。",
        "cover_unavailable": "このカバー画像を読み込めません。ファイルの場所にアクセスできないか、カバー画像自体が失われている可能性があります",
@@ -5488,11 +5498,21 @@
 +      "ai_tags_not_configured": "先に設定ページで AI タグを設定してください",
 +      "ai_tags_failed": "AI タグ付けに失敗しました。しばらくしてからお試しください",
 +      "plot_already_zh": "あらすじはすでに中国語です",
-+      "mask_focal_endpoint_down": "顔エンドポイントが応答しません。今回は内蔵の方法で顔を検出します"
++      "mask_focal_endpoint_down": "顔エンドポイントが応答しません。今回は内蔵の方法で顔を検出します",
++      "plot_refetch_tooltip": "あらすじを再取得",
++      "plot_refetch_source_label": "取得元を選択：",
++      "plot_refetch_auto": "自動検索",
++      "plot_refetch_empty_cta": "あらすじを取得",
++      "plot_refetch_pick_source": "取得元を選ぶ",
++      "plot_refetch_done": "あらすじを再取得しました",
++      "plot_refetch_done_source": "{source} からあらすじを再取得しました",
++      "plot_refetch_not_found": "この作品のあらすじが見つかりません",
++      "plot_refetch_missing_number": "品番がないため検索できません",
++      "plot_refetch_failed": "あらすじの再取得に失敗しました"
      },
      "pick": {
        "add_aria": "★を付ける",
-@@ -1410,10 +1964,107 @@
+@@ -1410,10 +1974,107 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -5600,7 +5620,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1434,7 +2085,8 @@
+@@ -1434,7 +2095,8 @@
        "this_computer_unavailable": "このPCの更新情報を一時的に読み取れません。ヘルプページを開き直してもう一度お試しください",
        "client_up_to_date": "このPCの OpenAver は最新です",
        "client_update_available_prefix": "このPCに新バージョン",
@@ -5610,7 +5630,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2099,7 @@
+@@ -1447,7 +2109,7 @@
        "title": "初めてですか？3ステップで始めましょう",
        "subtitle": "フォルダ追加からメタデータ補完まで、3ステップで始める",
        "step1_title": "ライブラリフォルダを追加",
@@ -5619,7 +5639,7 @@
        "step2_title": "ページを生成",
        "step2_desc": "ワンクリックでスキャンして閲覧可能なコレクションページを作成",
        "step3_title": "NFO 補完",
-@@ -1464,7 +2116,7 @@
+@@ -1464,7 +2126,7 @@
      "tag_alias": {
        "title": "Tag エイリアス管理",
        "intro": "中日英の同義語を一元管理することで、検索ボックス・chip フィルター・あいまい探索がすべて同じ言語で動きます。",
@@ -5628,7 +5648,7 @@
        "scanner_chipwall": "chip ウォールにすべての Tag エイリアスグループが表示されます。「+」をクリックして alias を追加。プライマリ名はピンク、エイリアスはグレーで表示されます。",
        "scanner_ai_hint": "「?」をクリックすると AI 提案パネルが開きます。tag の要件を AI に説明すると、提案エイリアスグループをそのままインポートできます。",
        "h6_showcase": "Showcase で自動展開",
-@@ -1501,16 +2153,16 @@
+@@ -1501,16 +2163,16 @@
      "batch": {
        "title": "バッチファイル検索",
        "h6_add": "複数ファイルの追加",
@@ -5649,7 +5669,7 @@
        "fav_auto": "自動的に最初の 20 ファイルの検索を開始",
        "fav_nfo_skip": "同名の .nfo が存在する場合は整理済みとみなし、scraper を再実行しません",
        "pause_pause": "バッチ検索中に「一時停止」ボタンをクリック",
-@@ -1563,17 +2215,17 @@
+@@ -1563,17 +2225,17 @@
        "h6_manage": "お気に入り管理",
        "manage_add": "検索ページまたはショーケースページからお気に入りに追加。プロフィール写真は自動でローカルに保存",
        "manage_library": "検索バー横の <strong>+</strong> で「ライブラリから女優を追加」一覧を開けます。ライブラリ内の女優が作品数の多い順に並び、別名は同一人物としてまとめられます。行のハートをタップすればお気に入りに追加されます",
@@ -5671,7 +5691,7 @@
        "feat_nfo": "NFO ファイルを自動で読み込みメタデータを表示",
        "feat_nfo_fill": "「NFO 補完」に対応：欠損した NFO ファイルを自動検索",
        "feat_terminal": "内蔵 Mini Terminal でリアルタイム処理進捗を表示",
-@@ -1587,7 +2239,7 @@
+@@ -1587,7 +2249,7 @@
        "jellyfin_canonical": "メディアマネージャーモードを選ぶと<strong>同名のカバー画像は生成されなくなります</strong>——そのファイルは Jellyfin／Emby が優先的に読み込むため、ポスターウォールに横長画像が並ぶ原因になります。既存の作品はカバーの場所をそのまま維持します（手動で調整したフォーカス位置を消さないため）。修正したい場合は該当作品の同名カバーを削除してから再生成してください。",
        "jellyfin_showcase": "スキャン完了後、<code>/showcase</code> ページで生成結果を閲覧可能",
        "h6_strm_deploy": "読み取り専用ソース + Emby／Jellyfin／Kodi に作品をスキャンさせる（マシンをまたぐ配置）",
@@ -5680,7 +5700,7 @@
        "strm_deploy_step2": "「出力先」に<strong>このマシンで書き込める</strong>フォルダー（このマシンにマウントした NAS の書き込み可能な共有でも可）を指定します——生成される <code>.strm</code>＋NFO＋表紙がここに置かれ、それを Emby／Jellyfin／Kodi に指定してライブラリを作らせます。この出力フォルダーは読み取り専用ソースそのものではありません。",
        "strm_deploy_step4": "その後マッピングルールを変更すると、既存の <code>.strm</code> が一括で自動的に書き換えられ、ライブラリ全体を作り直す必要はありません。",
        "h6_multiversion": "同一作品の複数版（流出 / 4K / 字幕）を Emby/Jellyfin で結合するには？",
-@@ -1601,7 +2253,7 @@
+@@ -1601,7 +2263,7 @@
        "h6_modes": "表示モード",
        "h6_sort": "ソートと検索",
        "h6_other": "その他の機能",
@@ -5689,7 +5709,7 @@
        "mode_grid": "<strong>カバー全体</strong>：ジャケット全体を並べるカバーウォール。クリックで Lightbox を開きます（既定）",
        "mode_poster": "<strong>縦型ポスター</strong>：ジャケットの右半分（表面）だけを表示。カードが細くなり 1 行に多く並びます。スマホ／狭いウィンドウでは常にこのレイアウトです",
        "mode_list": "<strong>リストモード</strong>：コンパクトなリスト、素早い閲覧に最適",
-@@ -1632,7 +2284,7 @@
+@@ -1632,7 +2294,7 @@
        "beta_compilation": "tag が多いほど（シリーズ / メーカー / cast）精度が上がる；tag が少ない動画は先に NFO を補完することを推奨",
        "h6_manage": "使用ヒント",
        "manage_enable": "設定不要、すぐ使える",
@@ -5698,7 +5718,7 @@
      },
      "shortcuts": {
        "title": "キーボードショートカット",
-@@ -1809,6 +2461,66 @@
+@@ -1809,6 +2471,66 @@
        "client_title": "このPCの OpenAver を更新します",
        "client_case_a_body": "更新するのはこのPCの OpenAver で、サーバーではありません。確認を押すとこのPCでターミナルが開いてインストールが実行されます。先に OpenAver を閉じ、インストール完了後に手動で開き直してください。",
        "client_case_b_body": "このPCの OpenAver は既定の場所にインストールされていません。\nインストーラーはまず新バージョンを既定のディレクトリにインストールします。インストール中に現在の OpenAver を閉じる必要はありません。\n\nインストール完了後、次の順に操作してください：\n1. OpenAver を閉じる\n2. 旧インストールディレクトリの python フォルダを削除する\n3. 新バージョンのすべてのファイルを、このPCの元のインストール場所にコピーして上書きする\n\n再インストールや再設定は不要で、ファイルを上書きするだけで使えます。"
@@ -5765,7 +5785,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2528,18 @@
+@@ -1816,20 +2538,18 @@
      "skip": "スキップ",
      "next": "次へ →",
      "done": "完了 🎉",
@@ -5798,7 +5818,7 @@
    },
    "updater": {
      "page_title": "アップデーター",
-@@ -1845,6 +2555,12 @@
+@@ -1845,6 +2565,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -5811,7 +5831,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,16 +2576,24 @@
+@@ -1860,16 +2586,24 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -5839,7 +5859,7 @@
      },
      "age": {
        "median": "中央値 {age}"
-@@ -1878,11 +2602,15 @@
+@@ -1878,11 +2612,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -5857,7 +5877,7 @@
      },
      "costar": {
        "count_label": "{n} 本"
-@@ -1892,7 +2620,17 @@
+@@ -1892,7 +2630,17 @@
      "all_maker": "すべてのメーカー",
      "clear_actress": "女優をクリア",
      "clear_maker": "メーカーをクリア",
@@ -5876,7 +5896,7 @@
    },
    "connect": {
      "nobridge": "デスクトップ版で開いてください",
-@@ -1957,7 +2695,7 @@
+@@ -1957,7 +2705,7 @@
        "intro": "左の欄はサーバー上のフォルダ、右の欄はこのPCから見えるパスです。後で入力することもできるので、空欄のままでも構いません。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -5885,7 +5905,7 @@
        "readonly": "読み取り専用",
        "test_btn": "テスト",
        "found": "見つかりました",
-@@ -1968,7 +2706,7 @@
+@@ -1968,7 +2716,7 @@
        "loading": "サーバーのスキャンソースを読み込み中…",
        "load_failed": "サーバーのスキャンソースを読み込めません",
        "reload_btn": "再読み込み",
@@ -5894,7 +5914,7 @@
        "stale": "（サーバーにこのソースはもうありません）",
        "remove": "削除",
        "save_btn": "パス対応表を保存",
-@@ -1976,5 +2714,448 @@
+@@ -1976,5 +2724,448 @@
        "saved": "パス対応表を保存しました",
        "save_failed": "パス対応表の保存に失敗しました"
      }
@@ -6345,7 +6365,7 @@
  }
 --- /dev/null
 +++ b/locales/ko.json
-@@ -0,0 +1,3161 @@
+@@ -0,0 +1,3171 @@
 +{
 +  "nav": {
 +    "app_tools": "앱 도구",
@@ -8211,7 +8231,17 @@
 +      "ai_tags_not_configured": "먼저 설정 페이지에서 AI 태그를 설정해 주세요",
 +      "ai_tags_failed": "AI 태그 실패, 나중에 다시 시도해 주세요",
 +      "plot_already_zh": "정보는 이미 중국어입니다",
-+      "mask_focal_endpoint_down": "얼굴 랜드마크 응답 없음, 이번에는 내장 방식으로 얼굴을 찾습니다"
++      "mask_focal_endpoint_down": "얼굴 랜드마크 응답 없음, 이번에는 내장 방식으로 얼굴을 찾습니다",
++      "plot_refetch_tooltip": "줄거리 다시 가져오기",
++      "plot_refetch_source_label": "가져올 소스 선택:",
++      "plot_refetch_auto": "자동 검색",
++      "plot_refetch_empty_cta": "줄거리 가져오기",
++      "plot_refetch_pick_source": "소스 선택",
++      "plot_refetch_done": "줄거리를 다시 가져왔습니다",
++      "plot_refetch_done_source": "{source}에서 줄거리를 다시 가져왔습니다",
++      "plot_refetch_not_found": "이 작품의 줄거리를 찾을 수 없습니다",
++      "plot_refetch_missing_number": "품번이 없어 줄거리를 검색할 수 없습니다",
++      "plot_refetch_failed": "줄거리 다시 가져오기에 실패했습니다"
 +    },
 +    "pick": {
 +      "add_aria": "엄선작에 추가",
@@ -10465,7 +10495,7 @@
        "mask_toggle": "封面裁切预览",
        "mask_detect_failed": "焦点检测失败，请稍后再试",
        "mask_focal_too_slow_auto_disabled": "这张封面找脸花了超过 5 秒，已经先帮你关掉自动对焦。想调整位置直接拖就可以，随时能到设置开回来。",
-@@ -1307,9 +1835,35 @@
+@@ -1307,9 +1835,45 @@
        "mask_save_failed": "裁切设置保存失败，请稍后再试",
        "mask_cover_changed": "封面已变更，请重新打开裁切工具再试一次",
        "cover_unavailable": "这部视频的封面现在读不到——可能是文件位置目前无法访问，或者封面文件本身不见了",
@@ -10499,11 +10529,21 @@
 +      "ai_tags_not_configured": "请先到设置页的 AI 标签设置好",
 +      "ai_tags_failed": "AI 标签失败，请稍后再试",
 +      "plot_already_zh": "简介已是中文",
-+      "mask_focal_endpoint_down": "人脸端点没有响应，这次用内置方式找脸"
++      "mask_focal_endpoint_down": "人脸端点没有响应，这次用内置方式找脸",
++      "plot_refetch_tooltip": "重新获取简介",
++      "plot_refetch_source_label": "选择来源重新获取：",
++      "plot_refetch_auto": "自动搜索",
++      "plot_refetch_empty_cta": "获取简介",
++      "plot_refetch_pick_source": "选择来源",
++      "plot_refetch_done": "已重新获取简介",
++      "plot_refetch_done_source": "已从 {source} 重新获取简介",
++      "plot_refetch_not_found": "未找到这部片的简介",
++      "plot_refetch_missing_number": "缺少番号，无法搜索简介",
++      "plot_refetch_failed": "重新获取简介失败，请重试"
      },
      "pick": {
        "add_aria": "加入精选",
-@@ -1410,10 +1964,107 @@
+@@ -1410,10 +1974,107 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -10611,7 +10651,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1434,7 +2085,8 @@
+@@ -1434,7 +2095,8 @@
        "this_computer_unavailable": "暂时读不到这台电脑的更新信息，请重新打开帮助页再试",
        "client_up_to_date": "这台电脑的 OpenAver 已是最新",
        "client_update_available_prefix": "这台电脑有新版",
@@ -10621,7 +10661,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2099,7 @@
+@@ -1447,7 +2109,7 @@
        "title": "第一次使用？先看这 3 步",
        "subtitle": "从加入文件夹到补全资料，三步上手",
        "step1_title": "加入片库文件夹",
@@ -10630,7 +10670,7 @@
        "step2_title": "生成网页",
        "step2_desc": "一键扫描并建立可浏览的收藏页",
        "step3_title": "NFO 补全",
-@@ -1464,7 +2116,7 @@
+@@ -1464,7 +2126,7 @@
      "tag_alias": {
        "title": "Tag 别名管理",
        "intro": "中日英同义词集中管理，让搜索框、chip 筛选、模糊探索全部说同一种语言。",
@@ -10639,7 +10679,7 @@
        "scanner_chipwall": "chip 墙列出所有 Tag 别名组。点「+」新增 alias，主名（primary）以粉红色显示，别名以灰色显示。",
        "scanner_ai_hint": "点「?」开启 AI 建议框：把你的 tag 需求描述给 AI，它会回传建议的别名组供你直接汇入。",
        "h6_showcase": "Showcase 自动展开",
-@@ -1501,16 +2153,16 @@
+@@ -1501,16 +2163,16 @@
      "batch": {
        "title": "批次文件搜索",
        "h6_add": "加入多个文件",
@@ -10660,7 +10700,7 @@
        "fav_auto": "自动开始搜索前 20 个文件",
        "fav_nfo_skip": "同名 .nfo 存在则视为已整理，不重打 scraper",
        "pause_pause": "批次搜索时可点击「暂停」按钮",
-@@ -1563,17 +2215,17 @@
+@@ -1563,17 +2225,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "从搜索页或浏览页加入收藏，照片自动下载至本地",
        "manage_library": "搜索栏旁的 <strong>+</strong> 可打开「从片库加入女优」列表：库内女优按片数由多到少排序，别名自动合并成同一人，逐行点爱心即可加入收藏",
@@ -10682,7 +10722,7 @@
        "feat_nfo": "自动读取 NFO 文件并显示元数据",
        "feat_nfo_fill": "支持「NFO 补全」：自动搜索缺失的 NFO 文件",
        "feat_terminal": "内建 Mini Terminal 显示即时处理进度",
-@@ -1587,7 +2239,7 @@
+@@ -1587,7 +2249,7 @@
        "jellyfin_canonical": "选了媒体管理器模式后<strong>不再另外生成同名封面</strong>——那张图会被 Jellyfin／Emby 优先读取，导致封面墙出现横版图。既有的片维持原本的封面位置（以免清掉你已调整过的对焦），要修正请自行删掉该片的同名封面后重新生成。",
        "jellyfin_showcase": "扫描完成后可至 <code>/showcase</code> 页面浏览生成结果",
        "h6_strm_deploy": "只读来源 + 让 Emby／Jellyfin／Kodi 扫到片（跨机器部署）",
@@ -10691,7 +10731,7 @@
        "strm_deploy_step2": "在「输出到」指定一个<strong>这台能写入</strong>的文件夹（可以是挂载到这台的 NAS 可写共享）——生成的 <code>.strm</code>＋NFO＋封面会放这里，再让 Emby／Jellyfin／Kodi 指向它建媒体库。这个输出夹不是只读来源本身。",
        "strm_deploy_step4": "之后改了映射规则，既有的 <code>.strm</code> 会自动一次改写，不用重建整个媒体库。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎么在 Emby/Jellyfin 合并？",
-@@ -1601,7 +2253,7 @@
+@@ -1601,7 +2263,7 @@
        "h6_modes": "显示模式",
        "h6_sort": "排序与搜索",
        "h6_other": "其他功能",
@@ -10700,7 +10740,7 @@
        "mode_grid": "<strong>完整封面</strong>：整张封面的封面墙，点击开启 Lightbox（默认）",
        "mode_poster": "<strong>竖版海报</strong>：只显示封面右半（正面），卡片变窄、一行放得更多；手机／窄窗口一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精简列表，适合快速浏览",
-@@ -1632,7 +2284,7 @@
+@@ -1632,7 +2294,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越准；tag 很少的视频建议先补完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "无需设置，开箱即用",
@@ -10709,7 +10749,7 @@
      },
      "shortcuts": {
        "title": "快捷键",
-@@ -1809,6 +2461,66 @@
+@@ -1809,6 +2471,66 @@
        "client_title": "即将更新这台电脑的 OpenAver",
        "client_case_a_body": "更新的是这台电脑上的 OpenAver，不是服务器。点击确认后会在这台电脑打开终端运行安装，请先关闭 OpenAver，安装完成后再自行重新打开。",
        "client_case_b_body": "这台电脑的 OpenAver 不是安装在默认位置。\n安装程序会先把新版本安装到默认目录，安装期间不需要先关闭当前的 OpenAver。\n\n安装完成后，请依次操作：\n1. 关闭 OpenAver\n2. 删除旧安装目录中的 python 文件夹\n3. 将新版本的所有文件复制覆盖回这台电脑原本的安装位置\n\n不需要重新安装或重新设置，直接覆盖文件即可使用。"
@@ -10776,7 +10816,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2528,18 @@
+@@ -1816,20 +2538,18 @@
      "skip": "跳过",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -10809,7 +10849,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1845,6 +2555,12 @@
+@@ -1845,6 +2565,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -10822,7 +10862,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,16 +2576,24 @@
+@@ -1860,16 +2586,24 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -10850,7 +10890,7 @@
      },
      "age": {
        "median": "中位数 {age}"
-@@ -1878,11 +2602,15 @@
+@@ -1878,11 +2612,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -10868,7 +10908,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1892,7 +2620,17 @@
+@@ -1892,7 +2630,17 @@
      "all_maker": "全部片商",
      "clear_actress": "清除女优",
      "clear_maker": "清除片商",
@@ -10887,7 +10927,7 @@
    },
    "connect": {
      "nobridge": "请在桌面版打开",
-@@ -1957,7 +2695,7 @@
+@@ -1957,7 +2705,7 @@
        "intro": "左栏是服务器上的文件夹，右栏填这台电脑看到的路径，可以先留空、之后再填。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -10896,7 +10936,7 @@
        "readonly": "只读",
        "test_btn": "测试",
        "found": "找得到",
-@@ -1968,7 +2706,7 @@
+@@ -1968,7 +2716,7 @@
        "loading": "正在读取服务器的扫描来源…",
        "load_failed": "读不到服务器的扫描来源",
        "reload_btn": "重新读取",
@@ -10905,7 +10945,7 @@
        "stale": "（服务器已无此来源）",
        "remove": "移除",
        "save_btn": "保存对照表",
-@@ -1976,5 +2714,448 @@
+@@ -1976,5 +2724,448 @@
        "saved": "对照表已保存",
        "save_failed": "对照表保存失败"
      }
@@ -12408,7 +12448,7 @@
        "translate_undo": "復原",
        "translate_skipped": "標題沒有需要翻譯的內容",
        "translate_undone": "已復原標題",
-@@ -1298,18 +1826,44 @@
+@@ -1298,18 +1826,54 @@
        "translate_no_nfo": "這部片還沒有 NFO，請先補完再翻譯標題",
        "user_tags_label": "自訂標籤",
        "alias_label": "別名",
@@ -12452,11 +12492,21 @@
 +      "ai_tags_not_configured": "請先到設定頁的 AI 標籤設定好",
 +      "ai_tags_failed": "AI 標籤失敗，請稍後再試",
 +      "plot_already_zh": "簡介已是中文",
-+      "mask_focal_endpoint_down": "人臉端點沒有回應，這次用內建方式找臉"
++      "mask_focal_endpoint_down": "人臉端點沒有回應，這次用內建方式找臉",
++      "plot_refetch_tooltip": "重新取得簡介",
++      "plot_refetch_source_label": "選擇來源重新取得：",
++      "plot_refetch_auto": "自動搜尋",
++      "plot_refetch_empty_cta": "取得簡介",
++      "plot_refetch_pick_source": "選擇來源",
++      "plot_refetch_done": "已重新取得簡介",
++      "plot_refetch_done_source": "已從 {source} 重新取得簡介",
++      "plot_refetch_not_found": "找不到這部片的簡介",
++      "plot_refetch_missing_number": "缺少番號，無法搜尋簡介",
++      "plot_refetch_failed": "重新取得簡介失敗，請重試"
      },
      "pick": {
        "add_aria": "加入精選",
-@@ -1410,12 +1964,109 @@
+@@ -1410,12 +1974,109 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -12567,7 +12617,7 @@
        "copy_curl": "複製指令",
        "page_title": "使用說明",
        "subtitle": "JAV 影片元數據管理工具",
-@@ -1426,15 +2077,16 @@
+@@ -1426,15 +2087,16 @@
        "update_available_prefix": "新版本",
        "update_available_suffix": "可用",
        "up_to_date": "已是最新版本",
@@ -12587,7 +12637,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2099,7 @@
+@@ -1447,7 +2109,7 @@
        "title": "第一次使用？先看這 3 步",
        "subtitle": "從加入資料夾到補全資料，三步上手",
        "step1_title": "加入片庫資料夾",
@@ -12596,7 +12646,7 @@
        "step2_title": "產生網頁",
        "step2_desc": "一鍵掃描並建立可瀏覽的收藏頁",
        "step3_title": "NFO 補全",
-@@ -1464,7 +2116,7 @@
+@@ -1464,7 +2126,7 @@
      "tag_alias": {
        "title": "Tag 別名管理",
        "intro": "中日英同義詞集中管理，讓搜尋框、chip 篩選、模糊探索全部說同一種語言。",
@@ -12605,7 +12655,7 @@
        "scanner_chipwall": "chip 牆列出所有 Tag 別名組。點「+」新增 alias，主名（primary）以粉紅色顯示，別名以灰色顯示。",
        "scanner_ai_hint": "點「?」開啟 AI 建議框：把你的 tag 需求描述給 AI，它會回傳建議的別名組供你直接匯入。",
        "h6_showcase": "Showcase 自動展開",
-@@ -1501,16 +2153,16 @@
+@@ -1501,16 +2163,16 @@
      "batch": {
        "title": "批次檔案搜尋",
        "h6_add": "加入多個檔案",
@@ -12626,7 +12676,7 @@
        "fav_auto": "自動開始搜尋前 20 個檔案",
        "fav_nfo_skip": "同名 .nfo 存在則視為已整理，不重打 scraper",
        "pause_pause": "批次搜尋時可點擊「暫停」按鈕",
-@@ -1563,17 +2215,17 @@
+@@ -1563,17 +2225,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "從搜尋頁或瀏覽頁加入收藏，照片自動下載至本地",
        "manage_library": "搜尋列旁的 <strong>+</strong> 可開啟「從片庫加入女優」清單：庫內女優依片數由多到少排序，別名自動合併成同一人，逐列點愛心即可加入收藏",
@@ -12648,7 +12698,7 @@
        "feat_nfo": "自動讀取 NFO 檔案並顯示元數據",
        "feat_nfo_fill": "「就地補資料」：原地補缺失的 NFO + 封面，不改名、不搬位 — 適合唯讀網盤、已有自己的資料夾結構，或只想瀏覽不被改檔案",
        "feat_terminal": "內建 Mini Terminal 顯示即時處理進度",
-@@ -1587,9 +2239,9 @@
+@@ -1587,9 +2249,9 @@
        "jellyfin_canonical": "選了媒體管理器模式後<strong>不再另外產生同名封面</strong>——那張圖會被 Jellyfin／Emby 優先讀取，造成封面牆出現橫式圖。既有的片維持原本的封面位置（以免清掉你已調整過的對焦），要修正請自行刪掉該片的同名封面後重新產生。",
        "jellyfin_showcase": "掃描完成後可至 <code>/showcase</code> 頁面瀏覽生成結果",
        "h6_strm_deploy": "唯讀來源 + 讓 Emby／Jellyfin／Kodi 掃到片（跨機器部署）",
@@ -12660,7 +12710,7 @@
        "strm_deploy_step4": "之後改了映射規則，既有的 <code>.strm</code> 會自動一次改寫，不用重建整個媒體庫。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎麼在 Emby/Jellyfin 合併？",
        "multiversion_intro": "多版本合併是 Emby 與 Jellyfin 共同支援的原生功能（同一套「資料夾名 - 標籤」規則），不是哪一家獨有。把同一片各版本放進以番號命名的資料夾，檔名都以資料夾名開頭加「 - 標籤」：",
-@@ -1601,7 +2253,7 @@
+@@ -1601,7 +2263,7 @@
        "h6_modes": "顯示模式",
        "h6_sort": "排序與搜尋",
        "h6_other": "其他功能",
@@ -12669,7 +12719,7 @@
        "mode_grid": "<strong>完整封面</strong>：整張封面的封面牆，點擊開啟 Lightbox（預設）",
        "mode_poster": "<strong>直式海報</strong>：只顯示封面右半（正面），卡片變窄、一列放得更多；手機／窄視窗一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精簡列表，適合快速瀏覽（預設不顯示；可至「設定」→「列表顯示預設」開啟「顯示表格與清單」）",
-@@ -1632,7 +2284,7 @@
+@@ -1632,7 +2294,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越準；tag 很少的影片建議先補完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "無需設定，開箱即用",
@@ -12678,7 +12728,7 @@
      },
      "shortcuts": {
        "title": "快捷鍵",
-@@ -1736,26 +2388,26 @@
+@@ -1736,26 +2398,26 @@
      "server_mode": {
        "title": "伺服器模式 — 讓手機/平板連進來",
        "h6_what": "這是什麼",
@@ -12712,7 +12762,7 @@
        "h6_recover": "不小心按了「取消 / 拒絕」怎麼救回",
        "recover_win_intro": "Windows 救回步驟：",
        "recover_win_1": "按 <code>Win + R</code>，輸入 <code>wf.msc</code> 後 Enter，開啟「Windows Defender 防火牆 進階安全性」。",
-@@ -1800,15 +2452,75 @@
+@@ -1800,15 +2462,75 @@
      "update_modal": {
        "trigger_btn": "更新",
        "title": "即將開啟安裝視窗",
@@ -12791,7 +12841,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2528,18 @@
+@@ -1816,20 +2538,18 @@
      "skip": "跳過",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -12824,7 +12874,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1850,6 +2560,12 @@
+@@ -1850,6 +2570,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -12837,7 +12887,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1861,20 +2577,28 @@
+@@ -1861,20 +2587,28 @@
        "series": "系列",
        "deep_dive": "深入：女優與片商",
        "gantt": "主要片商年表",
@@ -12870,7 +12920,7 @@
      },
      "age": {
        "median": "中位數 {age}"
-@@ -1883,20 +2607,34 @@
+@@ -1883,20 +2617,34 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -12909,7 +12959,7 @@
      "status_connected": "已連線 {host}",
      "status_down": "連不到 {host}",
      "version_line": "版本 {version}（{kind}）",
-@@ -1906,69 +2644,69 @@
+@@ -1906,69 +2654,69 @@
      "kind_windows": "Windows 桌面版",
      "kind_mac": "Mac 桌面版",
      "last_ok": "上次成功連線：{time}",
@@ -13000,7 +13050,7 @@
        "stale": "（伺服器已無此來源）",
        "remove": "移除",
        "save_btn": "儲存對照表",
-@@ -1976,5 +2714,448 @@
+@@ -1976,5 +2724,448 @@
        "saved": "對照表已儲存",
        "save_failed": "對照表儲存失敗"
      }
@@ -20923,7 +20973,7 @@
      flex-shrink: 0;
      display: inline-flex;
      align-items: center;
-@@ -578,33 +663,142 @@
+@@ -578,33 +663,230 @@
      border: 1px solid var(--stroke-subtle);
      border-radius: 50%;
      background: var(--surface-1);
@@ -21021,8 +21071,96 @@
 +    flex: none;
 +    display: flex;
 +    align-items: center;
++    gap: 0.35rem;
 +    padding-bottom: 0.5rem;
 +    border-bottom: 1px solid var(--stroke-subtle);
++}
++
++.lightbox-metadata .lb-plot-refetch-btn[aria-expanded="true"] {
++    border-color: color-mix(in oklch, var(--accent) 50%, var(--stroke-default));
++    color: var(--accent);
++    background: color-mix(in oklch, var(--accent) 12%, var(--surface-1));
++}
++
++.lightbox-metadata .lb-plot-source-bar {
++    display: flex;
++    flex-direction: column;
++    gap: 0.4rem;
++    padding: 0.55rem 0.65rem;
++    margin-top: 0.45rem;
++    border-radius: 10px;
++    background: var(--surface-1);
++    border: 1px solid var(--stroke-subtle);
++}
++
++.lightbox-metadata .lb-plot-source-label {
++    font-size: 0.72rem;
++    font-weight: 600;
++    color: var(--text-muted);
++}
++
++.lightbox-metadata .lb-plot-source-pills {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 0.35rem;
++}
++
++.lightbox-metadata .lb-plot-source-pill {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.25rem;
++    min-height: 28px;
++    padding: 0 0.58rem;
++    border-radius: 999px;
++    border: 1px solid var(--stroke-default);
++    background: var(--surface-2);
++    color: var(--text-primary);
++    font-size: 0.74rem;
++    font-weight: 600;
++    cursor: pointer;
++}
++
++.lightbox-metadata .lb-plot-source-pill:hover:not(:disabled) {
++    border-color: color-mix(in oklch, var(--accent) 45%, var(--stroke-default));
++}
++
++.lightbox-metadata .lb-plot-source-pill--auto {
++    background: color-mix(in oklch, var(--accent) 14%, var(--surface-2));
++    border-color: color-mix(in oklch, var(--accent) 36%, var(--stroke-default));
++    color: var(--accent);
++}
++
++.lightbox-metadata .lb-plot-empty-wrap {
++    display: flex;
++    flex-direction: column;
++    gap: 0.55rem;
++}
++
++.lightbox-metadata .lb-plot-empty-actions {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 0.4rem;
++}
++
++.lightbox-metadata .lb-plot-empty-btn {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.3rem;
++    min-height: 32px;
++    padding: 0 0.7rem;
++    border-radius: 999px;
++    border: 1px solid color-mix(in oklch, var(--accent) 38%, var(--stroke-default));
++    background: color-mix(in oklch, var(--accent) 13%, var(--surface-1));
++    color: var(--accent);
++    font-size: 0.76rem;
++    font-weight: 600;
++    cursor: pointer;
++}
++
++.lightbox-metadata .lb-plot-empty-btn--ghost {
++    border-color: var(--stroke-default);
++    background: var(--surface-1);
++    color: var(--text-secondary);
 +}
 +
 +.lightbox-metadata .lb-plot-face-title {
@@ -21076,7 +21214,7 @@
  }
  
  /* 98b-T4：遮罩 overlay（疊在 .lightbox-cover 已 layout 的封面 rect 上，不裁圖）。 */
-@@ -626,7 +820,7 @@
+@@ -626,7 +908,7 @@
      left: 0;
      box-sizing: border-box;
      border: 1px solid rgba(255, 255, 255, 0.55);      /* 亮框：對齊 .lb-action-btn 玻璃邊 rgba 先例 */
@@ -21085,7 +21223,7 @@
      transition: transform var(--fluent-duration-medium) var(--ease-out);
      touch-action: none;   /* 99a-T3：拖曳時防手機系統手勢（頁面捲動/swipe-to-back/左右換片）搶走 */
      cursor: ew-resize;    /* 100c-T3a：Y 軸砍除後（CD-6）唯一可拖方向恆為橫向，游標契約併回基礎規則 */
-@@ -820,9 +1014,8 @@
+@@ -820,9 +1102,8 @@
      border: 1px solid rgba(255, 255, 255, 0.4);
      border-radius: 50%;
      background: rgba(255, 255, 255, 0.15);
@@ -21097,7 +21235,7 @@
      cursor: pointer;
      display: flex;
      align-items: center;
-@@ -838,7 +1031,7 @@
+@@ -838,7 +1119,7 @@
      background: rgba(255, 255, 255, 0.3);
      border-color: rgba(255, 255, 255, 0.6);
      transform: scale(1.08);
@@ -21180,7 +21318,7 @@
  }
  
  /* Responsive: 小螢幕 */
-@@ -490,11 +489,480 @@
+@@ -490,11 +489,484 @@
      }
  }
  
@@ -21526,6 +21664,10 @@
 +        cursor: pointer;
 +    }
 +
++    .showcase-container .lb-mobile-plot .lb-plot-source-bar {
++        margin: 0 0 8px;
++    }
++
 +    .showcase-container .lb-mobile-plot-card {
 +        padding: 12px 14px;
 +        border: 1px solid var(--stroke-subtle);
@@ -21665,7 +21807,7 @@
      }
  
      .lightbox-nav {
-@@ -622,7 +1090,7 @@
+@@ -622,7 +1094,7 @@
  .table-scroll-container {
      overflow-x: auto;
      border-radius: var(--radius-md);
@@ -21674,7 +21816,7 @@
  }
  
  /* Table Base - DaisyUI .table 強化 */
-@@ -786,7 +1254,7 @@
+@@ -786,7 +1258,7 @@
      border: 1px solid var(--stroke-default);
      border-radius: var(--radius-md);
      overflow: hidden;
@@ -34427,7 +34569,7 @@ HcmV?d00001
 +}
 --- /dev/null
 +++ b/web/static/js/pages/showcase/state-lightbox-plot.js
-@@ -0,0 +1,306 @@
+@@ -0,0 +1,405 @@
 +/**
 + * Lightbox plot panel: lazy NFO read, translation, writeback, and undo.
 + *
@@ -34461,8 +34603,10 @@ HcmV?d00001
 +    return {
 +        lbPlotOpen: false,
 +        _lbPlotInline: false,
++        _lbPlotSourceOpen: false,
 +        _lbPlotView: emptyPlotView(),
 +        _lbPlotInFlight: {},
++        _lbPlotBusyAction: {},
 +        _lbPlotGen: 0,
 +        _lbPlotAbort: null,
 +
@@ -34477,6 +34621,27 @@ HcmV?d00001
 +                hasOriginal: this._lbPlotView.hasOriginal,
 +                showing: this._lbPlotView.showing,
 +            });
++        },
++
++        lbPlotRefetchSources() {
++            const builtin = typeof this.rescrapeBuiltinSources === 'function'
++                ? this.rescrapeBuiltinSources()
++                : [];
++            const custom = typeof this.rescrapeCustomSources === 'function'
++                ? this.rescrapeCustomSources()
++                : [];
++            return [...builtin, ...custom].filter((s) => (
++                s && s.id && !(typeof this.isJlUnavailable === 'function' && this.isJlUnavailable(s))
++            ));
++        },
++
++        lbPlotToggleRefetchSources() {
++            this._lbPlotSourceOpen = !this._lbPlotSourceOpen;
++        },
++
++        lbPlotIsActionBusy(action) {
++            const path = this.currentLightboxVideo?.path;
++            return !!(path && this._lbPlotInFlight[path] && this._lbPlotBusyAction[path] === action);
 +        },
 +
 +        lbPlotShowButton() {
@@ -34525,6 +34690,7 @@ HcmV?d00001
 +            }
 +            this.lbPlotOpen = false;
 +            this._lbPlotInline = false;
++            this._lbPlotSourceOpen = false;
 +            this._lbPlotView = emptyPlotView();
 +        },
 +
@@ -34587,6 +34753,7 @@ HcmV?d00001
 +            if (this._lbPlotInFlight[path]) return;
 +
 +            this._lbPlotInFlight[path] = true;
++            this._lbPlotBusyAction[path] = 'translate';
 +            const sourceText = view.showing === 'original'
 +                ? (view.original || '')
 +                : view.plot;
@@ -34688,6 +34855,79 @@ HcmV?d00001
 +                );
 +            } finally {
 +                delete this._lbPlotInFlight[path];
++                delete this._lbPlotBusyAction[path];
++            }
++        },
++
++        async lbPlotRefetch(source = 'auto') {
++            const video = this.currentLightboxVideo;
++            const view = this._lbPlotView;
++            const path = video?.path;
++            if (!path || view.loading || this._lbPlotInFlight[path]) return;
++            const generation = this._lbPlotGen;
++            const hadPreviousPlot = !view.error && !!view.plot;
++            const snapshot = hadPreviousPlot
++                ? { plot: view.plot, original: view.original || '' }
++                : null;
++
++            this._lbPlotSourceOpen = false;
++            this._lbPlotInFlight[path] = true;
++            this._lbPlotBusyAction[path] = 'refetch';
++            try {
++                let data;
++                try {
++                    const response = await fetch('/api/showcase/video/plot/refetch', {
++                        method: 'POST',
++                        headers: { 'Content-Type': 'application/json' },
++                        body: JSON.stringify({ file_path: path, source: source || 'auto' }),
++                    });
++                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
++                    data = await response.json();
++                } catch (_err) {
++                    this.showToast(
++                        window.t('showcase.lightbox.plot_refetch_failed'),
++                        'error',
++                    );
++                    return;
++                }
++
++                if (data?.success !== true) {
++                    const warnErrors = new Set(['no_summary', 'missing_number', 'search_blocked', 'search_unreachable']);
++                    const toastType = warnErrors.has(data?.error) ? 'warning' : 'error';
++                    this.showToast(
++                        data?.message || window.t('showcase.lightbox.plot_refetch_failed'),
++                        toastType,
++                    );
++                    return;
++                }
++
++                if (
++                    generation === this._lbPlotGen
++                    && (this.lbPlotOpen || this._lbPlotInline)
++                    && this._lbPlotView.path === path
++                ) {
++                    this._lbPlotApply(this._lbPlotView, data);
++                }
++
++                const doneMsg = data.source_label
++                    ? window.t('showcase.lightbox.plot_refetch_done_source', { source: data.source_label })
++                    : window.t('showcase.lightbox.plot_refetch_done');
++                if (snapshot && !sameAfterNormalize(data.plot, snapshot.plot)) {
++                    this.showToast(
++                        doneMsg,
++                        'success',
++                        UNDO_TOAST_MS,
++                        {
++                            label: window.t('showcase.lightbox.plot_translate_undo'),
++                            onClick: () => this._lbPlotUndo(path, snapshot),
++                        },
++                    );
++                } else {
++                    this.showToast(doneMsg, 'success');
++                }
++            } finally {
++                delete this._lbPlotInFlight[path];
++                delete this._lbPlotBusyAction[path];
 +            }
 +        },
 +
@@ -34730,6 +34970,7 @@ HcmV?d00001
 +                );
 +            } finally {
 +                delete this._lbPlotInFlight[path];
++                delete this._lbPlotBusyAction[path];
 +            }
 +        },
 +    };
@@ -34842,7 +35083,32 @@ HcmV?d00001
          // 71c-P2: helper — blur-up state reset + same-URL complete-check（DRY；供 _setLightboxIndex 與
          // slip-through 路徑（state-similar.js closeSimilarMode）共用，避免兩處邏輯漂移）。
          // 呼叫時機：currentLightboxVideo 已更新、Alpine reactive patch 尚未跑完（$nextTick 前）。
-@@ -190,6 +204,7 @@
+@@ -183,6 +197,24 @@
+             return this._isNarrow || this.cardShape === 'poster';
+         },
+ 
++        _resetSampleStripScroll() {
++            const reset = () => {
++                for (const sel of ['.showcase-lightbox .lb-mobile-sample-strip', '.sample-gallery .sg-thumbs']) {
++                    const el = document.querySelector(sel);
++                    if (el) el.scrollLeft = 0;
++                }
++            };
++            reset();
++            if (typeof this.$nextTick === 'function') {
++                this.$nextTick(() => {
++                    reset();
++                    if (typeof requestAnimationFrame === 'function') {
++                        requestAnimationFrame(reset);
++                    }
++                });
++            }
++        },
++
+         // F1: helper — 更新 lightboxIndex + currentLightboxVideo 一致性
+         _setLightboxIndex(idx) {
+             // 123-T4 / C27：燈箱星是常駐節點，切換影片必須先殺掉進行中的 --pick-fill
+@@ -190,6 +222,7 @@
              // 123-T4b：GSAP 呼叫收斂進 animations.js（TestMotionInfra 守衛，見該檔
              // killPickStarTweens 註解）。不清 --pick-fill（沿用搬移前行為）。
              window.ShowcaseAnimations?.killPickStarTweens?.({ clearTransform: true });
@@ -34850,12 +35116,13 @@ HcmV?d00001
              this.lightboxIndex = idx;
              this.currentLightboxVideo = (idx >= 0 && idx < _filteredVideos.length)
                  ? _filteredVideos[idx] : null;
-@@ -202,10 +217,32 @@
+@@ -202,10 +235,33 @@
              // 71c-P2: 抽至 _refreshLbFullBlurUp helper（slip-through 路徑共用）
              this._refreshLbFullBlurUp();
              this._refreshLbActorAges();
 +            if (this.currentLightboxVideo) {
 +                this._lbPlotAutoLoad?.();
++                this._resetSampleStripScroll();
 +            }
          },
  
@@ -34884,7 +35151,7 @@ HcmV?d00001
              // F2: cancel pending delayed clear from previous close
              if (this.lightboxCloseTimer) {
                  clearTimeout(this.lightboxCloseTimer);
-@@ -319,6 +356,7 @@
+@@ -319,6 +375,7 @@
          openHeroCardLightbox() {
              if (this._lightboxAnimating) return;
              if (!this._matchedActress) return;
@@ -34892,7 +35159,7 @@ HcmV?d00001
              this._actressChipsExpanded = { aliases: false, info: false };
              // ★ 直接賦值（不走 _setLightboxIndex(-1)）
              this.lightboxIndex = -1;
-@@ -361,6 +399,7 @@
+@@ -361,6 +418,7 @@
                  clearTimeout(this.lightboxCloseTimer);
                  this.lightboxCloseTimer = null;
              }
@@ -34900,7 +35167,7 @@ HcmV?d00001
  
              // 49b T4 fix: 若 picker 開啟中，先關閉 picker
              if (this._pickerOpen) {
-@@ -369,7 +408,6 @@
+@@ -369,7 +427,6 @@
  
              this.addingLbTag = false;    // 關閉 lightbox 時重置 user tag 輸入框
              this._resetMask();           // 98b-T4：關燈箱丟棄未提交遮罩態（不 commit）
@@ -34908,7 +35175,7 @@ HcmV?d00001
  
              // ★ C11: fly-back — 必須在 generation++ / lightboxOpen = false 之前捕獲
              // 56c-fix-v3: standalone similar-exit（similarExitVideo set，lightboxIndex 仍是進 similar mode 前舊值）
-@@ -560,6 +598,7 @@
+@@ -560,6 +617,7 @@
                  // 掛載），必須在賦值前同步 _resetMask()——姊妹 $watch 是非同步 effect flush，
                  // 對掛載那一幀擋不住（gotchas-frontend §8b／T1 CDP 2/2 重現）。
                  this._resetMask();
@@ -34916,7 +35183,7 @@ HcmV?d00001
                  this.currentLightboxActress = this._matchedActress;
                  this.currentLightboxVideo = null;
                  this.addingLbTag = false;
-@@ -680,6 +719,11 @@
+@@ -680,6 +738,11 @@
          // 呼叫點搶在方法定義前出現，誤導以 first-occurrence 定位方法體的既有 sentinel 守衛。
  
          _lbTouchStart(e) {
@@ -34928,7 +35195,7 @@ HcmV?d00001
              if (e.touches && e.touches.length > 0) {
                  this._lbTouchStartX = e.touches[0].clientX;
                  this._lbTouchStartY = e.touches[0].clientY;
-@@ -688,6 +732,11 @@
+@@ -688,6 +751,11 @@
  
          _lbTouchEnd(e) {
              if (this._lbTouchStartX === null) return;
@@ -34940,7 +35207,7 @@ HcmV?d00001
              var endX = e.changedTouches && e.changedTouches.length > 0
                  ? e.changedTouches[0].clientX
                  : null;
-@@ -912,19 +961,42 @@
+@@ -912,19 +980,42 @@
                      headers: { 'Content-Type': 'application/json' },
                      body: JSON.stringify({ file_path: video.path, number: video.number })
                  });
@@ -34991,7 +35258,7 @@ HcmV?d00001
              } finally {
                  this._fetchSamplesLoading = false;
              }
-@@ -948,7 +1020,13 @@
+@@ -948,7 +1039,13 @@
                      }
                      // 67-A2/CD-67-3b: data.video 不帶 _imgLoaded → 舊 true 殘留會讓新封面跳過 skeleton/fade。
                      // Object.assign 前 reset，讓補封面/重抓的新 cover_url（含上面 &t= cache-bust）重走 skeleton→@load→淡入。
@@ -35006,7 +35273,7 @@ HcmV?d00001
                      Object.assign(video, data.video);
                      _recomputeVideoBadges(video);
                      _recomputeCardActorAges(video);
-@@ -969,6 +1047,14 @@
+@@ -969,6 +1066,14 @@
  
          // --- 快捷鍵 (M4c 完整實作) ---
          handleKeydown(e) {
@@ -35021,7 +35288,7 @@ HcmV?d00001
              // 116b：浮層開啟時最高優先（必須在 INPUT early-return 之前——區間的 number input
              // 取得焦點時 e.target.tagName === 'INPUT'，放在後面 ESC 永遠到不了這裡）。
              // TASK-124a-T2：新增 _releaseEditor 分支（兩個 slot 依 §3.5 不變式恆不同時非
-@@ -1118,7 +1204,7 @@
+@@ -1118,7 +1223,7 @@
                  if (this.showFavoriteActresses) return;          // AC-5.3：女優牆整條早退
                  const order = this._presentationOrder();
                  const idx = order.indexOf(this._currentPresentation());
@@ -35030,7 +35297,7 @@ HcmV?d00001
              } else if (key === 'ARROWLEFT') {
                  if (this.page > 1) {
                      this.prevPage();
-@@ -1140,6 +1226,7 @@
+@@ -1140,6 +1245,7 @@
           * @param {WheelEvent} event
           */
          handleWheel(event) {
@@ -42153,7 +42420,7 @@ HcmV?d00001
  
                                  <!-- Inline 輸入框 -->
                                  <span class="lb-tag-input-wrapper" x-show="addingLbTag">
-@@ -1348,6 +1472,176 @@
+@@ -1348,6 +1472,268 @@
                                  </span>
                              </div>
  
@@ -42167,19 +42434,34 @@ HcmV?d00001
 +                                        <span>{{ t('showcase.lightbox.plot_face_title') }}</span>
 +                                    </span>
 +                                    <div class="lb-mobile-section-tools">
++                                        <button type="button" class="lb-translate-btn lb-plot-refetch-btn"
++                                                x-show="!_lbPlotView.loading && lbPlotShowButton()"
++                                                @click.stop="lbPlotToggleRefetchSources()"
++                                                :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                                :aria-busy="lbPlotIsActionBusy('refetch')"
++                                                :aria-expanded="_lbPlotSourceOpen"
++                                                data-tooltip="{{ t('showcase.lightbox.plot_refetch_tooltip') }}"
++                                                aria-label="{{ t('showcase.lightbox.plot_refetch_tooltip') }}">
++                                            <i class="bi bi-cloud-arrow-down"
++                                               x-show="!lbPlotIsActionBusy('refetch')"
++                                               aria-hidden="true"></i>
++                                            <i class="bi bi-arrow-repeat spin"
++                                               x-show="lbPlotIsActionBusy('refetch')"
++                                               aria-hidden="true"></i>
++                                        </button>
 +                                        <button type="button" class="lb-translate-btn"
 +                                                x-show="!_lbPlotView.error && !_lbPlotView.loading && (lbPlotButtons.includes('translate') || lbPlotButtons.includes('retranslate'))"
 +                                                @click.stop="lbPlotTranslate()"
 +                                                :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
-+                                                :aria-busy="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                                :aria-busy="lbPlotIsActionBusy('translate')"
 +                                                :data-tooltip="lbPlotButtons.includes('retranslate') ? t('showcase.lightbox.plot_retranslate_tooltip') : t('showcase.lightbox.plot_translate_tooltip')"
 +                                                :aria-label="lbPlotButtons.includes('retranslate') ? t('showcase.lightbox.plot_retranslate_tooltip') : t('showcase.lightbox.plot_translate_tooltip')">
 +                                            <i class="bi"
 +                                               :class="lbPlotButtons.includes('retranslate') ? 'bi-arrow-repeat' : 'bi-translate'"
-+                                               x-show="!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                               x-show="!lbPlotIsActionBusy('translate')"
 +                                               aria-hidden="true"></i>
 +                                            <i class="bi bi-arrow-repeat spin"
-+                                               x-show="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                               x-show="lbPlotIsActionBusy('translate')"
 +                                               aria-hidden="true"></i>
 +                                        </button>
 +                                        <button type="button" class="lb-translate-btn"
@@ -42191,6 +42473,23 @@ HcmV?d00001
 +                                        </button>
 +                                    </div>
 +                                </div>
++                                <div class="lb-plot-source-bar" x-show="_lbPlotSourceOpen" x-cloak>
++                                    <span class="lb-plot-source-label">{{ t('showcase.lightbox.plot_refetch_source_label') }}</span>
++                                    <div class="lb-plot-source-pills">
++                                        <button type="button" class="lb-plot-source-pill lb-plot-source-pill--auto"
++                                                :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                                @click.stop="lbPlotRefetch('auto')">
++                                            <i class="bi bi-stars" aria-hidden="true"></i>
++                                            <span>{{ t('showcase.lightbox.plot_refetch_auto') }}</span>
++                                        </button>
++                                        <template x-for="src in lbPlotRefetchSources()" :key="src.id">
++                                            <button type="button" class="lb-plot-source-pill"
++                                                    :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                                    @click.stop="lbPlotRefetch(src.id)"
++                                                    x-text="src.display_name_raw || src.display_name_key || src.id"></button>
++                                        </template>
++                                    </div>
++                                </div>
 +                                <div class="lb-mobile-plot-card">
 +                                    <div class="lb-plot-skeleton"
 +                                         x-show="_lbPlotView.loading"
@@ -42198,9 +42497,23 @@ HcmV?d00001
 +                                        <span class="lb-plot-skeleton-line"></span>
 +                                        <span class="lb-plot-skeleton-line"></span>
 +                                    </div>
-+                                    <p class="lb-plot-unavailable"
-+                                       x-show="!_lbPlotView.loading && _lbPlotView.error"
-+                                       x-text="t('showcase.lightbox.plot_unavailable')"></p>
++                                    <div class="lb-plot-empty-wrap" x-show="!_lbPlotView.loading && _lbPlotView.error">
++                                        <p class="lb-plot-unavailable"
++                                           x-text="t('showcase.lightbox.plot_unavailable')"></p>
++                                        <div class="lb-plot-empty-actions">
++                                            <button type="button" class="lb-plot-empty-btn"
++                                                    :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                                    @click.stop="lbPlotRefetch('auto')">
++                                                <i class="bi" :class="lbPlotIsActionBusy('refetch') ? 'bi-arrow-repeat spin' : 'bi-cloud-arrow-down'" aria-hidden="true"></i>
++                                                <span>{{ t('showcase.lightbox.plot_refetch_empty_cta') }}</span>
++                                            </button>
++                                            <button type="button" class="lb-plot-empty-btn lb-plot-empty-btn--ghost"
++                                                    :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                                    @click.stop="lbPlotToggleRefetchSources()">
++                                                <span>{{ t('showcase.lightbox.plot_refetch_pick_source') }}</span>
++                                            </button>
++                                        </div>
++                                    </div>
 +                                    <p class="lb-plot-text"
 +                                       x-show="!_lbPlotView.loading && !_lbPlotView.error && _lbPlotView.path === currentLightboxVideo?.path"
 +                                       x-text="_lbPlotView.showing === 'original' ? _lbPlotView.original : _lbPlotView.plot"></p>
@@ -42282,19 +42595,34 @@ HcmV?d00001
 +                                 :aria-hidden="!lbPlotOpen">
 +                                <div class="lb-plot-face-head">
 +                                    <span class="lb-plot-face-title">{{ t('showcase.lightbox.plot_face_title') }}</span>
++                                    <button type="button" class="lb-translate-btn lb-plot-refetch-btn"
++                                            x-show="!_lbPlotView.loading && lbPlotShowButton()"
++                                            @click.stop="lbPlotToggleRefetchSources()"
++                                            :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                            :aria-busy="lbPlotIsActionBusy('refetch')"
++                                            :aria-expanded="_lbPlotSourceOpen"
++                                            data-tooltip="{{ t('showcase.lightbox.plot_refetch_tooltip') }}"
++                                            aria-label="{{ t('showcase.lightbox.plot_refetch_tooltip') }}">
++                                        <i class="bi bi-cloud-arrow-down"
++                                           x-show="!lbPlotIsActionBusy('refetch')"
++                                           aria-hidden="true"></i>
++                                        <i class="bi bi-arrow-repeat spin"
++                                           x-show="lbPlotIsActionBusy('refetch')"
++                                           aria-hidden="true"></i>
++                                    </button>
 +                                    <button type="button" class="lb-translate-btn"
 +                                            x-show="!_lbPlotView.error && !_lbPlotView.loading && (lbPlotButtons.includes('translate') || lbPlotButtons.includes('retranslate'))"
 +                                            @click.stop="lbPlotTranslate()"
 +                                            :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
-+                                            :aria-busy="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                            :aria-busy="lbPlotIsActionBusy('translate')"
 +                                            :data-tooltip="lbPlotButtons.includes('retranslate') ? t('showcase.lightbox.plot_retranslate_tooltip') : t('showcase.lightbox.plot_translate_tooltip')"
 +                                            :aria-label="lbPlotButtons.includes('retranslate') ? t('showcase.lightbox.plot_retranslate_tooltip') : t('showcase.lightbox.plot_translate_tooltip')">
 +                                        <i class="bi"
 +                                           :class="lbPlotButtons.includes('retranslate') ? 'bi-arrow-repeat' : 'bi-translate'"
-+                                           x-show="!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                           x-show="!lbPlotIsActionBusy('translate')"
 +                                           aria-hidden="true"></i>
 +                                        <i class="bi bi-arrow-repeat spin"
-+                                           x-show="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                           x-show="lbPlotIsActionBusy('translate')"
 +                                           aria-hidden="true"></i>
 +                                    </button>
 +                                    <button type="button" class="lb-translate-btn"
@@ -42311,6 +42639,23 @@ HcmV?d00001
 +                                        <i class="bi bi-x-lg" aria-hidden="true"></i>
 +                                    </button>
 +                                </div>
++                                <div class="lb-plot-source-bar" x-show="_lbPlotSourceOpen" x-cloak>
++                                    <span class="lb-plot-source-label">{{ t('showcase.lightbox.plot_refetch_source_label') }}</span>
++                                    <div class="lb-plot-source-pills">
++                                        <button type="button" class="lb-plot-source-pill lb-plot-source-pill--auto"
++                                                :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                                @click.stop="lbPlotRefetch('auto')">
++                                            <i class="bi bi-stars" aria-hidden="true"></i>
++                                            <span>{{ t('showcase.lightbox.plot_refetch_auto') }}</span>
++                                        </button>
++                                        <template x-for="src in lbPlotRefetchSources()" :key="src.id">
++                                            <button type="button" class="lb-plot-source-pill"
++                                                    :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                                    @click.stop="lbPlotRefetch(src.id)"
++                                                    x-text="src.display_name_raw || src.display_name_key || src.id"></button>
++                                        </template>
++                                    </div>
++                                </div>
 +                                <div class="lb-plot-body">
 +                                    <div class="lb-plot-skeleton"
 +                                         x-show="_lbPlotView.loading"
@@ -42318,9 +42663,23 @@ HcmV?d00001
 +                                        <span class="lb-plot-skeleton-line"></span>
 +                                        <span class="lb-plot-skeleton-line"></span>
 +                                    </div>
-+                                    <p class="lb-plot-unavailable"
-+                                       x-show="!_lbPlotView.loading && _lbPlotView.error"
-+                                       x-text="t('showcase.lightbox.plot_unavailable')"></p>
++                                    <div class="lb-plot-empty-wrap" x-show="!_lbPlotView.loading && _lbPlotView.error">
++                                        <p class="lb-plot-unavailable"
++                                           x-text="t('showcase.lightbox.plot_unavailable')"></p>
++                                        <div class="lb-plot-empty-actions">
++                                            <button type="button" class="lb-plot-empty-btn"
++                                                    :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                                    @click.stop="lbPlotRefetch('auto')">
++                                                <i class="bi" :class="lbPlotIsActionBusy('refetch') ? 'bi-arrow-repeat spin' : 'bi-cloud-arrow-down'" aria-hidden="true"></i>
++                                                <span>{{ t('showcase.lightbox.plot_refetch_empty_cta') }}</span>
++                                            </button>
++                                            <button type="button" class="lb-plot-empty-btn lb-plot-empty-btn--ghost"
++                                                    :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                                    @click.stop="lbPlotToggleRefetchSources()">
++                                                <span>{{ t('showcase.lightbox.plot_refetch_pick_source') }}</span>
++                                            </button>
++                                        </div>
++                                    </div>
 +                                    <p class="lb-plot-text"
 +                                       x-show="!_lbPlotView.loading && !_lbPlotView.error"
 +                                       x-text="_lbPlotView.showing === 'original' ? _lbPlotView.original : _lbPlotView.plot"></p>
@@ -42330,7 +42689,7 @@ HcmV?d00001
                          </div>
                      </div>
                  </template>
-@@ -1472,8 +1766,8 @@
+@@ -1472,8 +1858,8 @@
           :class="{ 'show': sampleGalleryOpen }"
           x-trap.inert="sampleGalleryOpen && !rescrapeOpen && !removeActressModalOpen && !deleteVideoModalOpen"
           @click.self="closeSampleGallery()"
@@ -42341,7 +42700,7 @@ HcmV?d00001
  
          <!-- 關閉按鈕 -->
          <button class="sg-close" @click="closeSampleGallery()" title="{{ t('showcase.lightbox.close') }}">
-@@ -1531,6 +1825,8 @@
+@@ -1531,6 +1917,8 @@
           x-trap.inert="similarModeOpen"
           x-effect="similarModeOpen ? initSimilarStage() : destroySimilarStage()"
           @click.self="closeSimilarMode()">
@@ -42350,7 +42709,7 @@ HcmV?d00001
  
          <!-- X 關閉按鈕（backdrop scope，相對 viewport 角，不在 inner 內） -->
          <button class="similar-close-btn"
-@@ -1720,17 +2016,20 @@
+@@ -1720,17 +2108,20 @@
           :aria-hidden="!similarModeMobileOpen">
          <!-- scrim：overlay 30px 模糊完全遮住 lightbox（CD-10） -->
          <div class="similar-mobile-scrim" @click="closeMobilePanel()"></div>
@@ -42372,7 +42731,7 @@ HcmV?d00001
                          :aria-label="t('showcase.action.play')">
                      <i class="bi bi-play-fill" aria-hidden="true"></i>
                  </button>
-@@ -1750,6 +2049,7 @@
+@@ -1750,6 +2141,7 @@
                               @load="applyCellFocal($el, item)"
                               x-init="$watch('item.auto_focal', () => applyCellFocal($el, item));
                                       $watch('item.crop_mode', () => applyCellFocal($el, item))">
@@ -42380,7 +42739,7 @@ HcmV?d00001
                      </div>
                  </template>
              </div>
-@@ -1900,34 +2200,7 @@
+@@ -1900,34 +2292,7 @@
      </dialog>
  
      <!-- Toast (M3h) -->
@@ -42416,7 +42775,7 @@ HcmV?d00001
  
      <!-- Footer 三段式 (49a-T4)：左 count + 中 shortcut + 右 pager -->
      <!-- ⚠️ 不可加 x-data（會建立 nested Alpine scope，讓 showFavoriteActresses / totalPages / filteredCount 等 state 全變 undefined）。
-@@ -2025,6 +2298,59 @@
+@@ -2025,6 +2390,59 @@
      </div>
  
      {# 進階重新刮削彈窗（62a-2）。放 showcase x-data 作用域內，使 rescrape* hook 在 showcase Alpine root 求值。 #}
@@ -42476,7 +42835,7 @@ HcmV?d00001
      {% include '_rescrape_modal.html' %}
  </div>
  {% endblock %}
-@@ -2033,7 +2359,9 @@
+@@ -2033,7 +2451,9 @@
  <!-- M2c: 傳遞 config 給 JS -->
  <script>
  window.__SHOWCASE_CONFIG__ = {{ (config.gallery or {}) | tojson | safe }};
