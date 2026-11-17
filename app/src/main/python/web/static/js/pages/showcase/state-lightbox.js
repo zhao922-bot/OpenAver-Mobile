@@ -28,7 +28,14 @@ export function isStaleLbFullError(actualSrc, expectedSrc) {
 
 // 排除清單容器（橫向捲動列表/表格）：命中即整條 wheel handler 提早 return，
 // 讓原生橫向捲動不受影響（見 TASK-102d-T1.md「技術要點」排除清單段）。
-const WHEEL_EXCLUDE_SELECTOR = '.sample-strip, .sg-thumbs, .picker-candidates-grid, .table-scroll-container, .overflow-x-auto';
+const WHEEL_EXCLUDE_SELECTOR = '.lb-mobile-sample-strip, .sample-strip, .sg-thumbs, .picker-candidates-grid, .table-scroll-container, .overflow-x-auto';
+const SWIPE_EXCLUDE_SELECTOR = '.lb-mobile-samples, ' + WHEEL_EXCLUDE_SELECTOR;
+
+function isTouchInSelector(event, selector) {
+    const target = event && event.target;
+    const el = target && target.nodeType === 1 ? target : target && target.parentElement;
+    return !!(el && typeof el.closest === 'function' && el.closest(selector));
+}
 // 102d P2b（owner 拍板 2026-07-19）：overlay 內可垂直捲動的子容器（lightbox metadata 面板，
 // showcase.css:785/946 `.lightbox-metadata{overflow-y:auto}`）——垂直滾輪命中時交還原生捲動，
 // 不吃導航（僅 vertical 分支檢查，horizontal 分支不受影響、行為不變）。
@@ -712,6 +719,11 @@ export function stateLightbox() {
         // 呼叫點搶在方法定義前出現，誤導以 first-occurrence 定位方法體的既有 sentinel 守衛。
 
         _lbTouchStart(e) {
+            if (isTouchInSelector(e, SWIPE_EXCLUDE_SELECTOR)) {
+                this._lbTouchStartX = null;
+                this._lbTouchStartY = null;
+                return;
+            }
             if (e.touches && e.touches.length > 0) {
                 this._lbTouchStartX = e.touches[0].clientX;
                 this._lbTouchStartY = e.touches[0].clientY;
@@ -720,6 +732,11 @@ export function stateLightbox() {
 
         _lbTouchEnd(e) {
             if (this._lbTouchStartX === null) return;
+            if (isTouchInSelector(e, SWIPE_EXCLUDE_SELECTOR)) {
+                this._lbTouchStartX = null;
+                this._lbTouchStartY = null;
+                return;
+            }
             var endX = e.changedTouches && e.changedTouches.length > 0
                 ? e.changedTouches[0].clientX
                 : null;

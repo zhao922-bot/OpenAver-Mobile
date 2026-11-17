@@ -1766,8 +1766,8 @@
          :class="{ 'show': sampleGalleryOpen }"
          x-trap.inert="sampleGalleryOpen && !rescrapeOpen && !removeActressModalOpen && !deleteVideoModalOpen"
          @click.self="closeSampleGallery()"
-         @touchstart.passive="_sgTouchStart($event)"
-         @touchend.passive="_sgTouchEnd($event)">
+         @touchstart.passive="$event.target?.closest?.('.sg-thumbs') ? (_sgTouchStartX = null) : _sgTouchStart($event)"
+         @touchend.passive="$event.target?.closest?.('.sg-thumbs') ? (_sgTouchStartX = null) : _sgTouchEnd($event)">
 
         <!-- 關閉按鈕 -->
         <button class="sg-close" @click="closeSampleGallery()" title="{{ t('showcase.lightbox.close') }}">

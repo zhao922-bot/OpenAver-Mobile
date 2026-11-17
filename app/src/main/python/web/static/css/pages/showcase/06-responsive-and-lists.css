@@ -848,6 +848,8 @@ body.similar-mobile-active [data-picker-ghost] {
         display: flex;
         gap: 10px;
         overflow-x: auto;
+        overscroll-behavior-x: contain;
+        touch-action: pan-x pan-y;
         scroll-snap-type: x proximity;
         padding-bottom: 4px;
         scrollbar-width: none;

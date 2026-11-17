@@ -21180,7 +21180,7 @@
  }
  
  /* Responsive: 小螢幕 */
-@@ -490,11 +489,478 @@
+@@ -490,11 +489,480 @@
      }
  }
  
@@ -21547,6 +21547,8 @@
 +        display: flex;
 +        gap: 10px;
 +        overflow-x: auto;
++        overscroll-behavior-x: contain;
++        touch-action: pan-x pan-y;
 +        scroll-snap-type: x proximity;
 +        padding-bottom: 4px;
 +        scrollbar-width: none;
@@ -21663,7 +21665,7 @@
      }
  
      .lightbox-nav {
-@@ -622,7 +1088,7 @@
+@@ -622,7 +1090,7 @@
  .table-scroll-container {
      overflow-x: auto;
      border-radius: var(--radius-md);
@@ -21672,7 +21674,7 @@
  }
  
  /* Table Base - DaisyUI .table 強化 */
-@@ -786,7 +1252,7 @@
+@@ -786,7 +1254,7 @@
      border: 1px solid var(--stroke-default);
      border-radius: var(--radius-md);
      overflow: hidden;
@@ -21815,7 +21817,16 @@
  
      /* 初始隱藏 */
      opacity: 0;
-@@ -427,7 +447,7 @@
+@@ -342,6 +362,8 @@
+     padding: 0.5rem 1rem;
+     height: 80px;
+     overflow-x: auto;
++    overscroll-behavior-x: contain;
++    touch-action: pan-x pan-y;
+     white-space: nowrap;
+     flex-shrink: 0;
+     align-items: center;
+@@ -427,7 +449,7 @@
  }
  
  .sample-gallery .sg-close:hover {
@@ -21824,7 +21835,7 @@
      color: rgba(255, 255, 255, 1);
  }
  
-@@ -455,7 +475,7 @@
+@@ -455,7 +477,7 @@
  }
  
  .sample-gallery .sg-nav:hover {
@@ -21833,7 +21844,7 @@
      color: rgba(255, 255, 255, 1);
  }
  
-@@ -558,6 +578,23 @@
+@@ -558,6 +580,23 @@
      color: var(--color-primary-content);
      border-radius: var(--radius-pill);
      font-size: 0.6875rem;
@@ -21857,7 +21868,7 @@
  }
  
  /* × 刪除按鈕 */
-@@ -592,6 +629,37 @@
+@@ -592,6 +631,37 @@
  .lb-tag-add-btn:hover {
      border-color: var(--accent);
      color: var(--accent);
@@ -21895,7 +21906,7 @@
  }
  
  /* 輸入框包裝 */
-@@ -737,10 +805,9 @@
+@@ -737,10 +807,9 @@
  
  .mode-toggle-btn.active {
      background: rgba(255, 255, 255, 0.15);
@@ -21908,7 +21919,7 @@
  }
  
  .mode-toggle-btn:not(.active):hover {
-@@ -804,12 +871,10 @@
+@@ -804,12 +873,10 @@
      border-radius: var(--radius-pill);
      background: var(--bg-card);
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Heavy acrylic 20px spotlight frame (mirrors theme.css .spotlight-search input), TASK-115-T6 */
@@ -21924,7 +21935,7 @@
      transition:
          border-color var(--duration-normal) var(--ease-out),
          box-shadow var(--duration-normal) var(--ease-out),
-@@ -819,11 +884,7 @@
+@@ -819,11 +886,7 @@
  /* Focus ring wraps the whole group (pills + input), not just the text field. */
  .filter-pill-group:focus-within {
      border-color: var(--accent);
@@ -21937,7 +21948,7 @@
      transform: scale(1.02);
  }
  
-@@ -907,7 +968,6 @@
+@@ -907,7 +970,6 @@
      border-radius: 0;
      background: transparent;
      backdrop-filter: none;
@@ -21945,7 +21956,7 @@
      box-shadow: none;
      transform: none;
  }
-@@ -935,7 +995,7 @@
+@@ -935,7 +997,7 @@
      background: var(--surface-2);
      border: 1px solid var(--stroke-default);
      border-radius: var(--radius-md);
@@ -21954,7 +21965,7 @@
      padding: 0.75rem;
      z-index: 200;
  }
-@@ -1346,7 +1406,7 @@
+@@ -1346,7 +1408,7 @@
      border: 1px solid rgba(255, 255, 255, 0.2);
      border-radius: var(--fluent-radius-md);
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (default state), 2026-05-03 */
@@ -21963,7 +21974,7 @@
      cursor: pointer;
      color: var(--text-inverse);
      transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
-@@ -1356,7 +1416,7 @@
+@@ -1356,7 +1418,7 @@
      background: rgba(255, 255, 255, 0.15);
      border-color: rgba(255, 255, 255, 0.3);
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (hover state), 2026-05-03 */
@@ -21972,7 +21983,7 @@
      transform: translateY(-1px);
  }
  
-@@ -1364,7 +1424,7 @@
+@@ -1364,7 +1426,7 @@
      outline: 2px solid var(--accent);
      outline-offset: 2px;
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight + Fluent shadow + glow ring (focus-visible), 2026-05-03 */
@@ -21981,7 +21992,7 @@
  }
  
  .picker-refresh-btn:active:not(:disabled) {
-@@ -1401,7 +1461,7 @@
+@@ -1401,7 +1463,7 @@
      border: 1px solid rgba(255, 255, 255, 0.2);
      border-radius: var(--fluent-radius-md);
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (default state), 100b-T2b */
@@ -21990,7 +22001,7 @@
      cursor: pointer;
      color: var(--text-inverse);
      transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
-@@ -1411,7 +1471,7 @@
+@@ -1411,7 +1473,7 @@
      background: rgba(255, 255, 255, 0.15);
      border-color: rgba(255, 255, 255, 0.3);
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (hover state), 100b-T2b */
@@ -21999,7 +22010,7 @@
      transform: translateY(-1px);
  }
  
-@@ -1419,7 +1479,7 @@
+@@ -1419,7 +1481,7 @@
      outline: 2px solid var(--accent);
      outline-offset: 2px;
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight + Fluent shadow + glow ring (focus-visible), 100b-T2b */
@@ -22008,7 +22019,7 @@
  }
  
  .picker-upload-btn:active:not(:disabled) {
-@@ -1492,7 +1552,6 @@
+@@ -1492,7 +1554,6 @@
          position: static;
          background: transparent;
          backdrop-filter: none;
@@ -22016,7 +22027,7 @@
          color: inherit;
          padding: 0;
          margin-bottom: 8px;
-@@ -1540,9 +1599,7 @@
+@@ -1540,9 +1601,7 @@
      border-width: 1px;
      border-style: solid;
      /* Shadow: 底階 + dual-layer 內框 */
@@ -22027,7 +22038,7 @@
      transition:
          background var(--fluent-duration-fast) var(--fluent-ease-standard),
          border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
-@@ -1552,9 +1609,7 @@
+@@ -1552,9 +1611,7 @@
  
  .showcase-container .btn:hover:not(:disabled) {
      /* hover 不覆寫 border-color，DaisyUI variant 自管 (.btn-outline.btn-primary primary 強調保留) */
@@ -22038,7 +22049,7 @@
      transform: translateY(-1px);
  }
  
-@@ -1562,17 +1617,12 @@
+@@ -1562,17 +1619,12 @@
      /* Focus: 2px outline + 4px glow（charter §6 Checkpoint 5 精確規格） */
      outline: 2px solid var(--accent);
      outline-offset: 2px;
@@ -22058,7 +22069,7 @@
  }
  
  .showcase-container .input {
-@@ -1583,9 +1633,7 @@
+@@ -1583,9 +1635,7 @@
      border-width: 1px;
      border-style: solid;
      /* Shadow: 輸入框底階（charter §6 Checkpoint 4） */
@@ -22069,7 +22080,7 @@
      transition:
          border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
          box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
-@@ -1597,10 +1645,7 @@
+@@ -1597,10 +1647,7 @@
      outline: 2px solid var(--accent);
      outline-offset: 2px;
      border-color: var(--accent);
@@ -22081,7 +22092,7 @@
  }
  
  /* ─── 57c-T4: Similar Stage — fullscreen takeover (z-index:1501) ─────────── */
-@@ -1672,8 +1717,7 @@
+@@ -1672,8 +1719,7 @@
      border: 1px solid rgba(255, 255, 255, 0.15);
      border-radius: 50%;
      background: var(--overlay-control);
@@ -22091,7 +22102,7 @@
      color: rgba(255, 255, 255, 0.8);
      display: flex;
      align-items: center;
-@@ -1821,7 +1865,7 @@
+@@ -1821,7 +1867,7 @@
      transform: translate(-50%, -50%);
      background: var(--color-base-100);
      border-radius: var(--fluent-radius-xl);
@@ -22100,7 +22111,7 @@
      cursor: pointer;
      display: flex;
      align-items: center;
-@@ -1848,7 +1892,7 @@
+@@ -1848,7 +1894,7 @@
  }
  
  .similar-slot:hover {
@@ -22109,7 +22120,7 @@
  }
  
  .similar-slot-img {
-@@ -1919,7 +1963,7 @@
+@@ -1919,7 +1965,7 @@
      object-position: right center;  /* 沿用 cropMode: 'right-half' 視覺一致 */
      transform-origin: center center;
      border-radius: var(--fluent-radius-lg);
@@ -22118,7 +22129,7 @@
      z-index: 11;  /* > .similar-slot z=10；play button z=12 > 11 → button 在上 */
      cursor: pointer;
  }
-@@ -1946,15 +1990,14 @@
+@@ -1946,15 +1992,14 @@
      border: 1px solid rgba(255, 255, 255, 0.4);
      border-radius: 50%;
      background: var(--overlay-control);
@@ -22136,7 +22147,7 @@
      z-index: 12;  /* > .similar-main-static z=11 (inner stacking)；ghost 飛行期間蓋過 acceptable */
      transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
                  border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
-@@ -1964,7 +2007,7 @@
+@@ -1964,7 +2009,7 @@
  .similar-play-button:hover {
      background: rgba(0, 0, 0, 0.5);
      border-color: rgba(255, 255, 255, 0.6);
@@ -34801,7 +34812,23 @@ HcmV?d00001
          // 復原：只用按下當下的 snapshot 與當時捕獲的那一片；不佔 _lbTrInFlight（plan 已接受的併發 residual）
 --- a/web/static/js/pages/showcase/state-lightbox.js
 +++ b/web/static/js/pages/showcase/state-lightbox.js
-@@ -127,6 +127,13 @@
+@@ -28,7 +28,14 @@
+ 
+ // 排除清單容器（橫向捲動列表/表格）：命中即整條 wheel handler 提早 return，
+ // 讓原生橫向捲動不受影響（見 TASK-102d-T1.md「技術要點」排除清單段）。
+-const WHEEL_EXCLUDE_SELECTOR = '.sample-strip, .sg-thumbs, .picker-candidates-grid, .table-scroll-container, .overflow-x-auto';
++const WHEEL_EXCLUDE_SELECTOR = '.lb-mobile-sample-strip, .sample-strip, .sg-thumbs, .picker-candidates-grid, .table-scroll-container, .overflow-x-auto';
++const SWIPE_EXCLUDE_SELECTOR = '.lb-mobile-samples, ' + WHEEL_EXCLUDE_SELECTOR;
++
++function isTouchInSelector(event, selector) {
++    const target = event && event.target;
++    const el = target && target.nodeType === 1 ? target : target && target.parentElement;
++    return !!(el && typeof el.closest === 'function' && el.closest(selector));
++}
+ // 102d P2b（owner 拍板 2026-07-19）：overlay 內可垂直捲動的子容器（lightbox metadata 面板，
+ // showcase.css:785/946 `.lightbox-metadata{overflow-y:auto}`）——垂直滾輪命中時交還原生捲動，
+ // 不吃導航（僅 vertical 分支檢查，horizontal 分支不受影響、行為不變）。
+@@ -127,6 +134,13 @@
              }
          },
  
@@ -34815,7 +34842,7 @@ HcmV?d00001
          // 71c-P2: helper — blur-up state reset + same-URL complete-check（DRY；供 _setLightboxIndex 與
          // slip-through 路徑（state-similar.js closeSimilarMode）共用，避免兩處邏輯漂移）。
          // 呼叫時機：currentLightboxVideo 已更新、Alpine reactive patch 尚未跑完（$nextTick 前）。
-@@ -190,6 +197,7 @@
+@@ -190,6 +204,7 @@
              // 123-T4b：GSAP 呼叫收斂進 animations.js（TestMotionInfra 守衛，見該檔
              // killPickStarTweens 註解）。不清 --pick-fill（沿用搬移前行為）。
              window.ShowcaseAnimations?.killPickStarTweens?.({ clearTransform: true });
@@ -34823,7 +34850,7 @@ HcmV?d00001
              this.lightboxIndex = idx;
              this.currentLightboxVideo = (idx >= 0 && idx < _filteredVideos.length)
                  ? _filteredVideos[idx] : null;
-@@ -202,10 +210,32 @@
+@@ -202,10 +217,32 @@
              // 71c-P2: 抽至 _refreshLbFullBlurUp helper（slip-through 路徑共用）
              this._refreshLbFullBlurUp();
              this._refreshLbActorAges();
@@ -34857,7 +34884,7 @@ HcmV?d00001
              // F2: cancel pending delayed clear from previous close
              if (this.lightboxCloseTimer) {
                  clearTimeout(this.lightboxCloseTimer);
-@@ -319,6 +349,7 @@
+@@ -319,6 +356,7 @@
          openHeroCardLightbox() {
              if (this._lightboxAnimating) return;
              if (!this._matchedActress) return;
@@ -34865,7 +34892,7 @@ HcmV?d00001
              this._actressChipsExpanded = { aliases: false, info: false };
              // ★ 直接賦值（不走 _setLightboxIndex(-1)）
              this.lightboxIndex = -1;
-@@ -361,6 +392,7 @@
+@@ -361,6 +399,7 @@
                  clearTimeout(this.lightboxCloseTimer);
                  this.lightboxCloseTimer = null;
              }
@@ -34873,7 +34900,7 @@ HcmV?d00001
  
              // 49b T4 fix: 若 picker 開啟中，先關閉 picker
              if (this._pickerOpen) {
-@@ -369,7 +401,6 @@
+@@ -369,7 +408,6 @@
  
              this.addingLbTag = false;    // 關閉 lightbox 時重置 user tag 輸入框
              this._resetMask();           // 98b-T4：關燈箱丟棄未提交遮罩態（不 commit）
@@ -34881,7 +34908,7 @@ HcmV?d00001
  
              // ★ C11: fly-back — 必須在 generation++ / lightboxOpen = false 之前捕獲
              // 56c-fix-v3: standalone similar-exit（similarExitVideo set，lightboxIndex 仍是進 similar mode 前舊值）
-@@ -560,6 +591,7 @@
+@@ -560,6 +598,7 @@
                  // 掛載），必須在賦值前同步 _resetMask()——姊妹 $watch 是非同步 effect flush，
                  // 對掛載那一幀擋不住（gotchas-frontend §8b／T1 CDP 2/2 重現）。
                  this._resetMask();
@@ -34889,7 +34916,31 @@ HcmV?d00001
                  this.currentLightboxActress = this._matchedActress;
                  this.currentLightboxVideo = null;
                  this.addingLbTag = false;
-@@ -912,19 +944,42 @@
+@@ -680,6 +719,11 @@
+         // 呼叫點搶在方法定義前出現，誤導以 first-occurrence 定位方法體的既有 sentinel 守衛。
+ 
+         _lbTouchStart(e) {
++            if (isTouchInSelector(e, SWIPE_EXCLUDE_SELECTOR)) {
++                this._lbTouchStartX = null;
++                this._lbTouchStartY = null;
++                return;
++            }
+             if (e.touches && e.touches.length > 0) {
+                 this._lbTouchStartX = e.touches[0].clientX;
+                 this._lbTouchStartY = e.touches[0].clientY;
+@@ -688,6 +732,11 @@
+ 
+         _lbTouchEnd(e) {
+             if (this._lbTouchStartX === null) return;
++            if (isTouchInSelector(e, SWIPE_EXCLUDE_SELECTOR)) {
++                this._lbTouchStartX = null;
++                this._lbTouchStartY = null;
++                return;
++            }
+             var endX = e.changedTouches && e.changedTouches.length > 0
+                 ? e.changedTouches[0].clientX
+                 : null;
+@@ -912,19 +961,42 @@
                      headers: { 'Content-Type': 'application/json' },
                      body: JSON.stringify({ file_path: video.path, number: video.number })
                  });
@@ -34940,7 +34991,7 @@ HcmV?d00001
              } finally {
                  this._fetchSamplesLoading = false;
              }
-@@ -948,7 +1003,13 @@
+@@ -948,7 +1020,13 @@
                      }
                      // 67-A2/CD-67-3b: data.video 不帶 _imgLoaded → 舊 true 殘留會讓新封面跳過 skeleton/fade。
                      // Object.assign 前 reset，讓補封面/重抓的新 cover_url（含上面 &t= cache-bust）重走 skeleton→@load→淡入。
@@ -34955,7 +35006,7 @@ HcmV?d00001
                      Object.assign(video, data.video);
                      _recomputeVideoBadges(video);
                      _recomputeCardActorAges(video);
-@@ -969,6 +1030,14 @@
+@@ -969,6 +1047,14 @@
  
          // --- 快捷鍵 (M4c 完整實作) ---
          handleKeydown(e) {
@@ -34970,7 +35021,7 @@ HcmV?d00001
              // 116b：浮層開啟時最高優先（必須在 INPUT early-return 之前——區間的 number input
              // 取得焦點時 e.target.tagName === 'INPUT'，放在後面 ESC 永遠到不了這裡）。
              // TASK-124a-T2：新增 _releaseEditor 分支（兩個 slot 依 §3.5 不變式恆不同時非
-@@ -1118,7 +1187,7 @@
+@@ -1118,7 +1204,7 @@
                  if (this.showFavoriteActresses) return;          // AC-5.3：女優牆整條早退
                  const order = this._presentationOrder();
                  const idx = order.indexOf(this._currentPresentation());
@@ -34979,7 +35030,7 @@ HcmV?d00001
              } else if (key === 'ARROWLEFT') {
                  if (this.page > 1) {
                      this.prevPage();
-@@ -1140,6 +1209,7 @@
+@@ -1140,6 +1226,7 @@
           * @param {WheelEvent} event
           */
          handleWheel(event) {
@@ -38693,6 +38744,17 @@ HcmV?d00001
                      </button>
                  </div>
                  <!-- Row 3: Actresses -->
+@@ -364,8 +373,8 @@
+          :class="{ 'show': sampleGalleryOpen }"
+          x-trap.inert="sampleGalleryOpen && !rescrapeOpen && !browseDirOpen && !duplicateModalOpen"
+          @click.self="closeSampleGallery()"
+-         @touchstart.passive="_sgTouchStart($event)"
+-         @touchend.passive="_sgTouchEnd($event)">
++         @touchstart.passive="$event.target?.closest?.('.sg-thumbs') ? (_sgTouchStartX = null) : _sgTouchStart($event)"
++         @touchend.passive="$event.target?.closest?.('.sg-thumbs') ? (_sgTouchStartX = null) : _sgTouchEnd($event)">
+ 
+         <!-- 關閉按鈕 -->
+         <button class="sg-close" @click="closeSampleGallery()" title="{{ t('search.lightbox.close') }}">
 @@ -411,9 +420,16 @@
      </div>
  
@@ -42268,6 +42330,17 @@ HcmV?d00001
                          </div>
                      </div>
                  </template>
+@@ -1472,8 +1766,8 @@
+          :class="{ 'show': sampleGalleryOpen }"
+          x-trap.inert="sampleGalleryOpen && !rescrapeOpen && !removeActressModalOpen && !deleteVideoModalOpen"
+          @click.self="closeSampleGallery()"
+-         @touchstart.passive="_sgTouchStart($event)"
+-         @touchend.passive="_sgTouchEnd($event)">
++         @touchstart.passive="$event.target?.closest?.('.sg-thumbs') ? (_sgTouchStartX = null) : _sgTouchStart($event)"
++         @touchend.passive="$event.target?.closest?.('.sg-thumbs') ? (_sgTouchStartX = null) : _sgTouchEnd($event)">
+ 
+         <!-- 關閉按鈕 -->
+         <button class="sg-close" @click="closeSampleGallery()" title="{{ t('showcase.lightbox.close') }}">
 @@ -1531,6 +1825,8 @@
           x-trap.inert="similarModeOpen"
           x-effect="similarModeOpen ? initSimilarStage() : destroySimilarStage()"

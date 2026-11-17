@@ -191,3 +191,15 @@ def test_r19_assets_are_part_of_python_patch_payload():
         "web/static/js/pages/showcase/state-base.js",
     ):
         assert f'"{relative}"' in generator
+
+
+def test_sample_strips_exclude_lightbox_and_gallery_swipe_navigation():
+    lightbox_js = read(PYTHON_WEB / "static/js/pages/showcase/state-lightbox.js")
+    showcase_html = read(PYTHON_WEB / "templates/showcase.html")
+    search_html = read(PYTHON_WEB / "templates/search.html")
+
+    assert ".lb-mobile-sample-strip" in lightbox_js
+    assert "SWIPE_EXCLUDE_SELECTOR" in lightbox_js
+    assert "isTouchInSelector(e, SWIPE_EXCLUDE_SELECTOR)" in lightbox_js
+    assert showcase_html.count("closest?.('.sg-thumbs')") == 2
+    assert search_html.count("closest?.('.sg-thumbs')") == 2
