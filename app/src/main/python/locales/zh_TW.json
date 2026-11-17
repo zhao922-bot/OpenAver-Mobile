@@ -2588,13 +2588,17 @@
       "legend_rule": "主力片商：同一女優同年至少 4 部，且同一片商佔比不低於 80%",
       "other": "其他",
       "unknown": "未知",
-      "library_wide": "全庫"
+      "library_wide": "全庫",
+      "legend_toggle": "環圖說明"
     },
     "tags": {
       "coverage": "涵蓋 {pct}",
       "almost_all": "幾乎每部都有：",
       "empty": "沒有可顯示的標籤",
-      "tooltip": "{name}<br>片數 {count}<br>涵蓋 {pct}"
+      "tooltip": "{name}<br>片數 {count}<br>涵蓋 {pct}",
+      "mode_list": "膠囊排行",
+      "mode_map": "矩陣圖",
+      "hint": "點擊標籤去片庫"
     },
     "age": {
       "median": "中位數 {age}"
@@ -2616,7 +2620,17 @@
     "costar": {
       "count_label": "{n} 部"
     },
-    "total_count": "全庫 {n} 部"
+    "total_count": "全庫 {n} 部",
+    "open_browse_short": "去瀏覽",
+    "clear_all": "清空篩選",
+    "years": {
+      "hint": "點按柱條篩年份"
+    },
+    "board": {
+      "expand_all": "展開全部 ({n})",
+      "collapse": "收起名單",
+      "hint": "點選切換專注視角"
+    }
   },
   "connect": {
     "nobridge": "請在桌面版開啟",

@@ -19,6 +19,7 @@
     <section class="card board-podium-card">
         <div class="card-head">
             <h2 x-text="boardTitle"></h2>
+            <span class="insights-card-hint">{{ t('insights.board.hint') }}</span>
         </div>
         <div class="card-body">
             {# TASK-156e-T1a／CD-156e-1 v3 方案 A：台座層（固定位置 x-if）＋人員層（x-for :key=name） #}
@@ -73,7 +74,7 @@
             </div>
         </div>
     </section>
-    <section class="card board-rest-card">
+    <section class="card board-rest-card" :class="{ 'is-expanded': boardExpanded }">
         <div class="card-head">
             <h2 x-text="boardRestTitle"></h2>
         </div>
@@ -82,6 +83,7 @@
                 <template x-for="row in restRows" :key="row.name">
                     <div class="board-rest-row"
                          :class="{ 'is-active': sel.actress === row.name }"
+                         :style="'--row-pct:' + boardRowPct(row) + '%'"
                          :data-flip-id="'rest-' + row.name"
                          @click="flyAndFocusActress(row.name, $event)">
                         <span class="board-rank" x-text="row.rank"></span>
@@ -111,6 +113,13 @@
                      class="board-empty"
                      x-text="t(cardEmptyKey('actress'))"></div>
             </div>
+            <button type="button"
+                    class="insights-fold-toggle"
+                    x-show="restRows.length > 7"
+                    @click="boardExpanded = !boardExpanded">
+                <span x-text="boardExpanded ? t('insights.board.collapse') : t('insights.board.expand_all', { n: restRows.length })"></span>
+                <i class="bi" :class="boardExpanded ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i>
+            </button>
         </div>
     </section>
 </div>
@@ -140,11 +149,15 @@
                     <span class="insights-tile-value" x-text="Number(displayScopedCount).toLocaleString(window.__locale || document.documentElement.lang || 'zh-CN')"></span>
                     <span class="insights-tile-unit" x-text="t('insights.unit')"></span>
                     <span class="insights-open-arrow" aria-hidden="true">↗</span>
+                    <span class="insights-browse-cta" x-show="canGoBrowse" aria-hidden="true">
+                        <span>{{ t('insights.open_browse_short') }}</span>
+                        <i class="bi bi-arrow-up-right"></i>
+                    </span>
                 </div>
                 <div x-show="!snapshotError" class="insights-tile-sub" x-text="totalCountLabel()"></div>
             </div>
         </section>
-        <section class="card" id="tileYear">
+        <section class="card" id="tileYear" :class="{ 'is-active': sel.period.type !== 'all' }">
             <div class="card-body">
                 <span class="insights-summary-label">{{ t('insights.summary.year') }}</span>
                 <div x-show="sel.period.type !== 'all'" class="insights-year-value">
@@ -159,7 +172,7 @@
                      x-text="t('insights.all_years')"></div>
             </div>
         </section>
-        <section class="card" id="tileActress">
+        <section class="card" id="tileActress" :class="{ 'is-active': Boolean(sel.actress) }">
             <div class="card-body">
                 <span class="insights-summary-label">{{ t('insights.summary.actress') }}</span>
                 <div x-show="sel.actress" class="insights-focus-row">
@@ -208,7 +221,7 @@
                      x-text="t('insights.all_actress')"></div>
             </div>
         </section>
-        <section class="card" id="tileMaker">
+        <section class="card" id="tileMaker" :class="{ 'is-active': Boolean(sel.maker) }">
             <div class="card-body">
                 <span class="insights-summary-label">{{ t('insights.summary.maker') }}</span>
                 <div x-show="sel.maker" class="insights-focus-row">
@@ -233,11 +246,46 @@
         </section>
     </div>
 
+    <!-- 移动端吸顶激活筛选带（仅在有条件激活且 <=768px 时可见） -->
+    <div class="insights-sticky-filters" x-show="hasScope && !snapshotError" x-cloak>
+        <div class="sticky-filter-chips">
+            <template x-if="sel.period.type !== 'all'">
+                <button type="button" class="sticky-chip" @click="clearPeriod()">
+                    <span x-text="periodTileLabel()"></span>
+                    <i class="bi bi-x" aria-hidden="true"></i>
+                </button>
+            </template>
+            <template x-if="sel.actress">
+                <button type="button" class="sticky-chip" @click="clearActress()">
+                    <span x-text="sel.actress"></span>
+                    <i class="bi bi-x" aria-hidden="true"></i>
+                </button>
+            </template>
+            <template x-if="sel.maker">
+                <button type="button" class="sticky-chip" @click="clearMaker()">
+                    <span class="sticky-chip-dot" :style="focusMakerColor() ? ('background:' + focusMakerColor()) : ''" aria-hidden="true"></span>
+                    <span x-text="sel.maker"></span>
+                    <i class="bi bi-x" aria-hidden="true"></i>
+                </button>
+            </template>
+        </div>
+        <div class="sticky-filter-actions">
+            <button type="button" class="sticky-clear-btn" @click="clearAllFilters()" :title="t('insights.clear_all')">
+                {{ t('insights.clear_all') }}
+            </button>
+            <button type="button" class="sticky-browse-btn" :disabled="!canGoBrowse" @click="goBrowse()">
+                <span x-text="Number(displayScopedCount).toLocaleString(window.__locale || document.documentElement.lang || 'zh-CN') + ' ' + t('insights.unit')"></span>
+                <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+            </button>
+        </div>
+    </div>
+
     <!-- Row 2：年份長條 + 片商甜甜圈 -->
     <div class="row2">
         <section class="card row2-years">
             <div class="card-head">
                 <h2>{{ t('insights.row.years') }}</h2>
+                <span class="insights-card-hint">{{ t('insights.years.hint') }}</span>
             </div>
             <div class="card-body">
                 <div class="years-chart-wrap"><div id="yearsChart" class="echart"></div></div>
@@ -246,8 +294,18 @@
         <section class="card donut-card">
             <div class="card-head">
                 <div class="donut-head-text">
-                    <h2 x-text="donutTitle()"></h2>
-                    <div class="donut-legend">
+                    <div class="donut-head-top">
+                        <h2 x-text="donutTitle()"></h2>
+                        <button type="button"
+                                class="donut-guide-btn"
+                                :class="{ 'is-open': donutLegendOpen }"
+                                :aria-expanded="donutLegendOpen ? 'true' : 'false'"
+                                @click="donutLegendOpen = !donutLegendOpen">
+                            <i class="bi bi-info-circle" aria-hidden="true"></i>
+                            <span>{{ t('insights.donut.legend_toggle') }}</span>
+                        </button>
+                    </div>
+                    <div class="donut-legend" :class="{ 'is-mobile-open': donutLegendOpen }">
                         <span class="donut-legend-item">
                             <span class="donut-legend-swatch donut-legend-swatch--inner" aria-hidden="true"></span>
                             <span>{{ t('insights.donut.legend_inner') }}</span>
@@ -270,6 +328,19 @@
             </div>
             <div class="card-body">
                 <div class="donut-chart-wrap"><div id="donutChart" class="echart"></div></div>
+                <div class="donut-maker-list" x-show="makerBreakdown.length">
+                    <template x-for="mk in makerBreakdown" :key="mk.key">
+                        <button type="button"
+                                class="donut-maker-pill"
+                                :class="{ 'is-active': mk.active, 'is-static': !mk.clickable }"
+                                :disabled="!mk.clickable"
+                                @click="mk.clickable && toggleMakerFocus(mk.key)">
+                            <span class="donut-maker-dot" :style="'background:' + mk.color" aria-hidden="true"></span>
+                            <span class="donut-maker-name" x-text="mk.label"></span>
+                            <span class="donut-maker-meta" x-text="mk.pct + ' · ' + mk.count"></span>
+                        </button>
+                    </template>
+                </div>
             </div>
         </section>
     </div>
@@ -343,19 +414,78 @@
         </div>
         <section class="card treemap-card">
             <div class="card-head">
-                <h2>{{ t('insights.row.tags') }}</h2>
-                <span class="tags-coverage-hint" id="tagsHint"></span>
+                <div class="treemap-head-title">
+                    <h2>{{ t('insights.row.tags') }}</h2>
+                    <span class="tags-coverage-hint" id="tagsHint"></span>
+                </div>
+                <div class="insights-tag-mode-toggle" role="group">
+                    <button type="button"
+                            :class="{ 'is-on': tagViewMode === 'chips' }"
+                            @click="setTagViewMode('chips')">{{ t('insights.tags.mode_list') }}</button>
+                    <button type="button"
+                            :class="{ 'is-on': tagViewMode === 'treemap' }"
+                            @click="setTagViewMode('treemap')">{{ t('insights.tags.mode_map') }}</button>
+                </div>
             </div>
             <div class="card-body">
                 <div class="tags-pulled" id="tagsPulled"></div>
-                <div class="treemap-chart-wrap"><div id="tagsChart" class="echart"></div></div>
+                <div class="tags-chips-view" :class="{ 'is-hidden': tagViewMode !== 'chips' }">
+                    <div class="tags-chips-hint" x-show="tagsList.length">{{ t('insights.tags.hint') }}</div>
+                    <div class="tags-chips-grid" :class="{ 'is-expanded': tagsExpanded }">
+                        <template x-for="tg in tagsList" :key="tg.name">
+                            <button type="button"
+                                    class="tag-heat-chip"
+                                    :style="'--tag-fill:' + tg.ratio + '%'"
+                                    @click="goBrowseWith({ dim: 'tag', value: tg.name })">
+                                <span class="tag-heat-fill" aria-hidden="true"></span>
+                                <span class="tag-heat-name" x-text="tg.name"></span>
+                                <span class="tag-heat-count" x-text="tg.count"></span>
+                            </button>
+                        </template>
+                    </div>
+                    <div class="board-empty" x-show="!tagsList.length" x-text="t(cardEmptyKey(null))"></div>
+                    <button type="button"
+                            class="insights-fold-toggle"
+                            x-show="tagsList.length > 12"
+                            @click="tagsExpanded = !tagsExpanded">
+                        <span x-text="tagsExpanded ? t('insights.board.collapse') : t('insights.board.expand_all', { n: tagsList.length })"></span>
+                        <i class="bi" :class="tagsExpanded ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <div class="treemap-chart-wrap" :class="{ 'is-hidden': tagViewMode !== 'treemap' }"><div id="tagsChart" class="echart"></div></div>
             </div>
         </section>
     </div>
 
     <!-- Row 4：年齡 / 導演 / 系列 -->
     <div class="row4">
-        <section class="card row4-card">
+        <div class="insights-row4-tabs" role="tablist">
+            <button type="button"
+                    role="tab"
+                    :aria-selected="row4Tab === 'age'"
+                    :class="{ 'is-on': row4Tab === 'age' }"
+                    @click="selectRow4Tab('age')">
+                <span>{{ t('insights.row.age') }}</span>
+                <span class="row4-tab-pct" x-text="row4Coverage.age"></span>
+            </button>
+            <button type="button"
+                    role="tab"
+                    :aria-selected="row4Tab === 'director'"
+                    :class="{ 'is-on': row4Tab === 'director' }"
+                    @click="selectRow4Tab('director')">
+                <span>{{ t('insights.row.director') }}</span>
+                <span class="row4-tab-pct" x-text="row4Coverage.director"></span>
+            </button>
+            <button type="button"
+                    role="tab"
+                    :aria-selected="row4Tab === 'series'"
+                    :class="{ 'is-on': row4Tab === 'series' }"
+                    @click="selectRow4Tab('series')">
+                <span>{{ t('insights.row.series') }}</span>
+                <span class="row4-tab-pct" x-text="row4Coverage.series"></span>
+            </button>
+        </div>
+        <section class="card row4-card" :class="{ 'is-mobile-active': row4Tab === 'age' }">
             <div class="card-head">
                 <h2>{{ t('insights.row.age') }}</h2>
                 <span class="tags-coverage-hint" id="ageHint"></span>
@@ -364,7 +494,7 @@
                 <div class="age-chart-wrap"><div id="ageChart" class="echart"></div></div>
             </div>
         </section>
-        <section class="card row4-card">
+        <section class="card row4-card" :class="{ 'is-mobile-active': row4Tab === 'director' }">
             <div class="card-head">
                 <h2>{{ t('insights.row.director') }}</h2>
                 <span class="tags-coverage-hint" id="directorHint"></span>
@@ -373,7 +503,7 @@
                 <div class="bar-chart-wrap"><div id="directorChart" class="echart"></div></div>
             </div>
         </section>
-        <section class="card row4-card">
+        <section class="card row4-card" :class="{ 'is-mobile-active': row4Tab === 'series' }">
             <div class="card-head">
                 <h2>{{ t('insights.row.series') }}</h2>
                 <span class="tags-coverage-hint" id="seriesHint"></span>
@@ -389,7 +519,7 @@
 
     <!-- Row 5：主要片商年表（全寬） -->
     <div class="row5">
-        <section class="card gantt-card" x-data="{ ganttAxis: 'year' }">
+        <section class="card gantt-card" :class="{ 'is-empty': !ganttRows.length }" x-data="{ ganttAxis: 'year' }">
             <div class="card-head">
                 <div class="gantt-heading">
                     <h2 x-text="ganttTitle"></h2>
@@ -512,7 +642,7 @@
 
     <!-- Row 6：女優片商分布（「與她同片」TASK-156d-T3 搬進 row3 左半格，與副本 A 共用插槽） -->
     <div class="row6" id="row6">
-        <section class="card">
+        <section class="card" :class="{ 'is-expanded': soloExpanded }">
             <div class="card-head">
                 <div class="gantt-heading">
                     <h2 id="soloTitle" x-text="soloTitle"></h2>
@@ -558,6 +688,13 @@
                          class="solo-empty"
                          x-text="t(cardEmptyKey('actress'))"></div>
                 </div>
+                <button type="button"
+                        class="insights-fold-toggle"
+                        x-show="soloRows.length > 8"
+                        @click="soloExpanded = !soloExpanded">
+                    <span x-text="soloExpanded ? t('insights.board.collapse') : t('insights.board.expand_all', { n: soloRows.length })"></span>
+                    <i class="bi" :class="soloExpanded ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i>
+                </button>
             </div>
         </section>
     </div>

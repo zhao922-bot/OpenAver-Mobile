@@ -2583,13 +2583,17 @@
       "legend_rule": "主力片商：同一女优同一年至少 4 部，且同一片商占比不低于 80%",
       "other": "其他",
       "unknown": "未知",
-      "library_wide": "全库"
+      "library_wide": "全库",
+      "legend_toggle": "环图说明"
     },
     "tags": {
       "coverage": "涵盖 {pct}",
       "almost_all": "几乎每部都有：",
       "empty": "没有可显示的标签",
-      "tooltip": "{name}<br>片数 {count}<br>涵盖 {pct}"
+      "tooltip": "{name}<br>片数 {count}<br>涵盖 {pct}",
+      "mode_list": "胶囊排行",
+      "mode_map": "矩阵图",
+      "hint": "点击标签去片库"
     },
     "age": {
       "median": "中位数 {age}"
@@ -2616,7 +2620,17 @@
     "all_maker": "全部片商",
     "clear_actress": "清除女优",
     "clear_maker": "清除片商",
-    "count_open_browse": "在浏览页查看"
+    "count_open_browse": "在浏览页查看",
+    "open_browse_short": "去浏览",
+    "clear_all": "清空筛选",
+    "years": {
+      "hint": "点按柱条筛年份"
+    },
+    "board": {
+      "expand_all": "展开全部 ({n})",
+      "collapse": "收起名单",
+      "hint": "点选切换专注视角"
+    }
   },
   "connect": {
     "nobridge": "请在桌面版打开",

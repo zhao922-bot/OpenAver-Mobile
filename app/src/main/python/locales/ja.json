@@ -2583,13 +2583,17 @@
       "legend_rule": "主力メーカー：同じ女優の同年作品が 4 本以上、かつ同一メーカーが 80% 以上",
       "other": "その他",
       "unknown": "不明",
-      "library_wide": "ライブラリ全体"
+      "library_wide": "ライブラリ全体",
+      "legend_toggle": "凡例"
     },
     "tags": {
       "coverage": "カバー率 {pct}",
       "almost_all": "ほぼすべての作品にあります：",
       "empty": "表示できるタグがありません",
-      "tooltip": "{name}<br>作品数 {count}<br>カバー率 {pct}"
+      "tooltip": "{name}<br>作品数 {count}<br>カバー率 {pct}",
+      "mode_list": "ランキング",
+      "mode_map": "ツリーマップ",
+      "hint": "タグ選択で一覧へ"
     },
     "age": {
       "median": "中央値 {age}"
@@ -2616,7 +2620,17 @@
     "all_maker": "すべてのメーカー",
     "clear_actress": "女優をクリア",
     "clear_maker": "メーカーをクリア",
-    "count_open_browse": "ブラウズページで見る"
+    "count_open_browse": "ブラウズページで見る",
+    "open_browse_short": "一覧へ",
+    "clear_all": "すべて解除",
+    "years": {
+      "hint": "棒をタップで絞込"
+    },
+    "board": {
+      "expand_all": "すべて表示 ({n})",
+      "collapse": "折りたたむ",
+      "hint": "タップで絞込"
+    }
   },
   "connect": {
     "nobridge": "デスクトップ版で開いてください",

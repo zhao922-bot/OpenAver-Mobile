@@ -2583,13 +2583,17 @@
       "legend_rule": "Main studio: the same actress has at least 4 videos in one year, with one studio at 80% or more",
       "other": "Other",
       "unknown": "Unknown",
-      "library_wide": "Library-wide"
+      "library_wide": "Library-wide",
+      "legend_toggle": "Ring guide"
     },
     "tags": {
       "coverage": "Coverage {pct}",
       "almost_all": "Almost every video has it:",
       "empty": "No tags to display",
-      "tooltip": "{name}<br>{count} videos<br>Coverage {pct}"
+      "tooltip": "{name}<br>{count} videos<br>Coverage {pct}",
+      "mode_list": "Rankings",
+      "mode_map": "Treemap",
+      "hint": "Tap tag to browse"
     },
     "age": {
       "median": "Median {age}"
@@ -2616,7 +2620,17 @@
     "all_maker": "All studios",
     "clear_actress": "Clear actress",
     "clear_maker": "Clear studio",
-    "count_open_browse": "View in Browse"
+    "count_open_browse": "View in Browse",
+    "open_browse_short": "Browse",
+    "clear_all": "Clear all",
+    "years": {
+      "hint": "Tap bar to filter"
+    },
+    "board": {
+      "expand_all": "Show all ({n})",
+      "collapse": "Collapse",
+      "hint": "Tap to focus"
+    }
   },
   "connect": {
     "nobridge": "Please open this in the desktop version",

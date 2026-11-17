@@ -8,10 +8,13 @@
 
 import {
     ACTRESS_TOP_N,
+    REST_KEY,
+    UNKNOWN_KEY,
     podiumSizeForViewport,
     setRecords,
     getRecords,
     buildMakerColorSlots,
+    buildMakerDonutData,
     buildMainMakerYearMap,
     buildActressBoard,
     buildGanttRows,
@@ -22,6 +25,9 @@ import {
     buildGanttAgeCells,
     buildSoloRows,
     buildCostarRows,
+    aggregateTags,
+    aggregateAge,
+    aggregateFieldTop8,
     podiumPositionClass,
     classifyBoardTransition,
     diffBoardCounts,
@@ -251,6 +257,11 @@ export function libraryInsightsState() {
     let podiumResizeHandler = null;
     let resizePending = false;
     let resizeFrame = null;
+    let themeObserver = null;
+    let lastObservedTheme =
+        typeof document !== 'undefined'
+            ? document.documentElement.getAttribute('data-theme')
+            : null;
     return {
         snapshot: null,
         snapshotError: null,
@@ -263,6 +274,16 @@ export function libraryInsightsState() {
         boardDisplayCounts: {},
         boardRows: [],
         podiumSize: podiumSizeForViewport(typeof window !== 'undefined' ? window.innerWidth : undefined),
+        isMobileViewport: typeof window !== 'undefined' ? window.innerWidth <= 768 : false,
+        donutLegendOpen: false,
+        makerBreakdown: [],
+        tagViewUserChoice: null,
+        tagsList: [],
+        tagsExpanded: false,
+        boardExpanded: false,
+        soloExpanded: false,
+        row4Tab: 'age',
+        row4Coverage: { age: '', director: '', series: '' },
         // TASK-156d-T3／CD-156d-2：row3 左半格＋row7 三個可切換顯示旗標（不用 x-show，
         // FE-ALPINE-17——vendored Alpine 的 x-show 晚一幀且一翻轉就立即 display:none，
         // 淡出播不完）。初始狀態＝無焦點：副本 A 顯示、與她同片／row7 副本 B 隱藏。
@@ -1547,6 +1568,119 @@ export function libraryInsightsState() {
             this.sel = { ...this.sel, maker: null };
         },
 
+        clearAllFilters() {
+            this.sel = emptySel();
+        },
+
+        get tagViewMode() {
+            return this.tagViewUserChoice || (this.isMobileViewport ? 'chips' : 'treemap');
+        },
+
+        setTagViewMode(mode) {
+            if (mode !== 'chips' && mode !== 'treemap') return;
+            this.tagViewUserChoice = mode;
+            if (mode === 'treemap' && typeof this.$nextTick === 'function') {
+                this.$nextTick(() => {
+                    const c = getTagsChart();
+                    if (c && !c.isDisposed()) c.resize();
+                    this.redrawTags();
+                });
+            }
+        },
+
+        selectRow4Tab(tab) {
+            if (tab !== 'age' && tab !== 'director' && tab !== 'series') return;
+            this.row4Tab = tab;
+            if (typeof this.$nextTick === 'function') {
+                this.$nextTick(() => {
+                    const c = tab === 'age' ? getAgeChart() : getFieldBarChart(tab);
+                    if (c && !c.isDisposed()) c.resize();
+                    if (tab === 'age') this.redrawAge();
+                    else if (tab === 'director') this.redrawDirector();
+                    else this.redrawSeries();
+                });
+            }
+        },
+
+        get maxBoardCount() {
+            const rows = this.boardRows || [];
+            let max = 1;
+            for (let i = 0; i < rows.length; i++) {
+                const n = Number(rows[i].count) || 0;
+                if (n > max) max = n;
+            }
+            return max;
+        },
+
+        boardRowPct(row) {
+            if (!row) return 0;
+            return Math.min(100, Math.max(4, Math.round(((Number(row.count) || 0) / this.maxBoardCount) * 100)));
+        },
+
+        _formatPct(n, total) {
+            if (!total) return '0%';
+            return Math.round((n / total) * 100) + '%';
+        },
+
+        _donutItemLabel(key) {
+            const tFn = typeof window !== 'undefined' && typeof window.t === 'function' ? window.t : null;
+            if (key === REST_KEY) return tFn ? tFn('insights.donut.other') : 'Other';
+            if (key === UNKNOWN_KEY) return tFn ? tFn('insights.donut.unknown') : 'Unknown';
+            return key;
+        },
+
+        recomputeMobileInsights() {
+            const allRecords = getRecords();
+            // 1. Maker breakdown list aligned with donut chart (skipDim='maker').
+            const makerScoped = scopeRecords(allRecords, this.sel, 'maker');
+            const donut = buildMakerDonutData(makerScoped, _mainMakerYearMap);
+            const totalMakers = donut.total || 0;
+            this.makerBreakdown = (donut.inner || [])
+                .filter((e) => e && e.value > 0)
+                .map((e) => {
+                    const isRest = e.kind === 'rest';
+                    const isUnknown = e.kind === 'unknown';
+                    const color = isRest
+                        ? 'color-mix(in oklch, var(--color-base-content) 24%, transparent)'
+                        : isUnknown
+                          ? 'color-mix(in oklch, var(--text-muted) 36%, var(--surface-2))'
+                          : colorForMakerName(e.name);
+                    return {
+                        key: e.name,
+                        label: this._donutItemLabel(e.name),
+                        count: e.value,
+                        pct: this._formatPct(e.value, totalMakers),
+                        color,
+                        clickable: e.kind === 'named',
+                        active: e.kind === 'named' && this.sel.maker === e.name,
+                    };
+                });
+
+            // 2. Tags capsule ranking (for mobile 5B chips view).
+            const fullScoped = scopeRecords(allRecords, this.sel, null);
+            const tagAgg = aggregateTags(fullScoped);
+            const tagTotal = tagAgg.total || 0;
+            const topList = (tagAgg.rest || []).slice(0, 24);
+            const maxTag = topList.length ? Math.max(1, topList[0][1]) : 1;
+            this.tagsList = topList.map((e) => ({
+                name: e[0],
+                count: e[1],
+                pct: this._formatPct(e[1], tagTotal),
+                ratio: Math.min(100, Math.max(8, Math.round((e[1] / maxTag) * 100))),
+            }));
+
+            // 3. Row 4 coverage summary for mobile 3-in-1 segmented tabs.
+            const favs = (this.snapshot && this.snapshot.actressFavorites) || {};
+            const ageAgg = aggregateAge(fullScoped, favs);
+            const dirAgg = aggregateFieldTop8(fullScoped, 'director');
+            const serAgg = aggregateFieldTop8(fullScoped, 'series');
+            this.row4Coverage = {
+                age: this._formatPct(ageAgg.recordsWithAge, ageAgg.total),
+                director: this._formatPct(dirAgg.withValueCount, dirAgg.total),
+                series: this._formatPct(serAgg.withValueCount, serAgg.total),
+            };
+        },
+
         /**
          * CD-156c-8／CD-161a-2：suffixDims 內任一維有條件時加期間後綴
          * （全庫／單年／範圍），後綴文字由 selection.js 的 suffixLabel 產生。
@@ -1762,6 +1896,8 @@ export function libraryInsightsState() {
             if (this._bindPodiumResize()) this._registerInsightsCleanup();
             const size = podiumSizeForViewport(window.innerWidth);
             if (size !== this.podiumSize) this.podiumSize = size;
+            this.isMobileViewport = window.innerWidth <= 768;
+            this._bindThemeObserver();
             // 快照失敗時從未建圖——不要在 bfcache 還原時建空圖表
             if (this.snapshotError) return;
             // Finding 2：離頁前快照尚未載完（fetch 仍在飛）時，cleanup 已把
@@ -1902,6 +2038,7 @@ export function libraryInsightsState() {
                 this.recomputeBoard();
                 this.recomputeGantt();
                 this.recomputeSolo();
+                this.recomputeMobileInsights();
                 this._maybePlayPinPulse();
                 this.recomputeCostar();
                 // TASK-156d-T9 round 3 audit：這裡不需要呼叫 _syncCostarVisibility()
@@ -1982,6 +2119,7 @@ export function libraryInsightsState() {
                     resizeFrame = null;
                     const size = podiumSizeForViewport(window.innerWidth);
                     if (size !== this.podiumSize) this.podiumSize = size;
+                    this.isMobileViewport = window.innerWidth <= 768;
                 });
                 resizeFrame = frame;
             };
@@ -1997,11 +2135,42 @@ export function libraryInsightsState() {
             resizeFrame = null;
         },
 
+        _bindThemeObserver() {
+            if (themeObserver || typeof MutationObserver === 'undefined' || typeof document === 'undefined') {
+                return false;
+            }
+            lastObservedTheme = document.documentElement.getAttribute('data-theme');
+            themeObserver = new MutationObserver(() => {
+                const next = document.documentElement.getAttribute('data-theme');
+                if (next === lastObservedTheme || !_pageAlive || !this.snapshot) return;
+                lastObservedTheme = next;
+                this.redrawYears();
+                this.redrawDonut();
+                this.redrawTags();
+                this.redrawAge();
+                this.redrawDirector();
+                this.redrawSeries();
+            });
+            themeObserver.observe(document.documentElement, {
+                attributes: true,
+                attributeFilter: ['data-theme'],
+            });
+            return true;
+        },
+
+        _unbindThemeObserver() {
+            if (themeObserver) {
+                themeObserver.disconnect();
+                themeObserver = null;
+            }
+        },
+
         _registerInsightsCleanup() {
             if (window.__registerPage) {
                 window.__registerPage({
                     cleanup: () => {
                         this._unbindPodiumResize();
+                        this._unbindThemeObserver();
                         _pageAlive = false;
                         disposeAll();
                     },
@@ -2011,6 +2180,7 @@ export function libraryInsightsState() {
 
         async init() {
             this._bindPodiumResize();
+            this._bindThemeObserver();
             // pageshow：模組生命週期內只註冊一次；不進 __registerPage cleanup
             if (!_pageshowBound) {
                 _pageshowBound = true;
@@ -2066,6 +2236,7 @@ export function libraryInsightsState() {
                 this._playCountUps(oldBoardRows);
                 this.recomputeGantt();
                 this.recomputeSolo();
+                this.recomputeMobileInsights();
                 this._maybePlayPinPulse();
                 this._handleActressFocusChange(oldValue, oldCostarRowsLength);
             });

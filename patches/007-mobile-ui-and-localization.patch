@@ -3964,7 +3964,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,7 +2576,11 @@
+@@ -1860,16 +2576,24 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -3976,8 +3976,23 @@
 +      "legend_rule": "Main studio: the same actress has at least 4 videos in one year, with one studio at 80% or more",
        "other": "Other",
        "unknown": "Unknown",
-       "library_wide": "Library-wide"
-@@ -1878,11 +2598,15 @@
+-      "library_wide": "Library-wide"
++      "library_wide": "Library-wide",
++      "legend_toggle": "Ring guide"
+     },
+     "tags": {
+       "coverage": "Coverage {pct}",
+       "almost_all": "Almost every video has it:",
+       "empty": "No tags to display",
+-      "tooltip": "{name}<br>{count} videos<br>Coverage {pct}"
++      "tooltip": "{name}<br>{count} videos<br>Coverage {pct}",
++      "mode_list": "Rankings",
++      "mode_map": "Treemap",
++      "hint": "Tap tag to browse"
+     },
+     "age": {
+       "median": "Median {age}"
+@@ -1878,11 +2602,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -3995,7 +4010,26 @@
      },
      "costar": {
        "count_label": "{n} videos"
-@@ -1957,7 +2681,7 @@
+@@ -1892,7 +2620,17 @@
+     "all_maker": "All studios",
+     "clear_actress": "Clear actress",
+     "clear_maker": "Clear studio",
+-    "count_open_browse": "View in Browse"
++    "count_open_browse": "View in Browse",
++    "open_browse_short": "Browse",
++    "clear_all": "Clear all",
++    "years": {
++      "hint": "Tap bar to filter"
++    },
++    "board": {
++      "expand_all": "Show all ({n})",
++      "collapse": "Collapse",
++      "hint": "Tap to focus"
++    }
+   },
+   "connect": {
+     "nobridge": "Please open this in the desktop version",
+@@ -1957,7 +2695,7 @@
        "intro": "The left column is the folder on the server; in the right column enter the path as seen from this computer. You can leave it empty and fill it in later.",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -4004,7 +4038,7 @@
        "readonly": "Read-only",
        "test_btn": "Test",
        "found": "Found",
-@@ -1968,7 +2692,7 @@
+@@ -1968,7 +2706,7 @@
        "loading": "Loading the server's scan sources...",
        "load_failed": "Could not read the server's scan sources",
        "reload_btn": "Reload",
@@ -4013,7 +4047,7 @@
        "stale": "(no longer on the server)",
        "remove": "Remove",
        "save_btn": "Save Mapping Table",
-@@ -1976,5 +2700,448 @@
+@@ -1976,5 +2714,448 @@
        "saved": "Mapping table saved",
        "save_failed": "Failed to save the mapping table"
      }
@@ -5777,7 +5811,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,7 +2576,11 @@
+@@ -1860,16 +2576,24 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -5789,8 +5823,23 @@
 +      "legend_rule": "主力メーカー：同じ女優の同年作品が 4 本以上、かつ同一メーカーが 80% 以上",
        "other": "その他",
        "unknown": "不明",
-       "library_wide": "ライブラリ全体"
-@@ -1878,11 +2598,15 @@
+-      "library_wide": "ライブラリ全体"
++      "library_wide": "ライブラリ全体",
++      "legend_toggle": "凡例"
+     },
+     "tags": {
+       "coverage": "カバー率 {pct}",
+       "almost_all": "ほぼすべての作品にあります：",
+       "empty": "表示できるタグがありません",
+-      "tooltip": "{name}<br>作品数 {count}<br>カバー率 {pct}"
++      "tooltip": "{name}<br>作品数 {count}<br>カバー率 {pct}",
++      "mode_list": "ランキング",
++      "mode_map": "ツリーマップ",
++      "hint": "タグ選択で一覧へ"
+     },
+     "age": {
+       "median": "中央値 {age}"
+@@ -1878,11 +2602,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -5808,7 +5857,26 @@
      },
      "costar": {
        "count_label": "{n} 本"
-@@ -1957,7 +2681,7 @@
+@@ -1892,7 +2620,17 @@
+     "all_maker": "すべてのメーカー",
+     "clear_actress": "女優をクリア",
+     "clear_maker": "メーカーをクリア",
+-    "count_open_browse": "ブラウズページで見る"
++    "count_open_browse": "ブラウズページで見る",
++    "open_browse_short": "一覧へ",
++    "clear_all": "すべて解除",
++    "years": {
++      "hint": "棒をタップで絞込"
++    },
++    "board": {
++      "expand_all": "すべて表示 ({n})",
++      "collapse": "折りたたむ",
++      "hint": "タップで絞込"
++    }
+   },
+   "connect": {
+     "nobridge": "デスクトップ版で開いてください",
+@@ -1957,7 +2695,7 @@
        "intro": "左の欄はサーバー上のフォルダ、右の欄はこのPCから見えるパスです。後で入力することもできるので、空欄のままでも構いません。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -5817,7 +5885,7 @@
        "readonly": "読み取り専用",
        "test_btn": "テスト",
        "found": "見つかりました",
-@@ -1968,7 +2692,7 @@
+@@ -1968,7 +2706,7 @@
        "loading": "サーバーのスキャンソースを読み込み中…",
        "load_failed": "サーバーのスキャンソースを読み込めません",
        "reload_btn": "再読み込み",
@@ -5826,7 +5894,7 @@
        "stale": "（サーバーにこのソースはもうありません）",
        "remove": "削除",
        "save_btn": "パス対応表を保存",
-@@ -1976,5 +2700,448 @@
+@@ -1976,5 +2714,448 @@
        "saved": "パス対応表を保存しました",
        "save_failed": "パス対応表の保存に失敗しました"
      }
@@ -6277,7 +6345,7 @@
  }
 --- /dev/null
 +++ b/locales/ko.json
-@@ -0,0 +1,3147 @@
+@@ -0,0 +1,3161 @@
 +{
 +  "nav": {
 +    "app_tools": "앱 도구",
@@ -8863,13 +8931,17 @@
 +      "legend_rule": "메인 스튜디오: 같은 여배우가 1년에 최소 4개 이상의 동영상을 보유하고 있으며, 한 스튜디오가 80% 이상입니다.",
 +      "other": "기타",
 +      "unknown": "알 수 없음",
-+      "library_wide": "전체"
++      "library_wide": "전체",
++      "legend_toggle": "링 설명"
 +    },
 +    "tags": {
 +      "coverage": "{pct} 포함",
 +      "almost_all": "거의 모든 기기에 있습니다:",
 +      "empty": "표시할 태그가 없습니다",
-+      "tooltip": "{name}<br>편수 {count}<br>{pct} 포함"
++      "tooltip": "{name}<br>편수 {count}<br>{pct} 포함",
++      "mode_list": "순위 보기",
++      "mode_map": "트리맵",
++      "hint": "태그 탭하여 탐색"
 +    },
 +    "age": {
 +      "median": "중앙값 {age}"
@@ -8896,7 +8968,17 @@
 +    "all_maker": "모든 영화사",
 +    "clear_actress": "배우 삭제",
 +    "clear_maker": "딜러 제거",
-+    "count_open_browse": "페이지에서 보기"
++    "count_open_browse": "페이지에서 보기",
++    "open_browse_short": "탐색",
++    "clear_all": "필터 초기화",
++    "years": {
++      "hint": "막대 탭하여 필터"
++    },
++    "board": {
++      "expand_all": "전체 보기 ({n})",
++      "collapse": "접기",
++      "hint": "탭하여 포커스"
++    }
 +  },
 +  "connect": {
 +    "nobridge": "데스크톱 버전에서 열기",
@@ -10740,7 +10822,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,7 +2576,11 @@
+@@ -1860,16 +2576,24 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -10752,8 +10834,23 @@
 +      "legend_rule": "主力片商：同一女优同一年至少 4 部，且同一片商占比不低于 80%",
        "other": "其他",
        "unknown": "未知",
-       "library_wide": "全库"
-@@ -1878,11 +2598,15 @@
+-      "library_wide": "全库"
++      "library_wide": "全库",
++      "legend_toggle": "环图说明"
+     },
+     "tags": {
+       "coverage": "涵盖 {pct}",
+       "almost_all": "几乎每部都有：",
+       "empty": "没有可显示的标签",
+-      "tooltip": "{name}<br>片数 {count}<br>涵盖 {pct}"
++      "tooltip": "{name}<br>片数 {count}<br>涵盖 {pct}",
++      "mode_list": "胶囊排行",
++      "mode_map": "矩阵图",
++      "hint": "点击标签去片库"
+     },
+     "age": {
+       "median": "中位数 {age}"
+@@ -1878,11 +2602,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -10771,7 +10868,26 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1957,7 +2681,7 @@
+@@ -1892,7 +2620,17 @@
+     "all_maker": "全部片商",
+     "clear_actress": "清除女优",
+     "clear_maker": "清除片商",
+-    "count_open_browse": "在浏览页查看"
++    "count_open_browse": "在浏览页查看",
++    "open_browse_short": "去浏览",
++    "clear_all": "清空筛选",
++    "years": {
++      "hint": "点按柱条筛年份"
++    },
++    "board": {
++      "expand_all": "展开全部 ({n})",
++      "collapse": "收起名单",
++      "hint": "点选切换专注视角"
++    }
+   },
+   "connect": {
+     "nobridge": "请在桌面版打开",
+@@ -1957,7 +2695,7 @@
        "intro": "左栏是服务器上的文件夹，右栏填这台电脑看到的路径，可以先留空、之后再填。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -10780,7 +10896,7 @@
        "readonly": "只读",
        "test_btn": "测试",
        "found": "找得到",
-@@ -1968,7 +2692,7 @@
+@@ -1968,7 +2706,7 @@
        "loading": "正在读取服务器的扫描来源…",
        "load_failed": "读不到服务器的扫描来源",
        "reload_btn": "重新读取",
@@ -10789,7 +10905,7 @@
        "stale": "（服务器已无此来源）",
        "remove": "移除",
        "save_btn": "保存对照表",
-@@ -1976,5 +2700,448 @@
+@@ -1976,5 +2714,448 @@
        "saved": "对照表已保存",
        "save_failed": "对照表保存失败"
      }
@@ -12721,7 +12837,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1861,11 +2577,15 @@
+@@ -1861,20 +2577,28 @@
        "series": "系列",
        "deep_dive": "深入：女優與片商",
        "gantt": "主要片商年表",
@@ -12738,8 +12854,23 @@
 +      "legend_rule": "主力片商：同一女優同年至少 4 部，且同一片商佔比不低於 80%",
        "other": "其他",
        "unknown": "未知",
-       "library_wide": "全庫"
-@@ -1883,11 +2603,15 @@
+-      "library_wide": "全庫"
++      "library_wide": "全庫",
++      "legend_toggle": "環圖說明"
+     },
+     "tags": {
+       "coverage": "涵蓋 {pct}",
+       "almost_all": "幾乎每部都有：",
+       "empty": "沒有可顯示的標籤",
+-      "tooltip": "{name}<br>片數 {count}<br>涵蓋 {pct}"
++      "tooltip": "{name}<br>片數 {count}<br>涵蓋 {pct}",
++      "mode_list": "膠囊排行",
++      "mode_map": "矩陣圖",
++      "hint": "點擊標籤去片庫"
+     },
+     "age": {
+       "median": "中位數 {age}"
+@@ -1883,20 +2607,34 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -12757,7 +12888,19 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1896,7 +2620,7 @@
+     },
+-    "total_count": "全庫 {n} 部"
++    "total_count": "全庫 {n} 部",
++    "open_browse_short": "去瀏覽",
++    "clear_all": "清空篩選",
++    "years": {
++      "hint": "點按柱條篩年份"
++    },
++    "board": {
++      "expand_all": "展開全部 ({n})",
++      "collapse": "收起名單",
++      "hint": "點選切換專注視角"
++    }
    },
    "connect": {
      "nobridge": "請在桌面版開啟",
@@ -12766,7 +12909,7 @@
      "status_connected": "已連線 {host}",
      "status_down": "連不到 {host}",
      "version_line": "版本 {version}（{kind}）",
-@@ -1906,69 +2630,69 @@
+@@ -1906,69 +2644,69 @@
      "kind_windows": "Windows 桌面版",
      "kind_mac": "Mac 桌面版",
      "last_ok": "上次成功連線：{time}",
@@ -12857,7 +13000,7 @@
        "stale": "（伺服器已無此來源）",
        "remove": "移除",
        "save_btn": "儲存對照表",
-@@ -1976,5 +2700,448 @@
+@@ -1976,5 +2714,448 @@
        "saved": "對照表已儲存",
        "save_failed": "對照表儲存失敗"
      }
@@ -19273,12 +19416,11 @@
 -    box-shadow:
 -        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
 -        var(--fluent-shadow-4);
--    overflow: hidden;
--    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
 +    border: 1px solid var(--stroke-subtle);
 +    border-radius: 16px;
 +    box-shadow: var(--elev-card, none);
-+    overflow: hidden;
+     overflow: hidden;
+-    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
 +    background: var(--surface-1);
      display: flex;
      flex-direction: column;
@@ -19484,7 +19626,38 @@
  }
  
  .insights-container .donut-chart-wrap {
-@@ -746,7 +791,7 @@
+@@ -638,7 +683,12 @@
+ 
+ .insights-container .podium-stand--1 {
+     height: 72px;
+-    background: color-mix(in oklch, var(--color-primary) 26%, var(--surface-2));
++    background: linear-gradient(
++        180deg,
++        color-mix(in oklch, var(--accent) 32%, var(--surface-2)),
++        color-mix(in oklch, var(--accent) 18%, var(--surface-2))
++    );
++    border-top: 2px solid color-mix(in oklch, var(--accent) 55%, transparent);
+ }
+ 
+ .insights-container .podium-stand--2 {
+@@ -713,8 +763,15 @@
+     display: flex;
+     align-items: center;
+     gap: 0.5rem;
+-    padding: 0.25rem 0.125rem;
++    padding: 0.25rem 0.3rem;
++    border-radius: 8px;
+     border-bottom: 1px solid var(--stroke-subtle);
++    background-image: linear-gradient(
++        90deg,
++        color-mix(in oklch, var(--color-primary) 8%, transparent) 0%,
++        color-mix(in oklch, var(--color-primary) 8%, transparent) var(--row-pct, 0%),
++        transparent var(--row-pct, 0%)
++    );
+     cursor: pointer;
+     min-width: 0;
+ }
+@@ -746,7 +803,7 @@
      pointer-events: none;
      border-radius: var(--radius-md);
      overflow: hidden;
@@ -19493,7 +19666,49 @@
      background: var(--surface-1);
      border: 1px solid var(--stroke-default);
      box-sizing: border-box;
-@@ -862,8 +907,20 @@
+@@ -789,10 +846,14 @@
+ }
+ 
+ .insights-container .tags-pulled {
++    display: flex;
++    flex-wrap: wrap;
++    align-items: center;
++    gap: 0.35rem;
+     font-size: 0.6875rem;
+     color: var(--text-muted);
+     flex: 0 0 auto;
+-    margin-bottom: 0.125rem;
++    margin-bottom: 0.35rem;
+     line-height: 1.4;
+ }
+ 
+@@ -801,17 +862,20 @@
+ }
+ 
+ .insights-container .tags-pulled .tags-pulled-chip {
+-    background: none;
+-    border: 0;
+-    padding: 0;
++    background: color-mix(in oklch, var(--accent) 11%, var(--surface-2));
++    border: 1px solid color-mix(in oklch, var(--accent) 26%, var(--stroke-subtle));
++    border-radius: 999px;
++    padding: 0.14rem 0.55rem;
+     margin: 0;
+     font: inherit;
+-    color: inherit;
++    font-weight: 600;
++    color: var(--text-primary);
+     cursor: pointer;
+ }
+ 
+ .insights-container .tags-pulled .tags-pulled-chip:hover {
+-    text-decoration: underline;
++    text-decoration: none;
++    border-color: color-mix(in oklch, var(--accent) 52%, var(--stroke-default));
+ }
+ 
+ .insights-container .tags-pulled .tags-pulled-chip:focus-visible {
+@@ -862,8 +926,20 @@
  }
  
  .insights-container .gantt-card .card-head {
@@ -19516,7 +19731,7 @@
  }
  
  .insights-container .gantt-wrap {
-@@ -875,6 +932,7 @@
+@@ -875,6 +951,7 @@
  .insights-container .gantt-table {
      --gantt-name-w: 7.5rem;
      --gantt-cell-min-w: 1.5rem;
@@ -19524,7 +19739,7 @@
      display: flex;
      flex-direction: column;
      width: 100%;
-@@ -973,13 +1031,71 @@
+@@ -973,13 +1050,71 @@
      border-radius: var(--fluent-radius-md);
  }
  
@@ -19601,7 +19816,7 @@
  }
  
  .insights-container .gantt-legend {
-@@ -987,13 +1103,22 @@
+@@ -987,11 +1122,20 @@
      flex-wrap: wrap;
      align-items: center;
      gap: 0.5rem;
@@ -19613,8 +19828,8 @@
 +    justify-content: flex-start;
      font-size: 0.6875rem;
      color: var(--text-secondary);
- }
- 
++}
++
 +.insights-container .gantt-scroll-hint {
 +    display: none;
 +    align-items: center;
@@ -19622,12 +19837,10 @@
 +    margin: 0.35rem 0 0.2rem;
 +    color: var(--text-muted);
 +    font-size: 0.625rem;
-+}
-+
+ }
+ 
  .insights-container .gantt-legend-item {
-     display: inline-flex;
-     align-items: center;
-@@ -1002,10 +1127,48 @@
+@@ -1002,10 +1146,48 @@
  }
  
  .insights-container .gantt-legend-dot {
@@ -19678,7 +19891,7 @@
  }
  
  .insights-container .insights-gantt-toggle {
-@@ -1041,10 +1204,9 @@
+@@ -1041,10 +1223,9 @@
  
  .insights-container .insights-gantt-toggle button.is-on {
      background: color-mix(in oklch, var(--surface-2) 80%, transparent);
@@ -19691,7 +19904,7 @@
  }
  
  @media (prefers-reduced-motion: reduce) {
-@@ -1310,11 +1472,102 @@
+@@ -1310,11 +1491,102 @@
  /* ===== 響應式斷點 ===== */
  @media (max-width: 1024px) {
      .insights-container .row1 {
@@ -19799,7 +20012,7 @@
      }
  
      .insights-container .row2,
-@@ -1324,19 +1577,148 @@
+@@ -1324,19 +1596,691 @@
          grid-template-columns: 1fr;
      }
  
@@ -19958,6 +20171,549 @@
 -    }
 -}
 +        grid-template-columns: repeat(4, minmax(0, 1fr));
++    }
++}
++
++/* ===== 桌面维持精简布局；以下移动端专有元素在 >768px 隐藏 ===== */
++.insights-container .insights-browse-cta,
++.insights-container .insights-sticky-filters,
++.insights-container .donut-guide-btn,
++.insights-container .donut-maker-list,
++.insights-container .insights-tag-mode-toggle,
++.insights-container .tags-chips-view,
++.insights-container .insights-row4-tabs,
++.insights-container .insights-fold-toggle {
++    display: none;
++}
++
++.insights-container .insights-card-hint {
++    font-size: 0.6875rem;
++    color: var(--text-muted);
++    white-space: nowrap;
++}
++
++.insights-container .donut-head-text {
++    width: 100%;
++}
++
++.insights-container .donut-head-top,
++.insights-container .treemap-head-title {
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    gap: 0.5rem;
++    width: 100%;
++    min-width: 0;
++}
++
++.insights-container .treemap-head-title {
++    flex: 1 1 auto;
++}
++
++/* ===== 移动端深度改版（<= 768px）：双层控制台 + 环图图例 + 5B 胶囊排行 + Row4 分段卡 + 折叠列表 ===== */
++@media (max-width: 768px) {
++    .insights-container {
++        gap: 0.6rem;
++        padding-bottom: 1.75rem;
++    }
++
++    .insights-container .card-head {
++        padding: 0.65rem 0.8rem 0.3rem;
++    }
++
++    .insights-container .card-head h2 {
++        font-size: 0.9rem;
++    }
++
++    .insights-container .card-body {
++        padding: 0.35rem 0.8rem 0.7rem;
++    }
++
++    /* Row 1: 上层 KPI 横条 + 下层 3 个过滤瓷砖 */
++    .insights-container .row1.insights-summary-bar {
++        grid-template-columns: repeat(3, minmax(0, 1fr));
++        border-radius: 16px;
++        border: 1px solid var(--stroke-default);
++        background: var(--surface-1);
++    }
++
++    .insights-container .row1 #tileCount {
++        grid-column: 1 / -1;
++        min-height: 54px;
++        border-bottom: 1px solid var(--stroke-subtle);
++    }
++
++    .insights-container .row1 #tileCount .card-body {
++        display: grid;
++        grid-template-columns: auto 1fr;
++        align-items: center;
++        gap: 0.15rem 0.65rem;
++        padding: 0.55rem 0.85rem;
++    }
++
++    .insights-container .row1 #tileCount .insights-summary-label {
++        text-align: left;
++        font-size: 0.7rem;
++    }
++
++    .insights-container .row1 #tileCount .insights-big-number {
++        justify-content: flex-start;
++        align-items: center;
++        gap: 0.35rem;
++        width: 100%;
++    }
++
++    .insights-container .row1 #tileCount .insights-tile-value {
++        font-size: 1.45rem;
++    }
++
++    .insights-container .row1 #tileCount .insights-open-arrow {
++        display: none;
++    }
++
++    .insights-container .row1 #tileCount .insights-browse-cta {
++        display: inline-flex;
++        align-items: center;
++        gap: 0.25rem;
++        margin-left: auto;
++        min-height: 30px;
++        padding: 0 0.65rem;
++        border-radius: 999px;
++        background: color-mix(in oklch, var(--accent) 14%, var(--surface-2));
++        border: 1px solid color-mix(in oklch, var(--accent) 32%, var(--stroke-default));
++        color: var(--accent);
++        font-size: 0.74rem;
++        font-weight: 600;
++        white-space: nowrap;
++    }
++
++    .insights-container .row1 #tileCount.is-scoped .insights-tile-sub {
++        display: block;
++        grid-column: 1 / -1;
++        margin-top: 0.1rem;
++        font-size: 0.7rem;
++    }
++
++    .insights-container .row1 #tileYear,
++    .insights-container .row1 #tileActress,
++    .insights-container .row1 #tileMaker {
++        min-height: 54px;
++        border-left: 0;
++    }
++
++    .insights-container .row1 #tileActress,
++    .insights-container .row1 #tileMaker {
++        border-left: 1px solid var(--stroke-subtle);
++    }
++
++    .insights-container .row1 #tileYear.is-active,
++    .insights-container .row1 #tileActress.is-active,
++    .insights-container .row1 #tileMaker.is-active {
++        background: color-mix(in oklch, var(--accent) 10%, transparent);
++    }
++
++    .insights-container .row1 #tileYear .card-body,
++    .insights-container .row1 #tileActress .card-body,
++    .insights-container .row1 #tileMaker .card-body {
++        padding: 0.4rem 0.35rem;
++    }
++
++    .insights-container .insights-x-btn {
++        position: relative;
++        width: 24px;
++        height: 24px;
++        font-size: 0.78rem;
++    }
++
++    .insights-container .insights-x-btn::after {
++        content: '';
++        position: absolute;
++        inset: -8px;
++    }
++
++    /* 吸顶筛选胶囊条（hasScope 时可见，避让 56px 移动顶栏） */
++    .insights-container .insights-sticky-filters {
++        order: 1;
++        position: sticky;
++        top: calc(var(--mobile-topbar-height, 56px) + 6px);
++        z-index: 25;
++        display: flex;
++        align-items: center;
++        justify-content: space-between;
++        gap: 0.45rem;
++        padding: 0.42rem 0.55rem;
++        border-radius: 14px;
++        border: 1px solid color-mix(in oklch, var(--accent) 34%, var(--stroke-default));
++        background: color-mix(in oklch, var(--surface-1) 94%, transparent);
++        backdrop-filter: blur(12px);
++    }
++
++    .insights-container .sticky-filter-chips {
++        display: flex;
++        align-items: center;
++        flex-wrap: wrap;
++        gap: 0.3rem;
++        min-width: 0;
++        flex: 1 1 auto;
++    }
++
++    .insights-container .sticky-chip {
++        display: inline-flex;
++        align-items: center;
++        gap: 0.22rem;
++        max-width: 100%;
++        min-height: 28px;
++        padding: 0.15rem 0.5rem;
++        border-radius: 999px;
++        border: 1px solid color-mix(in oklch, var(--accent) 36%, var(--stroke-default));
++        background: color-mix(in oklch, var(--accent) 14%, var(--surface-2));
++        color: var(--text-primary);
++        font-size: 0.72rem;
++        font-weight: 600;
++        cursor: pointer;
++    }
++
++    .insights-container .sticky-chip span {
++        overflow: hidden;
++        text-overflow: ellipsis;
++        white-space: nowrap;
++        max-width: 9rem;
++    }
++
++    .insights-container .sticky-chip-dot {
++        width: 8px;
++        height: 8px;
++        border-radius: 50%;
++        flex: 0 0 auto;
++    }
++
++    .insights-container .sticky-filter-actions {
++        display: flex;
++        align-items: center;
++        gap: 0.3rem;
++        flex: 0 0 auto;
++    }
++
++    .insights-container .sticky-clear-btn {
++        min-height: 28px;
++        padding: 0 0.5rem;
++        border-radius: 999px;
++        border: 1px solid var(--stroke-default);
++        background: var(--surface-2);
++        color: var(--text-secondary);
++        font-size: 0.7rem;
++        font-weight: 600;
++        cursor: pointer;
++    }
++
++    .insights-container .sticky-browse-btn {
++        display: inline-flex;
++        align-items: center;
++        gap: 0.2rem;
++        min-height: 28px;
++        padding: 0 0.58rem;
++        border-radius: 999px;
++        border: 0;
++        background: var(--accent);
++        color: var(--color-primary-content);
++        font-size: 0.72rem;
++        font-weight: 700;
++        cursor: pointer;
++    }
++
++    /* Row 2: 甜甜圈收敛图头说明 + 补足可点击片商色标图例 */
++    .insights-container .donut-guide-btn {
++        display: inline-flex;
++        align-items: center;
++        gap: 0.25rem;
++        min-height: 28px;
++        padding: 0 0.55rem;
++        border-radius: 999px;
++        border: 1px solid var(--stroke-default);
++        background: color-mix(in oklch, var(--surface-2) 72%, transparent);
++        color: var(--text-secondary);
++        font-size: 0.7rem;
++        font-weight: 600;
++        cursor: pointer;
++        flex: 0 0 auto;
++    }
++
++    .insights-container .donut-guide-btn.is-open {
++        border-color: color-mix(in oklch, var(--accent) 42%, var(--stroke-default));
++        color: var(--accent);
++        background: color-mix(in oklch, var(--accent) 10%, transparent);
++    }
++
++    .insights-container .donut-legend {
++        display: none;
++    }
++
++    .insights-container .donut-legend.is-mobile-open {
++        display: flex;
++        margin-top: 0.45rem;
++        padding: 0.5rem 0.65rem;
++        border-radius: 12px;
++        background: color-mix(in oklch, var(--surface-2) 68%, transparent);
++        border: 1px solid var(--stroke-subtle);
++    }
++
++    .insights-container .donut-chart-wrap {
++        min-height: 230px;
++    }
++
++    .insights-container .donut-maker-list {
++        display: grid;
++        grid-template-columns: repeat(2, minmax(0, 1fr));
++        gap: 0.4rem;
++        margin-top: 0.55rem;
++    }
++
++    .insights-container .donut-maker-pill {
++        display: flex;
++        align-items: center;
++        gap: 0.4rem;
++        min-width: 0;
++        min-height: 36px;
++        padding: 0.3rem 0.55rem;
++        border-radius: 10px;
++        border: 1px solid var(--stroke-subtle);
++        background: color-mix(in oklch, var(--surface-2) 55%, transparent);
++        color: var(--text-primary);
++        font-size: 0.74rem;
++        cursor: pointer;
++        text-align: left;
++    }
++
++    .insights-container .donut-maker-pill.is-static {
++        cursor: default;
++        opacity: 0.75;
++    }
++
++    .insights-container .donut-maker-pill.is-active {
++        border-color: color-mix(in oklch, var(--accent) 55%, var(--stroke-default));
++        background: color-mix(in oklch, var(--accent) 13%, var(--surface-2));
++    }
++
++    .insights-container .donut-maker-dot {
++        width: 9px;
++        height: 9px;
++        border-radius: 50%;
++        flex: 0 0 auto;
++    }
++
++    .insights-container .donut-maker-name {
++        flex: 1 1 auto;
++        min-width: 0;
++        overflow: hidden;
++        text-overflow: ellipsis;
++        white-space: nowrap;
++        font-weight: 600;
++    }
++
++    .insights-container .donut-maker-meta {
++        flex: 0 0 auto;
++        font-size: 0.68rem;
++        color: var(--text-muted);
++        font-variant-numeric: tabular-nums;
++    }
++
++    /* Row 3: 女优榜第4-25名默认折叠 + 比例底条 */
++    .insights-container .board-rest-card .board-rest-list {
++        min-height: 0;
++    }
++
++    .insights-container .board-rest-card:not(.is-expanded) .board-rest-row:nth-of-type(n + 8):not(.is-active) {
++        display: none;
++    }
++
++    .insights-container .board-rest-row {
++        min-height: 40px;
++        padding: 0.35rem 0.45rem;
++        margin-bottom: 2px;
++        border-bottom-color: transparent;
++    }
++
++    .insights-container .insights-fold-toggle {
++        display: inline-flex;
++        align-items: center;
++        justify-content: center;
++        gap: 0.35rem;
++        width: 100%;
++        min-height: 38px;
++        margin-top: 0.45rem;
++        border-radius: 10px;
++        border: 1px solid var(--stroke-subtle);
++        background: color-mix(in oklch, var(--surface-2) 65%, transparent);
++        color: var(--text-secondary);
++        font-size: 0.78rem;
++        font-weight: 600;
++        cursor: pointer;
++    }
++
++    /* Row 3: 标签 5B（默认胶囊排行，支持切回矩阵图） */
++    .insights-container .treemap-card .card-head {
++        flex-wrap: wrap;
++        gap: 0.45rem;
++    }
++
++    .insights-container .insights-tag-mode-toggle {
++        display: inline-flex;
++        align-items: center;
++        gap: 2px;
++        padding: 2px;
++        border-radius: 999px;
++        background: var(--surface-2);
++        border: 1px solid var(--stroke-subtle);
++        flex: 0 0 auto;
++    }
++
++    .insights-container .insights-tag-mode-toggle button {
++        min-height: 26px;
++        padding: 0 0.6rem;
++        border: 0;
++        border-radius: 999px;
++        background: transparent;
++        color: var(--text-secondary);
++        font-size: 0.72rem;
++        font-weight: 600;
++        cursor: pointer;
++    }
++
++    .insights-container .insights-tag-mode-toggle button.is-on {
++        background: var(--surface-1);
++        color: var(--text-primary);
++        border: 1px solid var(--stroke-subtle);
++    }
++
++    .insights-container .tags-chips-view {
++        display: flex;
++        flex-direction: column;
++        gap: 0.45rem;
++    }
++
++    .insights-container .tags-chips-hint {
++        font-size: 0.68rem;
++        color: var(--text-muted);
++    }
++
++    .insights-container .tags-chips-grid {
++        display: grid;
++        grid-template-columns: repeat(2, minmax(0, 1fr));
++        gap: 0.4rem;
++    }
++
++    .insights-container .tags-chips-grid:not(.is-expanded) .tag-heat-chip:nth-of-type(n + 13) {
++        display: none;
++    }
++
++    .insights-container .tag-heat-chip {
++        position: relative;
++        overflow: hidden;
++        display: flex;
++        align-items: center;
++        justify-content: space-between;
++        gap: 0.4rem;
++        min-height: 38px;
++        padding: 0.35rem 0.6rem;
++        border-radius: 10px;
++        border: 1px solid var(--stroke-subtle);
++        background: color-mix(in oklch, var(--surface-2) 48%, transparent);
++        color: var(--text-primary);
++        font-size: 0.78rem;
++        text-align: left;
++        cursor: pointer;
++    }
++
++    .insights-container .tag-heat-fill {
++        position: absolute;
++        inset: 0 auto 0 0;
++        width: var(--tag-fill, 0%);
++        background: color-mix(in oklch, var(--accent) 13%, transparent);
++        pointer-events: none;
++    }
++
++    .insights-container .tag-heat-name {
++        position: relative;
++        z-index: 1;
++        min-width: 0;
++        overflow: hidden;
++        text-overflow: ellipsis;
++        white-space: nowrap;
++        font-weight: 600;
++    }
++
++    .insights-container .tag-heat-count {
++        position: relative;
++        z-index: 1;
++        flex: 0 0 auto;
++        font-size: 0.72rem;
++        font-weight: 700;
++        color: var(--text-secondary);
++        font-variant-numeric: tabular-nums;
++    }
++
++    .insights-container .treemap-chart-wrap {
++        min-height: 280px;
++    }
++
++    /* Row 4: 年龄 / 导演 / 系列 3合1分段 Tab 切换 */
++    .insights-container .insights-row4-tabs {
++        display: grid;
++        grid-template-columns: repeat(3, minmax(0, 1fr));
++        gap: 4px;
++        padding: 4px;
++        border-radius: 14px;
++        background: var(--surface-1);
++        border: 1px solid var(--stroke-default);
++    }
++
++    .insights-container .insights-row4-tabs button {
++        display: inline-flex;
++        align-items: center;
++        justify-content: center;
++        gap: 0.28rem;
++        min-height: 36px;
++        padding: 0 0.4rem;
++        border: 0;
++        border-radius: 10px;
++        background: transparent;
++        color: var(--text-secondary);
++        font-size: 0.78rem;
++        font-weight: 600;
++        cursor: pointer;
++    }
++
++    .insights-container .insights-row4-tabs button.is-on {
++        background: color-mix(in oklch, var(--accent) 14%, var(--surface-2));
++        color: var(--text-primary);
++    }
++
++    .insights-container .row4-tab-pct {
++        font-size: 0.66rem;
++        color: var(--text-muted);
++        font-variant-numeric: tabular-nums;
++    }
++
++    .insights-container .insights-row4-tabs button.is-on .row4-tab-pct {
++        color: var(--accent);
++    }
++
++    .insights-container .row4 .row4-card:not(.is-mobile-active) {
++        display: none;
++    }
++
++    /* Row 5 & Row 6: 空态降噪与分布折叠 */
++    .insights-container .gantt-card.is-empty .deep-card-subtitle {
++        display: none;
++    }
++
++    .insights-container .row6 .list-rows {
++        max-height: none;
++        overflow-y: visible;
++    }
++
++    .insights-container .row6 .card:not(.is-expanded) .solo-row:nth-of-type(n + 9):not(.is-active) {
++        display: none;
 +    }
 +}
 --- a/web/static/css/pages/showcase/05-lightbox.css
@@ -28554,7 +29310,31 @@ HcmV?d00001
                  },
 --- a/web/static/js/pages/insights/state.js
 +++ b/web/static/js/pages/insights/state.js
-@@ -64,6 +64,7 @@
+@@ -8,10 +8,13 @@
+ 
+ import {
+     ACTRESS_TOP_N,
++    REST_KEY,
++    UNKNOWN_KEY,
+     podiumSizeForViewport,
+     setRecords,
+     getRecords,
+     buildMakerColorSlots,
++    buildMakerDonutData,
+     buildMainMakerYearMap,
+     buildActressBoard,
+     buildGanttRows,
+@@ -22,6 +25,9 @@
+     buildGanttAgeCells,
+     buildSoloRows,
+     buildCostarRows,
++    aggregateTags,
++    aggregateAge,
++    aggregateFieldTop8,
+     podiumPositionClass,
+     classifyBoardTransition,
+     diffBoardCounts,
+@@ -64,6 +70,7 @@
      getFieldBarChart,
      resizeAll,
      colorForMakerName,
@@ -28562,7 +29342,7 @@ HcmV?d00001
      emptyKeyForCard,
  } from './charts.js';
  import { applyCellFocal } from '../../shared/focal-cell.js';
-@@ -78,6 +79,20 @@
+@@ -78,6 +85,20 @@
      not_found: ['error', 'showcase.actress.addNotFound'],
      failed: ['error', 'showcase.actress.addTimeout'],
  };
@@ -28583,7 +29363,36 @@ HcmV?d00001
  
  // goBrowse／goBrowseWith 共用：寫入 showcase_state 成功才同步導向瀏覽頁；失敗＝不導航。
  function writeHandoffAndNavigate(sel, extra) {
-@@ -257,12 +272,15 @@
+@@ -236,6 +257,11 @@
+     let podiumResizeHandler = null;
+     let resizePending = false;
+     let resizeFrame = null;
++    let themeObserver = null;
++    let lastObservedTheme =
++        typeof document !== 'undefined'
++            ? document.documentElement.getAttribute('data-theme')
++            : null;
+     return {
+         snapshot: null,
+         snapshotError: null,
+@@ -248,6 +274,16 @@
+         boardDisplayCounts: {},
+         boardRows: [],
+         podiumSize: podiumSizeForViewport(typeof window !== 'undefined' ? window.innerWidth : undefined),
++        isMobileViewport: typeof window !== 'undefined' ? window.innerWidth <= 768 : false,
++        donutLegendOpen: false,
++        makerBreakdown: [],
++        tagViewUserChoice: null,
++        tagsList: [],
++        tagsExpanded: false,
++        boardExpanded: false,
++        soloExpanded: false,
++        row4Tab: 'age',
++        row4Coverage: { age: '', director: '', series: '' },
+         // TASK-156d-T3／CD-156d-2：row3 左半格＋row7 三個可切換顯示旗標（不用 x-show，
+         // FE-ALPINE-17——vendored Alpine 的 x-show 晚一幀且一翻轉就立即 display:none，
+         // 淡出播不完）。初始狀態＝無焦點：副本 A 顯示、與她同片／row7 副本 B 隱藏。
+@@ -257,12 +293,15 @@
          ganttRows: [],
          // 修正 1（第 2 輪）：圖例名單存進 reactive 欄位，見 ganttLegendMakers() 註解。
          ganttLegend: [],
@@ -28599,7 +29408,7 @@ HcmV?d00001
          // P3-3：以女優名為 key，記錄該人頭像照片曾經載入失敗——取代舊版
          // @error 直接改寫 DOM textContent 的寫法（會把 x-if 錨點一併砍掉，
          // Alpine 之後永遠無法再插回新內容）。女優格與女優榜共用同一份。
-@@ -456,6 +474,25 @@
+@@ -456,6 +495,25 @@
                  _mainMakerYearMap,
                  this.sel,
              );
@@ -28625,7 +29434,7 @@ HcmV?d00001
          },
  
          /**
-@@ -689,6 +726,16 @@
+@@ -689,6 +747,16 @@
                      })
                      : label;
              }
@@ -28642,7 +29451,7 @@ HcmV?d00001
              return tFn
                  ? tFn('insights.gantt.tooltip_dot', {
                      label: label,
-@@ -697,6 +744,12 @@
+@@ -697,6 +765,12 @@
                  : label;
          },
  
@@ -28655,7 +29464,7 @@ HcmV?d00001
          /**
           * 修正 1（第 2 輪，真瀏覽器重現）：舊版直接讀模組級非 reactive
           * 變數 `_makerColorSlots`——模板首次渲染（快照載完前）算出 []，
-@@ -706,7 +759,7 @@
+@@ -706,7 +780,7 @@
           * 觸發依賴），排序改在 `_loadSnapshot` 算好存進去，這裡只回傳。
           */
          ganttLegendMakers() {
@@ -28664,7 +29473,7 @@ HcmV?d00001
          },
  
          /**
-@@ -735,8 +788,18 @@
+@@ -735,8 +809,18 @@
              return (
                  'grid-template-columns: var(--gantt-name-w) repeat(' +
                  n +
@@ -28684,7 +29493,7 @@ HcmV?d00001
          },
  
          /**
-@@ -1463,7 +1526,7 @@
+@@ -1463,7 +1547,7 @@
           */
          totalCountLabel() {
              const n = this.snapshot ? this.snapshot.logicalTitles : 0;
@@ -28693,7 +29502,136 @@ HcmV?d00001
              return typeof window !== 'undefined' && typeof window.t === 'function'
                  ? window.t('insights.total_count', { n: nStr })
                  : 'insights.total_count';
-@@ -1815,7 +1878,7 @@
+@@ -1482,6 +1566,119 @@
+         // 片商格的 ×：只清片商，保留期間與女優
+         clearMaker() {
+             this.sel = { ...this.sel, maker: null };
++        },
++
++        clearAllFilters() {
++            this.sel = emptySel();
++        },
++
++        get tagViewMode() {
++            return this.tagViewUserChoice || (this.isMobileViewport ? 'chips' : 'treemap');
++        },
++
++        setTagViewMode(mode) {
++            if (mode !== 'chips' && mode !== 'treemap') return;
++            this.tagViewUserChoice = mode;
++            if (mode === 'treemap' && typeof this.$nextTick === 'function') {
++                this.$nextTick(() => {
++                    const c = getTagsChart();
++                    if (c && !c.isDisposed()) c.resize();
++                    this.redrawTags();
++                });
++            }
++        },
++
++        selectRow4Tab(tab) {
++            if (tab !== 'age' && tab !== 'director' && tab !== 'series') return;
++            this.row4Tab = tab;
++            if (typeof this.$nextTick === 'function') {
++                this.$nextTick(() => {
++                    const c = tab === 'age' ? getAgeChart() : getFieldBarChart(tab);
++                    if (c && !c.isDisposed()) c.resize();
++                    if (tab === 'age') this.redrawAge();
++                    else if (tab === 'director') this.redrawDirector();
++                    else this.redrawSeries();
++                });
++            }
++        },
++
++        get maxBoardCount() {
++            const rows = this.boardRows || [];
++            let max = 1;
++            for (let i = 0; i < rows.length; i++) {
++                const n = Number(rows[i].count) || 0;
++                if (n > max) max = n;
++            }
++            return max;
++        },
++
++        boardRowPct(row) {
++            if (!row) return 0;
++            return Math.min(100, Math.max(4, Math.round(((Number(row.count) || 0) / this.maxBoardCount) * 100)));
++        },
++
++        _formatPct(n, total) {
++            if (!total) return '0%';
++            return Math.round((n / total) * 100) + '%';
++        },
++
++        _donutItemLabel(key) {
++            const tFn = typeof window !== 'undefined' && typeof window.t === 'function' ? window.t : null;
++            if (key === REST_KEY) return tFn ? tFn('insights.donut.other') : 'Other';
++            if (key === UNKNOWN_KEY) return tFn ? tFn('insights.donut.unknown') : 'Unknown';
++            return key;
++        },
++
++        recomputeMobileInsights() {
++            const allRecords = getRecords();
++            // 1. Maker breakdown list aligned with donut chart (skipDim='maker').
++            const makerScoped = scopeRecords(allRecords, this.sel, 'maker');
++            const donut = buildMakerDonutData(makerScoped, _mainMakerYearMap);
++            const totalMakers = donut.total || 0;
++            this.makerBreakdown = (donut.inner || [])
++                .filter((e) => e && e.value > 0)
++                .map((e) => {
++                    const isRest = e.kind === 'rest';
++                    const isUnknown = e.kind === 'unknown';
++                    const color = isRest
++                        ? 'color-mix(in oklch, var(--color-base-content) 24%, transparent)'
++                        : isUnknown
++                          ? 'color-mix(in oklch, var(--text-muted) 36%, var(--surface-2))'
++                          : colorForMakerName(e.name);
++                    return {
++                        key: e.name,
++                        label: this._donutItemLabel(e.name),
++                        count: e.value,
++                        pct: this._formatPct(e.value, totalMakers),
++                        color,
++                        clickable: e.kind === 'named',
++                        active: e.kind === 'named' && this.sel.maker === e.name,
++                    };
++                });
++
++            // 2. Tags capsule ranking (for mobile 5B chips view).
++            const fullScoped = scopeRecords(allRecords, this.sel, null);
++            const tagAgg = aggregateTags(fullScoped);
++            const tagTotal = tagAgg.total || 0;
++            const topList = (tagAgg.rest || []).slice(0, 24);
++            const maxTag = topList.length ? Math.max(1, topList[0][1]) : 1;
++            this.tagsList = topList.map((e) => ({
++                name: e[0],
++                count: e[1],
++                pct: this._formatPct(e[1], tagTotal),
++                ratio: Math.min(100, Math.max(8, Math.round((e[1] / maxTag) * 100))),
++            }));
++
++            // 3. Row 4 coverage summary for mobile 3-in-1 segmented tabs.
++            const favs = (this.snapshot && this.snapshot.actressFavorites) || {};
++            const ageAgg = aggregateAge(fullScoped, favs);
++            const dirAgg = aggregateFieldTop8(fullScoped, 'director');
++            const serAgg = aggregateFieldTop8(fullScoped, 'series');
++            this.row4Coverage = {
++                age: this._formatPct(ageAgg.recordsWithAge, ageAgg.total),
++                director: this._formatPct(dirAgg.withValueCount, dirAgg.total),
++                series: this._formatPct(serAgg.withValueCount, serAgg.total),
++            };
+         },
+ 
+         /**
+@@ -1699,6 +1896,8 @@
+             if (this._bindPodiumResize()) this._registerInsightsCleanup();
+             const size = podiumSizeForViewport(window.innerWidth);
+             if (size !== this.podiumSize) this.podiumSize = size;
++            this.isMobileViewport = window.innerWidth <= 768;
++            this._bindThemeObserver();
+             // 快照失敗時從未建圖——不要在 bfcache 還原時建空圖表
+             if (this.snapshotError) return;
+             // Finding 2：離頁前快照尚未載完（fetch 仍在飛）時，cleanup 已把
+@@ -1815,7 +2014,7 @@
  
                  setRecords(records);
                  var slots = buildMakerColorSlots(getRecords());
@@ -28702,6 +29640,81 @@ HcmV?d00001
                  this.ganttLegend = Object.keys(slots)
                      .map(function (name) {
                          return { name: name, slot: slots[name] };
+@@ -1839,6 +2038,7 @@
+                 this.recomputeBoard();
+                 this.recomputeGantt();
+                 this.recomputeSolo();
++                this.recomputeMobileInsights();
+                 this._maybePlayPinPulse();
+                 this.recomputeCostar();
+                 // TASK-156d-T9 round 3 audit：這裡不需要呼叫 _syncCostarVisibility()
+@@ -1919,6 +2119,7 @@
+                     resizeFrame = null;
+                     const size = podiumSizeForViewport(window.innerWidth);
+                     if (size !== this.podiumSize) this.podiumSize = size;
++                    this.isMobileViewport = window.innerWidth <= 768;
+                 });
+                 resizeFrame = frame;
+             };
+@@ -1934,11 +2135,42 @@
+             resizeFrame = null;
+         },
+ 
++        _bindThemeObserver() {
++            if (themeObserver || typeof MutationObserver === 'undefined' || typeof document === 'undefined') {
++                return false;
++            }
++            lastObservedTheme = document.documentElement.getAttribute('data-theme');
++            themeObserver = new MutationObserver(() => {
++                const next = document.documentElement.getAttribute('data-theme');
++                if (next === lastObservedTheme || !_pageAlive || !this.snapshot) return;
++                lastObservedTheme = next;
++                this.redrawYears();
++                this.redrawDonut();
++                this.redrawTags();
++                this.redrawAge();
++                this.redrawDirector();
++                this.redrawSeries();
++            });
++            themeObserver.observe(document.documentElement, {
++                attributes: true,
++                attributeFilter: ['data-theme'],
++            });
++            return true;
++        },
++
++        _unbindThemeObserver() {
++            if (themeObserver) {
++                themeObserver.disconnect();
++                themeObserver = null;
++            }
++        },
++
+         _registerInsightsCleanup() {
+             if (window.__registerPage) {
+                 window.__registerPage({
+                     cleanup: () => {
+                         this._unbindPodiumResize();
++                        this._unbindThemeObserver();
+                         _pageAlive = false;
+                         disposeAll();
+                     },
+@@ -1948,6 +2180,7 @@
+ 
+         async init() {
+             this._bindPodiumResize();
++            this._bindThemeObserver();
+             // pageshow：模組生命週期內只註冊一次；不進 __registerPage cleanup
+             if (!_pageshowBound) {
+                 _pageshowBound = true;
+@@ -2003,6 +2236,7 @@
+                 this._playCountUps(oldBoardRows);
+                 this.recomputeGantt();
+                 this.recomputeSolo();
++                this.recomputeMobileInsights();
+                 this._maybePlayPinPulse();
+                 this._handleActressFocusChange(oldValue, oldCostarRowsLength);
+             });
 --- /dev/null
 +++ b/web/static/js/pages/help/help-tabs.js
 @@ -0,0 +1,76 @@
@@ -36284,7 +37297,46 @@ HcmV?d00001
  {% endblock %}
  
  {% block pre_alpine_module %}
-@@ -118,15 +118,8 @@
+@@ -19,6 +19,7 @@
+     <section class="card board-podium-card">
+         <div class="card-head">
+             <h2 x-text="boardTitle"></h2>
++            <span class="insights-card-hint">{{ t('insights.board.hint') }}</span>
+         </div>
+         <div class="card-body">
+             {# TASK-156e-T1a／CD-156e-1 v3 方案 A：台座層（固定位置 x-if）＋人員層（x-for :key=name） #}
+@@ -73,7 +74,7 @@
+             </div>
+         </div>
+     </section>
+-    <section class="card board-rest-card">
++    <section class="card board-rest-card" :class="{ 'is-expanded': boardExpanded }">
+         <div class="card-head">
+             <h2 x-text="boardRestTitle"></h2>
+         </div>
+@@ -82,6 +83,7 @@
+                 <template x-for="row in restRows" :key="row.name">
+                     <div class="board-rest-row"
+                          :class="{ 'is-active': sel.actress === row.name }"
++                         :style="'--row-pct:' + boardRowPct(row) + '%'"
+                          :data-flip-id="'rest-' + row.name"
+                          @click="flyAndFocusActress(row.name, $event)">
+                         <span class="board-rank" x-text="row.rank"></span>
+@@ -111,6 +113,13 @@
+                      class="board-empty"
+                      x-text="t(cardEmptyKey('actress'))"></div>
+             </div>
++            <button type="button"
++                    class="insights-fold-toggle"
++                    x-show="restRows.length > 7"
++                    @click="boardExpanded = !boardExpanded">
++                <span x-text="boardExpanded ? t('insights.board.collapse') : t('insights.board.expand_all', { n: restRows.length })"></span>
++                <i class="bi" :class="boardExpanded ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i>
++            </button>
+         </div>
+     </section>
+ </div>
+@@ -118,15 +127,8 @@
  
  {% block content %}
  <div class="insights-container page-layer" x-data="libraryInsights" :class="{ 'is-actress-focused': isActressFocused, 'is-podium-3': podiumSize === 3 }">
@@ -36302,7 +37354,7 @@ HcmV?d00001
          <section class="card"
                   id="tileCount"
                   role="button"
-@@ -138,12 +131,13 @@
+@@ -138,20 +140,26 @@
                   @keydown.enter.prevent="goBrowse()"
                   @keydown.space.prevent="goBrowse()">
              <div class="card-body">
@@ -36316,37 +37368,111 @@ HcmV?d00001
 +                    <span class="insights-tile-value" x-text="Number(displayScopedCount).toLocaleString(window.__locale || document.documentElement.lang || 'zh-CN')"></span>
                      <span class="insights-tile-unit" x-text="t('insights.unit')"></span>
                      <span class="insights-open-arrow" aria-hidden="true">↗</span>
++                    <span class="insights-browse-cta" x-show="canGoBrowse" aria-hidden="true">
++                        <span>{{ t('insights.open_browse_short') }}</span>
++                        <i class="bi bi-arrow-up-right"></i>
++                    </span>
                  </div>
-@@ -152,6 +146,7 @@
+                 <div x-show="!snapshotError" class="insights-tile-sub" x-text="totalCountLabel()"></div>
+             </div>
          </section>
-         <section class="card" id="tileYear">
-             <div class="card-body">
+-        <section class="card" id="tileYear">
+-            <div class="card-body">
++        <section class="card" id="tileYear" :class="{ 'is-active': sel.period.type !== 'all' }">
++            <div class="card-body">
 +                <span class="insights-summary-label">{{ t('insights.summary.year') }}</span>
                  <div x-show="sel.period.type !== 'all'" class="insights-year-value">
                      <span class="insights-tile-value" x-text="periodTileLabel()"></span>
                      <button type="button"
-@@ -166,6 +161,7 @@
+@@ -164,8 +172,9 @@
+                      x-text="t('insights.all_years')"></div>
+             </div>
          </section>
-         <section class="card" id="tileActress">
-             <div class="card-body">
+-        <section class="card" id="tileActress">
+-            <div class="card-body">
++        <section class="card" id="tileActress" :class="{ 'is-active': Boolean(sel.actress) }">
++            <div class="card-body">
 +                <span class="insights-summary-label">{{ t('insights.summary.actress') }}</span>
                  <div x-show="sel.actress" class="insights-focus-row">
                      <template x-if="sel.actress">
                          <span class="insights-focus-avatar"
-@@ -214,6 +210,7 @@
+@@ -212,8 +221,9 @@
+                      x-text="t('insights.all_actress')"></div>
+             </div>
          </section>
-         <section class="card" id="tileMaker">
-             <div class="card-body">
+-        <section class="card" id="tileMaker">
+-            <div class="card-body">
++        <section class="card" id="tileMaker" :class="{ 'is-active': Boolean(sel.maker) }">
++            <div class="card-body">
 +                <span class="insights-summary-label">{{ t('insights.summary.maker') }}</span>
                  <div x-show="sel.maker" class="insights-focus-row">
                      <template x-if="sel.maker">
                          <span class="insights-focus-avatar mk"
-@@ -250,7 +247,25 @@
+@@ -236,11 +246,46 @@
+         </section>
+     </div>
+ 
++    <!-- 移动端吸顶激活筛选带（仅在有条件激活且 <=768px 时可见） -->
++    <div class="insights-sticky-filters" x-show="hasScope && !snapshotError" x-cloak>
++        <div class="sticky-filter-chips">
++            <template x-if="sel.period.type !== 'all'">
++                <button type="button" class="sticky-chip" @click="clearPeriod()">
++                    <span x-text="periodTileLabel()"></span>
++                    <i class="bi bi-x" aria-hidden="true"></i>
++                </button>
++            </template>
++            <template x-if="sel.actress">
++                <button type="button" class="sticky-chip" @click="clearActress()">
++                    <span x-text="sel.actress"></span>
++                    <i class="bi bi-x" aria-hidden="true"></i>
++                </button>
++            </template>
++            <template x-if="sel.maker">
++                <button type="button" class="sticky-chip" @click="clearMaker()">
++                    <span class="sticky-chip-dot" :style="focusMakerColor() ? ('background:' + focusMakerColor()) : ''" aria-hidden="true"></span>
++                    <span x-text="sel.maker"></span>
++                    <i class="bi bi-x" aria-hidden="true"></i>
++                </button>
++            </template>
++        </div>
++        <div class="sticky-filter-actions">
++            <button type="button" class="sticky-clear-btn" @click="clearAllFilters()" :title="t('insights.clear_all')">
++                {{ t('insights.clear_all') }}
++            </button>
++            <button type="button" class="sticky-browse-btn" :disabled="!canGoBrowse" @click="goBrowse()">
++                <span x-text="Number(displayScopedCount).toLocaleString(window.__locale || document.documentElement.lang || 'zh-CN') + ' ' + t('insights.unit')"></span>
++                <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
++            </button>
++        </div>
++    </div>
++
+     <!-- Row 2：年份長條 + 片商甜甜圈 -->
+     <div class="row2">
+         <section class="card row2-years">
+             <div class="card-head">
+                 <h2>{{ t('insights.row.years') }}</h2>
++                <span class="insights-card-hint">{{ t('insights.years.hint') }}</span>
+             </div>
+             <div class="card-body">
+                 <div class="years-chart-wrap"><div id="yearsChart" class="echart"></div></div>
+@@ -249,12 +294,53 @@
+         <section class="card donut-card">
              <div class="card-head">
                  <div class="donut-head-text">
-                     <h2 x-text="donutTitle()"></h2>
+-                    <h2 x-text="donutTitle()"></h2>
 -                    <div class="donut-legend">{{ t('insights.donut.legend') }}</div>
-+                    <div class="donut-legend">
++                    <div class="donut-head-top">
++                        <h2 x-text="donutTitle()"></h2>
++                        <button type="button"
++                                class="donut-guide-btn"
++                                :class="{ 'is-open': donutLegendOpen }"
++                                :aria-expanded="donutLegendOpen ? 'true' : 'false'"
++                                @click="donutLegendOpen = !donutLegendOpen">
++                            <i class="bi bi-info-circle" aria-hidden="true"></i>
++                            <span>{{ t('insights.donut.legend_toggle') }}</span>
++                        </button>
++                    </div>
++                    <div class="donut-legend" :class="{ 'is-mobile-open': donutLegendOpen }">
 +                        <span class="donut-legend-item">
 +                            <span class="donut-legend-swatch donut-legend-swatch--inner" aria-hidden="true"></span>
 +                            <span>{{ t('insights.donut.legend_inner') }}</span>
@@ -36368,9 +37494,130 @@ HcmV?d00001
                  </div>
              </div>
              <div class="card-body">
-@@ -376,17 +391,14 @@
+                 <div class="donut-chart-wrap"><div id="donutChart" class="echart"></div></div>
++                <div class="donut-maker-list" x-show="makerBreakdown.length">
++                    <template x-for="mk in makerBreakdown" :key="mk.key">
++                        <button type="button"
++                                class="donut-maker-pill"
++                                :class="{ 'is-active': mk.active, 'is-static': !mk.clickable }"
++                                :disabled="!mk.clickable"
++                                @click="mk.clickable && toggleMakerFocus(mk.key)">
++                            <span class="donut-maker-dot" :style="'background:' + mk.color" aria-hidden="true"></span>
++                            <span class="donut-maker-name" x-text="mk.label"></span>
++                            <span class="donut-maker-meta" x-text="mk.pct + ' · ' + mk.count"></span>
++                        </button>
++                    </template>
++                </div>
+             </div>
+         </section>
+     </div>
+@@ -328,19 +414,78 @@
+         </div>
+         <section class="card treemap-card">
+             <div class="card-head">
+-                <h2>{{ t('insights.row.tags') }}</h2>
+-                <span class="tags-coverage-hint" id="tagsHint"></span>
++                <div class="treemap-head-title">
++                    <h2>{{ t('insights.row.tags') }}</h2>
++                    <span class="tags-coverage-hint" id="tagsHint"></span>
++                </div>
++                <div class="insights-tag-mode-toggle" role="group">
++                    <button type="button"
++                            :class="{ 'is-on': tagViewMode === 'chips' }"
++                            @click="setTagViewMode('chips')">{{ t('insights.tags.mode_list') }}</button>
++                    <button type="button"
++                            :class="{ 'is-on': tagViewMode === 'treemap' }"
++                            @click="setTagViewMode('treemap')">{{ t('insights.tags.mode_map') }}</button>
++                </div>
+             </div>
+             <div class="card-body">
+                 <div class="tags-pulled" id="tagsPulled"></div>
+-                <div class="treemap-chart-wrap"><div id="tagsChart" class="echart"></div></div>
++                <div class="tags-chips-view" :class="{ 'is-hidden': tagViewMode !== 'chips' }">
++                    <div class="tags-chips-hint" x-show="tagsList.length">{{ t('insights.tags.hint') }}</div>
++                    <div class="tags-chips-grid" :class="{ 'is-expanded': tagsExpanded }">
++                        <template x-for="tg in tagsList" :key="tg.name">
++                            <button type="button"
++                                    class="tag-heat-chip"
++                                    :style="'--tag-fill:' + tg.ratio + '%'"
++                                    @click="goBrowseWith({ dim: 'tag', value: tg.name })">
++                                <span class="tag-heat-fill" aria-hidden="true"></span>
++                                <span class="tag-heat-name" x-text="tg.name"></span>
++                                <span class="tag-heat-count" x-text="tg.count"></span>
++                            </button>
++                        </template>
++                    </div>
++                    <div class="board-empty" x-show="!tagsList.length" x-text="t(cardEmptyKey(null))"></div>
++                    <button type="button"
++                            class="insights-fold-toggle"
++                            x-show="tagsList.length > 12"
++                            @click="tagsExpanded = !tagsExpanded">
++                        <span x-text="tagsExpanded ? t('insights.board.collapse') : t('insights.board.expand_all', { n: tagsList.length })"></span>
++                        <i class="bi" :class="tagsExpanded ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i>
++                    </button>
++                </div>
++                <div class="treemap-chart-wrap" :class="{ 'is-hidden': tagViewMode !== 'treemap' }"><div id="tagsChart" class="echart"></div></div>
+             </div>
+         </section>
+     </div>
+ 
+     <!-- Row 4：年齡 / 導演 / 系列 -->
+     <div class="row4">
+-        <section class="card row4-card">
++        <div class="insights-row4-tabs" role="tablist">
++            <button type="button"
++                    role="tab"
++                    :aria-selected="row4Tab === 'age'"
++                    :class="{ 'is-on': row4Tab === 'age' }"
++                    @click="selectRow4Tab('age')">
++                <span>{{ t('insights.row.age') }}</span>
++                <span class="row4-tab-pct" x-text="row4Coverage.age"></span>
++            </button>
++            <button type="button"
++                    role="tab"
++                    :aria-selected="row4Tab === 'director'"
++                    :class="{ 'is-on': row4Tab === 'director' }"
++                    @click="selectRow4Tab('director')">
++                <span>{{ t('insights.row.director') }}</span>
++                <span class="row4-tab-pct" x-text="row4Coverage.director"></span>
++            </button>
++            <button type="button"
++                    role="tab"
++                    :aria-selected="row4Tab === 'series'"
++                    :class="{ 'is-on': row4Tab === 'series' }"
++                    @click="selectRow4Tab('series')">
++                <span>{{ t('insights.row.series') }}</span>
++                <span class="row4-tab-pct" x-text="row4Coverage.series"></span>
++            </button>
++        </div>
++        <section class="card row4-card" :class="{ 'is-mobile-active': row4Tab === 'age' }">
+             <div class="card-head">
+                 <h2>{{ t('insights.row.age') }}</h2>
+                 <span class="tags-coverage-hint" id="ageHint"></span>
+@@ -349,7 +494,7 @@
+                 <div class="age-chart-wrap"><div id="ageChart" class="echart"></div></div>
+             </div>
+         </section>
+-        <section class="card row4-card">
++        <section class="card row4-card" :class="{ 'is-mobile-active': row4Tab === 'director' }">
+             <div class="card-head">
+                 <h2>{{ t('insights.row.director') }}</h2>
+                 <span class="tags-coverage-hint" id="directorHint"></span>
+@@ -358,7 +503,7 @@
+                 <div class="bar-chart-wrap"><div id="directorChart" class="echart"></div></div>
+             </div>
+         </section>
+-        <section class="card row4-card">
++        <section class="card row4-card" :class="{ 'is-mobile-active': row4Tab === 'series' }">
+             <div class="card-head">
+                 <h2>{{ t('insights.row.series') }}</h2>
+                 <span class="tags-coverage-hint" id="seriesHint"></span>
+@@ -374,19 +519,16 @@
+ 
+     <!-- Row 5：主要片商年表（全寬） -->
      <div class="row5">
-         <section class="card gantt-card" x-data="{ ganttAxis: 'year' }">
+-        <section class="card gantt-card" x-data="{ ganttAxis: 'year' }">
++        <section class="card gantt-card" :class="{ 'is-empty': !ganttRows.length }" x-data="{ ganttAxis: 'year' }">
              <div class="card-head">
 -                <h2 x-text="ganttTitle"></h2>
 -                <div class="gantt-legend">
@@ -36394,7 +37641,7 @@ HcmV?d00001
                      <button type="button"
                              :class="{ 'is-on': ganttAxis === 'year' }"
                              @click="ganttAxis = 'year'"
-@@ -398,6 +410,25 @@
+@@ -398,6 +540,25 @@
                  </div>
              </div>
              <div class="card-body">
@@ -36420,7 +37667,7 @@ HcmV?d00001
                  <div x-show="!ganttRows.length"
                       class="gantt-empty"
                       x-text="t(cardEmptyKey('actress'))"></div>
-@@ -416,7 +447,8 @@
+@@ -416,7 +577,8 @@
                                                       && sel.period.type !== 'all'
                                                       && isYearInSel(col)
                                               }"
@@ -36430,7 +37677,7 @@ HcmV?d00001
                                      </template>
                                  </div>
                                  <template x-for="row in ganttView(ganttAxis).rows"
-@@ -453,10 +485,15 @@
+@@ -453,10 +615,15 @@
                                                       ganttAxis === 'year' && sel.period.type !== 'all'
                                                           ? (isYearInSel(cell.year) ? ' is-selected' : ' is-dimmed')
                                                           : ''
@@ -36450,9 +37697,12 @@ HcmV?d00001
                                                   @click.stop="ganttCellClick(row.name, cell, ganttAxis, $event)"
                                                   :title="ganttCellTitle(cell, ganttAxis)"></div>
                                          </template>
-@@ -477,7 +514,10 @@
+@@ -475,9 +642,12 @@
+ 
+     <!-- Row 6：女優片商分布（「與她同片」TASK-156d-T3 搬進 row3 左半格，與副本 A 共用插槽） -->
      <div class="row6" id="row6">
-         <section class="card">
+-        <section class="card">
++        <section class="card" :class="{ 'is-expanded': soloExpanded }">
              <div class="card-head">
 -                <h2 id="soloTitle" x-text="soloTitle"></h2>
 +                <div class="gantt-heading">
@@ -36462,7 +37712,7 @@ HcmV?d00001
              </div>
              <div class="card-body">
                  <div class="list-rows" id="soloList">
-@@ -508,7 +548,7 @@
+@@ -508,7 +678,7 @@
                                      <span class="solo-segment"
                                            :class="'solo-segment--' + seg.kind"
                                            :style="'width:' + (row.total ? Math.round(seg.count / row.total * 100) : 0) + '%' + (seg.kind === 'named' ? (';background:' + colorForMakerName(seg.maker)) : '')"
@@ -36471,6 +37721,20 @@ HcmV?d00001
                                  </template>
                              </span>
                              <span class="solo-end" x-text="soloRowLabel(row)"></span>
+@@ -518,6 +688,13 @@
+                          class="solo-empty"
+                          x-text="t(cardEmptyKey('actress'))"></div>
+                 </div>
++                <button type="button"
++                        class="insights-fold-toggle"
++                        x-show="soloRows.length > 8"
++                        @click="soloExpanded = !soloExpanded">
++                    <span x-text="soloExpanded ? t('insights.board.collapse') : t('insights.board.expand_all', { n: soloRows.length })"></span>
++                    <i class="bi" :class="soloExpanded ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i>
++                </button>
+             </div>
+         </section>
+     </div>
 --- a/web/templates/scanner.html
 +++ b/web/templates/scanner.html
 @@ -1,10 +1,12 @@
