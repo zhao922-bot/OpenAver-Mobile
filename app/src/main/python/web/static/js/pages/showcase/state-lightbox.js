@@ -127,6 +127,13 @@ export function stateLightbox() {
             }
         },
 
+        _lbAmbientStyle() {
+            var url = this.currentLightboxVideo?.cover_url;
+            if (!url) return {};
+            var safeUrl = String(url).replace(/[\r\n"\\]/g, encodeURIComponent);
+            return { backgroundImage: 'url("' + safeUrl + '")' };
+        },
+
         // 71c-P2: helper — blur-up state reset + same-URL complete-check（DRY；供 _setLightboxIndex 與
         // slip-through 路徑（state-similar.js closeSimilarMode）共用，避免兩處邏輯漂移）。
         // 呼叫時機：currentLightboxVideo 已更新、Alpine reactive patch 尚未跑完（$nextTick 前）。
@@ -203,6 +210,9 @@ export function stateLightbox() {
             // 71c-P2: 抽至 _refreshLbFullBlurUp helper（slip-through 路徑共用）
             this._refreshLbFullBlurUp();
             this._refreshLbActorAges();
+            if (this.currentLightboxVideo) {
+                this._lbPlotAutoLoad?.();
+            }
         },
 
         // --- Lightbox (M3a) ---

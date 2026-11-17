@@ -1118,7 +1118,12 @@
                 <!-- Video Lightbox Branch (wrapped in x-if to prevent 44b hero card conflict) -->
                 <template x-if="currentLightboxVideo && !currentLightboxActress">
                     <div style="display:contents">
-                        <!-- Cover Image -->
+                        <!-- Cover Image Stage -->
+                        <div class="lb-cover-stage">
+                            <div class="lb-cover-ambient"
+                                 aria-hidden="true"
+                                 x-show="!!currentLightboxVideo?.cover_url"
+                                 :style="_lbAmbientStyle()"></div>
                         <!-- T8(Codex P2): has-cover 旗標 — 僅有封面時才讓 ≤480px min-height:0 塌到圖盒；
                              無封面時保留 min-height 避免 cover 區塌成 0 高（補封面入口會壞）。 -->
                         <div class="lightbox-cover" :class="{'has-cover': !!currentLightboxVideo?.cover_url}">
@@ -1214,6 +1219,7 @@
                                 </button>
                             </div>
                         </div>
+                        </div>
 
                         <!-- 83b-T1：舊寄生 .lightbox-similar-mobile x-collapse block 已移除，
                              改為獨立全螢幕 .similar-mobile-panel（page-level sibling，見 .similar-stage 之後）。 -->
@@ -1288,6 +1294,23 @@
                                     <i class="bi bi-play-fill" aria-hidden="true"></i>
                                     <span>{{ t('showcase.action.play') }}</span>
                                 </button>
+                                <button type="button" class="lb-mobile-icon-cta"
+                                        x-show="_lbFullLoaded && _posterModeActive()"
+                                        @click="openMask()"
+                                        :title="t('showcase.lightbox.mask_toggle')"
+                                        :aria-label="t('showcase.lightbox.mask_toggle')">
+                                    <i class="bi bi-person-bounding-box" aria-hidden="true"></i>
+                                </button>
+                                <button type="button" class="lb-mobile-icon-cta"
+                                        x-show="lbTrShowOnTitle()"
+                                        @click.stop="lbTranslate()"
+                                        :disabled="lbTrIsBusy()"
+                                        :aria-busy="lbTrIsBusy()"
+                                        :title="t('showcase.lightbox.translate_tooltip')"
+                                        :aria-label="t('showcase.lightbox.translate_tooltip')">
+                                    <i class="bi bi-translate" x-show="!lbTrIsBusy()" aria-hidden="true"></i>
+                                    <i class="bi bi-arrow-repeat spin" x-show="lbTrIsBusy()" aria-hidden="true"></i>
+                                </button>
                             </div>
                             <div class="lb-faces">
                             <div class="lb-info-face"
@@ -1311,51 +1334,77 @@
                             <!-- 分隔符 " · " 內嵌於各 span 開頭，隨 x-show 一起顯示/隱藏，避免孤立 · -->
                             <div class="lb-details">
                                 <!-- 123-T8：精選星已移到 .lb-title（標題行）最前面，此列回到以番號起頭。 -->
-                                <span x-text="currentLightboxVideo?.number || t('showcase.lightbox.unknown_number')"></span>
-                                <!-- 62b-1: 進階重刮 ⚙ 入口（番號旁 inline 細鈕，常駐顯示）-->
-                                <button type="button"
-                                        class="lb-rescrape-gear"
-                                        @click.stop="openRescrape(currentLightboxVideo, 'lightbox')"
-                                        data-tooltip="{{ t('showcase.rescrape.entry_tooltip') }}"
-                                        aria-label="{{ t('showcase.rescrape.entry_tooltip') }}">
-                                    <i class="bi bi-gear" aria-hidden="true"></i>
-                                </button>
-                                <span x-show="currentLightboxVideo?.maker">
-                                    &nbsp;·&nbsp;<a href="#" class="lb-link" @click.prevent="searchFromMetadata(currentLightboxVideo?.maker, 'maker')" x-text="currentLightboxVideo?.maker"></a>
+                                <span class="lb-detail-item">
+                                    <span class="lb-detail-key lb-detail-key--mobile">{{ t('showcase.table.col_number') }}</span>
+                                    <span class="lb-detail-val">
+                                        <span class="lb-detail-num" x-text="currentLightboxVideo?.number || t('showcase.lightbox.unknown_number')"></span>
+                                        <!-- 62b-1: 進階重刮 ⚙ 入口（番號旁 inline 細鈕，常駐顯示）-->
+                                        <button type="button"
+                                                class="lb-rescrape-gear"
+                                                @click.stop="openRescrape(currentLightboxVideo, 'lightbox')"
+                                                data-tooltip="{{ t('showcase.rescrape.entry_tooltip') }}"
+                                                aria-label="{{ t('showcase.rescrape.entry_tooltip') }}">
+                                            <i class="bi bi-gear" aria-hidden="true"></i>
+                                        </button>
+                                    </span>
                                 </span>
-                                <span x-show="currentLightboxVideo?.director">
-                                    &nbsp;·&nbsp;<b>{{ t('showcase.label.director') }}：</b>
-                                    <a href="#" class="lb-link"
-                                       @click.prevent="searchFromMetadata(currentLightboxVideo?.director, 'director')"
-                                       x-text="currentLightboxVideo?.director"></a>
+                                <span class="lb-detail-item" x-show="currentLightboxVideo?.maker">
+                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
+                                    <span class="lb-detail-key lb-detail-key--mobile">{{ t('showcase.label.maker') }}</span>
+                                    <span class="lb-detail-val">
+                                        <a href="#" class="lb-link" @click.prevent="searchFromMetadata(currentLightboxVideo?.maker, 'maker')" x-text="currentLightboxVideo?.maker"></a>
+                                    </span>
                                 </span>
-                                <span x-show="currentLightboxVideo?.duration">
-                                    &nbsp;·&nbsp;<span x-text="currentLightboxVideo?.duration ? currentLightboxVideo.duration + ' ' + t('showcase.unit.minutes') : ''"></span>
-                                </span>
-                                <span x-show="currentLightboxVideo?.series">
-                                    &nbsp;·&nbsp;<b>{{ t('showcase.label.series') }}：</b>
-                                    <a href="#" class="lb-link"
-                                       @click.prevent="searchFromMetadata(currentLightboxVideo?.series, 'series')"
-                                       x-text="currentLightboxVideo?.series"></a>
-                                </span>
-                                <span x-show="currentLightboxVideo?.label && currentLightboxVideo?.label !== currentLightboxVideo?.maker">
-                                    &nbsp;·&nbsp;<b>{{ t('showcase.label.label') }}：</b>
-                                    <a href="#" class="lb-link"
-                                       @click.prevent="searchFromMetadata(currentLightboxVideo?.label, 'label')"
-                                       x-text="currentLightboxVideo?.label"></a>
-                                </span>
-                                <span x-show="currentLightboxVideo?.release_date">
-                                    &nbsp;·&nbsp;<template x-if="_isReleaseClickable(currentLightboxVideo)">
+                                <span class="lb-detail-item" x-show="currentLightboxVideo?.director">
+                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
+                                    <span class="lb-detail-key">{{ t('showcase.label.director') }}<span class="lb-detail-colon" aria-hidden="true">：</span></span>
+                                    <span class="lb-detail-val">
                                         <a href="#" class="lb-link"
-                                           @click.prevent="searchFromMetadata(currentLightboxVideo?.release_date, 'release')"
-                                           x-text="currentLightboxVideo?.release_date"></a>
-                                    </template>
-                                    <template x-if="!_isReleaseClickable(currentLightboxVideo)">
-                                        <span x-text="currentLightboxVideo?.release_date"></span>
-                                    </template>
+                                           @click.prevent="searchFromMetadata(currentLightboxVideo?.director, 'director')"
+                                           x-text="currentLightboxVideo?.director"></a>
+                                    </span>
                                 </span>
-                                <span class="lb-size" x-show="currentLightboxVideo?.size">
-                                    &nbsp;·&nbsp;<span x-text="formatSize(currentLightboxVideo?.size || 0)"></span>
+                                <span class="lb-detail-item" x-show="currentLightboxVideo?.duration">
+                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
+                                    <span class="lb-detail-key lb-detail-key--mobile">{{ t('showcase.label.duration') }}</span>
+                                    <span class="lb-detail-val" x-text="currentLightboxVideo?.duration ? currentLightboxVideo.duration + ' ' + t('showcase.unit.minutes') : ''"></span>
+                                </span>
+                                <span class="lb-detail-item" x-show="currentLightboxVideo?.series">
+                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
+                                    <span class="lb-detail-key">{{ t('showcase.label.series') }}<span class="lb-detail-colon" aria-hidden="true">：</span></span>
+                                    <span class="lb-detail-val">
+                                        <a href="#" class="lb-link"
+                                           @click.prevent="searchFromMetadata(currentLightboxVideo?.series, 'series')"
+                                           x-text="currentLightboxVideo?.series"></a>
+                                    </span>
+                                </span>
+                                <span class="lb-detail-item" x-show="currentLightboxVideo?.label && currentLightboxVideo?.label !== currentLightboxVideo?.maker">
+                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
+                                    <span class="lb-detail-key">{{ t('showcase.label.label') }}<span class="lb-detail-colon" aria-hidden="true">：</span></span>
+                                    <span class="lb-detail-val">
+                                        <a href="#" class="lb-link"
+                                           @click.prevent="searchFromMetadata(currentLightboxVideo?.label, 'label')"
+                                           x-text="currentLightboxVideo?.label"></a>
+                                    </span>
+                                </span>
+                                <span class="lb-detail-item" x-show="currentLightboxVideo?.release_date">
+                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
+                                    <span class="lb-detail-key lb-detail-key--mobile">{{ t('showcase.label.date') }}</span>
+                                    <span class="lb-detail-val">
+                                        <template x-if="_isReleaseClickable(currentLightboxVideo)">
+                                            <a href="#" class="lb-link"
+                                               @click.prevent="searchFromMetadata(currentLightboxVideo?.release_date, 'release')"
+                                               x-text="currentLightboxVideo?.release_date"></a>
+                                        </template>
+                                        <template x-if="!_isReleaseClickable(currentLightboxVideo)">
+                                            <span x-text="currentLightboxVideo?.release_date"></span>
+                                        </template>
+                                    </span>
+                                </span>
+                                <span class="lb-detail-item lb-size" x-show="currentLightboxVideo?.size">
+                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
+                                    <span class="lb-detail-key lb-detail-key--mobile">{{ t('showcase.table.col_size') }}</span>
+                                    <span class="lb-detail-val" x-text="formatSize(currentLightboxVideo?.size || 0)"></span>
                                 </span>
                                 <!-- 71b-T1: 從收藏移除（破壞性，只刪 DB row + thumb，不碰磁碟影片/封面）。
                                      常駐 muted icon，靠右對齊於 metadata size 行末（margin-left:auto 推到行尾）。-->
@@ -1367,15 +1416,11 @@
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>
-                            <!-- Row 5: Tags (with +N chips, T4) -->
+                            <!-- Row 5: Tags -->
                             <div class="lb-tags" x-show="currentLightboxVideo?.tags">
                                 <template x-for="tag in _visibleVideoTags()" :key="tag">
                                     <a href="#" class="lb-tag lb-link" @click.prevent="searchFromMetadata(tag.trim(), 'tag')" x-text="tag.trim()"></a>
                                 </template>
-                                <span class="lb-tag lb-chips-more"
-                                      x-show="_videoTagsOverflow() > 0 && !_videoChipsExpanded"
-                                      x-text="'+' + _videoTagsOverflow()"
-                                      @click="_videoChipsExpanded = true"></span>
                             </div>
 
                             <!-- Row 6: User Tags (T4) -->
@@ -1425,6 +1470,125 @@
                                             @click.stop="cancelAddLbTag()"
                                             title="✕">✕</button>
                                 </span>
+                            </div>
+
+                            <!-- Mobile-only inline NFO plot section -->
+                            <div class="lb-mobile-plot"
+                                 x-show="lbPlotShowButton()"
+                                 x-cloak>
+                                <div class="lb-mobile-section-head">
+                                    <span class="lb-mobile-section-title">
+                                        <i class="bi bi-card-text" aria-hidden="true"></i>
+                                        <span>{{ t('showcase.lightbox.plot_face_title') }}</span>
+                                    </span>
+                                    <div class="lb-mobile-section-tools">
+                                        <button type="button" class="lb-translate-btn"
+                                                x-show="!_lbPlotView.error && !_lbPlotView.loading && (lbPlotButtons.includes('translate') || lbPlotButtons.includes('retranslate'))"
+                                                @click.stop="lbPlotTranslate()"
+                                                :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                                :aria-busy="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                                :data-tooltip="lbPlotButtons.includes('retranslate') ? t('showcase.lightbox.plot_retranslate_tooltip') : t('showcase.lightbox.plot_translate_tooltip')"
+                                                :aria-label="lbPlotButtons.includes('retranslate') ? t('showcase.lightbox.plot_retranslate_tooltip') : t('showcase.lightbox.plot_translate_tooltip')">
+                                            <i class="bi"
+                                               :class="lbPlotButtons.includes('retranslate') ? 'bi-arrow-repeat' : 'bi-translate'"
+                                               x-show="!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                               aria-hidden="true"></i>
+                                            <i class="bi bi-arrow-repeat spin"
+                                               x-show="!!_lbPlotInFlight[currentLightboxVideo?.path]"
+                                               aria-hidden="true"></i>
+                                        </button>
+                                        <button type="button" class="lb-translate-btn"
+                                                x-show="!_lbPlotView.error && !_lbPlotView.loading && lbPlotButtons.includes('toggle')"
+                                                @click.stop="lbPlotToggleOriginal()"
+                                                :data-tooltip="_lbPlotView.showing === 'plot' ? t('showcase.lightbox.plot_show_original_tooltip') : t('showcase.lightbox.plot_show_translated_tooltip')"
+                                                :aria-label="_lbPlotView.showing === 'plot' ? t('showcase.lightbox.plot_show_original_tooltip') : t('showcase.lightbox.plot_show_translated_tooltip')">
+                                            <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="lb-mobile-plot-card">
+                                    <div class="lb-plot-skeleton"
+                                         x-show="_lbPlotView.loading"
+                                         aria-hidden="true">
+                                        <span class="lb-plot-skeleton-line"></span>
+                                        <span class="lb-plot-skeleton-line"></span>
+                                    </div>
+                                    <p class="lb-plot-unavailable"
+                                       x-show="!_lbPlotView.loading && _lbPlotView.error"
+                                       x-text="t('showcase.lightbox.plot_unavailable')"></p>
+                                    <p class="lb-plot-text"
+                                       x-show="!_lbPlotView.loading && !_lbPlotView.error && _lbPlotView.path === currentLightboxVideo?.path"
+                                       x-text="_lbPlotView.showing === 'original' ? _lbPlotView.original : _lbPlotView.plot"></p>
+                                </div>
+                            </div>
+
+                            <!-- Mobile-only inline sample stills strip -->
+                            <div class="lb-mobile-samples"
+                                 x-show="(currentLightboxVideo?.sample_images || []).length > 0"
+                                 x-cloak>
+                                <div class="lb-mobile-section-head">
+                                    <span class="lb-mobile-section-title">
+                                        <i class="bi bi-images" aria-hidden="true"></i>
+                                        <span>{{ t('showcase.gallery.sample_prefix') }}</span>
+                                        <span class="lb-mobile-section-count"
+                                              x-text="'(' + (currentLightboxVideo?.sample_images || []).length + ')'"></span>
+                                    </span>
+                                    <button type="button"
+                                            class="lb-mobile-samples-all"
+                                            @click="openSampleGallery(currentLightboxVideo.sample_images, 0)"
+                                            :aria-label="t('showcase.gallery.sample_prefix')">
+                                        <i class="bi bi-arrows-fullscreen" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                <div class="lb-mobile-sample-strip">
+                                    <template x-for="(url, idx) in (currentLightboxVideo?.sample_images || [])" :key="url">
+                                        <button type="button"
+                                                class="lb-mobile-sample-thumb"
+                                                @click="openSampleGallery(currentLightboxVideo.sample_images, idx)"
+                                                :aria-label="t('showcase.gallery.sample_alt') + ' ' + (idx + 1)">
+                                            <img :src="url"
+                                                 :alt="t('showcase.gallery.sample_alt') + ' ' + (idx + 1)"
+                                                 loading="lazy">
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Mobile-only secondary maintenance actions -->
+                            <div class="lb-mobile-actions" x-show="!!currentLightboxVideo">
+                                <button type="button"
+                                        class="lb-mobile-action-btn"
+                                        x-show="shouldShowEnrichButton(currentLightboxVideo)"
+                                        :disabled="_enriching"
+                                        @click.stop="enrichVideo(currentLightboxVideo)">
+                                    <i class="bi"
+                                       :class="_enriching ? 'bi-arrow-clockwise spin' : 'bi-search'"
+                                       aria-hidden="true"></i>
+                                    <span>{{ t('showcase.action.enrich') }}</span>
+                                </button>
+                                <button type="button"
+                                        class="lb-mobile-action-btn"
+                                        x-show="!!currentLightboxVideo?.path && (currentLightboxVideo?.sample_images || []).length === 0"
+                                        :disabled="_fetchSamplesLoading"
+                                        @click.stop="fetchSamples(currentLightboxVideo)">
+                                    <i class="bi"
+                                       :class="_fetchSamplesLoading ? 'bi-arrow-repeat spin' : 'bi-cloud-download'"
+                                       aria-hidden="true"></i>
+                                    <span x-text="_fetchSamplesLoading ? t('showcase.samples.fetching') : t('showcase.samples.fetch_btn')"></span>
+                                </button>
+                                <button type="button"
+                                        class="lb-mobile-action-btn"
+                                        @click.stop="openRescrape(currentLightboxVideo, 'lightbox')">
+                                    <i class="bi bi-gear" aria-hidden="true"></i>
+                                    <span>{{ t('showcase.rescrape.entry_tooltip') }}</span>
+                                </button>
+                                <button type="button"
+                                        class="lb-mobile-action-btn lb-mobile-action-btn--danger"
+                                        x-show="!!currentLightboxVideo?.path"
+                                        @click.stop="openDeleteVideoModal()">
+                                    <i class="bi bi-trash" aria-hidden="true"></i>
+                                    <span>{{ t('showcase.video.delete') }}</span>
+                                </button>
                             </div>
                             </div>
                             <div class="lb-plot-face"

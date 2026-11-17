@@ -17766,7 +17766,7 @@
  /* ========== Reduced Motion (D.13 統一收斂) ========== */
 --- /dev/null
 +++ b/web/static/css/components/mobile-ui.css
-@@ -0,0 +1,826 @@
+@@ -0,0 +1,860 @@
 +/* r19: shared mobile state, touch, hierarchy, and density rules. */
 +
 +:root {
@@ -18368,27 +18368,44 @@
 +
 +  [data-is-android="true"] #scannerPage .folder-item .folder-path {
 +    grid-area: path;
++    display: flex;
++    flex-direction: column;
++    gap: 2px;
 +    min-width: 0;
 +    overflow: hidden;
-+    text-overflow: ellipsis;
-+    white-space: nowrap;
++    white-space: normal;
 +    word-break: normal;
 +  }
 +
 +  [data-is-android="true"] #scannerPage .folder-item .btn-remove {
 +    grid-area: remove;
 +    opacity: 1;
++    width: 32px;
++    min-height: 32px;
++    height: 32px;
++    padding: 0;
++    border-radius: 50%;
++    border-color: var(--stroke-subtle);
++    color: var(--text-muted);
 +  }
 +
 +  [data-is-android="true"] .output-info-path {
-+    flex-wrap: wrap;
++    flex-direction: column;
++    align-items: stretch;
++    gap: 0.65rem;
 +  }
 +
 +  [data-is-android="true"] .output-info-path .path {
++    order: 2;
 +    flex: 1 1 100%;
++    padding-top: 0.55rem;
++    border-top: 1px solid var(--stroke-subtle);
++    font-size: 0.72rem;
++    color: var(--text-muted);
 +  }
 +
 +  [data-is-android="true"] .output-info-actions {
++    order: -1;
 +    width: 100%;
 +    justify-content: flex-end;
 +    flex-wrap: wrap;
@@ -18403,23 +18420,26 @@
 +
 +  [data-is-android="true"] .scanner-action-cluster .path-copy-btn {
 +    grid-column: 1;
++    grid-row: 2;
 +  }
 +
 +  [data-is-android="true"] .scanner-action-cluster .settings-link {
 +    grid-column: 2;
++    grid-row: 2;
 +  }
 +
 +  [data-is-android="true"] .scanner-action-cluster .scanner-generate-inline {
 +    grid-column: 1 / -1;
++    grid-row: 1;
 +  }
 +
 +  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn {
 +    width: 100%;
 +    min-width: 0;
-+    min-height: var(--ui-touch-target);
-+    padding: 0.5rem 0.72rem;
-+    border-radius: var(--ui-control-radius);
-+    font-size: 0.8rem;
++    min-height: 40px;
++    padding: 0.45rem 0.68rem;
++    border-radius: 12px;
++    font-size: 0.76rem;
 +  }
 +
 +  [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > i {
@@ -18433,27 +18453,41 @@
 +    overflow-wrap: anywhere;
 +  }
 +
-+  [data-is-android="true"] .scanner-generate-inline {
++  [data-is-android="true"] .scanner-action-cluster .scanner-action-secondary {
++    background: var(--surface-2);
++    border-color: var(--stroke-subtle);
++    color: var(--text-secondary);
++  }
++
++  [data-is-android="true"] .scanner-action-cluster .scanner-generate-inline {
 +    min-height: var(--ui-touch-target);
-+    padding: 0.5rem 0.9rem;
-+    font-size: 0.86rem;
++    padding: 0.55rem 0.9rem;
++    border-radius: var(--radius-pill);
++    font-size: 0.92rem;
 +    white-space: nowrap;
 +  }
 +
 +  [data-is-android="true"] .output-info-actions .path-copy-btn,
 +  [data-is-android="true"] .output-info-actions .settings-link {
-+    min-height: var(--ui-touch-target);
++    min-height: 40px;
 +  }
 +
 +  [data-is-android="true"] .output-info-actions .settings-link {
 +    display: inline-flex;
 +    align-items: center;
 +    padding-inline: 0.72rem;
++    color: var(--text-secondary);
 +  }
 +
 +  [data-is-android="true"] .search-bar .spotlight-search--wishlist-toggle {
 +    --spotlight-left-slot: 7rem;
 +    --spotlight-right-slot: 3.5rem;
++  }
++
++  @media (max-width: 768px) {
++    [data-is-android="true"] .search-bar .spotlight-search--wishlist-toggle.search-spotlight--mobile-tabs {
++      --spotlight-left-slot: 2.75rem;
++    }
 +  }
 +
 +  /* Showcase has two mode icons inside the left slot. Reserve a real gap
@@ -19957,7 +19991,23 @@
      color: var(--text-inverse);
      font-size: 1.25rem;
      cursor: pointer;
-@@ -237,7 +235,7 @@
+@@ -100,6 +98,15 @@
+     /* hover 升階 0.5 (charter §3 個案保留，控制按鈕 hover 強調) */
+     background: rgba(0, 0, 0, 0.5);
+     transform: scale(1.1);
++}
++
++/* Desktop: .lb-cover-stage 透傳給 .lightbox-content flex 排版；手機端覆寫為影院氛圍舞台 */
++.lb-cover-stage {
++    display: contents;
++}
++
++.lb-cover-ambient {
++    display: none;
+ }
+ 
+ /* Cover Image Section — 大圖佔主要空間 */
+@@ -237,7 +244,7 @@
      line-height: 1.4;
      text-align: center;
      border: 1px solid var(--stroke-subtle);
@@ -19966,7 +20016,7 @@
  }
  
  /* Metadata Panel — 緊湊版（匹配原版 gallery） */
-@@ -253,7 +251,7 @@
+@@ -253,7 +260,7 @@
      overflow-y: auto;
  }
  
@@ -19975,7 +20025,7 @@
  .lightbox-metadata .lb-header {
      display: flex;
      align-items: flex-start;
-@@ -265,13 +263,67 @@
+@@ -265,13 +272,67 @@
  
  /* Title */
  .lightbox-metadata .lb-title {
@@ -20044,7 +20094,36 @@
  }
  
  /* Original Title */
-@@ -443,6 +495,8 @@
+@@ -330,6 +391,28 @@
+ .lightbox-metadata .lb-details .lb-detail-num {
+     color: var(--text-secondary);
+     font-weight: 500;
++}
++
++.lightbox-metadata .lb-detail-item,
++.lightbox-metadata .lb-detail-val {
++    display: inline-flex;
++    align-items: center;
++    flex-wrap: wrap;
++}
++
++.lightbox-metadata .lb-detail-key--mobile {
++    display: none;
++}
++
++.lightbox-metadata .lb-detail-key:not(.lb-detail-key--mobile) {
++    font-weight: 600;
++    color: var(--text-secondary);
++}
++
++.lb-mobile-plot,
++.lb-mobile-samples,
++.lb-mobile-actions {
++    display: none;
+ }
+ 
+ /* 123-T3／T8：燈箱精選星（無補間）。兩層疊置：outline 永遠顯示、fill 用 --pick-fill clip。
+@@ -443,6 +526,8 @@
      .lightbox-metadata .lb-title .pick-star {
          width: 44px;
          height: 44px;
@@ -20053,7 +20132,7 @@
          margin-right: calc(1.45em - 44px);   /* 同上：維持 0.45em 的視覺間距，換 44px 盒 */
      }
  }
-@@ -541,13 +595,12 @@
+@@ -541,13 +626,12 @@
      border: 1px solid rgba(255,255,255,0.4);
      border-radius: 50%;
      background: rgba(255,255,255,0.15);
@@ -20069,7 +20148,7 @@
      transition: background var(--duration-fast) var(--ease-out),
                  border-color var(--duration-fast) var(--ease-out),
                  transform var(--duration-fast) var(--ease-out),
-@@ -558,7 +611,7 @@
+@@ -558,7 +642,7 @@
      background: rgba(255,255,255,0.3);
      border-color: rgba(255,255,255,0.6);
      transform: scale(1.08);
@@ -20078,7 +20157,7 @@
  }
  
  .lb-action-btn:active {
-@@ -567,7 +620,8 @@
+@@ -567,7 +651,8 @@
  
  /* 98b-T4：焦點裁切遮罩 toggle — styled-like .lb-action-btn（上方）但更小，掛 metadata .lb-header。
   * 低調玻璃圓鈕，退位不搶封面戲（feedback_ui_restraint_taste）。token only（§6）。 */
@@ -20088,7 +20167,7 @@
      flex-shrink: 0;
      display: inline-flex;
      align-items: center;
-@@ -578,33 +632,130 @@
+@@ -578,33 +663,142 @@
      border: 1px solid var(--stroke-subtle);
      border-radius: 50%;
      background: var(--surface-1);
@@ -20149,6 +20228,10 @@
 +}
 +
 +.lightbox-metadata .lb-info-face.is-flipped {
++    position: absolute;
++    inset: 0 0 auto 0;
++    width: 100%;
++    pointer-events: none;
 +    opacity: 0;
 +    visibility: hidden;
 +    transition: opacity var(--duration-fast) var(--ease-out),
@@ -20161,6 +20244,7 @@
 +    display: flex;
 +    flex-direction: column;
 +    background: transparent;
++    pointer-events: none;
 +    opacity: 0;
 +    visibility: hidden;
 +    transition: opacity var(--duration-fast) var(--ease-out),
@@ -20168,6 +20252,10 @@
 +}
 +
 +.lightbox-metadata .lb-plot-face.is-open {
++    position: relative;
++    inset: auto;
++    pointer-events: auto;
++    min-height: 8rem;
 +    opacity: 1;
 +    visibility: visible;
 +    transition: opacity var(--duration-fast) var(--ease-out);
@@ -20177,29 +20265,32 @@
 +    flex: none;
 +    display: flex;
 +    align-items: center;
-+    padding-bottom: 0.4rem;
++    padding-bottom: 0.5rem;
 +    border-bottom: 1px solid var(--stroke-subtle);
 +}
 +
 +.lightbox-metadata .lb-plot-face-title {
 +    flex: 1 1 auto;
-+    font-size: 0.75rem;
-+    color: var(--text-muted);
++    font-size: 0.8125rem;
++    font-weight: 600;
++    color: var(--text-secondary);
 +}
 +
 +.lightbox-metadata .lb-plot-body {
-+    flex: 1 1 0;
++    flex: 1 1 auto;
 +    min-height: 0;
-+    overflow-y: auto;
-+    padding-top: 0.4rem;
++    overflow-y: visible;
++    padding-top: 0.6rem;
 +}
 +
 +.lightbox-metadata .lb-plot-text,
 +.lightbox-metadata .lb-plot-unavailable {
 +    margin: 0;
-+    font-size: 0.75rem;
-+    color: var(--text-muted);
++    font-size: 0.875rem;
++    line-height: 1.7;
++    color: var(--text-secondary);
 +    white-space: pre-wrap;
++    overflow-wrap: anywhere;
 +}
 +
 +.lightbox-metadata .lb-plot-skeleton {
@@ -20229,7 +20320,7 @@
  }
  
  /* 98b-T4：遮罩 overlay（疊在 .lightbox-cover 已 layout 的封面 rect 上，不裁圖）。 */
-@@ -626,7 +777,7 @@
+@@ -626,7 +820,7 @@
      left: 0;
      box-sizing: border-box;
      border: 1px solid rgba(255, 255, 255, 0.55);      /* 亮框：對齊 .lb-action-btn 玻璃邊 rgba 先例 */
@@ -20238,7 +20329,7 @@
      transition: transform var(--fluent-duration-medium) var(--ease-out);
      touch-action: none;   /* 99a-T3：拖曳時防手機系統手勢（頁面捲動/swipe-to-back/左右換片）搶走 */
      cursor: ew-resize;    /* 100c-T3a：Y 軸砍除後（CD-6）唯一可拖方向恆為橫向，游標契約併回基礎規則 */
-@@ -820,9 +971,8 @@
+@@ -820,9 +1014,8 @@
      border: 1px solid rgba(255, 255, 255, 0.4);
      border-radius: 50%;
      background: rgba(255, 255, 255, 0.15);
@@ -20250,7 +20341,7 @@
      cursor: pointer;
      display: flex;
      align-items: center;
-@@ -838,7 +988,7 @@
+@@ -838,7 +1031,7 @@
      background: rgba(255, 255, 255, 0.3);
      border-color: rgba(255, 255, 255, 0.6);
      transform: scale(1.08);
@@ -20333,7 +20424,7 @@
  }
  
  /* Responsive: 小螢幕 */
-@@ -490,11 +489,145 @@
+@@ -490,11 +489,478 @@
      }
  }
  
@@ -20388,6 +20479,62 @@
 +        left: 12px;
 +    }
 +
++    /* 方案 B：Showcase 手機端影院氛圍封面舞台（不壓縮裁切封面本體，維持 .lightbox-cover 與焦點遮罩 1:1 對齊） */
++    .showcase-container .showcase-lightbox:not(.similar-mode-active) .lb-cover-stage {
++        position: relative;
++        flex: 0 0 auto;
++        width: 100%;
++        min-height: 36dvh;
++        display: flex;
++        align-items: center;
++        justify-content: center;
++        padding: calc(env(safe-area-inset-top, 0px) + 56px) 16px 26px;
++        background: var(--surface-0);
++        overflow: hidden;
++    }
++
++    .showcase-container .showcase-lightbox:not(.similar-mode-active) .lb-cover-ambient {
++        display: block;
++        position: absolute;
++        inset: -24px;
++        z-index: 0;
++        background-position: center center;
++        background-size: cover;
++        background-repeat: no-repeat;
++        filter: blur(26px) saturate(1.26) brightness(0.56);
++        transform: scale(1.12);
++        opacity: 0.85;
++        pointer-events: none;
++    }
++
++    [data-theme="light"] .showcase-container .showcase-lightbox:not(.similar-mode-active) .lb-cover-ambient {
++        filter: blur(28px) saturate(1.12) brightness(0.95);
++        opacity: 0.36;
++    }
++
++    .showcase-container .showcase-lightbox:not(.similar-mode-active) .lb-cover-stage::after {
++        content: "";
++        position: absolute;
++        inset: 0;
++        z-index: 0;
++        pointer-events: none;
++        background: linear-gradient(
++            180deg,
++            rgb(10 12 16 / 0.24) 0%,
++            transparent 45%,
++            var(--surface-0) 98%
++        );
++    }
++
++    [data-theme="light"] .showcase-container .showcase-lightbox:not(.similar-mode-active) .lb-cover-stage::after {
++        background: linear-gradient(
++            180deg,
++            rgb(245 247 250 / 0.16) 0%,
++            transparent 48%,
++            var(--surface-0) 98%
++        );
++    }
++
 +    .showcase-lightbox:not(.similar-mode-active) .lightbox-cover {
 +        position: relative;
 +        z-index: 1;
@@ -20412,23 +20559,49 @@
 +        overflow: hidden;
 +    }
 +
++    .showcase-container .showcase-lightbox:not(.similar-mode-active) .lightbox-content .lightbox-cover.has-cover {
++        width: min(100%, calc(40dvh * var(--lb-cover-ar, 1.5)));
++        max-height: 40dvh;
++        border-radius: 12px;
++        border: 1px solid rgb(255 255 255 / 0.14);
++        box-shadow: 0 16px 38px rgb(0 0 0 / 0.42);
++    }
++
++    [data-theme="light"] .showcase-container .showcase-lightbox:not(.similar-mode-active) .lightbox-content .lightbox-cover.has-cover {
++        border-color: rgb(15 23 42 / 0.1);
++        box-shadow: 0 12px 30px rgb(15 23 42 / 0.16);
++    }
++
++    .showcase-container .showcase-lightbox:not(.similar-mode-active) .lightbox-cover:not(.has-cover) {
++        min-height: 180px;
++        padding: 20px 12px;
++        background: radial-gradient(circle at 50% 35%, rgb(255 138 76 / 0.14), transparent 65%), var(--surface-1);
++        border: 1px solid var(--stroke-subtle);
++        border-radius: 12px;
++    }
++
 +    .showcase-lightbox:not(.similar-mode-active) .lightbox-cover.has-cover img,
 +    .showcase-lightbox:not(.similar-mode-active) .lightbox-cover.has-cover .lb-full {
 +        border-radius: 0;
 +        object-fit: contain;
 +    }
 +
++    .showcase-container .showcase-lightbox:not(.similar-mode-active) .lightbox-cover.has-cover img,
++    .showcase-container .showcase-lightbox:not(.similar-mode-active) .lightbox-cover.has-cover .lb-full {
++        border-radius: inherit;
++    }
++
 +    .showcase-lightbox:not(.similar-mode-active) .lightbox-metadata {
-+        flex: 0 0 auto;
++        flex: 1 0 auto;
 +        overflow: visible;
 +        min-height: auto;
-+        margin-top: -14px;
++        margin-top: -16px;
 +        position: relative;
 +        z-index: 3;
 +        background: var(--surface-0);
 +        border-top: 1px solid var(--stroke-subtle);
-+        border-radius: 20px 20px 0 0;
-+        padding: 18px 16px calc(28px + env(safe-area-inset-bottom, 0px));
++        border-radius: 22px 22px 0 0;
++        padding: 18px 16px calc(30px + env(safe-area-inset-bottom, 0px));
 +    }
 +
 +    .showcase-lightbox:not(.similar-mode-active) .lightbox-metadata .lb-title {
@@ -20436,11 +20609,268 @@
 +        line-height: 1.4;
 +    }
 +
++    /* 方案 A：頂欄小按鈕整合進播放列或下方區塊，避免標題下出現孤立單顆按鈕 */
++    .showcase-container .lightbox-metadata .lb-header-actions {
++        display: none;
++    }
++
++    .showcase-container .lb-mobile-icon-cta {
++        flex: 0 0 48px;
++        width: 48px;
++        height: 48px;
++        display: inline-flex;
++        align-items: center;
++        justify-content: center;
++        border: 1px solid var(--stroke-subtle);
++        border-radius: 999px;
++        background: var(--surface-1);
++        color: var(--text-primary);
++        font-size: 1.05rem;
++        cursor: pointer;
++    }
++
++    .showcase-container .lb-mobile-icon-cta:active:not(:disabled) {
++        transform: scale(0.96);
++        background: var(--surface-2);
++    }
++
++    .showcase-container .lightbox-metadata .lb-otitle {
++        white-space: normal;
++        display: -webkit-box;
++        -webkit-line-clamp: 2;
++        -webkit-box-orient: vertical;
++        line-height: 1.45;
++        margin-bottom: 4px;
++    }
++
++    .showcase-container .lightbox-metadata .lb-actor {
++        font-size: 0.875rem;
++        margin: 2px 0 4px;
++    }
++
++    /* 2 列規格網格卡片 */
++    .showcase-container .lightbox-metadata .lb-details {
++        display: grid;
++        grid-template-columns: repeat(2, minmax(0, 1fr));
++        gap: 8px 14px;
++        margin: 8px 0 12px;
++        padding: 10px 14px;
++        border: 1px solid var(--stroke-subtle);
++        border-radius: 14px;
++        background: var(--surface-1);
++        font-size: 0.8125rem;
++    }
++
++    .showcase-container .lightbox-metadata .lb-details .lb-detail-item {
++        display: flex;
++        flex-direction: column;
++        align-items: flex-start;
++        gap: 2px;
++        min-width: 0;
++    }
++
++    .showcase-container .lightbox-metadata .lb-details .lb-detail-sep,
++    .showcase-container .lightbox-metadata .lb-details .lb-detail-colon,
++    .showcase-container .lightbox-metadata .lb-details .lb-rescrape-gear,
++    .showcase-container .lightbox-metadata .lb-details .lb-delete-btn {
++        display: none;
++    }
++
++    .showcase-container .lightbox-metadata .lb-details .lb-detail-key,
++    .showcase-container .lightbox-metadata .lb-details .lb-detail-key--mobile {
++        display: block;
++        font-size: 0.6875rem;
++        font-weight: 500;
++        color: var(--text-muted);
++        line-height: 1.25;
++    }
++
++    .showcase-container .lightbox-metadata .lb-details .lb-detail-val {
++        display: flex;
++        align-items: center;
++        flex-wrap: wrap;
++        gap: 4px;
++        max-width: 100%;
++        font-size: 0.8125rem;
++        font-weight: 500;
++        color: var(--text-primary);
++        line-height: 1.35;
++        overflow-wrap: anywhere;
++    }
++
++    .showcase-container .lightbox-metadata .lb-tags {
++        gap: 0.45rem;
++        margin-bottom: 0.65rem;
++    }
++
++    .showcase-container .lightbox-metadata .lb-tag {
++        padding: 0.28rem 0.68rem;
++        font-size: 0.75rem;
++    }
++
++    .showcase-container .lightbox-metadata .lb-user-tags {
++        margin-bottom: 0.75rem;
++    }
++
++    /* 手機端內聯 NFO 簡介卡片與橫滑劇照條 */
++    .showcase-container .lb-mobile-plot,
++    .showcase-container .lb-mobile-samples {
++        display: block;
++        margin-top: 14px;
++        padding-top: 14px;
++        border-top: 1px solid var(--stroke-subtle);
++    }
++
++    .showcase-container .lb-mobile-section-head {
++        display: flex;
++        align-items: center;
++        justify-content: space-between;
++        gap: 8px;
++        margin-bottom: 8px;
++    }
++
++    .showcase-container .lb-mobile-section-title {
++        display: inline-flex;
++        align-items: center;
++        gap: 6px;
++        font-size: 0.875rem;
++        font-weight: 600;
++        color: var(--text-primary);
++    }
++
++    .showcase-container .lb-mobile-section-title .bi {
++        color: var(--text-secondary);
++    }
++
++    .showcase-container .lb-mobile-section-count {
++        font-size: 0.75rem;
++        font-weight: 500;
++        color: var(--text-muted);
++    }
++
++    .showcase-container .lb-mobile-section-tools {
++        display: inline-flex;
++        align-items: center;
++        gap: 6px;
++    }
++
++    .showcase-container .lb-mobile-section-tools .lb-translate-btn,
++    .showcase-container .lb-mobile-samples-all {
++        display: inline-flex;
++        align-items: center;
++        justify-content: center;
++        width: 30px;
++        height: 30px;
++        margin: 0;
++        border: 1px solid var(--stroke-subtle);
++        border-radius: 8px;
++        background: var(--surface-1);
++        color: var(--text-secondary);
++        font-size: 0.8125rem;
++        cursor: pointer;
++    }
++
++    .showcase-container .lb-mobile-plot-card {
++        padding: 12px 14px;
++        border: 1px solid var(--stroke-subtle);
++        border-radius: 14px;
++        background: var(--surface-1);
++    }
++
++    .showcase-container .lb-mobile-plot-card .lb-plot-text,
++    .showcase-container .lb-mobile-plot-card .lb-plot-unavailable {
++        margin: 0;
++        font-size: 0.9rem;
++        line-height: 1.72;
++        color: var(--text-primary);
++        white-space: pre-wrap;
++        overflow-wrap: anywhere;
++    }
++
++    .showcase-container .lb-mobile-sample-strip {
++        display: flex;
++        gap: 10px;
++        overflow-x: auto;
++        scroll-snap-type: x proximity;
++        padding-bottom: 4px;
++        scrollbar-width: none;
++    }
++
++    .showcase-container .lb-mobile-sample-strip::-webkit-scrollbar {
++        display: none;
++    }
++
++    .showcase-container .lb-mobile-sample-thumb {
++        flex: 0 0 auto;
++        padding: 0;
++        border: 1px solid var(--stroke-subtle);
++        border-radius: 10px;
++        background: var(--surface-1);
++        overflow: hidden;
++        cursor: pointer;
++        scroll-snap-align: start;
++    }
++
++    .showcase-container .lb-mobile-sample-thumb img {
++        display: block;
++        width: 136px;
++        height: 86px;
++        object-fit: cover;
++    }
++
++    .showcase-container .lb-mobile-actions {
++        display: flex;
++        flex-wrap: wrap;
++        gap: 8px;
++        margin-top: 12px;
++        padding-top: 12px;
++        border-top: 1px solid var(--stroke-subtle);
++    }
++
++    .showcase-container .lb-mobile-action-btn {
++        display: inline-flex;
++        align-items: center;
++        justify-content: center;
++        gap: 6px;
++        flex: 1 1 calc(50% - 4px);
++        min-width: 0;
++        min-height: 38px;
++        padding: 7px 10px;
++        border: 1px solid var(--stroke-subtle);
++        border-radius: 12px;
++        background: var(--surface-1);
++        color: var(--text-secondary);
++        font-size: 0.8125rem;
++        font-weight: 500;
++        cursor: pointer;
++    }
++
++    .showcase-container .lb-mobile-action-btn:active:not(:disabled) {
++        transform: scale(0.98);
++        background: var(--surface-2);
++    }
++
++    .showcase-container .lb-mobile-action-btn--danger {
++        color: var(--color-error-hover);
++        border-color: color-mix(in oklch, var(--color-error-hover) 26%, var(--stroke-subtle));
++    }
++
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-metadata .lb-plot-face.is-open {
++        min-height: 0;
++    }
++
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-metadata .lb-plot-text,
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-metadata .lb-plot-unavailable {
++        font-size: 0.9375rem;
++        line-height: 1.75;
++        color: var(--text-primary);
++    }
++
 +    .lb-mobile-cta-row {
 +        display: flex;
 +        align-items: center;
 +        gap: 10px;
-+        margin: 12px 0 14px;
++        margin: 10px 0 12px;
 +    }
 +
 +    .lb-mobile-play-cta {
@@ -20473,17 +20903,11 @@
 +    }
 +
 +    .showcase-container .lightbox-cover .cover-actions:not(.cover-actions--focal-edit) {
-+        padding-bottom: 18px;
-+        background: transparent;
-+        pointer-events: none;
-+    }
-+
-+    .showcase-container .lightbox-cover .cover-actions:not(.cover-actions--focal-edit) > button {
-+        pointer-events: auto;
++        display: none;
      }
  
      .lightbox-nav {
-@@ -622,7 +755,7 @@
+@@ -622,7 +1088,7 @@
  .table-scroll-container {
      overflow-x: auto;
      border-radius: var(--radius-md);
@@ -20492,7 +20916,7 @@
  }
  
  /* Table Base - DaisyUI .table 強化 */
-@@ -786,7 +919,7 @@
+@@ -786,7 +1252,7 @@
      border: 1px solid var(--stroke-default);
      border-radius: var(--radius-md);
      overflow: hidden;
@@ -24503,7 +24927,7 @@ HcmV?d00001
      z-index: 9999;
      display: flex;
      align-items: center;
-@@ -365,3 +362,1120 @@
+@@ -365,3 +362,1275 @@
      border-radius: var(--fluent-radius-md);
      color: var(--text-default, currentColor);
  }
@@ -24740,9 +25164,47 @@ HcmV?d00001
 +    color: var(--accent);
 +}
 +
++.avlist-card-header .title {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.45rem;
++}
++
++.scanner-section-badge {
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    min-width: 1.3rem;
++    height: 1.3rem;
++    padding: 0 0.42rem;
++    border-radius: var(--radius-pill);
++    background: color-mix(in oklch, var(--accent) 14%, transparent);
++    color: var(--accent);
++    font-size: 0.72rem;
++    font-weight: 700;
++    font-variant-numeric: tabular-nums;
++}
++
++.folder-leaf {
++    display: block;
++    color: var(--text-primary);
++    font-size: 0.875rem;
++    font-weight: 650;
++    line-height: 1.3;
++    word-break: break-word;
++}
++
++.folder-full {
++    display: block;
++    color: var(--text-muted);
++    font-size: 0.71rem;
++    line-height: 1.35;
++    overflow-wrap: anywhere;
++}
++
 +.scanner-maintenance {
-+    border-top: 1px solid var(--border-light);
-+    padding: 0.8rem 1rem 0.4rem;
++    border-top: 1px solid var(--stroke-subtle);
++    padding: 0.8rem 1rem 0.5rem;
 +}
 +
 +.scanner-maintenance-head {
@@ -24818,28 +25280,48 @@ HcmV?d00001
 +    display: inline-flex;
 +    align-items: center;
 +    justify-content: center;
-+    gap: 0.4rem;
-+    min-height: 48px;
-+    padding: 0.55rem 1rem;
-+    border: 1px solid var(--maintenance-orange);
-+    border-radius: var(--radius-pill);
-+    background: var(--maintenance-orange);
-+    color: var(--maintenance-ink);
-+    font-size: 0.8rem;
-+    font-weight: 650;
++    gap: 0.38rem;
++    min-height: 38px;
++    padding: 0.45rem 0.9rem;
++    border: 1px solid var(--stroke-default);
++    border-radius: 11px;
++    background: var(--surface-1);
++    color: var(--text-primary);
++    font-size: 0.78rem;
++    font-weight: 600;
 +    cursor: pointer;
++    transition: border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
++                background-color var(--fluent-duration-fast) var(--fluent-ease-standard),
++                color var(--fluent-duration-fast) var(--fluent-ease-standard);
++}
++
++#scannerPage .scanner-maintenance-body :is(.btn-nfo-update, .btn-tag-preview) i {
++    color: var(--accent);
 +}
 +
 +#scannerPage .scanner-maintenance-body :is(.btn-nfo-update, .btn-tag-preview):hover:not(:disabled),
 +.maintenance-source-option:hover:not(:disabled) {
-+    background: var(--maintenance-orange-hover);
-+    border-color: var(--maintenance-orange-hover);
-+    color: var(--maintenance-ink);
++    background: color-mix(in oklch, var(--accent) 10%, var(--surface-1));
++    border-color: color-mix(in oklch, var(--accent) 55%, var(--stroke-default));
++    color: var(--text-primary);
 +}
 +
 +#scannerPage .scanner-maintenance-body :is(.btn-nfo-update, .btn-tag-preview):disabled {
-+    opacity: 0.5;
++    opacity: 0.55;
++    background: transparent;
++    border-color: var(--stroke-subtle);
++    color: var(--text-muted);
 +    cursor: not-allowed;
++}
++
++#scannerPage .scanner-maintenance-body :is(.btn-nfo-update, .btn-tag-preview):disabled i {
++    color: inherit;
++}
++
++#scannerPage .scanner-maintenance-body .maintenance-btn-accent {
++    background: color-mix(in oklch, var(--accent) 14%, var(--surface-1));
++    border-color: color-mix(in oklch, var(--accent) 45%, transparent);
++    color: var(--accent);
 +}
 +
 +.maintenance-source-grid {
@@ -24852,6 +25334,7 @@ HcmV?d00001
 +.maintenance-source-option {
 +    flex-direction: column;
 +    min-width: 0;
++    min-height: 48px;
 +    border-radius: var(--fluent-radius-md);
 +    overflow-wrap: anywhere;
 +}
@@ -24873,6 +25356,32 @@ HcmV?d00001
 +    text-align: center;
 +}
 +
++.maintenance-alert {
++    padding: 0.7rem 0.8rem;
++    margin: 0.55rem 0 0;
++    border: 1px solid var(--stroke-subtle);
++    border-radius: 12px;
++    background: var(--surface-2);
++}
++
++.maintenance-alert--accent {
++    border-color: color-mix(in oklch, var(--accent) 35%, var(--stroke-subtle));
++    background: color-mix(in oklch, var(--accent) 8%, var(--surface-1));
++}
++
++.maintenance-alert-actions {
++    display: flex;
++    align-items: center;
++    gap: 0.45rem;
++}
++
++.maintenance-backfill-grid {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 0.6rem;
++    padding: 0.7rem 0 0.75rem;
++}
++
 +#statsCard .maintenance-row {
 +    display: flex;
 +    align-items: center;
@@ -24888,6 +25397,88 @@ HcmV?d00001
 +    border-top: 0;
 +}
 +
++#scannerPage #statsCard .maintenance-row.maintenance-tile {
++    display: flex;
++    flex-direction: column;
++    align-items: stretch;
++    justify-content: space-between;
++    gap: 0.65rem;
++    flex: 1 1 calc(50% - 0.3rem);
++    min-width: 0;
++    width: auto;
++    box-sizing: border-box;
++    padding: 0.72rem 0.75rem;
++    border: 1px solid var(--stroke-subtle);
++    border-radius: 14px;
++    background: var(--surface-2);
++}
++
++.maintenance-tile-top {
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    gap: 0.35rem;
++    position: relative;
++}
++
++#scannerPage #statsCard .maintenance-tile-top .nfo-badge {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.35rem;
++    padding: 0;
++    border: none;
++    background: transparent;
++    color: var(--text-primary);
++    font-size: 0.76rem;
++    font-weight: 600;
++    min-width: 0;
++    white-space: nowrap;
++}
++
++#scannerPage #statsCard .maintenance-tile-top .nfo-badge i {
++    color: var(--accent);
++    font-size: 0.85rem;
++    flex: 0 0 auto;
++}
++
++#scannerPage #statsCard .maintenance-tile-count {
++    flex: 0 0 auto;
++    min-width: 1.55rem;
++    padding: 0.12rem 0.45rem;
++    border-radius: var(--radius-pill);
++    background: color-mix(in oklch, var(--accent) 13%, transparent);
++    color: var(--accent);
++    font-size: 0.74rem;
++    font-weight: 700;
++    font-variant-numeric: tabular-nums;
++}
++
++#scannerPage #statsCard .maintenance-tile > .btn-nfo-update {
++    width: 100%;
++    min-height: 36px;
++    padding: 0.35rem 0.55rem;
++    font-size: 0.75rem;
++    white-space: nowrap;
++}
++
++.maintenance-tools-list {
++    border-top: 1px solid var(--stroke-subtle);
++}
++
++#statsCard .maintenance-row.maintenance-row-tool {
++    padding: 0.8rem 0;
++    border-top: 1px solid var(--stroke-subtle);
++}
++
++#statsCard .maintenance-row.maintenance-row-tool:first-child {
++    border-top: 0;
++}
++
++.maintenance-icon.maintenance-icon--warn {
++    color: var(--color-warning);
++    background: color-mix(in oklch, var(--color-warning) 13%, transparent);
++}
++
 +#statsCard .maintenance-row > .nfo-badge {
 +    min-width: 0;
 +    flex: 1 1 14rem;
@@ -24895,7 +25486,6 @@ HcmV?d00001
 +
 +#statsCard .maintenance-row > .btn-nfo-update {
 +    flex: 0 0 auto;
-+    min-height: 48px;
 +}
 +
 +.maintenance-copy {
@@ -25537,30 +26127,23 @@ HcmV?d00001
 +        flex: 1 1 0;
 +    }
 +
-+    #statsCard .maintenance-row {
++    #statsCard .maintenance-row:not(.maintenance-tile) {
 +        flex-direction: column;
 +        align-items: stretch;
 +    }
 +
-+    #statsCard .maintenance-row > .nfo-badge,
-+    #statsCard .maintenance-row > .btn-nfo-update,
-+    .maintenance-copy,
-+    .maintenance-controls {
++    #statsCard .maintenance-row.maintenance-row-tool {
++        gap: 0.55rem;
++    }
++
++    #statsCard .maintenance-row.maintenance-row-tool .maintenance-copy {
++        flex: 1 1 auto;
 +        width: 100%;
-+        flex-basis: auto;
 +    }
 +
-+    .maintenance-controls {
-+        flex-direction: column;
-+        align-items: stretch;
-+    }
-+
-+    #statsCard .maintenance-row > .btn-nfo-update {
-+        justify-content: center;
-+    }
-+
-+    .maintenance-controls {
-+        justify-content: stretch;
++    #statsCard .maintenance-row.maintenance-row-tool .maintenance-controls {
++        width: 100%;
++        justify-content: flex-end;
 +    }
 +
 +    .maintenance-controls select {
@@ -25570,15 +26153,11 @@ HcmV?d00001
 +    }
 +
 +    .tag-source-actions {
-+        width: 100%;
++        width: auto;
 +    }
 +
-+    .tag-source-actions > button {
-+        flex: 1 1 0;
-+    }
-+
-+    .maintenance-controls > .btn-nfo-update {
-+        flex: 0 0 auto;
++    .tag-source-actions > button,
++    .rename-source-controls > button {
 +        white-space: nowrap;
 +    }
 +
@@ -25837,7 +26416,7 @@ HcmV?d00001
  }
  
  /* TASK-141b-T9（CD-17）＋ owner 2026-09-03 視覺改判（T11 六筆真資料驗收的產出）：
-@@ -1571,3 +1574,216 @@
+@@ -1571,3 +1574,502 @@
  @keyframes wishlistEmptyFadeIn {
      to { opacity: 1; }
  }
@@ -26052,6 +26631,292 @@ HcmV?d00001
 +
 +    .image-search-library {
 +        display: none;
++    }
++}
++
++/* ==================== Mobile Search-First Redesign ==================== */
++.search-mobile-leading-icon,
++.search-mode-segmented,
++.search-empty-img-card,
++.empty-explainer-toggle,
++.search-actions-right .search-img-trigger {
++    display: none;
++}
++
++.search-empty-head {
++    display: flex;
++    flex-direction: column;
++    align-items: center;
++}
++
++@media (max-width: 768px) {
++    .search-bar--split-tabs {
++        padding: 0.6rem 0.75rem 0.65rem;
++    }
++
++    .search-bar--split-tabs .search-actions-right .search-img-trigger {
++        display: flex;
++    }
++
++    .search-bar--split-tabs .spotlight-search--wishlist-toggle {
++        --spotlight-left-slot: 2.75rem;
++    }
++
++    .search-bar--split-tabs .spotlight-search--wishlist-toggle .mode-toggle {
++        display: none;
++    }
++
++    .search-bar--split-tabs .search-mobile-leading-icon {
++        display: block;
++        left: 1rem;
++        color: var(--text-muted);
++        pointer-events: none;
++    }
++
++    .search-bar--split-tabs .search-mode-segmented {
++        display: grid;
++        grid-template-columns: repeat(2, minmax(0, 1fr));
++        gap: 4px;
++        margin-top: 8px;
++        padding: 3px;
++        border: 1px solid var(--stroke-subtle);
++        border-radius: 12px;
++        background: var(--surface-2);
++    }
++
++    .search-bar--split-tabs .search-seg-btn {
++        display: inline-flex;
++        align-items: center;
++        justify-content: center;
++        gap: 6px;
++        min-height: 36px;
++        padding: 4px 10px;
++        border: none;
++        border-radius: 9px;
++        background: transparent;
++        color: var(--text-secondary);
++        font-size: 0.8rem;
++        font-weight: 600;
++        cursor: pointer;
++        transition: background-color var(--fluent-duration-fast) var(--fluent-ease-standard),
++                    color var(--fluent-duration-fast) var(--fluent-ease-standard);
++    }
++
++    .search-bar--split-tabs .search-seg-btn.is-active {
++        background: var(--surface-0);
++        color: var(--text-primary);
++        box-shadow: 0 1px 3px rgb(0 0 0 / 0.14);
++    }
++
++    .search-bar--split-tabs .search-seg-btn.is-active i {
++        color: var(--accent);
++    }
++
++    .search-bar--split-tabs .search-seg-badge {
++        display: inline-flex;
++        align-items: center;
++        justify-content: center;
++        min-width: 1.2rem;
++        height: 1.2rem;
++        padding: 0 0.35rem;
++        border-radius: var(--radius-pill);
++        background: var(--accent);
++        color: var(--color-primary-content);
++        font-size: 0.68rem;
++        font-weight: 700;
++    }
++
++    .search-container .image-search-entry {
++        display: none;
++    }
++
++    .search-container #emptyState {
++        padding: 1rem 0.9rem;
++        text-align: left;
++        align-items: stretch;
++        gap: 0;
++    }
++
++    .search-container #emptyState .search-empty-head {
++        flex-direction: row;
++        align-items: center;
++        gap: 0.65rem;
++        margin-bottom: 0.8rem;
++    }
++
++    .search-container #emptyState .search-empty-emblem {
++        display: inline-flex;
++        align-items: center;
++        justify-content: center;
++        width: 38px;
++        height: 38px;
++        flex: 0 0 38px;
++        border-radius: 10px;
++        background: color-mix(in oklch, var(--accent) 13%, transparent);
++        color: var(--accent);
++    }
++
++    .search-container #emptyState .search-empty-emblem .state-page-icon {
++        font-size: 1.15rem;
++        margin: 0;
++        color: inherit;
++    }
++
++    .search-container #emptyState .state-page-text {
++        margin: 0;
++        font-size: 0.92rem;
++        font-weight: 600;
++        line-height: 1.35;
++        color: var(--text-primary);
++    }
++
++    .search-container #emptyState .search-empty-img-card {
++        display: flex;
++        align-items: center;
++        gap: 0.65rem;
++        width: 100%;
++        padding: 0.7rem 0.8rem;
++        margin-bottom: 0.85rem;
++        border: 1px solid color-mix(in oklch, var(--accent) 28%, var(--stroke-subtle));
++        border-radius: 12px;
++        background: color-mix(in oklch, var(--accent) 7%, var(--surface-2));
++        color: var(--text-primary);
++        text-align: left;
++        cursor: pointer;
++    }
++
++    .search-container #emptyState .search-empty-img-icon {
++        display: inline-flex;
++        align-items: center;
++        justify-content: center;
++        width: 30px;
++        height: 30px;
++        flex: 0 0 30px;
++        border-radius: 8px;
++        background: color-mix(in oklch, var(--accent) 16%, transparent);
++        color: var(--accent);
++        font-size: 0.9rem;
++    }
++
++    .search-container #emptyState .search-empty-img-text {
++        flex: 1 1 auto;
++        min-width: 0;
++        font-size: 0.8rem;
++        font-weight: 600;
++        line-height: 1.35;
++        color: var(--text-primary);
++    }
++
++    .search-container #emptyState .search-empty-img-chevron {
++        flex: 0 0 auto;
++        color: var(--text-muted);
++    }
++
++    .search-container #emptyState .maker-latest {
++        justify-content: flex-start;
++        margin: 0 0 0.9rem;
++        padding: 0;
++        gap: 0.45rem;
++    }
++
++    .search-container #emptyState .maker-latest-title {
++        flex: 1 1 100%;
++        font-size: 0.75rem;
++        font-weight: 600;
++        color: var(--text-secondary);
++        margin-bottom: 0.1rem;
++    }
++
++    .search-container #emptyState .maker-latest-chip {
++        padding: 0.3rem 0.7rem;
++        font-size: 0.76rem;
++        background: var(--surface-2);
++    }
++
++    .search-container #emptyState .empty-actions {
++        display: grid;
++        grid-template-columns: repeat(2, minmax(0, 1fr));
++        gap: 0.55rem;
++        width: 100%;
++        margin: 0;
++    }
++
++    .search-container #emptyState .empty-actions .popover-anchor {
++        width: 100%;
++    }
++
++    .search-container #emptyState .empty-actions .btn {
++        width: 100%;
++        min-height: 46px;
++        justify-content: flex-start;
++        gap: 0.45rem;
++        padding: 0.55rem 0.75rem;
++        border-radius: 12px;
++        background: var(--surface-2);
++        border: 1px solid var(--stroke-subtle);
++        color: var(--text-primary);
++        font-size: 0.8rem;
++        font-weight: 600;
++        text-align: left;
++    }
++
++    .search-container #emptyState .empty-actions .btn i {
++        color: var(--accent);
++        flex: 0 0 auto;
++    }
++
++    .search-container #emptyState .empty-actions #btnFavorite i {
++        color: var(--color-warning);
++    }
++
++    .search-container #emptyState .empty-actions #btnAutoOrganize.btn-accent {
++        border-color: color-mix(in oklch, var(--accent) 45%, transparent);
++        background: color-mix(in oklch, var(--accent) 12%, var(--surface-2));
++    }
++
++    .search-container #emptyState .empty-explainer-wrap {
++        margin-top: 0.85rem;
++        padding-top: 0.75rem;
++        border-top: 1px solid var(--stroke-subtle);
++    }
++
++    .search-container #emptyState .empty-explainer-toggle {
++        display: flex;
++        align-items: center;
++        justify-content: space-between;
++        gap: 0.5rem;
++        width: 100%;
++        padding: 0.35rem 0.25rem;
++        border: none;
++        background: transparent;
++        color: var(--text-secondary);
++        font-size: 0.76rem;
++        text-align: left;
++        cursor: pointer;
++    }
++
++    .search-container #emptyState .empty-explainer-toggle-label {
++        display: inline-flex;
++        align-items: center;
++        gap: 0.4rem;
++        min-width: 0;
++    }
++
++    .search-container #emptyState .empty-explainer-toggle-label i {
++        color: var(--accent);
++        flex: 0 0 auto;
++    }
++
++    .search-container #emptyState .empty-explainer {
++        display: none;
++        margin: 0.45rem 0 0;
++        padding: 0;
++        border-top: 0;
++        max-width: 100%;
++    }
++
++    .search-container #emptyState .empty-explainer-wrap.is-open .empty-explainer {
++        display: block;
 +    }
 +}
 --- a/web/static/css/pages/settings.css
@@ -28019,15 +28884,23 @@ HcmV?d00001
  });
 --- a/web/static/js/pages/scanner/state-scan.js
 +++ b/web/static/js/pages/scanner/state-scan.js
-@@ -13,7 +13,6 @@
+@@ -11,9 +11,14 @@
+ export function stateScan() {
+     return {
          dirPath,
++        dirLeafName(dir) {
++            const raw = dirPath(dir).replace(/[\\/]+$/, '');
++            if (!raw) return '';
++            const parts = raw.split(/[\\/]/).filter(Boolean);
++            return parts.length ? parts[parts.length - 1] : raw;
++        },
          // ===== Data State =====
          directories: [],
 -        shellMode: '',
          config: {},
          configDirty: false,
  
-@@ -33,6 +32,7 @@
+@@ -33,6 +38,7 @@
          statsVisible: false,
          statTotal: 0,
          statLastRun: '',
@@ -28035,7 +28908,7 @@ HcmV?d00001
          clearCacheModalOpen: false,
          clearCacheLoading: false,
  
-@@ -45,12 +45,25 @@
+@@ -45,12 +51,25 @@
          copyFailDump: '',
  
          // ===== T7b: State Machine =====
@@ -28062,7 +28935,7 @@ HcmV?d00001
  
          // ===== T7b: Log System =====
          logHtml: '',           // 日誌 HTML（用於 restoreLogs）
-@@ -60,6 +73,7 @@
+@@ -60,6 +79,7 @@
          // ===== T7d: Log Terminal 增強 =====
          logEntries: [],        // [{level, message, timestamp}] 結構化陣列
          logFilter: 'all',      // 'all' | 'error' | 'warn' 篩選條件
@@ -28070,7 +28943,7 @@ HcmV?d00001
  
          // ===== T7b: Done Actions =====
          outputPath: '',        // 輸出路徑（供複製）
-@@ -69,6 +83,15 @@
+@@ -69,6 +89,15 @@
          nfoUpdatePaths: [],
          nfoUpdateItems: [],
          nfoUpdateVisible: false,
@@ -28086,7 +28959,7 @@ HcmV?d00001
  
          // ===== T6d: Jellyfin Image Update =====
          jellyfinImageCount: 0,
-@@ -102,9 +125,91 @@
+@@ -102,9 +131,91 @@
              return (this.progressCurrent / this.progressTotal) * 100;
          },
  
@@ -28179,7 +29052,7 @@ HcmV?d00001
          },
  
          get isBusy() {
-@@ -119,6 +224,67 @@
+@@ -119,6 +230,67 @@
  
          get doneActionsVisible() {
              return this.state === 'done' && this.outputPath !== '';
@@ -28247,7 +29120,7 @@ HcmV?d00001
          },
  
          get generateButtonText() {
-@@ -173,14 +339,6 @@
+@@ -173,14 +345,6 @@
  
          // ===== Lifecycle =====
          async init() {
@@ -28262,7 +29135,7 @@ HcmV?d00001
              // T5.1: 接入統一 page lifecycle
              // 提前到所有 await 之前註冊：closure 讀的都是 this.* runtime state，
              // 提前註冊不改變行為；但避免 loadConfig fetch 卡住時離頁 dirty-guard /
-@@ -212,13 +370,18 @@
+@@ -212,13 +376,18 @@
                      },
                      onBeforeUnload: () => {
                          const guard = this.shouldWarnBeforeLeave();
@@ -28282,7 +29155,7 @@ HcmV?d00001
                          // T2(40c): abort jellyfin check fetch
                          if (this._jellyfinCheckController) {
                              this._jellyfinCheckController.abort();
-@@ -233,6 +396,10 @@
+@@ -233,6 +402,10 @@
                              this._enrichAbortController.abort();
                              this._enrichAbortController = null;
                          }
@@ -28293,7 +29166,7 @@ HcmV?d00001
                          // TASK-94 Codex P1：離頁時清最後一片 flush dwell timer，避免 timer 事後
                          // 觸發 finalize（checkMissing fetch / state 變更）clobber 已離頁狀態。
                          if (this._flushTimer) {
-@@ -246,6 +413,7 @@
+@@ -246,6 +419,7 @@
              // 初始載入
              await this.loadConfig();
              this.loadStats();
@@ -28301,7 +29174,7 @@ HcmV?d00001
  
              // T7b: 恢復日誌（logOutput 為 scanner.html 靜態 x-ref 元素，
              // init 時早已 mount，直接同步還原、無需等 $nextTick）
-@@ -305,6 +473,14 @@
+@@ -305,6 +479,14 @@
                  if (result.success) {
                      this.config = result.data;
                      this.directories = this.config.gallery?.directories || [];
@@ -28316,7 +29189,7 @@ HcmV?d00001
                      // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                      this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
  
-@@ -358,7 +534,8 @@
+@@ -358,7 +540,8 @@
  
                          if (stats.last_run) {
                              const lastRun = new Date(stats.last_run);
@@ -28326,7 +29199,7 @@ HcmV?d00001
                                  month: 'numeric',
                                  day: 'numeric',
                                  hour: '2-digit',
-@@ -377,6 +554,25 @@
+@@ -377,6 +560,25 @@
              }
          },
  
@@ -28352,7 +29225,7 @@ HcmV?d00001
          async clearCache() {
              this.clearCacheLoading = true;
              try {
-@@ -387,6 +583,10 @@
+@@ -387,6 +589,10 @@
                      this.statTotal = 0;
                      this.statsVisible = false;
                      this.nfoUpdateVisible = false;
@@ -28363,7 +29236,7 @@ HcmV?d00001
                      this.jellyfinImageVisible = false;
                      this.jellyfinCheckState = 'idle';
                      this.clearCacheModalOpen = false;
-@@ -455,27 +655,7 @@
+@@ -455,27 +661,7 @@
  
          // ===== Folder Management =====
          async selectFolder() {
@@ -28392,7 +29265,7 @@ HcmV?d00001
          },
  
          addFolderPath(folderPath) {
-@@ -536,8 +716,6 @@
+@@ -536,8 +722,6 @@
              clearTimeout(_dragTimeoutHandle);
              _dragTimeoutHandle = null;
              if (this.showDragOverlay) this.showDragOverlay = false;
@@ -28401,7 +29274,7 @@ HcmV?d00001
              this.showToast(window.t('scanner.toast.browse_dir_fallback'), 'info');
              this.openBrowseDir('scanner', (path) => { this.addFolderPath(path); });
          },
-@@ -636,6 +814,9 @@
+@@ -636,6 +820,9 @@
          addLog(level, message) {
              // T7d: 加入結構化陣列
              this.logEntries.push({ level, message, timestamp: Date.now() });
@@ -28411,7 +29284,7 @@ HcmV?d00001
  
              const cls = level === 'error' ? 'log-error' :
                          level === 'warn' ? 'log-warn' : 'log-info';
-@@ -662,13 +843,30 @@
+@@ -662,13 +849,30 @@
  
              // 儲存到 localStorage
              localStorage.setItem('avlist_logs', this.logHtml);
@@ -28442,7 +29315,7 @@ HcmV?d00001
              const wasGenerating = localStorage.getItem('avlist_generating') === 'true';
  
              if (savedLogs) {
-@@ -709,14 +907,27 @@
+@@ -709,14 +913,27 @@
  
          clearLogs() {
              localStorage.removeItem('avlist_logs');
@@ -28470,7 +29343,7 @@ HcmV?d00001
          clearLogsDisplay() {
              this.logHtml = '';
              this.logEntries = [];
-@@ -758,7 +969,11 @@
+@@ -758,7 +975,11 @@
          },
  
          confirmClearAll() {
@@ -28483,7 +29356,7 @@ HcmV?d00001
              if (!hasLogs) {
                  this.showToast(window.t('scanner.toast.no_logs'), 'info');
                  return;
-@@ -768,6 +983,157 @@
+@@ -768,6 +989,157 @@
              if (confirm(window.t('scanner.toast.confirm_clear_logs'))) {
                  this.clearLogs();
                  this.showToast(window.t('scanner.toast.logs_cleared'), 'success');
@@ -28641,7 +29514,7 @@ HcmV?d00001
              }
          },
  
-@@ -792,9 +1158,7 @@
+@@ -792,9 +1164,7 @@
  
              // 重置狀態
              this.state = 'generating';
@@ -28652,7 +29525,7 @@ HcmV?d00001
              this.outputPath = '';
              this.nfoUpdateVisible = false;
              this.clearLogs();
-@@ -812,19 +1176,24 @@
+@@ -812,19 +1182,24 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -28680,7 +29553,7 @@ HcmV?d00001
                          localStorage.removeItem('avlist_state');  // 清除 viewer 狀態
  
                          // 處理 NFO 更新提示
-@@ -868,6 +1237,15 @@
+@@ -868,6 +1243,15 @@
                              this.showToast(window.t('scanner.toast.generate_success', { count: data.video_count }), 'success');
                          }
  
@@ -28696,7 +29569,7 @@ HcmV?d00001
                          // a5: Windows 長路徑警告
                          if (data.long_paths && data.long_paths.length > 0) {
                              this.showToast(
-@@ -890,24 +1268,24 @@
+@@ -890,24 +1274,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -28725,7 +29598,7 @@ HcmV?d00001
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] generate error:', e);
                  this.showToast(window.t('scanner.toast.generate_error'), 'error', 4000);
-@@ -915,26 +1293,64 @@
+@@ -915,26 +1299,64 @@
          },
  
          // ===== T7b: NFO Update Flow =====
@@ -28797,7 +29670,7 @@ HcmV?d00001
  
                  this.eventSource.onmessage = (event) => {
                      const data = JSON.parse(event.data);
-@@ -943,55 +1359,162 @@
+@@ -943,55 +1365,162 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -28972,7 +29845,7 @@ HcmV?d00001
          // ===== T6d: Jellyfin Image Update Flow =====
          async runJellyfinImageUpdate() {
              if (this.isGenerating) return;
-@@ -1002,9 +1525,7 @@
+@@ -1002,9 +1531,7 @@
              }
  
              this.state = 'jellyfinUpdating';
@@ -28983,7 +29856,7 @@ HcmV?d00001
              this.clearLogs();
  
              localStorage.setItem('avlist_generating', 'true');
-@@ -1019,14 +1540,13 @@
+@@ -1019,14 +1546,13 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -29000,7 +29873,7 @@ HcmV?d00001
                          // TASK-111 P2-b 後續（codex delta review）：done 不再必然代表「全數完成」——
                          // 批次跑到一半若把 external_manager 切成 off，後端會在下一部片 break 並送
                          // done(updated=已完成筆數)。這裡若無條件補滿 progressTotal，UI 會顯示 3/3
-@@ -1035,9 +1555,14 @@
+@@ -1035,9 +1561,14 @@
                          this.progressCurrent = (typeof data.updated === 'number')
                              ? data.updated
                              : this.progressTotal;
@@ -29016,7 +29889,7 @@ HcmV?d00001
  
                          // T3(40c) Codex fix: update 完成後重設 jellyfin check 狀態，讓觸發列重新出現
                          this.jellyfinImageVisible = false;
-@@ -1045,7 +1570,13 @@
+@@ -1045,7 +1576,13 @@
                          this.jellyfinItems = [];
                          this.jellyfinCheckState = 'idle';
  
@@ -29031,7 +29904,7 @@ HcmV?d00001
                          if (data.message) {
                              this.addLog('info', data.message);
                          }
-@@ -1053,24 +1584,24 @@
+@@ -1053,24 +1590,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -29060,7 +29933,7 @@ HcmV?d00001
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] runJellyfinImageUpdate error:', e);
                  this.showToast(window.t('scanner.toast.jellyfin_update_error'), 'error', 4000);
-@@ -1078,6 +1609,21 @@
+@@ -1078,6 +1615,21 @@
          },
  
          // ===== T7b: Utility =====
@@ -29082,7 +29955,7 @@ HcmV?d00001
          copyOutputPath() {
              if (!this.outputPath) return;
  
-@@ -1097,5 +1643,6 @@
+@@ -1097,5 +1649,6 @@
                  }
              });
          },
@@ -32448,7 +33321,23 @@ HcmV?d00001
                  }
                  var va, vb;
                  if (sort === 'video_count') {
-@@ -1413,6 +1424,10 @@
+@@ -972,13 +983,11 @@
+         },
+ 
+         _visibleVideoTags() {
+-            var tags = (this.currentLightboxVideo?.tags || '').split(',').filter(function(t) { return t.trim(); });
+-            return this._videoChipsExpanded ? tags : tags.slice(0, this._chipsLimit());
++            return (this.currentLightboxVideo?.tags || '').split(',').filter(function(t) { return t.trim(); });
+         },
+ 
+         _videoTagsOverflow() {
+-            var tags = (this.currentLightboxVideo?.tags || '').split(',').filter(function(t) { return t.trim(); });
+-            return Math.max(0, tags.length - this._chipsLimit());
++            return 0;
+         },
+ 
+         // --- 117-T3/T4: Actress add panel（T5 queue stubs 仍在） ---
+@@ -1413,6 +1422,10 @@
              var wasActressMode = this.showFavoriteActresses;
  
              try {
@@ -32459,7 +33348,7 @@ HcmV?d00001
                  // 捕獲來源 rect / coverSrc（必須在 closeLightbox / state 變更前）
                  var fromRect = null;
                  var coverSrc = null;
-@@ -1437,11 +1452,16 @@
+@@ -1437,11 +1450,16 @@
                      this.showFavoriteActresses = false;
                      this.actressSearch = '';
                  }
@@ -32514,7 +33403,7 @@ HcmV?d00001
 +}
 --- /dev/null
 +++ b/web/static/js/pages/showcase/state-lightbox-plot.js
-@@ -0,0 +1,284 @@
+@@ -0,0 +1,306 @@
 +/**
 + * Lightbox plot panel: lazy NFO read, translation, writeback, and undo.
 + *
@@ -32547,6 +33436,7 @@ HcmV?d00001
 +export function stateLightboxPlot() {
 +    return {
 +        lbPlotOpen: false,
++        _lbPlotInline: false,
 +        _lbPlotView: emptyPlotView(),
 +        _lbPlotInFlight: {},
 +        _lbPlotGen: 0,
@@ -32570,12 +33460,32 @@ HcmV?d00001
 +                && !!this.currentLightboxVideo?.path;
 +        },
 +
++        _lbPlotShouldInlineLoad() {
++            return typeof window !== 'undefined'
++                && window.innerWidth <= 768
++                && this.lbPlotShowButton();
++        },
++
++        _lbPlotAutoLoad() {
++            if (!this._lbPlotShouldInlineLoad()) return;
++            this._lbPlotInline = true;
++            return this._lbPlotLoad();
++        },
++
 +        lbPlotToggle() {
 +            if (this.lbPlotOpen) {
 +                this.lbPlotClose();
 +                return;
 +            }
 +            this.lbPlotOpen = true;
++            if (
++                this._lbPlotInline
++                && this._lbPlotView.path === this.currentLightboxVideo?.path
++                && !this._lbPlotView.loading
++                && (this._lbPlotView.plot || this._lbPlotView.error)
++            ) {
++                return;
++            }
 +            return this._lbPlotLoad();
 +        },
 +
@@ -32590,6 +33500,7 @@ HcmV?d00001
 +                this._lbPlotAbort = null;
 +            }
 +            this.lbPlotOpen = false;
++            this._lbPlotInline = false;
 +            this._lbPlotView = emptyPlotView();
 +        },
 +
@@ -32628,7 +33539,7 @@ HcmV?d00001
 +            // Use the generation plus the path as the stable request key.
 +            if (
 +                gen !== this._lbPlotGen
-+                || !this.lbPlotOpen
++                || (!this.lbPlotOpen && !this._lbPlotInline)
 +                || this._lbPlotView.path !== path
 +            ) return;
 +            // `_lbPlotView` is Alpine's reactive proxy after assignment. Mutate
@@ -32737,7 +33648,7 @@ HcmV?d00001
 +
 +                if (
 +                    generation === this._lbPlotGen
-+                    && this.lbPlotOpen
++                    && (this.lbPlotOpen || this._lbPlotInline)
 +                    && this._lbPlotView.path === path
 +                ) {
 +                    this._lbPlotApply(this._lbPlotView, data);
@@ -32781,7 +33692,7 @@ HcmV?d00001
 +                if (!response.ok) throw new Error(`HTTP ${response.status}`);
 +                const data = await response.json();
 +                if (data.success !== true) throw new Error(data.error || 'API failed');
-+                if (this._lbPlotView.path === path && this.lbPlotOpen) {
++                if (this._lbPlotView.path === path && (this.lbPlotOpen || this._lbPlotInline)) {
 +                    this._lbPlotApply(this._lbPlotView, data);
 +                }
 +                this.showToast(
@@ -32877,7 +33788,21 @@ HcmV?d00001
          // 復原：只用按下當下的 snapshot 與當時捕獲的那一片；不佔 _lbTrInFlight（plan 已接受的併發 residual）
 --- a/web/static/js/pages/showcase/state-lightbox.js
 +++ b/web/static/js/pages/showcase/state-lightbox.js
-@@ -190,6 +190,7 @@
+@@ -127,6 +127,13 @@
+             }
+         },
+ 
++        _lbAmbientStyle() {
++            var url = this.currentLightboxVideo?.cover_url;
++            if (!url) return {};
++            var safeUrl = String(url).replace(/[\r\n"\\]/g, encodeURIComponent);
++            return { backgroundImage: 'url("' + safeUrl + '")' };
++        },
++
+         // 71c-P2: helper — blur-up state reset + same-URL complete-check（DRY；供 _setLightboxIndex 與
+         // slip-through 路徑（state-similar.js closeSimilarMode）共用，避免兩處邏輯漂移）。
+         // 呼叫時機：currentLightboxVideo 已更新、Alpine reactive patch 尚未跑完（$nextTick 前）。
+@@ -190,6 +197,7 @@
              // 123-T4b：GSAP 呼叫收斂進 animations.js（TestMotionInfra 守衛，見該檔
              // killPickStarTweens 註解）。不清 --pick-fill（沿用搬移前行為）。
              window.ShowcaseAnimations?.killPickStarTweens?.({ clearTransform: true });
@@ -32885,7 +33810,13 @@ HcmV?d00001
              this.lightboxIndex = idx;
              this.currentLightboxVideo = (idx >= 0 && idx < _filteredVideos.length)
                  ? _filteredVideos[idx] : null;
-@@ -205,7 +206,26 @@
+@@ -202,10 +210,32 @@
+             // 71c-P2: 抽至 _refreshLbFullBlurUp helper（slip-through 路徑共用）
+             this._refreshLbFullBlurUp();
+             this._refreshLbActorAges();
++            if (this.currentLightboxVideo) {
++                this._lbPlotAutoLoad?.();
++            }
          },
  
          // --- Lightbox (M3a) ---
@@ -32913,7 +33844,7 @@ HcmV?d00001
              // F2: cancel pending delayed clear from previous close
              if (this.lightboxCloseTimer) {
                  clearTimeout(this.lightboxCloseTimer);
-@@ -319,6 +339,7 @@
+@@ -319,6 +349,7 @@
          openHeroCardLightbox() {
              if (this._lightboxAnimating) return;
              if (!this._matchedActress) return;
@@ -32921,7 +33852,7 @@ HcmV?d00001
              this._actressChipsExpanded = { aliases: false, info: false };
              // ★ 直接賦值（不走 _setLightboxIndex(-1)）
              this.lightboxIndex = -1;
-@@ -361,6 +382,7 @@
+@@ -361,6 +392,7 @@
                  clearTimeout(this.lightboxCloseTimer);
                  this.lightboxCloseTimer = null;
              }
@@ -32929,7 +33860,7 @@ HcmV?d00001
  
              // 49b T4 fix: 若 picker 開啟中，先關閉 picker
              if (this._pickerOpen) {
-@@ -369,7 +391,6 @@
+@@ -369,7 +401,6 @@
  
              this.addingLbTag = false;    // 關閉 lightbox 時重置 user tag 輸入框
              this._resetMask();           // 98b-T4：關燈箱丟棄未提交遮罩態（不 commit）
@@ -32937,7 +33868,7 @@ HcmV?d00001
  
              // ★ C11: fly-back — 必須在 generation++ / lightboxOpen = false 之前捕獲
              // 56c-fix-v3: standalone similar-exit（similarExitVideo set，lightboxIndex 仍是進 similar mode 前舊值）
-@@ -560,6 +581,7 @@
+@@ -560,6 +591,7 @@
                  // 掛載），必須在賦值前同步 _resetMask()——姊妹 $watch 是非同步 effect flush，
                  // 對掛載那一幀擋不住（gotchas-frontend §8b／T1 CDP 2/2 重現）。
                  this._resetMask();
@@ -32945,7 +33876,7 @@ HcmV?d00001
                  this.currentLightboxActress = this._matchedActress;
                  this.currentLightboxVideo = null;
                  this.addingLbTag = false;
-@@ -912,19 +934,42 @@
+@@ -912,19 +944,42 @@
                      headers: { 'Content-Type': 'application/json' },
                      body: JSON.stringify({ file_path: video.path, number: video.number })
                  });
@@ -32996,7 +33927,7 @@ HcmV?d00001
              } finally {
                  this._fetchSamplesLoading = false;
              }
-@@ -948,7 +993,13 @@
+@@ -948,7 +1003,13 @@
                      }
                      // 67-A2/CD-67-3b: data.video 不帶 _imgLoaded → 舊 true 殘留會讓新封面跳過 skeleton/fade。
                      // Object.assign 前 reset，讓補封面/重抓的新 cover_url（含上面 &t= cache-bust）重走 skeleton→@load→淡入。
@@ -33011,7 +33942,7 @@ HcmV?d00001
                      Object.assign(video, data.video);
                      _recomputeVideoBadges(video);
                      _recomputeCardActorAges(video);
-@@ -969,6 +1020,14 @@
+@@ -969,6 +1030,14 @@
  
          // --- 快捷鍵 (M4c 完整實作) ---
          handleKeydown(e) {
@@ -33026,7 +33957,7 @@ HcmV?d00001
              // 116b：浮層開啟時最高優先（必須在 INPUT early-return 之前——區間的 number input
              // 取得焦點時 e.target.tagName === 'INPUT'，放在後面 ESC 永遠到不了這裡）。
              // TASK-124a-T2：新增 _releaseEditor 分支（兩個 slot 依 §3.5 不變式恆不同時非
-@@ -1118,7 +1177,7 @@
+@@ -1118,7 +1187,7 @@
                  if (this.showFavoriteActresses) return;          // AC-5.3：女優牆整條早退
                  const order = this._presentationOrder();
                  const idx = order.indexOf(this._currentPresentation());
@@ -33035,7 +33966,7 @@ HcmV?d00001
              } else if (key === 'ARROWLEFT') {
                  if (this.page > 1) {
                      this.prevPage();
-@@ -1140,6 +1199,7 @@
+@@ -1140,6 +1209,7 @@
           * @param {WheelEvent} event
           */
          handleWheel(event) {
@@ -35570,7 +36501,27 @@ HcmV?d00001
      <!-- Drag Overlay (must be inside x-data scope) -->
      <div class="drag-overlay" id="dragOverlay" :class="{ active: showDragOverlay }">
          <div class="drag-overlay-content">
-@@ -97,14 +99,32 @@
+@@ -36,6 +38,7 @@
+         <div class="avlist-card-header">
+             <div class="title">
+                 <i class="bi bi-folder"></i> <span>{{ t('scanner.folder.section_title') }}</span>
++                <span class="scanner-section-badge" x-show="directories.length > 0" x-text="directories.length" x-cloak></span>
+             </div>
+             <div class="actions">
+                 <button id="btnSelectFolder" class="btn-icon" @click="selectFolder()" title="{{ t('scanner.folder.select_title') }}">
+@@ -79,7 +82,10 @@
+                                 <span>{{ t('scanner.folder.readonly_label') }}</span>
+                             </label>
+                             <i class="bi bi-folder folder-icon"></i>
+-                            <span class="folder-path" x-text="dirPath(dir)"></span>
++                            <span class="folder-path">
++                                <strong class="folder-leaf" x-text="dirLeafName(dir)"></strong>
++                                <span class="folder-full" x-text="dirPath(dir)"></span>
++                            </span>
+                             <button class="btn btn-sm btn-outline btn-error btn-remove"
+                                     @click="removeDirectory(idx)" title="{{ t('scanner.folder.remove_title') }}">
+                                 <i class="bi bi-x"></i>
+@@ -97,14 +103,32 @@
          </div>
  
          <!-- Output Info -->
@@ -35610,7 +36561,7 @@ HcmV?d00001
          </div>
  
          <!-- 跨機器路徑提醒（media-server 風味）：strm 內寫本機路徑，播放端在別機須認得，可到設定設路徑替換規則 -->
-@@ -120,12 +140,14 @@
+@@ -120,12 +144,14 @@
          </div>
  
          <!-- Action Buttons -->
@@ -35626,7 +36577,7 @@ HcmV?d00001
              <!-- Done Actions (hidden until complete) -->
              <div id="doneActions" class="done-actions" :style="{ display: doneActionsVisible ? 'flex' : 'none' }">
                  <button class="btn-hero btn-hero-secondary" id="btnCopyPath"
-@@ -137,37 +159,57 @@
+@@ -137,37 +163,57 @@
      </div>
  
      <!-- Mini Terminal (hidden by default) -->
@@ -35714,7 +36665,7 @@ HcmV?d00001
              </div>
          </div>
  
-@@ -207,27 +249,143 @@
+@@ -207,45 +253,162 @@
              <span class="enrich-card-badge" x-show="enrichBadgeCount > 0" x-text="enrichBadgeCount"></span>
          </div>
  
@@ -35827,6 +36778,17 @@ HcmV?d00001
 -            </div>
 -            <div class="stat-item" x-text="statLastRun"></div>
 -        </div>
+-        <!-- NFO Update Section (separate row) -->
+-        <div class="nfo-update-row" id="statNeedUpdate" x-show="nfoUpdateVisible">
+-            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
+-                <i class="bi bi-exclamation-circle"></i>
+-                {{ t('scanner.stats.nfo_prefix') }}
+-                <button type="button" class="number-drilldown-number-btn" id="updateCount"
+-                        :aria-expanded="open"
+-                        @click="toggle(nfoUpdateDrilldownPayload)"
+-                        x-text="nfoNeedUpdateCount"></button>
+-                {{ t('scanner.stats.nfo_suffix') }}
+-                {{ number_drilldown_panel() }}
 +    <div class="stats-card scanner-overview" id="statsCard" x-show="statsVisible">
 +        <div class="scanner-overview-head">
 +            <div class="scanner-overview-title">
@@ -35867,27 +36829,158 @@ HcmV?d00001
 +                </span>
 +            </button>
 +            <div class="scanner-maintenance-body" x-show="maintenanceExpanded" x-collapse>
-         <!-- NFO Update Section (separate row) -->
--        <div class="nfo-update-row" id="statNeedUpdate" x-show="nfoUpdateVisible">
-+        <div class="nfo-update-row maintenance-row" id="statNeedUpdate" x-show="nfoUpdateVisible">
-             <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
-                 <i class="bi bi-exclamation-circle"></i>
-                 {{ t('scanner.stats.nfo_prefix') }}
-@@ -238,14 +396,58 @@
-                 {{ t('scanner.stats.nfo_suffix') }}
-                 {{ number_drilldown_panel() }}
++        <!-- Resume Pill (未完成提示) — 优先置顶提示 -->
++        <div class="nfo-update-row maintenance-row maintenance-alert maintenance-alert--accent" x-show="resumePillVisible">
++            <span class="nfo-badge">
++                <i class="bi bi-arrow-repeat"></i>
++                <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
++                <strong x-text="missingItems.length"></strong>
++                <span x-text="window.t('scanner.stats.missing_resume_suffix')"></span>
              </span>
 -            <button class="btn-nfo-update" @click="runNfoUpdate()" id="btnUpdate"
-+            <button class="btn-nfo-update" @click="openMaintenanceSourcePicker('nfo')" id="btnUpdate"
-                     x-bind:disabled="nfoUpdateButtonDisabled"
-                     x-html="nfoUpdateButtonText"
-                     title="{{ t('scanner.stats.nfo_update_title') }}">
+-                    x-bind:disabled="nfoUpdateButtonDisabled"
+-                    x-html="nfoUpdateButtonText"
+-                    title="{{ t('scanner.stats.nfo_update_title') }}">
+-            </button>
+-        </div>
+-        <!-- T10: Missing NFO/Cover Pill -->
+-        <div class="nfo-update-row" x-show="missingPillVisible">
++            <div class="maintenance-alert-actions">
++                <button class="btn-nfo-update maintenance-btn-accent" @click="openMaintenanceSourcePicker('resume')"
++                        x-bind:disabled="isBusy">
++                    {{ t('scanner.stats.missing_resume_btn') }}
++                </button>
++                <button class="btn btn-ghost btn-xs" @click="dismissResume()">
++                    {{ t('scanner.stats.missing_resume_dismiss') }}
++                </button>
++            </div>
++        </div>
++
++        <!-- Missing NFO/Cover Alert Row -->
++        <div class="nfo-update-row maintenance-row maintenance-alert" x-show="missingPillVisible">
+             <span class="nfo-badge">
+                 <i class="bi bi-file-earmark-x"></i>
+                 <span x-show="missingBothCount > 0">
+@@ -288,32 +451,148 @@
+                     {{ t('scanner.stats.missing_suffix') }}
+                 </span>
+             </span>
+-            <button class="btn-nfo-update" @click="runMissingEnrich()"
++            <button class="btn-nfo-update maintenance-btn-accent" @click="openMaintenanceSourcePicker('enrich')"
+                     x-bind:disabled="isBusy || missingItems.length === 0"
+                     x-html="missingEnrichButtonText">
              </button>
          </div>
+ 
+-        <!-- T10: Resume Pill (未完成提示) -->
+-        <div class="nfo-update-row" x-show="resumePillVisible">
+-            <span class="nfo-badge">
+-                <i class="bi bi-arrow-repeat"></i>
+-                <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
+-                <strong x-text="missingItems.length"></strong>
+-                <span x-text="window.t('scanner.stats.missing_resume_suffix')"></span>
+-            </span>
+-            <button class="btn-nfo-update" @click="resumeMissingEnrich()"
+-                    x-bind:disabled="isBusy">
+-                {{ t('scanner.stats.missing_resume_btn') }}
+-            </button>
+-            <button class="btn btn-ghost btn-xs" @click="dismissResume()">
+-                {{ t('scanner.stats.missing_resume_dismiss') }}
+-            </button>
++        <!-- Quick Backfill 2x2 Tile Grid (NFO fields / Titles / Samples / Plots) -->
++        <div class="maintenance-backfill-grid">
++            <div class="nfo-update-row maintenance-row maintenance-tile" id="statNeedUpdate" x-show="nfoUpdateVisible">
++                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
++                    <span class="nfo-badge">
++                        <i class="bi bi-exclamation-circle"></i>
++                        <span>{{ t('scanner.stats.nfo_prefix') }}</span>
++                    </span>
++                    <button type="button" class="number-drilldown-number-btn maintenance-tile-count" id="updateCount"
++                            :aria-expanded="open"
++                            @click="toggle(nfoUpdateDrilldownPayload)"
++                            x-text="nfoNeedUpdateCount"></button>
++                    {{ number_drilldown_panel() }}
++                </div>
++                <button class="btn-nfo-update" @click="openMaintenanceSourcePicker('nfo')" id="btnUpdate"
++                        x-bind:disabled="nfoUpdateButtonDisabled"
++                        x-html="nfoUpdateButtonText"
++                        title="{{ t('scanner.stats.nfo_update_title') }}">
++                </button>
++            </div>
++
++            <div class="nfo-update-row maintenance-row maintenance-tile">
++                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
++                    <span class="nfo-badge">
++                        <i class="bi bi-translate"></i>
++                        <span>{{ t('scanner.stats.title_backfill_prefix') }}</span>
++                    </span>
++                    <button type="button" class="number-drilldown-number-btn maintenance-tile-count"
++                            :aria-expanded="open"
++                            @click="toggle(titleBackfillDrilldownPayload)"
++                            x-text="untranslatedTitleCount"></button>
++                    {{ number_drilldown_panel() }}
++                </div>
++                <button class="btn-nfo-update"
++                        @click="runTitleBackfill()"
++                        :disabled="titleBackfillDisabled"
++                        x-html="titleBackfillButtonText"
++                        :title="window.t('scanner.stats.title_backfill_hint')">
++                </button>
++            </div>
++
++            <div class="nfo-update-row maintenance-row maintenance-tile">
++                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
++                    <span class="nfo-badge">
++                        <i class="bi bi-images"></i>
++                        <span>{{ t('scanner.stats.sample_backfill_prefix') }}</span>
++                    </span>
++                    <button type="button" class="number-drilldown-number-btn maintenance-tile-count"
++                            :aria-expanded="open"
++                            @click="toggle(sampleBackfillDrilldownPayload)"
++                            x-text="missingSampleCount"></button>
++                    {{ number_drilldown_panel() }}
++                </div>
++                <button class="btn-nfo-update"
++                        @click="openMaintenanceSourcePicker('samples')"
++                        :disabled="sampleBackfillDisabled"
++                        x-html="sampleBackfillButtonText"
++                        :title="window.t('scanner.stats.sample_backfill_hint')">
++                </button>
++            </div>
++
++            <div class="nfo-update-row maintenance-row maintenance-tile">
++                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
++                    <span class="nfo-badge">
++                        <i class="bi bi-card-text"></i>
++                        <span>{{ t('scanner.stats.plot_backfill_prefix') }}</span>
++                    </span>
++                    <button type="button" class="number-drilldown-number-btn maintenance-tile-count"
++                            :aria-expanded="open"
++                            @click="toggle(plotBackfillDrilldownPayload)"
++                            x-text="missingPlotCount"></button>
++                    {{ number_drilldown_panel() }}
++                </div>
++                <button class="btn-nfo-update"
++                        @click="openMaintenanceSourcePicker('plots')"
++                        :disabled="plotBackfillDisabled"
++                        x-html="plotBackfillButtonText"
++                        :title="window.t('scanner.stats.plot_backfill_hint')">
++                </button>
++                <template x-for="batch in pendingPlotTranslations" :key="batch.batch_id">
++                    <button type="button" class="btn btn-warning btn-sm"
++                            :disabled="isBusy" :title="batch.numbers || ''"
++                            @click="pendingPlotTranslation=batch; plotTranslationConfirmOpen = true"
++                            x-text="window.t('scanner.plot_flow.pending', {n:batch.count}) + (batch.numbers ? ' · '+batch.numbers : '')"></button>
++                </template>
++            </div>
++        </div>
++
++        <!-- Batch Structure & Full-Library Tools -->
++        <div class="maintenance-tools-list">
 +        <!-- r28: source-titled file and folder normalization -->
-+        <div class="nfo-update-row maintenance-row maintenance-row-rename-source">
++        <div class="nfo-update-row maintenance-row maintenance-row-tool maintenance-row-rename-source">
 +            <div class="maintenance-copy">
-+                <span class="maintenance-icon"><i class="bi bi-input-cursor-text"></i></span>
++                <span class="maintenance-icon maintenance-icon--warn"><i class="bi bi-input-cursor-text"></i></span>
 +                <span class="maintenance-text">
 +                    <strong>{{ t('scanner.rename.source_row_title') }}</strong>
 +                    <small>{{ t('scanner.rename.source_row_hint') }}</small>
@@ -35906,10 +36999,9 @@ HcmV?d00001
 +            </div>
 +        </div>
 +
-+        <div class="nfo-update-row maintenance-row maintenance-row-tag"
-+             >
++        <div class="nfo-update-row maintenance-row maintenance-row-tool maintenance-row-tag">
 +            <div class="maintenance-copy" :title="window.t('scanner.stats.tag_source_hint')">
-+                <span class="maintenance-icon"><i class="bi bi-tags"></i></span>
++                <span class="maintenance-icon maintenance-icon--warn"><i class="bi bi-tags"></i></span>
 +                <span class="maintenance-text">
 +                    <strong>{{ t('scanner.stats.tag_source_label') }}</strong>
 +                    <small x-show="!selectedTagSourceRequiresCf">{{ t('scanner.stats.tag_source_hint') }}</small>
@@ -35927,130 +37019,35 @@ HcmV?d00001
 +                    </button>
 +                </div>
 +            </div>
-+        </div>
-         <!-- T10: Missing NFO/Cover Pill -->
--        <div class="nfo-update-row" x-show="missingPillVisible">
-+        <div class="nfo-update-row maintenance-row" x-show="missingPillVisible">
-             <span class="nfo-badge">
-                 <i class="bi bi-file-earmark-x"></i>
-                 <span x-show="missingBothCount > 0">
-@@ -288,21 +490,85 @@
-                     {{ t('scanner.stats.missing_suffix') }}
-                 </span>
-             </span>
--            <button class="btn-nfo-update" @click="runMissingEnrich()"
-+            <button class="btn-nfo-update" @click="openMaintenanceSourcePicker('enrich')"
-                     x-bind:disabled="isBusy || missingItems.length === 0"
-                     x-html="missingEnrichButtonText">
-             </button>
          </div>
  
-+        <!-- Missing-only backfill: titles and samples -->
-+        <div class="nfo-update-row maintenance-row">
-+            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
-+                <i class="bi bi-translate"></i>
-+                {{ t('scanner.stats.title_backfill_prefix') }}
-+                <button type="button" class="number-drilldown-number-btn"
-+                        :aria-expanded="open"
-+                        @click="toggle(titleBackfillDrilldownPayload)"
-+                        x-text="untranslatedTitleCount"></button>
-+                {{ t('scanner.stats.title_backfill_suffix') }}
-+                {{ number_drilldown_panel() }}
-+            </span>
-+            <button class="btn-nfo-update"
-+                    @click="runTitleBackfill()"
-+                    :disabled="titleBackfillDisabled"
-+                    x-html="titleBackfillButtonText"
-+                    :title="window.t('scanner.stats.title_backfill_hint')">
-+            </button>
-+        </div>
-+
-+        <div class="nfo-update-row maintenance-row">
-+            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
-+                <i class="bi bi-images"></i>
-+                {{ t('scanner.stats.sample_backfill_prefix') }}
-+                <button type="button" class="number-drilldown-number-btn"
-+                        :aria-expanded="open"
-+                        @click="toggle(sampleBackfillDrilldownPayload)"
-+                        x-text="missingSampleCount"></button>
-+                {{ t('scanner.stats.sample_backfill_suffix') }}
-+                {{ number_drilldown_panel() }}
-+            </span>
-+            <button class="btn-nfo-update"
-+                    @click="openMaintenanceSourcePicker('samples')"
-+                    :disabled="sampleBackfillDisabled"
-+                    x-html="sampleBackfillButtonText"
-+                    :title="window.t('scanner.stats.sample_backfill_hint')">
-+            </button>
-+        </div>
-+
-+        <div class="nfo-update-row maintenance-row">
-+            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
-+                <i class="bi bi-card-text"></i>
-+                {{ t('scanner.stats.plot_backfill_prefix') }}
-+                <button type="button" class="number-drilldown-number-btn"
-+                        :aria-expanded="open"
-+                        @click="toggle(plotBackfillDrilldownPayload)"
-+                        x-text="missingPlotCount"></button>
-+                {{ t('scanner.stats.plot_backfill_suffix') }}
-+                {{ number_drilldown_panel() }}
-+            </span>
-+            <button class="btn-nfo-update"
-+                    @click="openMaintenanceSourcePicker('plots')"
-+                    :disabled="plotBackfillDisabled"
-+                    x-html="plotBackfillButtonText"
-+                    :title="window.t('scanner.stats.plot_backfill_hint')">
-+            </button>
-+                <template x-for="batch in pendingPlotTranslations" :key="batch.batch_id">
-+                    <button type="button" class="btn btn-warning btn-sm"
-+                            :disabled="isBusy" :title="batch.numbers || ''"
-+                            @click="pendingPlotTranslation=batch; plotTranslationConfirmOpen = true"
-+                            x-text="window.t('scanner.plot_flow.pending', {n:batch.count}) + (batch.numbers ? ' · '+batch.numbers : '')"></button>
-+                </template>
-+        </div>
-+
-         <!-- T10: Resume Pill (未完成提示) -->
--        <div class="nfo-update-row" x-show="resumePillVisible">
-+        <div class="nfo-update-row maintenance-row" x-show="resumePillVisible">
-             <span class="nfo-badge">
-                 <i class="bi bi-arrow-repeat"></i>
-                 <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-                 <strong x-text="missingItems.length"></strong>
-                 <span x-text="window.t('scanner.stats.missing_resume_suffix')"></span>
-             </span>
--            <button class="btn-nfo-update" @click="resumeMissingEnrich()"
-+            <button class="btn-nfo-update" @click="openMaintenanceSourcePicker('resume')"
-                     x-bind:disabled="isBusy">
-                 {{ t('scanner.stats.missing_resume_btn') }}
-             </button>
-@@ -313,7 +579,7 @@
- 
          <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
-         <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
+-        <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
 -        <div class="nfo-update-row"
-+        <div class="nfo-update-row maintenance-row"
++        <div class="nfo-update-row maintenance-row maintenance-row-tool"
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +605,7 @@
+@@ -339,7 +618,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
 -        <div class="nfo-update-row" x-show="jellyfinImageVisible">
-+        <div class="nfo-update-row maintenance-row" x-show="jellyfinImageVisible">
++        <div class="nfo-update-row maintenance-row maintenance-row-tool" x-show="jellyfinImageVisible">
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +640,8 @@
+@@ -374,6 +653,9 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
++        </div>
 +        </div>
 +            </div>
          </div>
      </div>
  
-@@ -519,26 +787,6 @@
+@@ -519,26 +801,6 @@
               @keydown.space.prevent="toggleTagAliasCard()">
              <div class="title">
                  <i class="bi bi-tags"></i> <span>{{ t('scanner.tag_alias.section_title') }}</span>
@@ -36077,7 +37074,7 @@ HcmV?d00001
              </div>
              <span class="btn-collapse" aria-hidden="true">
                  <i class="bi" :class="tagAliasCardCollapsed ? 'bi-chevron-down' : 'bi-chevron-up'"></i>
-@@ -782,6 +1030,120 @@
+@@ -782,6 +1044,120 @@
          </div>
      </dialog>
  
@@ -36198,7 +37195,7 @@ HcmV?d00001
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -792,7 +1154,7 @@
+@@ -792,7 +1168,7 @@
                  <span x-text="window.t('scanner.stats.missing_enrich_confirm_title')"></span>
              </h3>
              <p class="fluent-modal-body">
@@ -36207,7 +37204,7 @@ HcmV?d00001
              </p>
              <div class="modal-action fluent-modal-actions">
                  <button type="button" class="btn btn-ghost" @click="cancelLargeMissingEnrich()">
-@@ -805,26 +1167,164 @@
+@@ -805,26 +1181,164 @@
          </div>
      </dialog>
  
@@ -36432,21 +37429,26 @@ HcmV?d00001
                      </button>
                  </div>
                  <!-- Row 3: Actresses -->
-@@ -413,7 +422,12 @@
+@@ -411,9 +420,16 @@
+     </div>
+ 
      <!-- 搜尋框（Spotlight 中央輸入；US-1 navbar 收合不作用於 search 頁，維持永遠可見） -->
-     <div class="search-bar">
+-    <div class="search-bar">
++    <div class="search-bar search-bar--split-tabs">
          <form id="searchForm" @submit.prevent="doSearch()">
 -            <div class="spotlight-search spotlight-search--wishlist-toggle">
-+            <div class="spotlight-search spotlight-search--wishlist-toggle"
++            <div class="spotlight-search spotlight-search--wishlist-toggle search-spotlight--mobile-tabs"
 +                 :data-action-units="1
 +                     + (pageState === 'loading' ? 1 : 0)
++                     + (!hasContent && pageState !== 'loading' ? 1 : 0)
 +                     + (listMode === 'search' && pageState === 'result' && (searchResults.length > 1 || actressProfile) && !isComposing() ? 1 : 0)
 +                     + (hasContent ? 1 : 0)
 +                     + ((isComposing() || canReopenSourcePick()) ? 2 : 0)">
++                <i class="bi bi-search search-icon-left search-mobile-leading-icon" aria-hidden="true"></i>
                  <!-- TASK-140-T7 / spec F2：segmented 檢視切換，取代原本的 search-icon-left -->
                  <div class="mode-toggle">
                      <button type="button" class="mode-toggle-btn"
-@@ -430,7 +444,7 @@
+@@ -430,7 +446,7 @@
                          <span class="mode-toggle-badge" x-show="wishlistCount > 0" x-text="wishlistCount"></span>
                      </button>
                  </div>
@@ -36455,10 +37457,51 @@ HcmV?d00001
                  <div class="search-actions-right">
                      <!-- 取消搜尋按鈕（loading 狀態顯示） -->
                      <button type="button"
-@@ -477,10 +491,39 @@
+@@ -460,6 +476,16 @@
+                     <button type="button" id="btnClear" class="btn-icon" x-show="hasContent" x-cloak @click="clearAll()" title="{{ t('search.action.clear') }}">
+                         <i class="bi bi-x-lg"></i>
+                     </button>
++                    <button type="button"
++                            class="btn-icon search-img-trigger"
++                            x-show="!hasContent && pageState !== 'loading'"
++                            x-cloak
++                            @click="imgSearchPickFile()"
++                            :disabled="imgSearchPhase === 'querying'"
++                            :title="t('search.image.btn_title')"
++                            :aria-label="t('search.image.btn_title')">
++                        <i class="bi bi-image" aria-hidden="true"></i>
++                    </button>
+                     <!-- US1: 自動來源膠囊（compose 態顯示，點擊開進階搜尋 picker） -->
+                     {{ source_pill(
+                         name="t('showcase.rescrape.auto_source')",
+@@ -475,14 +501,77 @@
+                 </div>
+             </div>
          </form>
-     </div>
- 
++        <div class="search-mode-segmented">
++            <button type="button"
++                    class="search-seg-btn"
++                    :class="{ 'is-active': listMode !== 'wishlist' }"
++                    @click="listMode === 'wishlist' && switchToSearchList()">
++                <i class="bi bi-search" aria-hidden="true"></i>
++                <span>{{ t('search.action.view_search_results') }}</span>
++            </button>
++            <button type="button"
++                    class="search-seg-btn"
++                    :class="{ 'is-active': listMode === 'wishlist' }"
++                    @click="listMode !== 'wishlist' && switchToWishlist()">
++                <i class="bi bi-bookmarks" aria-hidden="true"></i>
++                <span>{{ t('search.action.view_wishlist') }}</span>
++                <span class="search-seg-badge" x-show="wishlistCount > 0" x-text="wishlistCount"></span>
++            </button>
++        </div>
++        <input type="file"
++               x-ref="imgSearchFile"
++               class="image-search-file"
++               accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
++               @change="imgSearchOnFilePicked($event)">
++    </div>
++
 +    <div class="image-search-entry"
 +         x-show="!hasContent && pageState !== 'loading'"
 +         x-cloak>
@@ -36469,13 +37512,8 @@ HcmV?d00001
 +            <i class="bi bi-image" aria-hidden="true"></i>
 +            <span x-text="t('search.image.btn_title')"></span>
 +        </button>
-+        <input type="file"
-+               x-ref="imgSearchFile"
-+               class="image-search-file"
-+               accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-+               @change="imgSearchOnFilePicked($event)">
-+    </div>
-+
+     </div>
+ 
      <!-- 結果區域 -->
      <div class="result-area">
 +        <div class="ui-partial-banner"
@@ -36492,22 +37530,133 @@ HcmV?d00001
 +
          <!-- 初始狀態 -->
 -        <div id="emptyState" class="state-page w-full" x-show="pageState === 'empty' && listMode !== 'wishlist'" x-cloak>
+-            <i class="bi bi-film state-page-icon"></i>
+-            <p class="state-page-text">{{ t('search.empty.hint') }}</p>
 +        <div id="emptyState" class="state-page ui-state-card ui-state-card--empty w-full" x-show="pageState === 'empty' && listMode !== 'wishlist'" x-cloak>
-             <i class="bi bi-film state-page-icon"></i>
-             <p class="state-page-text">{{ t('search.empty.hint') }}</p>
++            <div class="search-empty-head">
++                <span class="search-empty-emblem"><i class="bi bi-film state-page-icon"></i></span>
++                <p class="state-page-text">{{ t('search.empty.hint') }}</p>
++            </div>
++            <button type="button"
++                    class="search-empty-img-card"
++                    @click="imgSearchPickFile()"
++                    :disabled="imgSearchPhase === 'querying'">
++                <span class="search-empty-img-icon"><i class="bi bi-image" aria-hidden="true"></i></span>
++                <span class="search-empty-img-text" x-text="t('search.image.btn_title')"></span>
++                <i class="bi bi-chevron-right search-empty-img-chevron" aria-hidden="true"></i>
++            </button>
++            <div class="maker-latest" x-show="makerCapsules.length > 0 || recentActressAvailable">
++                <span class="maker-latest-title" x-text="window.t('search.maker_latest.title')">{{ t('search.maker_latest.title') }}</span>
++                <button type="button" class="maker-latest-chip" x-show="recentActressAvailable" @click="startRecentActressSearch()" x-text="window.t('search.recent_actresses.label')">{{ t('search.recent_actresses.label') }}</button>
++                <template x-for="capsule in makerCapsules" :key="capsule.key">
++                    <button type="button" class="maker-latest-chip" @click="startMakerSearch(capsule)" x-text="capsule.label"></button>
++                </template>
++            </div>
              <div class="empty-actions">
-@@ -545,8 +588,9 @@
+                 <button class="btn btn-sm btn-outline btn-primary" id="btnAddFiles" @click="addFiles()">
+                     <i class="bi bi-file-earmark-plus"></i> {{ t('search.action.add_files') }}
+@@ -524,14 +613,7 @@
+                         </div>
+                         <p class="auto-organize-panel__path" x-text="displayFolderPath()"></p>
+                         <p class="auto-organize-panel__warning" x-text="window.t('search.auto_organize.folder_warning')">{{ t('search.auto_organize.folder_warning') }}</p>
+-                        {# 這一列用 x-show，不要改回 x-if：x-if 會在 folderIsSet 變 true 的當下把整列
+-                           從 DOM 拔掉，面板高度當場縮一截——使用者剛按下去的那個位置變成「面板外面」，
+-                           下一下點擊就會被 @click.outside 收走。x-show 只切 display，節點留在樹上。
+-                           ⚠️ 別把這裡寫成「x-if 拔掉 target ⇒ contains 回 false ⇒ 判成點在外面」——
+-                           那個直覺解釋是**錯的**，vendor/alpine/alpine.min.js 的 outside handler 有
+-                           `l.target.isConnected !== !1` 守衛，已經脫離文件樹的 target **不會**觸發它；
+-                           而且 useResolvedFolder() 是 async，狀態要等 fetch 回來才變，那一下的
+-                           outside 判定早就跑完了。詳見 gotchas-frontend.md 的 FE-ALPINE-16。 #}
++                        {# 這一列用 x-show，不要改回 x-if：見 gotchas-frontend.md 的 FE-ALPINE-16。 #}
+                         <div class="auto-organize-panel__row auto-organize-panel__unset" x-show="!folderIsSet && !resolvedFolder">
+                             <span x-text="window.t('search.auto_organize.folder_not_configured')">{{ t('search.auto_organize.folder_not_configured') }}</span>
+                             <a href="/settings" class="btn btn-sm btn-primary">{{ t('search.duplicate.go_settings') }}</a>
+@@ -544,47 +626,44 @@
+                     </div>
                  </div>
              </div>
++            {% if not is_android %}
              <small class="state-page-hint">{{ t('search.empty.drag_hint') }}</small>
 -            <div class="maker-latest" x-show="makerCapsules.length > 0">
-+            <div class="maker-latest" x-show="makerCapsules.length > 0 || recentActressAvailable">
-                 <span class="maker-latest-title" x-text="window.t('search.maker_latest.title')">{{ t('search.maker_latest.title') }}</span>
-+                <button type="button" class="maker-latest-chip" x-show="recentActressAvailable" @click="startRecentActressSearch()" x-text="window.t('search.recent_actresses.label')">{{ t('search.recent_actresses.label') }}</button>
-                 <template x-for="capsule in makerCapsules" :key="capsule.key">
-                     <button type="button" class="maker-latest-chip" @click="startMakerSearch(capsule)" x-text="capsule.label"></button>
-                 </template>
-@@ -606,22 +650,31 @@
+-                <span class="maker-latest-title" x-text="window.t('search.maker_latest.title')">{{ t('search.maker_latest.title') }}</span>
+-                <template x-for="capsule in makerCapsules" :key="capsule.key">
+-                    <button type="button" class="maker-latest-chip" @click="startMakerSearch(capsule)" x-text="capsule.label"></button>
+-                </template>
+-            </div>
+-            <div class="empty-explainer">
+-                <p class="empty-explainer-line">{{ t('search.empty.explain_add') }}</p>
+-
+-                {# appConfig 尚未載入時（第一幀，`appConfig === null`）兩個最愛列都不顯示：
+-                   favoriteConfigured() 對 null 回 false，若不加這個條件，**已經設過最愛資料夾**的人
+-                   會先看到「指定一個資料夾」再跳成真實路徑——畫面叫他去做一件他已經做完的事。
+-                   本機 4/4 冷載實測 /api/config 都在 first-contentful-paint 之前 10–41ms 到達
+-                   （＝這一幀通常不會被畫出來），但那是本機的餘裕；NAS ＋ 靜態資源已快取時
+-                   兩者的先後會反過來。代價只是慢載時那一列晚一幀出現，不會顯示錯的指示。 #}
+-                <p class="empty-explainer-line" x-show="appConfig !== null && !favoriteConfigured()">
+-                    <i class="bi bi-star-fill explainer-icon explainer-icon-favorite" aria-hidden="true"></i>
+-                    {{ t('search.empty.explain_favorite_unset') }}
+-                </p>
+-                <p class="empty-explainer-line" x-show="favoriteConfigured()">
+-                    <i class="bi bi-star-fill explainer-icon explainer-icon-favorite" aria-hidden="true"></i>
+-                    {{ t('search.empty.explain_favorite_set_prefix') }}<code x-text="favoritePathDisplay()"></code>{{ t('search.empty.explain_favorite_set_suffix') }}
+-                    <span class="text-warning" x-show="favoriteScannerLinked === false">{{ t('search.empty.explain_favorite_untracked') }}</span>
+-                </p>
+-
+-                <p class="empty-explainer-line">
+-                    <i class="bi bi-clock-history explainer-icon" aria-hidden="true"></i>
+-                    {{ t('search.empty.explain_auto_organize') }}
+-                </p>
+-
+-                {# 這一列吃**兩個各自獨立載入**的輸入（appConfig ＋ formatVariables，CD-146a-17 失敗隔離），
+-                   所以「準備好了沒」問 empty-explainer.js 的 namingPreviewReady()，不要在這裡列舉輸入——
+-                   樣板列舉過一次就漏過一次（`fc9667bc` 只擋了 appConfig，CodeRabbit 抓到 formatVariables）。
+-                   未 ready 時**整列隱藏**：前綴是「整理成：」，後面接空白或大括號都像在說
+-                   「你的檔案會被改成這樣」，比晚一幀出現糟得多。 #}
+-                <p class="empty-explainer-line" x-show="namingPreviewReady()">
+-                    {{ t('search.empty.explain_naming_prefix') }}<code x-text="namingPreviewExample()"></code>
+-                    <span x-show="appConfig?.translate?.enabled">{{ t('search.empty.explain_naming_translate_suffix') }}</span>
+-                    <a href="/settings#filenameFormat">{{ t('search.empty.explain_naming_link') }}</a>
+-                </p>
++            {% endif %}
++            <div class="empty-explainer-wrap" x-data="{ explainerOpen: false }" :class="{ 'is-open': explainerOpen }">
++                <button type="button"
++                        class="empty-explainer-toggle"
++                        @click="explainerOpen = !explainerOpen"
++                        :aria-expanded="explainerOpen.toString()">
++                    <span class="empty-explainer-toggle-label">
++                        <i class="bi bi-info-circle" aria-hidden="true"></i>
++                        <span>{{ t('search.empty.explainer_partial') }}</span>
++                    </span>
++                    <i class="bi" :class="explainerOpen ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i>
++                </button>
++                <div class="empty-explainer">
++                    <p class="empty-explainer-line">{{ t('search.empty.explain_add') }}</p>
++
++                    <p class="empty-explainer-line" x-show="appConfig !== null && !favoriteConfigured()">
++                        <i class="bi bi-star-fill explainer-icon explainer-icon-favorite" aria-hidden="true"></i>
++                        {{ t('search.empty.explain_favorite_unset') }}
++                    </p>
++                    <p class="empty-explainer-line" x-show="favoriteConfigured()">
++                        <i class="bi bi-star-fill explainer-icon explainer-icon-favorite" aria-hidden="true"></i>
++                        {{ t('search.empty.explain_favorite_set_prefix') }}<code x-text="favoritePathDisplay()"></code>{{ t('search.empty.explain_favorite_set_suffix') }}
++                        <span class="text-warning" x-show="favoriteScannerLinked === false">{{ t('search.empty.explain_favorite_untracked') }}</span>
++                    </p>
++
++                    <p class="empty-explainer-line">
++                        <i class="bi bi-clock-history explainer-icon" aria-hidden="true"></i>
++                        {{ t('search.empty.explain_auto_organize') }}
++                    </p>
++
++                    <p class="empty-explainer-line" x-show="namingPreviewReady()">
++                        {{ t('search.empty.explain_naming_prefix') }}<code x-text="namingPreviewExample()"></code>
++                        <span x-show="appConfig?.translate?.enabled">{{ t('search.empty.explain_naming_translate_suffix') }}</span>
++                        <a href="/settings#filenameFormat">{{ t('search.empty.explain_naming_link') }}</a>
++                    </p>
++                </div>
+             </div>
+         </div>
+ 
+@@ -606,22 +685,31 @@
                      <div class="detail-bar" :style="'width:' + detailProgressPercent() + '%'"></div>
                      <span class="detail-text" x-text="detailDone + ' / ' + detailTotal">0 / 0</span>
                  </div>
@@ -36551,7 +37700,7 @@ HcmV?d00001
              <p class="empty-explainer-line"
                 x-show="pageState === 'error' && errorKind === 'no_data' && (currentMode === 'exact' || currentMode === 'prefix')"
                 x-cloak>{{ t('search.empty.explainer_partial') }}</p>
-@@ -644,6 +697,7 @@
+@@ -644,6 +732,7 @@
                  </button>
              </div>
          </div>
@@ -36559,7 +37708,7 @@ HcmV?d00001
  
          <!-- 結果卡片（wrapper：卡片 + 檔案列表垂直排列） -->
          <div id="resultCard" x-show="pageState === 'result' && listMode !== 'wishlist'" x-cloak>
-@@ -660,7 +714,7 @@
+@@ -660,7 +749,7 @@
                           @touchstart.passive="_dtTouchStart($event)"
                           @touchend.passive="_dtTouchEnd($event)">
                          <img id="resultCover" x-ref="coverImg" class="av-card-full-cover-img"
@@ -36568,7 +37717,7 @@ HcmV?d00001
                               :src="coverUrl()"
                               @error="handleCoverError()"
                               @load="_coverLoaded = true; coverError = ''; _coverRetried = false; _updateCoverHeight()"
-@@ -671,15 +725,29 @@
+@@ -671,15 +760,29 @@
                              <div class="shimmer"></div>
                          </div>
                          <!-- 封面錯誤 -->
@@ -36601,7 +37750,7 @@ HcmV?d00001
                          <button class="nav-btn prev" id="btnPrev"
                                  x-show="showNavigation()"
                                  :disabled="!canGoPrev() || (isSearchingFile && searchingFileDirection === 'prev')"
-@@ -700,6 +768,14 @@
+@@ -700,6 +803,14 @@
                               x-show="showNavigation()"
                               x-text="navIndicatorText()">1/1</div>
                      </div>
@@ -36616,7 +37765,7 @@ HcmV?d00001
                      <!-- T7: Sample Images 縮圖列 -->
                      <div class="sample-strip"
                           x-show="displayMode === 'detail' && (current().sample_images || []).length > 0"
-@@ -721,19 +797,38 @@
+@@ -721,19 +832,38 @@
                  </div>
                  <div class="av-card-full-info">
                  <div class="av-card-full-header">
@@ -36659,7 +37808,7 @@ HcmV?d00001
                          ) }}
                      </template>
                      <button class="info-icon-btn"
-@@ -745,7 +840,7 @@
+@@ -745,7 +875,7 @@
                      <!-- TASK-140-T6: 加入書籤（本地沒有 ＋ 未加入）-->
                      <button class="info-icon-btn"
                              @click="addToWishlistFromDetail(current())"
@@ -36668,7 +37817,7 @@ HcmV?d00001
                              x-transition:enter="transition ease-out duration-150"
                              x-transition:enter-start="opacity-0"
                              x-transition:enter-end="opacity-100"
-@@ -755,7 +850,7 @@
+@@ -755,7 +885,7 @@
                      <!-- TASK-140-T6: 從書籤移除（本地沒有 ＋ 已加入）-->
                      <button class="info-icon-btn"
                              @click="removeFromWishlist(current()?.number, 'search')"
@@ -36677,7 +37826,7 @@ HcmV?d00001
                              x-transition:enter="transition ease-out duration-150"
                              x-transition:enter-start="opacity-0"
                              x-transition:enter-end="opacity-100"
-@@ -801,7 +896,7 @@
+@@ -801,7 +931,7 @@
                      </div>
                      <!-- 中文標題 -->
                      <div id="chineseTitleRow" class="av-card-full-footer-content mt-2"
@@ -36686,7 +37835,7 @@ HcmV?d00001
                          <span class="info-label" id="chineseTitleLabel" x-text="chineseTitleLabel()">{{ t('search.label.chinese_title') }}</span>
                          <!-- 顯示模式 -->
                          <div class="info-value-with-actions" id="chineseTitleContainer" x-show="!(editingChineseTitle && canEditFile())">
-@@ -835,8 +930,8 @@
+@@ -835,8 +965,8 @@
                      <div class="info-grid-pair">
                          <div class="info-cell">
                              <span class="info-label">{{ t('search.label.date') }}</span>
@@ -36697,7 +37846,7 @@ HcmV?d00001
                                     class="input input-bordered info-value"
                                     :value="current().date || ''"
                                     @focus="startEditDate()"
-@@ -852,7 +947,26 @@
+@@ -852,7 +982,26 @@
                      <div class="info-grid-pair">
                          <div class="info-cell">
                              <span class="info-label">{{ t('search.label.maker') }}</span>
@@ -36725,7 +37874,7 @@ HcmV?d00001
                          </div>
                          <div class="info-cell" x-show="current().label">
                              <span class="info-label">{{ t('search.label.label') }}</span>
-@@ -1062,7 +1176,7 @@
+@@ -1062,7 +1211,7 @@
                                  </button>
                                  <!-- TASK-140-T6: 播放（count===1 或 count>1 皆顯示）-->
                                  <button class="btn-glass-circle"
@@ -36734,7 +37883,7 @@ HcmV?d00001
                                          x-show="cardActionState(result) === 'play' || cardActionState(result) === 'play+folder'"
                                          title="{{ t('search.action.play') }}">
                                      <i class="bi bi-play-fill"></i>
-@@ -1157,13 +1271,14 @@
+@@ -1157,13 +1306,14 @@
  
                  <!-- 批次進度條 -->
                  <div class="batch-progress" id="batchProgress"
@@ -36750,7 +37899,7 @@ HcmV?d00001
                  </div>
  
                  <!-- 批次整理進度條 -->
-@@ -1202,6 +1317,7 @@
+@@ -1202,6 +1352,7 @@
                              <!-- 狀態圖示 -->
                              <span :class="fileStatusClass(file)"
                                    x-text="fileStatusIcon(file)"></span>
@@ -36758,7 +37907,7 @@ HcmV?d00001
  
                              <!-- 動作按鈕：產生 NFO -->
                              <button x-show="canScrapeFile(file) && !file.isScraping && file.scrapeStatus !== 'done'"
-@@ -1347,32 +1463,99 @@
+@@ -1347,32 +1498,99 @@
          </div>
      </div>
  
@@ -36883,7 +38032,7 @@ HcmV?d00001
  
      <!-- Fix-1: 覆蓋警告 Modal (Alpine state-driven) -->
      <dialog class="modal fluent-modal"
-@@ -1408,25 +1591,6 @@
+@@ -1408,25 +1626,6 @@
  {% endblock %}
  
  {% block extra_js %}
@@ -39355,7 +40504,21 @@ HcmV?d00001
                                       @load="applyCellFocal($el, actress, '--actress-crop-ratio')"
                                       x-init="$watch('actress.auto_focal', () => applyCellFocal($el, actress, '--actress-crop-ratio'));
                                               $watch('actress.crop_mode', () => applyCellFocal($el, actress, '--actress-crop-ratio'))">
-@@ -1131,7 +1180,7 @@
+@@ -1069,7 +1118,12 @@
+                 <!-- Video Lightbox Branch (wrapped in x-if to prevent 44b hero card conflict) -->
+                 <template x-if="currentLightboxVideo && !currentLightboxActress">
+                     <div style="display:contents">
+-                        <!-- Cover Image -->
++                        <!-- Cover Image Stage -->
++                        <div class="lb-cover-stage">
++                            <div class="lb-cover-ambient"
++                                 aria-hidden="true"
++                                 x-show="!!currentLightboxVideo?.cover_url"
++                                 :style="_lbAmbientStyle()"></div>
+                         <!-- T8(Codex P2): has-cover 旗標 — 僅有封面時才讓 ≤480px min-height:0 塌到圖盒；
+                              無封面時保留 min-height 避免 cover 區塌成 0 高（補封面入口會壞）。 -->
+                         <div class="lightbox-cover" :class="{'has-cover': !!currentLightboxVideo?.cover_url}">
+@@ -1131,7 +1185,7 @@
                                   similar-exit mode (path undefined) — regular lightbox items always have
                                   path so existing behavior is unaffected. -->
                              <div class="cover-actions" x-show="!!currentLightboxVideo?.path" :class="{'cover-actions--focal-edit': _maskVisible}">
@@ -39364,7 +40527,14 @@ HcmV?d00001
                                      <i class="bi bi-play-fill"></i>
                                  </button>
                                  <button class="lb-action-btn js-open-folder" x-show="!_maskVisible" @click="openLocal(currentLightboxVideo?.path)" data-tooltip="{{ t('search.action.open_folder') }}" aria-label="{{ t('search.action.open_folder') }}">
-@@ -1171,7 +1220,7 @@
+@@ -1165,13 +1219,14 @@
+                                 </button>
+                             </div>
+                         </div>
++                        </div>
+ 
+                         <!-- 83b-T1：舊寄生 .lightbox-similar-mobile x-collapse block 已移除，
+                              改為獨立全螢幕 .similar-mobile-panel（page-level sibling，見 .similar-stage 之後）。 -->
  
                          <!-- Metadata Panel（緊湊版，匹配原版 gallery） -->
                          <div class="lightbox-metadata">
@@ -39373,7 +40543,7 @@ HcmV?d00001
                              <div class="lb-header">
                                  <!-- 123-T8：精選星掛在標題行最前面（owner 拍板：標題前比番號前更清楚，
                                       與標題有沒有番號前綴無關——scraper 本來就會剝掉前綴，見
-@@ -1184,52 +1233,71 @@
+@@ -1184,52 +1239,88 @@
                                          :aria-label="(currentLightboxVideo?.user_rating||0) > 0 ? t('showcase.pick.remove_aria') : t('showcase.pick.add_aria')"
                                          :aria-busy="!!_pickInFlight[currentLightboxVideo?.path]"
                                          @click.stop="togglePickStar()"><i class="bi bi-star pick-star-outline" aria-hidden="true"></i><i class="bi bi-star-fill pick-star-fill" aria-hidden="true"
@@ -39459,12 +40629,24 @@ HcmV?d00001
 -                                     女優牆全寬度都裁（見 plan-101d §2.2）。改任一邊前先讀那張表，別「對齊」成同一套。 -->
 -                                <button class="lb-mask-btn"
 -                                        x-show="!!currentLightboxVideo?.path && _lbFullLoaded && _posterModeActive()"
--                                        @click="openMask()"
--                                        :title="t('showcase.lightbox.mask_toggle')"
--                                        :aria-label="t('showcase.lightbox.mask_toggle')">
--                                    <i class="bi bi-person-bounding-box" aria-hidden="true"></i>
--                                </button>
++                                <button type="button" class="lb-mobile-icon-cta"
++                                        x-show="_lbFullLoaded && _posterModeActive()"
+                                         @click="openMask()"
+                                         :title="t('showcase.lightbox.mask_toggle')"
+                                         :aria-label="t('showcase.lightbox.mask_toggle')">
+                                     <i class="bi bi-person-bounding-box" aria-hidden="true"></i>
+                                 </button>
 -                            </div>
++                                <button type="button" class="lb-mobile-icon-cta"
++                                        x-show="lbTrShowOnTitle()"
++                                        @click.stop="lbTranslate()"
++                                        :disabled="lbTrIsBusy()"
++                                        :aria-busy="lbTrIsBusy()"
++                                        :title="t('showcase.lightbox.translate_tooltip')"
++                                        :aria-label="t('showcase.lightbox.translate_tooltip')">
++                                    <i class="bi bi-translate" x-show="!lbTrIsBusy()" aria-hidden="true"></i>
++                                    <i class="bi bi-arrow-repeat spin" x-show="lbTrIsBusy()" aria-hidden="true"></i>
++                                </button>
 +                            </div>
 +                            <div class="lb-faces">
 +                            <div class="lb-info-face"
@@ -39485,7 +40667,140 @@ HcmV?d00001
                              </div>
                              <!-- Row 3: Actresses -->
                              <div class="lb-actor" x-show="currentLightboxVideo?.actresses">
-@@ -1316,7 +1384,7 @@
+@@ -1243,51 +1334,77 @@
+                             <!-- 分隔符 " · " 內嵌於各 span 開頭，隨 x-show 一起顯示/隱藏，避免孤立 · -->
+                             <div class="lb-details">
+                                 <!-- 123-T8：精選星已移到 .lb-title（標題行）最前面，此列回到以番號起頭。 -->
+-                                <span x-text="currentLightboxVideo?.number || t('showcase.lightbox.unknown_number')"></span>
+-                                <!-- 62b-1: 進階重刮 ⚙ 入口（番號旁 inline 細鈕，常駐顯示）-->
+-                                <button type="button"
+-                                        class="lb-rescrape-gear"
+-                                        @click.stop="openRescrape(currentLightboxVideo, 'lightbox')"
+-                                        data-tooltip="{{ t('showcase.rescrape.entry_tooltip') }}"
+-                                        aria-label="{{ t('showcase.rescrape.entry_tooltip') }}">
+-                                    <i class="bi bi-gear" aria-hidden="true"></i>
+-                                </button>
+-                                <span x-show="currentLightboxVideo?.maker">
+-                                    &nbsp;·&nbsp;<a href="#" class="lb-link" @click.prevent="searchFromMetadata(currentLightboxVideo?.maker, 'maker')" x-text="currentLightboxVideo?.maker"></a>
++                                <span class="lb-detail-item">
++                                    <span class="lb-detail-key lb-detail-key--mobile">{{ t('showcase.table.col_number') }}</span>
++                                    <span class="lb-detail-val">
++                                        <span class="lb-detail-num" x-text="currentLightboxVideo?.number || t('showcase.lightbox.unknown_number')"></span>
++                                        <!-- 62b-1: 進階重刮 ⚙ 入口（番號旁 inline 細鈕，常駐顯示）-->
++                                        <button type="button"
++                                                class="lb-rescrape-gear"
++                                                @click.stop="openRescrape(currentLightboxVideo, 'lightbox')"
++                                                data-tooltip="{{ t('showcase.rescrape.entry_tooltip') }}"
++                                                aria-label="{{ t('showcase.rescrape.entry_tooltip') }}">
++                                            <i class="bi bi-gear" aria-hidden="true"></i>
++                                        </button>
++                                    </span>
+                                 </span>
+-                                <span x-show="currentLightboxVideo?.director">
+-                                    &nbsp;·&nbsp;<b>{{ t('showcase.label.director') }}：</b>
+-                                    <a href="#" class="lb-link"
+-                                       @click.prevent="searchFromMetadata(currentLightboxVideo?.director, 'director')"
+-                                       x-text="currentLightboxVideo?.director"></a>
++                                <span class="lb-detail-item" x-show="currentLightboxVideo?.maker">
++                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
++                                    <span class="lb-detail-key lb-detail-key--mobile">{{ t('showcase.label.maker') }}</span>
++                                    <span class="lb-detail-val">
++                                        <a href="#" class="lb-link" @click.prevent="searchFromMetadata(currentLightboxVideo?.maker, 'maker')" x-text="currentLightboxVideo?.maker"></a>
++                                    </span>
+                                 </span>
+-                                <span x-show="currentLightboxVideo?.duration">
+-                                    &nbsp;·&nbsp;<span x-text="currentLightboxVideo?.duration ? currentLightboxVideo.duration + ' ' + t('showcase.unit.minutes') : ''"></span>
++                                <span class="lb-detail-item" x-show="currentLightboxVideo?.director">
++                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
++                                    <span class="lb-detail-key">{{ t('showcase.label.director') }}<span class="lb-detail-colon" aria-hidden="true">：</span></span>
++                                    <span class="lb-detail-val">
++                                        <a href="#" class="lb-link"
++                                           @click.prevent="searchFromMetadata(currentLightboxVideo?.director, 'director')"
++                                           x-text="currentLightboxVideo?.director"></a>
++                                    </span>
+                                 </span>
+-                                <span x-show="currentLightboxVideo?.series">
+-                                    &nbsp;·&nbsp;<b>{{ t('showcase.label.series') }}：</b>
+-                                    <a href="#" class="lb-link"
+-                                       @click.prevent="searchFromMetadata(currentLightboxVideo?.series, 'series')"
+-                                       x-text="currentLightboxVideo?.series"></a>
++                                <span class="lb-detail-item" x-show="currentLightboxVideo?.duration">
++                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
++                                    <span class="lb-detail-key lb-detail-key--mobile">{{ t('showcase.label.duration') }}</span>
++                                    <span class="lb-detail-val" x-text="currentLightboxVideo?.duration ? currentLightboxVideo.duration + ' ' + t('showcase.unit.minutes') : ''"></span>
+                                 </span>
+-                                <span x-show="currentLightboxVideo?.label && currentLightboxVideo?.label !== currentLightboxVideo?.maker">
+-                                    &nbsp;·&nbsp;<b>{{ t('showcase.label.label') }}：</b>
+-                                    <a href="#" class="lb-link"
+-                                       @click.prevent="searchFromMetadata(currentLightboxVideo?.label, 'label')"
+-                                       x-text="currentLightboxVideo?.label"></a>
++                                <span class="lb-detail-item" x-show="currentLightboxVideo?.series">
++                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
++                                    <span class="lb-detail-key">{{ t('showcase.label.series') }}<span class="lb-detail-colon" aria-hidden="true">：</span></span>
++                                    <span class="lb-detail-val">
++                                        <a href="#" class="lb-link"
++                                           @click.prevent="searchFromMetadata(currentLightboxVideo?.series, 'series')"
++                                           x-text="currentLightboxVideo?.series"></a>
++                                    </span>
+                                 </span>
+-                                <span x-show="currentLightboxVideo?.release_date">
+-                                    &nbsp;·&nbsp;<template x-if="_isReleaseClickable(currentLightboxVideo)">
++                                <span class="lb-detail-item" x-show="currentLightboxVideo?.label && currentLightboxVideo?.label !== currentLightboxVideo?.maker">
++                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
++                                    <span class="lb-detail-key">{{ t('showcase.label.label') }}<span class="lb-detail-colon" aria-hidden="true">：</span></span>
++                                    <span class="lb-detail-val">
+                                         <a href="#" class="lb-link"
+-                                           @click.prevent="searchFromMetadata(currentLightboxVideo?.release_date, 'release')"
+-                                           x-text="currentLightboxVideo?.release_date"></a>
+-                                    </template>
+-                                    <template x-if="!_isReleaseClickable(currentLightboxVideo)">
+-                                        <span x-text="currentLightboxVideo?.release_date"></span>
+-                                    </template>
++                                           @click.prevent="searchFromMetadata(currentLightboxVideo?.label, 'label')"
++                                           x-text="currentLightboxVideo?.label"></a>
++                                    </span>
+                                 </span>
+-                                <span class="lb-size" x-show="currentLightboxVideo?.size">
+-                                    &nbsp;·&nbsp;<span x-text="formatSize(currentLightboxVideo?.size || 0)"></span>
++                                <span class="lb-detail-item" x-show="currentLightboxVideo?.release_date">
++                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
++                                    <span class="lb-detail-key lb-detail-key--mobile">{{ t('showcase.label.date') }}</span>
++                                    <span class="lb-detail-val">
++                                        <template x-if="_isReleaseClickable(currentLightboxVideo)">
++                                            <a href="#" class="lb-link"
++                                               @click.prevent="searchFromMetadata(currentLightboxVideo?.release_date, 'release')"
++                                               x-text="currentLightboxVideo?.release_date"></a>
++                                        </template>
++                                        <template x-if="!_isReleaseClickable(currentLightboxVideo)">
++                                            <span x-text="currentLightboxVideo?.release_date"></span>
++                                        </template>
++                                    </span>
++                                </span>
++                                <span class="lb-detail-item lb-size" x-show="currentLightboxVideo?.size">
++                                    <span class="lb-detail-sep" aria-hidden="true">&nbsp;·&nbsp;</span>
++                                    <span class="lb-detail-key lb-detail-key--mobile">{{ t('showcase.table.col_size') }}</span>
++                                    <span class="lb-detail-val" x-text="formatSize(currentLightboxVideo?.size || 0)"></span>
+                                 </span>
+                                 <!-- 71b-T1: 從收藏移除（破壞性，只刪 DB row + thumb，不碰磁碟影片/封面）。
+                                      常駐 muted icon，靠右對齊於 metadata size 行末（margin-left:auto 推到行尾）。-->
+@@ -1299,15 +1416,11 @@
+                                     <i class="bi bi-trash"></i>
+                                 </button>
+                             </div>
+-                            <!-- Row 5: Tags (with +N chips, T4) -->
++                            <!-- Row 5: Tags -->
+                             <div class="lb-tags" x-show="currentLightboxVideo?.tags">
+                                 <template x-for="tag in _visibleVideoTags()" :key="tag">
+                                     <a href="#" class="lb-tag lb-link" @click.prevent="searchFromMetadata(tag.trim(), 'tag')" x-text="tag.trim()"></a>
+                                 </template>
+-                                <span class="lb-tag lb-chips-more"
+-                                      x-show="_videoTagsOverflow() > 0 && !_videoChipsExpanded"
+-                                      x-text="'+' + _videoTagsOverflow()"
+-                                      @click="_videoChipsExpanded = true"></span>
+                             </div>
+ 
+                             <!-- Row 6: User Tags (T4) -->
+@@ -1316,7 +1429,7 @@
                                  <!-- User tag badges with × remove button -->
                                  <template x-for="tag in (currentLightboxVideo?.user_tags || [])" :key="tag">
                                      <span class="lb-user-tag">
@@ -39494,7 +40809,7 @@ HcmV?d00001
                                          <button class="lb-tag-remove"
                                                  @click.stop="removeLbUserTag(tag)"
                                                  :title="tag">×</button>
-@@ -1328,6 +1396,17 @@
+@@ -1328,6 +1441,17 @@
                                          x-show="!addingLbTag && !!currentLightboxVideo?.path"
                                          @click.stop="showAddLbTagInput()"
                                          :title="t('showcase.lightbox.add_tag')">+</button>
@@ -39512,11 +40827,128 @@ HcmV?d00001
  
                                  <!-- Inline 輸入框 -->
                                  <span class="lb-tag-input-wrapper" x-show="addingLbTag">
-@@ -1347,7 +1426,58 @@
-                                             title="✕">✕</button>
+@@ -1348,6 +1472,176 @@
                                  </span>
                              </div>
--
+ 
++                            <!-- Mobile-only inline NFO plot section -->
++                            <div class="lb-mobile-plot"
++                                 x-show="lbPlotShowButton()"
++                                 x-cloak>
++                                <div class="lb-mobile-section-head">
++                                    <span class="lb-mobile-section-title">
++                                        <i class="bi bi-card-text" aria-hidden="true"></i>
++                                        <span>{{ t('showcase.lightbox.plot_face_title') }}</span>
++                                    </span>
++                                    <div class="lb-mobile-section-tools">
++                                        <button type="button" class="lb-translate-btn"
++                                                x-show="!_lbPlotView.error && !_lbPlotView.loading && (lbPlotButtons.includes('translate') || lbPlotButtons.includes('retranslate'))"
++                                                @click.stop="lbPlotTranslate()"
++                                                :disabled="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                                :aria-busy="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                                :data-tooltip="lbPlotButtons.includes('retranslate') ? t('showcase.lightbox.plot_retranslate_tooltip') : t('showcase.lightbox.plot_translate_tooltip')"
++                                                :aria-label="lbPlotButtons.includes('retranslate') ? t('showcase.lightbox.plot_retranslate_tooltip') : t('showcase.lightbox.plot_translate_tooltip')">
++                                            <i class="bi"
++                                               :class="lbPlotButtons.includes('retranslate') ? 'bi-arrow-repeat' : 'bi-translate'"
++                                               x-show="!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                               aria-hidden="true"></i>
++                                            <i class="bi bi-arrow-repeat spin"
++                                               x-show="!!_lbPlotInFlight[currentLightboxVideo?.path]"
++                                               aria-hidden="true"></i>
++                                        </button>
++                                        <button type="button" class="lb-translate-btn"
++                                                x-show="!_lbPlotView.error && !_lbPlotView.loading && lbPlotButtons.includes('toggle')"
++                                                @click.stop="lbPlotToggleOriginal()"
++                                                :data-tooltip="_lbPlotView.showing === 'plot' ? t('showcase.lightbox.plot_show_original_tooltip') : t('showcase.lightbox.plot_show_translated_tooltip')"
++                                                :aria-label="_lbPlotView.showing === 'plot' ? t('showcase.lightbox.plot_show_original_tooltip') : t('showcase.lightbox.plot_show_translated_tooltip')">
++                                            <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
++                                        </button>
++                                    </div>
++                                </div>
++                                <div class="lb-mobile-plot-card">
++                                    <div class="lb-plot-skeleton"
++                                         x-show="_lbPlotView.loading"
++                                         aria-hidden="true">
++                                        <span class="lb-plot-skeleton-line"></span>
++                                        <span class="lb-plot-skeleton-line"></span>
++                                    </div>
++                                    <p class="lb-plot-unavailable"
++                                       x-show="!_lbPlotView.loading && _lbPlotView.error"
++                                       x-text="t('showcase.lightbox.plot_unavailable')"></p>
++                                    <p class="lb-plot-text"
++                                       x-show="!_lbPlotView.loading && !_lbPlotView.error && _lbPlotView.path === currentLightboxVideo?.path"
++                                       x-text="_lbPlotView.showing === 'original' ? _lbPlotView.original : _lbPlotView.plot"></p>
++                                </div>
++                            </div>
++
++                            <!-- Mobile-only inline sample stills strip -->
++                            <div class="lb-mobile-samples"
++                                 x-show="(currentLightboxVideo?.sample_images || []).length > 0"
++                                 x-cloak>
++                                <div class="lb-mobile-section-head">
++                                    <span class="lb-mobile-section-title">
++                                        <i class="bi bi-images" aria-hidden="true"></i>
++                                        <span>{{ t('showcase.gallery.sample_prefix') }}</span>
++                                        <span class="lb-mobile-section-count"
++                                              x-text="'(' + (currentLightboxVideo?.sample_images || []).length + ')'"></span>
++                                    </span>
++                                    <button type="button"
++                                            class="lb-mobile-samples-all"
++                                            @click="openSampleGallery(currentLightboxVideo.sample_images, 0)"
++                                            :aria-label="t('showcase.gallery.sample_prefix')">
++                                        <i class="bi bi-arrows-fullscreen" aria-hidden="true"></i>
++                                    </button>
++                                </div>
++                                <div class="lb-mobile-sample-strip">
++                                    <template x-for="(url, idx) in (currentLightboxVideo?.sample_images || [])" :key="url">
++                                        <button type="button"
++                                                class="lb-mobile-sample-thumb"
++                                                @click="openSampleGallery(currentLightboxVideo.sample_images, idx)"
++                                                :aria-label="t('showcase.gallery.sample_alt') + ' ' + (idx + 1)">
++                                            <img :src="url"
++                                                 :alt="t('showcase.gallery.sample_alt') + ' ' + (idx + 1)"
++                                                 loading="lazy">
++                                        </button>
++                                    </template>
++                                </div>
++                            </div>
++
++                            <!-- Mobile-only secondary maintenance actions -->
++                            <div class="lb-mobile-actions" x-show="!!currentLightboxVideo">
++                                <button type="button"
++                                        class="lb-mobile-action-btn"
++                                        x-show="shouldShowEnrichButton(currentLightboxVideo)"
++                                        :disabled="_enriching"
++                                        @click.stop="enrichVideo(currentLightboxVideo)">
++                                    <i class="bi"
++                                       :class="_enriching ? 'bi-arrow-clockwise spin' : 'bi-search'"
++                                       aria-hidden="true"></i>
++                                    <span>{{ t('showcase.action.enrich') }}</span>
++                                </button>
++                                <button type="button"
++                                        class="lb-mobile-action-btn"
++                                        x-show="!!currentLightboxVideo?.path && (currentLightboxVideo?.sample_images || []).length === 0"
++                                        :disabled="_fetchSamplesLoading"
++                                        @click.stop="fetchSamples(currentLightboxVideo)">
++                                    <i class="bi"
++                                       :class="_fetchSamplesLoading ? 'bi-arrow-repeat spin' : 'bi-cloud-download'"
++                                       aria-hidden="true"></i>
++                                    <span x-text="_fetchSamplesLoading ? t('showcase.samples.fetching') : t('showcase.samples.fetch_btn')"></span>
++                                </button>
++                                <button type="button"
++                                        class="lb-mobile-action-btn"
++                                        @click.stop="openRescrape(currentLightboxVideo, 'lightbox')">
++                                    <i class="bi bi-gear" aria-hidden="true"></i>
++                                    <span>{{ t('showcase.rescrape.entry_tooltip') }}</span>
++                                </button>
++                                <button type="button"
++                                        class="lb-mobile-action-btn lb-mobile-action-btn--danger"
++                                        x-show="!!currentLightboxVideo?.path"
++                                        @click.stop="openDeleteVideoModal()">
++                                    <i class="bi bi-trash" aria-hidden="true"></i>
++                                    <span>{{ t('showcase.video.delete') }}</span>
++                                </button>
++                            </div>
 +                            </div>
 +                            <div class="lb-plot-face"
 +                                 :class="{'is-open': lbPlotOpen}"
@@ -39572,7 +41004,7 @@ HcmV?d00001
                          </div>
                      </div>
                  </template>
-@@ -1531,6 +1661,8 @@
+@@ -1531,6 +1825,8 @@
           x-trap.inert="similarModeOpen"
           x-effect="similarModeOpen ? initSimilarStage() : destroySimilarStage()"
           @click.self="closeSimilarMode()">
@@ -39581,7 +41013,7 @@ HcmV?d00001
  
          <!-- X 關閉按鈕（backdrop scope，相對 viewport 角，不在 inner 內） -->
          <button class="similar-close-btn"
-@@ -1720,17 +1852,20 @@
+@@ -1720,17 +2016,20 @@
           :aria-hidden="!similarModeMobileOpen">
          <!-- scrim：overlay 30px 模糊完全遮住 lightbox（CD-10） -->
          <div class="similar-mobile-scrim" @click="closeMobilePanel()"></div>
@@ -39603,7 +41035,7 @@ HcmV?d00001
                          :aria-label="t('showcase.action.play')">
                      <i class="bi bi-play-fill" aria-hidden="true"></i>
                  </button>
-@@ -1750,6 +1885,7 @@
+@@ -1750,6 +2049,7 @@
                               @load="applyCellFocal($el, item)"
                               x-init="$watch('item.auto_focal', () => applyCellFocal($el, item));
                                       $watch('item.crop_mode', () => applyCellFocal($el, item))">
@@ -39611,7 +41043,7 @@ HcmV?d00001
                      </div>
                  </template>
              </div>
-@@ -1900,34 +2036,7 @@
+@@ -1900,34 +2200,7 @@
      </dialog>
  
      <!-- Toast (M3h) -->
@@ -39647,7 +41079,7 @@ HcmV?d00001
  
      <!-- Footer 三段式 (49a-T4)：左 count + 中 shortcut + 右 pager -->
      <!-- ⚠️ 不可加 x-data（會建立 nested Alpine scope，讓 showFavoriteActresses / totalPages / filteredCount 等 state 全變 undefined）。
-@@ -2025,6 +2134,59 @@
+@@ -2025,6 +2298,59 @@
      </div>
  
      {# 進階重新刮削彈窗（62a-2）。放 showcase x-data 作用域內，使 rescrape* hook 在 showcase Alpine root 求值。 #}
@@ -39707,7 +41139,7 @@ HcmV?d00001
      {% include '_rescrape_modal.html' %}
  </div>
  {% endblock %}
-@@ -2033,7 +2195,9 @@
+@@ -2033,7 +2359,9 @@
  <!-- M2c: 傳遞 config 給 JS -->
  <script>
  window.__SHOWCASE_CONFIG__ = {{ (config.gallery or {}) | tojson | safe }};

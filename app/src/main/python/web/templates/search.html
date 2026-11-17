@@ -420,14 +420,16 @@
     </div>
 
     <!-- 搜尋框（Spotlight 中央輸入；US-1 navbar 收合不作用於 search 頁，維持永遠可見） -->
-    <div class="search-bar">
+    <div class="search-bar search-bar--split-tabs">
         <form id="searchForm" @submit.prevent="doSearch()">
-            <div class="spotlight-search spotlight-search--wishlist-toggle"
+            <div class="spotlight-search spotlight-search--wishlist-toggle search-spotlight--mobile-tabs"
                  :data-action-units="1
                      + (pageState === 'loading' ? 1 : 0)
+                     + (!hasContent && pageState !== 'loading' ? 1 : 0)
                      + (listMode === 'search' && pageState === 'result' && (searchResults.length > 1 || actressProfile) && !isComposing() ? 1 : 0)
                      + (hasContent ? 1 : 0)
                      + ((isComposing() || canReopenSourcePick()) ? 2 : 0)">
+                <i class="bi bi-search search-icon-left search-mobile-leading-icon" aria-hidden="true"></i>
                 <!-- TASK-140-T7 / spec F2：segmented 檢視切換，取代原本的 search-icon-left -->
                 <div class="mode-toggle">
                     <button type="button" class="mode-toggle-btn"
@@ -474,6 +476,16 @@
                     <button type="button" id="btnClear" class="btn-icon" x-show="hasContent" x-cloak @click="clearAll()" title="{{ t('search.action.clear') }}">
                         <i class="bi bi-x-lg"></i>
                     </button>
+                    <button type="button"
+                            class="btn-icon search-img-trigger"
+                            x-show="!hasContent && pageState !== 'loading'"
+                            x-cloak
+                            @click="imgSearchPickFile()"
+                            :disabled="imgSearchPhase === 'querying'"
+                            :title="t('search.image.btn_title')"
+                            :aria-label="t('search.image.btn_title')">
+                        <i class="bi bi-image" aria-hidden="true"></i>
+                    </button>
                     <!-- US1: 自動來源膠囊（compose 態顯示，點擊開進階搜尋 picker） -->
                     {{ source_pill(
                         name="t('showcase.rescrape.auto_source')",
@@ -489,6 +501,28 @@
                 </div>
             </div>
         </form>
+        <div class="search-mode-segmented">
+            <button type="button"
+                    class="search-seg-btn"
+                    :class="{ 'is-active': listMode !== 'wishlist' }"
+                    @click="listMode === 'wishlist' && switchToSearchList()">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <span>{{ t('search.action.view_search_results') }}</span>
+            </button>
+            <button type="button"
+                    class="search-seg-btn"
+                    :class="{ 'is-active': listMode === 'wishlist' }"
+                    @click="listMode !== 'wishlist' && switchToWishlist()">
+                <i class="bi bi-bookmarks" aria-hidden="true"></i>
+                <span>{{ t('search.action.view_wishlist') }}</span>
+                <span class="search-seg-badge" x-show="wishlistCount > 0" x-text="wishlistCount"></span>
+            </button>
+        </div>
+        <input type="file"
+               x-ref="imgSearchFile"
+               class="image-search-file"
+               accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+               @change="imgSearchOnFilePicked($event)">
     </div>
 
     <div class="image-search-entry"
@@ -501,11 +535,6 @@
             <i class="bi bi-image" aria-hidden="true"></i>
             <span x-text="t('search.image.btn_title')"></span>
         </button>
-        <input type="file"
-               x-ref="imgSearchFile"
-               class="image-search-file"
-               accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-               @change="imgSearchOnFilePicked($event)">
     </div>
 
     <!-- 結果區域 -->
@@ -524,8 +553,25 @@
 
         <!-- 初始狀態 -->
         <div id="emptyState" class="state-page ui-state-card ui-state-card--empty w-full" x-show="pageState === 'empty' && listMode !== 'wishlist'" x-cloak>
-            <i class="bi bi-film state-page-icon"></i>
-            <p class="state-page-text">{{ t('search.empty.hint') }}</p>
+            <div class="search-empty-head">
+                <span class="search-empty-emblem"><i class="bi bi-film state-page-icon"></i></span>
+                <p class="state-page-text">{{ t('search.empty.hint') }}</p>
+            </div>
+            <button type="button"
+                    class="search-empty-img-card"
+                    @click="imgSearchPickFile()"
+                    :disabled="imgSearchPhase === 'querying'">
+                <span class="search-empty-img-icon"><i class="bi bi-image" aria-hidden="true"></i></span>
+                <span class="search-empty-img-text" x-text="t('search.image.btn_title')"></span>
+                <i class="bi bi-chevron-right search-empty-img-chevron" aria-hidden="true"></i>
+            </button>
+            <div class="maker-latest" x-show="makerCapsules.length > 0 || recentActressAvailable">
+                <span class="maker-latest-title" x-text="window.t('search.maker_latest.title')">{{ t('search.maker_latest.title') }}</span>
+                <button type="button" class="maker-latest-chip" x-show="recentActressAvailable" @click="startRecentActressSearch()" x-text="window.t('search.recent_actresses.label')">{{ t('search.recent_actresses.label') }}</button>
+                <template x-for="capsule in makerCapsules" :key="capsule.key">
+                    <button type="button" class="maker-latest-chip" @click="startMakerSearch(capsule)" x-text="capsule.label"></button>
+                </template>
+            </div>
             <div class="empty-actions">
                 <button class="btn btn-sm btn-outline btn-primary" id="btnAddFiles" @click="addFiles()">
                     <i class="bi bi-file-earmark-plus"></i> {{ t('search.action.add_files') }}
@@ -567,14 +613,7 @@
                         </div>
                         <p class="auto-organize-panel__path" x-text="displayFolderPath()"></p>
                         <p class="auto-organize-panel__warning" x-text="window.t('search.auto_organize.folder_warning')">{{ t('search.auto_organize.folder_warning') }}</p>
-                        {# 這一列用 x-show，不要改回 x-if：x-if 會在 folderIsSet 變 true 的當下把整列
-                           從 DOM 拔掉，面板高度當場縮一截——使用者剛按下去的那個位置變成「面板外面」，
-                           下一下點擊就會被 @click.outside 收走。x-show 只切 display，節點留在樹上。
-                           ⚠️ 別把這裡寫成「x-if 拔掉 target ⇒ contains 回 false ⇒ 判成點在外面」——
-                           那個直覺解釋是**錯的**，vendor/alpine/alpine.min.js 的 outside handler 有
-                           `l.target.isConnected !== !1` 守衛，已經脫離文件樹的 target **不會**觸發它；
-                           而且 useResolvedFolder() 是 async，狀態要等 fetch 回來才變，那一下的
-                           outside 判定早就跑完了。詳見 gotchas-frontend.md 的 FE-ALPINE-16。 #}
+                        {# 這一列用 x-show，不要改回 x-if：見 gotchas-frontend.md 的 FE-ALPINE-16。 #}
                         <div class="auto-organize-panel__row auto-organize-panel__unset" x-show="!folderIsSet && !resolvedFolder">
                             <span x-text="window.t('search.auto_organize.folder_not_configured')">{{ t('search.auto_organize.folder_not_configured') }}</span>
                             <a href="/settings" class="btn btn-sm btn-primary">{{ t('search.duplicate.go_settings') }}</a>
@@ -587,48 +626,44 @@
                     </div>
                 </div>
             </div>
+            {% if not is_android %}
             <small class="state-page-hint">{{ t('search.empty.drag_hint') }}</small>
-            <div class="maker-latest" x-show="makerCapsules.length > 0 || recentActressAvailable">
-                <span class="maker-latest-title" x-text="window.t('search.maker_latest.title')">{{ t('search.maker_latest.title') }}</span>
-                <button type="button" class="maker-latest-chip" x-show="recentActressAvailable" @click="startRecentActressSearch()" x-text="window.t('search.recent_actresses.label')">{{ t('search.recent_actresses.label') }}</button>
-                <template x-for="capsule in makerCapsules" :key="capsule.key">
-                    <button type="button" class="maker-latest-chip" @click="startMakerSearch(capsule)" x-text="capsule.label"></button>
-                </template>
-            </div>
-            <div class="empty-explainer">
-                <p class="empty-explainer-line">{{ t('search.empty.explain_add') }}</p>
+            {% endif %}
+            <div class="empty-explainer-wrap" x-data="{ explainerOpen: false }" :class="{ 'is-open': explainerOpen }">
+                <button type="button"
+                        class="empty-explainer-toggle"
+                        @click="explainerOpen = !explainerOpen"
+                        :aria-expanded="explainerOpen.toString()">
+                    <span class="empty-explainer-toggle-label">
+                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                        <span>{{ t('search.empty.explainer_partial') }}</span>
+                    </span>
+                    <i class="bi" :class="explainerOpen ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i>
+                </button>
+                <div class="empty-explainer">
+                    <p class="empty-explainer-line">{{ t('search.empty.explain_add') }}</p>
 
-                {# appConfig 尚未載入時（第一幀，`appConfig === null`）兩個最愛列都不顯示：
-                   favoriteConfigured() 對 null 回 false，若不加這個條件，**已經設過最愛資料夾**的人
-                   會先看到「指定一個資料夾」再跳成真實路徑——畫面叫他去做一件他已經做完的事。
-                   本機 4/4 冷載實測 /api/config 都在 first-contentful-paint 之前 10–41ms 到達
-                   （＝這一幀通常不會被畫出來），但那是本機的餘裕；NAS ＋ 靜態資源已快取時
-                   兩者的先後會反過來。代價只是慢載時那一列晚一幀出現，不會顯示錯的指示。 #}
-                <p class="empty-explainer-line" x-show="appConfig !== null && !favoriteConfigured()">
-                    <i class="bi bi-star-fill explainer-icon explainer-icon-favorite" aria-hidden="true"></i>
-                    {{ t('search.empty.explain_favorite_unset') }}
-                </p>
-                <p class="empty-explainer-line" x-show="favoriteConfigured()">
-                    <i class="bi bi-star-fill explainer-icon explainer-icon-favorite" aria-hidden="true"></i>
-                    {{ t('search.empty.explain_favorite_set_prefix') }}<code x-text="favoritePathDisplay()"></code>{{ t('search.empty.explain_favorite_set_suffix') }}
-                    <span class="text-warning" x-show="favoriteScannerLinked === false">{{ t('search.empty.explain_favorite_untracked') }}</span>
-                </p>
+                    <p class="empty-explainer-line" x-show="appConfig !== null && !favoriteConfigured()">
+                        <i class="bi bi-star-fill explainer-icon explainer-icon-favorite" aria-hidden="true"></i>
+                        {{ t('search.empty.explain_favorite_unset') }}
+                    </p>
+                    <p class="empty-explainer-line" x-show="favoriteConfigured()">
+                        <i class="bi bi-star-fill explainer-icon explainer-icon-favorite" aria-hidden="true"></i>
+                        {{ t('search.empty.explain_favorite_set_prefix') }}<code x-text="favoritePathDisplay()"></code>{{ t('search.empty.explain_favorite_set_suffix') }}
+                        <span class="text-warning" x-show="favoriteScannerLinked === false">{{ t('search.empty.explain_favorite_untracked') }}</span>
+                    </p>
 
-                <p class="empty-explainer-line">
-                    <i class="bi bi-clock-history explainer-icon" aria-hidden="true"></i>
-                    {{ t('search.empty.explain_auto_organize') }}
-                </p>
+                    <p class="empty-explainer-line">
+                        <i class="bi bi-clock-history explainer-icon" aria-hidden="true"></i>
+                        {{ t('search.empty.explain_auto_organize') }}
+                    </p>
 
-                {# 這一列吃**兩個各自獨立載入**的輸入（appConfig ＋ formatVariables，CD-146a-17 失敗隔離），
-                   所以「準備好了沒」問 empty-explainer.js 的 namingPreviewReady()，不要在這裡列舉輸入——
-                   樣板列舉過一次就漏過一次（`fc9667bc` 只擋了 appConfig，CodeRabbit 抓到 formatVariables）。
-                   未 ready 時**整列隱藏**：前綴是「整理成：」，後面接空白或大括號都像在說
-                   「你的檔案會被改成這樣」，比晚一幀出現糟得多。 #}
-                <p class="empty-explainer-line" x-show="namingPreviewReady()">
-                    {{ t('search.empty.explain_naming_prefix') }}<code x-text="namingPreviewExample()"></code>
-                    <span x-show="appConfig?.translate?.enabled">{{ t('search.empty.explain_naming_translate_suffix') }}</span>
-                    <a href="/settings#filenameFormat">{{ t('search.empty.explain_naming_link') }}</a>
-                </p>
+                    <p class="empty-explainer-line" x-show="namingPreviewReady()">
+                        {{ t('search.empty.explain_naming_prefix') }}<code x-text="namingPreviewExample()"></code>
+                        <span x-show="appConfig?.translate?.enabled">{{ t('search.empty.explain_naming_translate_suffix') }}</span>
+                        <a href="/settings#filenameFormat">{{ t('search.empty.explain_naming_link') }}</a>
+                    </p>
+                </div>
             </div>
         </div>
 

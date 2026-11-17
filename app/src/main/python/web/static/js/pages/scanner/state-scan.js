@@ -11,6 +11,12 @@ export const DRAG_OVERLAY_TIMEOUT_MS = 1200; // 待 T3 實測覆核（見「驗�
 export function stateScan() {
     return {
         dirPath,
+        dirLeafName(dir) {
+            const raw = dirPath(dir).replace(/[\\/]+$/, '');
+            if (!raw) return '';
+            const parts = raw.split(/[\\/]/).filter(Boolean);
+            return parts.length ? parts[parts.length - 1] : raw;
+        },
         // ===== Data State =====
         directories: [],
         config: {},

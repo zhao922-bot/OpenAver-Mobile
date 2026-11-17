@@ -599,27 +599,44 @@
 
   [data-is-android="true"] #scannerPage .folder-item .folder-path {
     grid-area: path;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
     word-break: normal;
   }
 
   [data-is-android="true"] #scannerPage .folder-item .btn-remove {
     grid-area: remove;
     opacity: 1;
+    width: 32px;
+    min-height: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 50%;
+    border-color: var(--stroke-subtle);
+    color: var(--text-muted);
   }
 
   [data-is-android="true"] .output-info-path {
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
   }
 
   [data-is-android="true"] .output-info-path .path {
+    order: 2;
     flex: 1 1 100%;
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--stroke-subtle);
+    font-size: 0.72rem;
+    color: var(--text-muted);
   }
 
   [data-is-android="true"] .output-info-actions {
+    order: -1;
     width: 100%;
     justify-content: flex-end;
     flex-wrap: wrap;
@@ -634,23 +651,26 @@
 
   [data-is-android="true"] .scanner-action-cluster .path-copy-btn {
     grid-column: 1;
+    grid-row: 2;
   }
 
   [data-is-android="true"] .scanner-action-cluster .settings-link {
     grid-column: 2;
+    grid-row: 2;
   }
 
   [data-is-android="true"] .scanner-action-cluster .scanner-generate-inline {
     grid-column: 1 / -1;
+    grid-row: 1;
   }
 
   [data-is-android="true"] .scanner-action-cluster .scanner-action-btn {
     width: 100%;
     min-width: 0;
-    min-height: var(--ui-touch-target);
-    padding: 0.5rem 0.72rem;
-    border-radius: var(--ui-control-radius);
-    font-size: 0.8rem;
+    min-height: 40px;
+    padding: 0.45rem 0.68rem;
+    border-radius: 12px;
+    font-size: 0.76rem;
   }
 
   [data-is-android="true"] .scanner-action-cluster .scanner-action-btn > i {
@@ -664,27 +684,41 @@
     overflow-wrap: anywhere;
   }
 
-  [data-is-android="true"] .scanner-generate-inline {
+  [data-is-android="true"] .scanner-action-cluster .scanner-action-secondary {
+    background: var(--surface-2);
+    border-color: var(--stroke-subtle);
+    color: var(--text-secondary);
+  }
+
+  [data-is-android="true"] .scanner-action-cluster .scanner-generate-inline {
     min-height: var(--ui-touch-target);
-    padding: 0.5rem 0.9rem;
-    font-size: 0.86rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.92rem;
     white-space: nowrap;
   }
 
   [data-is-android="true"] .output-info-actions .path-copy-btn,
   [data-is-android="true"] .output-info-actions .settings-link {
-    min-height: var(--ui-touch-target);
+    min-height: 40px;
   }
 
   [data-is-android="true"] .output-info-actions .settings-link {
     display: inline-flex;
     align-items: center;
     padding-inline: 0.72rem;
+    color: var(--text-secondary);
   }
 
   [data-is-android="true"] .search-bar .spotlight-search--wishlist-toggle {
     --spotlight-left-slot: 7rem;
     --spotlight-right-slot: 3.5rem;
+  }
+
+  @media (max-width: 768px) {
+    [data-is-android="true"] .search-bar .spotlight-search--wishlist-toggle.search-spotlight--mobile-tabs {
+      --spotlight-left-slot: 2.75rem;
+    }
   }
 
   /* Showcase has two mode icons inside the left slot. Reserve a real gap

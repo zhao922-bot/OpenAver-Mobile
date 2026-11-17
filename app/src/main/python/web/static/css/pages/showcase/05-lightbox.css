@@ -100,6 +100,15 @@
     transform: scale(1.1);
 }
 
+/* Desktop: .lb-cover-stage 透傳給 .lightbox-content flex 排版；手機端覆寫為影院氛圍舞台 */
+.lb-cover-stage {
+    display: contents;
+}
+
+.lb-cover-ambient {
+    display: none;
+}
+
 /* Cover Image Section — 大圖佔主要空間 */
 .lightbox-cover {
     position: relative;
@@ -382,6 +391,28 @@
 .lightbox-metadata .lb-details .lb-detail-num {
     color: var(--text-secondary);
     font-weight: 500;
+}
+
+.lightbox-metadata .lb-detail-item,
+.lightbox-metadata .lb-detail-val {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.lightbox-metadata .lb-detail-key--mobile {
+    display: none;
+}
+
+.lightbox-metadata .lb-detail-key:not(.lb-detail-key--mobile) {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.lb-mobile-plot,
+.lb-mobile-samples,
+.lb-mobile-actions {
+    display: none;
 }
 
 /* 123-T3／T8：燈箱精選星（無補間）。兩層疊置：outline 永遠顯示、fill 用 --pick-fill clip。
@@ -679,6 +710,10 @@
 }
 
 .lightbox-metadata .lb-info-face.is-flipped {
+    position: absolute;
+    inset: 0 0 auto 0;
+    width: 100%;
+    pointer-events: none;
     opacity: 0;
     visibility: hidden;
     transition: opacity var(--duration-fast) var(--ease-out),
@@ -691,6 +726,7 @@
     display: flex;
     flex-direction: column;
     background: transparent;
+    pointer-events: none;
     opacity: 0;
     visibility: hidden;
     transition: opacity var(--duration-fast) var(--ease-out),
@@ -698,6 +734,10 @@
 }
 
 .lightbox-metadata .lb-plot-face.is-open {
+    position: relative;
+    inset: auto;
+    pointer-events: auto;
+    min-height: 8rem;
     opacity: 1;
     visibility: visible;
     transition: opacity var(--duration-fast) var(--ease-out);
@@ -707,29 +747,32 @@
     flex: none;
     display: flex;
     align-items: center;
-    padding-bottom: 0.4rem;
+    padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--stroke-subtle);
 }
 
 .lightbox-metadata .lb-plot-face-title {
     flex: 1 1 auto;
-    font-size: 0.75rem;
-    color: var(--text-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary);
 }
 
 .lightbox-metadata .lb-plot-body {
-    flex: 1 1 0;
+    flex: 1 1 auto;
     min-height: 0;
-    overflow-y: auto;
-    padding-top: 0.4rem;
+    overflow-y: visible;
+    padding-top: 0.6rem;
 }
 
 .lightbox-metadata .lb-plot-text,
 .lightbox-metadata .lb-plot-unavailable {
     margin: 0;
-    font-size: 0.75rem;
-    color: var(--text-muted);
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .lightbox-metadata .lb-plot-skeleton {

@@ -30,6 +30,7 @@ function emptyPlotView() {
 export function stateLightboxPlot() {
     return {
         lbPlotOpen: false,
+        _lbPlotInline: false,
         _lbPlotView: emptyPlotView(),
         _lbPlotInFlight: {},
         _lbPlotGen: 0,
@@ -53,12 +54,32 @@ export function stateLightboxPlot() {
                 && !!this.currentLightboxVideo?.path;
         },
 
+        _lbPlotShouldInlineLoad() {
+            return typeof window !== 'undefined'
+                && window.innerWidth <= 768
+                && this.lbPlotShowButton();
+        },
+
+        _lbPlotAutoLoad() {
+            if (!this._lbPlotShouldInlineLoad()) return;
+            this._lbPlotInline = true;
+            return this._lbPlotLoad();
+        },
+
         lbPlotToggle() {
             if (this.lbPlotOpen) {
                 this.lbPlotClose();
                 return;
             }
             this.lbPlotOpen = true;
+            if (
+                this._lbPlotInline
+                && this._lbPlotView.path === this.currentLightboxVideo?.path
+                && !this._lbPlotView.loading
+                && (this._lbPlotView.plot || this._lbPlotView.error)
+            ) {
+                return;
+            }
             return this._lbPlotLoad();
         },
 
@@ -73,6 +94,7 @@ export function stateLightboxPlot() {
                 this._lbPlotAbort = null;
             }
             this.lbPlotOpen = false;
+            this._lbPlotInline = false;
             this._lbPlotView = emptyPlotView();
         },
 
@@ -111,7 +133,7 @@ export function stateLightboxPlot() {
             // Use the generation plus the path as the stable request key.
             if (
                 gen !== this._lbPlotGen
-                || !this.lbPlotOpen
+                || (!this.lbPlotOpen && !this._lbPlotInline)
                 || this._lbPlotView.path !== path
             ) return;
             // `_lbPlotView` is Alpine's reactive proxy after assignment. Mutate
@@ -220,7 +242,7 @@ export function stateLightboxPlot() {
 
                 if (
                     generation === this._lbPlotGen
-                    && this.lbPlotOpen
+                    && (this.lbPlotOpen || this._lbPlotInline)
                     && this._lbPlotView.path === path
                 ) {
                     this._lbPlotApply(this._lbPlotView, data);
@@ -264,7 +286,7 @@ export function stateLightboxPlot() {
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 if (data.success !== true) throw new Error(data.error || 'API failed');
-                if (this._lbPlotView.path === path && this.lbPlotOpen) {
+                if (this._lbPlotView.path === path && (this.lbPlotOpen || this._lbPlotInline)) {
                     this._lbPlotApply(this._lbPlotView, data);
                 }
                 this.showToast(

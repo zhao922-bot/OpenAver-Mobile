@@ -983,13 +983,11 @@ export function stateActress() {
         },
 
         _visibleVideoTags() {
-            var tags = (this.currentLightboxVideo?.tags || '').split(',').filter(function(t) { return t.trim(); });
-            return this._videoChipsExpanded ? tags : tags.slice(0, this._chipsLimit());
+            return (this.currentLightboxVideo?.tags || '').split(',').filter(function(t) { return t.trim(); });
         },
 
         _videoTagsOverflow() {
-            var tags = (this.currentLightboxVideo?.tags || '').split(',').filter(function(t) { return t.trim(); });
-            return Math.max(0, tags.length - this._chipsLimit());
+            return 0;
         },
 
         // --- 117-T3/T4: Actress add panel（T5 queue stubs 仍在） ---

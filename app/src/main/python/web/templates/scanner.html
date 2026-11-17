@@ -38,6 +38,7 @@
         <div class="avlist-card-header">
             <div class="title">
                 <i class="bi bi-folder"></i> <span>{{ t('scanner.folder.section_title') }}</span>
+                <span class="scanner-section-badge" x-show="directories.length > 0" x-text="directories.length" x-cloak></span>
             </div>
             <div class="actions">
                 <button id="btnSelectFolder" class="btn-icon" @click="selectFolder()" title="{{ t('scanner.folder.select_title') }}">
@@ -81,7 +82,10 @@
                                 <span>{{ t('scanner.folder.readonly_label') }}</span>
                             </label>
                             <i class="bi bi-folder folder-icon"></i>
-                            <span class="folder-path" x-text="dirPath(dir)"></span>
+                            <span class="folder-path">
+                                <strong class="folder-leaf" x-text="dirLeafName(dir)"></strong>
+                                <span class="folder-full" x-text="dirPath(dir)"></span>
+                            </span>
                             <button class="btn btn-sm btn-outline btn-error btn-remove"
                                     @click="removeDirectory(idx)" title="{{ t('scanner.folder.remove_title') }}">
                                 <i class="bi bi-x"></i>
@@ -384,70 +388,27 @@
                 </span>
             </button>
             <div class="scanner-maintenance-body" x-show="maintenanceExpanded" x-collapse>
-        <!-- NFO Update Section (separate row) -->
-        <div class="nfo-update-row maintenance-row" id="statNeedUpdate" x-show="nfoUpdateVisible">
-            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
-                <i class="bi bi-exclamation-circle"></i>
-                {{ t('scanner.stats.nfo_prefix') }}
-                <button type="button" class="number-drilldown-number-btn" id="updateCount"
-                        :aria-expanded="open"
-                        @click="toggle(nfoUpdateDrilldownPayload)"
-                        x-text="nfoNeedUpdateCount"></button>
-                {{ t('scanner.stats.nfo_suffix') }}
-                {{ number_drilldown_panel() }}
+        <!-- Resume Pill (未完成提示) — 优先置顶提示 -->
+        <div class="nfo-update-row maintenance-row maintenance-alert maintenance-alert--accent" x-show="resumePillVisible">
+            <span class="nfo-badge">
+                <i class="bi bi-arrow-repeat"></i>
+                <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
+                <strong x-text="missingItems.length"></strong>
+                <span x-text="window.t('scanner.stats.missing_resume_suffix')"></span>
             </span>
-            <button class="btn-nfo-update" @click="openMaintenanceSourcePicker('nfo')" id="btnUpdate"
-                    x-bind:disabled="nfoUpdateButtonDisabled"
-                    x-html="nfoUpdateButtonText"
-                    title="{{ t('scanner.stats.nfo_update_title') }}">
-            </button>
-        </div>
-        <!-- r28: source-titled file and folder normalization -->
-        <div class="nfo-update-row maintenance-row maintenance-row-rename-source">
-            <div class="maintenance-copy">
-                <span class="maintenance-icon"><i class="bi bi-input-cursor-text"></i></span>
-                <span class="maintenance-text">
-                    <strong>{{ t('scanner.rename.source_row_title') }}</strong>
-                    <small>{{ t('scanner.rename.source_row_hint') }}</small>
-                </span>
-            </div>
-            <div class="maintenance-controls rename-source-controls">
-                <button class="btn-tag-preview"
-                        @click="openMaintenanceSourcePicker('rename')"
-                        :disabled="renamePreviewLoading || isBusy">
-                    <span x-show="renamePreviewLoading" class="loading loading-spinner loading-sm"></span>
-                    <i class="bi bi-eye" x-show="!renamePreviewLoading"></i>
-                    <span x-text="window.t(renamePreviewLoading
-                        ? 'scanner.rename.source_previewing'
-                        : 'scanner.rename.source_preview_btn')"></span>
+            <div class="maintenance-alert-actions">
+                <button class="btn-nfo-update maintenance-btn-accent" @click="openMaintenanceSourcePicker('resume')"
+                        x-bind:disabled="isBusy">
+                    {{ t('scanner.stats.missing_resume_btn') }}
+                </button>
+                <button class="btn btn-ghost btn-xs" @click="dismissResume()">
+                    {{ t('scanner.stats.missing_resume_dismiss') }}
                 </button>
             </div>
         </div>
 
-        <div class="nfo-update-row maintenance-row maintenance-row-tag"
-             >
-            <div class="maintenance-copy" :title="window.t('scanner.stats.tag_source_hint')">
-                <span class="maintenance-icon"><i class="bi bi-tags"></i></span>
-                <span class="maintenance-text">
-                    <strong>{{ t('scanner.stats.tag_source_label') }}</strong>
-                    <small x-show="!selectedTagSourceRequiresCf">{{ t('scanner.stats.tag_source_hint') }}</small>
-                    <small x-show="selectedTagSourceRequiresCf" x-cloak
-                           x-text="window.t('scanner.stats.tag_source_cf_hint')"></small>
-                </span>
-            </div>
-            <div class="maintenance-controls">
-                <div class="tag-source-actions">
-                    <button class="btn-nfo-update"
-                            @click="openMaintenanceSourcePicker('tag-update')"
-                            :disabled="isBusy || statTotal === 0"
-                            x-html="tagSourceUpdateButtonText"
-                            :title="window.t('scanner.stats.tag_source_hint')">
-                    </button>
-                </div>
-            </div>
-        </div>
-        <!-- T10: Missing NFO/Cover Pill -->
-        <div class="nfo-update-row maintenance-row" x-show="missingPillVisible">
+        <!-- Missing NFO/Cover Alert Row -->
+        <div class="nfo-update-row maintenance-row maintenance-alert" x-show="missingPillVisible">
             <span class="nfo-badge">
                 <i class="bi bi-file-earmark-x"></i>
                 <span x-show="missingBothCount > 0">
@@ -490,96 +451,148 @@
                     {{ t('scanner.stats.missing_suffix') }}
                 </span>
             </span>
-            <button class="btn-nfo-update" @click="openMaintenanceSourcePicker('enrich')"
+            <button class="btn-nfo-update maintenance-btn-accent" @click="openMaintenanceSourcePicker('enrich')"
                     x-bind:disabled="isBusy || missingItems.length === 0"
                     x-html="missingEnrichButtonText">
             </button>
         </div>
 
-        <!-- Missing-only backfill: titles and samples -->
-        <div class="nfo-update-row maintenance-row">
-            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
-                <i class="bi bi-translate"></i>
-                {{ t('scanner.stats.title_backfill_prefix') }}
-                <button type="button" class="number-drilldown-number-btn"
-                        :aria-expanded="open"
-                        @click="toggle(titleBackfillDrilldownPayload)"
-                        x-text="untranslatedTitleCount"></button>
-                {{ t('scanner.stats.title_backfill_suffix') }}
-                {{ number_drilldown_panel() }}
-            </span>
-            <button class="btn-nfo-update"
-                    @click="runTitleBackfill()"
-                    :disabled="titleBackfillDisabled"
-                    x-html="titleBackfillButtonText"
-                    :title="window.t('scanner.stats.title_backfill_hint')">
-            </button>
-        </div>
+        <!-- Quick Backfill 2x2 Tile Grid (NFO fields / Titles / Samples / Plots) -->
+        <div class="maintenance-backfill-grid">
+            <div class="nfo-update-row maintenance-row maintenance-tile" id="statNeedUpdate" x-show="nfoUpdateVisible">
+                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
+                    <span class="nfo-badge">
+                        <i class="bi bi-exclamation-circle"></i>
+                        <span>{{ t('scanner.stats.nfo_prefix') }}</span>
+                    </span>
+                    <button type="button" class="number-drilldown-number-btn maintenance-tile-count" id="updateCount"
+                            :aria-expanded="open"
+                            @click="toggle(nfoUpdateDrilldownPayload)"
+                            x-text="nfoNeedUpdateCount"></button>
+                    {{ number_drilldown_panel() }}
+                </div>
+                <button class="btn-nfo-update" @click="openMaintenanceSourcePicker('nfo')" id="btnUpdate"
+                        x-bind:disabled="nfoUpdateButtonDisabled"
+                        x-html="nfoUpdateButtonText"
+                        title="{{ t('scanner.stats.nfo_update_title') }}">
+                </button>
+            </div>
 
-        <div class="nfo-update-row maintenance-row">
-            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
-                <i class="bi bi-images"></i>
-                {{ t('scanner.stats.sample_backfill_prefix') }}
-                <button type="button" class="number-drilldown-number-btn"
-                        :aria-expanded="open"
-                        @click="toggle(sampleBackfillDrilldownPayload)"
-                        x-text="missingSampleCount"></button>
-                {{ t('scanner.stats.sample_backfill_suffix') }}
-                {{ number_drilldown_panel() }}
-            </span>
-            <button class="btn-nfo-update"
-                    @click="openMaintenanceSourcePicker('samples')"
-                    :disabled="sampleBackfillDisabled"
-                    x-html="sampleBackfillButtonText"
-                    :title="window.t('scanner.stats.sample_backfill_hint')">
-            </button>
-        </div>
+            <div class="nfo-update-row maintenance-row maintenance-tile">
+                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
+                    <span class="nfo-badge">
+                        <i class="bi bi-translate"></i>
+                        <span>{{ t('scanner.stats.title_backfill_prefix') }}</span>
+                    </span>
+                    <button type="button" class="number-drilldown-number-btn maintenance-tile-count"
+                            :aria-expanded="open"
+                            @click="toggle(titleBackfillDrilldownPayload)"
+                            x-text="untranslatedTitleCount"></button>
+                    {{ number_drilldown_panel() }}
+                </div>
+                <button class="btn-nfo-update"
+                        @click="runTitleBackfill()"
+                        :disabled="titleBackfillDisabled"
+                        x-html="titleBackfillButtonText"
+                        :title="window.t('scanner.stats.title_backfill_hint')">
+                </button>
+            </div>
 
-        <div class="nfo-update-row maintenance-row">
-            <span class="nfo-badge" x-data="numberDrilldown" @click.outside="close()">
-                <i class="bi bi-card-text"></i>
-                {{ t('scanner.stats.plot_backfill_prefix') }}
-                <button type="button" class="number-drilldown-number-btn"
-                        :aria-expanded="open"
-                        @click="toggle(plotBackfillDrilldownPayload)"
-                        x-text="missingPlotCount"></button>
-                {{ t('scanner.stats.plot_backfill_suffix') }}
-                {{ number_drilldown_panel() }}
-            </span>
-            <button class="btn-nfo-update"
-                    @click="openMaintenanceSourcePicker('plots')"
-                    :disabled="plotBackfillDisabled"
-                    x-html="plotBackfillButtonText"
-                    :title="window.t('scanner.stats.plot_backfill_hint')">
-            </button>
+            <div class="nfo-update-row maintenance-row maintenance-tile">
+                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
+                    <span class="nfo-badge">
+                        <i class="bi bi-images"></i>
+                        <span>{{ t('scanner.stats.sample_backfill_prefix') }}</span>
+                    </span>
+                    <button type="button" class="number-drilldown-number-btn maintenance-tile-count"
+                            :aria-expanded="open"
+                            @click="toggle(sampleBackfillDrilldownPayload)"
+                            x-text="missingSampleCount"></button>
+                    {{ number_drilldown_panel() }}
+                </div>
+                <button class="btn-nfo-update"
+                        @click="openMaintenanceSourcePicker('samples')"
+                        :disabled="sampleBackfillDisabled"
+                        x-html="sampleBackfillButtonText"
+                        :title="window.t('scanner.stats.sample_backfill_hint')">
+                </button>
+            </div>
+
+            <div class="nfo-update-row maintenance-row maintenance-tile">
+                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
+                    <span class="nfo-badge">
+                        <i class="bi bi-card-text"></i>
+                        <span>{{ t('scanner.stats.plot_backfill_prefix') }}</span>
+                    </span>
+                    <button type="button" class="number-drilldown-number-btn maintenance-tile-count"
+                            :aria-expanded="open"
+                            @click="toggle(plotBackfillDrilldownPayload)"
+                            x-text="missingPlotCount"></button>
+                    {{ number_drilldown_panel() }}
+                </div>
+                <button class="btn-nfo-update"
+                        @click="openMaintenanceSourcePicker('plots')"
+                        :disabled="plotBackfillDisabled"
+                        x-html="plotBackfillButtonText"
+                        :title="window.t('scanner.stats.plot_backfill_hint')">
+                </button>
                 <template x-for="batch in pendingPlotTranslations" :key="batch.batch_id">
                     <button type="button" class="btn btn-warning btn-sm"
                             :disabled="isBusy" :title="batch.numbers || ''"
                             @click="pendingPlotTranslation=batch; plotTranslationConfirmOpen = true"
                             x-text="window.t('scanner.plot_flow.pending', {n:batch.count}) + (batch.numbers ? ' · '+batch.numbers : '')"></button>
                 </template>
+            </div>
         </div>
 
-        <!-- T10: Resume Pill (未完成提示) -->
-        <div class="nfo-update-row maintenance-row" x-show="resumePillVisible">
-            <span class="nfo-badge">
-                <i class="bi bi-arrow-repeat"></i>
-                <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-                <strong x-text="missingItems.length"></strong>
-                <span x-text="window.t('scanner.stats.missing_resume_suffix')"></span>
-            </span>
-            <button class="btn-nfo-update" @click="openMaintenanceSourcePicker('resume')"
-                    x-bind:disabled="isBusy">
-                {{ t('scanner.stats.missing_resume_btn') }}
-            </button>
-            <button class="btn btn-ghost btn-xs" @click="dismissResume()">
-                {{ t('scanner.stats.missing_resume_dismiss') }}
-            </button>
+        <!-- Batch Structure & Full-Library Tools -->
+        <div class="maintenance-tools-list">
+        <!-- r28: source-titled file and folder normalization -->
+        <div class="nfo-update-row maintenance-row maintenance-row-tool maintenance-row-rename-source">
+            <div class="maintenance-copy">
+                <span class="maintenance-icon maintenance-icon--warn"><i class="bi bi-input-cursor-text"></i></span>
+                <span class="maintenance-text">
+                    <strong>{{ t('scanner.rename.source_row_title') }}</strong>
+                    <small>{{ t('scanner.rename.source_row_hint') }}</small>
+                </span>
+            </div>
+            <div class="maintenance-controls rename-source-controls">
+                <button class="btn-tag-preview"
+                        @click="openMaintenanceSourcePicker('rename')"
+                        :disabled="renamePreviewLoading || isBusy">
+                    <span x-show="renamePreviewLoading" class="loading loading-spinner loading-sm"></span>
+                    <i class="bi bi-eye" x-show="!renamePreviewLoading"></i>
+                    <span x-text="window.t(renamePreviewLoading
+                        ? 'scanner.rename.source_previewing'
+                        : 'scanner.rename.source_preview_btn')"></span>
+                </button>
+            </div>
+        </div>
+
+        <div class="nfo-update-row maintenance-row maintenance-row-tool maintenance-row-tag">
+            <div class="maintenance-copy" :title="window.t('scanner.stats.tag_source_hint')">
+                <span class="maintenance-icon maintenance-icon--warn"><i class="bi bi-tags"></i></span>
+                <span class="maintenance-text">
+                    <strong>{{ t('scanner.stats.tag_source_label') }}</strong>
+                    <small x-show="!selectedTagSourceRequiresCf">{{ t('scanner.stats.tag_source_hint') }}</small>
+                    <small x-show="selectedTagSourceRequiresCf" x-cloak
+                           x-text="window.t('scanner.stats.tag_source_cf_hint')"></small>
+                </span>
+            </div>
+            <div class="maintenance-controls">
+                <div class="tag-source-actions">
+                    <button class="btn-nfo-update"
+                            @click="openMaintenanceSourcePicker('tag-update')"
+                            :disabled="isBusy || statTotal === 0"
+                            x-html="tagSourceUpdateButtonText"
+                            :title="window.t('scanner.stats.tag_source_hint')">
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- T2(40c): Jellyfin 圖片檢查觸發列 -->
-        <!-- T3(40c) Codex fix: x-show 改為 !jellyfinImageVisible，done 狀態仍顯示觸發列 -->
-        <div class="nfo-update-row maintenance-row"
+        <div class="nfo-update-row maintenance-row maintenance-row-tool"
              x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
             <span class="nfo-badge">
                 <i class="bi bi-image"></i>
@@ -605,7 +618,7 @@
                   class="loading loading-spinner loading-sm"></span>
         </div>
         <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
-        <div class="nfo-update-row maintenance-row" x-show="jellyfinImageVisible">
+        <div class="nfo-update-row maintenance-row maintenance-row-tool" x-show="jellyfinImageVisible">
             <span class="nfo-badge" x-data="helpPopover">
                 <i class="bi bi-image"></i>
                 {{ t('scanner.stats.jellyfin_prefix') }}
@@ -640,6 +653,7 @@
                     x-html="jellyfinImageButtonText"
                     title="{{ t('scanner.stats.jellyfin_update_title') }}">
             </button>
+        </div>
         </div>
             </div>
         </div>
