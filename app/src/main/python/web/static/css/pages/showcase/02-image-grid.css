@@ -9,16 +9,20 @@
 :is(#ds-gallery-components,.ds-gallery-composition) .showcase-grid.shape-poster .av-card-preview .av-card-preview-img {aspect-ratio:var(--poster-crop-ratio,.71);}
 :is(#ds-gallery-components,.ds-gallery-composition) .showcase-grid.shape-poster .av-card-preview:not(.hero-card) .av-card-preview-img img {object-position:right center;}
 :is(#ds-gallery-components,.ds-gallery-composition) .showcase-grid .av-card-preview.hero-card .av-card-preview-img img {object-fit:cover;transform-origin:center;}
-:is(#ds-gallery-components,.ds-gallery-composition) .av-card-preview {border:1px solid var(--stroke-subtle);border-radius:12px;background:var(--surface-1);box-shadow:none;transform:none;}
-.showcase-container[data-browse-columns="5"] :is(.showcase-grid,.actress-grid) {gap:6px;}
+:is(#ds-gallery-components,.ds-gallery-composition) .av-card-preview {border:none;border-radius:0;background:transparent;box-shadow:none;overflow:visible;transform:none;}
+:is(#ds-gallery-components,.ds-gallery-composition) .av-card-preview:hover {border-color:transparent;box-shadow:none;transform:none;}
+:is(#ds-gallery-components,.ds-gallery-composition) .av-card-preview-img {border:1px solid var(--stroke-subtle);border-radius:14px;background:var(--surface-1);box-shadow:var(--elev-card);overflow:hidden;transition:border-color var(--fluent-duration-fast) var(--fluent-ease-standard),box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);}
+:is(#ds-gallery-components,.ds-gallery-composition) .av-card-preview:hover .av-card-preview-img {border-color:color-mix(in oklch,var(--accent) 55%,var(--stroke-default));box-shadow:var(--elev-float);}
+.showcase-container[data-browse-columns="5"] :is(.showcase-grid,.actress-grid) {gap:8px 6px;}
 .showcase-container[data-browse-columns="5"] .showcase-grid :is(.av-actress,.cover-badges,.av-card-preview-overlay) {display:none;}
 .showcase-container[data-browse-columns="5"] .showcase-grid .card-info {display:none;}
 .showcase-container[data-browse-columns="5"] .cover-badge {font-size:.625rem;padding:2px;}
 .showcase-container[data-browse-columns="5"] .cover-badges-part {right:2px;bottom:2px;}
-.showcase-container[data-browse-columns="5"] .showcase-grid .av-card-preview {border-radius:8px;}
+.showcase-container[data-browse-columns="5"] .showcase-grid .av-card-preview {border-radius:0;}
+.showcase-container[data-browse-columns="5"] .showcase-grid .av-card-preview-img {border-radius:10px;}
 @media(max-width:480px) {
- .showcase-container :is(.showcase-grid,.actress-grid) {gap:8px;}
- .showcase-container[data-browse-columns="5"] :is(.showcase-grid,.actress-grid) {gap:4px;padding-inline:8px;}
+ .showcase-container :is(.showcase-grid,.actress-grid) {gap:14px 10px;}
+ .showcase-container[data-browse-columns="5"] :is(.showcase-grid,.actress-grid) {gap:10px 5px;padding-inline:8px;}
  .showcase-container[data-browse-columns="3"] .showcase-grid .av-actress {display:none;}
  :is(#ds-gallery-components,.ds-gallery-composition) .actress-card-footer .footer-default .actress-sort-indicator {display:none;}
 }

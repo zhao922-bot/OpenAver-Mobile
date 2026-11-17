@@ -1,14 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#17191D</color>
-    <color name="surface">#212429</color>
-    <color name="surface_high">#2B2F35</color>
-    <color name="text_primary">#F0F1F3</color>
-    <color name="text_secondary">#B8C0CB</color>
-    <color name="text_muted">#A0AAB8</color>
-    <color name="accent">#FFA96D</color>
-    <color name="accent_mint">#5DE1C1</color>
-    <color name="warm">#FFBE78</color>
-    <color name="danger">#FF7C86</color>
-    <color name="icon_bg">#2B2F35</color>
+    <!-- Cinema Dark (dim) shared tokens -->
+    <color name="bg">#111317</color>
+    <color name="surface">#1A1D24</color>
+    <color name="surface_high">#232832</color>
+    <color name="text_primary">#F3F4F6</color>
+    <color name="text_secondary">#B4BCC9</color>
+    <color name="text_muted">#8892A2</color>
+    <color name="accent">#FF8A4C</color>
+    <color name="accent_mint">#34D399</color>
+    <color name="warm">#FBBF24</color>
+    <color name="danger">#F87171</color>
+    <color name="icon_bg">#232832</color>
+
+    <!-- Clean Light tokens (for theme-synced native bottom sheet & setup) -->
+    <color name="bg_light">#F5F6F8</color>
+    <color name="surface_light">#FFFFFF</color>
+    <color name="surface_high_light">#ECEFF3</color>
+    <color name="text_primary_light">#181B20</color>
+    <color name="text_secondary_light">#4D5562</color>
+    <color name="text_muted_light">#747D8C</color>
+    <color name="accent_light">#D14E12</color>
+    <color name="danger_light">#DC2626</color>
 </resources>

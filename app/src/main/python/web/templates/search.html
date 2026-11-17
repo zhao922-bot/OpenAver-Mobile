@@ -67,7 +67,7 @@
                         <i class="bi bi-box-arrow-up-right"></i>
                     </button>
                     <!-- TASK-140-T6: 播放 -->
-                    <button class="lb-action-btn"
+                    <button class="lb-action-btn lb-cover-play-btn"
                             @click="window.openLocalVideoStatus ? window.openLocalVideoStatus(currentLightboxVideo()?._localStatus) : window.openVideoPlayer?.(currentLightboxVideo()?._localStatus?.paths?.[0] || '')"
                             x-show="!actressLightboxMode() && (cardActionState(currentLightboxVideo()) === 'play' || cardActionState(currentLightboxVideo()) === 'play+folder')"
                             data-tooltip="{{ t('search.action.play') }}" aria-label="{{ t('search.action.play') }}">
@@ -121,6 +121,14 @@
                             x-show="(currentLightboxVideo()?.sample_images || []).length > 0"
                             @click="openSampleGallery((currentLightboxVideo()?.sample_images || []).map((url, i) => '/api/proxy-image?url=' + encodeURIComponent(currentLightboxVideo()?.preview_sample_images?.[i] || url)), 0)"
                             x-text="t('search.gallery.sample_prefix') + ' (' + (currentLightboxVideo()?.sample_images || []).length + ')'">
+                    </button>
+                </div>
+                <div class="lb-mobile-cta-row"
+                     x-show="!actressLightboxMode() && (cardActionState(currentLightboxVideo()) === 'play' || cardActionState(currentLightboxVideo()) === 'play+folder')">
+                    <button type="button" class="lb-mobile-play-cta"
+                            @click.stop="window.openLocalVideoStatus ? window.openLocalVideoStatus(currentLightboxVideo()?._localStatus) : window.openVideoPlayer?.(currentLightboxVideo()?._localStatus?.paths?.[0] || '')">
+                        <i class="bi bi-play-fill" aria-hidden="true"></i>
+                        <span>{{ t('search.action.play') }}</span>
                     </button>
                 </div>
                 <!-- Row 3: Actresses -->

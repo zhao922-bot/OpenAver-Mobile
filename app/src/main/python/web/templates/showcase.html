@@ -657,7 +657,7 @@
                             </span>
                             <span class="av-actress"><span x-text="video.actresses || t('showcase.grid.unknown_actor')"></span><span class="lb-actor-age" x-show="singleActorAge(video) != null" x-text="' (' + singleActorAge(video) + t('showcase.unit.age_suffix') + ')'"></span></span>
                         </div>
-                        <div class="native-card-title" x-text="video.title || t('showcase.grid.unknown_title')"></div>
+                        <div class="native-card-title" x-text="cardDisplayTitle(video)"></div>
                     </div>
                     <!-- Card Info 展開區 (M3i) — footer 同層，展開時撐高卡片 -->
                     <div class="card-info" x-cloak @click.stop>
@@ -1180,7 +1180,7 @@
                                  similar-exit mode (path undefined) — regular lightbox items always have
                                  path so existing behavior is unaffected. -->
                             <div class="cover-actions" x-show="!!currentLightboxVideo?.path" :class="{'cover-actions--focal-edit': _maskVisible}">
-                                <button class="lb-action-btn" x-show="!_maskVisible" @click="playVideo(currentLightboxVideo)" data-tooltip="{{ t('showcase.action.play') }}" aria-label="{{ t('showcase.action.play') }}">
+                                <button class="lb-action-btn lb-cover-play-btn" x-show="!_maskVisible" @click="playVideo(currentLightboxVideo)" data-tooltip="{{ t('showcase.action.play') }}" aria-label="{{ t('showcase.action.play') }}">
                                     <i class="bi bi-play-fill"></i>
                                 </button>
                                 <button class="lb-action-btn js-open-folder" x-show="!_maskVisible" @click="openLocal(currentLightboxVideo?.path)" data-tooltip="{{ t('search.action.open_folder') }}" aria-label="{{ t('search.action.open_folder') }}">
@@ -1281,6 +1281,13 @@
                                     </button>
                                     <span x-show="_fetchSamplesLoading" x-text="t('showcase.samples.fetching')"></span>
                                 </div>
+                            </div>
+                            <div class="lb-mobile-cta-row" x-show="!!currentLightboxVideo?.path && !_maskVisible">
+                                <button type="button" class="lb-mobile-play-cta"
+                                        @click.stop="playVideo(currentLightboxVideo)">
+                                    <i class="bi bi-play-fill" aria-hidden="true"></i>
+                                    <span>{{ t('showcase.action.play') }}</span>
+                                </button>
                             </div>
                             <div class="lb-faces">
                             <div class="lb-info-face"

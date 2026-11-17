@@ -650,6 +650,16 @@ export function stateBase() {
         formatPartLabel,
         singleActorAge,
 
+        cardDisplayTitle(video) {
+            const raw = String(video?.title || '').trim();
+            if (!raw) return window.t('showcase.grid.unknown_title');
+            const num = String(video?.number || '').trim();
+            if (!num) return raw;
+            const escaped = num.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const cleaned = raw.replace(new RegExp(`^\\[?${escaped}\\]?[\\s:：\\-–—]*`, 'i'), '').trim();
+            return cleaned || raw;
+        },
+
         // 格式化檔案大小（bytes → GB/MB）
         formatSize(bytes) {
             if (!bytes || bytes === 0) return window.t('showcase.grid.unknown_size');

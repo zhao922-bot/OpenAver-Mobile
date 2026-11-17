@@ -1,17 +1,23 @@
 /* ==================== Card Footer Switch (M3e) ==================== */
 
-/* Footer 容器：支援雙層切換 */
+/* Footer 容器：圖片無外框、文字區直落下方，手機端標題優先於番號 */
 .showcase-grid .av-card-preview-footer {
-    display: block;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 2px;
     position: relative;
     overflow: hidden;
     height: auto;
-    padding: 8px;
+    padding: 7px 2px 2px;
 }
 
 :is(#ds-gallery-components, .ds-gallery-composition) .showcase-grid .av-card-preview-footer {
-    display: block;
-    padding: 10px;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 2px;
+    padding: 7px 2px 2px;
 }
 .showcase-grid .footer-default { min-width: 0; }
 .showcase-grid .footer-default .av-actress { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%; }
@@ -110,35 +116,29 @@
 
 
 /* Film titles are visible on touch screens without requiring hover. */
-.showcase-grid .av-card-preview-footer .footer-default { opacity: 1; }
-.showcase-grid .native-card-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; font-size: .8125rem; line-height: 1.4; color: var(--text-secondary); margin-top: 4px; }
-.showcase-grid .av-num { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.showcase-container[data-browse-columns="5"] .showcase-grid .av-card-preview-footer { padding: 6px 4px; }
-.showcase-container[data-browse-columns="5"] .showcase-grid .native-card-title { -webkit-line-clamp: 2; }
+.showcase-grid .av-card-preview-footer .footer-default { opacity: 1; font-size: .75rem; color: var(--text-muted); }
+.showcase-grid .native-card-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; font-size: .825rem; font-weight: 550; line-height: 1.35; color: var(--text-primary); margin-top: 0; }
+.showcase-grid .av-num { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .72rem; color: var(--accent); font-weight: 600; letter-spacing: .01em; }
+.showcase-container[data-browse-columns="5"] .showcase-grid .av-card-preview-footer { padding: 4px 2px 1px; gap: 0; }
+.showcase-container[data-browse-columns="5"] .showcase-grid .native-card-title { display: none; }
 
-/* Dense layouts show the entire ID, wrapping long IDs at hyphens or digits. */
+/* Dense layouts keep 1-line title + compact number without clutter. */
 :is(#ds-gallery-components,.ds-gallery-composition)[data-browse-columns="3"] .showcase-grid .av-num {
-    font-size: .75rem;
+    font-size: .7rem;
 }
 :is(#ds-gallery-components,.ds-gallery-composition)[data-browse-columns="5"] .showcase-grid .av-num {
-    font-size: clamp(9px, .625rem, 12px);
-}
-:is(#ds-gallery-components,.ds-gallery-composition):is([data-browse-columns="3"],[data-browse-columns="5"]) .showcase-grid .av-num {
-    white-space: normal;
-    overflow-wrap: anywhere;
-    overflow: visible;
-    text-overflow: clip;
-    line-height: 1.35;
+    font-size: clamp(9.5px, .64rem, 11.5px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.25;
 }
 :is(#ds-gallery-components,.ds-gallery-composition)[data-browse-columns="3"] .showcase-grid .av-card-preview-footer {
-    padding: 8px 6px;
+    padding: 5px 2px 1px;
 }
 :is(#ds-gallery-components,.ds-gallery-composition)[data-browse-columns="5"] .showcase-grid .av-card-preview-footer {
-    padding: 6px 3px;
+    padding: 4px 2px 1px;
 }
 .showcase-container[data-browse-columns="3"] .showcase-grid .native-card-title {
-    font-size: .75rem;
-}
-.showcase-container[data-browse-columns="5"] .showcase-grid .native-card-title {
-    font-size: .625rem;
+    font-size: .74rem;
 }

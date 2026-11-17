@@ -12,9 +12,13 @@ final class NativeUiTheme {
 
     private NativeUiTheme() {}
 
-    static int dialogStyle(Context context) {
+    static boolean isLight(Context context) {
         return "light".equals(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getString(KEY, "dim"))
+                .getString(KEY, "dim"));
+    }
+
+    static int dialogStyle(Context context) {
+        return isLight(context)
                 ? R.style.Theme_OpenAverMobile_Dialog_Light
                 : R.style.Theme_OpenAverMobile_Dialog;
     }
@@ -23,7 +27,7 @@ final class NativeUiTheme {
         if (!"light".equals(theme) && !"dim".equals(theme)) return;
         activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, theme).apply();
         boolean light = "light".equals(theme);
-        int color = Color.parseColor(light ? "#FFFFFF" : "#212429");
+        int color = Color.parseColor(light ? "#FFFFFF" : "#1A1D24");
         activity.getWindow().setStatusBarColor(color);
         activity.getWindow().setNavigationBarColor(color);
         View decor = activity.getWindow().getDecorView();

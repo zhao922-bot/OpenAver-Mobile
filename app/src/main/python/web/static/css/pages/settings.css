@@ -1873,30 +1873,30 @@ html.theme-transition-active::view-transition-new(root) {
 #settings-components .settings-tabs {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 0.35rem;
+    gap: 0.3rem;
     margin: 0 0 0.85rem;
-    padding: 0.35rem;
-    border: 1px solid var(--stroke-default);
-    border-radius: calc(var(--fluent-radius-md) + 0.2rem);
-    background: color-mix(in oklch, var(--surface-1) 88%, transparent);
+    padding: 0.28rem;
+    border: 1px solid var(--stroke-subtle);
+    border-radius: 14px;
+    background: var(--surface-2);
     box-shadow: none;
     backdrop-filter: none;
 }
 
 #settings-components .settings-tab {
     min-width: 0;
-    min-height: 3rem;
+    min-height: 2.75rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.4rem;
-    padding: 0.55rem 0.7rem;
+    padding: 0.45rem 0.65rem;
     border: 1px solid transparent;
-    border-radius: var(--fluent-radius-md);
+    border-radius: 10px;
     color: var(--text-secondary);
     background: transparent;
     font-size: 0.8rem;
-    font-weight: 700;
+    font-weight: 650;
     line-height: 1.2;
     white-space: normal;
     overflow-wrap: anywhere;
@@ -1904,6 +1904,7 @@ html.theme-transition-active::view-transition-new(root) {
         color var(--fluent-duration-fast) var(--fluent-ease-standard),
         background var(--fluent-duration-fast) var(--fluent-ease-standard),
         border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+        box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard),
         transform var(--fluent-duration-fast) var(--fluent-ease-standard);
 }
 
@@ -1917,13 +1918,10 @@ html.theme-transition-active::view-transition-new(root) {
 }
 
 #settings-components .settings-tab.is-active {
-    color: var(--accent-contrast, #fff);
-    border-color: color-mix(in oklch, var(--accent) 84%, #000 16%);
-    background:
-        linear-gradient(145deg,
-            color-mix(in oklch, var(--accent) 92%, #fff 8%),
-            color-mix(in oklch, var(--accent) 82%, #000 18%));
-    box-shadow: none;
+    color: var(--accent);
+    border-color: var(--stroke-default);
+    background: var(--surface-1);
+    box-shadow: var(--elev-card, none);
 }
 
 #settings-components .settings-tab:focus-visible {
@@ -1989,9 +1987,21 @@ html.theme-transition-active::view-transition-new(root) {
         height: 48px;
     }
 
+    #settings-components .settings-appearance-controls .settings-locale-toggle .locale-toggle-btn,
+    #settings-components .settings-appearance-controls .settings-theme-toggle .theme-toggle-btn {
+        border-radius: 999px;
+        border: 1px solid var(--stroke-subtle);
+        background: var(--surface-1);
+        box-shadow: var(--elev-card, none);
+    }
+
     #settings-components .settings-appearance-controls .font-size-control {
         height: 48px;
-        padding: 0;
+        padding: 0 3px;
+        border-radius: 999px;
+        border: 1px solid var(--stroke-subtle);
+        background: var(--surface-1);
+        box-shadow: var(--elev-card, none);
     }
 
     #settings-components .settings-appearance-controls .settings-theme-toggle {
@@ -2012,18 +2022,18 @@ html.theme-transition-active::view-transition-new(root) {
         overscroll-behavior-x: contain;
         position: relative;
         z-index: auto;
-        gap: 0.2rem;
+        gap: 0.25rem;
         padding: 0.25rem;
     }
 
     #settings-components .settings-tab {
         flex: 0 0 auto;
         flex-direction: row;
-        gap: 0.2rem;
-        min-height: 3.5rem;
-        padding: 0.4rem 0.2rem;
-        font-size: 0.68rem;
-        line-height: 1.25;
+        gap: 0.3rem;
+        min-height: 3rem;
+        padding: 0.35rem 0.65rem;
+        font-size: 0.74rem;
+        line-height: 1.2;
         text-align: center;
     }
 
@@ -2087,7 +2097,8 @@ html.theme-transition-active::view-transition-new(root) {
     #settings-components .settings-mobile-save-btn {
         min-height: 40px;
         height: 40px;
-        padding: 0 14px;
+        padding: 0 16px;
+        border-radius: 999px;
         font-size: 13px;
         line-height: 1;
         white-space: nowrap;
@@ -2104,8 +2115,8 @@ html.theme-transition-active::view-transition-new(root) {
     }
 
     #settings-components .settings-tab {
-        min-height: 3.65rem;
-        font-size: 0.63rem;
+        min-height: 3rem;
+        font-size: 0.72rem;
     }
 
     #settings-components .settings-tab i {

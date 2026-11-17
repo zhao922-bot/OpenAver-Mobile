@@ -218,6 +218,8 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "web/static/css/pages/scanner.css",
             "web/static/css/pages/search.css",
             "web/static/css/pages/settings.css",
+            "web/static/favicon.svg",
+            "web/static/logo.svg",
             "web/static/js/components/mobile-back.js",
             "web/static/js/components/auto-organize-panel.js",
             "web/static/js/components/number-drilldown.js",

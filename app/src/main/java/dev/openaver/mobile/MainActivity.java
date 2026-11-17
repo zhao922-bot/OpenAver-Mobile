@@ -47,6 +47,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -1008,11 +1009,95 @@ public final class MainActivity extends Activity {
         dialog.setContentView(R.layout.dialog_web_menu);
         dialog.setCanceledOnTouchOutside(true);
 
+        boolean light = NativeUiTheme.isLight(this);
+        int textPrimary = getColor(light ? R.color.text_primary_light : R.color.text_primary);
+        int textMuted = getColor(light ? R.color.text_muted_light : R.color.text_muted);
+        int textSecondary = getColor(light ? R.color.text_secondary_light : R.color.text_secondary);
+        int accent = getColor(light ? R.color.accent_light : R.color.accent);
+        int danger = getColor(light ? R.color.danger_light : R.color.danger);
+        int dividerColor = light ? 0x18181B20 : 0x14FFFFFF;
+        int itemBg = light ? R.drawable.bg_sheet_item_light : R.drawable.bg_sheet_item;
+
+        dialog.findViewById(R.id.menuSheetCard).setBackgroundResource(
+                light ? R.drawable.bg_sheet_light : R.drawable.bg_sheet
+        );
+        dialog.findViewById(R.id.menuDragHandle).setBackgroundResource(
+                light ? R.drawable.bg_drag_handle_light : R.drawable.bg_drag_handle
+        );
+        ((TextView) dialog.findViewById(R.id.menuTitle)).setTextColor(textPrimary);
+
         TextView serverText = dialog.findViewById(R.id.menuServer);
         serverText.setText(getString(
                 R.string.menu_connected_to,
                 LOCAL_HOST + ":" + localPort
         ));
+        serverText.setTextColor(textMuted);
+
+        dialog.findViewById(R.id.menuDivider1).setBackgroundColor(dividerColor);
+        dialog.findViewById(R.id.menuDivider2).setBackgroundColor(dividerColor);
+
+        int[] rowIds = {
+                R.id.menuRefresh,
+                R.id.menuScanner,
+                R.id.menuStorageSettings,
+                R.id.menuStorageTree,
+                R.id.menuAbout,
+                R.id.menuExit
+        };
+        for (int rowId : rowIds) {
+            dialog.findViewById(rowId).setBackgroundResource(itemBg);
+        }
+
+        int[] labelIds = {
+                R.id.menuLabelRefresh,
+                R.id.menuLabelScanner,
+                R.id.menuLabelStorageSettings,
+                R.id.menuLabelStorageTree,
+                R.id.menuLabelAbout
+        };
+        for (int labelId : labelIds) {
+            ((TextView) dialog.findViewById(labelId)).setTextColor(textPrimary);
+        }
+        ((TextView) dialog.findViewById(R.id.menuLabelExit)).setTextColor(danger);
+
+        int[] iconIds = {
+                R.id.menuIconRefresh,
+                R.id.menuIconScanner,
+                R.id.menuIconStorage,
+                R.id.menuIconTree,
+                R.id.menuIconAbout
+        };
+        for (int iconId : iconIds) {
+            ((ImageView) dialog.findViewById(iconId)).setColorFilter(accent);
+        }
+        ((ImageView) dialog.findViewById(R.id.menuIconExit)).setColorFilter(danger);
+
+        int[] chevronIds = {
+                R.id.menuChevronRefresh,
+                R.id.menuChevronScanner,
+                R.id.menuChevronStorage,
+                R.id.menuChevronTree,
+                R.id.menuChevronAbout
+        };
+        for (int chevronId : chevronIds) {
+            ((ImageView) dialog.findViewById(chevronId)).setColorFilter(textMuted);
+        }
+
+        TextView treeDetail = dialog.findViewById(R.id.menuStorageTreeDetail);
+        if (StorageBridge.hasTreeAccess()) {
+            String desc = StorageBridge.treeDescription();
+            if (desc != null && !desc.isEmpty()) {
+                treeDetail.setText(desc);
+                treeDetail.setTextColor(light ? 0xFF059669 : getColor(R.color.accent_mint));
+                treeDetail.setVisibility(View.VISIBLE);
+            }
+        }
+
+        Button cancelButton = dialog.findViewById(R.id.menuCancel);
+        cancelButton.setBackgroundResource(
+                light ? R.drawable.bg_ghost_button_light : R.drawable.bg_ghost_button
+        );
+        cancelButton.setTextColor(textSecondary);
 
         dialog.findViewById(R.id.menuRefresh).setOnClickListener(view -> {
             dialog.dismiss();
@@ -1038,14 +1123,14 @@ public final class MainActivity extends Activity {
             dialog.dismiss();
             finish();
         });
-        dialog.findViewById(R.id.menuCancel).setOnClickListener(view -> dialog.dismiss());
+        cancelButton.setOnClickListener(view -> dialog.dismiss());
 
         Window window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             WindowManager.LayoutParams params = window.getAttributes();
-            params.dimAmount = 0.72f;
+            params.dimAmount = light ? 0.45f : 0.72f;
             window.setAttributes(params);
         }
         dialog.show();

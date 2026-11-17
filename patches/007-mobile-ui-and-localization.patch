@@ -18595,25 +18595,25 @@
 +
 --- /dev/null
 +++ b/web/static/css/pages/help-mobile.css
-@@ -0,0 +1,615 @@
+@@ -0,0 +1,605 @@
 +.mobile-help {
-+    --mobile-help-ink: #102a2a;
-+    --mobile-help-teal: #0f766e;
-+    --mobile-help-teal-soft: #d9f3ec;
-+    --mobile-help-amber: #d97706;
-+    --mobile-help-paper: color-mix(in oklch, var(--surface-1) 92%, #e9f4ef 8%);
-+    --mobile-help-border: color-mix(in oklch, var(--stroke-default) 82%, var(--mobile-help-teal) 18%);
++    --mobile-help-ink: var(--text-primary);
++    --mobile-help-teal: var(--accent);
++    --mobile-help-teal-soft: var(--accent-soft);
++    --mobile-help-amber: var(--accent);
++    --mobile-help-paper: var(--surface-1);
++    --mobile-help-border: var(--stroke-subtle);
 +    min-height: 100%;
 +    padding: 0 0 2rem;
 +    background: var(--surface-0);
 +}
 +
 +[data-theme="dim"] .mobile-help {
-+    --mobile-help-ink: #e7f6f2;
-+    --mobile-help-teal: #63d6c6;
-+    --mobile-help-teal-soft: #173b37;
-+    --mobile-help-amber: #f5b85b;
-+    --mobile-help-paper: color-mix(in oklch, var(--surface-1) 90%, #0e2725 10%);
++    --mobile-help-ink: var(--text-primary);
++    --mobile-help-teal: var(--accent);
++    --mobile-help-teal-soft: var(--accent-soft);
++    --mobile-help-amber: var(--accent);
++    --mobile-help-paper: var(--surface-1);
 +}
 +
 +.mobile-help__inner {
@@ -18629,21 +18629,14 @@
 +    gap: 1rem;
 +    padding: 1.35rem;
 +    color: var(--text-primary);
++    border: 1px solid var(--stroke-subtle);
 +    border-radius: 1.35rem;
 +    background: var(--surface-1);
-+    box-shadow: none;
++    box-shadow: var(--elev-card, none);
 +}
 +
 +.mobile-help-hero::after {
-+    content: '';
-+    position: absolute;
-+    inset: auto -4rem -6rem auto;
-+    width: 15rem;
-+    height: 15rem;
-+    border: 1px solid rgb(255 255 255 / 14%);
-+    border-radius: 50%;
-+    box-shadow: none;
-+    pointer-events: none;
++    display: none;
 +}
 +
 +.mobile-help-hero__copy {
@@ -18657,10 +18650,10 @@
 +    gap: 0.4rem;
 +    min-height: 1.75rem;
 +    padding: 0.2rem 0.65rem;
-+    border: 1px solid rgb(255 255 255 / 18%);
++    border: 1px solid color-mix(in oklch, var(--accent) 28%, var(--stroke-subtle));
 +    border-radius: 999px;
-+    color: #9ce9db;
-+    background: rgb(255 255 255 / 7%);
++    color: var(--accent);
++    background: var(--accent-soft);
 +    font-size: 0.75rem;
 +    font-weight: 700;
 +    letter-spacing: 0.04em;
@@ -18715,10 +18708,10 @@
 +    gap: 0.45rem;
 +    min-height: 3rem;
 +    padding: 0.65rem 0.85rem;
-+    border: 1px solid rgb(255 255 255 / 22%);
++    border: 1px solid var(--stroke-default);
 +    border-radius: 0.85rem;
 +    color: var(--text-primary);
-+    background: rgb(255 255 255 / 8%);
++    background: var(--surface-2);
 +    font-size: 0.86rem;
 +    font-weight: 700;
 +    text-decoration: none;
@@ -18829,17 +18822,14 @@
 +}
 +
 +.mobile-help-tab.is-active {
-+    color: #f5fffc;
-+    border-color: color-mix(in oklch, var(--mobile-help-teal) 75%, #000 25%);
-+    background:
-+        linear-gradient(145deg,
-+            color-mix(in oklch, var(--mobile-help-teal) 94%, #fff 6%),
-+            color-mix(in oklch, var(--mobile-help-teal) 76%, #000 24%));
-+    box-shadow: none;
++    color: var(--action-text);
++    border-color: var(--action-fill);
++    background: var(--action-fill);
++    box-shadow: var(--elev-card, none);
 +}
 +
 +.mobile-help-tab.is-active i {
-+    color: #d5fff6;
++    color: var(--action-text);
 +}
 +
 +.mobile-help-tab:focus-visible {
@@ -19240,16 +19230,20 @@
  }
  /* stylelint-enable color-no-hex */
  
-@@ -37,11 +43,9 @@
+@@ -35,13 +41,11 @@
+ 
+ /* Fluent Card Styling (settings.css:19-46) */
  .insights-container .card {
-     border: 1px solid var(--stroke-default);
-     border-radius: var(--radius-lg);
+-    border: 1px solid var(--stroke-default);
+-    border-radius: var(--radius-lg);
 -    box-shadow:
 -        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
 -        var(--fluent-shadow-4);
 -    overflow: hidden;
 -    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
-+    box-shadow: none;
++    border: 1px solid var(--stroke-subtle);
++    border-radius: 16px;
++    box-shadow: var(--elev-card, none);
 +    overflow: hidden;
 +    background: var(--surface-1);
      display: flex;
@@ -19340,7 +19334,22 @@
      align-items: baseline;
      gap: 0.375rem;
  }
-@@ -164,9 +156,7 @@
+@@ -149,7 +141,13 @@
+ 
+ .insights-container #tileCount.is-clickable {
+     cursor: pointer;
+-    transition: box-shadow var(--duration-fast) var(--fluent-ease-standard);
++    transition: box-shadow var(--duration-fast) var(--fluent-ease-standard),
++                border-color var(--duration-fast) var(--fluent-ease-standard);
++}
++
++.insights-container #tileCount.is-clickable:hover {
++    border-color: color-mix(in oklch, var(--accent) 45%, var(--stroke-default));
++    box-shadow: var(--elev-float, none);
+ }
+ 
+ .insights-container #tileCount.is-clickable.is-scoped {
+@@ -164,9 +162,7 @@
          color-mix(in oklch, var(--color-primary) 6%, transparent),
          color-mix(in oklch, var(--color-primary) 6%, transparent)
      );
@@ -19351,7 +19360,7 @@
  }
  
  /* 「↗」只在可點時顯示（純符號、aria-hidden；不用 x-show，FE-ALPINE-17） */
-@@ -206,10 +196,10 @@
+@@ -206,10 +202,10 @@
  }
  
  .insights-container .insights-muted-big {
@@ -19364,7 +19373,7 @@
      letter-spacing: -0.01em;
  }
  
-@@ -230,6 +220,7 @@
+@@ -230,6 +226,7 @@
  }
  
  .insights-container .insights-focus-name {
@@ -19372,7 +19381,7 @@
      overflow: hidden;
      text-overflow: ellipsis;
      white-space: nowrap;
-@@ -237,8 +228,8 @@
+@@ -237,8 +234,8 @@
  }
  
  .insights-container .insights-focus-avatar {
@@ -19383,7 +19392,7 @@
      border-radius: 50%;
      flex: 0 0 auto;
      overflow: hidden;
-@@ -327,9 +318,57 @@
+@@ -327,9 +324,57 @@
  }
  
  .insights-container .donut-legend {
@@ -19441,7 +19450,7 @@
  }
  
  .insights-container .donut-chart-wrap {
-@@ -746,7 +785,7 @@
+@@ -746,7 +791,7 @@
      pointer-events: none;
      border-radius: var(--radius-md);
      overflow: hidden;
@@ -19450,7 +19459,7 @@
      background: var(--surface-1);
      border: 1px solid var(--stroke-default);
      box-sizing: border-box;
-@@ -862,8 +901,20 @@
+@@ -862,8 +907,20 @@
  }
  
  .insights-container .gantt-card .card-head {
@@ -19473,7 +19482,7 @@
  }
  
  .insights-container .gantt-wrap {
-@@ -875,6 +926,7 @@
+@@ -875,6 +932,7 @@
  .insights-container .gantt-table {
      --gantt-name-w: 7.5rem;
      --gantt-cell-min-w: 1.5rem;
@@ -19481,7 +19490,7 @@
      display: flex;
      flex-direction: column;
      width: 100%;
-@@ -973,13 +1025,71 @@
+@@ -973,13 +1031,71 @@
      border-radius: var(--fluent-radius-md);
  }
  
@@ -19558,7 +19567,7 @@
  }
  
  .insights-container .gantt-legend {
-@@ -987,13 +1097,22 @@
+@@ -987,13 +1103,22 @@
      flex-wrap: wrap;
      align-items: center;
      gap: 0.5rem;
@@ -19584,7 +19593,7 @@
  .insights-container .gantt-legend-item {
      display: inline-flex;
      align-items: center;
-@@ -1002,10 +1121,48 @@
+@@ -1002,10 +1127,48 @@
  }
  
  .insights-container .gantt-legend-dot {
@@ -19635,7 +19644,7 @@
  }
  
  .insights-container .insights-gantt-toggle {
-@@ -1041,10 +1198,9 @@
+@@ -1041,10 +1204,9 @@
  
  .insights-container .insights-gantt-toggle button.is-on {
      background: color-mix(in oklch, var(--surface-2) 80%, transparent);
@@ -19648,7 +19657,7 @@
  }
  
  @media (prefers-reduced-motion: reduce) {
-@@ -1310,11 +1466,102 @@
+@@ -1310,11 +1472,102 @@
  /* ===== 響應式斷點 ===== */
  @media (max-width: 1024px) {
      .insights-container .row1 {
@@ -19756,7 +19765,7 @@
      }
  
      .insights-container .row2,
-@@ -1324,19 +1571,148 @@
+@@ -1324,19 +1577,148 @@
          grid-template-columns: 1fr;
      }
  
@@ -20324,7 +20333,157 @@
  }
  
  /* Responsive: 小螢幕 */
-@@ -622,7 +621,7 @@
+@@ -490,11 +489,145 @@
+     }
+ }
+ 
++.lb-mobile-cta-row {
++    display: none;
++}
++
+ @media (max-width: 768px) {
+-    .lightbox-content {
+-        max-width: 95vw;
+-        max-height: 95vh;
+-        padding: 1rem;
++    .showcase-lightbox:not(.similar-mode-active) {
++        padding: 0;
++        align-items: stretch;
++    }
++
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-content {
++        width: 100vw;
++        max-width: 100vw;
++        height: 100dvh;
++        max-height: 100dvh;
++        padding: 0;
++        gap: 0;
++        border: none;
++        border-radius: 0;
++        background: var(--surface-0);
++        align-items: stretch;
++        overflow-y: auto;
++        transform: translateY(16px);
++    }
++
++    .showcase-lightbox.show:not(.similar-mode-active) .lightbox-content {
++        transform: none;
++    }
++
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-close,
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-similar-btn {
++        top: calc(env(safe-area-inset-top, 0px) + 12px);
++        background: rgb(14 16 22 / 0.65);
++        border: 1px solid rgb(255 255 255 / 0.24);
++        -webkit-backdrop-filter: blur(14px) saturate(140%);
++        backdrop-filter: blur(14px) saturate(140%);
++        z-index: 25;
++    }
++
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-close {
++        right: 12px;
++    }
++
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-similar-btn {
++        left: 12px;
++    }
++
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-cover {
++        position: relative;
++        z-index: 1;
++        width: 100%;
++        max-width: 100%;
++        min-width: 0;
++        min-height: 220px;
++        background: radial-gradient(circle at 50% 35%, rgb(255 138 76 / 0.14), transparent 62%), #0b0d12;
++        padding: calc(env(safe-area-inset-top, 0px) + 48px) 0 18px;
++        border-radius: 0;
++    }
++
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-content .lightbox-cover.has-cover {
++        width: 100%;
++        max-width: 100%;
++        min-width: 0;
++        min-height: 0;
++        max-height: 54dvh;
++        padding: 0;
++        margin: 0 auto;
++        border-radius: 0;
++        overflow: hidden;
++    }
++
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-cover.has-cover img,
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-cover.has-cover .lb-full {
++        border-radius: 0;
++        object-fit: contain;
++    }
++
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-metadata {
++        flex: 0 0 auto;
++        overflow: visible;
++        min-height: auto;
++        margin-top: -14px;
++        position: relative;
++        z-index: 3;
++        background: var(--surface-0);
++        border-top: 1px solid var(--stroke-subtle);
++        border-radius: 20px 20px 0 0;
++        padding: 18px 16px calc(28px + env(safe-area-inset-bottom, 0px));
++    }
++
++    .showcase-lightbox:not(.similar-mode-active) .lightbox-metadata .lb-title {
++        font-size: 1.0625rem;
++        line-height: 1.4;
++    }
++
++    .lb-mobile-cta-row {
++        display: flex;
++        align-items: center;
++        gap: 10px;
++        margin: 12px 0 14px;
++    }
++
++    .lb-mobile-play-cta {
++        display: inline-flex;
++        align-items: center;
++        justify-content: center;
++        gap: 8px;
++        flex: 1 1 auto;
++        min-height: 48px;
++        padding: 10px 20px;
++        border: none;
++        border-radius: 999px;
++        background: var(--action-fill);
++        color: var(--action-text);
++        font-size: 0.95rem;
++        font-weight: 700;
++        letter-spacing: 0.01em;
++        box-shadow: var(--elev-card);
++        cursor: pointer;
++    }
++
++    .lb-mobile-play-cta:active {
++        transform: scale(0.98);
++        filter: brightness(0.94);
++    }
++
++    .showcase-container .lightbox-cover .cover-actions .lb-cover-play-btn,
++    .search-container .lightbox-cover .cover-actions .lb-cover-play-btn {
++        display: none;
++    }
++
++    .showcase-container .lightbox-cover .cover-actions:not(.cover-actions--focal-edit) {
++        padding-bottom: 18px;
++        background: transparent;
++        pointer-events: none;
++    }
++
++    .showcase-container .lightbox-cover .cover-actions:not(.cover-actions--focal-edit) > button {
++        pointer-events: auto;
+     }
+ 
+     .lightbox-nav {
+@@ -622,7 +755,7 @@
  .table-scroll-container {
      overflow-x: auto;
      border-radius: var(--radius-md);
@@ -20333,7 +20492,7 @@
  }
  
  /* Table Base - DaisyUI .table 強化 */
-@@ -786,7 +785,7 @@
+@@ -786,7 +919,7 @@
      border: 1px solid var(--stroke-default);
      border-radius: var(--radius-md);
      overflow: hidden;
@@ -20389,7 +20548,84 @@
  
      font-family: var(--font-mono);
      font-size: 0.75rem;
-@@ -295,8 +291,7 @@
+@@ -201,11 +197,52 @@
+     font-weight: 600;
+ }
+ 
+-/* 響應式：≤1023.98px sidebar 隱藏，footer 也要回到 left:0（對齊 .main-content margin-left:0）*/
++/* 響應式：≤1023.98px sidebar 隱藏；底部改為懸浮膠囊分頁器，消除與 4-Tab 底部列雙層堆疊 */
+ @media (max-width: 1023.98px) {
+     .showcase-footer,
+     body.sidebar-collapsed .showcase-footer {
+         left: 0;
++        right: 0;
++        bottom: calc(var(--native-bottom-height, 68px) + env(safe-area-inset-bottom) + 10px);
++        justify-content: center;
++        padding: 0 12px;
++        background: transparent;
++        border-top: none;
++        box-shadow: none;
++        pointer-events: none;
++    }
++    .showcase-footer .footer-left,
++    .showcase-footer .footer-center {
++        display: none;
++    }
++    .showcase-footer:has(.footer-pager[style*="display: none"]) {
++        display: none;
++    }
++    .showcase-footer .footer-right {
++        pointer-events: auto;
++    }
++    .showcase-footer .footer-pager {
++        padding: 4px 6px;
++        border-radius: 999px;
++        background: var(--frosted-sheen, none), var(--frosted-surface, var(--surface-1));
++        border: 1px solid var(--stroke-default);
++        box-shadow: var(--elev-float);
++        -webkit-backdrop-filter: blur(20px) saturate(145%);
++        backdrop-filter: blur(20px) saturate(145%);
++        gap: 2px;
++    }
++    .showcase-footer .pager-btn {
++        border: none;
++        border-radius: 999px;
++        min-width: 34px;
++        height: 34px;
++    }
++    .showcase-footer .pager-current {
++        padding: 0 10px;
++        font-size: 0.8125rem;
++    }
++    .showcase-container {
++        padding-bottom: 52px;
+     }
+ }
+ 
+@@ -213,22 +250,6 @@
+ @media (max-width: 767px) {
+     .footer-center {
+         display: none;
+-    }
+-}
+-
+-/* 響應式：手機 <640px 只留右側 pager */
+-@media (max-width: 640px) {
+-    .showcase-footer {
+-        justify-content: flex-end;
+-        padding: 0.4rem 0.75rem;
+-    }
+-    .footer-left,
+-    .footer-center {
+-        display: none;
+-    }
+-    .showcase-container {
+-        /* layout 對齊 fixed footer 真實渲染高度 (charter §4 例外) */
+-        padding-bottom: 44px;
+     }
+ }
+ 
+@@ -295,8 +316,7 @@
      align-items: center;
      justify-content: center;
      background: var(--overlay-gallery);
@@ -20399,7 +20635,7 @@
  
      /* 初始隱藏 */
      opacity: 0;
-@@ -427,7 +422,7 @@
+@@ -427,7 +447,7 @@
  }
  
  .sample-gallery .sg-close:hover {
@@ -20408,7 +20644,7 @@
      color: rgba(255, 255, 255, 1);
  }
  
-@@ -455,7 +450,7 @@
+@@ -455,7 +475,7 @@
  }
  
  .sample-gallery .sg-nav:hover {
@@ -20417,7 +20653,7 @@
      color: rgba(255, 255, 255, 1);
  }
  
-@@ -558,6 +553,23 @@
+@@ -558,6 +578,23 @@
      color: var(--color-primary-content);
      border-radius: var(--radius-pill);
      font-size: 0.6875rem;
@@ -20441,7 +20677,7 @@
  }
  
  /* × 刪除按鈕 */
-@@ -592,6 +604,37 @@
+@@ -592,6 +629,37 @@
  .lb-tag-add-btn:hover {
      border-color: var(--accent);
      color: var(--accent);
@@ -20479,7 +20715,7 @@
  }
  
  /* 輸入框包裝 */
-@@ -737,10 +780,9 @@
+@@ -737,10 +805,9 @@
  
  .mode-toggle-btn.active {
      background: rgba(255, 255, 255, 0.15);
@@ -20492,7 +20728,7 @@
  }
  
  .mode-toggle-btn:not(.active):hover {
-@@ -804,12 +846,10 @@
+@@ -804,12 +871,10 @@
      border-radius: var(--radius-pill);
      background: var(--bg-card);
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- Fluent Heavy acrylic 20px spotlight frame (mirrors theme.css .spotlight-search input), TASK-115-T6 */
@@ -20508,7 +20744,7 @@
      transition:
          border-color var(--duration-normal) var(--ease-out),
          box-shadow var(--duration-normal) var(--ease-out),
-@@ -819,11 +859,7 @@
+@@ -819,11 +884,7 @@
  /* Focus ring wraps the whole group (pills + input), not just the text field. */
  .filter-pill-group:focus-within {
      border-color: var(--accent);
@@ -20521,7 +20757,7 @@
      transform: scale(1.02);
  }
  
-@@ -907,7 +943,6 @@
+@@ -907,7 +968,6 @@
      border-radius: 0;
      background: transparent;
      backdrop-filter: none;
@@ -20529,7 +20765,7 @@
      box-shadow: none;
      transform: none;
  }
-@@ -935,7 +970,7 @@
+@@ -935,7 +995,7 @@
      background: var(--surface-2);
      border: 1px solid var(--stroke-default);
      border-radius: var(--radius-md);
@@ -20538,7 +20774,7 @@
      padding: 0.75rem;
      z-index: 200;
  }
-@@ -1346,7 +1381,7 @@
+@@ -1346,7 +1406,7 @@
      border: 1px solid rgba(255, 255, 255, 0.2);
      border-radius: var(--fluent-radius-md);
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (default state), 2026-05-03 */
@@ -20547,7 +20783,7 @@
      cursor: pointer;
      color: var(--text-inverse);
      transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
-@@ -1356,7 +1391,7 @@
+@@ -1356,7 +1416,7 @@
      background: rgba(255, 255, 255, 0.15);
      border-color: rgba(255, 255, 255, 0.3);
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (hover state), 2026-05-03 */
@@ -20556,7 +20792,7 @@
      transform: translateY(-1px);
  }
  
-@@ -1364,7 +1399,7 @@
+@@ -1364,7 +1424,7 @@
      outline: 2px solid var(--accent);
      outline-offset: 2px;
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight + Fluent shadow + glow ring (focus-visible), 2026-05-03 */
@@ -20565,7 +20801,7 @@
  }
  
  .picker-refresh-btn:active:not(:disabled) {
-@@ -1401,7 +1436,7 @@
+@@ -1401,7 +1461,7 @@
      border: 1px solid rgba(255, 255, 255, 0.2);
      border-radius: var(--fluent-radius-md);
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (default state), 100b-T2b */
@@ -20574,7 +20810,7 @@
      cursor: pointer;
      color: var(--text-inverse);
      transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
-@@ -1411,7 +1446,7 @@
+@@ -1411,7 +1471,7 @@
      background: rgba(255, 255, 255, 0.15);
      border-color: rgba(255, 255, 255, 0.3);
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight composed with Fluent shadow token (hover state), 100b-T2b */
@@ -20583,7 +20819,7 @@
      transform: translateY(-1px);
  }
  
-@@ -1419,7 +1454,7 @@
+@@ -1419,7 +1479,7 @@
      outline: 2px solid var(--accent);
      outline-offset: 2px;
      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- inset highlight + Fluent shadow + glow ring (focus-visible), 100b-T2b */
@@ -20592,7 +20828,7 @@
  }
  
  .picker-upload-btn:active:not(:disabled) {
-@@ -1492,7 +1527,6 @@
+@@ -1492,7 +1552,6 @@
          position: static;
          background: transparent;
          backdrop-filter: none;
@@ -20600,7 +20836,7 @@
          color: inherit;
          padding: 0;
          margin-bottom: 8px;
-@@ -1540,9 +1574,7 @@
+@@ -1540,9 +1599,7 @@
      border-width: 1px;
      border-style: solid;
      /* Shadow: 底階 + dual-layer 內框 */
@@ -20611,7 +20847,7 @@
      transition:
          background var(--fluent-duration-fast) var(--fluent-ease-standard),
          border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
-@@ -1552,9 +1584,7 @@
+@@ -1552,9 +1609,7 @@
  
  .showcase-container .btn:hover:not(:disabled) {
      /* hover 不覆寫 border-color，DaisyUI variant 自管 (.btn-outline.btn-primary primary 強調保留) */
@@ -20622,7 +20858,7 @@
      transform: translateY(-1px);
  }
  
-@@ -1562,17 +1592,12 @@
+@@ -1562,17 +1617,12 @@
      /* Focus: 2px outline + 4px glow（charter §6 Checkpoint 5 精確規格） */
      outline: 2px solid var(--accent);
      outline-offset: 2px;
@@ -20642,7 +20878,7 @@
  }
  
  .showcase-container .input {
-@@ -1583,9 +1608,7 @@
+@@ -1583,9 +1633,7 @@
      border-width: 1px;
      border-style: solid;
      /* Shadow: 輸入框底階（charter §6 Checkpoint 4） */
@@ -20653,7 +20889,7 @@
      transition:
          border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
          box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
-@@ -1597,10 +1620,7 @@
+@@ -1597,10 +1645,7 @@
      outline: 2px solid var(--accent);
      outline-offset: 2px;
      border-color: var(--accent);
@@ -20665,7 +20901,7 @@
  }
  
  /* ─── 57c-T4: Similar Stage — fullscreen takeover (z-index:1501) ─────────── */
-@@ -1672,8 +1692,7 @@
+@@ -1672,8 +1717,7 @@
      border: 1px solid rgba(255, 255, 255, 0.15);
      border-radius: 50%;
      background: var(--overlay-control);
@@ -20675,7 +20911,7 @@
      color: rgba(255, 255, 255, 0.8);
      display: flex;
      align-items: center;
-@@ -1821,7 +1840,7 @@
+@@ -1821,7 +1865,7 @@
      transform: translate(-50%, -50%);
      background: var(--color-base-100);
      border-radius: var(--fluent-radius-xl);
@@ -20684,7 +20920,7 @@
      cursor: pointer;
      display: flex;
      align-items: center;
-@@ -1848,7 +1867,7 @@
+@@ -1848,7 +1892,7 @@
  }
  
  .similar-slot:hover {
@@ -20693,7 +20929,7 @@
  }
  
  .similar-slot-img {
-@@ -1919,7 +1938,7 @@
+@@ -1919,7 +1963,7 @@
      object-position: right center;  /* 沿用 cropMode: 'right-half' 視覺一致 */
      transform-origin: center center;
      border-radius: var(--fluent-radius-lg);
@@ -20702,7 +20938,7 @@
      z-index: 11;  /* > .similar-slot z=10；play button z=12 > 11 → button 在上 */
      cursor: pointer;
  }
-@@ -1946,15 +1965,14 @@
+@@ -1946,15 +1990,14 @@
      border: 1px solid rgba(255, 255, 255, 0.4);
      border-radius: 50%;
      background: var(--overlay-control);
@@ -20720,7 +20956,7 @@
      z-index: 12;  /* > .similar-main-static z=11 (inner stacking)；ghost 飛行期間蓋過 acceptable */
      transition: background var(--fluent-duration-fast) var(--fluent-ease-standard),
                  border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
-@@ -1964,7 +1982,7 @@
+@@ -1964,7 +2007,7 @@
  .similar-play-button:hover {
      background: rgba(0, 0, 0, 0.5);
      border-color: rgba(255, 255, 255, 0.6);
@@ -24217,20 +24453,25 @@ HcmV?d00001
      border-bottom: 1px solid var(--stroke-subtle);
      padding-bottom: 1rem;
      margin-bottom: 0.5rem;
-@@ -35,19 +34,17 @@
+@@ -33,21 +32,19 @@
+     color: var(--text-secondary);
+ }
  
- /* Mini Terminal - Compact Log */
+-/* Mini Terminal - Compact Log */
++/* Mini Terminal / Task Activity Card */
  .mini-terminal {
 -    background: color-mix(in oklch, var(--color-base-200) 80%, transparent);
+-    border: 1px solid var(--stroke-default);
+-    border-radius: var(--fluent-radius-xl);
 +    background: var(--surface-1);
-     border: 1px solid var(--stroke-default);
-     border-radius: var(--fluent-radius-xl);
++    border: 1px solid var(--stroke-subtle);
++    border-radius: 16px;
      margin: 1rem;
      overflow: hidden;
 -    box-shadow:
 -        inset 0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent),
 -        var(--fluent-shadow-4);
-+    box-shadow: none;
++    box-shadow: var(--elev-card, none);
      transition: background-color var(--fluent-duration-slow) var(--fluent-ease-standard);
  }
  
@@ -24240,7 +24481,19 @@ HcmV?d00001
  }
  
  .mini-terminal-header {
-@@ -289,8 +286,7 @@
+@@ -55,8 +52,9 @@
+     align-items: center;
+     justify-content: space-between;
+     gap: 0.5rem;
+-    padding: 0.5rem 0.75rem;
+-    background: color-mix(in oklch, var(--color-base-content) 5%, transparent);
++    padding: 0.65rem 0.9rem;
++    background: var(--surface-2);
++    border-bottom: 1px solid var(--stroke-subtle);
+     transition: background-color var(--fluent-duration-slow) var(--fluent-ease-standard);
+ }
+ 
+@@ -289,8 +287,7 @@
      right: 0;
      bottom: 0;
      background: color-mix(in oklch, var(--color-base-100) 60%, transparent);
@@ -24250,7 +24503,7 @@ HcmV?d00001
      z-index: 9999;
      display: flex;
      align-items: center;
-@@ -365,3 +361,1118 @@
+@@ -365,3 +362,1120 @@
      border-radius: var(--fluent-radius-md);
      color: var(--text-default, currentColor);
  }
@@ -24264,10 +24517,10 @@ HcmV?d00001
 +
 +#progressSection {
 +    margin: 1rem 0;
-+    background: color-mix(in oklch, var(--bg-card) 92%, var(--color-base-200));
-+    border: 1px solid var(--border-light);
-+    border-radius: var(--radius-md);
-+    box-shadow: none;
++    background: var(--surface-1);
++    border: 1px solid var(--stroke-subtle);
++    border-radius: 16px;
++    box-shadow: var(--elev-card, none);
 +}
 +
 +#progressSection .mini-terminal-header {
@@ -24275,7 +24528,9 @@ HcmV?d00001
 +    flex-wrap: wrap;
 +    align-items: center;
 +    gap: 0.5rem 0.75rem;
-+    padding: 0.65rem 0.8rem;
++    padding: 0.75rem 0.9rem;
++    background: transparent;
++    border-bottom: none;
 +}
 +
 +.terminal-toggle {
@@ -25371,17 +25626,27 @@ HcmV?d00001
 +}
 --- a/web/static/css/pages/search.css
 +++ b/web/static/css/pages/search.css
-@@ -14,8 +14,7 @@
+@@ -8,14 +8,14 @@
+     flex-direction: column;
+ }
+ 
+-/* 搜尋框區域 - 緊湊 */
++/* 搜尋框區域 - 緊湊 + 磨砂浮層 */
+ .search-bar {
+     flex-shrink: 0;
      padding: 0.75rem var(--layer-inset);   /* 129-T4 / CD-129-4：與 .showcase-toolbar 對齊（showcase.css:36）*/
-     background: var(--bg-header);
-     border-bottom: 1px solid var(--border-light);
+-    background: var(--bg-header);
+-    border-bottom: 1px solid var(--border-light);
 -    backdrop-filter: blur(var(--fluent-blur)) saturate(var(--fluent-saturate));
 -    -webkit-backdrop-filter: blur(var(--fluent-blur)) saturate(var(--fluent-saturate));
-+    backdrop-filter: none;
++    background: var(--frosted-surface, var(--bg-header));
++    border-bottom: 1px solid var(--stroke-subtle);
++    -webkit-backdrop-filter: blur(20px) saturate(145%);
++    backdrop-filter: blur(20px) saturate(145%);
      z-index: 100;
  }
  
-@@ -258,7 +257,7 @@
+@@ -258,7 +258,7 @@
      transition: all var(--fluent-duration-fast) var(--fluent-ease-standard);
      z-index: 10;
      border-radius: var(--fluent-radius-md);
@@ -25390,7 +25655,7 @@ HcmV?d00001
  }
  
  .av-card-full-cover-wrapper .nav-btn:hover {
-@@ -297,7 +296,7 @@
+@@ -297,7 +297,7 @@
  
  /* 檔案列表區（卡片下方獨立區塊） */
  .file-list-section {
@@ -25399,7 +25664,7 @@ HcmV?d00001
      border: 1px solid var(--stroke-default);
      border-radius: var(--fluent-radius-lg);
      padding: 0.5rem 1rem;
-@@ -305,9 +304,7 @@
+@@ -305,9 +305,7 @@
      flex-shrink: 0;
      overflow-y: auto;
      max-height: 200px;
@@ -25410,7 +25675,7 @@ HcmV?d00001
  }
  
  /* 92a-T5: 批次整理鈕常駐 — header sticky-top，長清單於 200px 捲動區內捲動時保持可見。
-@@ -405,19 +402,15 @@
+@@ -405,19 +403,15 @@
  
  /* T8.3: state-page Canvas 上的 surface 層 */
  .search-container .state-page {
@@ -25433,7 +25698,7 @@ HcmV?d00001
  }
  
  /* .hidden 保護：search 頁內所有後代元素。
-@@ -560,7 +553,7 @@
+@@ -560,7 +554,7 @@
      padding: 1.5rem 2rem;
      min-width: 320px;
      max-width: 420px;
@@ -25442,7 +25707,7 @@ HcmV?d00001
      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
      transition: background-color var(--fluent-duration-slow) var(--fluent-ease-standard);
  }
-@@ -654,8 +647,7 @@
+@@ -654,8 +648,7 @@
      right: 0;
      bottom: 0;
      background: color-mix(in oklch, var(--color-base-100) 60%, transparent);
@@ -25452,18 +25717,45 @@ HcmV?d00001
      z-index: 9999;
      display: flex;
      align-items: center;
-@@ -817,6 +809,10 @@
-     background: var(--color-primary);
-     width: 0%;
+@@ -819,6 +812,10 @@
      transition: width var(--fluent-duration-slow) var(--fluent-ease-standard), background-color var(--fluent-duration-slow) var(--fluent-ease-standard);
-+}
-+
-+.batch-progress.is-paused .batch-progress-fill {
-+    background: color-mix(in oklch, var(--color-base-content) 40%, transparent);
  }
  
++.batch-progress.is-paused .batch-progress-fill {
++    background: color-mix(in oklch, var(--color-base-content) 40%, transparent);
++}
++
  #scrapeProgressBar {
-@@ -1274,7 +1270,7 @@
+     transition: none;  /* T2b: GSAP 接管 width 動畫 */
+ }
+@@ -1079,6 +1076,26 @@
+         width: 100%;
+         height: auto;
+         object-fit: contain;
++    }
++}
++
++@media (max-width: 768px) {
++    .search-container .lightbox-content {
++        overflow-y: auto;
++    }
++    .search-container .lightbox-cover.has-cover {
++        width: 100%;
++        max-width: 100%;
++        max-height: 54dvh;
++    }
++    .search-container .lightbox-cover.has-cover img {
++        width: 100%;
++        height: 100%;
++        object-fit: contain;
++    }
++    .search-container .lightbox-metadata {
++        flex: 0 0 auto;
++        overflow: visible;
+     }
+ }
+ 
+@@ -1274,7 +1291,7 @@
  
  .search-toast-container .alert {
      pointer-events: auto;  /* alert 本身可點擊（未來可能加關閉按鈕） */
@@ -25472,7 +25764,7 @@ HcmV?d00001
  }
  
  /* Mobile 適配：toast 左右邊距 */
-@@ -1385,9 +1381,7 @@
+@@ -1385,9 +1402,7 @@
      border-width: 1px;
      border-style: solid;
      /* 不固定 border-color — 保留 DaisyUI variant (.btn-outline.btn-primary 等) */
@@ -25483,7 +25775,7 @@ HcmV?d00001
      transition:
          background var(--fluent-duration-fast) var(--fluent-ease-standard),
          border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
-@@ -1396,26 +1390,19 @@
+@@ -1396,26 +1411,19 @@
  }
  
  .search-container .btn:hover:not(:disabled) {
@@ -25513,7 +25805,7 @@ HcmV?d00001
  }
  
  /* 個案豁免：dashed transparent btn / link btn / tag inline icon-only btn 自有設計語言，不套 dual-layer shadow（視覺衝突）*/
-@@ -1457,7 +1444,7 @@
+@@ -1457,7 +1465,7 @@
  .search-container .btn.tag-cancel:focus-visible,
  .search-container .btn-link:focus-visible {
      /* 保留 focus glow（a11y 必需）但移除 dual-layer shadow */
@@ -25522,7 +25814,7 @@ HcmV?d00001
  }
  
  .search-container .textarea {
-@@ -1465,9 +1452,7 @@
+@@ -1465,9 +1473,7 @@
      background: var(--surface-1);
      border-width: 1px;
      border-style: solid;
@@ -25533,7 +25825,7 @@ HcmV?d00001
      transition:
          border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
          box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
-@@ -1478,10 +1463,7 @@
+@@ -1478,10 +1484,7 @@
      outline: 2px solid var(--accent);
      outline-offset: 2px;
      border-color: var(--accent);
@@ -25545,7 +25837,7 @@ HcmV?d00001
  }
  
  /* TASK-141b-T9（CD-17）＋ owner 2026-09-03 視覺改判（T11 六筆真資料驗收的產出）：
-@@ -1571,3 +1553,216 @@
+@@ -1571,3 +1574,216 @@
  @keyframes wishlistEmptyFadeIn {
      to { opacity: 1; }
  }
@@ -26223,7 +26515,7 @@ HcmV?d00001
  }
  
  #settings-components .source-pill--chip .chip-x {
-@@ -1729,3 +1827,440 @@
+@@ -1729,3 +1827,451 @@
      background: color-mix(in oklch, var(--surface-2) 55%, transparent);
      border-radius: var(--radius-sm);
  }
@@ -26273,30 +26565,30 @@ HcmV?d00001
 +#settings-components .settings-tabs {
 +    display: grid;
 +    grid-template-columns: repeat(5, minmax(0, 1fr));
-+    gap: 0.35rem;
++    gap: 0.3rem;
 +    margin: 0 0 0.85rem;
-+    padding: 0.35rem;
-+    border: 1px solid var(--stroke-default);
-+    border-radius: calc(var(--fluent-radius-md) + 0.2rem);
-+    background: color-mix(in oklch, var(--surface-1) 88%, transparent);
++    padding: 0.28rem;
++    border: 1px solid var(--stroke-subtle);
++    border-radius: 14px;
++    background: var(--surface-2);
 +    box-shadow: none;
 +    backdrop-filter: none;
 +}
 +
 +#settings-components .settings-tab {
 +    min-width: 0;
-+    min-height: 3rem;
++    min-height: 2.75rem;
 +    display: inline-flex;
 +    align-items: center;
 +    justify-content: center;
 +    gap: 0.4rem;
-+    padding: 0.55rem 0.7rem;
++    padding: 0.45rem 0.65rem;
 +    border: 1px solid transparent;
-+    border-radius: var(--fluent-radius-md);
++    border-radius: 10px;
 +    color: var(--text-secondary);
 +    background: transparent;
 +    font-size: 0.8rem;
-+    font-weight: 700;
++    font-weight: 650;
 +    line-height: 1.2;
 +    white-space: normal;
 +    overflow-wrap: anywhere;
@@ -26304,6 +26596,7 @@ HcmV?d00001
 +        color var(--fluent-duration-fast) var(--fluent-ease-standard),
 +        background var(--fluent-duration-fast) var(--fluent-ease-standard),
 +        border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
++        box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard),
 +        transform var(--fluent-duration-fast) var(--fluent-ease-standard);
 +}
 +
@@ -26317,13 +26610,10 @@ HcmV?d00001
 +}
 +
 +#settings-components .settings-tab.is-active {
-+    color: var(--accent-contrast, #fff);
-+    border-color: color-mix(in oklch, var(--accent) 84%, #000 16%);
-+    background:
-+        linear-gradient(145deg,
-+            color-mix(in oklch, var(--accent) 92%, #fff 8%),
-+            color-mix(in oklch, var(--accent) 82%, #000 18%));
-+    box-shadow: none;
++    color: var(--accent);
++    border-color: var(--stroke-default);
++    background: var(--surface-1);
++    box-shadow: var(--elev-card, none);
 +}
 +
 +#settings-components .settings-tab:focus-visible {
@@ -26389,9 +26679,21 @@ HcmV?d00001
 +        height: 48px;
 +    }
 +
++    #settings-components .settings-appearance-controls .settings-locale-toggle .locale-toggle-btn,
++    #settings-components .settings-appearance-controls .settings-theme-toggle .theme-toggle-btn {
++        border-radius: 999px;
++        border: 1px solid var(--stroke-subtle);
++        background: var(--surface-1);
++        box-shadow: var(--elev-card, none);
++    }
++
 +    #settings-components .settings-appearance-controls .font-size-control {
 +        height: 48px;
-+        padding: 0;
++        padding: 0 3px;
++        border-radius: 999px;
++        border: 1px solid var(--stroke-subtle);
++        background: var(--surface-1);
++        box-shadow: var(--elev-card, none);
 +    }
 +
 +    #settings-components .settings-appearance-controls .settings-theme-toggle {
@@ -26412,18 +26714,18 @@ HcmV?d00001
 +        overscroll-behavior-x: contain;
 +        position: relative;
 +        z-index: auto;
-+        gap: 0.2rem;
++        gap: 0.25rem;
 +        padding: 0.25rem;
 +    }
 +
 +    #settings-components .settings-tab {
 +        flex: 0 0 auto;
 +        flex-direction: row;
-+        gap: 0.2rem;
-+        min-height: 3.5rem;
-+        padding: 0.4rem 0.2rem;
-+        font-size: 0.68rem;
-+        line-height: 1.25;
++        gap: 0.3rem;
++        min-height: 3rem;
++        padding: 0.35rem 0.65rem;
++        font-size: 0.74rem;
++        line-height: 1.2;
 +        text-align: center;
 +    }
 +
@@ -26487,7 +26789,8 @@ HcmV?d00001
 +    #settings-components .settings-mobile-save-btn {
 +        min-height: 40px;
 +        height: 40px;
-+        padding: 0 14px;
++        padding: 0 16px;
++        border-radius: 999px;
 +        font-size: 13px;
 +        line-height: 1;
 +        white-space: nowrap;
@@ -26504,8 +26807,8 @@ HcmV?d00001
 +    }
 +
 +    #settings-components .settings-tab {
-+        min-height: 3.65rem;
-+        font-size: 0.63rem;
++        min-height: 3rem;
++        font-size: 0.72rem;
 +    }
 +
 +    #settings-components .settings-tab i {
@@ -26664,6 +26967,55 @@ HcmV?d00001
 +        grid-template-columns: repeat(2, minmax(0, 1fr));
 +    }
 +}
+--- a/web/static/favicon.svg
++++ b/web/static/favicon.svg
+@@ -1,26 +1,26 @@
+ <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+   <defs>
+     <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+-      <stop offset="0%" style="stop-color:#4f7cff"/>
+-      <stop offset="100%" style="stop-color:#6c5ce7"/>
++      <stop offset="0%" style="stop-color:#FF8A4C"/>
++      <stop offset="100%" style="stop-color:#FFB48A"/>
+     </linearGradient>
+   </defs>
+ 
+   <!-- 圓形背景 -->
+-  <circle cx="32" cy="32" r="30" fill="#1a1a2e"/>
++  <circle cx="32" cy="32" r="30" fill="#1A1D24" stroke="#2D333E" stroke-width="2"/>
+ 
+   <!-- A 字母 - 播放按鈕風格 -->
+-  <path d="M20 48 L32 16 L44 48"
++  <path d="M20 47 L32 16 L44 47"
+         fill="none"
+         stroke="url(#gradient)"
+-        stroke-width="4"
++        stroke-width="4.5"
+         stroke-linecap="round"
+         stroke-linejoin="round"/>
+ 
+   <!-- A 橫線 -->
+-  <path d="M24 38 L40 38"
++  <path d="M24.5 37.5 L39.5 37.5"
+         fill="none"
+         stroke="url(#gradient)"
+-        stroke-width="4"
++        stroke-width="4.5"
+         stroke-linecap="round"/>
+ </svg>
+--- a/web/static/logo.svg
++++ b/web/static/logo.svg
+@@ -1,8 +1,8 @@
+ <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
+   <defs>
+     <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+-      <stop offset="0%" style="stop-color:#4f7cff"/>
+-      <stop offset="100%" style="stop-color:#6c5ce7"/>
++      <stop offset="0%" style="stop-color:#FF8A4C"/>
++      <stop offset="100%" style="stop-color:#FFB48A"/>
+     </linearGradient>
+   </defs>
+ 
 --- /dev/null
 +++ b/web/static/js/components/mobile-back.js
 @@ -0,0 +1,248 @@
@@ -33392,7 +33744,24 @@ HcmV?d00001
              this._persistedShowcase.actressSearch = this.actressSearch;                  // ★ 129-T2
              this._persistedShowcase.pills = serializePills(this.pills);
              this._persistedShowcase.cardShape = this.cardShape;
-@@ -642,6 +666,17 @@
+@@ -626,6 +650,16 @@
+         formatPartLabel,
+         singleActorAge,
+ 
++        cardDisplayTitle(video) {
++            const raw = String(video?.title || '').trim();
++            if (!raw) return window.t('showcase.grid.unknown_title');
++            const num = String(video?.number || '').trim();
++            if (!num) return raw;
++            const escaped = num.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
++            const cleaned = raw.replace(new RegExp(`^\\[?${escaped}\\]?[\\s:：\\-–—]*`, 'i'), '').trim();
++            return cleaned || raw;
++        },
++
+         // 格式化檔案大小（bytes → GB/MB）
+         formatSize(bytes) {
+             if (!bytes || bytes === 0) return window.t('showcase.grid.unknown_size');
+@@ -642,6 +676,17 @@
          // 點 enrich 後自動走 refresh_full 補封面。
          handleCoverError(video, event) {
              if (!video) return;
@@ -34115,7 +34484,7 @@ HcmV?d00001
        style="font-size: {{ font_size_px|default(16) }}px"
        x-data="{ theme: '{{ theme|default('light') }}', fontSize: '{{ font_size|default('md') }}' }"
 -      x-init="$watch('theme', configSync('theme')); $watch('theme', v => { document.querySelector('meta[name=&quot;theme-color&quot;]').content = (v === 'dim' ? '#2a303c' : '#ffffff'); }); $watch('fontSize', configSync('font_size'))"
-+      x-init="$watch('theme', configSync('theme')); $watch('theme', v => { document.querySelector('meta[name=&quot;theme-color&quot;]').content = (v === 'dim' ? '#212429' : '#ffffff'); }); $watch('fontSize', configSync('font_size'))"
++      x-init="$watch('theme', configSync('theme')); $watch('theme', v => { document.querySelector('meta[name=&quot;theme-color&quot;]').content = (v === 'dim' ? '#1a1d24' : '#ffffff'); }); $watch('fontSize', configSync('font_size'))"
        :data-theme="theme"
        :style="'font-size:' + {xs:'13px',sm:'14px',md:'16px',lg:'18px',xl:'20px'}[fontSize]">
 +
@@ -34152,7 +34521,7 @@ HcmV?d00001
 -    <meta name="theme-color" content="{{ '#2a303c' if theme == 'dim' else '#ffffff' }}">
 -
 -    <!-- Theme CSS -->
-+    <meta name="theme-color" content="{{ '#212429' if theme == 'dim' else '#ffffff' }}">
++    <meta name="theme-color" content="{{ '#1a1d24' if theme == 'dim' else '#ffffff' }}">
 +
 +    <!-- Shared source theme. -->
      <link href="/static/css/theme.css" rel="stylesheet">
@@ -34430,7 +34799,7 @@ HcmV?d00001
                      aria-haspopup="true"
                      :aria-expanded="notifBell.drawerOpen.toString()">
                  <i :class="notifBell.unreadCount > 0 ? 'bi bi-bell-fill' : 'bi bi-bell'" class="text-xl"></i>
-@@ -649,7 +679,7 @@
+@@ -649,16 +679,16 @@
           x-transition:leave="transition ease-in duration-200"
           x-transition:leave-start="opacity-100 translate-x-0"
           x-transition:leave-end="opacity-0 -translate-x-full"
@@ -34438,8 +34807,11 @@ HcmV?d00001
 +         class="offcanvas-mobile fixed inset-y-0 left-0 w-64 shadow-xl z-[210] lg:hidden"
           tabindex="-1">
          <div class="flex items-center justify-between p-4 border-b border-base-300">
-             <h5 class="text-lg font-semibold">
-@@ -658,7 +688,7 @@
+-            <h5 class="text-lg font-semibold">
+-                <i class="bi bi-film"></i> OpenAver
++            <h5 class="text-lg font-semibold flex items-center gap-2">
++                <img src="/static/favicon.svg" alt="" width="20" height="20"> OpenAver
+             </h5>
              <button type="button"
                      class="btn btn-sm btn-circle btn-ghost"
                      @click="mobileMenuOpen = false"
@@ -34547,8 +34919,8 @@ HcmV?d00001
          {% block content %}{% endblock %}
      </main>
 +
-+    <nav class="native-bottom-nav" aria-label="{{ t('nav.showcase') }} / {{ t('nav.scanner') }} / {{ t('nav.settings') }}">
-+        {% for route, icon in [('showcase', 'bi-grid'), ('scanner', 'bi-collection-play'), ('settings', 'bi-sliders')] %}
++    <nav class="native-bottom-nav" aria-label="{{ t('nav.showcase') }} / {{ t('nav.search') }} / {{ t('nav.scanner') }} / {{ t('nav.settings') }}">
++        {% for route, icon in [('showcase', 'bi-collection-play'), ('search', 'bi-search'), ('scanner', 'bi-list-ul'), ('settings', 'bi-gear')] %}
 +        <a href="/{{ route }}" {% if page == route %}aria-current="page"{% endif %}
 +           @click="handleNavClick($event, $el.href)">
 +            <i class="bi {{ icon }}" aria-hidden="true"></i><span>{{ t('nav.' + route) }}</span>
@@ -36034,16 +36406,33 @@ HcmV?d00001
  {% include '_showcase_css.html' %}
  {% endblock %}
  
-@@ -67,7 +68,7 @@
+@@ -66,8 +67,8 @@
+                         <i class="bi bi-box-arrow-up-right"></i>
                      </button>
                      <!-- TASK-140-T6: 播放 -->
-                     <button class="lb-action-btn"
+-                    <button class="lb-action-btn"
 -                            @click="window.open('/api/gallery/player?path=' + encodeURIComponent(currentLightboxVideo()?._localStatus?.paths?.[0] || ''), '_blank')"
++                    <button class="lb-action-btn lb-cover-play-btn"
 +                            @click="window.openLocalVideoStatus ? window.openLocalVideoStatus(currentLightboxVideo()?._localStatus) : window.openVideoPlayer?.(currentLightboxVideo()?._localStatus?.paths?.[0] || '')"
                              x-show="!actressLightboxMode() && (cardActionState(currentLightboxVideo()) === 'play' || cardActionState(currentLightboxVideo()) === 'play+folder')"
                              data-tooltip="{{ t('search.action.play') }}" aria-label="{{ t('search.action.play') }}">
                          <i class="bi bi-play-fill"></i>
-@@ -413,7 +414,12 @@
+@@ -120,6 +121,14 @@
+                             x-show="(currentLightboxVideo()?.sample_images || []).length > 0"
+                             @click="openSampleGallery((currentLightboxVideo()?.sample_images || []).map((url, i) => '/api/proxy-image?url=' + encodeURIComponent(currentLightboxVideo()?.preview_sample_images?.[i] || url)), 0)"
+                             x-text="t('search.gallery.sample_prefix') + ' (' + (currentLightboxVideo()?.sample_images || []).length + ')'">
++                    </button>
++                </div>
++                <div class="lb-mobile-cta-row"
++                     x-show="!actressLightboxMode() && (cardActionState(currentLightboxVideo()) === 'play' || cardActionState(currentLightboxVideo()) === 'play+folder')">
++                    <button type="button" class="lb-mobile-play-cta"
++                            @click.stop="window.openLocalVideoStatus ? window.openLocalVideoStatus(currentLightboxVideo()?._localStatus) : window.openVideoPlayer?.(currentLightboxVideo()?._localStatus?.paths?.[0] || '')">
++                        <i class="bi bi-play-fill" aria-hidden="true"></i>
++                        <span>{{ t('search.action.play') }}</span>
+                     </button>
+                 </div>
+                 <!-- Row 3: Actresses -->
+@@ -413,7 +422,12 @@
      <!-- 搜尋框（Spotlight 中央輸入；US-1 navbar 收合不作用於 search 頁，維持永遠可見） -->
      <div class="search-bar">
          <form id="searchForm" @submit.prevent="doSearch()">
@@ -36057,7 +36446,7 @@ HcmV?d00001
                  <!-- TASK-140-T7 / spec F2：segmented 檢視切換，取代原本的 search-icon-left -->
                  <div class="mode-toggle">
                      <button type="button" class="mode-toggle-btn"
-@@ -430,7 +436,7 @@
+@@ -430,7 +444,7 @@
                          <span class="mode-toggle-badge" x-show="wishlistCount > 0" x-text="wishlistCount"></span>
                      </button>
                  </div>
@@ -36066,7 +36455,7 @@ HcmV?d00001
                  <div class="search-actions-right">
                      <!-- 取消搜尋按鈕（loading 狀態顯示） -->
                      <button type="button"
-@@ -477,10 +483,39 @@
+@@ -477,10 +491,39 @@
          </form>
      </div>
  
@@ -36107,7 +36496,7 @@ HcmV?d00001
              <i class="bi bi-film state-page-icon"></i>
              <p class="state-page-text">{{ t('search.empty.hint') }}</p>
              <div class="empty-actions">
-@@ -545,8 +580,9 @@
+@@ -545,8 +588,9 @@
                  </div>
              </div>
              <small class="state-page-hint">{{ t('search.empty.drag_hint') }}</small>
@@ -36118,7 +36507,7 @@ HcmV?d00001
                  <template x-for="capsule in makerCapsules" :key="capsule.key">
                      <button type="button" class="maker-latest-chip" @click="startMakerSearch(capsule)" x-text="capsule.label"></button>
                  </template>
-@@ -606,22 +642,31 @@
+@@ -606,22 +650,31 @@
                      <div class="detail-bar" :style="'width:' + detailProgressPercent() + '%'"></div>
                      <span class="detail-text" x-text="detailDone + ' / ' + detailTotal">0 / 0</span>
                  </div>
@@ -36162,7 +36551,7 @@ HcmV?d00001
              <p class="empty-explainer-line"
                 x-show="pageState === 'error' && errorKind === 'no_data' && (currentMode === 'exact' || currentMode === 'prefix')"
                 x-cloak>{{ t('search.empty.explainer_partial') }}</p>
-@@ -644,6 +689,7 @@
+@@ -644,6 +697,7 @@
                  </button>
              </div>
          </div>
@@ -36170,7 +36559,7 @@ HcmV?d00001
  
          <!-- 結果卡片（wrapper：卡片 + 檔案列表垂直排列） -->
          <div id="resultCard" x-show="pageState === 'result' && listMode !== 'wishlist'" x-cloak>
-@@ -660,7 +706,7 @@
+@@ -660,7 +714,7 @@
                           @touchstart.passive="_dtTouchStart($event)"
                           @touchend.passive="_dtTouchEnd($event)">
                          <img id="resultCover" x-ref="coverImg" class="av-card-full-cover-img"
@@ -36179,7 +36568,7 @@ HcmV?d00001
                               :src="coverUrl()"
                               @error="handleCoverError()"
                               @load="_coverLoaded = true; coverError = ''; _coverRetried = false; _updateCoverHeight()"
-@@ -671,15 +717,29 @@
+@@ -671,15 +725,29 @@
                              <div class="shimmer"></div>
                          </div>
                          <!-- 封面錯誤 -->
@@ -36212,7 +36601,7 @@ HcmV?d00001
                          <button class="nav-btn prev" id="btnPrev"
                                  x-show="showNavigation()"
                                  :disabled="!canGoPrev() || (isSearchingFile && searchingFileDirection === 'prev')"
-@@ -700,6 +760,14 @@
+@@ -700,6 +768,14 @@
                               x-show="showNavigation()"
                               x-text="navIndicatorText()">1/1</div>
                      </div>
@@ -36227,7 +36616,7 @@ HcmV?d00001
                      <!-- T7: Sample Images 縮圖列 -->
                      <div class="sample-strip"
                           x-show="displayMode === 'detail' && (current().sample_images || []).length > 0"
-@@ -721,19 +789,38 @@
+@@ -721,19 +797,38 @@
                  </div>
                  <div class="av-card-full-info">
                  <div class="av-card-full-header">
@@ -36270,7 +36659,7 @@ HcmV?d00001
                          ) }}
                      </template>
                      <button class="info-icon-btn"
-@@ -745,7 +832,7 @@
+@@ -745,7 +840,7 @@
                      <!-- TASK-140-T6: 加入書籤（本地沒有 ＋ 未加入）-->
                      <button class="info-icon-btn"
                              @click="addToWishlistFromDetail(current())"
@@ -36279,7 +36668,7 @@ HcmV?d00001
                              x-transition:enter="transition ease-out duration-150"
                              x-transition:enter-start="opacity-0"
                              x-transition:enter-end="opacity-100"
-@@ -755,7 +842,7 @@
+@@ -755,7 +850,7 @@
                      <!-- TASK-140-T6: 從書籤移除（本地沒有 ＋ 已加入）-->
                      <button class="info-icon-btn"
                              @click="removeFromWishlist(current()?.number, 'search')"
@@ -36288,7 +36677,7 @@ HcmV?d00001
                              x-transition:enter="transition ease-out duration-150"
                              x-transition:enter-start="opacity-0"
                              x-transition:enter-end="opacity-100"
-@@ -801,7 +888,7 @@
+@@ -801,7 +896,7 @@
                      </div>
                      <!-- 中文標題 -->
                      <div id="chineseTitleRow" class="av-card-full-footer-content mt-2"
@@ -36297,7 +36686,7 @@ HcmV?d00001
                          <span class="info-label" id="chineseTitleLabel" x-text="chineseTitleLabel()">{{ t('search.label.chinese_title') }}</span>
                          <!-- 顯示模式 -->
                          <div class="info-value-with-actions" id="chineseTitleContainer" x-show="!(editingChineseTitle && canEditFile())">
-@@ -835,8 +922,8 @@
+@@ -835,8 +930,8 @@
                      <div class="info-grid-pair">
                          <div class="info-cell">
                              <span class="info-label">{{ t('search.label.date') }}</span>
@@ -36308,7 +36697,7 @@ HcmV?d00001
                                     class="input input-bordered info-value"
                                     :value="current().date || ''"
                                     @focus="startEditDate()"
-@@ -852,7 +939,26 @@
+@@ -852,7 +947,26 @@
                      <div class="info-grid-pair">
                          <div class="info-cell">
                              <span class="info-label">{{ t('search.label.maker') }}</span>
@@ -36336,7 +36725,7 @@ HcmV?d00001
                          </div>
                          <div class="info-cell" x-show="current().label">
                              <span class="info-label">{{ t('search.label.label') }}</span>
-@@ -1062,7 +1168,7 @@
+@@ -1062,7 +1176,7 @@
                                  </button>
                                  <!-- TASK-140-T6: 播放（count===1 或 count>1 皆顯示）-->
                                  <button class="btn-glass-circle"
@@ -36345,7 +36734,7 @@ HcmV?d00001
                                          x-show="cardActionState(result) === 'play' || cardActionState(result) === 'play+folder'"
                                          title="{{ t('search.action.play') }}">
                                      <i class="bi bi-play-fill"></i>
-@@ -1157,13 +1263,14 @@
+@@ -1157,13 +1271,14 @@
  
                  <!-- 批次進度條 -->
                  <div class="batch-progress" id="batchProgress"
@@ -36361,7 +36750,7 @@ HcmV?d00001
                  </div>
  
                  <!-- 批次整理進度條 -->
-@@ -1202,6 +1309,7 @@
+@@ -1202,6 +1317,7 @@
                              <!-- 狀態圖示 -->
                              <span :class="fileStatusClass(file)"
                                    x-text="fileStatusIcon(file)"></span>
@@ -36369,7 +36758,7 @@ HcmV?d00001
  
                              <!-- 動作按鈕：產生 NFO -->
                              <button x-show="canScrapeFile(file) && !file.isScraping && file.scrapeStatus !== 'done'"
-@@ -1347,32 +1455,99 @@
+@@ -1347,32 +1463,99 @@
          </div>
      </div>
  
@@ -36494,7 +36883,7 @@ HcmV?d00001
  
      <!-- Fix-1: 覆蓋警告 Modal (Alpine state-driven) -->
      <dialog class="modal fluent-modal"
-@@ -1408,25 +1583,6 @@
+@@ -1408,25 +1591,6 @@
  {% endblock %}
  
  {% block extra_js %}
@@ -38940,7 +39329,7 @@ HcmV?d00001
 -                        <div class="footer-hover" x-show="!infoVisible">
 -                            <div class="hover-title" x-text="video.title || t('showcase.grid.unknown_title')"></div>
 -                        </div>
-+                        <div class="native-card-title" x-text="video.title || t('showcase.grid.unknown_title')"></div>
++                        <div class="native-card-title" x-text="cardDisplayTitle(video)"></div>
                      </div>
                      <!-- Card Info 展開區 (M3i) — footer 同層，展開時撐高卡片 -->
                      <div class="card-info" x-cloak @click.stop>
@@ -38971,7 +39360,7 @@ HcmV?d00001
                                   path so existing behavior is unaffected. -->
                              <div class="cover-actions" x-show="!!currentLightboxVideo?.path" :class="{'cover-actions--focal-edit': _maskVisible}">
 -                                <button class="lb-action-btn" x-show="!_maskVisible" @click="playVideo(currentLightboxVideo?.path)" data-tooltip="{{ t('showcase.action.play') }}" aria-label="{{ t('showcase.action.play') }}">
-+                                <button class="lb-action-btn" x-show="!_maskVisible" @click="playVideo(currentLightboxVideo)" data-tooltip="{{ t('showcase.action.play') }}" aria-label="{{ t('showcase.action.play') }}">
++                                <button class="lb-action-btn lb-cover-play-btn" x-show="!_maskVisible" @click="playVideo(currentLightboxVideo)" data-tooltip="{{ t('showcase.action.play') }}" aria-label="{{ t('showcase.action.play') }}">
                                      <i class="bi bi-play-fill"></i>
                                  </button>
                                  <button class="lb-action-btn js-open-folder" x-show="!_maskVisible" @click="openLocal(currentLightboxVideo?.path)" data-tooltip="{{ t('search.action.open_folder') }}" aria-label="{{ t('search.action.open_folder') }}">
@@ -38984,7 +39373,7 @@ HcmV?d00001
                              <div class="lb-header">
                                  <!-- 123-T8：精選星掛在標題行最前面（owner 拍板：標題前比番號前更清楚，
                                       與標題有沒有番號前綴無關——scraper 本來就會剝掉前綴，見
-@@ -1184,52 +1233,64 @@
+@@ -1184,52 +1233,71 @@
                                          :aria-label="(currentLightboxVideo?.user_rating||0) > 0 ? t('showcase.pick.remove_aria') : t('showcase.pick.add_aria')"
                                          :aria-busy="!!_pickInFlight[currentLightboxVideo?.path]"
                                          @click.stop="togglePickStar()"><i class="bi bi-star pick-star-outline" aria-hidden="true"></i><i class="bi bi-star-fill pick-star-fill" aria-hidden="true"
@@ -39000,28 +39389,6 @@ HcmV?d00001
 -                                        x-show="(currentLightboxVideo?.sample_images || []).length > 0"
 -                                        @click="openSampleGallery(currentLightboxVideo.sample_images, 0)"
 -                                        x-text="t('showcase.gallery.sample_prefix') + ' (' + (currentLightboxVideo?.sample_images || []).length + ')'">
--                                </button>
--                                <!-- §b3: 劇照補抓入口（無劇照時顯示） -->
--                                <button class="fetch-samples-btn"
--                                        x-show="(currentLightboxVideo?.sample_images || []).length === 0 && !_fetchSamplesLoading"
--                                        :disabled="!!_fetchSamplesFailed[currentLightboxVideo?.path]"
--                                        @click="fetchSamples(currentLightboxVideo)">
--                                    <i class="bi bi-cloud-download" aria-hidden="true"></i>
--                                    <span x-text="t('showcase.samples.fetch_btn')"></span>
--                                </button>
--                                <span x-show="_fetchSamplesLoading" x-text="t('showcase.samples.fetching')"></span>
--                                <!-- 98b-T4：焦點裁切遮罩 toggle（低調圓鈕，styled-like .lb-action-btn 但更小）-->
--                                <!-- 101d-T2：影片焦點 gate 綁 _posterModeActive()（窄/poster 模式才顯示）。與女優
--                                     _focalIconVisible() 的 per-image 門檻刻意不同——根因：影片只在 ≤899px 裁、
--                                     女優牆全寬度都裁（見 plan-101d §2.2）。改任一邊前先讀那張表，別「對齊」成同一套。 -->
--                                <button class="lb-mask-btn"
--                                        x-show="!!currentLightboxVideo?.path && _lbFullLoaded && _posterModeActive()"
--                                        @click="openMask()"
--                                        :title="t('showcase.lightbox.mask_toggle')"
--                                        :aria-label="t('showcase.lightbox.mask_toggle')">
--                                    <i class="bi bi-person-bounding-box" aria-hidden="true"></i>
--                                </button>
--                            </div>
 +                                       :style="{ '--pick-fill': (currentLightboxVideo?.user_rating || 0) > 0 ? '0%' : '100%' }"></i></button><span class="lb-title-text" x-text="currentLightboxVideo?.title || t('showcase.grid.unknown_title')"></span></div>
 +                                <div class="lb-header-actions">
 +                                    <!-- Lazy NFO plot entry. The button follows cached NFO presence;
@@ -39071,6 +39438,34 @@ HcmV?d00001
 +                                    <span x-show="_fetchSamplesLoading" x-text="t('showcase.samples.fetching')"></span>
 +                                </div>
 +                            </div>
++                            <div class="lb-mobile-cta-row" x-show="!!currentLightboxVideo?.path && !_maskVisible">
++                                <button type="button" class="lb-mobile-play-cta"
++                                        @click.stop="playVideo(currentLightboxVideo)">
++                                    <i class="bi bi-play-fill" aria-hidden="true"></i>
++                                    <span>{{ t('showcase.action.play') }}</span>
+                                 </button>
+-                                <!-- §b3: 劇照補抓入口（無劇照時顯示） -->
+-                                <button class="fetch-samples-btn"
+-                                        x-show="(currentLightboxVideo?.sample_images || []).length === 0 && !_fetchSamplesLoading"
+-                                        :disabled="!!_fetchSamplesFailed[currentLightboxVideo?.path]"
+-                                        @click="fetchSamples(currentLightboxVideo)">
+-                                    <i class="bi bi-cloud-download" aria-hidden="true"></i>
+-                                    <span x-text="t('showcase.samples.fetch_btn')"></span>
+-                                </button>
+-                                <span x-show="_fetchSamplesLoading" x-text="t('showcase.samples.fetching')"></span>
+-                                <!-- 98b-T4：焦點裁切遮罩 toggle（低調圓鈕，styled-like .lb-action-btn 但更小）-->
+-                                <!-- 101d-T2：影片焦點 gate 綁 _posterModeActive()（窄/poster 模式才顯示）。與女優
+-                                     _focalIconVisible() 的 per-image 門檻刻意不同——根因：影片只在 ≤899px 裁、
+-                                     女優牆全寬度都裁（見 plan-101d §2.2）。改任一邊前先讀那張表，別「對齊」成同一套。 -->
+-                                <button class="lb-mask-btn"
+-                                        x-show="!!currentLightboxVideo?.path && _lbFullLoaded && _posterModeActive()"
+-                                        @click="openMask()"
+-                                        :title="t('showcase.lightbox.mask_toggle')"
+-                                        :aria-label="t('showcase.lightbox.mask_toggle')">
+-                                    <i class="bi bi-person-bounding-box" aria-hidden="true"></i>
+-                                </button>
+-                            </div>
++                            </div>
 +                            <div class="lb-faces">
 +                            <div class="lb-info-face"
 +                                 :class="{'is-flipped': lbPlotOpen}"
@@ -39090,7 +39485,7 @@ HcmV?d00001
                              </div>
                              <!-- Row 3: Actresses -->
                              <div class="lb-actor" x-show="currentLightboxVideo?.actresses">
-@@ -1316,7 +1377,7 @@
+@@ -1316,7 +1384,7 @@
                                  <!-- User tag badges with × remove button -->
                                  <template x-for="tag in (currentLightboxVideo?.user_tags || [])" :key="tag">
                                      <span class="lb-user-tag">
@@ -39099,7 +39494,7 @@ HcmV?d00001
                                          <button class="lb-tag-remove"
                                                  @click.stop="removeLbUserTag(tag)"
                                                  :title="tag">×</button>
-@@ -1328,6 +1389,17 @@
+@@ -1328,6 +1396,17 @@
                                          x-show="!addingLbTag && !!currentLightboxVideo?.path"
                                          @click.stop="showAddLbTagInput()"
                                          :title="t('showcase.lightbox.add_tag')">+</button>
@@ -39117,7 +39512,7 @@ HcmV?d00001
  
                                  <!-- Inline 輸入框 -->
                                  <span class="lb-tag-input-wrapper" x-show="addingLbTag">
-@@ -1347,7 +1419,58 @@
+@@ -1347,7 +1426,58 @@
                                              title="✕">✕</button>
                                  </span>
                              </div>
@@ -39177,7 +39572,7 @@ HcmV?d00001
                          </div>
                      </div>
                  </template>
-@@ -1531,6 +1654,8 @@
+@@ -1531,6 +1661,8 @@
           x-trap.inert="similarModeOpen"
           x-effect="similarModeOpen ? initSimilarStage() : destroySimilarStage()"
           @click.self="closeSimilarMode()">
@@ -39186,7 +39581,7 @@ HcmV?d00001
  
          <!-- X 關閉按鈕（backdrop scope，相對 viewport 角，不在 inner 內） -->
          <button class="similar-close-btn"
-@@ -1720,17 +1845,20 @@
+@@ -1720,17 +1852,20 @@
           :aria-hidden="!similarModeMobileOpen">
          <!-- scrim：overlay 30px 模糊完全遮住 lightbox（CD-10） -->
          <div class="similar-mobile-scrim" @click="closeMobilePanel()"></div>
@@ -39208,7 +39603,7 @@ HcmV?d00001
                          :aria-label="t('showcase.action.play')">
                      <i class="bi bi-play-fill" aria-hidden="true"></i>
                  </button>
-@@ -1750,6 +1878,7 @@
+@@ -1750,6 +1885,7 @@
                               @load="applyCellFocal($el, item)"
                               x-init="$watch('item.auto_focal', () => applyCellFocal($el, item));
                                       $watch('item.crop_mode', () => applyCellFocal($el, item))">
@@ -39216,7 +39611,7 @@ HcmV?d00001
                      </div>
                  </template>
              </div>
-@@ -1900,34 +2029,7 @@
+@@ -1900,34 +2036,7 @@
      </dialog>
  
      <!-- Toast (M3h) -->
@@ -39252,7 +39647,7 @@ HcmV?d00001
  
      <!-- Footer 三段式 (49a-T4)：左 count + 中 shortcut + 右 pager -->
      <!-- ⚠️ 不可加 x-data（會建立 nested Alpine scope，讓 showFavoriteActresses / totalPages / filteredCount 等 state 全變 undefined）。
-@@ -2025,6 +2127,59 @@
+@@ -2025,6 +2134,59 @@
      </div>
  
      {# 進階重新刮削彈窗（62a-2）。放 showcase x-data 作用域內，使 rescrape* hook 在 showcase Alpine root 求值。 #}
@@ -39312,7 +39707,7 @@ HcmV?d00001
      {% include '_rescrape_modal.html' %}
  </div>
  {% endblock %}
-@@ -2033,7 +2188,9 @@
+@@ -2033,7 +2195,9 @@
  <!-- M2c: 傳遞 config 給 JS -->
  <script>
  window.__SHOWCASE_CONFIG__ = {{ (config.gallery or {}) | tojson | safe }};

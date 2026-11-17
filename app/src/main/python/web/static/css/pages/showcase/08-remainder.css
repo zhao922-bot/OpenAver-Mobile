@@ -197,11 +197,52 @@ body.sidebar-collapsed .showcase-footer {
     font-weight: 600;
 }
 
-/* 響應式：≤1023.98px sidebar 隱藏，footer 也要回到 left:0（對齊 .main-content margin-left:0）*/
+/* 響應式：≤1023.98px sidebar 隱藏；底部改為懸浮膠囊分頁器，消除與 4-Tab 底部列雙層堆疊 */
 @media (max-width: 1023.98px) {
     .showcase-footer,
     body.sidebar-collapsed .showcase-footer {
         left: 0;
+        right: 0;
+        bottom: calc(var(--native-bottom-height, 68px) + env(safe-area-inset-bottom) + 10px);
+        justify-content: center;
+        padding: 0 12px;
+        background: transparent;
+        border-top: none;
+        box-shadow: none;
+        pointer-events: none;
+    }
+    .showcase-footer .footer-left,
+    .showcase-footer .footer-center {
+        display: none;
+    }
+    .showcase-footer:has(.footer-pager[style*="display: none"]) {
+        display: none;
+    }
+    .showcase-footer .footer-right {
+        pointer-events: auto;
+    }
+    .showcase-footer .footer-pager {
+        padding: 4px 6px;
+        border-radius: 999px;
+        background: var(--frosted-sheen, none), var(--frosted-surface, var(--surface-1));
+        border: 1px solid var(--stroke-default);
+        box-shadow: var(--elev-float);
+        -webkit-backdrop-filter: blur(20px) saturate(145%);
+        backdrop-filter: blur(20px) saturate(145%);
+        gap: 2px;
+    }
+    .showcase-footer .pager-btn {
+        border: none;
+        border-radius: 999px;
+        min-width: 34px;
+        height: 34px;
+    }
+    .showcase-footer .pager-current {
+        padding: 0 10px;
+        font-size: 0.8125rem;
+    }
+    .showcase-container {
+        padding-bottom: 52px;
     }
 }
 
@@ -209,22 +250,6 @@ body.sidebar-collapsed .showcase-footer {
 @media (max-width: 767px) {
     .footer-center {
         display: none;
-    }
-}
-
-/* 響應式：手機 <640px 只留右側 pager */
-@media (max-width: 640px) {
-    .showcase-footer {
-        justify-content: flex-end;
-        padding: 0.4rem 0.75rem;
-    }
-    .footer-left,
-    .footer-center {
-        display: none;
-    }
-    .showcase-container {
-        /* layout 對齊 fixed footer 真實渲染高度 (charter §4 例外) */
-        padding-bottom: 44px;
     }
 }
 

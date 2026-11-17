@@ -83,17 +83,16 @@
 /* ==================== Actress Card (T3) ==================== */
 
 .actress-card {
-    background: var(--bg-card);
-    border-radius: var(--fluent-radius-xl);
+    background: transparent;
+    border-radius: 0;
     box-shadow: none;
-    overflow: hidden;
+    overflow: visible;
     cursor: pointer;
-    transition: transform var(--fluent-duration-fast) var(--fluent-ease-standard),
-                box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+    transition: transform var(--fluent-duration-fast) var(--fluent-ease-standard);
 }
 
 .actress-card:hover {
-    transform: translateY(-4px) scale(1.02);
+    transform: translateY(-2px);
     box-shadow: none;
 }
 
@@ -107,7 +106,17 @@
     aspect-ratio: 3 / 4;   /* portrait，比 video card 的 3/2 更窄 */
     overflow: hidden;
     background: var(--surface-1);
+    border: 1px solid var(--stroke-subtle);
+    border-radius: 14px;
+    box-shadow: var(--elev-card);
     position: relative;
+    transition: border-color var(--fluent-duration-fast) var(--fluent-ease-standard),
+                box-shadow var(--fluent-duration-fast) var(--fluent-ease-standard);
+}
+
+.actress-card:hover .actress-card-photo {
+    border-color: color-mix(in oklch, var(--accent) 55%, var(--stroke-default));
+    box-shadow: var(--elev-float);
 }
 
 .actress-card-photo img {
@@ -159,13 +168,14 @@
 .actress-card-footer {
     position: relative;
     overflow: hidden;
-    height: 2.5rem;
-    padding: 0 0.75rem;
+    height: auto;
+    min-height: 2rem;
+    padding: 6px 2px 2px;
 }
 
 .actress-name {
-    font-size: 0.875rem;
-    font-weight: 500;
+    font-size: 0.84rem;
+    font-weight: 600;
     color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;

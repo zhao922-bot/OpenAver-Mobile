@@ -41,9 +41,9 @@
 
 /* Fluent Card Styling (settings.css:19-46) */
 .insights-container .card {
-    border: 1px solid var(--stroke-default);
-    border-radius: var(--radius-lg);
-    box-shadow: none;
+    border: 1px solid var(--stroke-subtle);
+    border-radius: 16px;
+    box-shadow: var(--elev-card, none);
     overflow: hidden;
     background: var(--surface-1);
     display: flex;
@@ -141,7 +141,13 @@
 
 .insights-container #tileCount.is-clickable {
     cursor: pointer;
-    transition: box-shadow var(--duration-fast) var(--fluent-ease-standard);
+    transition: box-shadow var(--duration-fast) var(--fluent-ease-standard),
+                border-color var(--duration-fast) var(--fluent-ease-standard);
+}
+
+.insights-container #tileCount.is-clickable:hover {
+    border-color: color-mix(in oklch, var(--accent) 45%, var(--stroke-default));
+    box-shadow: var(--elev-float, none);
 }
 
 .insights-container #tileCount.is-clickable.is-scoped {
