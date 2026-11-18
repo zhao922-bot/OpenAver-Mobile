@@ -1873,7 +1873,20 @@
       "plot_refetch_done_source": "Updated synopsis from {source}",
       "plot_refetch_not_found": "No synopsis found for this video",
       "plot_refetch_missing_number": "Missing code; cannot search synopsis",
-      "plot_refetch_failed": "Failed to re-fetch synopsis"
+      "plot_refetch_failed": "Failed to re-fetch synopsis",
+      "plot_refetch_and_translate": "Refetch & translate",
+      "plot_refetch_auto_translate": "Auto-translate",
+      "plot_edit_tooltip": "Edit synopsis",
+      "plot_edit_empty_cta": "Write manually",
+      "plot_edit_placeholder": "Enter or paste synopsis...",
+      "plot_edit_done": "Synopsis saved",
+      "plot_edit_empty_error": "Synopsis cannot be empty",
+      "title_edit_tooltip": "Edit title",
+      "title_edit_placeholder": "Enter video title...",
+      "title_edit_done": "Title saved",
+      "title_edit_empty_error": "Title cannot be empty",
+      "edit_save": "Save",
+      "edit_cancel": "Cancel"
     },
     "pick": {
       "add_aria": "Add to picks",

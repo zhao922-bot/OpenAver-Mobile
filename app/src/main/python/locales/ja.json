@@ -1873,7 +1873,20 @@
       "plot_refetch_done_source": "{source} からあらすじを再取得しました",
       "plot_refetch_not_found": "この作品のあらすじが見つかりません",
       "plot_refetch_missing_number": "品番がないため検索できません",
-      "plot_refetch_failed": "あらすじの再取得に失敗しました"
+      "plot_refetch_failed": "あらすじの再取得に失敗しました",
+      "plot_refetch_and_translate": "再取得して翻訳",
+      "plot_refetch_auto_translate": "取得後に翻訳",
+      "plot_edit_tooltip": "あらすじを編集",
+      "plot_edit_empty_cta": "手動で入力",
+      "plot_edit_placeholder": "あらすじを入力または貼り付け...",
+      "plot_edit_done": "あらすじを保存しました",
+      "plot_edit_empty_error": "あらすじを入力してください",
+      "title_edit_tooltip": "タイトルを編集",
+      "title_edit_placeholder": "タイトルを入力...",
+      "title_edit_done": "タイトルを保存しました",
+      "title_edit_empty_error": "タイトルを入力してください",
+      "edit_save": "保存",
+      "edit_cancel": "キャンセル"
     },
     "pick": {
       "add_aria": "★を付ける",

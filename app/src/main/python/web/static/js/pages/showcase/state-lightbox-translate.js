@@ -15,10 +15,90 @@ export function stateLightboxTranslate() {
     return {
         // path → true；與 _pickInFlight 同形（per-path 鎖，切片不清）
         _lbTrInFlight: {},
+        _lbTitleEditing: false,
+        _lbTitleDraft: '',
 
         // 翻譯開關：只讀 showcase.html 注入的 {enabled}（沿用 state-base 的 typeof 守衛）
         get lbTranslateEnabled() {
             return typeof window !== 'undefined' && window.__SHOWCASE_TRANSLATE__?.enabled === true;
+        },
+
+        lbTitleCanEdit() {
+            return !!this.currentLightboxVideo?.path;
+        },
+
+        lbTitleStartEdit() {
+            const video = this.currentLightboxVideo;
+            if (!video?.path || this.lbTrIsBusy()) return;
+            this._lbTitleDraft = video.title || '';
+            this._lbTitleEditing = true;
+        },
+
+        lbTitleCancelEdit() {
+            this._lbTitleEditing = false;
+            this._lbTitleDraft = '';
+        },
+
+        async lbTitleSaveEdit() {
+            const video = this.currentLightboxVideo;
+            if (!video?.path || this._lbTrInFlight[video.path]) return;
+            const path = video.path;
+            const nextTitle = String(this._lbTitleDraft || '').trim();
+            if (!nextTitle) {
+                this.showToast(window.t('showcase.lightbox.title_edit_empty_error'), 'warning');
+                return;
+            }
+            if (nextTitle === (video.title || '').trim()) {
+                this.lbTitleCancelEdit();
+                return;
+            }
+            this._lbTrInFlight[path] = true;
+            const snapshot = { title: video.title || '', original_title: video.original_title || '' };
+            try {
+                let data;
+                try {
+                    const resp = await fetch('/api/showcase/video/title', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            file_path: path,
+                            title: nextTitle,
+                            original_title: video.original_title || '',
+                        }),
+                    });
+                    data = await resp.json();
+                    if (!resp.ok) {
+                        throw new Error(data?.message || data?.error || `HTTP ${resp.status}`);
+                    }
+                } catch (e) {
+                    this.showToast(e.message || window.t('showcase.lightbox.translate_write_failed'), 'error');
+                    return;
+                }
+                if (data?.success === true) {
+                    this._lbTrApply(video, data);
+                    video.has_nfo = true;
+                    if (this.currentLightboxVideo === video) {
+                        this.lbTitleCancelEdit();
+                    }
+                    this.showToast(
+                        window.t('showcase.lightbox.title_edit_done'),
+                        'success',
+                        LB_TR_UNDO_TOAST_MS,
+                        {
+                            label: window.t('showcase.lightbox.translate_undo'),
+                            onClick: () => this._lbTrUndo(video, snapshot),
+                        },
+                    );
+                } else {
+                    const key = data?.error === 'no_nfo' ? 'translate_no_nfo' : 'translate_write_failed';
+                    const message = data?.error === 'no_nfo'
+                        ? window.t(`showcase.lightbox.${key}`)
+                        : (data?.message || window.t(`showcase.lightbox.${key}`));
+                    this.showToast(message, 'error');
+                }
+            } finally {
+                delete this._lbTrInFlight[path];
+            }
         },
 
         // 主標題固定提供翻譯入口；有原文時翻譯原文，沒有時翻譯目前標題。

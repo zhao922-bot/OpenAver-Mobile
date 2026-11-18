@@ -167,6 +167,7 @@ export function searchStateBase() {
         sampleGalleryImages: [],
         sampleGalleryIndex: 0,
         _sgTouchStartX: null,
+        _sgTouchStartY: null,
         _lbTouchStartX: null,
         _lbTouchStartY: null,
         _dtTouchStartX: null,
@@ -547,6 +548,10 @@ export function searchStateBase() {
                 }
                 // Issue-2: 更新封面高度 CSS variable（供 sample-thumb 高度計算）
                 this._updateCoverHeight();
+                for (const sel of ['.search-container .sample-strip', '.sample-gallery .sg-thumbs']) {
+                    const strip = document.querySelector(sel);
+                    if (strip) strip.scrollLeft = 0;
+                }
             });
         },
 

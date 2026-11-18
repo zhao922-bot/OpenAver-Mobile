@@ -2275,3 +2275,65 @@ html.theme-transition-active::view-transition-new(root) {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+
+/* ==================== Mobile First-Screen Compaction & Tab Ergonomics ==================== */
+@media (max-width: 768px) {
+    body #settings-components .settings-header {
+        padding-top: 6px;
+        padding-bottom: 8px;
+        margin-bottom: 8px;
+        gap: 0.4rem;
+    }
+
+    #settings-components .settings-appearance-controls {
+        height: 40px;
+    }
+
+    #settings-components .settings-appearance-controls .settings-locale-toggle,
+    #settings-components .settings-appearance-controls .font-size-control,
+    #settings-components .settings-appearance-controls .settings-theme-toggle {
+        height: 40px;
+    }
+
+    #settings-components .settings-mobile-save:not(.is-dirty):not(.is-saving):not(.is-error) {
+        display: none;
+    }
+
+    #settings-components .settings-mobile-save.is-dirty,
+    #settings-components .settings-mobile-save.is-saving,
+    #settings-components .settings-mobile-save.is-error {
+        margin-top: 2px;
+        padding: 6px 10px;
+        border: 1px solid color-mix(in oklch, var(--color-warning) 45%, var(--stroke-default));
+        border-radius: 12px;
+        background: color-mix(in oklch, var(--color-warning) 10%, var(--surface-1));
+    }
+
+    #settings-components .settings-mobile-save.is-error {
+        border-color: color-mix(in oklch, var(--color-error) 50%, var(--stroke-default));
+        background: color-mix(in oklch, var(--color-error) 10%, var(--surface-1));
+    }
+
+    #settings-components .settings-tabs {
+        scrollbar-width: none;
+        scroll-behavior: smooth;
+        margin-bottom: 0.65rem;
+        padding: 3px;
+    }
+
+    #settings-components .settings-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    #settings-components .settings-tab {
+        min-height: 2.35rem;
+        padding: 0.3rem 0.58rem;
+        font-size: 0.75rem;
+    }
+
+    /* Hide redundant primary card header that duplicates the active tab label on mobile */
+    #settings-components .settings-section > .card:first-of-type > .settings-card-header,
+    #settings-components .card[data-settings-panel] > .settings-card-header {
+        display: none;
+    }
+}

@@ -50,6 +50,7 @@ class PlotWritebackRequest(BaseModel):
     file_path: str
     plot: str
     original_plot: Optional[str] = None
+    allow_empty_existing: bool = False
 
 
 class PlotRefetchRequest(BaseModel):
@@ -257,7 +258,7 @@ def write_video_plot(req: PlotWritebackRequest):
         current_plot, current_original, error = _read_plots(nfo_path, locale)
         if error is not None:
             return error
-        if not current_plot:
+        if not current_plot and not req.allow_empty_existing:
             return _fail("plot_empty", locale)
 
         new_plot = strip_illegal_xml_chars(req.plot)
@@ -283,6 +284,7 @@ def write_video_plot(req: PlotWritebackRequest):
             new_plot=new_plot,
             new_original=new_original,
             locale=locale,
+            allow_empty_existing=req.allow_empty_existing,
         )
         if persist_error is not None:
             return persist_error

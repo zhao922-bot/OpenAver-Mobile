@@ -1873,7 +1873,20 @@
       "plot_refetch_done_source": "已從 {source} 重新取得簡介",
       "plot_refetch_not_found": "找不到這部片的簡介",
       "plot_refetch_missing_number": "缺少番號，無法搜尋簡介",
-      "plot_refetch_failed": "重新取得簡介失敗，請重試"
+      "plot_refetch_failed": "重新取得簡介失敗，請重試",
+      "plot_refetch_and_translate": "重抓並翻譯",
+      "plot_refetch_auto_translate": "抓後翻譯",
+      "plot_edit_tooltip": "編輯簡介",
+      "plot_edit_empty_cta": "手動填寫",
+      "plot_edit_placeholder": "輸入或貼上影片簡介...",
+      "plot_edit_done": "簡介已儲存",
+      "plot_edit_empty_error": "簡介內容不能為空",
+      "title_edit_tooltip": "編輯標題",
+      "title_edit_placeholder": "輸入影片標題...",
+      "title_edit_done": "標題已儲存",
+      "title_edit_empty_error": "標題內容不能為空",
+      "edit_save": "儲存",
+      "edit_cancel": "取消"
     },
     "pick": {
       "add_aria": "加入精選",

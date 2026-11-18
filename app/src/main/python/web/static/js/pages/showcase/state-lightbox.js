@@ -203,6 +203,15 @@ export function stateLightbox() {
                     const el = document.querySelector(sel);
                     if (el) el.scrollLeft = 0;
                 }
+                for (const sel of [
+                    '.showcase-lightbox',
+                    '.showcase-lightbox .lightbox-content',
+                    '.showcase-lightbox .lightbox-metadata',
+                    '.showcase-lightbox .lb-plot-body',
+                ]) {
+                    const el = document.querySelector(sel);
+                    if (el) el.scrollTop = 0;
+                }
             };
             reset();
             if (typeof this.$nextTick === 'function') {
@@ -223,6 +232,7 @@ export function stateLightbox() {
             // killPickStarTweens 註解）。不清 --pick-fill（沿用搬移前行為）。
             window.ShowcaseAnimations?.killPickStarTweens?.({ clearTransform: true });
             this._lbPlotReset?.();
+            this.lbTitleCancelEdit?.();
             this.lightboxIndex = idx;
             this.currentLightboxVideo = (idx >= 0 && idx < _filteredVideos.length)
                 ? _filteredVideos[idx] : null;
@@ -419,6 +429,7 @@ export function stateLightbox() {
                 this.lightboxCloseTimer = null;
             }
             this._lbPlotReset?.();
+            this.lbTitleCancelEdit?.();
 
             // 49b T4 fix: 若 picker 開啟中，先關閉 picker
             if (this._pickerOpen) {

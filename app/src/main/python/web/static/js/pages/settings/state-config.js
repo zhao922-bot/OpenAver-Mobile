@@ -422,9 +422,29 @@ export function stateConfig() {
         },
 
         // ===== Methods =====
+        _scrollActiveSettingsTabIntoView() {
+            const syncTab = () => {
+                if (typeof document === 'undefined') return;
+                const strip = document.querySelector('#settings-components .settings-tabs');
+                if (!strip) return;
+                const active = strip.querySelector('.settings-tab.is-active')
+                    || strip.querySelector('[aria-selected="true"]');
+                if (!active) return;
+                const targetLeft = active.offsetLeft - (strip.clientWidth - active.clientWidth) / 2;
+                strip.scrollLeft = Math.max(0, Math.round(targetLeft));
+            };
+            syncTab();
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(syncTab);
+            }
+        },
+
         _initSettingsTabs() {
             writeStoredSettingsTab(this.settingsTab);
-            this.$nextTick(() => this._scrollToSettingsHashTarget());
+            this.$nextTick(() => {
+                this._scrollActiveSettingsTabIntoView();
+                this._scrollToSettingsHashTarget();
+            });
         },
 
         selectSettingsTab(name) {
@@ -436,7 +456,10 @@ export function stateConfig() {
             } catch {
                 // History may be unavailable in embedded test pages.
             }
-            this.$nextTick(() => this._scrollToSettingsHashTarget());
+            this.$nextTick(() => {
+                this._scrollActiveSettingsTabIntoView();
+                this._scrollToSettingsHashTarget();
+            });
         },
 
         syncSettingsFromHash() {
@@ -448,7 +471,10 @@ export function stateConfig() {
                 this.settingsTab = next;
                 writeStoredSettingsTab(next);
             }
-            this.$nextTick(() => this._scrollToSettingsHashTarget());
+            this.$nextTick(() => {
+                this._scrollActiveSettingsTabIntoView();
+                this._scrollToSettingsHashTarget();
+            });
         },
 
         revealInvalidSettingsTab(event) {

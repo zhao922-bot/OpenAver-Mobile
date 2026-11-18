@@ -260,3 +260,50 @@ def test_plot_router_readonly_source_only_writes_output_nfo(monkeypatch, tmp_pat
     assert saved["success"] is True
     assert source_nfo.read_bytes() == source_before
     assert ET.fromstring(output_nfo.read_bytes()).findtext("plot") == TRANSLATED_PLOT
+
+
+def test_plot_router_manual_edit_fills_empty_plot_when_allowed(monkeypatch, tmp_path):
+    library = tmp_path / "library"
+    library.mkdir()
+    video_path = library / "ABC-999.mp4"
+    video_path.write_bytes(b"video")
+    nfo_path = library / "ABC-999.nfo"
+    nfo_path.write_text(
+        "<?xml version='1.0' encoding='utf-8'?><movie><title>ABC-999</title><plot></plot></movie>",
+        encoding="utf-8",
+    )
+    db_path = tmp_path / "openaver.db"
+    init_db(db_path)
+    video_uri = to_file_uri(str(video_path))
+    VideoRepository(db_path).upsert(
+        Video(
+            path=video_uri,
+            number="ABC-999",
+            title="ABC-999",
+            nfo_mtime=nfo_path.stat().st_mtime,
+        )
+    )
+    _wire_plot_router(monkeypatch, db_path, library)
+
+    rejected = showcase_plot.write_video_plot(
+        showcase_plot.PlotWritebackRequest(
+            file_path=video_uri,
+            plot="手动补充的简介",
+        )
+    )
+    assert rejected["success"] is False
+    assert rejected["error"] == "plot_empty"
+
+    saved = showcase_plot.write_video_plot(
+        showcase_plot.PlotWritebackRequest(
+            file_path=video_uri,
+            plot="手动补充的简介",
+            original_plot="",
+            allow_empty_existing=True,
+        )
+    )
+    assert saved["success"] is True
+    assert saved["plot"] == "手动补充的简介"
+    assert saved["original_plot"] == ""
+    assert saved["has_original"] is False
+    assert ET.fromstring(nfo_path.read_bytes()).findtext("plot") == "手动补充的简介"

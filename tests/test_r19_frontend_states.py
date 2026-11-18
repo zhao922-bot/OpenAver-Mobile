@@ -195,7 +195,9 @@ def test_r19_assets_are_part_of_python_patch_payload():
 
 def test_sample_strips_exclude_lightbox_and_gallery_swipe_navigation():
     lightbox_js = read(PYTHON_WEB / "static/js/pages/showcase/state-lightbox.js")
+    samples_js = read(PYTHON_WEB / "static/js/pages/showcase/state-lightbox-samples.js")
     plot_js = read(PYTHON_WEB / "static/js/pages/showcase/state-lightbox-plot.js")
+    tr_js = read(PYTHON_WEB / "static/js/pages/showcase/state-lightbox-translate.js")
     showcase_html = read(PYTHON_WEB / "templates/showcase.html")
     search_html = read(PYTHON_WEB / "templates/search.html")
 
@@ -203,7 +205,12 @@ def test_sample_strips_exclude_lightbox_and_gallery_swipe_navigation():
     assert "SWIPE_EXCLUDE_SELECTOR" in lightbox_js
     assert "isTouchInSelector(e, SWIPE_EXCLUDE_SELECTOR)" in lightbox_js
     assert "_resetSampleStripScroll" in lightbox_js
+    assert "el.scrollTop = 0" in lightbox_js
+    assert "_scrollActiveSampleThumbIntoView" in samples_js
+    assert "detectSwipe(" in samples_js
     assert "lbPlotRefetch" in plot_js
+    assert "lbPlotSaveEdit" in plot_js
+    assert "lbTitleSaveEdit" in tr_js
     assert "/api/showcase/video/plot/refetch" in plot_js
     assert showcase_html.count("lbPlotToggleRefetchSources()") == 4
     assert showcase_html.count("closest?.('.sg-thumbs')") == 2

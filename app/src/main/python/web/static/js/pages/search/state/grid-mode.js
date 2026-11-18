@@ -587,12 +587,34 @@ export function searchStateGridMode() {
 
     // ==================== T8: Sample Gallery Methods ====================
 
+    _scrollActiveSampleThumbIntoView() {
+        const syncScroll = () => {
+            const strip = document.querySelector('.sample-gallery .sg-thumbs');
+            if (!strip) return;
+            const btns = strip.querySelectorAll('.sg-thumb-btn');
+            const active = btns[this.sampleGalleryIndex] || strip.querySelector('.sg-thumb-active');
+            if (!active) return;
+            const targetLeft = active.offsetLeft - (strip.clientWidth - active.clientWidth) / 2;
+            strip.scrollLeft = Math.max(0, Math.round(targetLeft));
+        };
+        syncScroll();
+        if (typeof this.$nextTick === 'function') {
+            this.$nextTick(() => {
+                syncScroll();
+                if (typeof requestAnimationFrame === 'function') {
+                    requestAnimationFrame(syncScroll);
+                }
+            });
+        }
+    },
+
     openSampleGallery(images, startIdx) {
         if (!images || images.length === 0) return;
         this.sampleGalleryImages = images;
         this.sampleGalleryIndex = startIdx || 0;
         this._sgGeneration++;
         this.sampleGalleryOpen = true;
+        this._scrollActiveSampleThumbIntoView();
     },
 
     closeSampleGallery() {
@@ -606,6 +628,7 @@ export function searchStateGridMode() {
         this._sgGeneration++;
         var gen = this._sgGeneration;
         this.sampleGalleryIndex = prevIdx;
+        this._scrollActiveSampleThumbIntoView();
         // C17: state-first，$nextTick 後播動畫
         var self = this;
         this.$nextTick(() => {
@@ -623,6 +646,7 @@ export function searchStateGridMode() {
         this._sgGeneration++;
         var gen = this._sgGeneration;
         this.sampleGalleryIndex = nextIdx;
+        this._scrollActiveSampleThumbIntoView();
         // C17: state-first，$nextTick 後播動畫
         var self = this;
         this.$nextTick(() => {
@@ -640,6 +664,7 @@ export function searchStateGridMode() {
         this._sgGeneration++;
         var gen = this._sgGeneration;
         this.sampleGalleryIndex = idx;
+        this._scrollActiveSampleThumbIntoView();
         // C17: state-first，$nextTick 後播動畫
         var self = this;
         this.$nextTick(() => {
@@ -652,9 +677,13 @@ export function searchStateGridMode() {
     },
 
     _sgTouchStart(e) {
-        if (e.touches && e.touches.length > 0) {
-            this._sgTouchStartX = e.touches[0].clientX;
+        if (!e.touches || e.touches.length !== 1) {
+            this._sgTouchStartX = null;
+            this._sgTouchStartY = null;
+            return;
         }
+        this._sgTouchStartX = e.touches[0].clientX;
+        this._sgTouchStartY = e.touches[0].clientY ?? null;
     },
 
     _sgTouchEnd(e) {
@@ -662,13 +691,22 @@ export function searchStateGridMode() {
         var endX = e.changedTouches && e.changedTouches.length > 0
             ? e.changedTouches[0].clientX
             : null;
-        if (endX === null) { this._sgTouchStartX = null; return; }
-        var delta = endX - this._sgTouchStartX;
+        var endY = e.changedTouches && e.changedTouches.length > 0
+            ? e.changedTouches[0].clientY
+            : null;
+        if (endX === null) {
+            this._sgTouchStartX = null;
+            this._sgTouchStartY = null;
+            return;
+        }
+        var startY = this._sgTouchStartY !== null ? this._sgTouchStartY : (endY ?? 0);
+        var finishY = endY !== null && endY !== undefined ? endY : startY;
+        var dir = detectSwipe(this._sgTouchStartX, startY, endX, finishY, 50);
         this._sgTouchStartX = null;
-        if (Math.abs(delta) < 50) return; // swipe threshold
-        if (delta < 0) {
+        this._sgTouchStartY = null;
+        if (dir === 'left') {
             this.nextSampleGallery(); // swipe left → next
-        } else {
+        } else if (dir === 'right') {
             this.prevSampleGallery(); // swipe right → prev
         }
     }

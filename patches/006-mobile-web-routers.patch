@@ -9295,7 +9295,7 @@
  @router.get("/source-status")
 --- /dev/null
 +++ b/web/routers/showcase_plot.py
-@@ -0,0 +1,384 @@
+@@ -0,0 +1,386 @@
 +"""Lightbox plot API: read and translate NFO plot text on demand."""
 +
 +from __future__ import annotations
@@ -9348,6 +9348,7 @@
 +    file_path: str
 +    plot: str
 +    original_plot: Optional[str] = None
++    allow_empty_existing: bool = False
 +
 +
 +class PlotRefetchRequest(BaseModel):
@@ -9555,7 +9556,7 @@
 +        current_plot, current_original, error = _read_plots(nfo_path, locale)
 +        if error is not None:
 +            return error
-+        if not current_plot:
++        if not current_plot and not req.allow_empty_existing:
 +            return _fail("plot_empty", locale)
 +
 +        new_plot = strip_illegal_xml_chars(req.plot)
@@ -9581,6 +9582,7 @@
 +            new_plot=new_plot,
 +            new_original=new_original,
 +            locale=locale,
++            allow_empty_existing=req.allow_empty_existing,
 +        )
 +        if persist_error is not None:
 +            return persist_error

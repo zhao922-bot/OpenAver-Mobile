@@ -752,10 +752,134 @@
     border-bottom: 1px solid var(--stroke-subtle);
 }
 
-.lightbox-metadata .lb-plot-refetch-btn[aria-expanded="true"] {
+.lightbox-metadata .lb-plot-refetch-btn[aria-expanded="true"],
+.lightbox-metadata .lb-plot-edit-btn[aria-expanded="true"],
+.lightbox-metadata .lb-title-edit-btn[aria-expanded="true"] {
     border-color: color-mix(in oklch, var(--accent) 50%, var(--stroke-default));
     color: var(--accent);
     background: color-mix(in oklch, var(--accent) 12%, var(--surface-1));
+}
+
+.lightbox-metadata .lb-title-edit-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0.45rem 0 0.55rem;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--stroke-default);
+    border-radius: 12px;
+    background: var(--surface-1);
+}
+
+.lightbox-metadata .lb-title-edit-input {
+    flex: 1 1 14rem;
+    min-width: 0;
+    min-height: 36px;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--stroke-default);
+    border-radius: 8px;
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.lightbox-metadata .lb-title-edit-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.lightbox-metadata .lb-title-edit-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: auto;
+}
+
+.lightbox-metadata .lb-title-edit-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-height: 32px;
+    padding: 0 0.68rem;
+    border-radius: 999px;
+    border: 1px solid var(--stroke-default);
+    background: var(--surface-2);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.lightbox-metadata .lb-title-edit-action--save {
+    border-color: color-mix(in oklch, var(--accent) 42%, var(--stroke-default));
+    background: color-mix(in oklch, var(--accent) 14%, var(--surface-1));
+    color: var(--accent);
+}
+
+.lightbox-metadata .lb-plot-source-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.lightbox-metadata .lb-plot-auto-tr-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-height: 24px;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--stroke-subtle);
+    background: var(--surface-2);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.lightbox-metadata .lb-plot-auto-tr-toggle.is-active {
+    border-color: color-mix(in oklch, var(--accent) 45%, var(--stroke-default));
+    background: color-mix(in oklch, var(--accent) 14%, var(--surface-1));
+    color: var(--accent);
+}
+
+.lightbox-metadata .lb-plot-source-pill--translate {
+    background: color-mix(in oklch, var(--accent-secondary, var(--accent)) 14%, var(--surface-2));
+    border-color: color-mix(in oklch, var(--accent-secondary, var(--accent)) 38%, var(--stroke-default));
+    color: var(--accent);
+}
+
+.lightbox-metadata .lb-plot-edit-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.lightbox-metadata .lb-plot-edit-textarea {
+    width: 100%;
+    min-height: 112px;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--stroke-default);
+    border-radius: 10px;
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    line-height: 1.65;
+    resize: vertical;
+}
+
+.lightbox-metadata .lb-plot-edit-textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.lightbox-metadata .lb-plot-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.4rem;
 }
 
 .lightbox-metadata .lb-plot-source-bar {

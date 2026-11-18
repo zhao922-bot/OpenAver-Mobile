@@ -5,6 +5,8 @@
  * 從 state-lightbox.js 拆出，逐字搬移，見 plan-149a.md CD-149a-1／CD-149a-2。
  */
 
+import { detectSwipe } from '@/shared/swipe.js';
+
 export function stateLightboxSamples() {
     return {
         // Sample Gallery 狀態
@@ -12,10 +14,32 @@ export function stateLightboxSamples() {
         sampleGalleryImages: [],
         sampleGalleryIndex: 0,
         _sgTouchStartX: null,
+        _sgTouchStartY: null,
         _sgAnimating: false,            // guard
         _sgGeneration: 0,               // stale callback 防護
 
         // ==================== Sample Gallery Methods ====================
+
+        _scrollActiveSampleThumbIntoView() {
+            const syncScroll = () => {
+                const strip = document.querySelector('.sample-gallery .sg-thumbs');
+                if (!strip) return;
+                const btns = strip.querySelectorAll('.sg-thumb-btn');
+                const active = btns[this.sampleGalleryIndex] || strip.querySelector('.sg-thumb-active');
+                if (!active) return;
+                const targetLeft = active.offsetLeft - (strip.clientWidth - active.clientWidth) / 2;
+                strip.scrollLeft = Math.max(0, Math.round(targetLeft));
+            };
+            syncScroll();
+            if (typeof this.$nextTick === 'function') {
+                this.$nextTick(() => {
+                    syncScroll();
+                    if (typeof requestAnimationFrame === 'function') {
+                        requestAnimationFrame(syncScroll);
+                    }
+                });
+            }
+        },
 
         openSampleGallery(images, startIdx) {
             if (!images || images.length === 0) return;
@@ -23,6 +47,7 @@ export function stateLightboxSamples() {
             this.sampleGalleryIndex = startIdx || 0;
             this._sgGeneration++;
             this.sampleGalleryOpen = true;
+            this._scrollActiveSampleThumbIntoView();
         },
 
         closeSampleGallery() {
@@ -36,6 +61,7 @@ export function stateLightboxSamples() {
             this._sgGeneration++;
             var gen = this._sgGeneration;
             this.sampleGalleryIndex = prevIdx;
+            this._scrollActiveSampleThumbIntoView();
             // state-first，$nextTick 後播動畫
             var self = this;
             this.$nextTick(() => {
@@ -53,6 +79,7 @@ export function stateLightboxSamples() {
             this._sgGeneration++;
             var gen = this._sgGeneration;
             this.sampleGalleryIndex = nextIdx;
+            this._scrollActiveSampleThumbIntoView();
             // state-first，$nextTick 後播動畫
             var self = this;
             this.$nextTick(() => {
@@ -70,6 +97,7 @@ export function stateLightboxSamples() {
             this._sgGeneration++;
             var gen = this._sgGeneration;
             this.sampleGalleryIndex = idx;
+            this._scrollActiveSampleThumbIntoView();
             // state-first，$nextTick 後播動畫
             var self = this;
             this.$nextTick(() => {
@@ -82,9 +110,13 @@ export function stateLightboxSamples() {
         },
 
         _sgTouchStart(e) {
-            if (e.touches && e.touches.length > 0) {
-                this._sgTouchStartX = e.touches[0].clientX;
+            if (!e.touches || e.touches.length !== 1) {
+                this._sgTouchStartX = null;
+                this._sgTouchStartY = null;
+                return;
             }
+            this._sgTouchStartX = e.touches[0].clientX;
+            this._sgTouchStartY = e.touches[0].clientY ?? null;
         },
 
         _sgTouchEnd(e) {
@@ -92,13 +124,22 @@ export function stateLightboxSamples() {
             var endX = e.changedTouches && e.changedTouches.length > 0
                 ? e.changedTouches[0].clientX
                 : null;
-            if (endX === null) { this._sgTouchStartX = null; return; }
-            var delta = endX - this._sgTouchStartX;
+            var endY = e.changedTouches && e.changedTouches.length > 0
+                ? e.changedTouches[0].clientY
+                : null;
+            if (endX === null) {
+                this._sgTouchStartX = null;
+                this._sgTouchStartY = null;
+                return;
+            }
+            var startY = this._sgTouchStartY !== null ? this._sgTouchStartY : (endY ?? 0);
+            var finishY = endY !== null && endY !== undefined ? endY : startY;
+            var dir = detectSwipe(this._sgTouchStartX, startY, endX, finishY, 50);
             this._sgTouchStartX = null;
-            if (Math.abs(delta) < 50) return; // swipe threshold
-            if (delta < 0) {
+            this._sgTouchStartY = null;
+            if (dir === 'left') {
                 this.nextSampleGallery(); // swipe left → next
-            } else {
+            } else if (dir === 'right') {
                 this.prevSampleGallery(); // swipe right → prev
             }
         },

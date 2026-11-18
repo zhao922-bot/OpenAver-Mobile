@@ -1873,7 +1873,20 @@
       "plot_refetch_done_source": "已从 {source} 重新获取简介",
       "plot_refetch_not_found": "未找到这部片的简介",
       "plot_refetch_missing_number": "缺少番号，无法搜索简介",
-      "plot_refetch_failed": "重新获取简介失败，请重试"
+      "plot_refetch_failed": "重新获取简介失败，请重试",
+      "plot_refetch_and_translate": "重抓并翻译",
+      "plot_refetch_auto_translate": "抓后翻译",
+      "plot_edit_tooltip": "编辑简介",
+      "plot_edit_empty_cta": "手动填写",
+      "plot_edit_placeholder": "输入或粘贴影片简介...",
+      "plot_edit_done": "简介已保存",
+      "plot_edit_empty_error": "简介内容不能为空",
+      "title_edit_tooltip": "编辑标题",
+      "title_edit_placeholder": "输入影片标题...",
+      "title_edit_done": "标题已保存",
+      "title_edit_empty_error": "标题内容不能为空",
+      "edit_save": "保存",
+      "edit_cancel": "取消"
     },
     "pick": {
       "add_aria": "加入精选",

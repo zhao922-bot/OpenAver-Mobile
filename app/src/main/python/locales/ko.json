@@ -1873,7 +1873,20 @@
       "plot_refetch_done_source": "{source}에서 줄거리를 다시 가져왔습니다",
       "plot_refetch_not_found": "이 작품의 줄거리를 찾을 수 없습니다",
       "plot_refetch_missing_number": "품번이 없어 줄거리를 검색할 수 없습니다",
-      "plot_refetch_failed": "줄거리 다시 가져오기에 실패했습니다"
+      "plot_refetch_failed": "줄거리 다시 가져오기에 실패했습니다",
+      "plot_refetch_and_translate": "다시 가져와 번역",
+      "plot_refetch_auto_translate": "가져온 후 번역",
+      "plot_edit_tooltip": "줄거리 편집",
+      "plot_edit_empty_cta": "직접 입력",
+      "plot_edit_placeholder": "줄거리를 입력하거나 붙여넣기...",
+      "plot_edit_done": "줄거리가 저장되었습니다",
+      "plot_edit_empty_error": "줄거리를 입력해 주세요",
+      "title_edit_tooltip": "제목 편집",
+      "title_edit_placeholder": "제목 입력...",
+      "title_edit_done": "제목이 저장되었습니다",
+      "title_edit_empty_error": "제목을 입력해 주세요",
+      "edit_save": "저장",
+      "edit_cancel": "취소"
     },
     "pick": {
       "add_aria": "엄선작에 추가",
