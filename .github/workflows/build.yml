@@ -92,7 +92,7 @@ jobs:
       - name: Run Android JVM unit tests
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon testDebugUnitTest -Pabi=arm64-v8a
+          ./gradlew --no-daemon :app:testDebugUnitTest -Pabi=arm64-v8a
 
       - name: Generate code health report
         continue-on-error: true
@@ -110,7 +110,7 @@ jobs:
       - name: Build unsigned arm64 release APK
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon assembleRelease -Pabi=arm64-v8a
+          ./gradlew --no-daemon :app:assembleRelease -Pabi=arm64-v8a
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7

@@ -98,7 +98,7 @@ jobs:
       - name: Run Android JVM unit tests
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon testDebugUnitTest -Pabi=arm64-v8a
+          ./gradlew --no-daemon :app:testDebugUnitTest -Pabi=arm64-v8a
 
       - name: Decode required release keystore
         shell: bash
@@ -113,7 +113,7 @@ jobs:
       - name: Build signed arm64 release APK
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon assembleRelease -Pabi=arm64-v8a
+          ./gradlew --no-daemon :app:assembleRelease -Pabi=arm64-v8a
 
       - name: Read app version and prepare release body
         shell: bash
