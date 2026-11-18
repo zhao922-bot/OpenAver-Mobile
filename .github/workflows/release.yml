@@ -63,6 +63,20 @@ jobs:
       - name: Configure Gradle cache
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Prepare and test Flutter UI
+        working-directory: flutter_ui
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+
       - name: Verify upstream patch layering
         run: |
           python tools/verify_python_sync.py \

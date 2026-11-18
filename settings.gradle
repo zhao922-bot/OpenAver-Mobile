@@ -7,12 +7,21 @@ pluginManagement {
 }
 
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://storage.googleapis.com/download.flutter.io")
+        }
     }
 }
 
 rootProject.name = "OpenAverMobile"
 include(":app")
+
+def flutterIncludeScript = new File(settingsDir, "flutter_ui/.android/include_flutter.groovy")
+if (flutterIncludeScript.exists()) {
+    setBinding(new Binding([gradle: this]))
+    evaluate(flutterIncludeScript)
+}

@@ -112,6 +112,9 @@ android {
 }
 
 dependencies {
+    if (findProject(':flutter') != null) {
+        implementation project(':flutter')
+    }
     testImplementation "junit:junit:4.13.2"
     testImplementation "org.json:json:20240303"
 }

@@ -60,8 +60,8 @@ public final class AndroidCfTransport {
             SITE_JAVLIBRARY, SITE_FC2_JAVTEN, SITE_JABLE
     );
 
-    private final Activity activity;
-    private final FrameLayout root;
+    private Activity activity;
+    private FrameLayout root;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, SiteView> sites = new ConcurrentHashMap<>();
     private final Object siteCreateLock = new Object();
@@ -77,6 +77,46 @@ public final class AndroidCfTransport {
         this.activity = activity;
         this.root = root;
         createOverlay();
+    }
+
+    /**
+     * Reattach the Cloudflare solve overlay onto the currently visible host
+     * Activity (MainActivity or OpenAverFlutterActivity) without rebuilding
+     * underlying site WebViews.
+     */
+    public void setHost(Activity newActivity, FrameLayout newRoot) {
+        if (newActivity == null || newRoot == null) {
+            return;
+        }
+        Runnable attach = () -> {
+            this.activity = newActivity;
+            this.root = newRoot;
+            if (overlay == null) {
+                createOverlay();
+                return;
+            }
+            if (overlay.getParent() == newRoot) {
+                if (overlay.getVisibility() == View.VISIBLE) {
+                    overlay.bringToFront();
+                }
+                return;
+            }
+            if (overlay.getParent() instanceof ViewGroup) {
+                ((ViewGroup) overlay.getParent()).removeView(overlay);
+            }
+            newRoot.addView(overlay, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+            if (overlay.getVisibility() == View.VISIBLE) {
+                overlay.bringToFront();
+            }
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            attach.run();
+        } else {
+            mainHandler.post(attach);
+        }
     }
 
     public boolean isOverlayVisible() {

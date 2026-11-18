@@ -74,6 +74,7 @@ public final class MainActivity extends Activity {
     private static final int REQUEST_ALL_FILES_ACCESS = 4102;
     private static final int REQUEST_LEGACY_STORAGE = 4103;
     private static final int REQUEST_STORAGE_TREE = 4104;
+    private static final int REQUEST_FLUTTER_UI = 4105;
     private static final long EXIT_BACK_WINDOW_MS = 2000L;
     private static final long PAGE_LOAD_TIMEOUT_MS = 30000L;
     private static final long LOCAL_START_TIMEOUT_MS = 300_000L;
@@ -82,6 +83,9 @@ public final class MainActivity extends Activity {
     private static final boolean NATIVE_LOADED;
     private static final String PREFS_NAME = "openaver_mobile";
     private static final String PREF_UI_LOCALE = "ui_locale";
+    private static final String PREF_UI_MODE = "ui_mode";
+    private static final String UI_MODE_FLUTTER = "flutter";
+    private static final String UI_MODE_WEB = "web";
     private static final String DEFAULT_UI_LOCALE = "zh-CN";
     private static final String[] SUPPORTED_UI_LOCALES = {
             "zh-CN", "zh-TW", "ja", "en", "ko"
@@ -473,13 +477,36 @@ public final class MainActivity extends Activity {
                     runtimeFailed = false;
                     hideLoading();
                     setupScroll.setVisibility(View.GONE);
-                    webContainer.setVisibility(View.VISIBLE);
-                    applyLocalAuthCookie(() -> {
-                        openLocalPath("/scanner");
-                        // Keep the CF poller available, but do not put WebView
-                        // construction on the page's startup critical path.
+                    if (shouldLaunchFlutterUi()) {
                         startCfMobile();
-                    });
+                        MobileRuntimeSession.markReady(
+                                localPort,
+                                localAuthToken,
+                                localAuthCookieName,
+                                dataDir,
+                                nativeAbiSafe(),
+                                cfTransport,
+                                cfMobile
+                        );
+                        launchFlutterUi();
+                    } else {
+                        MobileRuntimeSession.markReady(
+                                localPort,
+                                localAuthToken,
+                                localAuthCookieName,
+                                dataDir,
+                                nativeAbiSafe(),
+                                null,
+                                null
+                        );
+                        webContainer.setVisibility(View.VISIBLE);
+                        applyLocalAuthCookie(() -> {
+                            openLocalPath("/scanner");
+                            // Keep the CF poller available, but do not put WebView
+                            // construction on the page's startup critical path.
+                            startCfMobile();
+                        });
+                    }
                 });
             } catch (Throwable error) {
                 final String failureStage = stage;
@@ -905,7 +932,36 @@ public final class MainActivity extends Activity {
         }
         cfTransport = new AndroidCfTransport(this, root);
         cfMobile = new CfMobileAgent(localBaseUrl(), localAuthToken, cfTransport);
+        MobileRuntimeSession.setCfAgent(cfTransport, cfMobile);
         cfMobile.start();
+    }
+
+    private boolean shouldLaunchFlutterUi() {
+        if (getIntent() != null && getIntent().getBooleanExtra("force_classic_web", false)) {
+            return false;
+        }
+        String uiMode = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .getString(PREF_UI_MODE, UI_MODE_FLUTTER);
+        return !UI_MODE_WEB.equals(uiMode);
+    }
+
+    private void launchFlutterUi() {
+        if (!MobileRuntimeSession.isReady()) {
+            return;
+        }
+        webContainer.setVisibility(View.GONE);
+        Intent intent = new Intent(this, OpenAverFlutterActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+        startActivityForResult(intent, REQUEST_FLUTTER_UI);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (runtimeReady && shouldLaunchFlutterUi()) {
+            launchFlutterUi();
+        }
     }
 
     private void showPageError() {
@@ -1041,6 +1097,7 @@ public final class MainActivity extends Activity {
                 R.id.menuScanner,
                 R.id.menuStorageSettings,
                 R.id.menuStorageTree,
+                R.id.menuFlutterUi,
                 R.id.menuAbout,
                 R.id.menuExit
         };
@@ -1053,6 +1110,7 @@ public final class MainActivity extends Activity {
                 R.id.menuLabelScanner,
                 R.id.menuLabelStorageSettings,
                 R.id.menuLabelStorageTree,
+                R.id.menuLabelFlutterUi,
                 R.id.menuLabelAbout
         };
         for (int labelId : labelIds) {
@@ -1065,6 +1123,7 @@ public final class MainActivity extends Activity {
                 R.id.menuIconScanner,
                 R.id.menuIconStorage,
                 R.id.menuIconTree,
+                R.id.menuIconFlutterUi,
                 R.id.menuIconAbout
         };
         for (int iconId : iconIds) {
@@ -1077,6 +1136,7 @@ public final class MainActivity extends Activity {
                 R.id.menuChevronScanner,
                 R.id.menuChevronStorage,
                 R.id.menuChevronTree,
+                R.id.menuChevronFlutterUi,
                 R.id.menuChevronAbout
         };
         for (int chevronId : chevronIds) {
@@ -1114,6 +1174,14 @@ public final class MainActivity extends Activity {
         dialog.findViewById(R.id.menuStorageTree).setOnClickListener(view -> {
             dialog.dismiss();
             openStorageTreePicker();
+        });
+        dialog.findViewById(R.id.menuFlutterUi).setOnClickListener(view -> {
+            dialog.dismiss();
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    .edit()
+                    .putString(PREF_UI_MODE, UI_MODE_FLUTTER)
+                    .apply();
+            launchFlutterUi();
         });
         dialog.findViewById(R.id.menuAbout).setOnClickListener(view -> {
             dialog.dismiss();
@@ -1474,6 +1542,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        MobileRuntimeSession.clear();
         TaskKeepAliveService.stop(this);
         mainHandler.removeCallbacksAndMessages(null);
         runtimeExecutor.shutdownNow();
@@ -1521,6 +1590,38 @@ public final class MainActivity extends Activity {
                 startEmbeddedRuntime();
             } else {
                 showPermissionUi();
+            }
+            return;
+        }
+        if (requestCode == REQUEST_FLUTTER_UI) {
+            if (resultCode == OpenAverFlutterActivity.RESULT_EXIT_APP) {
+                finish();
+                return;
+            }
+            if (resultCode == OpenAverFlutterActivity.RESULT_SWITCH_CLASSIC_WEB) {
+                if (cfTransport != null) {
+                    cfTransport.setHost(this, root);
+                }
+                String targetPath = data == null
+                        ? null
+                        : data.getStringExtra(OpenAverFlutterActivity.EXTRA_TARGET_PATH);
+                if (targetPath != null && !targetPath.isEmpty()) {
+                    currentLocalPath = targetPath;
+                }
+                setupScroll.setVisibility(View.GONE);
+                webContainer.setVisibility(View.VISIBLE);
+                applyLocalAuthCookie(() -> openLocalPathNow(currentLocalPath));
+                return;
+            }
+            if (!shouldLaunchFlutterUi()) {
+                if (cfTransport != null) {
+                    cfTransport.setHost(this, root);
+                }
+                setupScroll.setVisibility(View.GONE);
+                webContainer.setVisibility(View.VISIBLE);
+                applyLocalAuthCookie(() -> openLocalPathNow(currentLocalPath));
+            } else {
+                finish();
             }
             return;
         }

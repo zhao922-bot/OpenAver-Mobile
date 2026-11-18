@@ -55,6 +55,7 @@
     <string name="retry">重试</string>
     <string name="menu_refresh">刷新页面</string>
     <string name="menu_scanner">打开列表生成</string>
+    <string name="menu_flutter_ui">切换到原生 Flutter 界面</string>
     <string name="menu_storage_settings">存储权限</string>
     <string name="menu_storage_tree">授权可写目录</string>
     <string name="storage_tree_authorized">可写目录授权成功</string>

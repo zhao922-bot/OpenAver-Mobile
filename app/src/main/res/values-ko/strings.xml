@@ -54,6 +54,7 @@
     <string name="web_renderer_restarted">표시 프로세스가 다시 시작되었습니다.</string>
     <string name="retry">다시 시도</string>
     <string name="menu_refresh">페이지 새로 고침</string>
+    <string name="menu_flutter_ui">네이티브 Flutter UI로 전환</string>
     <string name="menu_scanner">스캐너 열기</string>
     <string name="menu_storage_settings">저장 권한</string>
     <string name="menu_storage_tree">쓰기 가능한 폴더 승인</string>

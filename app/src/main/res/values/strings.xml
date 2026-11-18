@@ -55,6 +55,7 @@
     <string name="retry">Retry</string>
     <string name="menu_refresh">Refresh page</string>
     <string name="menu_scanner">Open scanner</string>
+    <string name="menu_flutter_ui">Switch to native Flutter UI</string>
     <string name="menu_storage_settings">Storage permission</string>
     <string name="menu_storage_tree">Authorize writable folder</string>
     <string name="storage_tree_authorized">Writable folder authorized</string>

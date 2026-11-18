@@ -54,6 +54,7 @@
     <string name="web_renderer_restarted">顯示程序已重新啟動。</string>
     <string name="retry">重試</string>
     <string name="menu_refresh">重新整理頁面</string>
+    <string name="menu_flutter_ui">切換到 Flutter 原生介面</string>
     <string name="menu_scanner">開啟列表生成</string>
     <string name="menu_storage_settings">儲存權限</string>
     <string name="menu_storage_tree">授權可寫目錄</string>
