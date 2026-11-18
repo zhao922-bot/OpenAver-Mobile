@@ -7,6 +7,7 @@ class MissingCheckSummary {
     required this.untranslatedTitles,
     required this.missingSamples,
     required this.missingPlots,
+    this.pendingTranslationBatchIds = const [],
   });
 
   final int missingBoth;
@@ -16,9 +17,19 @@ class MissingCheckSummary {
   final int untranslatedTitles;
   final int missingSamples;
   final int missingPlots;
+  final List<String> pendingTranslationBatchIds;
 
   factory MissingCheckSummary.fromJson(Map<String, dynamic> json) {
     final data = (json['data'] as Map<String, dynamic>?) ?? json;
+    final rawBatches = (data['pending_plot_translations'] as List?) ?? const [];
+    final batches = <String>[];
+    for (final b in rawBatches) {
+      if (b is Map && b['batch_id'] != null) {
+        batches.add(b['batch_id'].toString());
+      } else if (b is String && b.isNotEmpty) {
+        batches.add(b);
+      }
+    }
     return MissingCheckSummary(
       missingBoth: (data['missing_both'] as num?)?.toInt() ?? 0,
       missingNfo: (data['missing_nfo'] as num?)?.toInt() ?? 0,
@@ -27,6 +38,7 @@ class MissingCheckSummary {
       untranslatedTitles: (data['untranslated_titles'] as num?)?.toInt() ?? 0,
       missingSamples: (data['missing_samples'] as num?)?.toInt() ?? 0,
       missingPlots: (data['missing_plots'] as num?)?.toInt() ?? 0,
+      pendingTranslationBatchIds: batches,
     );
   }
 }

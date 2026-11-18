@@ -19,18 +19,21 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import io.flutter.embedding.android.FlutterActivity;
 import io.flutter.embedding.engine.FlutterEngine;
+import io.flutter.embedding.engine.FlutterEngineCache;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
@@ -90,6 +93,18 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
         super.onBackPressed();
     }
 
+    @Nullable
+    @Override
+    public FlutterEngine provideFlutterEngine(@NonNull Context context) {
+        FlutterEngine cached = FlutterEngineCache.getInstance().get(MobileRuntimeSession.FLUTTER_ENGINE_ID);
+        return cached != null ? cached : super.provideFlutterEngine(context);
+    }
+
+    @Override
+    public boolean shouldDestroyEngineWithHost() {
+        return FlutterEngineCache.getInstance().get(MobileRuntimeSession.FLUTTER_ENGINE_ID) == null;
+    }
+
     @Override
     public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
         super.configureFlutterEngine(flutterEngine);
@@ -103,38 +118,29 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
     private void handleMethodCall(MethodCall call, MethodChannel.Result result) {
         switch (call.method) {
             case "getBootstrapInfo": {
-                SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-                SharedPreferences themePrefs = getSharedPreferences("native_appearance", MODE_PRIVATE);
-                Map<String, Object> info = new HashMap<>();
-                info.put("ready", MobileRuntimeSession.isReady());
-                info.put("port", MobileRuntimeSession.getPort());
-                info.put("token", MobileRuntimeSession.getAuthToken());
-                info.put("cookieName", MobileRuntimeSession.getAuthCookieName());
-                info.put("dataDir", MobileRuntimeSession.getDataDir());
-                info.put("version", BuildConfig.VERSION_NAME);
-                info.put("openaverRelease", BuildConfig.OPENAVER_RELEASE);
-                info.put("openaverCommit", BuildConfig.OPENAVER_COMMIT);
-                info.put("abi", MobileRuntimeSession.getAbi());
-                info.put("uiLocale", prefs.getString(PREF_UI_LOCALE, DEFAULT_UI_LOCALE));
-                info.put("theme", themePrefs.getString("theme", "dim"));
-                info.put("hasStorageAccess", hasStorageAccess());
-                info.put("hasTreeAccess", StorageBridge.hasTreeAccess());
-                info.put("treeDescription", StorageBridge.treeDescription());
-                result.success(info);
+                result.success(FlutterEngineManager.buildBootstrapPayload(this));
                 break;
             }
             case "openExternalPlayer": {
                 String path = call.argument("path");
                 String parts = call.argument("parts");
-                boolean handled = ExternalPlayer.open(
+                boolean handled = ExternalPlayer.openExternalDirect(
                         this,
                         path,
                         parts,
-                        (selectedPath, partNumber) -> runOnUiThread(() -> {
+                        (selectedPath, partNumber, parsedParts) -> runOnUiThread(() -> {
                             if (bridgeChannel != null) {
+                                List<Map<String, String>> serializedParts = new ArrayList<>();
+                                for (VideoPartParser.Part item : parsedParts) {
+                                    Map<String, String> entry = new HashMap<>();
+                                    entry.put("path", item.path);
+                                    entry.put("label", item.label);
+                                    serializedParts.add(entry);
+                                }
                                 Map<String, Object> payload = new HashMap<>();
                                 payload.put("path", selectedPath);
                                 payload.put("part", partNumber);
+                                payload.put("parts", serializedParts);
                                 bridgeChannel.invokeMethod("openBuiltInPlayer", payload);
                             }
                         })
@@ -248,14 +254,18 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
         }
     }
 
-    private boolean hasStorageAccess() {
+    static boolean hasStorageAccess(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            return checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
+            return context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
                     == PackageManager.PERMISSION_GRANTED
-                    && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    && context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     == PackageManager.PERMISSION_GRANTED;
         }
         return Environment.isExternalStorageManager();
+    }
+
+    private boolean hasStorageAccess() {
+        return hasStorageAccess(this);
     }
 
     private void openStoragePermission(MethodChannel.Result result) {

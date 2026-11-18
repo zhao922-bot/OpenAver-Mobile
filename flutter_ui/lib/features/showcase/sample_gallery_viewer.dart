@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
+import '../shared/openaver_image.dart';
 
 class SampleGalleryViewer extends StatefulWidget {
   const SampleGalleryViewer({
@@ -51,8 +52,8 @@ class _SampleGalleryViewerState extends State<SampleGalleryViewer> {
             onPageChanged: (value) => setState(() => _index = value),
             itemBuilder: (_, idx) {
               return _ZoomableImage(
-                url: widget.api.resolveUrl(widget.imageUrls[idx]),
-                headers: widget.api.authHeaders,
+                api: widget.api,
+                url: widget.imageUrls[idx],
               );
             },
           ),
@@ -92,10 +93,10 @@ class _SampleGalleryViewerState extends State<SampleGalleryViewer> {
 }
 
 class _ZoomableImage extends StatefulWidget {
-  const _ZoomableImage({required this.url, required this.headers});
+  const _ZoomableImage({required this.api, required this.url});
 
+  final ApiClient api;
   final String url;
-  final Map<String, String> headers;
 
   @override
   State<_ZoomableImage> createState() => _ZoomableImageState();
@@ -127,15 +128,11 @@ class _ZoomableImageState extends State<_ZoomableImage> {
         minScale: 1.0,
         maxScale: 4.5,
         child: Center(
-          child: Image.network(
-            widget.url,
-            headers: widget.headers,
+          child: OpenAverNetworkImage(
+            api: widget.api,
+            url: widget.url,
             fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => const Icon(
-              Icons.broken_image_outlined,
-              color: Colors.white54,
-              size: 48,
-            ),
+            fullResolution: true,
           ),
         ),
       ),

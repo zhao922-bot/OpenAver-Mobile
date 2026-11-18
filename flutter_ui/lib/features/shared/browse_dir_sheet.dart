@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
+import '../../core/app_providers.dart';
 import '../../core/app_theme.dart';
 import '../../core/models/scanner_models.dart';
 
-class BrowseDirSheet extends StatefulWidget {
+class BrowseDirSheet extends ConsumerStatefulWidget {
   const BrowseDirSheet({
     super.key,
     required this.api,
@@ -32,10 +34,10 @@ class BrowseDirSheet extends StatefulWidget {
   }
 
   @override
-  State<BrowseDirSheet> createState() => _BrowseDirSheetState();
+  ConsumerState<BrowseDirSheet> createState() => _BrowseDirSheetState();
 }
 
-class _BrowseDirSheetState extends State<BrowseDirSheet> {
+class _BrowseDirSheetState extends ConsumerState<BrowseDirSheet> {
   bool _loading = true;
   String? _error;
   BrowseDirResponse? _data;
@@ -71,6 +73,7 @@ class _BrowseDirSheetState extends State<BrowseDirSheet> {
         _loading = false;
       });
     } catch (e) {
+      debugPrint('BrowseDirSheet _loadPath error: $e');
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -82,6 +85,7 @@ class _BrowseDirSheetState extends State<BrowseDirSheet> {
   @override
   Widget build(BuildContext context) {
     final palette = OpenAverPalette.of(context);
+    final strings = ref.watch(stringsProvider);
     final current = _data?.currentPath ?? '';
 
     return Column(
@@ -94,7 +98,7 @@ class _BrowseDirSheetState extends State<BrowseDirSheet> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  current.isEmpty ? '选择目录' : current,
+                  current.isEmpty ? strings.chooseFolder : current,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -105,7 +109,7 @@ class _BrowseDirSheetState extends State<BrowseDirSheet> {
               ),
               if (_data?.parentPath != null)
                 IconButton(
-                  tooltip: '上一层',
+                  tooltip: strings.parentFolder,
                   icon: const Icon(Icons.arrow_upward_rounded),
                   onPressed: _loading ? null : () => _loadPath(_data!.parentPath),
                 ),
@@ -131,7 +135,7 @@ class _BrowseDirSheetState extends State<BrowseDirSheet> {
                             const SizedBox(height: 12),
                             FilledButton(
                               onPressed: () => _loadPath(null),
-                              child: const Text('返回根目录'),
+                              child: Text(strings.backToRoot),
                             ),
                           ],
                         ),
@@ -159,7 +163,7 @@ class _BrowseDirSheetState extends State<BrowseDirSheet> {
               child: FilledButton.icon(
                 onPressed: current.isEmpty ? null : () => Navigator.of(context).pop(current),
                 icon: const Icon(Icons.check_rounded),
-                label: const Text('选择当前目录'),
+                label: Text(strings.selectCurrentFolder),
               ),
             ),
           ),

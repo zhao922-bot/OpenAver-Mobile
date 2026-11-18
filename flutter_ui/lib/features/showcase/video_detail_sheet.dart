@@ -7,6 +7,7 @@ import '../../core/app_theme.dart';
 import '../../core/models/video_item.dart';
 import '../../core/native_bridge.dart';
 import '../player/builtin_player_page.dart';
+import '../shared/openaver_image.dart';
 import 'sample_gallery_viewer.dart';
 
 class VideoDetailPage extends ConsumerStatefulWidget {
@@ -17,6 +18,8 @@ class VideoDetailPage extends ConsumerStatefulWidget {
     required this.onVideoUpdated,
     required this.onVideoDeleted,
     required this.onSelectActress,
+    this.onSelectTag,
+    this.onSelectFilterText,
   });
 
   final List<VideoItem> videos;
@@ -24,6 +27,8 @@ class VideoDetailPage extends ConsumerStatefulWidget {
   final ValueChanged<VideoItem> onVideoUpdated;
   final ValueChanged<String> onVideoDeleted;
   final ValueChanged<String> onSelectActress;
+  final ValueChanged<String>? onSelectTag;
+  final ValueChanged<String>? onSelectFilterText;
 
   @override
   ConsumerState<VideoDetailPage> createState() => _VideoDetailPageState();
@@ -38,7 +43,10 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
   void initState() {
     super.initState();
     _videos = List<VideoItem>.from(widget.videos);
-    _currentIndex = widget.initialIndex.clamp(0, _videos.isEmpty ? 0 : _videos.length - 1);
+    _currentIndex = widget.initialIndex.clamp(
+      0,
+      _videos.isEmpty ? 0 : _videos.length - 1,
+    );
     _pageController = PageController(initialPage: _currentIndex);
   }
 
@@ -52,10 +60,7 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
   Widget build(BuildContext context) {
     final palette = OpenAverPalette.of(context);
     if (_videos.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: const SizedBox.shrink(),
-      );
+      return Scaffold(appBar: AppBar(), body: const SizedBox.shrink());
     }
 
     final current = _videos[_currentIndex];
@@ -108,6 +113,14 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
               Navigator.of(context).pop();
               widget.onSelectActress(name);
             },
+            onSelectTag: (tag) {
+              Navigator.of(context).pop();
+              widget.onSelectTag?.call(tag);
+            },
+            onSelectFilterText: (term) {
+              Navigator.of(context).pop();
+              widget.onSelectFilterText?.call(term);
+            },
           );
         },
       ),
@@ -122,12 +135,16 @@ class _VideoDetailBody extends ConsumerStatefulWidget {
     required this.onUpdated,
     required this.onDeleted,
     required this.onSelectActress,
+    required this.onSelectTag,
+    required this.onSelectFilterText,
   });
 
   final VideoItem video;
   final ValueChanged<VideoItem> onUpdated;
   final ValueChanged<String> onDeleted;
   final ValueChanged<String> onSelectActress;
+  final ValueChanged<String> onSelectTag;
+  final ValueChanged<String> onSelectFilterText;
 
   @override
   ConsumerState<_VideoDetailBody> createState() => _VideoDetailBodyState();
@@ -153,6 +170,10 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
   bool _savingTitle = false;
   bool _translatingTitle = false;
   late final TextEditingController _titleCtrl;
+
+  bool _fetchingSamples = false;
+  bool _detectingFocal = false;
+  bool _autoTagging = false;
 
   List<Map<String, dynamic>> _similar = const [];
   bool _similarLoading = false;
@@ -201,6 +222,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
         });
       }
     } catch (e) {
+      debugPrint('loadPlot error: $e');
       if (!mounted) return;
       setState(() {
         _plotError = e.toString();
@@ -216,7 +238,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
     try {
       final resp = await api.getJson(
         '/api/similar-covers/by-number/${Uri.encodeComponent(widget.video.number)}',
-        queryParameters: {'limit': 10},
+        queryParameters: {'limit': 12},
       );
       if (!mounted) return;
       final list = (resp['results'] as List?) ?? const [];
@@ -227,25 +249,84 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
             .toList();
         _similarLoading = false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('loadSimilar error: $e');
       if (!mounted) return;
       setState(() => _similarLoading = false);
     }
   }
 
+  Future<void> _openSimilarVideo(Map<String, dynamic> sim) async {
+    final strings = ref.read(stringsProvider);
+    final api = ref.read(apiClientProvider);
+    final number = (sim['number'] ?? '').toString().trim();
+    final title = (sim['title'] ?? '').toString().trim();
+
+    try {
+      final resp = await api.getJson(
+        '/api/showcase/videos',
+        queryParameters: {'paged': false},
+      );
+      if (!mounted) return;
+      if (resp['success'] != true) {
+        _showToast(strings.loadLibraryFailed);
+        return;
+      }
+      final parsed = VideosPageResponse.fromJson(resp);
+      var idx = -1;
+      if (number.isNotEmpty) {
+        idx = parsed.videos.indexWhere(
+          (v) => v.number.toUpperCase() == number.toUpperCase(),
+        );
+      }
+      if (idx == -1 && title.isNotEmpty) {
+        idx = parsed.videos.indexWhere((v) => v.title == title);
+      }
+      if (idx == -1) {
+        _showToast(strings.videoNotInLibrary);
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => VideoDetailPage(
+            videos: parsed.videos,
+            initialIndex: idx,
+            onVideoUpdated: widget.onUpdated,
+            onVideoDeleted: widget.onDeleted,
+            onSelectActress: widget.onSelectActress,
+            onSelectTag: widget.onSelectTag,
+            onSelectFilterText: widget.onSelectFilterText,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('openSimilarVideo error: $e');
+      _showToast(strings.requestFailed('$e'));
+    }
+  }
+
   Future<void> _toggleFavorite() async {
+    final strings = ref.read(stringsProvider);
     final api = ref.read(apiClientProvider);
     final nextPicked = !widget.video.isFavorite;
-    final resp = await api.postJson('/api/user-rating', data: {
-      'file_path': widget.video.path,
-      'picked': nextPicked,
-    });
-    if (resp['success'] == true) {
-      widget.onUpdated(widget.video.copyWith(userRating: nextPicked ? 1 : 0));
+    try {
+      final resp = await api.postJson('/api/user-rating', data: {
+        'file_path': widget.video.path,
+        'picked': nextPicked,
+      });
+      if (resp['success'] == true) {
+        widget.onUpdated(widget.video.copyWith(userRating: nextPicked ? 1 : 0));
+      } else {
+        _showToast((resp['error'] ?? strings.saveFailed).toString());
+      }
+    } catch (e) {
+      debugPrint('toggleFavorite error: $e');
+      _showToast(strings.requestFailed('$e'));
     }
   }
 
   Future<void> _savePlot({String? customPlot, bool allowEmpty = true}) async {
+    final strings = ref.read(stringsProvider);
     final text = (customPlot ?? _plotCtrl.text).trim();
     if (text.isEmpty) return;
     final api = ref.read(apiClientProvider);
@@ -266,14 +347,18 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
           _showOriginalPlot = false;
         });
       } else {
-        _showToast((resp['message'] ?? resp['error'] ?? '保存失败').toString());
+        _showToast((resp['message'] ?? resp['error'] ?? strings.saveFailed).toString());
       }
+    } catch (e) {
+      debugPrint('savePlot error: $e');
+      _showToast(strings.requestFailed('$e'));
     } finally {
       if (mounted) setState(() => _savingPlot = false);
     }
   }
 
   Future<void> _refetchPlot() async {
+    final strings = ref.read(stringsProvider);
     final api = ref.read(apiClientProvider);
     setState(() => _refetchingPlot = true);
     try {
@@ -293,16 +378,20 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
           _editingPlot = false;
         });
         final sourceLabel = (resp['source_label'] ?? resp['source'] ?? '').toString();
-        _showToast(sourceLabel.isNotEmpty ? '已从 $sourceLabel 重新获取简介' : '已重新获取简介');
+        _showToast(strings.refetchPlotSuccess(sourceLabel));
       } else {
-        _showToast((resp['message'] ?? resp['error'] ?? '未获取到简介').toString());
+        _showToast((resp['message'] ?? resp['error'] ?? strings.refetchPlotEmpty).toString());
       }
+    } catch (e) {
+      debugPrint('refetchPlot error: $e');
+      _showToast(strings.requestFailed('$e'));
     } finally {
       if (mounted) setState(() => _refetchingPlot = false);
     }
   }
 
   Future<void> _translatePlot() async {
+    final strings = ref.read(stringsProvider);
     final source = (_plotText ?? '').trim();
     if (source.isEmpty) return;
     final api = ref.read(apiClientProvider);
@@ -334,14 +423,18 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
           });
         }
       } else {
-        _showToast((resp['error'] ?? '翻译失败').toString());
+        _showToast((resp['error'] ?? strings.translateFailed).toString());
       }
+    } catch (e) {
+      debugPrint('translatePlot error: $e');
+      _showToast(strings.requestFailed('$e'));
     } finally {
       if (mounted) setState(() => _translatingPlot = false);
     }
   }
 
   Future<void> _saveTitle(String newTitle) async {
+    final strings = ref.read(stringsProvider);
     final trimmed = newTitle.trim();
     if (trimmed.isEmpty) return;
     final api = ref.read(apiClientProvider);
@@ -366,14 +459,18 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
           _editingTitle = false;
         });
       } else {
-        _showToast((resp['message'] ?? resp['error'] ?? '标题保存失败').toString());
+        _showToast((resp['message'] ?? resp['error'] ?? strings.saveFailed).toString());
       }
+    } catch (e) {
+      debugPrint('saveTitle error: $e');
+      _showToast(strings.requestFailed('$e'));
     } finally {
       if (mounted) setState(() => _savingTitle = false);
     }
   }
 
   Future<void> _translateTitle() async {
+    final strings = ref.read(stringsProvider);
     final api = ref.read(apiClientProvider);
     setState(() => _translatingTitle = true);
     try {
@@ -388,67 +485,173 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
       if (resp['success'] == true && translated.isNotEmpty) {
         await _saveTitle(translated);
       } else {
-        _showToast((resp['error'] ?? '标题翻译失败').toString());
+        _showToast((resp['error'] ?? strings.translateFailed).toString());
       }
+    } catch (e) {
+      debugPrint('translateTitle error: $e');
+      _showToast(strings.requestFailed('$e'));
     } finally {
       if (mounted) setState(() => _translatingTitle = false);
     }
   }
 
+  Future<void> _fetchSamples() async {
+    final strings = ref.read(stringsProvider);
+    final api = ref.read(apiClientProvider);
+    setState(() => _fetchingSamples = true);
+    try {
+      final resp = await api.postJson('/api/scraper/fetch-samples', data: {
+        'file_path': widget.video.path,
+        'number': widget.video.number,
+      });
+      if (!mounted) return;
+      if (resp['success'] == true) {
+        final fresh = await api.getJson(
+          '/api/showcase/video',
+          queryParameters: {'path': widget.video.path},
+        );
+        if (fresh['success'] == true && fresh['video'] is Map) {
+          widget.onUpdated(VideoItem.fromJson(Map<String, dynamic>.from(fresh['video'])));
+        }
+        _showToast(strings.samplesFetched);
+      } else {
+        _showToast((resp['error'] ?? strings.saveFailed).toString());
+      }
+    } catch (e) {
+      debugPrint('fetchSamples error: $e');
+      _showToast(strings.requestFailed('$e'));
+    } finally {
+      if (mounted) setState(() => _fetchingSamples = false);
+    }
+  }
+
+  Future<void> _detectAndSaveFocal() async {
+    final strings = ref.read(stringsProvider);
+    final api = ref.read(apiClientProvider);
+    setState(() => _detectingFocal = true);
+    try {
+      final resp = await api.postJson('/api/showcase/video/detect-focal', data: {
+        'file_path': widget.video.path,
+      });
+      if (!mounted) return;
+      final focal = (resp['auto_focal'] as String?) ?? '';
+      if (resp['success'] == true && focal.isNotEmpty) {
+        final save = await api.postJson('/api/showcase/video/save-focal', data: {
+          'file_path': widget.video.path,
+          'focal': focal,
+        });
+        if (!mounted) return;
+        if (save['success'] == true) {
+          widget.onUpdated(widget.video.copyWith(autoFocal: focal, cropMode: 'manual'));
+          _showToast(strings.focalUpdated);
+        }
+      } else {
+        _showToast(strings.focalNoFace);
+      }
+    } catch (e) {
+      debugPrint('detectFocal error: $e');
+      _showToast(strings.requestFailed('$e'));
+    } finally {
+      if (mounted) setState(() => _detectingFocal = false);
+    }
+  }
+
+  Future<void> _autoTagVideo() async {
+    final strings = ref.read(stringsProvider);
+    final api = ref.read(apiClientProvider);
+    setState(() => _autoTagging = true);
+    try {
+      final resp = await api.postJson('/api/tags/videos', data: {
+        'paths': [widget.video.path],
+      });
+      if (!mounted) return;
+      if (resp['success'] == true) {
+        final fresh = await api.getJson(
+          '/api/showcase/video',
+          queryParameters: {'path': widget.video.path},
+        );
+        if (fresh['success'] == true && fresh['video'] is Map) {
+          widget.onUpdated(VideoItem.fromJson(Map<String, dynamic>.from(fresh['video'])));
+        }
+        _showToast(strings.saved);
+      } else {
+        _showToast((resp['error'] ?? resp['detail'] ?? strings.saveFailed).toString());
+      }
+    } catch (e) {
+      debugPrint('autoTagVideo error: $e');
+      _showToast(strings.requestFailed('$e'));
+    } finally {
+      if (mounted) setState(() => _autoTagging = false);
+    }
+  }
+
   Future<void> _addUserTag() async {
+    final strings = ref.read(stringsProvider);
     final ctrl = TextEditingController();
     final tag = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('添加个人标签'),
+        title: Text(strings.addUserTagTitle),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          decoration: const InputDecoration(hintText: '输入标签名称'),
+          decoration: InputDecoration(hintText: strings.tagNameHint),
           onSubmitted: (v) => Navigator.of(ctx).pop(v),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text), child: const Text('确定')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(strings.cancel)),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text), child: Text(strings.confirm)),
         ],
       ),
     );
     ctrl.dispose();
     if (tag == null || tag.trim().isEmpty) return;
     final api = ref.read(apiClientProvider);
-    final resp = await api.postJson('/api/user-tags', data: {
-      'file_path': widget.video.path,
-      'add': [tag.trim()],
-      'remove': const [],
-    });
-    if (resp['success'] == true && resp['user_tags'] is List) {
-      widget.onUpdated(
-        widget.video.copyWith(
-          userTags: (resp['user_tags'] as List).map((e) => e.toString()).toList(),
-        ),
-      );
+    try {
+      final resp = await api.postJson('/api/user-tags', data: {
+        'file_path': widget.video.path,
+        'add': [tag.trim()],
+        'remove': const [],
+      });
+      if (resp['success'] == true && resp['user_tags'] is List) {
+        widget.onUpdated(
+          widget.video.copyWith(
+            userTags: (resp['user_tags'] as List).map((e) => e.toString()).toList(),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('addUserTag error: $e');
+      _showToast(strings.requestFailed('$e'));
     }
   }
 
   Future<void> _removeUserTag(String tag) async {
+    final strings = ref.read(stringsProvider);
     final api = ref.read(apiClientProvider);
-    final resp = await api.postJson('/api/user-tags', data: {
-      'file_path': widget.video.path,
-      'add': const [],
-      'remove': [tag],
-    });
-    if (resp['success'] == true && resp['user_tags'] is List) {
-      widget.onUpdated(
-        widget.video.copyWith(
-          userTags: (resp['user_tags'] as List).map((e) => e.toString()).toList(),
-        ),
-      );
+    try {
+      final resp = await api.postJson('/api/user-tags', data: {
+        'file_path': widget.video.path,
+        'add': const [],
+        'remove': [tag],
+      });
+      if (resp['success'] == true && resp['user_tags'] is List) {
+        widget.onUpdated(
+          widget.video.copyWith(
+            userTags: (resp['user_tags'] as List).map((e) => e.toString()).toList(),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('removeUserTag error: $e');
+      _showToast(strings.requestFailed('$e'));
     }
   }
 
   Future<void> _openRescrapeDialog() async {
+    final strings = ref.read(stringsProvider);
     final numCtrl = TextEditingController(text: widget.video.number);
-    String source = 'auto';
+    var source = 'auto';
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -465,45 +668,59 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
                 loading = true;
                 statusError = null;
               });
-              final resp = await api.postJson('/api/rescrape/preview', data: {
-                'number': numCtrl.text.trim(),
-                'source': source,
-              });
-              setSheetState(() {
-                loading = false;
-                if (resp['success'] == true) {
-                  preview = resp;
-                } else {
-                  statusError = (resp['error'] ?? '未找到匹配元数据').toString();
-                }
-              });
+              try {
+                final resp = await api.postJson('/api/rescrape/preview', data: {
+                  'number': numCtrl.text.trim(),
+                  'source': source,
+                });
+                setSheetState(() {
+                  loading = false;
+                  if (resp['success'] == true) {
+                    preview = resp;
+                  } else {
+                    statusError = (resp['error'] ?? strings.rescrapeNotFound).toString();
+                  }
+                });
+              } catch (e) {
+                setSheetState(() {
+                  loading = false;
+                  statusError = e.toString();
+                });
+              }
             }
 
             Future<void> doApply() async {
               if (preview == null) return;
               setSheetState(() => loading = true);
-              final resp = await api.postJson('/api/enrich-single', data: {
-                'file_path': widget.video.path,
-                'number': numCtrl.text.trim(),
-                'source': source,
-                'mode': 'fill_missing',
-                'metadata': preview,
-                'overwrite_existing': true,
-              });
-              setSheetState(() => loading = false);
-              if (resp['success'] == true) {
-                final fresh = await api.getJson(
-                  '/api/showcase/video',
-                  queryParameters: {'path': widget.video.path},
-                );
-                if (fresh['success'] == true && fresh['video'] is Map) {
-                  widget.onUpdated(VideoItem.fromJson(Map<String, dynamic>.from(fresh['video'])));
+              try {
+                final resp = await api.postJson('/api/enrich-single', data: {
+                  'file_path': widget.video.path,
+                  'number': numCtrl.text.trim(),
+                  'source': source,
+                  'mode': 'fill_missing',
+                  'metadata': preview,
+                  'overwrite_existing': true,
+                });
+                setSheetState(() => loading = false);
+                if (resp['success'] == true) {
+                  final fresh = await api.getJson(
+                    '/api/showcase/video',
+                    queryParameters: {'path': widget.video.path},
+                  );
+                  if (fresh['success'] == true && fresh['video'] is Map) {
+                    widget.onUpdated(VideoItem.fromJson(Map<String, dynamic>.from(fresh['video'])));
+                  }
+                  if (ctx.mounted) Navigator.of(ctx).pop();
+                  _showToast(strings.rescrapeUpdated);
+                } else {
+                  setSheetState(() {
+                    statusError = (resp['error'] ?? resp['reason'] ?? strings.saveFailed).toString();
+                  });
                 }
-                if (ctx.mounted) Navigator.of(ctx).pop();
-                _showToast('重刮并更新成功');
-              } else {
+              } catch (e) {
                 setSheetState(() {
-                  statusError = (resp['error'] ?? resp['reason'] ?? '应用失败').toString();
+                  loading = false;
+                  statusError = e.toString();
                 });
               }
             }
@@ -519,25 +736,25 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('重刮元数据', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  Text(strings.rescrape, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
                         child: TextField(
                           controller: numCtrl,
-                          decoration: const InputDecoration(labelText: '番号'),
+                          decoration: InputDecoration(labelText: strings.numberLabel),
                         ),
                       ),
                       const SizedBox(width: 10),
                       DropdownButton<String>(
                         value: source,
-                        items: const [
-                          DropdownMenuItem(value: 'auto', child: Text('自动')),
-                          DropdownMenuItem(value: 'javbus', child: Text('JavBus')),
-                          DropdownMenuItem(value: 'javdb', child: Text('JavDB')),
-                          DropdownMenuItem(value: 'dmm', child: Text('DMM')),
-                          DropdownMenuItem(value: 'jav321', child: Text('Jav321')),
+                        items: [
+                          DropdownMenuItem(value: 'auto', child: Text(strings.autoLabel)),
+                          const DropdownMenuItem(value: 'javbus', child: Text('JavBus')),
+                          const DropdownMenuItem(value: 'javdb', child: Text('JavDB')),
+                          const DropdownMenuItem(value: 'dmm', child: Text('DMM')),
+                          const DropdownMenuItem(value: 'jav321', child: Text('Jav321')),
                         ],
                         onChanged: (v) {
                           if (v != null) setSheetState(() => source = v);
@@ -570,7 +787,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '片商: ${preview!['maker'] ?? '-'} · 发行: ${preview!['date'] ?? '-'}',
+                            '${strings.makerLabel}: ${preview!['maker'] ?? '-'} · ${strings.releaseLabel}: ${preview!['date'] ?? '-'}',
                             style: const TextStyle(fontSize: 12),
                           ),
                         ],
@@ -581,14 +798,14 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
                       Expanded(
                         child: OutlinedButton(
                           onPressed: loading ? null : doPreview,
-                          child: Text(loading ? '请求中…' : '预览刮削结果'),
+                          child: Text(loading ? strings.requesting : strings.previewRescrape),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: FilledButton(
                           onPressed: (loading || preview == null) ? null : doApply,
-                          child: const Text('覆盖更新'),
+                          child: Text(strings.applyOverwrite),
                         ),
                       ),
                     ],
@@ -604,21 +821,27 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
   }
 
   Future<void> _confirmDelete() async {
+    final strings = ref.read(stringsProvider);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('移出片库索引'),
-        content: const Text('仅从本地索引数据库中移除此记录，不会删除视频和封面文件。'),
+        title: Text(strings.removeFromDb),
+        content: Text(strings.removeFromDbConfirm),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('确认移出')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(strings.cancel)),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(strings.confirmRemove)),
         ],
       ),
     );
     if (ok != true) return;
     final api = ref.read(apiClientProvider);
-    await api.deleteJson('/api/showcase/video', queryParameters: {'path': widget.video.path});
-    widget.onDeleted(widget.video.path);
+    try {
+      await api.deleteJson('/api/showcase/video', queryParameters: {'path': widget.video.path});
+      widget.onDeleted(widget.video.path);
+    } catch (e) {
+      debugPrint('deleteVideo error: $e');
+      _showToast(strings.requestFailed('$e'));
+    }
   }
 
   void _openBuiltInPlayer(ApiClient api, {int partIndex = 0}) {
@@ -670,10 +893,9 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
         ? _originalPlot!
         : (_plotText ?? '');
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+    final mediaPane = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Cover banner with hero tap to open full-screen viewer
         GestureDetector(
           onTap: v.coverFullUrl.isEmpty
               ? null
@@ -697,22 +919,12 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (v.coverFullUrl.isNotEmpty || v.coverUrl.isNotEmpty)
-                    Image.network(
-                      api.resolveUrl(v.coverFullUrl.isNotEmpty ? v.coverFullUrl : v.coverUrl),
-                      headers: api.authHeaders,
-                      fit: BoxFit.cover,
-                      alignment: v.focalAlignment,
-                      errorBuilder: (_, _, _) => Container(
-                        color: palette.surfaceHigh,
-                        child: Icon(Icons.broken_image_outlined, color: palette.textMuted, size: 42),
-                      ),
-                    )
-                  else
-                    Container(
-                      color: palette.surfaceHigh,
-                      child: Icon(Icons.movie_outlined, color: palette.textMuted, size: 48),
-                    ),
+                  OpenAverNetworkImage(
+                    api: api,
+                    url: v.coverFullUrl.isNotEmpty ? v.coverFullUrl : v.coverUrl,
+                    alignment: v.focalAlignment,
+                    errorIcon: Icons.movie_outlined,
+                  ),
                   Positioned(
                     right: 10,
                     top: 10,
@@ -730,9 +942,49 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
             ),
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () => _openBuiltInPlayer(api),
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: Text(strings.builtinPlayer),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _openExternalPlayer,
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                label: Text(strings.externalPlayer),
+              ),
+            ),
+          ],
+        ),
+        if (v.isMultipart) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: List.generate(v.partPaths.length, (idx) {
+              final token = idx < v.partTokens.length && v.partTokens[idx].isNotEmpty
+                  ? v.partTokens[idx].toUpperCase()
+                  : 'CD${idx + 1}';
+              return ActionChip(
+                avatar: const Icon(Icons.play_circle_outline_rounded, size: 16),
+                label: Text(token),
+                onPressed: () => _openBuiltInPlayer(api, partIndex: idx),
+              );
+            }),
+          ),
+        ],
+      ],
+    );
 
-        // Title + inline editor + AI translate
+    final detailsPane = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         if (_editingTitle)
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -741,7 +993,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
                 controller: _titleCtrl,
                 maxLines: 3,
                 minLines: 1,
-                decoration: const InputDecoration(labelText: '编辑标题'),
+                decoration: InputDecoration(labelText: strings.editTitleLabel),
               ),
               const SizedBox(height: 8),
               Row(
@@ -754,7 +1006,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
                   const SizedBox(width: 8),
                   FilledButton(
                     onPressed: _savingTitle ? null : () => _saveTitle(_titleCtrl.text),
-                    child: Text(_savingTitle ? '保存中…' : strings.save),
+                    child: Text(_savingTitle ? strings.saving : strings.save),
                   ),
                 ],
               ),
@@ -809,32 +1061,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
               ),
             ],
           ),
-
-        const SizedBox(height: 12),
-
-        // Play buttons
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: () => _openBuiltInPlayer(api),
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: Text(strings.builtinPlayer),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _openExternalPlayer,
-                icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                label: Text(strings.externalPlayer),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Quick action row
+        const SizedBox(height: 10),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -845,6 +1072,20 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
               onPressed: _openRescrapeDialog,
             ),
             ActionChip(
+              avatar: _detectingFocal
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.center_focus_strong_outlined, size: 16),
+              label: Text(strings.detectFocal),
+              onPressed: _detectingFocal ? null : _detectAndSaveFocal,
+            ),
+            ActionChip(
+              avatar: _autoTagging
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.auto_awesome_outlined, size: 16),
+              label: Text(strings.aiAutoTag),
+              onPressed: _autoTagging ? null : _autoTagVideo,
+            ),
+            ActionChip(
               avatar: const Icon(Icons.delete_outline_rounded, size: 16),
               label: Text(strings.removeFromDb),
               onPressed: _confirmDelete,
@@ -853,7 +1094,6 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
         ),
         const SizedBox(height: 14),
 
-        // Metadata info card
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -865,19 +1105,39 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
             spacing: 14,
             runSpacing: 6,
             children: [
-              if (v.number.isNotEmpty) _MetaPill(label: '番号', value: v.number),
-              if (v.releaseDate.isNotEmpty) _MetaPill(label: '发行', value: v.releaseDate),
-              if (v.duration != null) _MetaPill(label: '时长', value: '${v.duration} min'),
-              if (v.maker.isNotEmpty) _MetaPill(label: '片商', value: v.maker),
-              if (v.director.isNotEmpty) _MetaPill(label: '导演', value: v.director),
-              if (v.series.isNotEmpty) _MetaPill(label: '系列', value: v.series),
-              if (v.formattedSize.isNotEmpty) _MetaPill(label: '大小', value: v.formattedSize),
-              if (v.partTokens.isNotEmpty) _MetaPill(label: '分段', value: v.partTokens.join(', ')),
+              if (v.number.isNotEmpty) _MetaPill(label: strings.numberLabel, value: v.number),
+              if (v.releaseDate.isNotEmpty) _MetaPill(label: strings.releaseLabel, value: v.releaseDate),
+              if (v.duration != null) _MetaPill(label: strings.durationLabel, value: '${v.duration} min'),
+              if (v.maker.isNotEmpty)
+                _MetaPill(
+                  label: strings.makerLabel,
+                  value: v.maker,
+                  onTap: () => widget.onSelectFilterText(v.maker),
+                ),
+              if (v.director.isNotEmpty)
+                _MetaPill(
+                  label: strings.directorLabel,
+                  value: v.director,
+                  onTap: () => widget.onSelectFilterText(v.director),
+                ),
+              if (v.series.isNotEmpty)
+                _MetaPill(
+                  label: strings.seriesLabel,
+                  value: v.series,
+                  onTap: () => widget.onSelectFilterText(v.series),
+                ),
+              if (v.label.isNotEmpty)
+                _MetaPill(
+                  label: strings.labelLabel,
+                  value: v.label,
+                  onTap: () => widget.onSelectFilterText(v.label),
+                ),
+              if (v.formattedSize.isNotEmpty) _MetaPill(label: strings.sizeLabel, value: v.formattedSize),
+              if (v.partTokens.isNotEmpty) _MetaPill(label: strings.partsLabel, value: v.partTokens.join(', ')),
             ],
           ),
         ),
 
-        // Actresses
         if (v.actresses.isNotEmpty) ...[
           const SizedBox(height: 14),
           Text(strings.actresses, style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
@@ -900,11 +1160,10 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
           ),
         ],
 
-        // User Tags & Genre Tags
         const SizedBox(height: 14),
         Row(
           children: [
-            Text('标签', style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
+            Text(strings.tagsLabel, style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
             const Spacer(),
             TextButton.icon(
               onPressed: _addUserTag,
@@ -921,14 +1180,19 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
               (ut) => InputChip(
                 label: Text(ut),
                 backgroundColor: palette.accent.withValues(alpha: 0.16),
+                onPressed: () => widget.onSelectTag(ut),
                 onDeleted: () => _removeUserTag(ut),
               ),
             ),
-            ...v.tags.map((t) => Chip(label: Text(t))),
+            ...v.tags.map(
+              (t) => ActionChip(
+                label: Text(t),
+                onPressed: () => widget.onSelectTag(t),
+              ),
+            ),
           ],
         ),
 
-        // Plot section (inline edit + AI translate + refetch)
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(14),
@@ -971,7 +1235,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
                       controller: _plotCtrl,
                       maxLines: 6,
                       minLines: 3,
-                      decoration: const InputDecoration(hintText: '输入简介内容…'),
+                      decoration: InputDecoration(hintText: strings.plotInputHint),
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -984,7 +1248,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
                         const SizedBox(width: 8),
                         FilledButton(
                           onPressed: _savingPlot ? null : () => _savePlot(),
-                          child: Text(_savingPlot ? '保存中…' : strings.save),
+                          child: Text(_savingPlot ? strings.saving : strings.save),
                         ),
                       ],
                     ),
@@ -1026,13 +1290,13 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      (_plotError != null && _plotError!.isNotEmpty) ? _plotError! : '暂无简介',
+                      (_plotError != null && _plotError!.isNotEmpty) ? _plotError! : strings.emptyPlot,
                       style: TextStyle(color: palette.textMuted, fontSize: 13),
                     ),
                     const SizedBox(height: 8),
                     ActionChip(
                       avatar: const Icon(Icons.edit_outlined, size: 15),
-                      label: const Text('手动添加简介'),
+                      label: Text(strings.addPlotManually),
                       onPressed: () {
                         _plotCtrl.text = '';
                         setState(() => _editingPlot = true);
@@ -1044,13 +1308,24 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
           ),
         ),
 
-        // Sample images horizontal gallery with isolated ScrollController
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Text(
+              '${strings.sampleImages} (${v.sampleImages.length})',
+              style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _fetchingSamples ? null : _fetchSamples,
+              icon: _fetchingSamples
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.collections_outlined, size: 16),
+              label: Text(strings.fetchSamples),
+            ),
+          ],
+        ),
         if (v.sampleImages.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Text(
-            '${strings.sampleImages} (${v.sampleImages.length})',
-            style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary),
-          ),
           const SizedBox(height: 8),
           SizedBox(
             height: 120,
@@ -1078,10 +1353,10 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
                     borderRadius: BorderRadius.circular(10),
                     child: AspectRatio(
                       aspectRatio: 16 / 10,
-                      child: Image.network(
-                        api.resolveUrl(v.sampleImages[idx]),
-                        headers: api.authHeaders,
-                        fit: BoxFit.cover,
+                      child: OpenAverNetworkImage(
+                        api: api,
+                        url: v.sampleImages[idx],
+                        targetDecodeWidth: 420,
                       ),
                     ),
                   ),
@@ -1091,7 +1366,6 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
           ),
         ],
 
-        // Similar recommendations
         if (_similarLoading || _similar.isNotEmpty) ...[
           const SizedBox(height: 16),
           Text(strings.similarVideos, style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
@@ -1100,7 +1374,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
             const LinearProgressIndicator(minHeight: 2)
           else
             SizedBox(
-              height: 165,
+              height: 170,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: _similar.length,
@@ -1112,34 +1386,38 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
                   final title = (sim['title'] ?? '').toString();
                   return SizedBox(
                     width: 112,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: cover.isNotEmpty
-                                ? Image.network(
-                                    api.resolveUrl(cover),
-                                    headers: api.authHeaders,
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                  )
-                                : Container(color: palette.surfaceHigh),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => _openSimilarVideo(sim),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: OpenAverNetworkImage(
+                                  api: api,
+                                  url: cover,
+                                  targetDecodeWidth: 280,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          num.isNotEmpty ? num : title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: palette.textPrimary,
+                          const SizedBox(height: 4),
+                          Text(
+                            num.isNotEmpty ? num : title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: palette.textPrimary,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 },
@@ -1148,19 +1426,56 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
         ],
       ],
     );
+
+    return LayoutBuilder(
+      builder: (_, constraints) {
+        final wide = constraints.maxWidth >= 720;
+        if (wide) {
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 360,
+                  child: SingleChildScrollView(child: mediaPane),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: SingleChildScrollView(child: detailsPane),
+                ),
+              ],
+            ),
+          );
+        }
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
+            mediaPane,
+            const SizedBox(height: 14),
+            detailsPane,
+          ],
+        );
+      },
+    );
   }
 }
 
 class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.label, required this.value});
+  const _MetaPill({
+    required this.label,
+    required this.value,
+    this.onTap,
+  });
 
   final String label;
   final String value;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final palette = OpenAverPalette.of(context);
-    return RichText(
+    final child = RichText(
       text: TextSpan(
         style: TextStyle(fontSize: 12, color: palette.textSecondary),
         children: [
@@ -1170,9 +1485,22 @@ class _MetaPill extends StatelessWidget {
           ),
           TextSpan(
             text: value,
-            style: TextStyle(color: palette.textPrimary, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              color: onTap != null ? palette.accent : palette.textPrimary,
+              fontWeight: FontWeight.w500,
+              decoration: onTap != null ? TextDecoration.underline : null,
+            ),
           ),
         ],
+      ),
+    );
+    if (onTap == null) return child;
+    return InkWell(
+      borderRadius: BorderRadius.circular(4),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 2),
+        child: child,
       ),
     );
   }

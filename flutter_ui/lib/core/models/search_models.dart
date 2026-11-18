@@ -3,6 +3,7 @@ class SearchResultItem {
     required this.number,
     required this.title,
     required this.originalTitle,
+    required this.translatedTitle,
     required this.actors,
     required this.tags,
     required this.maker,
@@ -21,6 +22,7 @@ class SearchResultItem {
   final String number;
   final String title;
   final String originalTitle;
+  final String translatedTitle;
   final List<String> actors;
   final List<String> tags;
   final String maker;
@@ -48,6 +50,7 @@ class SearchResultItem {
       number: (json['number'] as String?) ?? '',
       title: (json['title'] as String?) ?? '',
       originalTitle: (json['original_title'] as String?) ?? '',
+      translatedTitle: (json['translated_title'] as String?) ?? '',
       actors: parseList(json['actors']),
       tags: parseList(json['tags']),
       maker: (json['maker'] as String?) ?? '',
@@ -56,7 +59,7 @@ class SearchResultItem {
       label: (json['label'] as String?) ?? '',
       date: (json['date'] as String?) ?? '',
       duration: (json['duration'] as num?)?.toInt(),
-      cover: ((json['cover'] ?? json['cover_url']) as String?) ?? '',
+      cover: ((json['preview_cover_url'] ?? json['cover'] ?? json['cover_url']) as String?) ?? '',
       sampleImages: parseList(json['sample_images']),
       source: (json['source'] as String?) ?? '',
       url: (json['url'] as String?) ?? '',

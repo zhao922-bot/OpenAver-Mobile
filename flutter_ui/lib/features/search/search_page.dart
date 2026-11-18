@@ -7,6 +7,8 @@ import '../../core/app_theme.dart';
 import '../../core/models/search_models.dart';
 import '../../core/native_bridge.dart';
 import '../player/builtin_player_page.dart';
+import '../shared/openaver_image.dart';
+import 'search_result_detail_page.dart';
 
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
@@ -20,6 +22,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   CancelToken? _searchCancel;
 
   bool _searching = false;
+  bool _inResultsMode = false;
+  String _activeSearchLabel = '';
   String? _searchError;
   String _searchMode = '';
   final Map<String, String> _sourceStatuses = {};
@@ -27,6 +31,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   Map<String, LocalStatusInfo> _localStatus = const {};
   Set<String> _wishlisted = const {};
   List<Map<String, dynamic>> _makerCapsules = const [];
+  bool _recentActressesAvailable = false;
+  String _recentActressesKey = '';
   List<FavoriteFileItem> _favoriteFiles = const [];
   bool _loadingFavorites = false;
 
@@ -35,6 +41,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadMakerCapsules();
+      _loadRecentActressesAvailability();
       _loadFavoriteFiles();
       _refreshWishlistMembership();
     });
@@ -45,6 +52,26 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _searchCancel?.cancel();
     _queryCtrl.dispose();
     super.dispose();
+  }
+
+  void _syncBackHook() {
+    ref.read(searchResetHookProvider).value = _inResultsMode;
+  }
+
+  void _returnToHome() {
+    _searchCancel?.cancel();
+    _queryCtrl.clear();
+    setState(() {
+      _searching = false;
+      _inResultsMode = false;
+      _activeSearchLabel = '';
+      _searchError = null;
+      _searchMode = '';
+      _sourceStatuses.clear();
+      _results = const [];
+      _localStatus = const {};
+    });
+    _syncBackHook();
   }
 
   Future<void> _loadMakerCapsules() async {
@@ -59,7 +86,22 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('loadMakerCapsules error: $e');
+    }
+  }
+
+  Future<void> _loadRecentActressesAvailability() async {
+    try {
+      final resp = await ref.read(apiClientProvider).getJson('/api/search/recent-actresses');
+      if (!mounted) return;
+      setState(() {
+        _recentActressesAvailable = resp['available'] == true;
+        _recentActressesKey = (resp['key'] ?? '').toString();
+      });
+    } catch (e) {
+      debugPrint('loadRecentActressesAvailability error: $e');
+    }
   }
 
   Future<void> _loadFavoriteFiles() async {
@@ -75,8 +117,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             .toList();
         _loadingFavorites = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loadingFavorites = false);
+    } catch (e) {
+      debugPrint('loadFavoriteFiles error: $e');
+      if (mounted) {
+        setState(() => _loadingFavorites = false);
+      }
     }
   }
 
@@ -91,7 +136,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             .where((n) => n.isNotEmpty)
             .toSet();
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('refreshWishlistMembership error: $e');
+    }
   }
 
   Future<void> _startSearch({String? overrideQuery, String? makerKey, String? makerName}) async {
@@ -99,6 +146,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     if (makerKey == null && q.length < 2) return;
     if (overrideQuery != null) {
       _queryCtrl.text = overrideQuery;
+    } else if (makerName != null && makerName.isNotEmpty) {
+      _queryCtrl.text = makerName;
     }
     _searchCancel?.cancel();
     final cancel = CancelToken();
@@ -106,14 +155,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
     setState(() {
       _searching = true;
+      _inResultsMode = true;
+      _activeSearchLabel = makerName ?? q;
       _searchError = null;
       _results = const [];
       _localStatus = const {};
       _sourceStatuses.clear();
       _searchMode = makerKey != null ? 'maker' : '';
     });
+    _syncBackHook();
 
     final api = ref.read(apiClientProvider);
+    final strings = ref.read(stringsProvider);
     try {
       await for (final event in api.streamSse(
         '/api/search/stream',
@@ -151,13 +204,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             break;
           case 'error':
             setState(() {
-              _searchError = (event.data['message'] ?? '搜索失败').toString();
+              _searchError = (event.data['message'] ?? strings.taskFailed).toString();
               _searching = false;
             });
             break;
         }
       }
     } catch (e) {
+      debugPrint('stream search error: $e');
       if (!cancel.isCancelled && mounted) {
         setState(() {
           _searching = false;
@@ -168,6 +222,75 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       if (mounted && _searching) {
         setState(() => _searching = false);
       }
+    }
+  }
+
+  Future<void> _openBatchSearchDialog() async {
+    final strings = ref.read(stringsProvider);
+    final ctrl = TextEditingController();
+    final submitted = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(strings.batchSearch),
+        content: TextField(
+          controller: ctrl,
+          maxLines: 6,
+          minLines: 3,
+          decoration: InputDecoration(hintText: strings.batchSearchHint),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(strings.cancel)),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text), child: Text(strings.startBatchSearch)),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (submitted == null || submitted.trim().isEmpty) return;
+
+    final numbers = submitted
+        .split(RegExp(r'[\s,;\n\r]+'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (numbers.isEmpty) return;
+
+    setState(() {
+      _searching = true;
+      _inResultsMode = true;
+      _activeSearchLabel = '${strings.batchSearch} (${numbers.length})';
+      _searchError = null;
+      _results = const [];
+      _localStatus = const {};
+      _sourceStatuses.clear();
+      _searchMode = 'batch';
+    });
+    _syncBackHook();
+
+    try {
+      final resp = await ref.read(apiClientProvider).postJson(
+        '/api/batch-search',
+        data: {'numbers': numbers, 'include_covers': true},
+      );
+      if (!mounted) return;
+      final rawResults = (resp['results'] as Map?) ?? const {};
+      final items = <SearchResultItem>[];
+      rawResults.forEach((_, val) {
+        if (val is Map && val['found'] == true) {
+          items.add(SearchResultItem.fromJson(Map<String, dynamic>.from(val)));
+        }
+      });
+      setState(() {
+        _results = items;
+        _searching = false;
+      });
+      _checkLocalStatus(items);
+    } catch (e) {
+      debugPrint('batchSearch error: $e');
+      if (!mounted) return;
+      setState(() {
+        _searching = false;
+        _searchError = e.toString();
+      });
     }
   }
 
@@ -187,10 +310,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         }
       });
       setState(() => _localStatus = parsed);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('checkLocalStatus error: $e');
+    }
   }
 
   Future<void> _pickAndImageSearch() async {
+    final strings = ref.read(stringsProvider);
     final picked = await NativeBridge.instance.pickFile(
       mimeTypes: const ['image/jpeg', 'image/png', 'image/webp'],
     );
@@ -201,12 +327,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const AlertDialog(
+      builder: (_) => AlertDialog(
         content: Row(
           children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 16),
-            Text('正在以图搜番…'),
+            const CircularProgressIndicator(),
+            const SizedBox(width: 16),
+            Text(strings.imageSearching),
           ],
         ),
       ),
@@ -220,7 +346,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       if (mounted) Navigator.of(context).pop();
       final body = resp.data is Map ? Map<String, dynamic>.from(resp.data as Map) : const <String, dynamic>{};
       if (body['success'] != true) {
-        _toast((body['message'] ?? body['error'] ?? '识别失败').toString());
+        _toast((body['message'] ?? body['error'] ?? strings.taskFailed).toString());
         return;
       }
       final candidates = ((body['candidates'] as List?) ?? const [])
@@ -229,7 +355,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           .toList();
       if (!mounted) return;
       if (candidates.isEmpty) {
-        _toast('未识别到匹配番号');
+        _toast(strings.imageSearchNoMatch);
         return;
       }
       await showModalBottomSheet<void>(
@@ -238,8 +364,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const ListTile(
-                title: Text('以图搜番候选结果', style: TextStyle(fontWeight: FontWeight.w700)),
+              ListTile(
+                title: Text(strings.imageSearchCandidates, style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
               ...candidates.map((c) {
                 final candidateNumber = (c['number'] ?? c['code'] ?? '').toString();
@@ -247,7 +373,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 final inLib = c['in_library'] == true;
                 return ListTile(
                   title: Text(candidateNumber, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text('匹配度 ${sim.toStringAsFixed(1)}%${inLib ? " · 已入库" : ""}'),
+                  subtitle: Text(strings.matchConfidence(sim.toStringAsFixed(1), inLib)),
                   trailing: const Icon(Icons.search_rounded),
                   onTap: () {
                     Navigator.of(ctx).pop();
@@ -260,106 +386,138 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         ),
       );
     } catch (e) {
+      debugPrint('imageSearch error: $e');
       if (mounted) Navigator.of(context).pop();
-      _toast('以图搜番失败: $e');
+      _toast(strings.requestFailed('$e'));
     }
   }
 
   Future<void> _toggleWishlist(SearchResultItem item) async {
+    final strings = ref.read(stringsProvider);
     final key = item.number.toUpperCase();
     final api = ref.read(apiClientProvider);
-    if (_wishlisted.contains(key)) {
-      await api.deleteJson('/api/wishlist/${Uri.encodeComponent(item.number)}');
-      setState(() => _wishlisted = {..._wishlisted}..remove(key));
-    } else {
-      final resp = await api.postJson('/api/wishlist', data: {
-        'number': item.number,
-        'title': item.title,
-        'actors': item.actors,
-        'tags': item.tags,
-        'maker': item.maker,
-        'director': item.director,
-        'series': item.series,
-        'label': item.label,
-        'duration': item.duration,
-        'date': item.date,
-        'cover': item.cover,
-        'sample_images': item.sampleImages,
-        'source': item.source,
-        'url': item.url,
-      });
-      if (resp['success'] == true) {
-        setState(() => _wishlisted = {..._wishlisted, key});
-      } else if (resp['already_owned'] == true) {
-        _toast('本地片库已有此影片');
+    try {
+      if (_wishlisted.contains(key)) {
+        await api.deleteJson('/api/wishlist/${Uri.encodeComponent(item.number)}');
+        if (mounted) setState(() => _wishlisted = {..._wishlisted}..remove(key));
+      } else {
+        final resp = await api.postJson('/api/wishlist', data: {
+          'number': item.number,
+          'title': item.title,
+          'actors': item.actors,
+          'tags': item.tags,
+          'maker': item.maker,
+          'director': item.director,
+          'series': item.series,
+          'label': item.label,
+          'duration': item.duration,
+          'date': item.date,
+          'cover': item.cover,
+          'sample_images': item.sampleImages,
+          'source': item.source,
+          'url': item.url,
+        });
+        if (!mounted) return;
+        if (resp['success'] == true) {
+          setState(() => _wishlisted = {..._wishlisted, key});
+        } else if (resp['already_owned'] == true) {
+          _toast(strings.alreadyOwnedHint);
+        }
       }
+    } catch (e) {
+      debugPrint('toggleWishlist error: $e');
+      _toast(strings.requestFailed('$e'));
     }
   }
 
   Future<void> _openWishlistSheet() async {
-    final list = await ref.read(apiClientProvider).getJsonList('/api/wishlist');
-    if (!mounted) return;
-    final items = list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.72,
-        builder: (_, scrollCtrl) => Column(
-          children: [
-            ListTile(
-              title: Text('待看书签 (${items.length})', style: const TextStyle(fontWeight: FontWeight.w700)),
-              trailing: IconButton(
-                icon: const Icon(Icons.close_rounded),
-                onPressed: () => Navigator.of(ctx).pop(),
+    final strings = ref.read(stringsProvider);
+    final api = ref.read(apiClientProvider);
+    try {
+      final list = await api.getJsonList('/api/wishlist');
+      if (!mounted) return;
+      final items = list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (ctx) => DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.72,
+          builder: (_, scrollCtrl) => Column(
+            children: [
+              ListTile(
+                title: Text(strings.wishlistCount(items.length), style: const TextStyle(fontWeight: FontWeight.w700)),
+                trailing: IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
               ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: items.isEmpty
-                  ? const Center(child: Text('书签列表为空'))
-                  : ListView.builder(
-                      controller: scrollCtrl,
-                      itemCount: items.length,
-                      itemBuilder: (_, idx) {
-                        final w = items[idx];
-                        final num = (w['number'] ?? '').toString();
-                        final title = (w['title'] ?? '').toString();
-                        return ListTile(
-                          title: Text(num, style: const TextStyle(fontWeight: FontWeight.w700)),
-                          subtitle: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded),
-                            onPressed: () async {
-                              await ref
-                                  .read(apiClientProvider)
-                                  .deleteJson('/api/wishlist/${Uri.encodeComponent(num)}');
-                              if (ctx.mounted) Navigator.of(ctx).pop();
-                              _refreshWishlistMembership();
+              const Divider(height: 1),
+              Expanded(
+                child: items.isEmpty
+                    ? Center(child: Text(strings.emptyWishlist))
+                    : ListView.builder(
+                        controller: scrollCtrl,
+                        itemCount: items.length,
+                        itemBuilder: (_, idx) {
+                          final w = items[idx];
+                          final num = (w['number'] ?? '').toString();
+                          final title = (w['title'] ?? '').toString();
+                          final coverRaw = (w['cover'] ?? w['cover_url'] ?? '').toString();
+                          final coverProxy = coverRaw.isNotEmpty
+                              ? '/api/proxy-image?url=${Uri.encodeQueryComponent(coverRaw)}'
+                              : '';
+                          return ListTile(
+                            leading: coverProxy.isNotEmpty
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: SizedBox(
+                                      width: 56,
+                                      height: 40,
+                                      child: OpenAverNetworkImage(
+                                        api: api,
+                                        url: coverProxy,
+                                        targetDecodeWidth: 160,
+                                      ),
+                                    ),
+                                  )
+                                : null,
+                            title: Text(num, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            subtitle: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded),
+                              onPressed: () async {
+                                await api.deleteJson('/api/wishlist/${Uri.encodeComponent(num)}');
+                                if (ctx.mounted) Navigator.of(ctx).pop();
+                                _refreshWishlistMembership();
+                              },
+                            ),
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _startSearch(overrideQuery: num);
                             },
-                          ),
-                          onTap: () {
-                            Navigator.of(ctx).pop();
-                            _startSearch(overrideQuery: num);
-                          },
-                        );
-                      },
-                    ),
-            ),
-          ],
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('openWishlistSheet error: $e');
+      _toast(strings.requestFailed('$e'));
+    }
   }
 
   Future<void> _scrapeFavoriteFile(FavoriteFileItem file) async {
+    final strings = ref.read(stringsProvider);
     final ctrl = TextEditingController(text: file.number);
     final number = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('刮削整理文件'),
+        title: Text(strings.scrapeOrganizeTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -368,29 +526,50 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             const SizedBox(height: 10),
             TextField(
               controller: ctrl,
-              decoration: const InputDecoration(labelText: '识别番号'),
+              decoration: InputDecoration(labelText: strings.detectedNumberField),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text), child: const Text('开始整理')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(strings.cancel)),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text), child: Text(strings.startOrganize)),
         ],
       ),
     );
     ctrl.dispose();
     if (number == null || number.trim().isEmpty) return;
-    _toast('正在刮削整理 ${number.trim()}…');
-    final resp = await ref.read(apiClientProvider).postJson('/api/scrape-single', data: {
-      'file_path': file.path,
-      'number': number.trim(),
-    });
-    if (resp['success'] == true) {
-      _toast('整理完成');
-      _loadFavoriteFiles();
-    } else {
-      _toast((resp['error'] ?? '整理失败').toString());
+    _toast('${strings.startOrganize}: ${number.trim()}…');
+    try {
+      final resp = await ref.read(apiClientProvider).postJson('/api/scrape-single', data: {
+        'file_path': file.path,
+        'number': number.trim(),
+      });
+      if (!mounted) return;
+      if (resp['success'] == true) {
+        _toast(strings.organizeCompleted);
+        _loadFavoriteFiles();
+      } else {
+        _toast((resp['error'] ?? strings.taskFailed).toString());
+      }
+    } catch (e) {
+      debugPrint('scrapeFavoriteFile error: $e');
+      _toast(strings.requestFailed('$e'));
     }
+  }
+
+  void _openResultDetail(int index) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SearchResultDetailPage(
+          results: _results,
+          initialIndex: index,
+          localStatus: _localStatus,
+          wishlistedNumbers: _wishlisted,
+          onToggleWishlist: _toggleWishlist,
+          onSearchActor: (actor) => _startSearch(overrideQuery: actor),
+        ),
+      ),
+    );
   }
 
   void _toast(String msg) {
@@ -401,7 +580,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   @override
   Widget build(BuildContext context) {
     final api = ref.watch(apiClientProvider);
+    final strings = ref.watch(stringsProvider);
     final palette = OpenAverPalette.of(context);
+
+    // Respond if parent PopScope cleared reset hook
+    final resetHook = ref.watch(searchResetHookProvider);
+    if (!resetHook.value && _inResultsMode && !_searching) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !resetHook.value && _inResultsMode) {
+          _returnToHome();
+        }
+      });
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -411,12 +601,20 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
               child: Row(
                 children: [
+                  if (_inResultsMode) ...[
+                    IconButton.filledTonal(
+                      tooltip: strings.backToSearchHome,
+                      onPressed: _returnToHome,
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   Expanded(
                     child: TextField(
                       controller: _queryCtrl,
                       textInputAction: TextInputAction.search,
                       decoration: InputDecoration(
-                        hintText: '搜索番号、女优或关键字…',
+                        hintText: strings.searchQueryHint,
                         prefixIcon: const Icon(Icons.search_rounded),
                         suffixIcon: _searching
                             ? IconButton(
@@ -426,17 +624,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                   setState(() => _searching = false);
                                 },
                               )
-                            : (_queryCtrl.text.isEmpty
+                            : ((_queryCtrl.text.isEmpty && !_inResultsMode)
                                 ? null
                                 : IconButton(
                                     icon: const Icon(Icons.clear_rounded, size: 18),
-                                    onPressed: () {
-                                      _queryCtrl.clear();
-                                      setState(() {
-                                        _results = const [];
-                                        _searchError = null;
-                                      });
-                                    },
+                                    onPressed: _returnToHome,
                                   )),
                       ),
                       onChanged: (_) => setState(() {}),
@@ -445,13 +637,19 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   ),
                   const SizedBox(width: 6),
                   IconButton.filledTonal(
-                    tooltip: '以图搜番',
+                    tooltip: strings.batchSearch,
+                    onPressed: _openBatchSearchDialog,
+                    icon: const Icon(Icons.playlist_play_rounded),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton.filledTonal(
+                    tooltip: strings.imageSearch,
                     onPressed: _pickAndImageSearch,
                     icon: const Icon(Icons.image_search_rounded),
                   ),
                   const SizedBox(width: 4),
                   IconButton.filledTonal(
-                    tooltip: '书签 (${_wishlisted.length})',
+                    tooltip: strings.wishlistCount(_wishlisted.length),
                     onPressed: _openWishlistSheet,
                     icon: Badge(
                       isLabelVisible: _wishlisted.isNotEmpty,
@@ -462,6 +660,30 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 ],
               ),
             ),
+
+            if (_inResultsMode)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                child: Row(
+                  children: [
+                    ActionChip(
+                      avatar: const Icon(Icons.home_outlined, size: 16),
+                      label: Text(strings.backToSearchHome),
+                      onPressed: _returnToHome,
+                    ),
+                    const SizedBox(width: 8),
+                    if (_activeSearchLabel.isNotEmpty)
+                      Expanded(
+                        child: Text(
+                          '$_activeSearchLabel (${_results.length})',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: palette.textMuted),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
 
             if (_sourceStatuses.isNotEmpty)
               SingleChildScrollView(
@@ -477,9 +699,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     ..._sourceStatuses.entries.map(
                       (e) => Padding(
                         padding: const EdgeInsets.only(right: 6),
-                        child: Chip(
-                          label: Text('${e.key}: ${e.value}'),
-                        ),
+                        child: Chip(label: Text('${e.key}: ${e.value}')),
                       ),
                     ),
                   ],
@@ -495,160 +715,188 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               ),
 
             Expanded(
-              child: _results.isNotEmpty
-                  ? ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                      itemCount: _results.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (_, index) {
-                        final r = _results[index];
-                        final local = _localStatus[r.number.toUpperCase()];
-                        final saved = _wishlisted.contains(r.number.toUpperCase());
-                        final coverProxy = r.cover.isNotEmpty
-                            ? api.resolveUrl('/api/proxy-image?url=${Uri.encodeQueryComponent(r.cover)}')
-                            : '';
-
-                        return Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: palette.surface,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: palette.stroke),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+              child: _inResultsMode
+                  ? (_results.isEmpty && !_searching
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: SizedBox(
-                                  width: 108,
-                                  height: 76,
-                                  child: coverProxy.isNotEmpty
-                                      ? Image.network(
-                                          coverProxy,
-                                          headers: api.authHeaders,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, _, _) => Container(
-                                            color: palette.surfaceHigh,
-                                            child: Icon(Icons.broken_image_outlined, color: palette.textMuted),
-                                          ),
-                                        )
-                                      : Container(color: palette.surfaceHigh),
-                                ),
+                              Text(strings.emptySearchResults, style: TextStyle(color: palette.textMuted)),
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: _returnToHome,
+                                icon: const Icon(Icons.arrow_back_rounded),
+                                label: Text(strings.backToSearchHome),
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
+                            ],
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+                          itemCount: _results.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 10),
+                          itemBuilder: (_, index) {
+                            final r = _results[index];
+                            final local = _localStatus[r.number.toUpperCase()];
+                            final saved = _wishlisted.contains(r.number.toUpperCase());
+                            final coverProxy = r.cover.isNotEmpty
+                                ? '/api/proxy-image?url=${Uri.encodeQueryComponent(r.cover)}'
+                                : '';
+
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () => _openResultDetail(index),
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: palette.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: palette.stroke),
+                                ),
+                                child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          r.number,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            color: palette.accent,
-                                          ),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: SizedBox(
+                                        width: 108,
+                                        height: 76,
+                                        child: OpenAverNetworkImage(
+                                          api: api,
+                                          url: coverProxy,
+                                          targetDecodeWidth: 280,
                                         ),
-                                        const SizedBox(width: 6),
-                                        if (r.source.isNotEmpty)
-                                          Text(
-                                            r.source,
-                                            style: TextStyle(fontSize: 11, color: palette.textMuted),
-                                          ),
-                                        const Spacer(),
-                                        if (local?.exists == true)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: palette.success.withValues(alpha: 0.16),
-                                              borderRadius: BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              '已入库',
-                                              style: TextStyle(fontSize: 10, color: palette.success, fontWeight: FontWeight.w600),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      r.title,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(fontSize: 13, color: palette.textPrimary),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    if (r.actors.isNotEmpty)
-                                      Text(
-                                        r.actors.join(', '),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(fontSize: 11.5, color: palette.textMuted),
                                       ),
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      children: [
-                                        if (local?.exists == true)
-                                          TextButton.icon(
-                                            onPressed: () {
-                                              Navigator.of(context).push(
-                                                MaterialPageRoute<void>(
-                                                  builder: (_) => BuiltInPlayerPage(
-                                                    api: api,
-                                                    title: r.title,
-                                                    partPaths: local!.partPaths,
-                                                    partTokens: local.partTokens,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(
+                                                r.number,
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: palette.accent,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              if (r.source.isNotEmpty)
+                                                Text(
+                                                  r.source,
+                                                  style: TextStyle(fontSize: 11, color: palette.textMuted),
+                                                ),
+                                              const Spacer(),
+                                              if (local?.exists == true)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: palette.success.withValues(alpha: 0.16),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    strings.inLibraryBadge,
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: palette.success,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
                                                   ),
                                                 ),
-                                              );
-                                            },
-                                            icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                                            label: const Text('播放'),
-                                          )
-                                        else
-                                          TextButton.icon(
-                                            onPressed: () => _toggleWishlist(r),
-                                            icon: Icon(
-                                              saved ? Icons.bookmark_rounded : Icons.bookmark_add_outlined,
-                                              size: 16,
-                                            ),
-                                            label: Text(saved ? '已收藏' : '加入书签'),
+                                            ],
                                           ),
-                                      ],
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            r.title,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(fontSize: 13, color: palette.textPrimary),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          if (r.actors.isNotEmpty)
+                                            Text(
+                                              r.actors.join(', '),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(fontSize: 11.5, color: palette.textMuted),
+                                            ),
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            children: [
+                                              if (local?.exists == true)
+                                                TextButton.icon(
+                                                  onPressed: () {
+                                                    Navigator.of(context).push(
+                                                      MaterialPageRoute<void>(
+                                                        builder: (_) => BuiltInPlayerPage(
+                                                          api: api,
+                                                          title: r.title,
+                                                          partPaths: local!.partPaths,
+                                                          partTokens: local.partTokens,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                  icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                                                  label: Text(strings.playLabel),
+                                                )
+                                              else
+                                                TextButton.icon(
+                                                  onPressed: () => _toggleWishlist(r),
+                                                  icon: Icon(
+                                                    saved ? Icons.bookmark_rounded : Icons.bookmark_add_outlined,
+                                                    size: 16,
+                                                  ),
+                                                  label: Text(saved ? strings.wishlisted : strings.addWishlist),
+                                                ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
-                            ],
-                          ),
-                        );
-                      },
-                    )
+                            );
+                          },
+                        ))
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
                       children: [
-                        if (_makerCapsules.isNotEmpty) ...[
-                          Text('片商新作速览', style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                        if (_recentActressesAvailable || _makerCapsules.isNotEmpty) ...[
+                          Text(strings.makerCapsulesTitle, style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
                           const SizedBox(height: 8),
                           Wrap(
                             spacing: 8,
                             runSpacing: 6,
-                            children: _makerCapsules.map((m) {
-                              final name = (m['maker'] ?? '').toString();
-                              final total = (m['total'] ?? 0).toString();
-                              return ActionChip(
-                                label: Text('$name ($total)'),
-                                onPressed: () => _startSearch(makerKey: name, makerName: name),
-                              );
-                            }).toList(),
+                            children: [
+                              if (_recentActressesAvailable && _recentActressesKey.isNotEmpty)
+                                ActionChip(
+                                  avatar: Icon(Icons.favorite_rounded, size: 15, color: palette.favoritePink),
+                                  label: Text(strings.recentActressesLabel),
+                                  onPressed: () => _startSearch(
+                                    makerKey: _recentActressesKey,
+                                    makerName: strings.recentActressesLabel,
+                                  ),
+                                ),
+                              ..._makerCapsules.map((m) {
+                                final name = (m['maker'] ?? '').toString();
+                                final total = (m['total'] ?? 0).toString();
+                                return ActionChip(
+                                  label: Text('$name ($total)'),
+                                  onPressed: () => _startSearch(makerKey: name, makerName: name),
+                                );
+                              }),
+                            ],
                           ),
                           const SizedBox(height: 18),
                         ],
                         Row(
                           children: [
                             Text(
-                              '待整理文件 (${_favoriteFiles.length})',
+                              strings.favoriteFilesTitle(_favoriteFiles.length),
                               style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary),
                             ),
                             const Spacer(),
@@ -663,7 +911,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                         else if (_favoriteFiles.isEmpty)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 20),
-                            child: Text('暂无待整理文件（可在设置中配置待整理文件夹）', style: TextStyle(color: palette.textMuted, fontSize: 12.5)),
+                            child: Text(strings.noFavoriteFiles, style: TextStyle(color: palette.textMuted, fontSize: 12.5)),
                           )
                         else
                           ..._favoriteFiles.map(
@@ -671,10 +919,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                               margin: const EdgeInsets.only(bottom: 8),
                               child: ListTile(
                                 title: Text(f.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                subtitle: Text(f.number.isNotEmpty ? '推测番号: ${f.number}' : f.path, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                subtitle: Text(
+                                  f.number.isNotEmpty ? strings.guessedNumber(f.number) : f.path,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                                 trailing: FilledButton.tonal(
                                   onPressed: () => _scrapeFavoriteFile(f),
-                                  child: const Text('整理'),
+                                  child: Text(strings.organizeBtn),
                                 ),
                                 onTap: f.number.isEmpty ? null : () => _startSearch(overrideQuery: f.number),
                               ),

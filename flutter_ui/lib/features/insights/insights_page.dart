@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/app_providers.dart';
 import '../../core/app_theme.dart';
 import '../../core/models/insights_models.dart';
+import '../shared/openaver_image.dart';
 
 class InsightsPage extends ConsumerStatefulWidget {
   const InsightsPage({super.key});
@@ -38,6 +39,7 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
   }
 
   Future<void> _load() async {
+    final strings = ref.read(stringsProvider);
     setState(() {
       _loading = true;
       _error = null;
@@ -48,7 +50,7 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
       if (resp['success'] != true) {
         setState(() {
           _loading = false;
-          _error = (resp['error'] ?? '加载分析快照失败').toString();
+          _error = (resp['error'] ?? strings.loadLibraryFailed).toString();
         });
         return;
       }
@@ -57,6 +59,7 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
         _loading = false;
       });
     } catch (e) {
+      debugPrint('Insights _load error: $e');
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -68,6 +71,7 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
   @override
   Widget build(BuildContext context) {
     final palette = OpenAverPalette.of(context);
+    final strings = ref.watch(stringsProvider);
     final api = ref.watch(apiClientProvider);
 
     if (_loading) {
@@ -76,19 +80,44 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
     if (_error != null) {
       return Scaffold(
         body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_error!, style: TextStyle(color: palette.danger)),
-              const SizedBox(height: 12),
-              FilledButton(onPressed: _load, child: const Text('重试')),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_error!, style: TextStyle(color: palette.danger)),
+                const SizedBox(height: 12),
+                FilledButton(onPressed: _load, child: Text(strings.retry)),
+              ],
+            ),
           ),
         ),
       );
     }
 
     final snap = _snapshot!;
+    if (snap.records.isEmpty) {
+      return Scaffold(
+        body: RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 96, horizontal: 24),
+                child: Column(
+                  children: [
+                    Icon(Icons.pie_chart_outline_rounded, size: 48, color: palette.textMuted),
+                    const SizedBox(height: 12),
+                    Text(strings.insightsEmpty, style: TextStyle(color: palette.textMuted)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final filtered = snap.records.where((r) {
       if (_selectedYear != null && r.year != _selectedYear) return false;
       if (_selectedMaker != null && (r.maker ?? '') != _selectedMaker) return false;
@@ -140,7 +169,6 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
             children: [
-              // 4-tile summary bar (mobile IA)
               GridView.count(
                 crossAxisCount: 4,
                 shrinkWrap: true,
@@ -148,10 +176,10 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
                 crossAxisSpacing: 8,
                 childAspectRatio: 1.25,
                 children: [
-                  _SummaryTile(label: '影片', value: '${filtered.length}', palette: palette),
-                  _SummaryTile(label: '年份', value: yearSpan, palette: palette),
-                  _SummaryTile(label: '女优', value: '${actressCounts.length}', palette: palette),
-                  _SummaryTile(label: '片商', value: '${makerCounts.length}', palette: palette),
+                  _SummaryTile(label: strings.insightsVideos, value: '${filtered.length}', palette: palette),
+                  _SummaryTile(label: strings.insightsYears, value: yearSpan, palette: palette),
+                  _SummaryTile(label: strings.insightsActresses, value: '${actressCounts.length}', palette: palette),
+                  _SummaryTile(label: strings.insightsMakers, value: '${makerCounts.length}', palette: palette),
                 ],
               ),
 
@@ -162,23 +190,22 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
                   children: [
                     if (_selectedYear != null)
                       InputChip(
-                        label: Text('年份: $_selectedYear'),
+                        label: Text('${strings.insightsYears}: $_selectedYear'),
                         onDeleted: () => setState(() => _selectedYear = null),
                       ),
                     if (_selectedMaker != null)
                       InputChip(
-                        label: Text('片商: $_selectedMaker'),
+                        label: Text('${strings.makerLabel}: $_selectedMaker'),
                         onDeleted: () => setState(() => _selectedMaker = null),
                       ),
                   ],
                 ),
               ],
 
-              // Year bar chart
               if (sortedYears.isNotEmpty) ...[
                 const SizedBox(height: 14),
                 _ChartCard(
-                  title: '发行年份分布',
+                  title: strings.insightsYearDistribution,
                   palette: palette,
                   child: SizedBox(
                     height: 190,
@@ -248,11 +275,10 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
                 ),
               ],
 
-              // Maker donut chart
               if (topMakers.isNotEmpty) ...[
                 const SizedBox(height: 14),
                 _ChartCard(
-                  title: '片商分布 Top 8',
+                  title: strings.insightsMakerTop,
                   palette: palette,
                   child: Row(
                     children: [
@@ -323,11 +349,10 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
                 ),
               ],
 
-              // Actress leaderboard
               if (topActresses.isNotEmpty) ...[
                 const SizedBox(height: 14),
                 _ChartCard(
-                  title: '女优作品榜 (点击跳转片库)',
+                  title: strings.insightsActressBoard,
                   palette: palette,
                   child: Column(
                     children: [
@@ -343,18 +368,23 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
                               leading: CircleAvatar(
                                 radius: 18,
                                 backgroundColor: palette.surfaceHigh,
-                                backgroundImage: fav?.hasPhoto == true
-                                    ? NetworkImage(
-                                        api.resolveUrl('/api/actresses/photo/${Uri.encodeComponent(fav!.photoName)}'),
-                                        headers: api.authHeaders,
-                                      )
-                                    : null,
                                 child: fav?.hasPhoto == true
-                                    ? null
+                                    ? ClipOval(
+                                        child: OpenAverNetworkImage(
+                                          api: api,
+                                          url: '/api/actresses/photo/${Uri.encodeComponent(fav!.photoName)}',
+                                          width: 36,
+                                          height: 36,
+                                          targetDecodeWidth: 120,
+                                          errorIcon: Icons.person_rounded,
+                                        ),
+                                      )
                                     : Text('${i + 1}', style: const TextStyle(fontSize: 11)),
                               ),
                               title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                              subtitle: fav?.birth != null ? Text('生日 ${fav!.birth}', style: const TextStyle(fontSize: 11)) : null,
+                              subtitle: fav?.birth != null
+                                  ? Text('${strings.birthLabel} ${fav!.birth}', style: const TextStyle(fontSize: 11))
+                                  : null,
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -363,12 +393,15 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
                                       padding: const EdgeInsets.only(right: 6),
                                       child: Icon(Icons.favorite_rounded, size: 15, color: palette.favoritePink),
                                     ),
-                                  Text('$count 部', style: TextStyle(color: palette.accent, fontWeight: FontWeight.w700)),
+                                  Text(
+                                    strings.videosUnit(count),
+                                    style: TextStyle(color: palette.accent, fontWeight: FontWeight.w700),
+                                  ),
                                 ],
                               ),
                               onTap: () {
-                                ref.read(showcaseActressFilterProvider.notifier).state = name;
-                                ref.read(activeTabProvider.notifier).state = 0;
+                                ref.read(showcaseActressFilterProvider.notifier).setActress(name);
+                                ref.read(activeTabProvider.notifier).setTab(0);
                               },
                             );
                           },
@@ -378,17 +411,24 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
                 ),
               ],
 
-              // Tags cloud
               if (topTags.isNotEmpty) ...[
                 const SizedBox(height: 14),
                 _ChartCard(
-                  title: '高频标签 Top ${topTags.length}',
+                  title: strings.insightsTagsTop(topTags.length),
                   palette: palette,
                   child: Wrap(
                     spacing: 6,
                     runSpacing: 6,
                     children: topTags
-                        .map((e) => Chip(label: Text('${e.key} (${e.value})')))
+                        .map(
+                          (e) => ActionChip(
+                            label: Text('${e.key} (${e.value})'),
+                            onPressed: () {
+                              ref.read(showcaseTagFilterProvider.notifier).setTag(e.key);
+                              ref.read(activeTabProvider.notifier).setTab(0);
+                            },
+                          ),
+                        )
                         .toList(),
                   ),
                 ),
@@ -452,20 +492,22 @@ class _ChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: palette.surface,
+    return Material(
+      color: palette.surface,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: palette.stroke),
+        side: BorderSide(color: palette.stroke),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
-          const SizedBox(height: 10),
-          child,
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
+            const SizedBox(height: 10),
+            child,
+          ],
+        ),
       ),
     );
   }

@@ -94,6 +94,8 @@ class VideoItem {
     bool? hasNfo,
     bool? needsTranslate,
     bool? canTranslate,
+    String? autoFocal,
+    String? cropMode,
   }) {
     return VideoItem(
       path: path,
@@ -119,8 +121,8 @@ class VideoItem {
       hasNfo: hasNfo ?? this.hasNfo,
       needsTranslate: needsTranslate ?? this.needsTranslate,
       canTranslate: canTranslate ?? this.canTranslate,
-      autoFocal: autoFocal,
-      cropMode: cropMode,
+      autoFocal: autoFocal ?? this.autoFocal,
+      cropMode: cropMode ?? this.cropMode,
       partTokens: partTokens,
       partPaths: partPaths,
     );

@@ -46,5 +46,6 @@ public final class MobileRuntimeSessionTest {
     public void requiresNonEmptyTokenToBeReady() {
         MobileRuntimeSession.markReady(8765, "", "cookie", "/data", "arm64-v8a", null, null);
         assertFalse(MobileRuntimeSession.isReady());
+        assertEquals("openaver_main", MobileRuntimeSession.FLUTTER_ENGINE_ID);
     }
 }

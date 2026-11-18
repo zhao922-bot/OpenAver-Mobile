@@ -5,6 +5,7 @@ package dev.openaver.mobile;
  * MainActivity (bootstrap / classic WebView fallback) and OpenAverFlutterActivity.
  */
 final class MobileRuntimeSession {
+    static final String FLUTTER_ENGINE_ID = "openaver_main";
     private static volatile boolean ready = false;
     private static volatile int port = 8765;
     private static volatile String authToken = "";

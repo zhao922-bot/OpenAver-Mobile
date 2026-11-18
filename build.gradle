@@ -3,3 +3,19 @@ plugins {
     id "com.chaquo.python" version "17.2.0" apply false
     id "org.jetbrains.kotlin.android" version "2.2.20" apply false
 }
+
+// Keep Flutter/third-party Android library subprojects compatible with
+// AndroidX minSdk >= 19 (e.g. screen_brightness_android declares 16)
+// and avoid manifest merger failures in unit test builds.
+subprojects {
+    plugins.withId("com.android.library") {
+        def components = extensions.findByName("androidComponents")
+        if (components != null) {
+            components.finalizeDsl { extension ->
+                if (extension.defaultConfig.minSdk == null || extension.defaultConfig.minSdk < 21) {
+                    extension.defaultConfig.minSdk = 21
+                }
+            }
+        }
+    }
+}

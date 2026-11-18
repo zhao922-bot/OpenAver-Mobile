@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 class SseEvent {
   const SseEvent(this.data);
@@ -13,6 +14,7 @@ class ApiClient {
   ApiClient({
     required int port,
     required this.token,
+    HttpClientAdapter? httpClientAdapter,
   })  : _port = port,
         dio = Dio(
           BaseOptions(
@@ -22,6 +24,9 @@ class ApiClient {
             validateStatus: (status) => status != null && status < 500,
           ),
         ) {
+    if (httpClientAdapter != null) {
+      dio.httpClientAdapter = httpClientAdapter;
+    }
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
@@ -129,6 +134,7 @@ class ApiClient {
     if (body == null) return;
 
     final buffer = StringBuffer();
+    var pendingEventType = '';
     await for (final chunk in utf8.decoder.bind(body.stream)) {
       buffer.write(chunk);
       var text = buffer.toString();
@@ -136,16 +142,23 @@ class ApiClient {
       while (newlineIndex != -1) {
         final line = text.substring(0, newlineIndex).trimRight();
         text = text.substring(newlineIndex + 1);
-        if (line.startsWith('data:')) {
+        if (line.isEmpty) {
+          pendingEventType = '';
+        } else if (line.startsWith('event:')) {
+          pendingEventType = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
           final payload = line.substring(5).trim();
           if (payload.isNotEmpty) {
             try {
               final decoded = jsonDecode(payload);
               if (decoded is Map<String, dynamic>) {
+                if (pendingEventType.isNotEmpty && !decoded.containsKey('type')) {
+                  decoded['type'] = pendingEventType;
+                }
                 yield SseEvent(decoded);
               }
-            } catch (_) {
-              // Ignore malformed partial SSE keep-alive lines.
+            } catch (e) {
+              debugPrint('SSE line JSON decode skipped: $e');
             }
           }
         }
@@ -162,9 +175,14 @@ class ApiClient {
         try {
           final decoded = jsonDecode(payload);
           if (decoded is Map<String, dynamic>) {
+            if (pendingEventType.isNotEmpty && !decoded.containsKey('type')) {
+              decoded['type'] = pendingEventType;
+            }
             yield SseEvent(decoded);
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('SSE trailing JSON decode skipped: $e');
+        }
       }
     }
   }
@@ -176,7 +194,9 @@ class ApiClient {
       try {
         final decoded = jsonDecode(data);
         if (decoded is Map<String, dynamic>) return decoded;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('JSON map coerce failed: $e');
+      }
     }
     return const {};
   }

@@ -17,6 +17,8 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
   int _totalVideos = 0;
   MissingCheckSummary? _missing;
   bool _checkingMissing = false;
+  String? _loadError;
+  String _scrapeSource = 'auto';
 
   bool _runningTask = false;
   String _taskLabel = '';
@@ -47,8 +49,14 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
       final data = (resp['data'] as Map?) ?? const {};
       setState(() {
         _totalVideos = (data['total'] as num?)?.toInt() ?? 0;
+        _loadError = null;
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Scanner _loadStats error: $e');
+      if (mounted) {
+        setState(() => _loadError = e.toString());
+      }
+    }
   }
 
   Future<void> _checkMissing() async {
@@ -58,6 +66,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
       if (!mounted) return;
       if (resp['success'] == true) {
         setState(() => _missing = MissingCheckSummary.fromJson(resp));
+      }
+    } catch (e) {
+      debugPrint('Scanner _checkMissing error: $e');
+      if (mounted) {
+        _toast(ref.read(stringsProvider).requestFailed('$e'));
       }
     } finally {
       if (mounted) setState(() => _checkingMissing = false);
@@ -72,13 +85,14 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
     Object? data,
   }) async {
     if (_runningTask) return;
+    final strings = ref.read(stringsProvider);
     final cancel = CancelToken();
     _taskCancel = cancel;
     setState(() {
       _runningTask = true;
       _taskLabel = label;
       _progress = null;
-      _statusLine = '正在启动…';
+      _statusLine = strings.starting;
       _logs.clear();
     });
     await NativeBridge.instance.setTaskKeepAlive(true);
@@ -111,20 +125,21 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
         } else if (event.type == 'done') {
           setState(() {
             _progress = 1.0;
-            _statusLine = msg.isNotEmpty ? msg : '任务完成';
+            _statusLine = msg.isNotEmpty ? msg : strings.taskDone;
             if (msg.isNotEmpty) _logs.add('✔ $msg');
           });
         } else if (event.type == 'error') {
           setState(() {
-            _statusLine = msg.isNotEmpty ? msg : '执行失败';
+            _statusLine = msg.isNotEmpty ? msg : strings.taskFailed;
             if (msg.isNotEmpty) _logs.add('✖ $msg');
           });
         }
       }
     } catch (e) {
+      debugPrint('Scanner SSE error: $e');
       if (!cancel.isCancelled && mounted) {
         setState(() {
-          _statusLine = '连接中断: $e';
+          _statusLine = strings.requestFailed('$e');
           _logs.add('✖ $e');
         });
       }
@@ -139,99 +154,235 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
   }
 
   Future<void> _openRenameSheet() async {
+    final strings = ref.read(stringsProvider);
     final api = ref.read(apiClientProvider);
-    final resp = await api.getJson('/api/gallery/rename-preview', queryParameters: {'scope': 'files'});
-    if (!mounted) return;
-    if (resp['success'] != true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text((resp['error'] ?? '获取重命名预览失败').toString())),
-      );
-      return;
-    }
-    final data = (resp['data'] as Map?)?.cast<String, dynamic>() ?? const {};
-    final planId = (data['plan_id'] ?? '').toString();
-    final items = ((data['items'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .where((e) => e['status'] == 'ready')
-        .toList();
+    try {
+      final resp = await api.getJson('/api/gallery/rename-preview', queryParameters: {'scope': 'files'});
+      if (!mounted) return;
+      if (resp['success'] != true) {
+        _toast((resp['error'] ?? strings.taskFailed).toString());
+        return;
+      }
+      final data = (resp['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final planId = (data['plan_id'] ?? '').toString();
+      final items = ((data['items'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((e) => e['status'] == 'ready')
+          .toList();
 
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (ctx) => SizedBox(
-        height: MediaQuery.of(ctx).size.height * 0.72,
-        child: Column(
-          children: [
-            ListTile(
-              title: Text('文件名整理预览 (${items.length} 项待修改)', style: const TextStyle(fontWeight: FontWeight.w700)),
-              trailing: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.of(ctx).pop()),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: items.isEmpty
-                  ? const Center(child: Text('所有文件命名均已规范'))
-                  : ListView.builder(
-                      itemCount: items.length,
-                      itemBuilder: (_, idx) {
-                        final item = items[idx];
-                        return ListTile(
-                          title: Text((item['old_name'] ?? '').toString(), style: const TextStyle(fontSize: 12.5)),
-                          subtitle: Text('→ ${item['new_name'] ?? ''}', style: const TextStyle(fontSize: 12.5)),
-                        );
-                      },
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (ctx) => SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.72,
+          child: Column(
+            children: [
+              ListTile(
+                title: Text(strings.renamePreviewTitle(items.length), style: const TextStyle(fontWeight: FontWeight.w700)),
+                trailing: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.of(ctx).pop()),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: items.isEmpty
+                    ? Center(child: Text(strings.renameAllClean))
+                    : ListView.builder(
+                        itemCount: items.length,
+                        itemBuilder: (_, idx) {
+                          final item = items[idx];
+                          return ListTile(
+                            title: Text((item['old_name'] ?? '').toString(), style: const TextStyle(fontSize: 12.5)),
+                            subtitle: Text('→ ${item['new_name'] ?? ''}', style: const TextStyle(fontSize: 12.5)),
+                          );
+                        },
+                      ),
+              ),
+              if (items.isNotEmpty)
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () async {
+                          Navigator.of(ctx).pop();
+                          final execResp = await api.postJson('/api/gallery/rename-execute', data: {
+                            'plan_id': planId,
+                            'scope': 'files',
+                          });
+                          if (mounted) {
+                            _toast(execResp['success'] == true
+                                ? strings.renameCompleted
+                                : (execResp['error'] ?? strings.taskFailed).toString());
+                          }
+                        },
+                        child: Text(strings.renameExecute),
+                      ),
                     ),
-            ),
-            if (items.isNotEmpty)
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('openRenameSheet error: $e');
+      _toast(strings.requestFailed('$e'));
+    }
+  }
+
+  Future<void> _openCollectionAnalysisSheet() async {
+    final strings = ref.read(stringsProvider);
+    final api = ref.read(apiClientProvider);
+    try {
+      final resp = await api.getJson('/api/collection/analysis');
+      if (!mounted) return;
+      final data = (resp['data'] as Map?)?.cast<String, dynamic>() ?? resp;
+      final groups = (data['groups'] as List?) ?? const [];
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (ctx) => SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.72,
+          child: Column(
+            children: [
+              ListTile(
+                title: Text(strings.collectionAnalysis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                trailing: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.of(ctx).pop()),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: groups.isEmpty
+                    ? Center(child: Text(strings.renameAllClean))
+                    : ListView.builder(
+                        itemCount: groups.length,
+                        itemBuilder: (_, idx) {
+                          final g = groups[idx];
+                          if (g is! Map) return const SizedBox.shrink();
+                          final title = (g['label'] ?? g['type'] ?? g['name'] ?? '').toString();
+                          final count = (g['count'] ?? '').toString();
+                          return ListTile(
+                            title: Text(title),
+                            trailing: count.isNotEmpty ? Text(count) : null,
+                          );
+                        },
+                      ),
+              ),
               SafeArea(
                 top: false,
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: SizedBox(
                     width: double.infinity,
-                    child: FilledButton(
+                    child: FilledButton.tonal(
                       onPressed: () async {
-                        Navigator.of(ctx).pop();
-                        final execResp = await api.postJson('/api/gallery/rename-execute', data: {
-                          'plan_id': planId,
-                          'scope': 'files',
-                        });
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(execResp['success'] == true ? '批量命名整理完成' : (execResp['error'] ?? '执行失败').toString()),
-                            ),
-                          );
+                        final preview = await api.postJson('/api/collection/fix-numbers/preview');
+                        if (!ctx.mounted) return;
+                        final items = (preview['items'] as List?) ?? const [];
+                        if (items.isEmpty) {
+                          Navigator.of(ctx).pop();
+                          _toast(strings.renameAllClean);
+                          return;
                         }
+                        await api.postJson('/api/collection/fix-numbers/apply', data: {'items': items});
+                        if (ctx.mounted) Navigator.of(ctx).pop();
+                        _toast(strings.saved);
+                        _loadStats();
                       },
-                      child: const Text('确认执行重命名'),
+                      child: Text(strings.apply),
                     ),
                   ),
                 ),
               ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('openCollectionAnalysisSheet error: $e');
+      _toast(strings.requestFailed('$e'));
+    }
+  }
+
+  Future<void> _openAliasManager({required bool actressMode}) async {
+    final strings = ref.read(stringsProvider);
+    final api = ref.read(apiClientProvider);
+    final endpoint = actressMode ? '/api/actress-alias' : '/api/tag-alias';
+    final title = actressMode ? strings.actressAliasesManage : strings.tagAliasesManage;
+    try {
+      final resp = await api.getJson(endpoint);
+      if (!mounted) return;
+      final list = ((resp['groups'] ?? resp['aliases'] ?? resp['data']) as List?) ?? const [];
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (ctx) => SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.72,
+          child: Column(
+            children: [
+              ListTile(
+                title: Text('$title (${list.length})', style: const TextStyle(fontWeight: FontWeight.w700)),
+                trailing: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.of(ctx).pop()),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: list.isEmpty
+                    ? Center(child: Text(strings.emptyActresses))
+                    : ListView.builder(
+                        itemCount: list.length,
+                        itemBuilder: (_, idx) {
+                          final g = list[idx];
+                          if (g is! Map) return const SizedBox.shrink();
+                          final primary = (g['primary_name'] ?? g['name'] ?? '').toString();
+                          final aliases = ((g['aliases'] as List?) ?? const []).join(', ');
+                          return ListTile(
+                            title: Text(primary, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle: aliases.isNotEmpty ? Text(aliases) : null,
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('openAliasManager error: $e');
+      _toast(strings.requestFailed('$e'));
+    }
   }
 
   Future<void> _confirmClearCache() async {
+    final strings = ref.read(stringsProvider);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('清空片库索引'),
-        content: const Text('清空本地 SQLite 索引后需重新扫描片库，不会删除您的视频或 NFO 文件。'),
+        title: Text(strings.clearCache),
+        content: Text(strings.clearCacheConfirm),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('确认清空')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(strings.cancel)),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(strings.confirm)),
         ],
       ),
     );
     if (ok != true) return;
-    await ref.read(apiClientProvider).deleteJson('/api/gallery/cache');
-    _loadStats();
-    _checkMissing();
+    try {
+      await ref.read(apiClientProvider).deleteJson('/api/gallery/cache');
+      _loadStats();
+      _checkMissing();
+    } catch (e) {
+      debugPrint('clearCache error: $e');
+      _toast(strings.requestFailed('$e'));
+    }
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
@@ -245,7 +396,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
           children: [
-            // Summary header card
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -260,11 +410,12 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                     children: [
                       Icon(Icons.folder_copy_outlined, color: palette.accent),
                       const SizedBox(width: 8),
-                      Text(
-                        '当前片库 $_totalVideos 部影片',
-                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: palette.textPrimary),
+                      Expanded(
+                        child: Text(
+                          strings.libraryTotalHeader(_totalVideos),
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: palette.textPrimary),
+                        ),
                       ),
-                      const Spacer(),
                       IconButton(
                         onPressed: () {
                           _loadStats();
@@ -274,6 +425,10 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                       ),
                     ],
                   ),
+                  if (_loadError != null) ...[
+                    const SizedBox(height: 6),
+                    Text(_loadError!, style: TextStyle(color: palette.danger, fontSize: 12)),
+                  ],
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -293,7 +448,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                             _taskCancel?.cancel();
                             setState(() {
                               _runningTask = false;
-                              _logs.add('■ 用户已请求中止任务');
+                              _logs.add(strings.taskAborted);
                             });
                           },
                           icon: const Icon(Icons.stop_rounded),
@@ -306,7 +461,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
               ),
             ),
 
-            // Live task progress & console
             if (_runningTask || _logs.isNotEmpty) ...[
               const SizedBox(height: 12),
               Container(
@@ -356,14 +510,30 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
               ),
             ],
 
-            // Missing check & batch backfill actions
             const SizedBox(height: 16),
             Row(
               children: [
-                Text('缺失检测与一键补全', style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                Text(strings.missingCheckTitle, style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
                 const Spacer(),
+                DropdownButton<String>(
+                  value: _scrapeSource,
+                  underline: const SizedBox.shrink(),
+                  items: [
+                    DropdownMenuItem(value: 'auto', child: Text('${strings.scrapeSourceLabel}: ${strings.autoLabel}')),
+                    const DropdownMenuItem(value: 'javbus', child: Text('JavBus')),
+                    const DropdownMenuItem(value: 'javdb', child: Text('JavDB')),
+                    const DropdownMenuItem(value: 'dmm', child: Text('DMM')),
+                    const DropdownMenuItem(value: 'jav321', child: Text('Jav321')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => _scrapeSource = v);
+                  },
+                ),
                 if (_checkingMissing)
-                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
                 else
                   TextButton(onPressed: _checkMissing, child: Text(strings.checkMissing)),
               ],
@@ -372,7 +542,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             _BackfillTile(
               icon: Icons.description_outlined,
               title: strings.backfillNfo,
-              subtitle: missing == null ? '检查中…' : '缺 NFO/封面共 ${missing.totalMissing} 项',
+              subtitle: missing == null ? strings.checking : strings.backfillNfoDesc(missing.totalMissing),
               onTap: _runningTask
                   ? null
                   : () => _runSseTask(label: strings.backfillNfo, path: '/api/gallery/update'),
@@ -380,20 +550,34 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             _BackfillTile(
               icon: Icons.article_outlined,
               title: strings.backfillPlots,
-              subtitle: missing == null ? '检查中…' : '待补简介 ${missing.missingPlots} 项',
+              subtitle: missing == null ? strings.checking : strings.backfillPlotsDesc(missing.missingPlots),
               onTap: _runningTask
                   ? null
                   : () => _runSseTask(
                         label: strings.backfillPlots,
                         path: '/api/gallery/backfill-plots',
                         method: 'POST',
-                        queryParameters: {'source': 'auto'},
+                        queryParameters: {'source': _scrapeSource},
                       ),
             ),
+            if (missing != null && missing.pendingTranslationBatchIds.isNotEmpty)
+              _BackfillTile(
+                icon: Icons.g_translate_rounded,
+                title: strings.translatePendingPlots,
+                subtitle: '${missing.pendingTranslationBatchIds.length}',
+                onTap: _runningTask
+                    ? null
+                    : () => _runSseTask(
+                          label: strings.translatePendingPlots,
+                          path: '/api/gallery/translate-backfilled-plots',
+                          method: 'POST',
+                          data: {'batch_id': missing.pendingTranslationBatchIds.first},
+                        ),
+              ),
             _BackfillTile(
               icon: Icons.translate_rounded,
               title: strings.backfillTitles,
-              subtitle: missing == null ? '检查中…' : '待翻译标题 ${missing.untranslatedTitles} 项',
+              subtitle: missing == null ? strings.checking : strings.backfillTitlesDesc(missing.untranslatedTitles),
               onTap: _runningTask
                   ? null
                   : () => _runSseTask(
@@ -405,38 +589,56 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             _BackfillTile(
               icon: Icons.photo_library_outlined,
               title: strings.backfillSamples,
-              subtitle: missing == null ? '检查中…' : '缺剧照 ${missing.missingSamples} 项',
+              subtitle: missing == null ? strings.checking : strings.backfillSamplesDesc(missing.missingSamples),
               onTap: _runningTask
                   ? null
                   : () => _runSseTask(
                         label: strings.backfillSamples,
                         path: '/api/gallery/backfill-samples',
                         method: 'POST',
-                        queryParameters: {'source': 'auto'},
+                        queryParameters: {'source': _scrapeSource},
                       ),
             ),
             _BackfillTile(
               icon: Icons.image_outlined,
               title: strings.backfillJellyfin,
-              subtitle: '生成 -poster / -fanart 媒体服务器图像',
+              subtitle: strings.backfillJellyfinDesc,
               onTap: _runningTask
                   ? null
                   : () => _runSseTask(label: strings.backfillJellyfin, path: '/api/gallery/jellyfin-update'),
             ),
 
             const SizedBox(height: 14),
-            Text('高级维护', style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
+            Text(strings.advancedMaintenance, style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
             const SizedBox(height: 6),
             _BackfillTile(
               icon: Icons.drive_file_rename_outline_rounded,
               title: strings.renameNormalize,
-              subtitle: '预览并规范化视频文件命名',
+              subtitle: strings.renameNormalizeDesc,
               onTap: _runningTask ? null : _openRenameSheet,
+            ),
+            _BackfillTile(
+              icon: Icons.health_and_safety_outlined,
+              title: strings.collectionAnalysis,
+              subtitle: strings.collectionAnalysis,
+              onTap: _runningTask ? null : _openCollectionAnalysisSheet,
+            ),
+            _BackfillTile(
+              icon: Icons.face_retouching_natural_outlined,
+              title: strings.actressAliasesManage,
+              subtitle: strings.actressAliasesManage,
+              onTap: _runningTask ? null : () => _openAliasManager(actressMode: true),
+            ),
+            _BackfillTile(
+              icon: Icons.label_outline_rounded,
+              title: strings.tagAliasesManage,
+              subtitle: strings.tagAliasesManage,
+              onTap: _runningTask ? null : () => _openAliasManager(actressMode: false),
             ),
             _BackfillTile(
               icon: Icons.delete_sweep_outlined,
               title: strings.clearCache,
-              subtitle: '清空 SQLite 索引（不删物理文件）',
+              subtitle: strings.clearCacheDesc,
               onTap: _runningTask ? null : _confirmClearCache,
             ),
           ],

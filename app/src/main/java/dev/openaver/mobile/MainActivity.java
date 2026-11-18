@@ -426,6 +426,9 @@ public final class MainActivity extends Activity {
         runtimeStarting = true;
         runtimeFailed = false;
         showLoading(getString(R.string.starting_local));
+        if (shouldLaunchFlutterUi()) {
+            FlutterEngineManager.prewarm(getApplicationContext());
+        }
         runtimeExecutor.execute(() -> {
             String stage = getString(R.string.starting_python);
             try {
@@ -488,6 +491,7 @@ public final class MainActivity extends Activity {
                                 cfTransport,
                                 cfMobile
                         );
+                        FlutterEngineManager.notifyRuntimeReady(this);
                         launchFlutterUi();
                     } else {
                         MobileRuntimeSession.markReady(
@@ -1542,6 +1546,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        FlutterEngineManager.destroy();
         MobileRuntimeSession.clear();
         TaskKeepAliveService.stop(this);
         mainHandler.removeCallbacksAndMessages(null);

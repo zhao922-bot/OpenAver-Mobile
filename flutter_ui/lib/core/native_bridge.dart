@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class BootstrapInfo {
@@ -15,6 +16,7 @@ class BootstrapInfo {
     required this.hasStorageAccess,
     required this.hasTreeAccess,
     required this.treeDescription,
+    this.openaverCommit = '',
   });
 
   final bool ready;
@@ -24,6 +26,7 @@ class BootstrapInfo {
   final String dataDir;
   final String version;
   final String openaverRelease;
+  final String openaverCommit;
   final String abi;
   final String uiLocale;
   final String theme;
@@ -40,6 +43,7 @@ class BootstrapInfo {
       dataDir: (map['dataDir'] as String?) ?? '',
       version: (map['version'] as String?) ?? '',
       openaverRelease: (map['openaverRelease'] as String?) ?? '',
+      openaverCommit: (map['openaverCommit'] as String?) ?? '',
       abi: (map['abi'] as String?) ?? '',
       uiLocale: (map['uiLocale'] as String?) ?? 'zh-CN',
       theme: (map['theme'] as String?) ?? 'dim',
@@ -74,7 +78,45 @@ class TreeAccessInfo {
   final String? error;
 }
 
-typedef BuiltInPlayerCallback = void Function(String path, int part);
+class BuiltInPlayerPart {
+  const BuiltInPlayerPart({
+    required this.path,
+    this.label = '',
+  });
+
+  final String path;
+  final String label;
+
+  static List<BuiltInPlayerPart> parseList(
+    Object? rawParts, {
+    String fallbackPath = '',
+  }) {
+    final parsed = <BuiltInPlayerPart>[];
+    if (rawParts is List) {
+      for (final entry in rawParts) {
+        if (entry is Map) {
+          final p = (entry['path'] ?? '').toString().trim();
+          final l = (entry['label'] ?? '').toString().trim();
+          if (p.isNotEmpty) {
+            parsed.add(BuiltInPlayerPart(path: p, label: l));
+          }
+        }
+      }
+    }
+    if (parsed.isEmpty && fallbackPath.trim().isNotEmpty) {
+      parsed.add(BuiltInPlayerPart(path: fallbackPath.trim()));
+    }
+    return parsed;
+  }
+}
+
+typedef BuiltInPlayerCallback = void Function(
+  String path,
+  int part,
+  List<BuiltInPlayerPart> parts,
+);
+
+typedef RuntimeReadyCallback = void Function(BootstrapInfo info);
 
 class NativeBridge {
   NativeBridge._() {
@@ -85,14 +127,21 @@ class NativeBridge {
   static const MethodChannel _channel = MethodChannel('dev.openaver.mobile/bridge');
 
   BuiltInPlayerCallback? onOpenBuiltInPlayer;
+  RuntimeReadyCallback? onRuntimeReady;
 
   Future<void> _handleIncoming(MethodCall call) async {
     if (call.method == 'openBuiltInPlayer') {
       final args = call.arguments as Map<Object?, Object?>?;
       final path = (args?['path'] as String?) ?? '';
       final part = (args?['part'] as int?) ?? 1;
-      if (path.isNotEmpty) {
-        onOpenBuiltInPlayer?.call(path, part);
+      final parts = BuiltInPlayerPart.parseList(args?['parts'], fallbackPath: path);
+      if (parts.isNotEmpty) {
+        onOpenBuiltInPlayer?.call(path.isNotEmpty ? path : parts.first.path, part, parts);
+      }
+    } else if (call.method == 'onRuntimeReady') {
+      final raw = call.arguments as Map<Object?, Object?>?;
+      if (raw != null) {
+        onRuntimeReady?.call(BootstrapInfo.fromMap(raw));
       }
     }
   }
@@ -111,7 +160,11 @@ class NativeBridge {
   }
 
   Future<void> setTaskKeepAlive(bool active) async {
-    await _channel.invokeMethod<void>('setTaskKeepAlive', {'active': active});
+    try {
+      await _channel.invokeMethod<void>('setTaskKeepAlive', {'active': active});
+    } catch (e) {
+      debugPrint('setTaskKeepAlive error: $e');
+    }
   }
 
   Future<bool> hasStorageAccess() async {
@@ -171,11 +224,19 @@ class NativeBridge {
   }
 
   Future<void> syncNativeTheme(String theme) async {
-    await _channel.invokeMethod<void>('syncNativeTheme', {'theme': theme});
+    try {
+      await _channel.invokeMethod<void>('syncNativeTheme', {'theme': theme});
+    } catch (e) {
+      debugPrint('syncNativeTheme error: $e');
+    }
   }
 
   Future<void> syncUiLocale(String locale) async {
-    await _channel.invokeMethod<void>('syncUiLocale', {'locale': locale});
+    try {
+      await _channel.invokeMethod<void>('syncUiLocale', {'locale': locale});
+    } catch (e) {
+      debugPrint('syncUiLocale error: $e');
+    }
   }
 
   Future<bool> openExternalUrl(String url) async {
