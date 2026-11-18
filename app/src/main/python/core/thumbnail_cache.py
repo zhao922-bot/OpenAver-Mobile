@@ -12,33 +12,63 @@
 import hashlib
 import shutil
 import threading
+import weakref
 from pathlib import Path
 from typing import Optional
 
 from PIL import Image
 
 from core.atomic_write import atomic_write
+from core.data_root import get_data_root
 from core.database import get_db_path
 from core.logger import get_logger
 
 logger = get_logger(__name__)
+
+_DEFAULT_GET_DB_PATH = get_db_path
+
+
+class _RefLock:
+    """Weakref-capable wrapper around ``threading.Lock`` for ``WeakValueDictionary``."""
+
+    __slots__ = ("_lock", "__weakref__")
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
+    def __enter__(self):
+        return self._lock.__enter__()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return self._lock.__exit__(exc_type, exc_val, exc_tb)
+
+    def acquire(self, *args, **kwargs):
+        return self._lock.acquire(*args, **kwargs)
+
+    def release(self):
+        return self._lock.release()
+
+    def locked(self) -> bool:
+        return self._lock.locked()
+
 
 # per-thumb-path 鎖註冊表（Codex round-2 P1 修法 A）。
 # 讓 generate（讀 cover + 原子寫 thumb）與 invalidate（unlink）對「同一 thumb path」
 # 互斥序列化，關閉「enrich 原地覆寫同一 cover.jpg → generate serve 舊內容、stale thumb
 # 殘留」的競態。鎖 key = str(thumb_file_for(uri))，generate 的 dst 與 invalidate 的 tf
 # 對同一 video_path_uri 必是同一 Path → str 相同 → 同一把鎖。
-_thumb_locks: dict = {}              # str(thumb_path) -> threading.Lock
+# 使用 WeakValueDictionary：進行中的操作持有強引用維持互斥，操作結束自動回收，避免無界增長。
+_thumb_locks: weakref.WeakValueDictionary[str, _RefLock] = weakref.WeakValueDictionary()
 _thumb_locks_guard = threading.Lock()
 
 
-def _lock_for_thumb(dst) -> threading.Lock:
+def _lock_for_thumb(dst) -> _RefLock:
     """取得 thumb path 對應的鎖（缺則建）。key 用 str(dst) 確保跨 generate/invalidate 一致。"""
     key = str(dst)
     with _thumb_locks_guard:
         lk = _thumb_locks.get(key)
         if lk is None:
-            lk = threading.Lock()
+            lk = _RefLock()
             _thumb_locks[key] = lk
         return lk
 
@@ -60,6 +90,8 @@ _generate_slots = threading.BoundedSemaphore(_MAX_CONCURRENT_GENERATES)
 
 def _thumb_dir() -> Path:
     """縮圖快取根目錄（= output/thumb/，CD-2/D1）。不負責建檔。"""
+    if get_db_path is _DEFAULT_GET_DB_PATH:
+        return get_data_root() / "thumb"
     return get_db_path().parent / "thumb"
 
 

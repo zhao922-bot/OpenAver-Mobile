@@ -77,3 +77,29 @@ def test_generate_reuses_a_thumb_created_by_another_request(tmp_path, monkeypatc
     monkeypatch.setattr(thumbnail_cache.Image, "open", fail_open)
 
     assert thumbnail_cache.generate("cover.jpg", dst) is True
+
+
+def test_thumb_locks_evict_idle_entries_and_thumb_file_for_avoids_mkdir(
+    tmp_path,
+    monkeypatch,
+):
+    import gc
+
+    dst = tmp_path / "transient.webp"
+    dst.write_bytes(b"cached")
+    assert thumbnail_cache.generate("cover.jpg", dst) is True
+    thumbnail_cache.invalidate("file:///library/transient.mp4")
+    gc.collect()
+
+    assert str(dst) not in thumbnail_cache._thumb_locks
+
+    monkeypatch.setattr(thumbnail_cache, "get_data_root", lambda: tmp_path / "data_root")
+    monkeypatch.setattr(
+        thumbnail_cache,
+        "get_db_path",
+        thumbnail_cache._DEFAULT_GET_DB_PATH,
+    )
+    thumb_path = thumbnail_cache.thumb_file_for("file:///library/video.mp4")
+    assert thumb_path.parent.parent == tmp_path / "data_root" / "thumb"
+    assert not (tmp_path / "data_root").exists()
+

@@ -14,14 +14,40 @@ from core.database.version_tracker import _RevisionTrackingConnection
 
 logger = get_logger(__name__)
 
-_db_init_lock = threading.Lock()
+_db_init_lock = threading.RLock()
 _initialized_db_paths: set[str] = set()
+_wal_enabled_files: set[tuple[str, int, int]] = set()
+_ensured_db_dir: str | None = None
+
+
+def _wal_file_key(db_path: Path | str) -> tuple[str, int, int] | None:
+    raw = str(db_path)
+    if raw == ":memory:":
+        return None
+    try:
+        st = Path(db_path).stat()
+    except OSError:
+        return None
+    if st.st_size <= 0:
+        return None
+    return (raw, st.st_dev, st.st_ino)
+
+
+def _record_wal_enabled(db_path: Path | str) -> None:
+    key = _wal_file_key(db_path)
+    if key is not None:
+        with _db_init_lock:
+            _wal_enabled_files.add(key)
 
 
 def get_db_path() -> Path:
     """獲取資料庫路徑 (output/openaver.db)"""
+    global _ensured_db_dir
     db_dir = get_data_root()
-    db_dir.mkdir(parents=True, exist_ok=True)
+    dir_key = str(db_dir)
+    if _ensured_db_dir != dir_key:
+        db_dir.mkdir(parents=True, exist_ok=True)
+        _ensured_db_dir = dir_key
     return db_dir / "openaver.db"
 
 
@@ -30,6 +56,7 @@ def get_connection(db_path: Path = None) -> sqlite3.Connection:
     if db_path is None:
         db_path = get_db_path()
 
+    wal_key = _wal_file_key(db_path)
     conn = sqlite3.connect(
         str(db_path),
         timeout=5.0,
@@ -39,8 +66,11 @@ def get_connection(db_path: Path = None) -> sqlite3.Connection:
     # the same lock/durability behavior.
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA synchronous=NORMAL")
-    # 啟用 WAL 模式以提升並發效能
-    conn.execute("PRAGMA journal_mode=WAL")
+    # WAL mode persists in the SQLite file header once initialized; avoid
+    # re-issuing PRAGMA journal_mode=WAL on every short-lived connection.
+    if wal_key is None or wal_key not in _wal_enabled_files:
+        conn.execute("PRAGMA journal_mode=WAL")
+        _record_wal_enabled(db_path)
     return conn
 
 
@@ -420,6 +450,7 @@ def _init_db_schema(db_path: Path = None) -> None:
 
     conn.commit()
     conn.close()
+    _record_wal_enabled(db_path if db_path is not None else get_db_path())
 
 
 def _normalized_db_path(db_path: Path = None) -> Path:
@@ -456,5 +487,8 @@ def init_db(db_path: Path = None, *, force: bool = False) -> None:
 
 def _clear_db_init_cache() -> None:
     """Clear process-local initialization state (tests/maintenance only)."""
+    global _ensured_db_dir
     with _db_init_lock:
         _initialized_db_paths.clear()
+        _wal_enabled_files.clear()
+        _ensured_db_dir = None

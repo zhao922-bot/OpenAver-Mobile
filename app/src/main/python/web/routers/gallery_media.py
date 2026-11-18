@@ -18,7 +18,12 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response, FileResponse, HTMLResponse, StreamingResponse
 
 from core.path_utils import to_file_uri, is_path_under_dir, uri_to_fs_path, uri_to_local_fs_path
-from core.config import load_config, iter_gallery_sources, get_gallery_source_paths
+from core.config import (
+    load_config,
+    load_config_readonly,
+    iter_gallery_sources,
+    get_gallery_source_paths,
+)
 from core.database import get_db_path, VideoRepository
 from core.i18n import SUPPORTED_LOCALES
 from core.multipart_group import resolve_group
@@ -30,6 +35,15 @@ from core.logger import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/gallery", tags=["gallery"])
+
+_DEFAULT_LOAD_CONFIG = load_config
+
+
+def _read_config() -> dict:
+    """Read-only config access on hot media routes, preserving load_config monkeypatches."""
+    if load_config is _DEFAULT_LOAD_CONFIG:
+        return load_config_readonly()
+    return load_config()
 
 # TASK-73: 白名單目錄 dual-form TTL 快取（key: (raw_dir, frozen_mappings), value: (forms, expire_monotonic)）
 _dir_forms_cache: dict = {}
@@ -129,7 +143,7 @@ def get_image(path: str = Query(..., description="圖片路徑")):
     # IO 之前，不呼叫 realpath / safe_realpath / _dir_candidate_forms / os.path.exists。
     # config/gallery_config/path_mappings 從原本「3. 目錄白名單」段落整段上移到這裡
     # （不多呼叫一次 load_config()，下方該段落改用這裡算好的變數）。
-    config = load_config()
+    config = _read_config()
     gallery_config = config.get('gallery', {})
     path_mappings = gallery_config.get('path_mappings', {})
 
@@ -201,7 +215,7 @@ def get_video(request: Request, path: str = Query(..., description="影片路徑
 
     # TASK-91-T2b #12：config/gallery_config/path_mappings 搬到 local_path 計算之前，
     # 讓 uri_to_local_fs_path 取用得到 path_mappings（原本晚於 local_path 賦值，會 NameError）。
-    config = load_config()
+    config = _read_config()
     gallery_config = config.get('gallery', {})
     path_mappings = gallery_config.get('path_mappings', {})
 
@@ -364,7 +378,7 @@ def video_player(
     # video_url 也做 HTML escape（防禦性，避免 src 屬性注入）
     video_url_safe = html_escape(video_url)
 
-    config = load_config()
+    config = _read_config()
     locale = (config.get('general') or {}).get('locale') or ''
     allowed_langs = set(SUPPORTED_LOCALES)
     # 本端點唯一的 locale 正規化點，lang 屬性與提示文字都吃它
@@ -526,7 +540,8 @@ def get_thumb(request: Request, path: str = Query(..., description="影片路徑
     # 「封面不在快取記錄中」（本 task 發現的卡片未涵蓋 gap，見 report）。
     # 修法：DB 背書比對維持用裸 uri_to_fs_path（與改動前行為等價，零回歸）；
     # 反解只用在「即將真的碰磁碟」的 cover_fs（generate/fallback FileResponse/os.path.isfile）。
-    gallery_config = load_config().get('gallery', {})
+    config = _read_config()
+    gallery_config = config.get('gallery', {})
     path_mappings = gallery_config.get('path_mappings', {})
     cover_fs_for_db = uri_to_fs_path(video.cover_path)  # uri-no-reverse: DB round-trip comparison-only (is_known_cover_path), real disk path uses uri_to_local_fs_path below  # db-ns-ok: _for_db, sourced from existing DB URI (uri_to_fs_path, not reverse-mapped), round-trips to mapped namespace
     if not repo.is_known_cover_path(cover_fs_for_db):
@@ -542,7 +557,7 @@ def get_thumb(request: Request, path: str = Query(..., description="影片路徑
     # 用戶關閉快取 + clear 後，stale 分頁的 miss 請求不應重建剛清的目錄。
     # disabled → fall through 到下方 fallback 原圖（D6 不破圖）。
     # hit 路徑（tf.exists() → _serve_thumb_file）不 gate：已存在直接 serve 是 harmless。
-    if not load_config().get("thumbnail_cache_enabled", False):
+    if not config.get("thumbnail_cache_enabled", False):
         # disabled：跳過 generate，fall through 到 fallback 原圖
         pass
     elif thumbnail_cache.generate(cover_fs, tf):

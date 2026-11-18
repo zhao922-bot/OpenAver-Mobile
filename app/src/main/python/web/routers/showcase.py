@@ -7,6 +7,7 @@ Showcase API 路由 - 影片展示資料端點
 """
 
 import os
+import threading
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -18,11 +19,14 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from core.database import AliasRepository, VideoRepository, get_db_path, init_db
+from core.database import version_tracker
 from core.database.version_tracker import (
     compute_db_fingerprint,
     compute_etag,
+    etag_matches,
     get_showcase_revision,
 )
+from core.nfo_locator import _locate_output_nfo, locate_nfo_for_video
 from core.path_utils import (
     is_path_under_dir,
     uri_to_local_fs_path,
@@ -121,6 +125,22 @@ def _can_manual_translate(
     )
 
 
+_DEFAULT_NEEDS_TRANSLATE = _needs_translate
+_DEFAULT_CAN_MANUAL_TRANSLATE = _can_manual_translate
+_DEFAULT_VIDEO_REPOSITORY = VideoRepository
+_DEFAULT_GET_SHOWCASE_ROWS = VideoRepository.get_showcase_rows
+
+_showcase_groups_cache_lock = threading.Lock()
+_showcase_groups_cache: Optional[tuple[tuple, tuple]] = None
+
+
+def _clear_showcase_groups_cache() -> None:
+    """Clear cached grouped showcase rows (tests/maintenance)."""
+    global _showcase_groups_cache
+    with _showcase_groups_cache_lock:
+        _showcase_groups_cache = None
+
+
 def _serialize_video(
     v,
     path_mappings: dict,
@@ -149,6 +169,29 @@ def _serialize_video(
         local_path = uri_to_local_fs_path(img_uri, path_mappings)
         sample_urls.append(f"/api/gallery/image?path={quote(local_path, safe='')}")
 
+    has_nfo = (v.nfo_mtime or 0) > 0
+    can_translate = bool(
+        _can_manual_translate(
+            v.title,
+            v.original_title,
+            v.nfo_mtime,
+            locale,
+            proper_terms=v.actresses,
+        )
+    )
+    needs_translate = (
+        bool(has_nfo and can_translate)
+        if _needs_translate is _DEFAULT_NEEDS_TRANSLATE
+        and _can_manual_translate is _DEFAULT_CAN_MANUAL_TRANSLATE
+        else _needs_translate(
+            v.title,
+            v.original_title,
+            v.nfo_mtime,
+            locale,
+            proper_terms=v.actresses,
+        )
+    )
+
     return {
         "path": v.path,                                          # file:/// URI（開啟影片用）
         "title": v.title,
@@ -170,21 +213,9 @@ def _serialize_video(
         "user_tags": v.user_tags or [],              # list[str]，空時回空 list
         "user_rating": v.user_rating or 0,            # 精選標記（spec-123）；無條件輸出，未精選為 0（FE-ALPINE-06）
         "has_cover": bool(v.cover_path),             # DB 初判（不做 IO）
-        "has_nfo": (v.nfo_mtime or 0) > 0,          # 對齊 41a nfo_mtime 寫入契約，防禦 NULL
-        "needs_translate": _needs_translate(
-            v.title,
-            v.original_title,
-            v.nfo_mtime,
-            locale,
-            proper_terms=v.actresses,
-        ),
-        "can_translate": _can_manual_translate(
-            v.title,
-            v.original_title,
-            v.nfo_mtime,
-            locale,
-            proper_terms=v.actresses,
-        ),
+        "has_nfo": has_nfo,                          # 對齊 41a nfo_mtime 寫入契約，防禦 NULL
+        "needs_translate": needs_translate,
+        "can_translate": can_translate,
         "auto_focal": v.auto_focal,                  # canonical "x,y" 4dp 字串或 ''（98b：前端 focalObjectPosition 消費）
         "crop_mode": v.crop_mode,                    # 'auto' | 'default'（98b：default 退 baseline 右裁）
     }
@@ -249,15 +280,54 @@ def _sort_groups(groups, sort: str, order: str):
     return sorted(groups, key=lambda group: _group_sort_key(group, sort), reverse=reverse)
 
 
-def _etag_matches(if_none_match: str, etag: str) -> bool:
-    """比對 `If-None-Match` 語意（抄 Starlette `StaticFiles.is_not_modified()` 的比對方式，
-    不 import 該函式本身——它綁定 `FileResponse` 用的 `Headers` 型別，這裡是手寫 JSON 端點）。
+_etag_matches = etag_matches
 
-    依逗號拆多值、去除頭尾空白與 `W/` 弱驗證前綴，逐一比對是否等於 `etag`。
-    """
-    if not if_none_match:
-        return False
-    return etag in [tag.strip().removeprefix("W/") for tag in if_none_match.split(",")]
+
+def _load_showcase_groups(
+    db_path: Path,
+    configured_dir_uris: set[str],
+    path_mappings: dict,
+    actress_names: Optional[list[str]],
+    *,
+    revision: int,
+    db_fingerprint: tuple,
+):
+    """Load and group showcase rows, reusing an in-memory snapshot when unchanged."""
+    global _showcase_groups_cache
+
+    can_cache = (
+        VideoRepository is _DEFAULT_VIDEO_REPOSITORY
+        and VideoRepository.get_showcase_rows is _DEFAULT_GET_SHOWCASE_ROWS
+    )
+    cache_key = None
+    if can_cache:
+        cache_key = (
+            str(db_path),
+            revision,
+            version_tracker.get_showcase_revision(),
+            db_fingerprint,
+            version_tracker.compute_db_fingerprint(db_path),
+            tuple(sorted(configured_dir_uris)),
+            tuple(sorted((str(k), str(v)) for k, v in (path_mappings or {}).items())),
+            tuple(actress_names or ()),
+        )
+        with _showcase_groups_cache_lock:
+            if _showcase_groups_cache is not None and _showcase_groups_cache[0] == cache_key:
+                return list(_showcase_groups_cache[1])
+
+    repo = VideoRepository(db_path)
+    all_videos = [
+        v for v in repo.get_showcase_rows(configured_dir_uris, actress_names)
+        if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)
+    ]
+    groups = group_rows(
+        all_videos,
+        fs_path_of=lambda v: uri_to_local_fs_path(v.path, path_mappings),
+    )
+    if can_cache and cache_key is not None:
+        with _showcase_groups_cache_lock:
+            _showcase_groups_cache = (cache_key, tuple(groups))
+    return groups
 
 
 @router.get("/videos")
@@ -329,25 +399,30 @@ def get_videos(
             "order": requested_order if use_pagination else 'client',
             "actress_names": actress_names or [],
         }
+        revision = get_showcase_revision()
+        db_fingerprint = compute_db_fingerprint(db_path)
         etag = None
         if requested_sort != 'random':
             etag = compute_etag(
-                get_showcase_revision(),
-                compute_db_fingerprint(db_path),
+                revision,
+                db_fingerprint,
                 projection,
             )
 
         if etag and _etag_matches(request.headers.get("if-none-match"), etag):
             return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
 
-        repo = VideoRepository(db_path)
-        all_videos = [v for v in repo.get_showcase_rows(configured_dir_uris, actress_names)
-                      if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
-
         # feature/122 CD-122-1：分組在序列化層收斂，前端拿到的 videos 陣列已是
         # 合併後的一筆一組（多一個 part_tokens 欄位）。單檔片的 group 只有自己
         # 一個 member，_serialize_group() 輸出與改動前逐鍵逐值相同（AC-4）。
-        groups = group_rows(all_videos, fs_path_of=lambda v: uri_to_local_fs_path(v.path, path_mappings))
+        groups = _load_showcase_groups(
+            db_path,
+            configured_dir_uris,
+            path_mappings,
+            actress_names,
+            revision=revision,
+            db_fingerprint=db_fingerprint,
+        )
 
         total = len(groups)
         total_pages = 1
@@ -781,45 +856,20 @@ def _new_original_title(req, video) -> str:
 
 
 def _locate_readonly_nfo(video, path_mappings: dict, output_uri: str):
-    """唯讀來源：scandir 一次列舉輸出夾的 .nfo（BE-DATA-12：四狀態分開）。回 (path, err)。
+    """唯讀來源：委派 core.nfo_locator._locate_output_nfo（單一真理來源）。"""
+    return _locate_output_nfo(video, output_uri, path_mappings)
 
-    output_dir 必須在目前設定的輸出根（output_uri）底下，否則視為沒有 NFO（不碰舊夾）。
-    """
-    if not video.output_dir:
-        return None, "no_nfo"
-    if not output_uri or not is_path_under_dir(video.output_dir, output_uri):
-        return None, "no_nfo"
-    out_fs = Path(uri_to_local_fs_path(video.output_dir, path_mappings))
-    video_fs = Path(uri_to_local_fs_path(video.path, path_mappings))
-    try:
-        exact = find_sidecar_nfos(out_fs / video_fs.name)
-        if exact:
-            return str(exact[0]), None
-        with os.scandir(out_fs) as it:
-            nfo_files = sorted(e.path for e in it if e.name.lower().endswith(".nfo") and e.is_file())
-    except FileNotFoundError:
-        return None, "no_nfo"
-    except OSError:
-        return None, "nfo_unreadable"
-    if len(nfo_files) > 1:
-        return None, "nfo_ambiguous"
-    if not nfo_files:
-        return None, "no_nfo"
-    return nfo_files[0], None
+
+_DEFAULT_LOCATE_READONLY_NFO = _locate_readonly_nfo
 
 
 def _locate_title_nfo(video, config: dict, path_mappings: dict):
-    """回 (nfo_path, err)：唯讀來源取輸出夾那份，一般來源取影片旁同名 .nfo。"""
-    owning = resolve_owning_output_root(video.path, config)
-    if owning is not None:
-        return _locate_readonly_nfo(video, path_mappings, owning[2])
-    video_fs_path = uri_to_local_fs_path(video.path, path_mappings)
-    candidates = find_sidecar_nfos(video_fs_path)
-    if not candidates:
-        return None, "no_nfo"
-    if len(candidates) > 1:
-        return None, "nfo_ambiguous"
-    return str(candidates[0]), None
+    """回 (nfo_path, err)：委派 core.nfo_locator.locate_nfo_for_video。"""
+    if _locate_readonly_nfo is not _DEFAULT_LOCATE_READONLY_NFO:
+        owning = resolve_owning_output_root(video.path, config)
+        if owning is not None:
+            return _locate_readonly_nfo(video, path_mappings, owning[2])
+    return locate_nfo_for_video(video, config, path_mappings)
 
 
 def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: str) -> Optional[str]:

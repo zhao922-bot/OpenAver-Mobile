@@ -228,3 +228,22 @@ def test_save_config_updates_cached_snapshot(tmp_path, monkeypatch):
     )
 
     assert config_module.load_config()["marker"] == "after"
+
+
+def test_load_config_readonly_returns_cached_snapshot_without_deepcopy(
+    tmp_path,
+    monkeypatch,
+):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"marker": "readonly", "sources": [], "search": {}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_module, "CONFIG_PATH", config_path)
+
+    first = config_module.load_config_readonly()
+    second = config_module.load_config_readonly()
+
+    assert first is second
+    assert first["marker"] == "readonly"
+

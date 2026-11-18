@@ -998,21 +998,56 @@
  import time
  from pathlib import Path
  
-@@ -12,6 +13,9 @@
- from core.database.version_tracker import _RevisionTrackingConnection
+@@ -13,11 +14,40 @@
  
  logger = get_logger(__name__)
-+
-+_db_init_lock = threading.Lock()
-+_initialized_db_paths: set[str] = set()
  
++_db_init_lock = threading.RLock()
++_initialized_db_paths: set[str] = set()
++_wal_enabled_files: set[tuple[str, int, int]] = set()
++_ensured_db_dir: str | None = None
++
++
++def _wal_file_key(db_path: Path | str) -> tuple[str, int, int] | None:
++    raw = str(db_path)
++    if raw == ":memory:":
++        return None
++    try:
++        st = Path(db_path).stat()
++    except OSError:
++        return None
++    if st.st_size <= 0:
++        return None
++    return (raw, st.st_dev, st.st_ino)
++
++
++def _record_wal_enabled(db_path: Path | str) -> None:
++    key = _wal_file_key(db_path)
++    if key is not None:
++        with _db_init_lock:
++            _wal_enabled_files.add(key)
++
  
  def get_db_path() -> Path:
-@@ -26,7 +30,15 @@
+     """獲取資料庫路徑 (output/openaver.db)"""
++    global _ensured_db_dir
+     db_dir = get_data_root()
+-    db_dir.mkdir(parents=True, exist_ok=True)
++    dir_key = str(db_dir)
++    if _ensured_db_dir != dir_key:
++        db_dir.mkdir(parents=True, exist_ok=True)
++        _ensured_db_dir = dir_key
+     return db_dir / "openaver.db"
+ 
+ 
+@@ -26,9 +56,21 @@
      if db_path is None:
          db_path = get_db_path()
  
 -    conn = sqlite3.connect(str(db_path), factory=_RevisionTrackingConnection)
+-    # 啟用 WAL 模式以提升並發效能
+-    conn.execute("PRAGMA journal_mode=WAL")
++    wal_key = _wal_file_key(db_path)
 +    conn = sqlite3.connect(
 +        str(db_path),
 +        timeout=5.0,
@@ -1022,10 +1057,15 @@
 +    # the same lock/durability behavior.
 +    conn.execute("PRAGMA busy_timeout=5000")
 +    conn.execute("PRAGMA synchronous=NORMAL")
-     # 啟用 WAL 模式以提升並發效能
-     conn.execute("PRAGMA journal_mode=WAL")
++    # WAL mode persists in the SQLite file header once initialized; avoid
++    # re-issuing PRAGMA journal_mode=WAL on every short-lived connection.
++    if wal_key is None or wal_key not in _wal_enabled_files:
++        conn.execute("PRAGMA journal_mode=WAL")
++        _record_wal_enabled(db_path)
      return conn
-@@ -108,6 +120,18 @@
+ 
+ 
+@@ -108,6 +150,18 @@
          cursor.execute("ALTER TABLE notifications ADD COLUMN url TEXT")
  
  
@@ -1044,7 +1084,7 @@
  # 片商 → JavBus 作品頁代號對應表（173-T2，CD-173-5）。
  # 三態：有列 found／有列 not_found／沒有列＝沒查過。maker_key 對後端是不透明字串。
  _MAKER_JAVBUS_MAP_DDL = """
-@@ -123,7 +147,7 @@
+@@ -123,7 +177,7 @@
  """
  
  
@@ -1053,7 +1093,7 @@
      """初始化資料庫 Schema"""
      conn = get_connection(db_path)
      cursor = conn.cursor()
-@@ -155,6 +179,8 @@
+@@ -155,6 +209,8 @@
              auto_focal TEXT DEFAULT '',
              crop_mode TEXT NOT NULL DEFAULT 'auto',
              focal_attempted_at TIMESTAMP DEFAULT NULL,
@@ -1062,7 +1102,7 @@
              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
          )
-@@ -310,6 +336,7 @@
+@@ -310,6 +366,7 @@
              value TEXT NOT NULL
          )
      """)
@@ -1070,7 +1110,7 @@
  
      # Migration: 加入 Phase 37 新欄位
      existing_cols = {row[1] for row in cursor.execute("PRAGMA table_info(videos)").fetchall()}
-@@ -359,6 +386,16 @@
+@@ -359,6 +416,16 @@
      # 每次重掃無限重排。nullable：NULL = 從未偵測過，非 NULL = 偵測跑過（不論有臉/無臉）。
      if 'focal_attempted_at' not in existing_cols:
          cursor.execute("ALTER TABLE videos ADD COLUMN focal_attempted_at TIMESTAMP DEFAULT NULL")
@@ -1087,10 +1127,11 @@
  
      # Migration: 加入 user_rating 欄位（videos，spec-123 精選標記；0=未精選，>0=已精選。
      # 只由 set_user_rating()/set_user_rating_bulk() 與 repath() 分支 3 的 max() 合併寫入，
-@@ -383,3 +420,41 @@
+@@ -383,3 +450,45 @@
  
      conn.commit()
      conn.close()
++    _record_wal_enabled(db_path if db_path is not None else get_db_path())
 +
 +
 +def _normalized_db_path(db_path: Path = None) -> Path:
@@ -1127,8 +1168,11 @@
 +
 +def _clear_db_init_cache() -> None:
 +    """Clear process-local initialization state (tests/maintenance only)."""
++    global _ensured_db_dir
 +    with _db_init_lock:
 +        _initialized_db_paths.clear()
++        _wal_enabled_files.clear()
++        _ensured_db_dir = None
 --- a/core/database/video.py
 +++ b/core/database/video.py
 @@ -1,9 +1,9 @@
@@ -1237,18 +1281,22 @@
      @classmethod
      def from_row(cls, row: tuple, columns: List[str]) -> 'Video':
          """從資料庫 row 建立"""
-@@ -153,6 +233,10 @@
+@@ -153,7 +233,14 @@
              if isinstance(data['updated_at'], str):
                  data['updated_at'] = datetime.fromisoformat(data['updated_at'])
  
 +        # DB-only migration columns (focal_model, ai tags, plot flags, etc.)
 +        # must not be forwarded to the dataclass constructor.
-+        allowed = {f.name for f in fields(cls)}
++        allowed = _VIDEO_FIELD_NAMES if cls is Video else {f.name for f in fields(cls)}
 +        data = {key: value for key, value in data.items() if key in allowed}
          return cls(**data)
++
++
++_VIDEO_FIELD_NAMES = frozenset(f.name for f in fields(Video))
  
  
-@@ -189,6 +273,37 @@
+ # preserve-on-conflict 欄位集合（CD-98a-6）：比照 path — 首次 INSERT 帶 dataclass 預設值，
+@@ -189,6 +276,50 @@
      "WHEN videos.crop_mode = 'manual' THEN 'auto' ELSE videos.crop_mode END"
  )
  
@@ -1278,6 +1326,19 @@
 +    'user_rating',
 +)
 +
++# Insights snapshot only needs these fields for grouping and chart aggregation.
++_INSIGHTS_COLUMNS = (
++    'path',
++    'number',
++    'release_date',
++    'duration',
++    'actresses',
++    'maker',
++    'director',
++    'series',
++    'tags',
++)
++
 +
 +def _escape_like_prefix(value: str) -> str:
 +    """Escape SQLite LIKE wildcards before appending a trailing '%'."""
@@ -1286,7 +1347,7 @@
  
  class VideoRepository:
      """影片資料存取層"""
-@@ -201,16 +316,19 @@
+@@ -201,16 +332,19 @@
          """取得資料庫連線"""
          return connection.get_connection(self.db_path)
  
@@ -1310,10 +1371,315 @@
          return self._columns_cache
  
      def upsert(self, video: Video) -> int:
-@@ -626,6 +744,178 @@
+@@ -364,267 +498,419 @@
+             self.upsert(video)
+             return
  
-         return rowcount > 0
- 
+-        # 讀取 old / new 是否存在
+-        conn = self._get_connection()
+-        cursor = conn.cursor()
+-        try:
+-            cursor.execute("SELECT 1 FROM videos WHERE path = ?", (old_uri,))
+-            old_exists = cursor.fetchone() is not None
+-            cursor.execute("SELECT 1 FROM videos WHERE path = ?", (new_uri,))
+-            new_exists = cursor.fetchone() is not None
+-        finally:
+-            conn.close()
+-
+-        # ── 分支 4：old-not-in-DB ─────────────────────────────────────────
+-        if not old_exists and not new_exists:
+-            self.upsert(video)
+-            return
+-
+-        # ── 分支 2：正常 UPDATE（old 在 DB、new 不在 DB）────────────────────
+-        if old_exists and not new_exists:
+-            old_row = self.get_by_path(old_uri)
+-            merged_tags = self._union_tags(
+-                old_row.user_tags if old_row else [],
+-                video.user_tags,
+-            )
+-
+-            # 動態建 SET 子句（鏡射 upsert 的 column list 邏輯）
++        # 讀取 old / new 既有列並共用同一連線完成更新（消除單次 repath 開關 3~4 次連線）
++        conn = self._get_connection()
++        cursor = conn.cursor()
++        try:
++            db_columns = self._get_columns(conn)
++            cursor.execute(
++                "SELECT * FROM videos WHERE path IN (?, ?)",
++                (old_uri, new_uri),
++            )
++            by_path = {
++                parsed.path: parsed
++                for row in cursor.fetchall()
++                for parsed in (Video.from_row(row, db_columns),)
++            }
++            old_row = by_path.get(old_uri)
++            new_row = by_path.get(new_uri)
++            old_exists = old_row is not None
++            new_exists = new_row is not None
++
++            # ── 分支 4：old-not-in-DB ─────────────────────────────────────────
++            if not old_exists and not new_exists:
++                conn.close()
++                conn = None
++                self.upsert(video)
++                return
++
++            # ── 分支 2：正常 UPDATE（old 在 DB、new 不在 DB）────────────────────
++            if old_exists and not new_exists:
++                merged_tags = self._union_tags(
++                    old_row.user_tags if old_row else [],
++                    video.user_tags,
++                )
++
++                # 動態建 SET 子句（鏡射 upsert 的 column list 邏輯）
++                video_dict = video.to_dict()
++                video_dict.pop('id', None)
++                video_dict.pop('created_at', None)
++                video_dict.pop('updated_at', None)
++                video_dict.pop('path', None)   # path 會另外指定
++                video_dict.pop('user_rating', None)  # CD-123-3：只由 set_user_rating() 寫入，排除在動態欄位外
++
++                cover_unchanged = old_row is not None and video.cover_path == old_row.cover_path
++
++                set_parts = []
++                set_values = []
++                for col, val in video_dict.items():
++                    if col == 'user_tags':
++                        continue  # handled separately
++                    elif col == 'crop_mode':
++                        if cover_unchanged:
++                            continue  # 裁切模式偏好與封面無關，同封面一律保留 DB 既有值（CD-98a-6）
++                        if old_row and old_row.crop_mode == 'manual':
++                            # 換封面：manual 座標對新內容已失效 → 降回 auto（CD-10/99a-T1b）
++                            set_parts.append("crop_mode = ?")
++                            set_values.append('auto')
++                        continue  # 防 fall-through 到底部通用 append 重複 SET（Codex PR#105 P2c 教訓）
++                    elif col == 'auto_focal':
++                        if cover_unchanged:
++                            continue  # 保留 DB 既有值
++                        set_parts.append("auto_focal = ?")
++                        set_values.append('')
++                        continue
++                    elif col == 'focal_attempted_at':
++                        if cover_unchanged:
++                            continue  # 保留 DB 既有值
++                        set_parts.append("focal_attempted_at = ?")
++                        set_values.append(None)
++                        continue
++                    elif col == 'output_dir' and not val:
++                        continue
++                    elif col == 'scrape_attempted_at' and not val:
++                        continue
++                    set_parts.append(f"{col} = ?")
++                    set_values.append(val)
++
++                # user_tags（Python-side union，JSON 序列化）
++                set_parts.append("user_tags = ?")
++                set_values.append(json.dumps(merged_tags, ensure_ascii=False))
++
++                # path + updated_at
++                set_parts.append("path = ?")
++                set_values.append(new_uri)
++                set_parts.append("updated_at = CURRENT_TIMESTAMP")
++
++                sql = f"UPDATE videos SET {', '.join(set_parts)} WHERE path = ?"
++                set_values.append(old_uri)
++
++                cursor.execute(sql, set_values)
++                conn.commit()
++                rowcount = cursor.rowcount
++                conn.close()
++                conn = None
++
++                if rowcount == 0:
++                    self.upsert(video)
++                    return
++
++                try:
++                    from core.similar.ranker_cache import SimilarRankerCache
++                    SimilarRankerCache.invalidate()
++                except Exception:
++                    logger.exception("SimilarRankerCache invalidate failed (non-fatal)")
++                return
++
++            # ── 分支 3：碰撞 delete-merge（new 已有一筆）──────────────────────────
++            tags_a = old_row.user_tags if old_row else []
++            tags_b = new_row.user_tags if new_row else []
++            tags_c = video.user_tags
++            merged_tags = self._union_tags(self._union_tags(tags_a, tags_b), tags_c)
++
++            old_ca = old_row.created_at if old_row else None
++            new_ca = new_row.created_at if new_row else None
++            if old_ca and new_ca:
++                earliest_ca = min(str(old_ca), str(new_ca))
++            elif old_ca:
++                earliest_ca = str(old_ca)
++            elif new_ca:
++                earliest_ca = str(new_ca)
++            else:
++                earliest_ca = None
++
++            old_ur = old_row.user_rating if old_row else 0
++            new_ur = new_row.user_rating if new_row else 0
++            merged_rating = max(old_ur, new_ur)
++
+             video_dict = video.to_dict()
+             video_dict.pop('id', None)
+             video_dict.pop('created_at', None)
+             video_dict.pop('updated_at', None)
+-            video_dict.pop('path', None)   # path 會另外指定
+-            video_dict.pop('user_rating', None)  # CD-123-3：只由 set_user_rating() 寫入，排除在動態欄位外
+-
+-            # cover_path 是否變動決定 auto_focal/focal_attempted_at 保留或重置
+-            # （Codex PR#105 P2b）。old_row 為 None 屬既有存在檢查後被並行刪除的極端
+-            # race（見上方 merged_tags 同一 old_row 用法），安全預設視為「封面已變」
+-            # 一併重置，不留可能對應舊封面的 stale 值。
+-            cover_unchanged = old_row is not None and video.cover_path == old_row.cover_path
+-
+-            set_parts = []
+-            set_values = []
+-            for col, val in video_dict.items():
+-                if col == 'user_tags':
+-                    continue  # handled separately
+-                elif col == 'crop_mode':
+-                    if cover_unchanged:
+-                        continue  # 裁切模式偏好與封面無關，同封面一律保留 DB 既有值（CD-98a-6）
+-                    if old_row and old_row.crop_mode == 'manual':
+-                        # 換封面：manual 座標對新內容已失效 → 降回 auto（CD-10/99a-T1b）
+-                        set_parts.append("crop_mode = ?")
+-                        set_values.append('auto')
+-                    continue  # 防 fall-through 到底部通用 append 重複 SET（Codex PR#105 P2c 教訓）
+-                elif col == 'auto_focal':
+-                    if cover_unchanged:
+-                        continue  # 保留 DB 既有值
+-                    set_parts.append("auto_focal = ?")
+-                    set_values.append('')
+-                    continue  # 已排入 reset，勿 fall through 到底部通用 append（重複 SET→SQLite 取最右＝incoming stale 值蓋掉 reset，Codex PR#105 P2c）
+-                elif col == 'focal_attempted_at':
+-                    if cover_unchanged:
+-                        continue  # 保留 DB 既有值
+-                    set_parts.append("focal_attempted_at = ?")
+-                    set_values.append(None)
+-                    continue  # 同上：勿 fall through 重複 append 蓋掉 reset（Codex PR#105 P2c）
+-                elif col == 'output_dir' and not val:
+-                    # incoming output_dir 空 → 保留既有值（不寫入），與 upsert() CASE-WHEN 對稱
++
++            columns = list(video_dict.keys())
++            values = list(video_dict.values())
++
++            for i, col in enumerate(columns):
++                if col == 'path':
++                    values[i] = new_uri
++                elif col == 'user_tags':
++                    values[i] = json.dumps(merged_tags, ensure_ascii=False)
++                elif col == 'user_rating':
++                    values[i] = merged_rating
++
++            if earliest_ca:
++                columns.append('created_at')
++                values.append(earliest_ca)
++
++            placeholders = ', '.join(['?'] * len(columns))
++
++            update_parts = []
++            for col in columns:
++                if col == 'path':
+                     continue
+-                elif col == 'scrape_attempted_at' and not val:
+-                    # incoming scrape_attempted_at 為 0 → 保留既有值（不寫入），與 upsert() CASE-WHEN 對稱
++                elif col in _FOCAL_PRESERVE:
++                    if col == 'crop_mode':
++                        update_parts.append(_FOCAL_CROP_MODE_CASE_SQL)
++                    elif col == 'auto_focal':
++                        update_parts.append(_FOCAL_AUTO_FOCAL_CASE_SQL)
++                    elif col == 'focal_attempted_at':
++                        update_parts.append(_FOCAL_ATTEMPTED_AT_CASE_SQL)
++                elif col == 'created_at':
++                    update_parts.append("created_at = excluded.created_at")
++                elif col == 'user_rating':
++                    update_parts.append("user_rating = excluded.user_rating")
++                elif col == 'user_tags':
++                    update_parts.append(
++                        "user_tags = CASE WHEN excluded.user_tags = '[]' "
++                        "THEN videos.user_tags ELSE excluded.user_tags END"
++                    )
++                elif col == 'output_dir':
++                    update_parts.append(
++                        "output_dir = CASE WHEN excluded.output_dir = '' "
++                        "THEN videos.output_dir ELSE excluded.output_dir END"
++                    )
++                elif col == 'scrape_attempted_at':
++                    update_parts.append(
++                        "scrape_attempted_at = CASE WHEN excluded.scrape_attempted_at = 0 "
++                        "THEN videos.scrape_attempted_at ELSE excluded.scrape_attempted_at END"
++                    )
++                else:
++                    update_parts.append(f"{col} = excluded.{col}")
++            update_parts.append("updated_at = CURRENT_TIMESTAMP")
++            update_clause = ', '.join(update_parts)
++
++            insert_sql = (
++                f"INSERT INTO videos ({', '.join(columns)}) VALUES ({placeholders})\n"
++                f"ON CONFLICT(path) DO UPDATE SET {update_clause}"
++            )
++
++            try:
++                if old_exists:
++                    cursor.execute("DELETE FROM videos WHERE path = ?", (old_uri,))
++                cursor.execute(insert_sql, values)
++                conn.commit()
++            except Exception:
++                conn.rollback()
++                raise
++        finally:
++            if conn is not None:
++                conn.close()
++
++        # ranker invalidate
++        try:
++            from core.similar.ranker_cache import SimilarRankerCache
++            SimilarRankerCache.invalidate()
++        except Exception:
++            logger.exception("SimilarRankerCache invalidate failed (non-fatal)")
++
++    def repath_path_only(self, old_uri: str, new_uri: str) -> bool:
++        """scan-fail 保卡專用：只更新 path，不觸碰其他欄位。
++
++        Contract:
++        - old_uri 空或 old_uri == new_uri → return False（no-op）
++        - new_uri 已有 row → 不 UPDATE（避免 UNIQUE 碰撞）→ return False
++        - 否則 UPDATE path + updated_at WHERE path=old_uri；commit；
++          invalidate ranker cache（non-fatal）；rowcount > 0 → True else False
++        """
++        if not old_uri or old_uri == new_uri:
++            return False
++
++        # 碰撞預檢：new_uri 已有 row → 放棄（讓 prune 自癒）
++        if self.get_by_path(new_uri) is not None:
++            return False
++
++        conn = self._get_connection()
++        cursor = conn.cursor()
++        try:
++            cursor.execute(
++                "UPDATE videos SET path = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?",
++                (new_uri, old_uri),
++            )
++            conn.commit()
++            rowcount = cursor.rowcount  # 讀在 close() 之前
++        finally:
++            conn.close()
++
++        try:
++            from core.similar.ranker_cache import SimilarRankerCache
++            SimilarRankerCache.invalidate()
++        except Exception:
++            logger.exception("SimilarRankerCache invalidate failed (non-fatal)")
++
++        return rowcount > 0
++
 +    def apply_rename_batch(self, updates: List[dict]) -> bool:
 +        """Apply rename path/cover/sample updates in one transaction.
 +
@@ -1361,7 +1727,38 @@
 +                old_uri = str(update.get("db_old_uri") or "")
 +                new_uri = str(update.get("db_new_uri") or "")
 +                if old_uri == new_uri:
-+                    continue
+                     continue
+-                set_parts.append(f"{col} = ?")
+-                set_values.append(val)
+-
+-            # user_tags（Python-side union，JSON 序列化）
+-            set_parts.append("user_tags = ?")
+-            set_values.append(json.dumps(merged_tags, ensure_ascii=False))
+-
+-            # path + updated_at
+-            set_parts.append("path = ?")
+-            set_values.append(new_uri)
+-            set_parts.append("updated_at = CURRENT_TIMESTAMP")
+-
+-            sql = f"UPDATE videos SET {', '.join(set_parts)} WHERE path = ?"
+-            set_values.append(old_uri)
+-
+-            conn = self._get_connection()
+-            cursor = conn.cursor()
+-            try:
+-                cursor.execute(sql, set_values)
+-                conn.commit()
+-                rowcount = cursor.rowcount  # 讀在 close() 之前
+-            finally:
+-                conn.close()
+-
+-            if rowcount == 0:
+-                # old row 在 existence check 後被並行刪除 → 退化為 upsert
+-                # upsert 自帶 invalidate，不再額外呼叫（避免 double invalidate）
+-                self.upsert(video)
+-                return
+-
+-            # ranker invalidate（不繼承 upsert，必須顯式呼叫）
 +                if old_uri not in existing or new_uri in existing:
 +                    conn.rollback()
 +                    return False
@@ -1478,18 +1875,173 @@
 +            conn.close()
 +
 +        if path_changed:
-+            try:
-+                from core.similar.ranker_cache import SimilarRankerCache
-+                SimilarRankerCache.invalidate()
-+            except Exception:
-+                logger.exception("SimilarRankerCache invalidate failed (non-fatal)")
+             try:
+                 from core.similar.ranker_cache import SimilarRankerCache
+                 SimilarRankerCache.invalidate()
+             except Exception:
+                 logger.exception("SimilarRankerCache invalidate failed (non-fatal)")
+-            return
+-
+-        # ── 分支 3：碰撞 delete-merge（new 已有一筆）──────────────────────────
+-        old_row = self.get_by_path(old_uri) if old_exists else None
+-        new_row = self.get_by_path(new_uri)
+-
+-        # 三方 tag 聯集
+-        tags_a = old_row.user_tags if old_row else []
+-        tags_b = new_row.user_tags if new_row else []
+-        tags_c = video.user_tags
+-        merged_tags = self._union_tags(self._union_tags(tags_a, tags_b), tags_c)
+-
+-        # created_at 取較早
+-        old_ca = old_row.created_at if old_row else None
+-        new_ca = new_row.created_at if new_row else None
+-        if old_ca and new_ca:
+-            earliest_ca = min(str(old_ca), str(new_ca))
+-        elif old_ca:
+-            earliest_ca = str(old_ca)
+-        elif new_ca:
+-            earliest_ca = str(new_ca)
+-        else:
+-            earliest_ca = None
+-
+-        # user_rating 取較高（CD-123-4：所有權宣告，明確不含 video.user_rating——
+-        # video 是 ingest 造出的物件，恆為 dataclass 預設 0，納入 max() 不影響結果但會
+-        # 混淆「這欄只由 mutator 寫」的意圖）
+-        old_ur = old_row.user_rating if old_row else 0
+-        new_ur = new_row.user_rating if new_row else 0
+-        merged_rating = max(old_ur, new_ur)
+-
+-        # 動態建 INSERT 欄位 / upsert update_clause（鏡射 upsert）
+-        video_dict = video.to_dict()
+-        video_dict.pop('id', None)
+-        video_dict.pop('created_at', None)
+-        video_dict.pop('updated_at', None)
+-
+-        columns = list(video_dict.keys())
+-        values = list(video_dict.values())
+-
+-        # 強制覆蓋 path + user_tags
+-        for i, col in enumerate(columns):
+-            if col == 'path':
+-                values[i] = new_uri
+-            elif col == 'user_tags':
+-                values[i] = json.dumps(merged_tags, ensure_ascii=False)
+-            elif col == 'user_rating':
+-                values[i] = merged_rating
+-
+-        # 顯式帶入 created_at
+-        if earliest_ca:
+-            columns.append('created_at')
+-            values.append(earliest_ca)
+-
+-        placeholders = ', '.join(['?'] * len(columns))
+-
+-        update_parts = []
+-        for col in columns:
+-            if col == 'path':
+-                continue
+-            elif col in _FOCAL_PRESERVE:
+-                if col == 'crop_mode':
+-                    # 同封面保留；換封面時 manual 座標已失效 → 降回 auto（CD-10/99a-T1b）
+-                    update_parts.append(_FOCAL_CROP_MODE_CASE_SQL)
+-                elif col == 'auto_focal':
+-                    # cover_path 相同 → 保留；換封面 → 重置為未偵測（Codex PR#105 P2b）
+-                    update_parts.append(_FOCAL_AUTO_FOCAL_CASE_SQL)
+-                elif col == 'focal_attempted_at':
+-                    update_parts.append(_FOCAL_ATTEMPTED_AT_CASE_SQL)
+-            elif col == 'created_at':
+-                # 碰撞分支：強制寫入較早的 created_at（DO UPDATE 也要更新）
+-                update_parts.append("created_at = excluded.created_at")
+-            elif col == 'user_rating':
+-                update_parts.append("user_rating = excluded.user_rating")  # CD-123-4 明寫合併
+-            elif col == 'user_tags':
+-                update_parts.append(
+-                    "user_tags = CASE WHEN excluded.user_tags = '[]' "
+-                    "THEN videos.user_tags ELSE excluded.user_tags END"
+-                )
+-            elif col == 'output_dir':
+-                # output_dir = '' 時視同「不更新」，保留 DB 現有值（與 upsert() 對稱，Codex P2 修正）
+-                update_parts.append(
+-                    "output_dir = CASE WHEN excluded.output_dir = '' "
+-                    "THEN videos.output_dir ELSE excluded.output_dir END"
+-                )
+-            elif col == 'scrape_attempted_at':
+-                # scrape_attempted_at = 0 時視同「不更新」，保留 DB 現有值（與 upsert() 對稱，Codex P2 修正）
+-                update_parts.append(
+-                    "scrape_attempted_at = CASE WHEN excluded.scrape_attempted_at = 0 "
+-                    "THEN videos.scrape_attempted_at ELSE excluded.scrape_attempted_at END"
+-                )
+-            else:
+-                update_parts.append(f"{col} = excluded.{col}")
+-        update_parts.append("updated_at = CURRENT_TIMESTAMP")
+-        update_clause = ', '.join(update_parts)
+-
+-        insert_sql = (
+-            f"INSERT INTO videos ({', '.join(columns)}) VALUES ({placeholders})\n"
+-            f"ON CONFLICT(path) DO UPDATE SET {update_clause}"
+-        )
+-
+-        conn = self._get_connection()
+-        cursor = conn.cursor()
+-        try:
+-            if old_exists:
+-                cursor.execute("DELETE FROM videos WHERE path = ?", (old_uri,))
+-            cursor.execute(insert_sql, values)
+-            conn.commit()
+-        except Exception:
+-            conn.rollback()
+-            raise
+-        finally:
+-            conn.close()
+-
+-        # ranker invalidate
+-        try:
+-            from core.similar.ranker_cache import SimilarRankerCache
+-            SimilarRankerCache.invalidate()
+-        except Exception:
+-            logger.exception("SimilarRankerCache invalidate failed (non-fatal)")
+-
+-    def repath_path_only(self, old_uri: str, new_uri: str) -> bool:
+-        """scan-fail 保卡專用：只更新 path，不觸碰其他欄位。
+-
+-        Contract:
+-        - old_uri 空或 old_uri == new_uri → return False（no-op）
+-        - new_uri 已有 row → 不 UPDATE（避免 UNIQUE 碰撞）→ return False
+-        - 否則 UPDATE path + updated_at WHERE path=old_uri；commit；
+-          invalidate ranker cache（non-fatal）；rowcount > 0 → True else False
+-        """
+-        if not old_uri or old_uri == new_uri:
+-            return False
+-
+-        # 碰撞預檢：new_uri 已有 row → 放棄（讓 prune 自癒）
+-        if self.get_by_path(new_uri) is not None:
+-            return False
+-
+-        conn = self._get_connection()
+-        cursor = conn.cursor()
+-        try:
+-            cursor.execute(
+-                "UPDATE videos SET path = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?",
+-                (new_uri, old_uri),
+-            )
+-            conn.commit()
+-            rowcount = cursor.rowcount  # 讀在 close() 之前
+-        finally:
+-            conn.close()
+-
+-        try:
+-            from core.similar.ranker_cache import SimilarRankerCache
+-            SimilarRankerCache.invalidate()
+-        except Exception:
+-            logger.exception("SimilarRankerCache invalidate failed (non-fatal)")
+-
+-        return rowcount > 0
 +
 +        return True
-+
+ 
      def upsert_batch(self, videos: List[Video]) -> tuple:
          """批次新增或更新
- 
-@@ -726,8 +1016,30 @@
+@@ -726,8 +1012,30 @@
              cursor.execute("SELECT * FROM videos WHERE path = ?", (path,))
              row = cursor.fetchone()
              if row:
@@ -1521,7 +2073,7 @@
          finally:
              conn.close()
  
-@@ -832,7 +1144,122 @@
+@@ -832,7 +1140,152 @@
          try:
              cursor.execute("SELECT * FROM videos ORDER BY id")
              rows = cursor.fetchall()
@@ -1642,10 +2194,40 @@
 +                Video.from_row(row, list(_SHOWCASE_COLUMNS))
 +                for row in cursor.fetchall()
 +            ]
++        finally:
++            conn.close()
++
++    def get_insights_rows(
++        self,
++        configured_dir_uris: Optional[set[str]] = None,
++    ) -> List[Video]:
++        """Load the lightweight projection needed by GET /api/insights/snapshot."""
++        if configured_dir_uris is not None and not configured_dir_uris:
++            return []
++
++        params: List[str] = []
++        where_sql = ""
++        if configured_dir_uris:
++            scope_clauses: List[str] = []
++            for dir_uri in sorted(configured_dir_uris):
++                prefix = dir_uri if dir_uri.endswith('/') else dir_uri + '/'
++                scope_clauses.append("(path = ? OR path LIKE ? ESCAPE '\\')")
++                params.extend((dir_uri, _escape_like_prefix(prefix) + '%'))
++            where_sql = f"WHERE ({' OR '.join(scope_clauses)}) "
++
++        columns = ', '.join(_INSIGHTS_COLUMNS)
++        query = f"SELECT {columns} FROM videos {where_sql}ORDER BY id"
++        conn = self._get_connection()
++        try:
++            cursor = conn.execute(query, params)
++            return [
++                Video.from_row(row, list(_INSIGHTS_COLUMNS))
++                for row in cursor.fetchall()
++            ]
          finally:
              conn.close()
  
-@@ -850,8 +1277,8 @@
+@@ -850,8 +1303,8 @@
          finally:
              conn.close()
  
@@ -1656,7 +2238,7 @@
  
          sample_count（TASK-118b-T9）：合法 JSON list → 實際張數。空字串／NULL／
          損毀 JSON／非 list 的合法 JSON 這四種壞值一律回傳哨兵值
-@@ -859,15 +1286,45 @@
+@@ -859,15 +1312,45 @@
          裁決④：壞資料要 fail-safe 成「需要重掃」，不得讓單筆壞資料中止整個
          SELECT／整次掃描）。真實檔案系統算出來的張數恆為 >= 0，-1 必定與任何
          真實張數不相等，呼叫端的比對式因此自然觸發重掃，不需要額外的例外分支。
@@ -1709,7 +2291,7 @@
                  sample_count = _SAMPLE_COUNT_UNKNOWN
                  if sample_images_raw:
                      try:
-@@ -876,7 +1333,22 @@
+@@ -876,7 +1359,22 @@
                              sample_count = len(parsed)
                      except (json.JSONDecodeError, TypeError):
                          pass
@@ -1733,7 +2315,7 @@
              return result
          finally:
              conn.close()
-@@ -885,7 +1357,7 @@
+@@ -885,7 +1383,7 @@
          """取得 {path: scrape_attempted_at} 索引，供 T3 `_should_skip` 冷啟動判斷用（TASK-89b-T1）。
  
          Additive read-only method。回傳的是 {path: int}——**不是** get_mtime_index() 的
@@ -1742,7 +2324,7 @@
          含 scrape_attempted_at == 0 的 row（不過濾）——呼叫端用 `.get(path, 0) > 0`
          統一判斷「從未試過」（key 不存在或值為 0 皆視為未試過）。
          """
-@@ -988,7 +1460,7 @@
+@@ -988,7 +1486,7 @@
              cursor.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
              row = cursor.fetchone()
              if row:
@@ -1751,7 +2333,7 @@
              return None
          finally:
              conn.close()
-@@ -1008,7 +1480,7 @@
+@@ -1008,7 +1506,7 @@
              )
              row = cursor.fetchone()
              if row:
@@ -1760,7 +2342,7 @@
              return None
          finally:
              conn.close()
-@@ -1044,8 +1516,9 @@
+@@ -1044,8 +1542,9 @@
  
              # 建立結果字典（使用原始輸入的 key）
              result = {}
@@ -1771,7 +2353,7 @@
                  if video.number:
                      # 找到原始輸入的 key
                      original_key = upper_to_original.get(video.number.upper())
-@@ -1109,7 +1582,8 @@
+@@ -1109,7 +1608,8 @@
                  (actress_name,)
              )
              rows = cursor.fetchall()
@@ -1781,7 +2363,7 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress json_each failed for %r (returning [])",
-@@ -1146,7 +1620,8 @@
+@@ -1146,7 +1646,8 @@
                  tuple(names)
              )
              rows = cursor.fetchall()
@@ -1791,7 +2373,7 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress_names json_each failed for %d names (returning [])",
-@@ -1156,25 +1631,145 @@
+@@ -1156,25 +1657,145 @@
          finally:
              conn.close()
  
@@ -1940,7 +2522,7 @@
          finally:
              conn.close()
  
-@@ -1193,6 +1788,20 @@
+@@ -1193,6 +1814,20 @@
              cursor.execute(
                  "UPDATE videos SET title = ?, original_title = ?, nfo_mtime = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?",
                  (title, original_title, nfo_mtime, path)
@@ -1961,7 +2543,7 @@
              )
              conn.commit()
              return cursor.rowcount > 0
-@@ -1343,7 +1952,13 @@
+@@ -1343,7 +1978,13 @@
          finally:
              conn.close()
  
@@ -1976,7 +2558,7 @@
          """安全更新 auto_focal 欄位（不碰其他欄位，CD-98a-6 mutator，鏡射 update_user_tags）。
  
          同時蓋章 focal_attempted_at = CURRENT_TIMESTAMP（單條 UPDATE 原子寫，Codex PR#105
-@@ -1383,13 +1998,57 @@
+@@ -1383,13 +2024,57 @@
          cursor = conn.cursor()
          try:
              cursor.execute(
@@ -2036,7 +2618,7 @@
          finally:
              conn.close()
  
-@@ -1566,7 +2225,7 @@
+@@ -1566,7 +2251,7 @@
                  """,
                  (escaped + '%', escaped + '%/%'),
              )
@@ -2056,6 +2638,21 @@
          """C 層 __exit__ 不 dispatch 到 Python commit()；改走這裡以維持 revision 不變式。"""
          if exc_type is None:
              self.commit()
+@@ -94,3 +94,14 @@
+     )
+     digest = hmac.new(_BOOT_SECRET, material.encode("utf-8"), hashlib.sha256).hexdigest()
+     return f'"{digest}"'
++
++
++def etag_matches(if_none_match: str | None, etag: str | None) -> bool:
++    """Compare an ``If-None-Match`` header value against a strong/weak ETag."""
++    if not if_none_match or not etag:
++        return False
++    return etag in [
++        tag.strip().removeprefix("W/")
++        for tag in if_none_match.split(",")
++    ]
++
 --- a/core/enricher.py
 +++ b/core/enricher.py
 @@ -2,12 +2,15 @@
@@ -8788,7 +9385,73 @@
  
 --- a/core/thumbnail_cache.py
 +++ b/core/thumbnail_cache.py
-@@ -45,7 +45,17 @@
+@@ -12,44 +12,86 @@
+ import hashlib
+ import shutil
+ import threading
++import weakref
+ from pathlib import Path
+ from typing import Optional
+ 
+ from PIL import Image
+ 
+ from core.atomic_write import atomic_write
++from core.data_root import get_data_root
+ from core.database import get_db_path
+ from core.logger import get_logger
+ 
+ logger = get_logger(__name__)
++
++_DEFAULT_GET_DB_PATH = get_db_path
++
++
++class _RefLock:
++    """Weakref-capable wrapper around ``threading.Lock`` for ``WeakValueDictionary``."""
++
++    __slots__ = ("_lock", "__weakref__")
++
++    def __init__(self) -> None:
++        self._lock = threading.Lock()
++
++    def __enter__(self):
++        return self._lock.__enter__()
++
++    def __exit__(self, exc_type, exc_val, exc_tb):
++        return self._lock.__exit__(exc_type, exc_val, exc_tb)
++
++    def acquire(self, *args, **kwargs):
++        return self._lock.acquire(*args, **kwargs)
++
++    def release(self):
++        return self._lock.release()
++
++    def locked(self) -> bool:
++        return self._lock.locked()
++
+ 
+ # per-thumb-path 鎖註冊表（Codex round-2 P1 修法 A）。
+ # 讓 generate（讀 cover + 原子寫 thumb）與 invalidate（unlink）對「同一 thumb path」
+ # 互斥序列化，關閉「enrich 原地覆寫同一 cover.jpg → generate serve 舊內容、stale thumb
+ # 殘留」的競態。鎖 key = str(thumb_file_for(uri))，generate 的 dst 與 invalidate 的 tf
+ # 對同一 video_path_uri 必是同一 Path → str 相同 → 同一把鎖。
+-_thumb_locks: dict = {}              # str(thumb_path) -> threading.Lock
++# 使用 WeakValueDictionary：進行中的操作持有強引用維持互斥，操作結束自動回收，避免無界增長。
++_thumb_locks: weakref.WeakValueDictionary[str, _RefLock] = weakref.WeakValueDictionary()
+ _thumb_locks_guard = threading.Lock()
+ 
+ 
+-def _lock_for_thumb(dst) -> threading.Lock:
++def _lock_for_thumb(dst) -> _RefLock:
+     """取得 thumb path 對應的鎖（缺則建）。key 用 str(dst) 確保跨 generate/invalidate 一致。"""
+     key = str(dst)
+     with _thumb_locks_guard:
+         lk = _thumb_locks.get(key)
+         if lk is None:
+-            lk = threading.Lock()
++            lk = _RefLock()
+             _thumb_locks[key] = lk
+         return lk
+ 
  # 縮圖參數（CD-3 / D2，集中為模組常數供日後調參）
  THUMB_WIDTH = 400      # 目標寬度（px）
  THUMB_QUALITY = 80     # WebP quality
@@ -8807,7 +9470,13 @@
  
  
  def _thumb_dir() -> Path:
-@@ -75,17 +85,23 @@
+     """縮圖快取根目錄（= output/thumb/，CD-2/D1）。不負責建檔。"""
++    if get_db_path is _DEFAULT_GET_DB_PATH:
++        return get_data_root() / "thumb"
+     return get_db_path().parent / "thumb"
+ 
+ 
+@@ -75,17 +117,23 @@
      # 整個「讀 cover → 處理 → 原子寫」包進 per-thumb 鎖內，與 invalidate 的 unlink
      # 序列化（Codex round-2 P1 修法 A）。失敗回 False 的語義不變，只是被鎖包住。
      with _lock_for_thumb(dst):

@@ -1019,7 +1019,7 @@
 +    )
 --- a/web/routers/gallery_media.py
 +++ b/web/routers/gallery_media.py
-@@ -11,7 +11,7 @@
+@@ -11,15 +11,21 @@
  import os
  import time
  from pathlib import Path
@@ -1028,15 +1028,56 @@
  from urllib.parse import quote, unquote
  
  from fastapi import APIRouter, Query, Request
-@@ -20,6 +20,7 @@
+ from fastapi.responses import Response, FileResponse, HTMLResponse, StreamingResponse
+ 
  from core.path_utils import to_file_uri, is_path_under_dir, uri_to_fs_path, uri_to_local_fs_path
- from core.config import load_config, iter_gallery_sources, get_gallery_source_paths
+-from core.config import load_config, iter_gallery_sources, get_gallery_source_paths
++from core.config import (
++    load_config,
++    load_config_readonly,
++    iter_gallery_sources,
++    get_gallery_source_paths,
++)
  from core.database import get_db_path, VideoRepository
 +from core.i18n import SUPPORTED_LOCALES
  from core.multipart_group import resolve_group
  from core.video_extensions import get_proxy_extensions
  from core.readonly_paths import resolve_output_root
-@@ -344,7 +345,10 @@
+@@ -29,6 +35,15 @@
+ logger = get_logger(__name__)
+ 
+ router = APIRouter(prefix="/api/gallery", tags=["gallery"])
++
++_DEFAULT_LOAD_CONFIG = load_config
++
++
++def _read_config() -> dict:
++    """Read-only config access on hot media routes, preserving load_config monkeypatches."""
++    if load_config is _DEFAULT_LOAD_CONFIG:
++        return load_config_readonly()
++    return load_config()
+ 
+ # TASK-73: 白名單目錄 dual-form TTL 快取（key: (raw_dir, frozen_mappings), value: (forms, expire_monotonic)）
+ _dir_forms_cache: dict = {}
+@@ -128,7 +143,7 @@
+     # IO 之前，不呼叫 realpath / safe_realpath / _dir_candidate_forms / os.path.exists。
+     # config/gallery_config/path_mappings 從原本「3. 目錄白名單」段落整段上移到這裡
+     # （不多呼叫一次 load_config()，下方該段落改用這裡算好的變數）。
+-    config = load_config()
++    config = _read_config()
+     gallery_config = config.get('gallery', {})
+     path_mappings = gallery_config.get('path_mappings', {})
+ 
+@@ -200,7 +215,7 @@
+ 
+     # TASK-91-T2b #12：config/gallery_config/path_mappings 搬到 local_path 計算之前，
+     # 讓 uri_to_local_fs_path 取用得到 path_mappings（原本晚於 local_path 賦值，會 NameError）。
+-    config = load_config()
++    config = _read_config()
+     gallery_config = config.get('gallery', {})
+     path_mappings = gallery_config.get('path_mappings', {})
+ 
+@@ -344,7 +359,10 @@
  
  
  @router.get("/player")
@@ -1048,9 +1089,12 @@
      """影片播放頁面 — 用 HTML5 <video> 標籤在新分頁播放"""
      from html import escape as html_escape
      from core.i18n import t as i18n_t
-@@ -362,9 +366,9 @@
+@@ -360,11 +378,11 @@
+     # video_url 也做 HTML escape（防禦性，避免 src 屬性注入）
+     video_url_safe = html_escape(video_url)
  
-     config = load_config()
+-    config = load_config()
++    config = _read_config()
      locale = (config.get('general') or {}).get('locale') or ''
 -    allowed_langs = {"zh-TW", "zh-CN", "ja", "en"}
 +    allowed_langs = set(SUPPORTED_LOCALES)
@@ -1060,7 +1104,7 @@
      html_lang_safe = html_escape(html_lang)
      hint_text_network = html_escape(i18n_t('showcase.video.player_unavailable', locale=html_lang))
      hint_text_format = html_escape(i18n_t('showcase.video.player_unavailable_format', locale=html_lang))
-@@ -373,6 +377,7 @@
+@@ -373,6 +391,7 @@
      path_mappings = gallery_config.get('path_mappings', {})
  
      group = None
@@ -1068,7 +1112,7 @@
      try:
          db_path = get_db_path()
          if db_path.exists():
-@@ -380,31 +385,62 @@
+@@ -380,31 +399,62 @@
              v = repo.get_by_path(path)
              if v is not None:
                  group = resolve_group(repo, path, path_mappings, folder_source_uri=v.path)
@@ -1135,6 +1179,25 @@
              extra_script='\n    <script type="module" src="/static/js/pages/player.js"></script>',
          ))
  
+@@ -490,7 +540,8 @@
+     # 「封面不在快取記錄中」（本 task 發現的卡片未涵蓋 gap，見 report）。
+     # 修法：DB 背書比對維持用裸 uri_to_fs_path（與改動前行為等價，零回歸）；
+     # 反解只用在「即將真的碰磁碟」的 cover_fs（generate/fallback FileResponse/os.path.isfile）。
+-    gallery_config = load_config().get('gallery', {})
++    config = _read_config()
++    gallery_config = config.get('gallery', {})
+     path_mappings = gallery_config.get('path_mappings', {})
+     cover_fs_for_db = uri_to_fs_path(video.cover_path)  # uri-no-reverse: DB round-trip comparison-only (is_known_cover_path), real disk path uses uri_to_local_fs_path below  # db-ns-ok: _for_db, sourced from existing DB URI (uri_to_fs_path, not reverse-mapped), round-trips to mapped namespace
+     if not repo.is_known_cover_path(cover_fs_for_db):
+@@ -506,7 +557,7 @@
+     # 用戶關閉快取 + clear 後，stale 分頁的 miss 請求不應重建剛清的目錄。
+     # disabled → fall through 到下方 fallback 原圖（D6 不破圖）。
+     # hit 路徑（tf.exists() → _serve_thumb_file）不 gate：已存在直接 serve 是 harmless。
+-    if not load_config().get("thumbnail_cache_enabled", False):
++    if not config.get("thumbnail_cache_enabled", False):
+         # disabled：跳過 generate，fall through 到 fallback 原圖
+         pass
+     elif thumbnail_cache.generate(cover_fs, tf):
 --- /dev/null
 +++ b/web/routers/image_search.py
 @@ -0,0 +1,104 @@
@@ -1244,7 +1307,53 @@
 +    return {"success": True, "source": "avscan", "clear_hit": clear_hit, "lead": lead, "candidates": candidates}
 --- a/web/routers/insights.py
 +++ b/web/routers/insights.py
-@@ -75,7 +75,7 @@
+@@ -6,6 +6,8 @@
+ """
+ 
+ from __future__ import annotations
++
++import threading
+ 
+ from fastapi import APIRouter, Request
+ from fastapi.responses import JSONResponse, Response
+@@ -18,9 +20,11 @@
+     get_db_path,
+     init_db,
+ )
++from core.database import version_tracker
+ from core.database.version_tracker import (
+     compute_db_fingerprint,
+     compute_etag,
++    etag_matches,
+     get_showcase_revision,
+ )
+ from core.library_titles import (
+@@ -41,11 +45,19 @@
+ 
+ router = APIRouter(prefix="/api/insights", tags=["insights"])
+ 
+-def _etag_matches(if_none_match: str, etag: str) -> bool:
+-    """比對 `If-None-Match` 語意（同 showcase.py）。"""
+-    if not if_none_match:
+-        return False
+-    return etag in [tag.strip().removeprefix("W/") for tag in if_none_match.split(",")]
++_etag_matches = etag_matches
++_DEFAULT_VIDEO_REPOSITORY = VideoRepository
++_DEFAULT_GET_INSIGHTS_ROWS = VideoRepository.get_insights_rows
++
++_insights_snapshot_cache_lock = threading.Lock()
++_insights_snapshot_cache: tuple[tuple, dict] | None = None
++
++
++def _clear_insights_snapshot_cache() -> None:
++    """Clear cached insights snapshot payload (tests/maintenance)."""
++    global _insights_snapshot_cache
++    with _insights_snapshot_cache_lock:
++        _insights_snapshot_cache = None
+ 
+ 
+ def _build_alias_lookup(records) -> dict[str, tuple[str, list[str]]]:
+@@ -75,7 +87,7 @@
  def _merge_badge_alias_manifest(
      tag_lookup: dict[str, tuple[str, list[str]]],
  ) -> dict[str, tuple[str, list[str]]]:
@@ -1253,6 +1362,88 @@
      user_tag_lookup = dict(tag_lookup)
      merged: dict[str, tuple[str, list[str]]] = dict(tag_lookup)
  
+@@ -167,6 +179,7 @@
+ @router.get("/snapshot")
+ def get_insights_snapshot(request: Request):
+     """取得片庫分析快照（聚合在瀏覽器；本端點只出匿名最小欄位，CD-156-1）。"""
++    global _insights_snapshot_cache
+     try:
+         db_path = get_db_path()
+ 
+@@ -200,8 +213,35 @@
+                 headers={"ETag": etag, "Cache-Control": "no-cache"},
+             )
+ 
++        can_cache = (
++            VideoRepository is _DEFAULT_VIDEO_REPOSITORY
++            and VideoRepository.get_insights_rows is _DEFAULT_GET_INSIGHTS_ROWS
++        )
++        cache_key = None
++        if can_cache:
++            cache_key = (
++                etag,
++                str(db_path),
++                version_tracker.get_showcase_revision(),
++                version_tracker.compute_db_fingerprint(db_path),
++            )
++            with _insights_snapshot_cache_lock:
++                if (
++                    _insights_snapshot_cache is not None
++                    and _insights_snapshot_cache[0] == cache_key
++                ):
++                    resp = JSONResponse(_insights_snapshot_cache[1])
++                    resp.headers["ETag"] = etag
++                    resp.headers["Cache-Control"] = "no-cache"
++                    return resp
++
+         repo = VideoRepository(db_path)
+-        all_videos = rows_in_library_dirs(repo.get_all(), configured_dir_uris)
++        raw_rows = (
++            repo.get_insights_rows(configured_dir_uris)
++            if hasattr(repo, "get_insights_rows")
++            else repo.get_all()
++        )
++        all_videos = rows_in_library_dirs(raw_rows, configured_dir_uris)
+         firsts = first_members(all_videos, path_mappings)
+ 
+         actress_lookup = _build_alias_lookup(AliasRepository(db_path).get_all())
+@@ -221,14 +261,6 @@
+                 primary = a.name
+             if primary in favorites_by_primary:            # 同組已有更早（字母序更前）的收藏命中，跳過
+                 continue
+-            # first-wins：依標準排序（ORDER BY name）取同組第一個收藏，不論有無生日
+-            # ——比照燈箱 resolveFavoriteActressAge：actresses.find() 只挑第一個，
+-            # 沒生日就是不顯示年齡，不會退而求其次改選同組後面那個有生日的。
+-            # hasPhoto：收藏存在不代表本機有照片檔（來源沒圖／下載失敗時 add_favorite
+-            # 仍會先 repo.save 落地收藏，見 web/routers/actress.py 的 favorite 流程）；
+-            # 沿用 _actress_to_response 同一支 get_local_photo_path 判斷式（單一真理來源），
+-            # 不自己拼路徑。每次照片變動的端點都伴隨一次 repo.save（bump revision），
+-            # 故此欄位不會讓 ETag 對不上實際檔案狀態。
+             favorites_by_primary[primary] = {
+                 "birth": a.birth or None,
+                 "photoName": a.name,
+@@ -237,14 +269,19 @@
+                 "crop_mode": a.crop_mode,
+             }
+ 
+-        resp = JSONResponse({
++        payload = {
+             "success": True,
+             "logicalTitles": len(records),
+             "physicalRows": len(all_videos),
+             "years": years,
+             "records": records,
+             "actressFavorites": favorites_by_primary,
+-        })
++        }
++        if can_cache and cache_key is not None:
++            with _insights_snapshot_cache_lock:
++                _insights_snapshot_cache = (cache_key, payload)
++
++        resp = JSONResponse(payload)
+         resp.headers["ETag"] = etag
+         resp.headers["Cache-Control"] = "no-cache"
+         return resp
 --- a/web/routers/scanner.py
 +++ b/web/routers/scanner.py
 @@ -20,10 +20,12 @@
@@ -3854,7 +4045,7 @@
          return {
              "success": True,
              "data": {
-@@ -1046,75 +2748,2170 @@
+@@ -1046,125 +2748,2196 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
@@ -6008,7 +6199,7 @@
 +            selected_paths=path,
 +            source=source,
 +        ),
-+    )
+     )
 +
 +
 +@router.get("/tag-source-update")
@@ -6049,44 +6240,80 @@
 +            dry_run=True,
 +            numbers=selected_numbers,
 +        ),
-     )
++    )
++
++
++from web.routers.scanner_extras import (
++    GenerateFromIdsRequest,
++    _MIN_IMAGE_SIZE,
++    _MIME_MAP,
++    _REFERER_MAP,
++    _VALID_MODES,
++    _VALID_SORTS,
++    _browse_start_dir,
++    _compute_parent,
++    _embed_cover,
++    _is_windows,
++    _list_windows_drives,
++    _path_flavour,
++    browse_dir as _browse_dir_impl,
++    generate_from_ids as _generate_from_ids_impl,
++    view_list as _view_list_impl,
++)
  
  
-@@ -1123,6 +4920,7 @@
+ @router.get("/view")
+ def view_list():
      """取得產生的 HTML 列表檔案（修改圖片路徑為 API 代理）"""
-     try:
-         config = load_config()
-+        locale = _active_locale(config)
-         gallery_config = config.get('gallery', {})
-         output_dir = gallery_config.get('output_dir', '') or ''
-         output_filename = gallery_config.get('output_filename', 'gallery_output.html')
-@@ -1131,7 +4929,10 @@
- 
-         if not html_path.exists():
-             return HTMLResponse(
+-    try:
+-        config = load_config()
+-        gallery_config = config.get('gallery', {})
+-        output_dir = gallery_config.get('output_dir', '') or ''
+-        output_filename = gallery_config.get('output_filename', 'gallery_output.html')
+-
+-        html_path = resolve_gallery_output_path(output_dir) / output_filename
+-
+-        if not html_path.exists():
+-            return HTMLResponse(
 -                content="<html><body><h1>列表尚未產生</h1><p>請先到「列表生成」頁面產生列表。</p></body></html>",
-+                content=(
-+                    f"<html><body><h1>{_runtime_text('scanner', 'view_missing_title', locale)}</h1>"
-+                    f"<p>{_runtime_text('scanner', 'view_missing_body', locale)}</p></body></html>"
-+                ),
-                 status_code=404
-             )
- 
-@@ -1161,8 +4962,12 @@
-         return HTMLResponse(content=content)
-     except Exception:
-         logger.exception("view_list 讀取失敗")
-+        locale = _active_locale()
-         return HTMLResponse(
+-                status_code=404
+-            )
+-
+-        with open(html_path, 'r', encoding='utf-8') as f:
+-            content = f.read()
+-
+-        # 將 file:/// 圖片路徑替換為 API 代理路徑（只替換圖片，不替換影片）
+-        # file:///C:/path/to/image.jpg -> /api/gallery/image?path=C:/path/to/image.jpg
+-        import re
+-        from urllib.parse import quote
+-
+-        # 圖片副檔名
+-        image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp')
+-
+-        def replace_file_url(match):
+-            file_path = match.group(1)
+-            # 只替換圖片路徑
+-            if file_path.lower().endswith(image_extensions):
+-                encoded_path = quote(file_path, safe='')
+-                return f'/api/gallery/image?path={encoded_path}'
+-            # 非圖片保持原樣
+-            return match.group(0)
+-
+-        # 匹配 file:/// 後面直到引號的所有字元（包含空格和中文）
+-        content = re.sub(r'file:///([^"\'<>]+?)(?=["\'])', replace_file_url, content)
+-
+-        return HTMLResponse(content=content)
+-    except Exception:
+-        logger.exception("view_list 讀取失敗")
+-        return HTMLResponse(
 -            content="<html><body><h1>錯誤</h1><p>列表載入失敗，請重試。</p></body></html>",
-+            content=(
-+                f"<html><body><h1>{_runtime_text('scanner', 'view_error_title', locale)}</h1>"
-+                f"<p>{_runtime_text('scanner', 'view_error_body', locale)}</p></body></html>"
-+            ),
-             status_code=500
-         )
+-            status_code=500
+-        )
++    return _view_list_impl()
  
-@@ -1177,12 +4982,25 @@
+ 
+ @router.get("/actress-stats")
+@@ -1177,12 +4950,25 @@
              return {"success": True, "data": {"count": 0}}
  
          repo = VideoRepository(db_path)
@@ -6114,7 +6341,7 @@
  
  
  # === Jellyfin 圖片批次補齊 ===
-@@ -1191,30 +5009,43 @@
+@@ -1191,30 +4977,43 @@
      """檢查 DB 中有多少影片缺少 poster/fanart"""
      videos = repo.get_all()
      need_update = []
@@ -6176,7 +6403,7 @@
      try:
          # Codex PR#123 P2：gate 必須排在 get_db_path() 之前——get_db_path() 內部會
          # mkdir 建立 output/ 資料夾（core/database/connection.py:15-22），是有副作用
-@@ -1224,17 +5055,29 @@
+@@ -1224,17 +5023,29 @@
          # done + updated:0（off 時零寫入），且與 _check_jellyfin_needed() 的順序
          # 不對稱。config 只讀一次，下面 path_mappings 沿用同一個 config。
          config = load_config()
@@ -6208,7 +6435,7 @@
              return
  
          repo = VideoRepository(db_path)
-@@ -1246,13 +5089,31 @@
+@@ -1246,13 +5057,31 @@
          if total == 0:
              _jellyfin_cache_result = None
              _jellyfin_cache_time = 0
@@ -6242,7 +6469,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,45 +5122,129 @@
+@@ -1261,45 +5090,129 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -6389,7 +6616,7 @@
  
  
  def _check_jellyfin_needed() -> dict | None:
-@@ -1359,15 +5304,11 @@
+@@ -1359,348 +5272,21 @@
  
  
  @router.get("/jellyfin-update")
@@ -6407,17 +6634,540 @@
 +        request,
 +        generate_jellyfin_images_stream,
      )
+-
+-
+-_MIME_MAP = {
+-    '.jpg': 'image/jpeg',
+-    '.jpeg': 'image/jpeg',
+-    '.png': 'image/png',
+-    '.webp': 'image/webp',
+-}
+-
+-
+-_REFERER_MAP = {
+-    'javbus.com': 'https://www.javbus.com/',
+-    'dmm.co.jp': 'https://www.dmm.co.jp/',
+-    'jav321.com': 'https://www.jav321.com/',
+-}
+-
+-_MIN_IMAGE_SIZE = 1000  # bytes — 小於此視為無效（防空白/錯誤頁）
+-
+-
+-def _embed_cover(img_ref: str, path_mappings: dict = None) -> str:
+-    """將圖片 URL/路徑轉為 data URI。失敗時回傳原值。"""
+-    if not img_ref or img_ref.startswith('data:'):
+-        return img_ref
+-
+-    try:
+-        if img_ref.startswith('file:///'):
+-            local_path = uri_to_local_fs_path(img_ref, path_mappings)
+-            data = Path(local_path).read_bytes()
+-        elif img_ref.startswith(('http://', 'https://')):
+-            headers = _EMBED_HEADERS.copy()
+-            for domain, referer in _REFERER_MAP.items():
+-                if domain in img_ref:
+-                    headers['Referer'] = referer
+-                    break
+-
+-            resp = requests.get(img_ref, headers=headers, timeout=15, **proxy_kwargs('image', url=img_ref))
+-            if resp.status_code != 200:
+-                logger.warning('封面嵌入失敗 [HTTP %s] %s', resp.status_code, img_ref[:100])
+-                return img_ref
+-            if len(resp.content) < _MIN_IMAGE_SIZE:
+-                logger.warning('封面嵌入失敗 [內容過小 %d bytes] %s', len(resp.content), img_ref[:100])
+-                return img_ref
+-            data = resp.content
+-        else:
+-            return img_ref
+-
+-        # MIME: HTTP 時優先用 Content-Type，其他 fallback 副檔名
+-        mime = 'image/jpeg'
+-        if img_ref.startswith(('http://', 'https://')):
+-            ct = resp.headers.get('Content-Type', '')
+-            if ct.startswith('image/'):
+-                mime = ct.split(';')[0].strip()
+-        if mime == 'image/jpeg':
+-            ext = Path(img_ref.split('?')[0]).suffix.lower()
+-            mime = _MIME_MAP.get(ext, 'image/jpeg')
+-
+-        b64 = base64.b64encode(data).decode('ascii')
+-        return f'data:{mime};base64,{b64}'
+-    except Exception as e:
+-        logger.warning('封面嵌入失敗 [%s] %s', type(e).__name__, img_ref[:100])
+-        return img_ref
+-
+-
+-class GenerateFromIdsRequest(BaseModel):
+-    numbers: List[str]
+-    title: str = "Custom Gallery"
+-    mode: str = "image"
+-    sort: str = "date"
+-    embed_covers: bool = True
+-
+-
+-_VALID_MODES = {"image", "detail", "text"}
+-_VALID_SORTS = {"date", "num", "title"}
  
  
-@@ -1463,26 +5404,49 @@
-     ```
-     """
-     numbers = [n.strip() for n in body.numbers if isinstance(n, str) and n.strip()]
-+    config = load_config()
-+    locale = _active_locale(config)
- 
-     if not numbers:
+ @router.post("/generate-from-ids", summary="番號列表產生自訂 Gallery HTML")
+ def generate_from_ids(body: GenerateFromIdsRequest):
+-    """
+-    根據番號列表產生自訂 Gallery HTML 頁面。
+-
+-    - DB 有資料的番號直接組裝；DB 沒有的即時 scrape。
+-    - 輸出路徑：output/gallery_custom_{timestamp}.html
+-
+-    回傳：
+-    ```json
+-    {
+-      "success": true,
+-      "html_path": "/abs/path/to/gallery_custom_20260331_120000.html",
+-      "video_count": 12,
+-      "missing": ["FAKE-999"]
+-    }
+-    ```
+-    """
+-    numbers = [n.strip() for n in body.numbers if isinstance(n, str) and n.strip()]
+-
+-    if not numbers:
 -        return JSONResponse(status_code=400, content={"success": False, "error": "numbers 不可為空"})
+-
+-    if len(numbers) > 100:
+-        return JSONResponse(status_code=422, content={"success": False, "error": "最多支援 100 筆"})
+-
+-    if body.mode not in _VALID_MODES:
+-        return JSONResponse(status_code=422, content={
+-            "success": False,
+-            "error": f"mode 必須是 {sorted(_VALID_MODES)} 之一"
+-        })
+-
+-    if body.sort not in _VALID_SORTS:
+-        return JSONResponse(status_code=422, content={
+-            "success": False,
+-            "error": f"sort 必須是 {sorted(_VALID_SORTS)} 之一"
+-        })
+-
+-    config = load_config()
+-    gallery_config = config.get('gallery', {})
+-    output_dir = gallery_config.get('output_dir', '') or ''
+-    theme = config.get('general', {}).get('theme', 'light')
+-
+-    # 查 DB
+-    try:
+-        db_path = get_db_path()
+-        repo = VideoRepository(db_path)
+-        db_results = repo.get_by_numbers(numbers)
+-    except Exception as e:
+-        logger.error('generate_from_ids: DB 查詢失敗: %s', e)
+-        return JSONResponse(status_code=500, content={"success": False, "error": "資料庫查詢失敗"})
+-
+-    all_videos: List[VideoInfo] = []
+-    missing: List[str] = []
+-
+-    for num in numbers:
+-        db_videos = db_results.get(num)
+-        if db_videos:
+-            v = db_videos[0]
+-            info = VideoInfo(
+-                path=v.path,
+-                title=v.title or '',
+-                originaltitle=v.original_title or '',
+-                actor=','.join(v.actresses) if v.actresses else '',
+-                num=v.number or num,
+-                maker=v.maker or '',
+-                date=v.release_date or '',
+-                genre=','.join(v.tags) if v.tags else '',
+-                size=v.size_bytes or 0,
+-                mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
+-                img=v.cover_path or ''
+-            )
+-            all_videos.append(info)
+-        else:
+-            # DB miss → 即時 scrape
+-            try:
+-                scrape_results = smart_search(num, limit=1, uncensored_mode=is_uncensored_mode_effective(config))
+-            except Exception as e:
+-                logger.error('generate_from_ids: scrape %s failed: %s', num, e)
+-                scrape_results = []
+-
+-            if scrape_results:
+-                r = scrape_results[0]
+-                info = VideoInfo(
+-                    path='',
+-                    title=r.get('title', ''),
+-                    originaltitle=r.get('original_title', ''),
+-                    actor=','.join(r.get('actors', [])) if isinstance(r.get('actors'), list) else r.get('actors', ''),
+-                    num=r.get('number', num),
+-                    maker=r.get('maker', ''),
+-                    date=r.get('date', ''),
+-                    genre=','.join(r.get('tags', [])) if isinstance(r.get('tags'), list) else '',
+-                    size=0,
+-                    mtime=0,
+-                    img=r.get('cover', '') or r.get('cover_url', '')
+-                )
+-                all_videos.append(info)
+-            else:
+-                missing.append(num)
+-
+-    # 封面嵌入（embed_covers=True 時將 img 轉為 data URI）
+-    embedded_count = 0
+-    embed_failed_count = 0
+-    if body.embed_covers:
+-        for info in all_videos:
+-            if info.img:
+-                original = info.img
+-                info.img = _embed_cover(info.img, gallery_config.get('path_mappings', {}))
+-                if info.img.startswith('data:'):
+-                    embedded_count += 1
+-                elif original:  # 有原圖但 embed 失敗
+-                    embed_failed_count += 1
+-
+-    # 確保輸出目錄存在（空值 → 資料根；相對／絕對值依 resolve_gallery_output_path）
+-    output_path = resolve_gallery_output_path(output_dir)
+-    output_path.mkdir(parents=True, exist_ok=True)
+-
+-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+-    html_filename = f'gallery_custom_{timestamp}.html'
+-    html_path = output_path / html_filename
+-
+-    try:
+-        generator = HTMLGenerator()
+-        generator.generate(
+-            all_videos,
+-            str(html_path),
+-            title=body.title,
+-            mode=body.mode,
+-            sort=body.sort,
+-            theme=theme,
+-        )
+-    except Exception as e:
+-        logger.error('generate_from_ids: HTML 產生失敗: %s', e)
+-        return JSONResponse(status_code=500, content={"success": False, "error": "HTML 產生失敗"})
+-
+-    result = {
+-        "success": True,
+-        "html_path": str(html_path),
+-        "video_count": len(all_videos),
+-        "missing": missing,
+-    }
+-    if body.embed_covers:
+-        result["embedded_count"] = embedded_count
+-        result["embed_failed_count"] = embed_failed_count
+-    return result
+-
+-
+-def _is_windows() -> bool:
+-    return os.name == 'nt'
+-
+-
+-def _path_flavour():
+-    from pathlib import PurePosixPath, PureWindowsPath
+-    return PureWindowsPath if _is_windows() else PurePosixPath
+-
+-
+-def _compute_parent(path: str) -> Optional[str]:
+-    if not path:
+-        return None
+-    flavour = _path_flavour()
+-    p = flavour(path)
+-    if p.parent == p:
+-        return "" if _is_windows() else None
+-    return str(p.parent)
+-
+-
+-def _list_windows_drives() -> list[str]:
+-    try:
+-        if hasattr(os, "listdrives"):
+-            return list(os.listdrives())
+-    except (AttributeError, OSError):
+-        pass
+-    import string
+-    return [f"{d}:\\" for d in string.ascii_uppercase if os.path.exists(f"{d}:\\")]
+-
+-
+-def _browse_start_dir(config: dict) -> str:
+-    gallery_cfg = config.get('gallery') or {}
+-    sources = iter_gallery_sources(gallery_cfg)
+-    if sources:
+-        path_mappings = gallery_cfg.get('path_mappings', {})
+-        fs = uri_to_local_fs_path(sources[0].path, path_mappings)
+-        parent = str(Path(fs).parent)
+-        resolved = safe_realpath(parent, 'browse-dir')
+-        # isdir 為真還不夠：目錄存在但列不出來（traverse-only 權限、NAS 掛著但權限壞掉）
+-        # 會讓「第一次開彈窗」直接吃 403，而使用者沒有任何畫面可以導去別處自救。
+-        # 起點決議不得回 4xx —— 探一次 scandir，列不動就退回平台根。
+-        if os.path.isdir(resolved):
+-            try:
+-                with os.scandir(resolved):
+-                    pass
+-                return resolved
+-            except OSError:
+-                logger.warning("browse-dir: 起點列舉失敗，退回平台根 path=%s", resolved)
+-    return "" if _is_windows() else "/"
++    """根據番號列表產生自訂 Gallery HTML 頁面（委派 scanner_extras）。"""
++    return _generate_from_ids_impl(body)
+ 
+ 
+ @router.get("/browse-dir")
+ def browse_dir(path: Optional[str] = Query(None), expand: Optional[str] = Query(None)):
+-    config = load_config()
+-    # path 省略 → 起點決議。空字串在兩個平台語意不同：Windows 的 "" 是虛擬磁碟機清單
+-    # 節點（從 C:\ 按上一層會走到這裡，必須保留），POSIX 沒有這個節點，"" 等同省略。
+-    if path is None or (path == "" and not _is_windows()):
+-        current_path = _browse_start_dir(config)
+-    else:
+-        current_path = path
+-
+-    if current_path == "" and _is_windows():
+-        drives = _list_windows_drives()
+-        entries = [{"name": d, "path": d} for d in drives]
+-        entries.sort(key=lambda e: (e["name"].casefold(), e["name"]))
+-        result = {
+-            "current_path": "",
+-            "parent_path": None,
+-            "entries": entries,
+-        }
+-        if expand == "videos":
+-            result["files"] = []
+-        return result
+-
+-    resolved_path = safe_realpath(current_path, "browse-dir")
+-    if not os.path.exists(resolved_path):
+-        return JSONResponse(status_code=404, content={"success": False, "error": "not_found"})
+-    if not os.path.isdir(resolved_path):
+-        return JSONResponse(status_code=400, content={"success": False, "error": "not_a_directory"})
+-
+-    entries = []
+-    video_files = []
+-    video_exts = get_video_extensions(config) if expand == "videos" else set()
+-
+-    try:
+-        with os.scandir(resolved_path) as it:
+-            for entry in it:
+-                try:
+-                    if entry.is_dir():
+-                        if is_nas_system_dir_name(entry.name):
+-                            continue
+-                        entries.append({"name": entry.name, "path": entry.path})
+-                    elif expand == "videos" and entry.is_file():
+-                        ext = os.path.splitext(entry.name)[1].lower()
+-                        if ext in video_exts:
+-                            video_files.append(entry.path)
+-                except OSError:
+-                    continue
+-    except (PermissionError, OSError):
+-        return JSONResponse(status_code=403, content={"success": False, "error": "permission_denied"})
+-
+-    entries.sort(key=lambda e: (e["name"].casefold(), e["name"]))
+-    if expand == "videos":
+-        video_files.sort(key=lambda p: (os.path.basename(p).casefold(), p))
+-
+-    parent_path = _compute_parent(resolved_path)
+-    result = {
+-        "current_path": resolved_path,
+-        "parent_path": parent_path,
+-        "entries": entries,
+-    }
+-    if expand == "videos":
+-        result["files"] = video_files
+-    return result
++    """列舉資料夾目錄與影片檔案清單（委派 scanner_extras）。"""
++    return _browse_dir_impl(path=path, expand=expand)
+--- /dev/null
++++ b/web/routers/scanner_extras.py
+@@ -0,0 +1,471 @@
++"""
++Scanner auxiliary endpoints & helpers extracted from web/routers/scanner.py:
++- HTML gallery view proxy (/api/gallery/view)
++- Custom Gallery HTML generation from IDs (/api/gallery/generate-from-ids)
++- Server directory browser (/api/gallery/browse-dir)
++"""
++
++from __future__ import annotations
++
++import base64
++import os
++import re
++import sys
++from datetime import datetime
++from pathlib import Path
++from typing import List, Optional
++from urllib.parse import quote
++
++import requests
++from fastapi import Query
++from fastapi.responses import HTMLResponse, JSONResponse
++from pydantic import BaseModel
++
++from core.config import iter_gallery_sources, load_config
++from core.data_root import resolve_gallery_output_path
++from core.database import VideoRepository, get_db_path
++from core.gallery_generator import HTMLGenerator
++from core.gallery_scanner import VideoInfo, is_nas_system_dir_name
++from core.i18n import get_config_locale, t as i18n_t
++from core.logger import get_logger
++from core.organizer import HEADERS as _EMBED_HEADERS
++from core.path_utils import uri_to_local_fs_path
++from core.proxy_policy import proxy_kwargs
++from core.scraper import smart_search
++from core.source_settings import is_uncensored_mode_effective
++from core.video_extensions import get_video_extensions
++from web.routers.gallery_media import safe_realpath
++
++logger = get_logger(__name__)
++
++_MIME_MAP = {
++    '.jpg': 'image/jpeg',
++    '.jpeg': 'image/jpeg',
++    '.png': 'image/png',
++    '.webp': 'image/webp',
++}
++
++_REFERER_MAP = {
++    'javbus.com': 'https://www.javbus.com/',
++    'dmm.co.jp': 'https://www.dmm.co.jp/',
++    'jav321.com': 'https://www.jav321.com/',
++}
++
++_MIN_IMAGE_SIZE = 1000  # bytes — 小於此視為無效（防空白/錯誤頁）
++
++_VALID_MODES = {"image", "detail", "text"}
++_VALID_SORTS = {"date", "num", "title"}
++
++
++class GenerateFromIdsRequest(BaseModel):
++    numbers: List[str]
++    title: str = "Custom Gallery"
++    mode: str = "image"
++    sort: str = "date"
++    embed_covers: bool = True
++
++
++def _scanner_attr(name: str, default):
++    scanner_mod = sys.modules.get("web.routers.scanner")
++    return getattr(scanner_mod, name, default) if scanner_mod is not None else default
++
++
++def _runtime_text(section: str, key: str, locale: str, **params) -> str:
++    return i18n_t(f"runtime.{section}.{key}", locale=locale, **params)
++
++
++def _active_locale(config: dict | None = None) -> str:
++    try:
++        return get_config_locale(config)
++    except Exception:
++        return "zh-CN"
++
++
++def view_list():
++    """取得產生的 HTML 列表檔案（修改圖片路徑為 API 代理）"""
++    load_cfg = _scanner_attr("load_config", load_config)
++    resolve_out = _scanner_attr("resolve_gallery_output_path", resolve_gallery_output_path)
++    try:
++        config = load_cfg()
++        locale = _active_locale(config)
++        gallery_config = config.get('gallery', {})
++        output_dir = gallery_config.get('output_dir', '') or ''
++        output_filename = gallery_config.get('output_filename', 'gallery_output.html')
++
++        html_path = resolve_out(output_dir) / output_filename
++
++        if not html_path.exists():
++            return HTMLResponse(
++                content=(
++                    f"<html><body><h1>{_runtime_text('scanner', 'view_missing_title', locale)}</h1>"
++                    f"<p>{_runtime_text('scanner', 'view_missing_body', locale)}</p></body></html>"
++                ),
++                status_code=404,
++            )
++
++        with open(html_path, 'r', encoding='utf-8') as f:
++            content = f.read()
++
++        image_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp')
++
++        def replace_file_url(match):
++            file_path = match.group(1)
++            if file_path.lower().endswith(image_extensions):
++                encoded_path = quote(file_path, safe='')
++                return f'/api/gallery/image?path={encoded_path}'
++            return match.group(0)
++
++        content = re.sub(r'file:///([^"\'<>]+?)(?=["\'])', replace_file_url, content)
++        return HTMLResponse(content=content)
++    except Exception:
++        logger.exception("view_list 讀取失敗")
++        locale = _active_locale()
++        return HTMLResponse(
++            content=(
++                f"<html><body><h1>{_runtime_text('scanner', 'view_error_title', locale)}</h1>"
++                f"<p>{_runtime_text('scanner', 'view_error_body', locale)}</p></body></html>"
++            ),
++            status_code=500,
++        )
++
++
++def _embed_cover(img_ref: str, path_mappings: dict = None) -> str:
++    """將圖片 URL/路徑轉為 data URI。失敗時回傳原值。"""
++    if not img_ref or img_ref.startswith('data:'):
++        return img_ref
++
++    req_mod = _scanner_attr("requests", requests)
++    proxy_fn = _scanner_attr("proxy_kwargs", proxy_kwargs)
++    try:
++        if img_ref.startswith('file:///'):
++            local_path = uri_to_local_fs_path(img_ref, path_mappings)
++            data = Path(local_path).read_bytes()
++        elif img_ref.startswith(('http://', 'https://')):
++            headers = _EMBED_HEADERS.copy()
++            for domain, referer in _REFERER_MAP.items():
++                if domain in img_ref:
++                    headers['Referer'] = referer
++                    break
++
++            resp = req_mod.get(img_ref, headers=headers, timeout=15, **proxy_fn('image', url=img_ref))
++            if resp.status_code != 200:
++                logger.warning('封面嵌入失敗 [HTTP %s] %s', resp.status_code, img_ref[:100])
++                return img_ref
++            if len(resp.content) < _MIN_IMAGE_SIZE:
++                logger.warning('封面嵌入失敗 [內容過小 %d bytes] %s', len(resp.content), img_ref[:100])
++                return img_ref
++            data = resp.content
++        else:
++            return img_ref
++
++        mime = 'image/jpeg'
++        if img_ref.startswith(('http://', 'https://')):
++            ct = resp.headers.get('Content-Type', '')
++            if ct.startswith('image/'):
++                mime = ct.split(';')[0].strip()
++        if mime == 'image/jpeg':
++            ext = Path(img_ref.split('?')[0]).suffix.lower()
++            mime = _MIME_MAP.get(ext, 'image/jpeg')
++
++        b64 = base64.b64encode(data).decode('ascii')
++        return f'data:{mime};base64,{b64}'
++    except Exception as e:
++        logger.warning('封面嵌入失敗 [%s] %s', type(e).__name__, img_ref[:100])
++        return img_ref
++
++
++def generate_from_ids(body: GenerateFromIdsRequest):
++    """根據番號列表產生自訂 Gallery HTML 頁面。"""
++    load_cfg = _scanner_attr("load_config", load_config)
++    db_path_fn = _scanner_attr("get_db_path", get_db_path)
++    repo_cls = _scanner_attr("VideoRepository", VideoRepository)
++    search_fn = _scanner_attr("smart_search", smart_search)
++    uncensored_fn = _scanner_attr("is_uncensored_mode_effective", is_uncensored_mode_effective)
++    embed_fn = _scanner_attr("_embed_cover", _embed_cover)
++    resolve_out = _scanner_attr("resolve_gallery_output_path", resolve_gallery_output_path)
++    generator_cls = _scanner_attr("HTMLGenerator", HTMLGenerator)
++
++    numbers = [n.strip() for n in body.numbers if isinstance(n, str) and n.strip()]
++    config = load_cfg()
++    locale = _active_locale(config)
++
++    if not numbers:
 +        return JSONResponse(
 +            status_code=400,
 +            content={
@@ -6425,9 +7175,8 @@
 +                "error": _runtime_text("scanner", "generate_ids_empty", locale),
 +            },
 +        )
- 
-     if len(numbers) > 100:
--        return JSONResponse(status_code=422, content={"success": False, "error": "最多支援 100 筆"})
++
++    if len(numbers) > 100:
 +        return JSONResponse(
 +            status_code=422,
 +            content={
@@ -6435,40 +7184,39 @@
 +                "error": _runtime_text("scanner", "generate_ids_limit", locale),
 +            },
 +        )
- 
-     if body.mode not in _VALID_MODES:
-         return JSONResponse(status_code=422, content={
-             "success": False,
--            "error": f"mode 必須是 {sorted(_VALID_MODES)} 之一"
++
++    if body.mode not in _VALID_MODES:
++        return JSONResponse(status_code=422, content={
++            "success": False,
 +            "error": _runtime_text(
 +                "scanner",
 +                "generate_ids_mode",
 +                locale,
 +                values=", ".join(sorted(_VALID_MODES)),
 +            ),
-         })
- 
-     if body.sort not in _VALID_SORTS:
-         return JSONResponse(status_code=422, content={
-             "success": False,
--            "error": f"sort 必須是 {sorted(_VALID_SORTS)} 之一"
++        })
++
++    if body.sort not in _VALID_SORTS:
++        return JSONResponse(status_code=422, content={
++            "success": False,
 +            "error": _runtime_text(
 +                "scanner",
 +                "generate_ids_sort",
 +                locale,
 +                values=", ".join(sorted(_VALID_SORTS)),
 +            ),
-         })
- 
--    config = load_config()
-     gallery_config = config.get('gallery', {})
-     output_dir = gallery_config.get('output_dir', '') or ''
-     theme = config.get('general', {}).get('theme', 'light')
-@@ -1494,7 +5458,13 @@
-         db_results = repo.get_by_numbers(numbers)
-     except Exception as e:
-         logger.error('generate_from_ids: DB 查詢失敗: %s', e)
--        return JSONResponse(status_code=500, content={"success": False, "error": "資料庫查詢失敗"})
++        })
++
++    gallery_config = config.get('gallery', {})
++    output_dir = gallery_config.get('output_dir', '') or ''
++    theme = config.get('general', {}).get('theme', 'light')
++
++    try:
++        db_path = db_path_fn()
++        repo = repo_cls(db_path)
++        db_results = repo.get_by_numbers(numbers)
++    except Exception as e:
++        logger.error('generate_from_ids: DB 查詢失敗: %s', e)
 +        return JSONResponse(
 +            status_code=500,
 +            content={
@@ -6476,14 +7224,85 @@
 +                "error": _runtime_text("scanner", "generate_ids_db_failed", locale),
 +            },
 +        )
- 
-     all_videos: List[VideoInfo] = []
-     missing: List[str] = []
-@@ -1577,7 +5547,13 @@
-         )
-     except Exception as e:
-         logger.error('generate_from_ids: HTML 產生失敗: %s', e)
--        return JSONResponse(status_code=500, content={"success": False, "error": "HTML 產生失敗"})
++
++    all_videos: List[VideoInfo] = []
++    missing: List[str] = []
++
++    for num in numbers:
++        db_videos = db_results.get(num)
++        if db_videos:
++            v = db_videos[0]
++            info = VideoInfo(
++                path=v.path,
++                title=v.title or '',
++                originaltitle=v.original_title or '',
++                actor=','.join(v.actresses) if v.actresses else '',
++                num=v.number or num,
++                maker=v.maker or '',
++                date=v.release_date or '',
++                genre=','.join(v.tags) if v.tags else '',
++                size=v.size_bytes or 0,
++                mtime=int(v.mtime * 10000000 + 116444736000000000) if v.mtime else 0,
++                img=v.cover_path or '',
++            )
++            all_videos.append(info)
++        else:
++            try:
++                scrape_results = search_fn(num, limit=1, uncensored_mode=uncensored_fn(config))
++            except Exception as e:
++                logger.error('generate_from_ids: scrape %s failed: %s', num, e)
++                scrape_results = []
++
++            if scrape_results:
++                r = scrape_results[0]
++                info = VideoInfo(
++                    path='',
++                    title=r.get('title', ''),
++                    originaltitle=r.get('original_title', ''),
++                    actor=','.join(r.get('actors', [])) if isinstance(r.get('actors'), list) else r.get('actors', ''),
++                    num=r.get('number', num),
++                    maker=r.get('maker', ''),
++                    date=r.get('date', ''),
++                    genre=','.join(r.get('tags', [])) if isinstance(r.get('tags'), list) else '',
++                    size=0,
++                    mtime=0,
++                    img=r.get('cover', '') or r.get('cover_url', ''),
++                )
++                all_videos.append(info)
++            else:
++                missing.append(num)
++
++    embedded_count = 0
++    embed_failed_count = 0
++    if body.embed_covers:
++        for info in all_videos:
++            if info.img:
++                original = info.img
++                info.img = embed_fn(info.img, gallery_config.get('path_mappings', {}))
++                if info.img.startswith('data:'):
++                    embedded_count += 1
++                elif original:
++                    embed_failed_count += 1
++
++    output_path = resolve_out(output_dir)
++    output_path.mkdir(parents=True, exist_ok=True)
++
++    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
++    html_filename = f'gallery_custom_{timestamp}.html'
++    html_path = output_path / html_filename
++
++    try:
++        generator = generator_cls()
++        generator.generate(
++            all_videos,
++            str(html_path),
++            title=body.title,
++            mode=body.mode,
++            sort=body.sort,
++            theme=theme,
++        )
++    except Exception as e:
++        logger.error('generate_from_ids: HTML 產生失敗: %s', e)
 +        return JSONResponse(
 +            status_code=500,
 +            content={
@@ -6491,21 +7310,143 @@
 +                "error": _runtime_text("scanner", "generate_ids_html_failed", locale),
 +            },
 +        )
- 
-     result = {
-         "success": True,
-@@ -1621,6 +5597,11 @@
- 
- 
- def _browse_start_dir(config: dict) -> str:
++
++    result = {
++        "success": True,
++        "html_path": str(html_path),
++        "video_count": len(all_videos),
++        "missing": missing,
++    }
++    if body.embed_covers:
++        result["embedded_count"] = embedded_count
++        result["embed_failed_count"] = embed_failed_count
++    return result
++
++
++def _is_windows() -> bool:
++    return os.name == 'nt'
++
++
++def _path_flavour():
++    from pathlib import PurePosixPath, PureWindowsPath
++    is_win = _scanner_attr("_is_windows", _is_windows)
++    return PureWindowsPath if is_win() else PurePosixPath
++
++
++def _compute_parent(path: str) -> Optional[str]:
++    if not path:
++        return None
++    flavour_fn = _scanner_attr("_path_flavour", _path_flavour)
++    is_win = _scanner_attr("_is_windows", _is_windows)
++    flavour = flavour_fn()
++    p = flavour(path)
++    if p.parent == p:
++        return "" if is_win() else None
++    return str(p.parent)
++
++
++def _list_windows_drives() -> list[str]:
++    try:
++        if hasattr(os, "listdrives"):
++            return list(os.listdrives())
++    except (AttributeError, OSError):
++        pass
++    import string
++    return [f"{d}:\\" for d in string.ascii_uppercase if os.path.exists(f"{d}:\\")]
++
++
++def _browse_start_dir(config: dict) -> str:
 +    if sys.platform == "android":
 +        shared_root = "/storage/emulated/0"
 +        if os.path.isdir(shared_root):
 +            return shared_root
 +
-     gallery_cfg = config.get('gallery') or {}
-     sources = iter_gallery_sources(gallery_cfg)
-     if sources:
++    realpath_fn = _scanner_attr("safe_realpath", safe_realpath)
++    is_win = _scanner_attr("_is_windows", _is_windows)
++    gallery_cfg = config.get('gallery') or {}
++    sources = iter_gallery_sources(gallery_cfg)
++    if sources:
++        path_mappings = gallery_cfg.get('path_mappings', {})
++        fs = uri_to_local_fs_path(sources[0].path, path_mappings)
++        parent = str(Path(fs).parent)
++        resolved = realpath_fn(parent, 'browse-dir')
++        if os.path.isdir(resolved):
++            try:
++                with os.scandir(resolved):
++                    pass
++                return resolved
++            except OSError:
++                logger.warning("browse-dir: 起點列舉失敗，退回平台根 path=%s", resolved)
++    return "" if is_win() else "/"
++
++
++def browse_dir(path: Optional[str] = Query(None), expand: Optional[str] = Query(None)):
++    load_cfg = _scanner_attr("load_config", load_config)
++    is_win = _scanner_attr("_is_windows", _is_windows)
++    start_dir_fn = _scanner_attr("_browse_start_dir", _browse_start_dir)
++    list_drives_fn = _scanner_attr("_list_windows_drives", _list_windows_drives)
++    realpath_fn = _scanner_attr("safe_realpath", safe_realpath)
++    parent_fn = _scanner_attr("_compute_parent", _compute_parent)
++
++    config = load_cfg()
++    if path is None or (path == "" and not is_win()):
++        current_path = start_dir_fn(config)
++    else:
++        current_path = path
++
++    if current_path == "" and is_win():
++        drives = list_drives_fn()
++        entries = [{"name": d, "path": d} for d in drives]
++        entries.sort(key=lambda e: (e["name"].casefold(), e["name"]))
++        result = {
++            "current_path": "",
++            "parent_path": None,
++            "entries": entries,
++        }
++        if expand == "videos":
++            result["files"] = []
++        return result
++
++    resolved_path = realpath_fn(current_path, "browse-dir")
++    if not os.path.exists(resolved_path):
++        return JSONResponse(status_code=404, content={"success": False, "error": "not_found"})
++    if not os.path.isdir(resolved_path):
++        return JSONResponse(status_code=400, content={"success": False, "error": "not_a_directory"})
++
++    entries = []
++    video_files = []
++    video_exts = get_video_extensions(config) if expand == "videos" else set()
++
++    try:
++        with os.scandir(resolved_path) as it:
++            for entry in it:
++                try:
++                    if entry.is_dir():
++                        if is_nas_system_dir_name(entry.name):
++                            continue
++                        entries.append({"name": entry.name, "path": entry.path})
++                    elif expand == "videos" and entry.is_file():
++                        ext = os.path.splitext(entry.name)[1].lower()
++                        if ext in video_exts:
++                            video_files.append(entry.path)
++                except OSError:
++                    continue
++    except (PermissionError, OSError):
++        return JSONResponse(status_code=403, content={"success": False, "error": "permission_denied"})
++
++    entries.sort(key=lambda e: (e["name"].casefold(), e["name"]))
++    if expand == "videos":
++        video_files.sort(key=lambda p: (os.path.basename(p).casefold(), p))
++
++    parent_path = parent_fn(resolved_path)
++    result = {
++        "current_path": resolved_path,
++        "parent_path": parent_path,
++        "entries": entries,
++    }
++    if expand == "videos":
++        result["files"] = video_files
++    return result
 --- a/web/routers/scraper.py
 +++ b/web/routers/scraper.py
 @@ -12,20 +12,29 @@
@@ -8493,16 +9434,32 @@
  class AutoOrganizeConfigRequest(BaseModel):
 --- a/web/routers/showcase.py
 +++ b/web/routers/showcase.py
-@@ -17,7 +17,7 @@
+@@ -7,6 +7,7 @@
+ """
+ 
+ import os
++import threading
+ import uuid
+ from pathlib import Path
+ from typing import Optional
+@@ -17,12 +18,15 @@
  from fastapi.responses import JSONResponse, Response
  from pydantic import BaseModel
  
 -from core.database import VideoRepository, get_db_path, init_db
 +from core.database import AliasRepository, VideoRepository, get_db_path, init_db
++from core.database import version_tracker
  from core.database.version_tracker import (
      compute_db_fingerprint,
      compute_etag,
-@@ -30,21 +30,39 @@
++    etag_matches,
+     get_showcase_revision,
+ )
++from core.nfo_locator import _locate_output_nfo, locate_nfo_for_video
+ from core.path_utils import (
+     is_path_under_dir,
+     uri_to_local_fs_path,
+@@ -30,21 +34,39 @@
  from core.logger import get_logger
  from core.platform_info import DSM_PERMISSION_HINT, is_synology
  from core.config import load_config, get_gallery_source_paths, get_configured_gallery_dirs
@@ -8543,7 +9500,7 @@
  
  
  class DetectFocalRequest(BaseModel):
-@@ -70,12 +88,45 @@
+@@ -70,12 +92,61 @@
      original_title: Optional[str] = None
  
  
@@ -8586,6 +9543,22 @@
 +    )
 +
 +
++_DEFAULT_NEEDS_TRANSLATE = _needs_translate
++_DEFAULT_CAN_MANUAL_TRANSLATE = _can_manual_translate
++_DEFAULT_VIDEO_REPOSITORY = VideoRepository
++_DEFAULT_GET_SHOWCASE_ROWS = VideoRepository.get_showcase_rows
++
++_showcase_groups_cache_lock = threading.Lock()
++_showcase_groups_cache: Optional[tuple[tuple, tuple]] = None
++
++
++def _clear_showcase_groups_cache() -> None:
++    """Clear cached grouped showcase rows (tests/maintenance)."""
++    global _showcase_groups_cache
++    with _showcase_groups_cache_lock:
++        _showcase_groups_cache = None
++
++
 +def _serialize_video(
 +    v,
 +    path_mappings: dict,
@@ -8595,25 +9568,45 @@
      """將 Video ORM 物件序列化為前端 JSON dict（列表端點與單筆端點共用）。
  
      feature/71 T4：thumbnail_cache_enabled 開關決定 cover_url 走 thumb / image 分支。
-@@ -120,30 +171,82 @@
+@@ -97,6 +168,29 @@
+     for img_uri in (v.sample_images or []):
+         local_path = uri_to_local_fs_path(img_uri, path_mappings)
+         sample_urls.append(f"/api/gallery/image?path={quote(local_path, safe='')}")
++
++    has_nfo = (v.nfo_mtime or 0) > 0
++    can_translate = bool(
++        _can_manual_translate(
++            v.title,
++            v.original_title,
++            v.nfo_mtime,
++            locale,
++            proper_terms=v.actresses,
++        )
++    )
++    needs_translate = (
++        bool(has_nfo and can_translate)
++        if _needs_translate is _DEFAULT_NEEDS_TRANSLATE
++        and _can_manual_translate is _DEFAULT_CAN_MANUAL_TRANSLATE
++        else _needs_translate(
++            v.title,
++            v.original_title,
++            v.nfo_mtime,
++            locale,
++            proper_terms=v.actresses,
++        )
++    )
+ 
+     return {
+         "path": v.path,                                          # file:/// URI（開啟影片用）
+@@ -119,47 +213,138 @@
+         "user_tags": v.user_tags or [],              # list[str]，空時回空 list
          "user_rating": v.user_rating or 0,            # 精選標記（spec-123）；無條件輸出，未精選為 0（FE-ALPINE-06）
          "has_cover": bool(v.cover_path),             # DB 初判（不做 IO）
-         "has_nfo": (v.nfo_mtime or 0) > 0,          # 對齊 41a nfo_mtime 寫入契約，防禦 NULL
+-        "has_nfo": (v.nfo_mtime or 0) > 0,          # 對齊 41a nfo_mtime 寫入契約，防禦 NULL
 -        "needs_translate": _needs_translate(v.title, v.original_title, v.nfo_mtime),  # 無條件輸出（FE-ALPINE-06）
-+        "needs_translate": _needs_translate(
-+            v.title,
-+            v.original_title,
-+            v.nfo_mtime,
-+            locale,
-+            proper_terms=v.actresses,
-+        ),
-+        "can_translate": _can_manual_translate(
-+            v.title,
-+            v.original_title,
-+            v.nfo_mtime,
-+            locale,
-+            proper_terms=v.actresses,
-+        ),
++        "has_nfo": has_nfo,                          # 對齊 41a nfo_mtime 寫入契約，防禦 NULL
++        "needs_translate": needs_translate,
++        "can_translate": can_translate,
          "auto_focal": v.auto_focal,                  # canonical "x,y" 4dp 字串或 ''（98b：前端 focalObjectPosition 消費）
          "crop_mode": v.crop_mode,                    # 'auto' | 'default'（98b：default 退 baseline 右裁）
      }
@@ -8651,8 +9644,17 @@
 +        if len(group.members) > 1 else []
 +    )
      return base
-+
-+
+ 
+ 
+-def _etag_matches(if_none_match: str, etag: str) -> bool:
+-    """比對 `If-None-Match` 語意（抄 Starlette `StaticFiles.is_not_modified()` 的比對方式，
+-    不 import 該函式本身——它綁定 `FileResponse` 用的 `Headers` 型別，這裡是手寫 JSON 端點）。
+-
+-    依逗號拆多值、去除頭尾空白與 `W/` 弱驗證前綴，逐一比對是否等於 `etag`。
+-    """
+-    if not if_none_match:
+-        return False
+-    return etag in [tag.strip().removeprefix("W/") for tag in if_none_match.split(",")]
 +def _group_sort_key(group, sort: str):
 +    """Return the same primary sort value the showcase client uses."""
 +    video = group.members[0]
@@ -8681,10 +9683,56 @@
 +    # Python's stable sort keeps DB insertion order for equal keys, matching
 +    # the browser's stable Array.sort() semantics used by legacy clients.
 +    return sorted(groups, key=lambda group: _group_sort_key(group, sort), reverse=reverse)
- 
- 
- def _etag_matches(if_none_match: str, etag: str) -> bool:
-@@ -158,8 +261,20 @@
++
++
++_etag_matches = etag_matches
++
++
++def _load_showcase_groups(
++    db_path: Path,
++    configured_dir_uris: set[str],
++    path_mappings: dict,
++    actress_names: Optional[list[str]],
++    *,
++    revision: int,
++    db_fingerprint: tuple,
++):
++    """Load and group showcase rows, reusing an in-memory snapshot when unchanged."""
++    global _showcase_groups_cache
++
++    can_cache = (
++        VideoRepository is _DEFAULT_VIDEO_REPOSITORY
++        and VideoRepository.get_showcase_rows is _DEFAULT_GET_SHOWCASE_ROWS
++    )
++    cache_key = None
++    if can_cache:
++        cache_key = (
++            str(db_path),
++            revision,
++            version_tracker.get_showcase_revision(),
++            db_fingerprint,
++            version_tracker.compute_db_fingerprint(db_path),
++            tuple(sorted(configured_dir_uris)),
++            tuple(sorted((str(k), str(v)) for k, v in (path_mappings or {}).items())),
++            tuple(actress_names or ()),
++        )
++        with _showcase_groups_cache_lock:
++            if _showcase_groups_cache is not None and _showcase_groups_cache[0] == cache_key:
++                return list(_showcase_groups_cache[1])
++
++    repo = VideoRepository(db_path)
++    all_videos = [
++        v for v in repo.get_showcase_rows(configured_dir_uris, actress_names)
++        if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)
++    ]
++    groups = group_rows(
++        all_videos,
++        fs_path_of=lambda v: uri_to_local_fs_path(v.path, path_mappings),
++    )
++    if can_cache and cache_key is not None:
++        with _showcase_groups_cache_lock:
++            _showcase_groups_cache = (cache_key, tuple(groups))
++    return groups
  
  
  @router.get("/videos")
@@ -8706,7 +9754,7 @@
  
      帶 ETag（CD-145a-8/11/12）：涵蓋 DB 內部寫入 revision、DB/-wal 檔案指紋（涵蓋外部
      抽換或還原備份）、無機密設定投影（來源資料夾／path_mappings／縮圖開關）三項，
-@@ -182,22 +297,51 @@
+@@ -182,46 +367,98 @@
  
          # 只取「當前設定資料夾」底下的記錄（DB 保留全部當 cache）
          config = load_config()
@@ -8745,29 +9793,39 @@
 -        etag = compute_etag(get_showcase_revision(), compute_db_fingerprint(db_path), projection)
 -
 -        if _etag_matches(request.headers.get("if-none-match"), etag):
++        revision = get_showcase_revision()
++        db_fingerprint = compute_db_fingerprint(db_path)
 +        etag = None
 +        if requested_sort != 'random':
 +            etag = compute_etag(
-+                get_showcase_revision(),
-+                compute_db_fingerprint(db_path),
++                revision,
++                db_fingerprint,
 +                projection,
 +            )
 +
 +        if etag and _etag_matches(request.headers.get("if-none-match"), etag):
              return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
- 
-         repo = VideoRepository(db_path)
+-
+-        repo = VideoRepository(db_path)
 -        all_videos = [v for v in repo.get_all()
-+        all_videos = [v for v in repo.get_showcase_rows(configured_dir_uris, actress_names)
-                       if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
+-                      if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)]
  
          # feature/122 CD-122-1：分組在序列化層收斂，前端拿到的 videos 陣列已是
-@@ -205,23 +349,41 @@
+         # 合併後的一筆一組（多一個 part_tokens 欄位）。單檔片的 group 只有自己
          # 一個 member，_serialize_group() 輸出與改動前逐鍵逐值相同（AC-4）。
-         groups = group_rows(all_videos, fs_path_of=lambda v: uri_to_local_fs_path(v.path, path_mappings))
- 
+-        groups = group_rows(all_videos, fs_path_of=lambda v: uri_to_local_fs_path(v.path, path_mappings))
+-
 -        videos_json = [_serialize_group(g, path_mappings, thumb_enabled)
 -                       for g in groups]
++        groups = _load_showcase_groups(
++            db_path,
++            configured_dir_uris,
++            path_mappings,
++            actress_names,
++            revision=revision,
++            db_fingerprint=db_fingerprint,
++        )
++
 +        total = len(groups)
 +        total_pages = 1
 +        if use_pagination:
@@ -8809,7 +9867,7 @@
              "videos": [],
              "total": 0
          }, status_code=500)
-@@ -230,23 +392,43 @@
+@@ -230,23 +467,43 @@
  @router.get("/video")
  def get_video(path: str = Query(..., description="file:/// URI")):
      """取得單筆影片資料（用於 T3 refreshVideoData enrich 後刷新卡片）"""
@@ -8856,7 +9914,7 @@
  
          thumb_enabled = config.get('thumbnail_cache_enabled', False)
  
-@@ -257,14 +439,22 @@
+@@ -257,14 +514,22 @@
          group = resolve_group(repo, path, path_mappings, folder_source_uri=v.path)
          if group is None:
              return JSONResponse({"success": True,
@@ -8882,7 +9940,7 @@
  
  
  @router.delete("/video")
-@@ -353,30 +543,58 @@
+@@ -353,30 +618,58 @@
      ⚠️ 停用狀態已於上方端點層短路，不會走到這裡，所以「關掉之後直接進手動」不受鎖排隊影響。
      **不進 capabilities（不揭露）。**
      """
@@ -8946,7 +10004,7 @@
  
          # 152d-T-D8：停用時在這裡就回，不要進 run_detection ——
          # pre_spawn_check 跑在全域 _slot_lock 裡面（subprocess_runner.py:298→309），
-@@ -430,7 +648,13 @@
+@@ -430,7 +723,13 @@
  
      except Exception as e:
          logger.error("偵測焦點失敗: %s", e)
@@ -8961,7 +10019,7 @@
  
  
  @router.post("/video/save-focal")
-@@ -451,58 +675,102 @@
+@@ -451,58 +750,102 @@
      rescrape 期間換了封面）→ 409，DB 不變，前端應提示使用者重新開啟裁切工具。
      `def`（非 async）→ Starlette threadpool。**不進 capabilities（不揭露）。**
      """
@@ -9083,36 +10141,54 @@
  
  
  def _new_original_title(req, video) -> str:
-@@ -521,8 +789,12 @@
-         return None, "no_nfo"
-     if not output_uri or not is_path_under_dir(video.output_dir, output_uri):
-         return None, "no_nfo"
+@@ -513,35 +856,20 @@
+ 
+ 
+ def _locate_readonly_nfo(video, path_mappings: dict, output_uri: str):
+-    """唯讀來源：scandir 一次列舉輸出夾的 .nfo（BE-DATA-12：四狀態分開）。回 (path, err)。
+-
+-    output_dir 必須在目前設定的輸出根（output_uri）底下，否則視為沒有 NFO（不碰舊夾）。
+-    """
+-    if not video.output_dir:
+-        return None, "no_nfo"
+-    if not output_uri or not is_path_under_dir(video.output_dir, output_uri):
+-        return None, "no_nfo"
 -    out_fs = uri_to_local_fs_path(video.output_dir, path_mappings)
-+    out_fs = Path(uri_to_local_fs_path(video.output_dir, path_mappings))
-+    video_fs = Path(uri_to_local_fs_path(video.path, path_mappings))
-     try:
-+        exact = find_sidecar_nfos(out_fs / video_fs.name)
-+        if exact:
-+            return str(exact[0]), None
-         with os.scandir(out_fs) as it:
-             nfo_files = sorted(e.path for e in it if e.name.lower().endswith(".nfo") and e.is_file())
-     except FileNotFoundError:
-@@ -541,7 +813,13 @@
-     owning = resolve_owning_output_root(video.path, config)
-     if owning is not None:
-         return _locate_readonly_nfo(video, path_mappings, owning[2])
+-    try:
+-        with os.scandir(out_fs) as it:
+-            nfo_files = sorted(e.path for e in it if e.name.lower().endswith(".nfo") and e.is_file())
+-    except FileNotFoundError:
+-        return None, "no_nfo"
+-    except OSError:
+-        return None, "nfo_unreadable"
+-    if len(nfo_files) > 1:
+-        return None, "nfo_ambiguous"
+-    if not nfo_files:
+-        return None, "no_nfo"
+-    return nfo_files[0], None
++    """唯讀來源：委派 core.nfo_locator._locate_output_nfo（單一真理來源）。"""
++    return _locate_output_nfo(video, output_uri, path_mappings)
++
++
++_DEFAULT_LOCATE_READONLY_NFO = _locate_readonly_nfo
+ 
+ 
+ def _locate_title_nfo(video, config: dict, path_mappings: dict):
+-    """回 (nfo_path, err)：唯讀來源取輸出夾那份，一般來源取影片旁同名 .nfo。"""
+-    owning = resolve_owning_output_root(video.path, config)
+-    if owning is not None:
+-        return _locate_readonly_nfo(video, path_mappings, owning[2])
 -    return str(Path(uri_to_local_fs_path(video.path, path_mappings)).with_suffix(".nfo")), None
-+    video_fs_path = uri_to_local_fs_path(video.path, path_mappings)
-+    candidates = find_sidecar_nfos(video_fs_path)
-+    if not candidates:
-+        return None, "no_nfo"
-+    if len(candidates) > 1:
-+        return None, "nfo_ambiguous"
-+    return str(candidates[0]), None
++    """回 (nfo_path, err)：委派 core.nfo_locator.locate_nfo_for_video。"""
++    if _locate_readonly_nfo is not _DEFAULT_LOCATE_READONLY_NFO:
++        owning = resolve_owning_output_root(video.path, config)
++        if owning is not None:
++            return _locate_readonly_nfo(video, path_mappings, owning[2])
++    return locate_nfo_for_video(video, config, path_mappings)
  
  
  def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: str) -> Optional[str]:
-@@ -556,28 +834,114 @@
+@@ -556,28 +884,114 @@
          return "no_nfo"
      except NfoParseError:
          return "nfo_unreadable"
@@ -9231,7 +10307,7 @@
  
      # 取實際寫入那份 NFO 的 mtime；取不到沿用舊值（下次掃描最多多讀一次）
      new_mtime = nfo_mtime_or_none(Path(nfo_path))
-@@ -587,11 +951,22 @@
+@@ -587,11 +1001,22 @@
          written = repo.update_titles(video.path, body, new_original, new_mtime)
      except Exception as e:
          logger.error("[title-writeback] DB 寫入失敗: %s", e)
@@ -9257,7 +10333,7 @@
              "nfo_updated": True}
  
  
-@@ -602,25 +977,29 @@
+@@ -602,25 +1027,29 @@
      失敗一律 HTTP 200 ＋ {success:false, error:<code>}。`def`（非 async）→ threadpool。
      端點內不呼叫翻譯；唯讀來源只改輸出夾那份 NFO，來源零寫入。
      """

@@ -166,6 +166,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "web/routers/image_search.py",
             "web/routers/insights.py",
             "web/routers/scanner.py",
+            "web/routers/scanner_extras.py",
             "web/routers/scraper.py",
             "web/routers/search.py",
             "web/routers/showcase.py",

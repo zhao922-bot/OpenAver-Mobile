@@ -235,9 +235,12 @@ class Video:
 
         # DB-only migration columns (focal_model, ai tags, plot flags, etc.)
         # must not be forwarded to the dataclass constructor.
-        allowed = {f.name for f in fields(cls)}
+        allowed = _VIDEO_FIELD_NAMES if cls is Video else {f.name for f in fields(cls)}
         data = {key: value for key, value in data.items() if key in allowed}
         return cls(**data)
+
+
+_VIDEO_FIELD_NAMES = frozenset(f.name for f in fields(Video))
 
 
 # preserve-on-conflict 欄位集合（CD-98a-6）：比照 path — 首次 INSERT 帶 dataclass 預設值，
@@ -297,6 +300,19 @@ _SHOWCASE_COLUMNS = (
     'auto_focal',
     'crop_mode',
     'user_rating',
+)
+
+# Insights snapshot only needs these fields for grouping and chart aggregation.
+_INSIGHTS_COLUMNS = (
+    'path',
+    'number',
+    'release_date',
+    'duration',
+    'actresses',
+    'maker',
+    'director',
+    'series',
+    'tags',
 )
 
 
@@ -482,224 +498,204 @@ class VideoRepository:
             self.upsert(video)
             return
 
-        # 讀取 old / new 是否存在
+        # 讀取 old / new 既有列並共用同一連線完成更新（消除單次 repath 開關 3~4 次連線）
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
-            cursor.execute("SELECT 1 FROM videos WHERE path = ?", (old_uri,))
-            old_exists = cursor.fetchone() is not None
-            cursor.execute("SELECT 1 FROM videos WHERE path = ?", (new_uri,))
-            new_exists = cursor.fetchone() is not None
-        finally:
-            conn.close()
-
-        # ── 分支 4：old-not-in-DB ─────────────────────────────────────────
-        if not old_exists and not new_exists:
-            self.upsert(video)
-            return
-
-        # ── 分支 2：正常 UPDATE（old 在 DB、new 不在 DB）────────────────────
-        if old_exists and not new_exists:
-            old_row = self.get_by_path(old_uri)
-            merged_tags = self._union_tags(
-                old_row.user_tags if old_row else [],
-                video.user_tags,
+            db_columns = self._get_columns(conn)
+            cursor.execute(
+                "SELECT * FROM videos WHERE path IN (?, ?)",
+                (old_uri, new_uri),
             )
+            by_path = {
+                parsed.path: parsed
+                for row in cursor.fetchall()
+                for parsed in (Video.from_row(row, db_columns),)
+            }
+            old_row = by_path.get(old_uri)
+            new_row = by_path.get(new_uri)
+            old_exists = old_row is not None
+            new_exists = new_row is not None
 
-            # 動態建 SET 子句（鏡射 upsert 的 column list 邏輯）
+            # ── 分支 4：old-not-in-DB ─────────────────────────────────────────
+            if not old_exists and not new_exists:
+                conn.close()
+                conn = None
+                self.upsert(video)
+                return
+
+            # ── 分支 2：正常 UPDATE（old 在 DB、new 不在 DB）────────────────────
+            if old_exists and not new_exists:
+                merged_tags = self._union_tags(
+                    old_row.user_tags if old_row else [],
+                    video.user_tags,
+                )
+
+                # 動態建 SET 子句（鏡射 upsert 的 column list 邏輯）
+                video_dict = video.to_dict()
+                video_dict.pop('id', None)
+                video_dict.pop('created_at', None)
+                video_dict.pop('updated_at', None)
+                video_dict.pop('path', None)   # path 會另外指定
+                video_dict.pop('user_rating', None)  # CD-123-3：只由 set_user_rating() 寫入，排除在動態欄位外
+
+                cover_unchanged = old_row is not None and video.cover_path == old_row.cover_path
+
+                set_parts = []
+                set_values = []
+                for col, val in video_dict.items():
+                    if col == 'user_tags':
+                        continue  # handled separately
+                    elif col == 'crop_mode':
+                        if cover_unchanged:
+                            continue  # 裁切模式偏好與封面無關，同封面一律保留 DB 既有值（CD-98a-6）
+                        if old_row and old_row.crop_mode == 'manual':
+                            # 換封面：manual 座標對新內容已失效 → 降回 auto（CD-10/99a-T1b）
+                            set_parts.append("crop_mode = ?")
+                            set_values.append('auto')
+                        continue  # 防 fall-through 到底部通用 append 重複 SET（Codex PR#105 P2c 教訓）
+                    elif col == 'auto_focal':
+                        if cover_unchanged:
+                            continue  # 保留 DB 既有值
+                        set_parts.append("auto_focal = ?")
+                        set_values.append('')
+                        continue
+                    elif col == 'focal_attempted_at':
+                        if cover_unchanged:
+                            continue  # 保留 DB 既有值
+                        set_parts.append("focal_attempted_at = ?")
+                        set_values.append(None)
+                        continue
+                    elif col == 'output_dir' and not val:
+                        continue
+                    elif col == 'scrape_attempted_at' and not val:
+                        continue
+                    set_parts.append(f"{col} = ?")
+                    set_values.append(val)
+
+                # user_tags（Python-side union，JSON 序列化）
+                set_parts.append("user_tags = ?")
+                set_values.append(json.dumps(merged_tags, ensure_ascii=False))
+
+                # path + updated_at
+                set_parts.append("path = ?")
+                set_values.append(new_uri)
+                set_parts.append("updated_at = CURRENT_TIMESTAMP")
+
+                sql = f"UPDATE videos SET {', '.join(set_parts)} WHERE path = ?"
+                set_values.append(old_uri)
+
+                cursor.execute(sql, set_values)
+                conn.commit()
+                rowcount = cursor.rowcount
+                conn.close()
+                conn = None
+
+                if rowcount == 0:
+                    self.upsert(video)
+                    return
+
+                try:
+                    from core.similar.ranker_cache import SimilarRankerCache
+                    SimilarRankerCache.invalidate()
+                except Exception:
+                    logger.exception("SimilarRankerCache invalidate failed (non-fatal)")
+                return
+
+            # ── 分支 3：碰撞 delete-merge（new 已有一筆）──────────────────────────
+            tags_a = old_row.user_tags if old_row else []
+            tags_b = new_row.user_tags if new_row else []
+            tags_c = video.user_tags
+            merged_tags = self._union_tags(self._union_tags(tags_a, tags_b), tags_c)
+
+            old_ca = old_row.created_at if old_row else None
+            new_ca = new_row.created_at if new_row else None
+            if old_ca and new_ca:
+                earliest_ca = min(str(old_ca), str(new_ca))
+            elif old_ca:
+                earliest_ca = str(old_ca)
+            elif new_ca:
+                earliest_ca = str(new_ca)
+            else:
+                earliest_ca = None
+
+            old_ur = old_row.user_rating if old_row else 0
+            new_ur = new_row.user_rating if new_row else 0
+            merged_rating = max(old_ur, new_ur)
+
             video_dict = video.to_dict()
             video_dict.pop('id', None)
             video_dict.pop('created_at', None)
             video_dict.pop('updated_at', None)
-            video_dict.pop('path', None)   # path 會另外指定
-            video_dict.pop('user_rating', None)  # CD-123-3：只由 set_user_rating() 寫入，排除在動態欄位外
 
-            # cover_path 是否變動決定 auto_focal/focal_attempted_at 保留或重置
-            # （Codex PR#105 P2b）。old_row 為 None 屬既有存在檢查後被並行刪除的極端
-            # race（見上方 merged_tags 同一 old_row 用法），安全預設視為「封面已變」
-            # 一併重置，不留可能對應舊封面的 stale 值。
-            cover_unchanged = old_row is not None and video.cover_path == old_row.cover_path
+            columns = list(video_dict.keys())
+            values = list(video_dict.values())
 
-            set_parts = []
-            set_values = []
-            for col, val in video_dict.items():
-                if col == 'user_tags':
-                    continue  # handled separately
-                elif col == 'crop_mode':
-                    if cover_unchanged:
-                        continue  # 裁切模式偏好與封面無關，同封面一律保留 DB 既有值（CD-98a-6）
-                    if old_row and old_row.crop_mode == 'manual':
-                        # 換封面：manual 座標對新內容已失效 → 降回 auto（CD-10/99a-T1b）
-                        set_parts.append("crop_mode = ?")
-                        set_values.append('auto')
-                    continue  # 防 fall-through 到底部通用 append 重複 SET（Codex PR#105 P2c 教訓）
-                elif col == 'auto_focal':
-                    if cover_unchanged:
-                        continue  # 保留 DB 既有值
-                    set_parts.append("auto_focal = ?")
-                    set_values.append('')
-                    continue  # 已排入 reset，勿 fall through 到底部通用 append（重複 SET→SQLite 取最右＝incoming stale 值蓋掉 reset，Codex PR#105 P2c）
-                elif col == 'focal_attempted_at':
-                    if cover_unchanged:
-                        continue  # 保留 DB 既有值
-                    set_parts.append("focal_attempted_at = ?")
-                    set_values.append(None)
-                    continue  # 同上：勿 fall through 重複 append 蓋掉 reset（Codex PR#105 P2c）
-                elif col == 'output_dir' and not val:
-                    # incoming output_dir 空 → 保留既有值（不寫入），與 upsert() CASE-WHEN 對稱
+            for i, col in enumerate(columns):
+                if col == 'path':
+                    values[i] = new_uri
+                elif col == 'user_tags':
+                    values[i] = json.dumps(merged_tags, ensure_ascii=False)
+                elif col == 'user_rating':
+                    values[i] = merged_rating
+
+            if earliest_ca:
+                columns.append('created_at')
+                values.append(earliest_ca)
+
+            placeholders = ', '.join(['?'] * len(columns))
+
+            update_parts = []
+            for col in columns:
+                if col == 'path':
                     continue
-                elif col == 'scrape_attempted_at' and not val:
-                    # incoming scrape_attempted_at 為 0 → 保留既有值（不寫入），與 upsert() CASE-WHEN 對稱
-                    continue
-                set_parts.append(f"{col} = ?")
-                set_values.append(val)
+                elif col in _FOCAL_PRESERVE:
+                    if col == 'crop_mode':
+                        update_parts.append(_FOCAL_CROP_MODE_CASE_SQL)
+                    elif col == 'auto_focal':
+                        update_parts.append(_FOCAL_AUTO_FOCAL_CASE_SQL)
+                    elif col == 'focal_attempted_at':
+                        update_parts.append(_FOCAL_ATTEMPTED_AT_CASE_SQL)
+                elif col == 'created_at':
+                    update_parts.append("created_at = excluded.created_at")
+                elif col == 'user_rating':
+                    update_parts.append("user_rating = excluded.user_rating")
+                elif col == 'user_tags':
+                    update_parts.append(
+                        "user_tags = CASE WHEN excluded.user_tags = '[]' "
+                        "THEN videos.user_tags ELSE excluded.user_tags END"
+                    )
+                elif col == 'output_dir':
+                    update_parts.append(
+                        "output_dir = CASE WHEN excluded.output_dir = '' "
+                        "THEN videos.output_dir ELSE excluded.output_dir END"
+                    )
+                elif col == 'scrape_attempted_at':
+                    update_parts.append(
+                        "scrape_attempted_at = CASE WHEN excluded.scrape_attempted_at = 0 "
+                        "THEN videos.scrape_attempted_at ELSE excluded.scrape_attempted_at END"
+                    )
+                else:
+                    update_parts.append(f"{col} = excluded.{col}")
+            update_parts.append("updated_at = CURRENT_TIMESTAMP")
+            update_clause = ', '.join(update_parts)
 
-            # user_tags（Python-side union，JSON 序列化）
-            set_parts.append("user_tags = ?")
-            set_values.append(json.dumps(merged_tags, ensure_ascii=False))
+            insert_sql = (
+                f"INSERT INTO videos ({', '.join(columns)}) VALUES ({placeholders})\n"
+                f"ON CONFLICT(path) DO UPDATE SET {update_clause}"
+            )
 
-            # path + updated_at
-            set_parts.append("path = ?")
-            set_values.append(new_uri)
-            set_parts.append("updated_at = CURRENT_TIMESTAMP")
-
-            sql = f"UPDATE videos SET {', '.join(set_parts)} WHERE path = ?"
-            set_values.append(old_uri)
-
-            conn = self._get_connection()
-            cursor = conn.cursor()
             try:
-                cursor.execute(sql, set_values)
+                if old_exists:
+                    cursor.execute("DELETE FROM videos WHERE path = ?", (old_uri,))
+                cursor.execute(insert_sql, values)
                 conn.commit()
-                rowcount = cursor.rowcount  # 讀在 close() 之前
-            finally:
-                conn.close()
-
-            if rowcount == 0:
-                # old row 在 existence check 後被並行刪除 → 退化為 upsert
-                # upsert 自帶 invalidate，不再額外呼叫（避免 double invalidate）
-                self.upsert(video)
-                return
-
-            # ranker invalidate（不繼承 upsert，必須顯式呼叫）
-            try:
-                from core.similar.ranker_cache import SimilarRankerCache
-                SimilarRankerCache.invalidate()
             except Exception:
-                logger.exception("SimilarRankerCache invalidate failed (non-fatal)")
-            return
-
-        # ── 分支 3：碰撞 delete-merge（new 已有一筆）──────────────────────────
-        old_row = self.get_by_path(old_uri) if old_exists else None
-        new_row = self.get_by_path(new_uri)
-
-        # 三方 tag 聯集
-        tags_a = old_row.user_tags if old_row else []
-        tags_b = new_row.user_tags if new_row else []
-        tags_c = video.user_tags
-        merged_tags = self._union_tags(self._union_tags(tags_a, tags_b), tags_c)
-
-        # created_at 取較早
-        old_ca = old_row.created_at if old_row else None
-        new_ca = new_row.created_at if new_row else None
-        if old_ca and new_ca:
-            earliest_ca = min(str(old_ca), str(new_ca))
-        elif old_ca:
-            earliest_ca = str(old_ca)
-        elif new_ca:
-            earliest_ca = str(new_ca)
-        else:
-            earliest_ca = None
-
-        # user_rating 取較高（CD-123-4：所有權宣告，明確不含 video.user_rating——
-        # video 是 ingest 造出的物件，恆為 dataclass 預設 0，納入 max() 不影響結果但會
-        # 混淆「這欄只由 mutator 寫」的意圖）
-        old_ur = old_row.user_rating if old_row else 0
-        new_ur = new_row.user_rating if new_row else 0
-        merged_rating = max(old_ur, new_ur)
-
-        # 動態建 INSERT 欄位 / upsert update_clause（鏡射 upsert）
-        video_dict = video.to_dict()
-        video_dict.pop('id', None)
-        video_dict.pop('created_at', None)
-        video_dict.pop('updated_at', None)
-
-        columns = list(video_dict.keys())
-        values = list(video_dict.values())
-
-        # 強制覆蓋 path + user_tags
-        for i, col in enumerate(columns):
-            if col == 'path':
-                values[i] = new_uri
-            elif col == 'user_tags':
-                values[i] = json.dumps(merged_tags, ensure_ascii=False)
-            elif col == 'user_rating':
-                values[i] = merged_rating
-
-        # 顯式帶入 created_at
-        if earliest_ca:
-            columns.append('created_at')
-            values.append(earliest_ca)
-
-        placeholders = ', '.join(['?'] * len(columns))
-
-        update_parts = []
-        for col in columns:
-            if col == 'path':
-                continue
-            elif col in _FOCAL_PRESERVE:
-                if col == 'crop_mode':
-                    # 同封面保留；換封面時 manual 座標已失效 → 降回 auto（CD-10/99a-T1b）
-                    update_parts.append(_FOCAL_CROP_MODE_CASE_SQL)
-                elif col == 'auto_focal':
-                    # cover_path 相同 → 保留；換封面 → 重置為未偵測（Codex PR#105 P2b）
-                    update_parts.append(_FOCAL_AUTO_FOCAL_CASE_SQL)
-                elif col == 'focal_attempted_at':
-                    update_parts.append(_FOCAL_ATTEMPTED_AT_CASE_SQL)
-            elif col == 'created_at':
-                # 碰撞分支：強制寫入較早的 created_at（DO UPDATE 也要更新）
-                update_parts.append("created_at = excluded.created_at")
-            elif col == 'user_rating':
-                update_parts.append("user_rating = excluded.user_rating")  # CD-123-4 明寫合併
-            elif col == 'user_tags':
-                update_parts.append(
-                    "user_tags = CASE WHEN excluded.user_tags = '[]' "
-                    "THEN videos.user_tags ELSE excluded.user_tags END"
-                )
-            elif col == 'output_dir':
-                # output_dir = '' 時視同「不更新」，保留 DB 現有值（與 upsert() 對稱，Codex P2 修正）
-                update_parts.append(
-                    "output_dir = CASE WHEN excluded.output_dir = '' "
-                    "THEN videos.output_dir ELSE excluded.output_dir END"
-                )
-            elif col == 'scrape_attempted_at':
-                # scrape_attempted_at = 0 時視同「不更新」，保留 DB 現有值（與 upsert() 對稱，Codex P2 修正）
-                update_parts.append(
-                    "scrape_attempted_at = CASE WHEN excluded.scrape_attempted_at = 0 "
-                    "THEN videos.scrape_attempted_at ELSE excluded.scrape_attempted_at END"
-                )
-            else:
-                update_parts.append(f"{col} = excluded.{col}")
-        update_parts.append("updated_at = CURRENT_TIMESTAMP")
-        update_clause = ', '.join(update_parts)
-
-        insert_sql = (
-            f"INSERT INTO videos ({', '.join(columns)}) VALUES ({placeholders})\n"
-            f"ON CONFLICT(path) DO UPDATE SET {update_clause}"
-        )
-
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        try:
-            if old_exists:
-                cursor.execute("DELETE FROM videos WHERE path = ?", (old_uri,))
-            cursor.execute(insert_sql, values)
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
+                conn.rollback()
+                raise
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
 
         # ranker invalidate
         try:
@@ -1258,6 +1254,36 @@ class VideoRepository:
             cursor = conn.execute(query, params)
             return [
                 Video.from_row(row, list(_SHOWCASE_COLUMNS))
+                for row in cursor.fetchall()
+            ]
+        finally:
+            conn.close()
+
+    def get_insights_rows(
+        self,
+        configured_dir_uris: Optional[set[str]] = None,
+    ) -> List[Video]:
+        """Load the lightweight projection needed by GET /api/insights/snapshot."""
+        if configured_dir_uris is not None and not configured_dir_uris:
+            return []
+
+        params: List[str] = []
+        where_sql = ""
+        if configured_dir_uris:
+            scope_clauses: List[str] = []
+            for dir_uri in sorted(configured_dir_uris):
+                prefix = dir_uri if dir_uri.endswith('/') else dir_uri + '/'
+                scope_clauses.append("(path = ? OR path LIKE ? ESCAPE '\\')")
+                params.extend((dir_uri, _escape_like_prefix(prefix) + '%'))
+            where_sql = f"WHERE ({' OR '.join(scope_clauses)}) "
+
+        columns = ', '.join(_INSIGHTS_COLUMNS)
+        query = f"SELECT {columns} FROM videos {where_sql}ORDER BY id"
+        conn = self._get_connection()
+        try:
+            cursor = conn.execute(query, params)
+            return [
+                Video.from_row(row, list(_INSIGHTS_COLUMNS))
                 for row in cursor.fetchall()
             ]
         finally:

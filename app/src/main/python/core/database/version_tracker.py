@@ -94,3 +94,14 @@ def compute_etag(revision: int, db_fingerprint: tuple, projection: dict) -> str:
     )
     digest = hmac.new(_BOOT_SECRET, material.encode("utf-8"), hashlib.sha256).hexdigest()
     return f'"{digest}"'
+
+
+def etag_matches(if_none_match: str | None, etag: str | None) -> bool:
+    """Compare an ``If-None-Match`` header value against a strong/weak ETag."""
+    if not if_none_match or not etag:
+        return False
+    return etag in [
+        tag.strip().removeprefix("W/")
+        for tag in if_none_match.split(",")
+    ]
+

@@ -858,21 +858,31 @@ def _store_config_cache(config: dict) -> None:
     _config_cache_signature = _config_file_signature()
 
 
-def _load_cached_config_unlocked() -> dict:
-    """Return a copy of the current config, parsing disk only on a cache miss."""
+def _get_cached_config_snapshot_unlocked() -> dict:
+    """Return the cached config snapshot, parsing disk only on a cache miss."""
     signature = _config_file_signature()
     if _config_cache is not None and _config_cache_signature == signature:
-        return copy.deepcopy(_config_cache)
+        return _config_cache
 
     raw_config = _load_config_unlocked()
     _store_config_cache(raw_config)
-    return copy.deepcopy(raw_config)
+    return _config_cache
+
+
+def _load_cached_config_unlocked() -> dict:
+    """Return a copy of the current config, parsing disk only on a cache miss."""
+    return copy.deepcopy(_get_cached_config_snapshot_unlocked())
+
+
+def load_config_readonly() -> dict:
+    """載入唯讀設定快照（不執行 deepcopy，供高頻圖片／縮圖代理端點使用）。"""
+    with _config_write_lock:
+        return _get_cached_config_snapshot_unlocked()
 
 
 def load_config() -> dict:
-    """載入設定；未變更時使用記憶體快照（process-wide 序列化）。"""
-    with _config_write_lock:
-        return _load_cached_config_unlocked()
+    """載入設定；未變更時使用記憶體快照（deepcopy 移出寫鎖外以降低併發競爭）。"""
+    return copy.deepcopy(load_config_readonly())
 
 
 def _save_config_unlocked(config: dict) -> None:

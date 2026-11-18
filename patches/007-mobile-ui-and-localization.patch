@@ -1078,7 +1078,7 @@
              _save_config_unlocked(raw_config)
  
          return raw_config
-@@ -648,10 +842,37 @@
+@@ -648,10 +842,47 @@
      return AppConfig().model_dump()
  
  
@@ -1098,27 +1098,38 @@
 +    _config_cache_signature = _config_file_signature()
 +
 +
-+def _load_cached_config_unlocked() -> dict:
-+    """Return a copy of the current config, parsing disk only on a cache miss."""
++def _get_cached_config_snapshot_unlocked() -> dict:
++    """Return the cached config snapshot, parsing disk only on a cache miss."""
 +    signature = _config_file_signature()
 +    if _config_cache is not None and _config_cache_signature == signature:
-+        return copy.deepcopy(_config_cache)
++        return _config_cache
 +
 +    raw_config = _load_config_unlocked()
 +    _store_config_cache(raw_config)
-+    return copy.deepcopy(raw_config)
++    return _config_cache
++
++
++def _load_cached_config_unlocked() -> dict:
++    """Return a copy of the current config, parsing disk only on a cache miss."""
++    return copy.deepcopy(_get_cached_config_snapshot_unlocked())
++
++
++def load_config_readonly() -> dict:
++    """載入唯讀設定快照（不執行 deepcopy，供高頻圖片／縮圖代理端點使用）。"""
++    with _config_write_lock:
++        return _get_cached_config_snapshot_unlocked()
 +
 +
  def load_config() -> dict:
 -    """載入設定，包含自動遷移邏輯和首次啟動初始化（process-wide 序列化）"""
-+    """載入設定；未變更時使用記憶體快照（process-wide 序列化）。"""
-     with _config_write_lock:
+-    with _config_write_lock:
 -        return _load_config_unlocked()
-+        return _load_cached_config_unlocked()
++    """載入設定；未變更時使用記憶體快照（deepcopy 移出寫鎖外以降低併發競爭）。"""
++    return copy.deepcopy(load_config_readonly())
  
  
  def _save_config_unlocked(config: dict) -> None:
-@@ -672,6 +893,7 @@
+@@ -672,6 +903,7 @@
  
      with atomic_write(CONFIG_PATH, mode='w', encoding='utf-8') as f:
          json.dump(config, f, indent=2, ensure_ascii=False)
@@ -1126,7 +1137,7 @@
  
  
  def save_config(config: dict) -> None:
-@@ -691,16 +913,19 @@
+@@ -691,16 +923,19 @@
      mutate_config / reset_config_file）—— 會在已持鎖時二次 acquire → 自我死鎖。
      """
      with _config_write_lock:

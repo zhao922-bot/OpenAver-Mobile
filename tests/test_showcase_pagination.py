@@ -195,3 +195,123 @@ def test_showcase_sort_is_stable_for_equal_primary_keys():
         item.members[0].path
         for item in showcase_router._sort_groups(groups, "date", "desc")
     ] == ["first", "second", "third"]
+
+
+def test_showcase_pagination_reuses_in_memory_group_cache_and_invalidates_on_db_write(
+    tmp_path,
+    monkeypatch,
+):
+    db_path, gallery_dir = _prepare_route(tmp_path, monkeypatch)
+    showcase_router._clear_showcase_groups_cache()
+
+    calls = 0
+    original_get_showcase_rows = VideoRepository.get_showcase_rows
+
+    def counting_get_showcase_rows(self, configured_dir_uris, actress_names=None):
+        nonlocal calls
+        calls += 1
+        return original_get_showcase_rows(self, configured_dir_uris, actress_names)
+
+    monkeypatch.setattr(VideoRepository, "get_showcase_rows", counting_get_showcase_rows)
+    monkeypatch.setattr(
+        showcase_router,
+        "_DEFAULT_GET_SHOWCASE_ROWS",
+        counting_get_showcase_rows,
+    )
+
+    page_1 = json.loads(
+        showcase_router.get_videos(
+            _request(),
+            page=1,
+            per_page=1,
+            sort="date",
+            order="asc",
+            paged=True,
+        ).body
+    )
+    page_2 = json.loads(
+        showcase_router.get_videos(
+            _request(),
+            page=2,
+            per_page=1,
+            sort="num",
+            order="desc",
+            paged=True,
+        ).body
+    )
+
+    assert calls == 1
+    assert [v["number"] for v in page_1["videos"]] == ["A-001"]
+    assert [v["number"] for v in page_2["videos"]] == ["A-001"]
+
+    VideoRepository(db_path).upsert(
+        Video(
+            path=to_file_uri(str(gallery_dir / "D-004.mp4")),
+            number="D-004",
+            title="Fourth",
+            release_date="2024-04-01",
+        )
+    )
+
+    refreshed = json.loads(
+        showcase_router.get_videos(
+            _request(),
+            page=1,
+            per_page=1,
+            sort="date",
+            order="desc",
+            paged=True,
+        ).body
+    )
+    assert calls == 2
+    assert refreshed["total"] == 3
+    assert [v["number"] for v in refreshed["videos"]] == ["D-004"]
+
+
+def test_serialize_video_evaluates_title_language_once_per_video(monkeypatch):
+    calls = 0
+    original_fn = showcase_router.title_needs_translation
+
+    def counting_title_needs_translation(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original_fn(*args, **kwargs)
+
+    monkeypatch.setattr(
+        showcase_router,
+        "title_needs_translation",
+        counting_title_needs_translation,
+    )
+
+    video = Video(
+        path="file:///library/A-001.mp4",
+        number="A-001",
+        title="これは日本語のタイトルです",
+        nfo_mtime=100.0,
+    )
+    serialized = showcase_router._serialize_video(video, {}, False, "zh-CN")
+
+    assert calls == 1
+    assert serialized["can_translate"] is True
+    assert serialized["needs_translate"] is True
+
+
+def test_shared_etag_helper_and_scanner_extras_delegation(tmp_path, monkeypatch):
+    from web.routers import insights as insights_router
+    from web.routers import scanner as scanner_router
+
+    assert showcase_router._etag_matches is insights_router._etag_matches
+    assert showcase_router._etag_matches('W/"abc", "def"', '"abc"') is True
+    assert showcase_router._etag_matches('"xyz"', '"abc"') is False
+
+    sub_dir = tmp_path / "Movies"
+    sub_dir.mkdir()
+    monkeypatch.setattr(
+        scanner_router,
+        "load_config",
+        lambda: {"gallery": {"directories": [], "path_mappings": {}}},
+    )
+    result = scanner_router.browse_dir(path=str(tmp_path), expand=None)
+    assert [entry["name"] for entry in result["entries"]] == ["Movies"]
+
+

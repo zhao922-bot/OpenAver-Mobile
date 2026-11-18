@@ -7,6 +7,8 @@ Insights API 路由 — 片庫分析快照端點
 
 from __future__ import annotations
 
+import threading
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
@@ -18,9 +20,11 @@ from core.database import (
     get_db_path,
     init_db,
 )
+from core.database import version_tracker
 from core.database.version_tracker import (
     compute_db_fingerprint,
     compute_etag,
+    etag_matches,
     get_showcase_revision,
 )
 from core.library_titles import (
@@ -41,11 +45,19 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 
-def _etag_matches(if_none_match: str, etag: str) -> bool:
-    """比對 `If-None-Match` 語意（同 showcase.py）。"""
-    if not if_none_match:
-        return False
-    return etag in [tag.strip().removeprefix("W/") for tag in if_none_match.split(",")]
+_etag_matches = etag_matches
+_DEFAULT_VIDEO_REPOSITORY = VideoRepository
+_DEFAULT_GET_INSIGHTS_ROWS = VideoRepository.get_insights_rows
+
+_insights_snapshot_cache_lock = threading.Lock()
+_insights_snapshot_cache: tuple[tuple, dict] | None = None
+
+
+def _clear_insights_snapshot_cache() -> None:
+    """Clear cached insights snapshot payload (tests/maintenance)."""
+    global _insights_snapshot_cache
+    with _insights_snapshot_cache_lock:
+        _insights_snapshot_cache = None
 
 
 def _build_alias_lookup(records) -> dict[str, tuple[str, list[str]]]:
@@ -167,6 +179,7 @@ def _serialize_record(v, actress_lookup, tag_lookup) -> dict:
 @router.get("/snapshot")
 def get_insights_snapshot(request: Request):
     """取得片庫分析快照（聚合在瀏覽器；本端點只出匿名最小欄位，CD-156-1）。"""
+    global _insights_snapshot_cache
     try:
         db_path = get_db_path()
 
@@ -200,8 +213,35 @@ def get_insights_snapshot(request: Request):
                 headers={"ETag": etag, "Cache-Control": "no-cache"},
             )
 
+        can_cache = (
+            VideoRepository is _DEFAULT_VIDEO_REPOSITORY
+            and VideoRepository.get_insights_rows is _DEFAULT_GET_INSIGHTS_ROWS
+        )
+        cache_key = None
+        if can_cache:
+            cache_key = (
+                etag,
+                str(db_path),
+                version_tracker.get_showcase_revision(),
+                version_tracker.compute_db_fingerprint(db_path),
+            )
+            with _insights_snapshot_cache_lock:
+                if (
+                    _insights_snapshot_cache is not None
+                    and _insights_snapshot_cache[0] == cache_key
+                ):
+                    resp = JSONResponse(_insights_snapshot_cache[1])
+                    resp.headers["ETag"] = etag
+                    resp.headers["Cache-Control"] = "no-cache"
+                    return resp
+
         repo = VideoRepository(db_path)
-        all_videos = rows_in_library_dirs(repo.get_all(), configured_dir_uris)
+        raw_rows = (
+            repo.get_insights_rows(configured_dir_uris)
+            if hasattr(repo, "get_insights_rows")
+            else repo.get_all()
+        )
+        all_videos = rows_in_library_dirs(raw_rows, configured_dir_uris)
         firsts = first_members(all_videos, path_mappings)
 
         actress_lookup = _build_alias_lookup(AliasRepository(db_path).get_all())
@@ -221,14 +261,6 @@ def get_insights_snapshot(request: Request):
                 primary = a.name
             if primary in favorites_by_primary:            # 同組已有更早（字母序更前）的收藏命中，跳過
                 continue
-            # first-wins：依標準排序（ORDER BY name）取同組第一個收藏，不論有無生日
-            # ——比照燈箱 resolveFavoriteActressAge：actresses.find() 只挑第一個，
-            # 沒生日就是不顯示年齡，不會退而求其次改選同組後面那個有生日的。
-            # hasPhoto：收藏存在不代表本機有照片檔（來源沒圖／下載失敗時 add_favorite
-            # 仍會先 repo.save 落地收藏，見 web/routers/actress.py 的 favorite 流程）；
-            # 沿用 _actress_to_response 同一支 get_local_photo_path 判斷式（單一真理來源），
-            # 不自己拼路徑。每次照片變動的端點都伴隨一次 repo.save（bump revision），
-            # 故此欄位不會讓 ETag 對不上實際檔案狀態。
             favorites_by_primary[primary] = {
                 "birth": a.birth or None,
                 "photoName": a.name,
@@ -237,14 +269,19 @@ def get_insights_snapshot(request: Request):
                 "crop_mode": a.crop_mode,
             }
 
-        resp = JSONResponse({
+        payload = {
             "success": True,
             "logicalTitles": len(records),
             "physicalRows": len(all_videos),
             "years": years,
             "records": records,
             "actressFavorites": favorites_by_primary,
-        })
+        }
+        if can_cache and cache_key is not None:
+            with _insights_snapshot_cache_lock:
+                _insights_snapshot_cache = (cache_key, payload)
+
+        resp = JSONResponse(payload)
         resp.headers["ETag"] = etag
         resp.headers["Cache-Control"] = "no-cache"
         return resp
