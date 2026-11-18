@@ -106,6 +106,7 @@ class ActressProfile {
   factory ActressProfile.fromJson(Map<String, dynamic> json, {int fallbackVideoCount = 0}) {
     final rawAliases = (json['aliases'] as List?) ?? const [];
     final rawName = ((json['name'] ?? json['primary_name']) as String?) ?? '';
+    final rawVideoCount = (json['video_count'] as num?)?.toInt();
     return ActressProfile(
       name: rawName,
       aliases: rawAliases.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList(),
@@ -123,7 +124,9 @@ class ActressProfile {
       autoFocal: (json['auto_focal'] as String?) ?? '',
       cropMode: (json['crop_mode'] as String?) ?? 'auto',
       isFavorite: json['is_favorite'] == true || json.containsKey('photo_source'),
-      videoCount: (json['video_count'] as num?)?.toInt() ?? fallbackVideoCount,
+      videoCount: (rawVideoCount != null && rawVideoCount > 0)
+          ? rawVideoCount
+          : fallbackVideoCount,
     );
   }
 }

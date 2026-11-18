@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/app_providers.dart';
 import '../../core/app_theme.dart';
+import '../../core/l10n.dart';
 import '../../core/models/video_item.dart';
 import '../../core/native_bridge.dart';
 import '../player/builtin_player_page.dart';
@@ -172,7 +173,6 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
   late final TextEditingController _titleCtrl;
 
   bool _fetchingSamples = false;
-  bool _detectingFocal = false;
   bool _autoTagging = false;
 
   List<Map<String, dynamic>> _similar = const [];
@@ -525,34 +525,22 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
     }
   }
 
-  Future<void> _detectAndSaveFocal() async {
+  Future<void> _openFocalEditor() async {
     final strings = ref.read(stringsProvider);
     final api = ref.read(apiClientProvider);
-    setState(() => _detectingFocal = true);
-    try {
-      final resp = await api.postJson('/api/showcase/video/detect-focal', data: {
-        'file_path': widget.video.path,
-      });
-      if (!mounted) return;
-      final focal = (resp['auto_focal'] as String?) ?? '';
-      if (resp['success'] == true && focal.isNotEmpty) {
-        final save = await api.postJson('/api/showcase/video/save-focal', data: {
-          'file_path': widget.video.path,
-          'focal': focal,
-        });
-        if (!mounted) return;
-        if (save['success'] == true) {
-          widget.onUpdated(widget.video.copyWith(autoFocal: focal, cropMode: 'manual'));
-          _showToast(strings.focalUpdated);
-        }
-      } else {
-        _showToast(strings.focalNoFace);
-      }
-    } catch (e) {
-      debugPrint('detectFocal error: $e');
-      _showToast(strings.requestFailed('$e'));
-    } finally {
-      if (mounted) setState(() => _detectingFocal = false);
+    final savedFocal = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _FocalCropSheet(
+        api: api,
+        strings: strings,
+        video: widget.video,
+      ),
+    );
+    if (savedFocal != null && savedFocal.isNotEmpty && mounted) {
+      widget.onUpdated(widget.video.copyWith(autoFocal: savedFocal, cropMode: 'manual'));
+      _showToast(strings.focalSavedMsg);
     }
   }
 
@@ -1072,11 +1060,9 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
               onPressed: _openRescrapeDialog,
             ),
             ActionChip(
-              avatar: _detectingFocal
-                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.center_focus_strong_outlined, size: 16),
+              avatar: const Icon(Icons.crop_rounded, size: 16),
               label: Text(strings.detectFocal),
-              onPressed: _detectingFocal ? null : _detectAndSaveFocal,
+              onPressed: _openFocalEditor,
             ),
             ActionChip(
               avatar: _autoTagging
@@ -1501,6 +1487,331 @@ class _MetaPill extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 2),
         child: child,
+      ),
+    );
+  }
+}
+
+class _FocalCropSheet extends StatefulWidget {
+  const _FocalCropSheet({
+    required this.api,
+    required this.strings,
+    required this.video,
+  });
+
+  final ApiClient api;
+  final AppStrings strings;
+  final VideoItem video;
+
+  @override
+  State<_FocalCropSheet> createState() => _FocalCropSheetState();
+}
+
+class _FocalCropSheetState extends State<_FocalCropSheet> {
+  static const double _cropRatio = 0.71;
+
+  late double _x;
+  late double _y;
+  String? _expectedCoverPath;
+  bool _detecting = false;
+  bool _saving = false;
+  String? _statusText;
+  bool _statusIsError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initInitialFocal();
+    _runFaceDetect(silentIfEmpty: true);
+  }
+
+  void _initInitialFocal() {
+    final v = widget.video;
+    if (v.cropMode != 'default' && v.autoFocal.isNotEmpty) {
+      final parts = v.autoFocal.split(',');
+      if (parts.length == 2) {
+        final px = double.tryParse(parts[0].trim());
+        final py = double.tryParse(parts[1].trim());
+        if (px != null && py != null) {
+          _x = px.clamp(0.0, 1.0);
+          _y = py.clamp(0.0, 1.0);
+          return;
+        }
+      }
+    }
+    _x = 1.0;
+    _y = 0.5;
+  }
+
+  Future<void> _runFaceDetect({required bool silentIfEmpty}) async {
+    setState(() {
+      _detecting = true;
+      if (!silentIfEmpty) {
+        _statusText = null;
+        _statusIsError = false;
+      }
+    });
+    try {
+      final resp = await widget.api.postJson(
+        '/api/showcase/video/detect-focal',
+        data: {'path': widget.video.path},
+      );
+      if (!mounted) return;
+      final coverPath = resp['cover_path'] as String?;
+      if (coverPath != null) {
+        _expectedCoverPath = coverPath;
+      }
+      final focal = (resp['auto_focal'] as String?) ?? '';
+      final reason = (resp['reason'] as String?) ?? '';
+      if (resp['success'] == true && focal.isNotEmpty) {
+        final parts = focal.split(',');
+        if (parts.length == 2) {
+          final px = double.tryParse(parts[0].trim());
+          final py = double.tryParse(parts[1].trim());
+          if (px != null && py != null) {
+            final shouldApply = !silentIfEmpty || widget.video.autoFocal.isEmpty;
+            setState(() {
+              if (shouldApply) {
+                _x = px.clamp(0.0, 1.0);
+                _y = py.clamp(0.0, 1.0);
+              }
+              if (!silentIfEmpty) {
+                _statusText = widget.strings.focalUpdated;
+                _statusIsError = false;
+              }
+            });
+            return;
+          }
+        }
+      }
+      if (!silentIfEmpty) {
+        String msg = widget.strings.focalNoFace;
+        if (reason == 'device_disabled' || reason == 'too_slow_auto_disabled') {
+          msg = widget.strings.focalDisabledHint;
+        } else if (reason == 'still_detecting') {
+          msg = widget.strings.focalStillDetectingHint;
+        }
+        setState(() {
+          _statusText = msg;
+          _statusIsError = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('focal detect error: $e');
+      if (mounted && !silentIfEmpty) {
+        setState(() {
+          _statusText = widget.strings.requestFailed('$e');
+          _statusIsError = true;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _detecting = false);
+    }
+  }
+
+  Future<void> _saveFocal() async {
+    setState(() {
+      _saving = true;
+      _statusText = null;
+      _statusIsError = false;
+    });
+    try {
+      final focalStr = '${_x.toStringAsFixed(4)},${_y.toStringAsFixed(4)}';
+      final resp = await widget.api.postJson(
+        '/api/showcase/video/save-focal',
+        data: {
+          'path': widget.video.path,
+          'focal': focalStr,
+          'expected_cover_path': _expectedCoverPath ?? '',
+        },
+      );
+      if (!mounted) return;
+      if (resp['success'] == true) {
+        Navigator.of(context).pop((resp['auto_focal'] as String?) ?? focalStr);
+      } else {
+        setState(() {
+          _saving = false;
+          _statusText = (resp['error'] ?? widget.strings.saveFailed).toString();
+          _statusIsError = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('focal save error: $e');
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _statusText = widget.strings.requestFailed('$e');
+          _statusIsError = true;
+        });
+      }
+    }
+  }
+
+  void _updateFromLocalPosition(Offset pos, Size boxSize) {
+    if (boxSize.width <= 0 || boxSize.height <= 0) return;
+    setState(() {
+      _x = (pos.dx / boxSize.width).clamp(0.0, 1.0);
+      _y = (pos.dy / boxSize.height).clamp(0.0, 1.0);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = OpenAverPalette.of(context);
+    final coverUrl = widget.video.coverFullUrl.isNotEmpty
+        ? widget.video.coverFullUrl
+        : widget.video.coverUrl;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        14,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.strings.focalCropTitle,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          Text(
+            widget.strings.focalDragHint,
+            style: TextStyle(fontSize: 12, color: palette.textMuted),
+          ),
+          const SizedBox(height: 10),
+          AspectRatio(
+            aspectRatio: 1.48,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LayoutBuilder(
+                builder: (_, constraints) {
+                  final boxW = constraints.maxWidth;
+                  final boxH = constraints.maxHeight;
+                  final winW = (boxH * _cropRatio).clamp(24.0, boxW);
+                  final left = ((boxW - winW) * _x).clamp(0.0, boxW - winW);
+
+                  return GestureDetector(
+                    onTapDown: (d) => _updateFromLocalPosition(d.localPosition, Size(boxW, boxH)),
+                    onPanUpdate: (d) => _updateFromLocalPosition(d.localPosition, Size(boxW, boxH)),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        OpenAverNetworkImage(
+                          api: widget.api,
+                          url: coverUrl,
+                          fit: BoxFit.cover,
+                          errorIcon: Icons.movie_outlined,
+                        ),
+                        // Dim regions outside the 0.71 portrait crop window
+                        if (left > 0)
+                          Positioned(
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: left,
+                            child: const ColoredBox(color: Color(0x88000000)),
+                          ),
+                        if (left + winW < boxW)
+                          Positioned(
+                            left: left + winW,
+                            top: 0,
+                            bottom: 0,
+                            right: 0,
+                            child: const ColoredBox(color: Color(0x88000000)),
+                          ),
+                        Positioned(
+                          left: left,
+                          top: 0,
+                          bottom: 0,
+                          width: winW,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: palette.accent, width: 2),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                'X: ${(_x * 100).round()}%',
+                style: TextStyle(fontSize: 12, color: palette.textSecondary),
+              ),
+              Expanded(
+                child: Slider(
+                  value: _x,
+                  min: 0.0,
+                  max: 1.0,
+                  onChanged: (v) => setState(() => _x = v),
+                ),
+              ),
+            ],
+          ),
+          if (_statusText != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                _statusText!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _statusIsError ? palette.danger : palette.textSecondary,
+                ),
+              ),
+            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
+            children: [
+              OutlinedButton.icon(
+                onPressed: (_detecting || _saving) ? null : () => _runFaceDetect(silentIfEmpty: false),
+                icon: _detecting
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.face_retouching_natural_outlined, size: 17),
+                label: Text(widget.strings.focalDetectLocalBtn),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: (_detecting || _saving)
+                        ? null
+                        : () => setState(() {
+                              _x = 1.0;
+                              _y = 0.5;
+                            }),
+                    child: Text(widget.strings.focalResetBtn),
+                  ),
+                  const SizedBox(width: 6),
+                  FilledButton(
+                    onPressed: (_detecting || _saving) ? null : _saveFocal,
+                    child: Text(_saving ? widget.strings.saving : widget.strings.focalSaveBtn),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

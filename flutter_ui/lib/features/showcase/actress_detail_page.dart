@@ -123,7 +123,6 @@ class _ActressDetailBodyState extends ConsumerState<_ActressDetailBody> {
   late ActressProfile _profile;
   bool _loadingDetail = false;
   bool _togglingFavorite = false;
-  bool _detectingFocal = false;
 
   @override
   void initState() {
@@ -282,45 +281,6 @@ class _ActressDetailBodyState extends ConsumerState<_ActressDetailBody> {
     }
   }
 
-  Future<void> _detectAndSaveFocal() async {
-    final strings = ref.read(stringsProvider);
-    final api = ref.read(apiClientProvider);
-    if (!_profile.isFavorite) {
-      final added = await _favoriteActress();
-      if (!added || !mounted) return;
-    }
-    setState(() => _detectingFocal = true);
-    try {
-      final det = await api.postJson(
-        '/api/actresses/${Uri.encodeComponent(_profile.name)}/detect-focal',
-      );
-      if (!mounted) return;
-      final focal = (det['auto_focal'] as String?) ?? '';
-      if (focal.isEmpty) {
-        _toast(strings.focalNoFace);
-        return;
-      }
-      final save = await api.postJson(
-        '/api/actresses/${Uri.encodeComponent(_profile.name)}/focal',
-        data: {'focal': focal},
-      );
-      if (!mounted) return;
-      if (save['success'] == true) {
-        final updated = _profile.copyWith(autoFocal: focal, cropMode: 'manual');
-        setState(() => _profile = updated);
-        widget.onUpdated(updated);
-        _toast(strings.focalUpdated);
-      } else {
-        _toast((save['error'] ?? strings.saveFailed).toString());
-      }
-    } catch (e) {
-      debugPrint('detect actress focal error: $e');
-      _toast(strings.requestFailed('$e'));
-    } finally {
-      if (mounted) setState(() => _detectingFocal = false);
-    }
-  }
-
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -451,17 +411,6 @@ class _ActressDetailBodyState extends ConsumerState<_ActressDetailBody> {
               ),
             ),
           ],
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: ActionChip(
-            avatar: _detectingFocal
-                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.center_focus_strong_outlined, size: 16),
-            label: Text(strings.detectFocal),
-            onPressed: _detectingFocal ? null : _detectAndSaveFocal,
-          ),
         ),
         if (_loadingDetail)
           const Padding(

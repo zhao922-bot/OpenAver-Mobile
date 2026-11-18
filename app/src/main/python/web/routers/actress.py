@@ -1914,10 +1914,19 @@ def get_actress(name: str):
             content={"error": "not_found"}
         )
 
+    alias_repo = AliasRepository()
+    video_count = _count_logical_actress_videos(
+        alias_repo.resolve(actress.name)
+    )
+    recent_score = _safe_recent_score(actress.name, repo, alias_repo)
     return JSONResponse(
         status_code=200,
         content={
-            "actress": _actress_to_response(actress),
+            "actress": _actress_to_response(
+                actress,
+                video_count,
+                recent_score=recent_score,
+            ),
             "is_favorite": True,
         }
     )

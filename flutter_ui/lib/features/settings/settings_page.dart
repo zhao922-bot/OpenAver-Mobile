@@ -28,7 +28,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _storageGranted = true;
   bool _probingSources = false;
   Map<String, String> _probeResults = const {};
+  int _presetRev = 0;
+
   bool _testingAi = false;
+  bool _fetchingTranslateModels = false;
+  List<String> _translateModels = const [];
+  String? _translateStatus;
+  bool _translateStatusOk = true;
+
+  bool _testingSimilar = false;
+  String? _similarStatus;
+  bool _similarStatusOk = true;
+
+  bool _testingFaces = false;
+  bool _fetchingFacesModels = false;
+  List<String> _facesModels = const [];
+  String? _facesStatus;
+  bool _facesStatusOk = true;
+
+  bool _testingTags = false;
+  bool _fetchingTagsModels = false;
+  List<String> _tagsModels = const [];
+  String? _tagsStatus;
+  bool _tagsStatusOk = true;
 
   @override
   void initState() {
@@ -189,12 +211,88 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
+  List<String> _extractModelNames(dynamic raw) {
+    if (raw is! List) return const [];
+    final out = <String>[];
+    for (final item in raw) {
+      if (item is String && item.trim().isNotEmpty) {
+        out.add(item.trim());
+      } else if (item is Map && item['name'] != null) {
+        final name = item['name'].toString().trim();
+        if (name.isNotEmpty) out.add(name);
+      }
+    }
+    return out;
+  }
+
+  Future<void> _fetchTranslateModels(String provider) async {
+    final strings = ref.read(stringsProvider);
+    final api = ref.read(apiClientProvider);
+    final sub = _nestedSection(_section('translate'), provider);
+    setState(() {
+      _fetchingTranslateModels = true;
+      _translateStatus = null;
+    });
+    try {
+      final endpoint = switch (provider) {
+        'ollama' => '/api/ollama/models',
+        'gemini' => '/api/gemini/test',
+        'claude' => '/api/claude/models',
+        'openai_official' => '/api/openai/official/models',
+        _ => '/api/openai/models',
+      };
+      final payload = switch (provider) {
+        'ollama' => {
+          'url': (sub['url'] ?? '').toString().trim(),
+          'api_key': (sub['api_key'] ?? '').toString(),
+        },
+        _ => {
+          'base_url': (sub['base_url'] ?? '').toString().trim(),
+          'api_key': (sub['api_key'] ?? '').toString(),
+        },
+      };
+      final resp = await api.postJson(endpoint, data: payload);
+      if (!mounted) return;
+      final models = _extractModelNames(resp['models']);
+      if (resp['success'] == true && models.isNotEmpty) {
+        setState(() {
+          _translateModels = models;
+          if ((sub['model'] ?? '').toString().trim().isEmpty) {
+            sub['model'] = (resp['default_model'] ?? models.first).toString();
+            _presetRev++;
+            _dirty = true;
+          }
+          _translateStatus = strings.modelsLoadedCount(models.length);
+          _translateStatusOk = true;
+        });
+      } else {
+        setState(() {
+          _translateStatus = (resp['error'] ?? resp['message'] ?? strings.modelsFetchFailed).toString();
+          _translateStatusOk = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('fetchTranslateModels error: $e');
+      if (mounted) {
+        setState(() {
+          _translateStatus = strings.requestFailed('$e');
+          _translateStatusOk = false;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _fetchingTranslateModels = false);
+    }
+  }
+
   Future<void> _testTranslateConnection(String provider) async {
     final strings = ref.read(stringsProvider);
     final api = ref.read(apiClientProvider);
     final tCfg = _section('translate');
     final sub = _nestedSection(tCfg, provider);
-    setState(() => _testingAi = true);
+    setState(() {
+      _testingAi = true;
+      _translateStatus = null;
+    });
     try {
       final endpoint = switch (provider) {
         'ollama' => '/api/ollama/test',
@@ -206,15 +304,273 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final resp = await api.postJson(endpoint, data: sub);
       if (!mounted) return;
       if (resp['success'] == true || resp['ok'] == true) {
-        _toast(strings.saved);
+        final preview = (resp['translation'] ?? resp['result'] ?? '').toString().trim();
+        final msg = preview.isNotEmpty ? '${strings.connectSuccess}: $preview' : strings.connectSuccess;
+        setState(() {
+          _translateStatus = msg;
+          _translateStatusOk = true;
+        });
+        _toast(msg);
       } else {
-        _toast((resp['error'] ?? resp['message'] ?? strings.taskFailed).toString());
+        final msg = (resp['error'] ?? resp['message'] ?? strings.connectFailed).toString();
+        setState(() {
+          _translateStatus = msg;
+          _translateStatusOk = false;
+        });
+        _toast(msg);
       }
     } catch (e) {
       debugPrint('testTranslateConnection error: $e');
+      if (mounted) {
+        setState(() {
+          _translateStatus = strings.requestFailed('$e');
+          _translateStatusOk = false;
+        });
+      }
       _toast(strings.requestFailed('$e'));
     } finally {
       if (mounted) setState(() => _testingAi = false);
+    }
+  }
+
+  Future<void> _testSimilarConnection(Map<String, dynamic> aiSimilar) async {
+    final strings = ref.read(stringsProvider);
+    setState(() {
+      _testingSimilar = true;
+      _similarStatus = null;
+    });
+    try {
+      final resp = await ref.read(apiClientProvider).postJson(
+        '/api/ai/similar/test',
+        data: {
+          'provider': (aiSimilar['provider'] ?? 'endpoint').toString(),
+          'url': (aiSimilar['url'] ?? '').toString().trim(),
+          'api_key': (aiSimilar['api_key'] ?? '').toString(),
+          'model': (aiSimilar['model'] ?? '').toString().trim(),
+        },
+      );
+      if (!mounted) return;
+      if (resp['ok'] == true) {
+        final model = (resp['model'] ?? '').toString();
+        final dim = resp['dim'];
+        final detail = [
+          strings.connectSuccess,
+          if (model.isNotEmpty) model,
+          if (dim != null) 'dim=$dim',
+        ].join(' · ');
+        setState(() {
+          _similarStatus = detail;
+          _similarStatusOk = true;
+        });
+      } else {
+        final err = [
+          resp['kind']?.toString(),
+          resp['check']?.toString(),
+        ].where((s) => s != null && s.isNotEmpty).join(': ');
+        setState(() {
+          _similarStatus = err.isNotEmpty ? '${strings.connectFailed} ($err)' : strings.connectFailed;
+          _similarStatusOk = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('testSimilarConnection error: $e');
+      if (mounted) {
+        setState(() {
+          _similarStatus = strings.requestFailed('$e');
+          _similarStatusOk = false;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _testingSimilar = false);
+    }
+  }
+
+  Future<void> _fetchFacesModels(Map<String, dynamic> aiFaces) async {
+    final strings = ref.read(stringsProvider);
+    setState(() {
+      _fetchingFacesModels = true;
+      _facesStatus = null;
+    });
+    try {
+      final resp = await ref.read(apiClientProvider).postJson(
+        '/api/ai/faces/models',
+        data: {
+          'provider': (aiFaces['provider'] ?? 'openai').toString(),
+          'url': (aiFaces['url'] ?? '').toString().trim(),
+          'api_key': (aiFaces['api_key'] ?? '').toString(),
+          'model': (aiFaces['model'] ?? '').toString().trim(),
+        },
+      );
+      if (!mounted) return;
+      final models = _extractModelNames(resp['models']);
+      if (resp['success'] == true && models.isNotEmpty) {
+        setState(() {
+          _facesModels = models;
+          if ((aiFaces['model'] ?? '').toString().trim().isEmpty) {
+            aiFaces['model'] = models.first;
+            _presetRev++;
+            _dirty = true;
+          }
+          _facesStatus = strings.modelsLoadedCount(models.length);
+          _facesStatusOk = true;
+        });
+      } else {
+        setState(() {
+          _facesStatus = strings.modelsFetchFailed;
+          _facesStatusOk = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('fetchFacesModels error: $e');
+      if (mounted) {
+        setState(() {
+          _facesStatus = strings.requestFailed('$e');
+          _facesStatusOk = false;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _fetchingFacesModels = false);
+    }
+  }
+
+  Future<void> _testFacesConnection(Map<String, dynamic> aiFaces) async {
+    final strings = ref.read(stringsProvider);
+    setState(() {
+      _testingFaces = true;
+      _facesStatus = null;
+    });
+    try {
+      final resp = await ref.read(apiClientProvider).postJson(
+        '/api/ai/faces/test',
+        data: {
+          'provider': (aiFaces['provider'] ?? 'endpoint').toString(),
+          'url': (aiFaces['url'] ?? '').toString().trim(),
+          'api_key': (aiFaces['api_key'] ?? '').toString(),
+          'model': (aiFaces['model'] ?? '').toString().trim(),
+        },
+      );
+      if (!mounted) return;
+      if (resp['ok'] == true) {
+        final model = (resp['model'] ?? '').toString();
+        final boxes = (resp['boxes'] as List?)?.length ?? 0;
+        setState(() {
+          _facesStatus = '${strings.connectSuccess}${model.isNotEmpty ? ' · $model' : ''} (boxes=$boxes)';
+          _facesStatusOk = true;
+        });
+      } else {
+        final err = [
+          resp['kind']?.toString(),
+          resp['check']?.toString(),
+        ].where((s) => s != null && s.isNotEmpty).join(': ');
+        setState(() {
+          _facesStatus = err.isNotEmpty ? '${strings.connectFailed} ($err)' : strings.connectFailed;
+          _facesStatusOk = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('testFacesConnection error: $e');
+      if (mounted) {
+        setState(() {
+          _facesStatus = strings.requestFailed('$e');
+          _facesStatusOk = false;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _testingFaces = false);
+    }
+  }
+
+  Future<void> _fetchTagsModels(Map<String, dynamic> aiTags) async {
+    final strings = ref.read(stringsProvider);
+    setState(() {
+      _fetchingTagsModels = true;
+      _tagsStatus = null;
+    });
+    try {
+      final resp = await ref.read(apiClientProvider).postJson(
+        '/api/ai/tags/models',
+        data: {
+          'provider': (aiTags['provider'] ?? '').toString(),
+          'base_url': (aiTags['base_url'] ?? '').toString().trim(),
+          'api_key': (aiTags['api_key'] ?? '').toString(),
+          'model': (aiTags['model'] ?? '').toString().trim(),
+        },
+      );
+      if (!mounted) return;
+      final models = _extractModelNames(resp['models']);
+      if (resp['success'] == true && models.isNotEmpty) {
+        setState(() {
+          _tagsModels = models;
+          if ((aiTags['model'] ?? '').toString().trim().isEmpty) {
+            aiTags['model'] = models.first;
+            _presetRev++;
+            _dirty = true;
+          }
+          _tagsStatus = strings.modelsLoadedCount(models.length);
+          _tagsStatusOk = true;
+        });
+      } else {
+        setState(() {
+          _tagsStatus = (resp['error'] ?? strings.modelsFetchFailed).toString();
+          _tagsStatusOk = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('fetchTagsModels error: $e');
+      if (mounted) {
+        setState(() {
+          _tagsStatus = strings.requestFailed('$e');
+          _tagsStatusOk = false;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _fetchingTagsModels = false);
+    }
+  }
+
+  Future<void> _testTagsConnection(Map<String, dynamic> aiTags) async {
+    final strings = ref.read(stringsProvider);
+    setState(() {
+      _testingTags = true;
+      _tagsStatus = null;
+    });
+    try {
+      final resp = await ref.read(apiClientProvider).postJson(
+        '/api/ai/tags/test',
+        data: {
+          'provider': (aiTags['provider'] ?? '').toString(),
+          'base_url': (aiTags['base_url'] ?? '').toString().trim(),
+          'api_key': (aiTags['api_key'] ?? '').toString(),
+          'model': (aiTags['model'] ?? '').toString().trim(),
+        },
+      );
+      if (!mounted) return;
+      if (resp['ok'] == true) {
+        final tags = (resp['tags'] as List?)?.map((e) => e.toString()).join(', ') ?? '';
+        setState(() {
+          _tagsStatus = tags.isNotEmpty ? '${strings.connectSuccess}: $tags' : strings.connectSuccess;
+          _tagsStatusOk = true;
+        });
+      } else {
+        final err = [
+          resp['outcome']?.toString(),
+          resp['detail']?.toString(),
+        ].where((s) => s != null && s.isNotEmpty).join(': ');
+        setState(() {
+          _tagsStatus = err.isNotEmpty ? '${strings.connectFailed} ($err)' : strings.connectFailed;
+          _tagsStatusOk = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('testTagsConnection error: $e');
+      if (mounted) {
+        setState(() {
+          _tagsStatus = strings.requestFailed('$e');
+          _tagsStatusOk = false;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _testingTags = false);
     }
   }
 
@@ -1011,29 +1367,56 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 DropdownMenuItem(value: 'claude', child: Text('Anthropic Claude')),
                               ],
                               onChanged: (v) {
-                                if (v != null) _markDirty(() => translateCfg['provider'] = v);
+                                if (v != null) {
+                                  _markDirty(() {
+                                    translateCfg['provider'] = v;
+                                    _translateModels = const [];
+                                    _translateStatus = null;
+                                  });
+                                }
                               },
                             ),
+                            if (translateProvider == 'openai') ...[
+                              const SizedBox(height: 8),
+                              _AiPresetChips(
+                                label: strings.presetsLabel,
+                                palette: palette,
+                                presets: const [
+                                  ('DeepSeek', 'https://api.deepseek.com/v1', 'deepseek-chat'),
+                                  ('Qwen', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'qwen-plus'),
+                                  ('OpenRouter', 'https://openrouter.ai/api/v1', 'google/gemini-2.5-flash'),
+                                  ('SiliconFlow', 'https://api.siliconflow.cn/v1', 'deepseek-ai/DeepSeek-V3'),
+                                ],
+                                onSelect: (url, model) => _markDirty(() {
+                                  translateProviderCfg['base_url'] = url;
+                                  if (model.isNotEmpty) translateProviderCfg['model'] = model;
+                                  _translateModels = const [];
+                                  _translateStatus = null;
+                                  _presetRev++;
+                                }),
+                              ),
+                            ],
                             const SizedBox(height: 8),
                             if (translateProviderCfg.containsKey('url') || translateProvider == 'ollama')
                               TextFormField(
-                                key: ValueKey('tr_url_$translateProvider'),
+                                key: ValueKey('tr_url_${translateProvider}_$_presetRev'),
                                 initialValue: (translateProviderCfg['url'] ?? '').toString(),
                                 decoration: const InputDecoration(labelText: 'Endpoint URL'),
                                 onChanged: (v) => _markDirty(() => translateProviderCfg['url'] = v.trim()),
                               )
                             else
                               TextFormField(
-                                key: ValueKey('tr_base_$translateProvider'),
+                                key: ValueKey('tr_base_${translateProvider}_$_presetRev'),
                                 initialValue: (translateProviderCfg['base_url'] ?? '').toString(),
                                 decoration: const InputDecoration(labelText: 'Base URL'),
                                 onChanged: (v) => _markDirty(() => translateProviderCfg['base_url'] = v.trim()),
                               ),
                             const SizedBox(height: 8),
                             TextFormField(
-                              key: ValueKey('tr_key_$translateProvider'),
+                              key: ValueKey('tr_key_${translateProvider}_$_presetRev'),
                               initialValue: (translateProviderCfg['api_key'] ?? '').toString(),
                               decoration: const InputDecoration(labelText: 'API Key'),
+                              obscureText: true,
                               onChanged: (v) => _markDirty(() => translateProviderCfg['api_key'] = v.trim()),
                             ),
                             const SizedBox(height: 8),
@@ -1041,18 +1424,51 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               children: [
                                 Expanded(
                                   child: TextFormField(
-                                    key: ValueKey('tr_model_$translateProvider'),
+                                    key: ValueKey('tr_model_${translateProvider}_$_presetRev'),
                                     initialValue: (translateProviderCfg['model'] ?? '').toString(),
                                     decoration: const InputDecoration(labelText: 'Model'),
                                     onChanged: (v) => _markDirty(() => translateProviderCfg['model'] = v.trim()),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                OutlinedButton(
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: _fetchingTranslateModels
+                                      ? null
+                                      : () => _fetchTranslateModels(translateProvider),
+                                  icon: _fetchingTranslateModels
+                                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                      : const Icon(Icons.cloud_download_outlined, size: 16),
+                                  label: Text(strings.fetchModelsBtn),
+                                ),
+                                OutlinedButton.icon(
                                   onPressed: _testingAi ? null : () => _testTranslateConnection(translateProvider),
-                                  child: Text(_testingAi ? strings.requesting : strings.testConnection),
+                                  icon: _testingAi
+                                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                      : const Icon(Icons.bolt_rounded, size: 16),
+                                  label: Text(strings.testTranslateBtn),
                                 ),
                               ],
+                            ),
+                            _AiModelChips(
+                              models: _translateModels,
+                              currentModel: (translateProviderCfg['model'] ?? '').toString(),
+                              title: strings.quickModelSelectLabel,
+                              palette: palette,
+                              onSelected: (m) => _markDirty(() {
+                                translateProviderCfg['model'] = m;
+                                _presetRev++;
+                              }),
+                            ),
+                            _AiStatusBanner(
+                              message: _translateStatus,
+                              ok: _translateStatusOk,
+                              palette: palette,
                             ),
                             const Divider(height: 24),
                             SwitchListTile(
@@ -1068,10 +1484,63 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               onChanged: (v) => _markDirty(() => aiSimilar['enabled'] = v),
                             ),
                             if (aiSimilar['enabled'] == true) ...[
+                              DropdownButtonFormField<String>(
+                                initialValue: aiSimilar['provider'] == 'qwen' ? 'qwen' : 'endpoint',
+                                decoration: InputDecoration(labelText: strings.serviceTypeLabel),
+                                items: [
+                                  DropdownMenuItem(value: 'endpoint', child: Text(strings.legacyEndpointType)),
+                                  DropdownMenuItem(value: 'qwen', child: Text(strings.qwenEmbeddingType)),
+                                ],
+                                onChanged: (v) {
+                                  if (v == null) return;
+                                  _markDirty(() {
+                                    aiSimilar['provider'] = v;
+                                    if (v == 'qwen') {
+                                      aiSimilar['url'] = 'https://dashscope.aliyuncs.com';
+                                      aiSimilar['model'] = 'qwen3-vl-embedding';
+                                    } else if (aiSimilar['url'] == 'https://dashscope.aliyuncs.com') {
+                                      aiSimilar['url'] = '';
+                                      aiSimilar['model'] = '';
+                                    }
+                                    _similarStatus = null;
+                                    _presetRev++;
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 8),
                               TextFormField(
+                                key: ValueKey('sim_url_$_presetRev'),
                                 initialValue: (aiSimilar['url'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'Similarity Endpoint URL'),
+                                decoration: const InputDecoration(labelText: 'Similarity URL'),
                                 onChanged: (v) => _markDirty(() => aiSimilar['url'] = v.trim()),
+                              ),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                key: ValueKey('sim_key_$_presetRev'),
+                                initialValue: (aiSimilar['api_key'] ?? '').toString(),
+                                decoration: const InputDecoration(labelText: 'API Key'),
+                                obscureText: true,
+                                onChanged: (v) => _markDirty(() => aiSimilar['api_key'] = v.trim()),
+                              ),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                key: ValueKey('sim_model_$_presetRev'),
+                                initialValue: (aiSimilar['model'] ?? '').toString(),
+                                decoration: const InputDecoration(labelText: 'Similarity Model'),
+                                onChanged: (v) => _markDirty(() => aiSimilar['model'] = v.trim()),
+                              ),
+                              const SizedBox(height: 8),
+                              OutlinedButton.icon(
+                                onPressed: _testingSimilar ? null : () => _testSimilarConnection(aiSimilar),
+                                icon: _testingSimilar
+                                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Icon(Icons.network_check_rounded, size: 16),
+                                label: Text(strings.testConnection),
+                              ),
+                              _AiStatusBanner(
+                                message: _similarStatus,
+                                ok: _similarStatusOk,
+                                palette: palette,
                               ),
                               const SizedBox(height: 6),
                             ],
@@ -1082,10 +1551,99 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               onChanged: (v) => _markDirty(() => aiFaces['enabled'] = v),
                             ),
                             if (aiFaces['enabled'] == true) ...[
+                              DropdownButtonFormField<String>(
+                                initialValue: aiFaces['provider'] == 'openai' ? 'openai' : 'endpoint',
+                                decoration: InputDecoration(labelText: strings.serviceTypeLabel),
+                                items: [
+                                  DropdownMenuItem(value: 'endpoint', child: Text(strings.legacyEndpointType)),
+                                  DropdownMenuItem(value: 'openai', child: Text(strings.openaiVisionType)),
+                                ],
+                                onChanged: (v) {
+                                  if (v == null) return;
+                                  _markDirty(() {
+                                    aiFaces['provider'] = v;
+                                    _facesModels = const [];
+                                    _facesStatus = null;
+                                  });
+                                },
+                              ),
+                              if (aiFaces['provider'] == 'openai') ...[
+                                const SizedBox(height: 8),
+                                _AiPresetChips(
+                                  label: strings.presetsLabel,
+                                  palette: palette,
+                                  presets: const [
+                                    ('Qwen', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'qwen3-vl-plus'),
+                                    ('DeepSeek', 'https://api.deepseek.com', 'deepseek-flash'),
+                                    ('B.AI', 'https://api.b.ai/v1', ''),
+                                  ],
+                                  onSelect: (url, model) => _markDirty(() {
+                                    aiFaces['url'] = url;
+                                    aiFaces['model'] = model;
+                                    _facesModels = const [];
+                                    _facesStatus = null;
+                                    _presetRev++;
+                                  }),
+                                ),
+                              ],
+                              const SizedBox(height: 8),
                               TextFormField(
+                                key: ValueKey('faces_url_$_presetRev'),
                                 initialValue: (aiFaces['url'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'Faces Endpoint URL'),
+                                decoration: const InputDecoration(labelText: 'Faces URL'),
                                 onChanged: (v) => _markDirty(() => aiFaces['url'] = v.trim()),
+                              ),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                key: ValueKey('faces_key_$_presetRev'),
+                                initialValue: (aiFaces['api_key'] ?? '').toString(),
+                                decoration: const InputDecoration(labelText: 'API Key'),
+                                obscureText: true,
+                                onChanged: (v) => _markDirty(() => aiFaces['api_key'] = v.trim()),
+                              ),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                key: ValueKey('faces_model_$_presetRev'),
+                                initialValue: (aiFaces['model'] ?? '').toString(),
+                                decoration: const InputDecoration(labelText: 'Faces Model'),
+                                onChanged: (v) => _markDirty(() => aiFaces['model'] = v.trim()),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: [
+                                  if (aiFaces['provider'] == 'openai')
+                                    OutlinedButton.icon(
+                                      onPressed: _fetchingFacesModels ? null : () => _fetchFacesModels(aiFaces),
+                                      icon: _fetchingFacesModels
+                                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                          : const Icon(Icons.cloud_download_outlined, size: 16),
+                                      label: Text(strings.fetchModelsBtn),
+                                    ),
+                                  OutlinedButton.icon(
+                                    onPressed: _testingFaces ? null : () => _testFacesConnection(aiFaces),
+                                    icon: _testingFaces
+                                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                        : const Icon(Icons.network_check_rounded, size: 16),
+                                    label: Text(strings.testConnection),
+                                  ),
+                                ],
+                              ),
+                              _AiModelChips(
+                                models: _facesModels,
+                                currentModel: (aiFaces['model'] ?? '').toString(),
+                                title: strings.quickModelSelectLabel,
+                                palette: palette,
+                                onSelected: (m) => _markDirty(() {
+                                  aiFaces['model'] = m;
+                                  _presetRev++;
+                                }),
+                              ),
+                              _AiStatusBanner(
+                                message: _facesStatus,
+                                ok: _facesStatusOk,
+                                palette: palette,
                               ),
                               const SizedBox(height: 6),
                             ],
@@ -1093,19 +1651,129 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               contentPadding: EdgeInsets.zero,
                               title: Text(strings.aiTagsTitle),
                               value: aiTags['enabled'] == true,
-                              onChanged: (v) => _markDirty(() => aiTags['enabled'] = v),
+                              onChanged: (v) => _markDirty(() {
+                                aiTags['enabled'] = v;
+                                if (v && (aiTags['provider'] ?? '').toString().isEmpty) {
+                                  aiTags['provider'] = translateProvider;
+                                  aiTags['base_url'] = switch (translateProvider) {
+                                    'ollama' => 'http://localhost:11434',
+                                    'gemini' => 'https://generativelanguage.googleapis.com/v1beta',
+                                    'claude' => 'https://api.anthropic.com',
+                                    'openai_official' => 'https://api.openai.com/v1',
+                                    _ => '',
+                                  };
+                                  _presetRev++;
+                                }
+                              }),
                             ),
                             if (aiTags['enabled'] == true) ...[
+                              DropdownButtonFormField<String>(
+                                initialValue: const {'', 'ollama', 'gemini', 'claude', 'openai_official', 'openai'}
+                                        .contains((aiTags['provider'] ?? '').toString())
+                                    ? (aiTags['provider'] ?? '').toString()
+                                    : '',
+                                decoration: InputDecoration(labelText: strings.translateProviderTitle),
+                                items: [
+                                  DropdownMenuItem(value: '', child: Text(strings.providerPlaceholder)),
+                                  const DropdownMenuItem(value: 'ollama', child: Text('Ollama')),
+                                  const DropdownMenuItem(value: 'openai', child: Text('OpenAI Compatible')),
+                                  const DropdownMenuItem(value: 'openai_official', child: Text('OpenAI Official')),
+                                  const DropdownMenuItem(value: 'gemini', child: Text('Google Gemini')),
+                                  const DropdownMenuItem(value: 'claude', child: Text('Anthropic Claude')),
+                                ],
+                                onChanged: (v) {
+                                  if (v == null) return;
+                                  _markDirty(() {
+                                    aiTags['provider'] = v;
+                                    aiTags['base_url'] = switch (v) {
+                                      'ollama' => 'http://localhost:11434',
+                                      'gemini' => 'https://generativelanguage.googleapis.com/v1beta',
+                                      'claude' => 'https://api.anthropic.com',
+                                      'openai_official' => 'https://api.openai.com/v1',
+                                      _ => '',
+                                    };
+                                    _tagsModels = const [];
+                                    _tagsStatus = null;
+                                    _presetRev++;
+                                  });
+                                },
+                              ),
+                              if (aiTags['provider'] == 'openai') ...[
+                                const SizedBox(height: 8),
+                                _AiPresetChips(
+                                  label: strings.presetsLabel,
+                                  palette: palette,
+                                  presets: const [
+                                    ('Qwen', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'qwen-vl-plus'),
+                                    ('OpenRouter', 'https://openrouter.ai/api/v1', 'google/gemini-2.5-flash'),
+                                    ('B.AI', 'https://api.b.ai/v1', ''),
+                                  ],
+                                  onSelect: (url, model) => _markDirty(() {
+                                    aiTags['base_url'] = url;
+                                    if (model.isNotEmpty) aiTags['model'] = model;
+                                    _tagsModels = const [];
+                                    _tagsStatus = null;
+                                    _presetRev++;
+                                  }),
+                                ),
+                              ],
+                              const SizedBox(height: 8),
                               TextFormField(
+                                key: ValueKey('tags_url_$_presetRev'),
                                 initialValue: (aiTags['base_url'] ?? '').toString(),
                                 decoration: const InputDecoration(labelText: 'Tags Base URL'),
                                 onChanged: (v) => _markDirty(() => aiTags['base_url'] = v.trim()),
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 8),
                               TextFormField(
+                                key: ValueKey('tags_key_$_presetRev'),
+                                initialValue: (aiTags['api_key'] ?? '').toString(),
+                                decoration: const InputDecoration(labelText: 'API Key'),
+                                obscureText: true,
+                                onChanged: (v) => _markDirty(() => aiTags['api_key'] = v.trim()),
+                              ),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                key: ValueKey('tags_model_$_presetRev'),
                                 initialValue: (aiTags['model'] ?? '').toString(),
                                 decoration: const InputDecoration(labelText: 'Tags Model'),
                                 onChanged: (v) => _markDirty(() => aiTags['model'] = v.trim()),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: _fetchingTagsModels ? null : () => _fetchTagsModels(aiTags),
+                                    icon: _fetchingTagsModels
+                                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                        : const Icon(Icons.cloud_download_outlined, size: 16),
+                                    label: Text(strings.fetchModelsBtn),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: _testingTags ? null : () => _testTagsConnection(aiTags),
+                                    icon: _testingTags
+                                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                        : const Icon(Icons.network_check_rounded, size: 16),
+                                    label: Text(strings.testConnection),
+                                  ),
+                                ],
+                              ),
+                              _AiModelChips(
+                                models: _tagsModels,
+                                currentModel: (aiTags['model'] ?? '').toString(),
+                                title: strings.quickModelSelectLabel,
+                                palette: palette,
+                                onSelected: (m) => _markDirty(() {
+                                  aiTags['model'] = m;
+                                  _presetRev++;
+                                }),
+                              ),
+                              _AiStatusBanner(
+                                message: _tagsStatus,
+                                ok: _tagsStatusOk,
+                                palette: palette,
                               ),
                             ],
                           ],
@@ -1205,6 +1873,117 @@ class _SectionHeader extends StatelessWidget {
           fontSize: 13,
           fontWeight: FontWeight.w700,
           color: palette.textSecondary,
+        ),
+      ),
+    );
+  }
+}
+
+class _AiPresetChips extends StatelessWidget {
+  const _AiPresetChips({
+    required this.label,
+    required this.palette,
+    required this.presets,
+    required this.onSelect,
+  });
+
+  final String label;
+  final OpenAverPalette palette;
+  final List<(String, String, String)> presets;
+  final void Function(String url, String model) onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 11.5, color: palette.textMuted)),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: presets
+              .map(
+                (p) => ActionChip(
+                  label: Text(p.$1, style: const TextStyle(fontSize: 12)),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => onSelect(p.$2, p.$3),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _AiModelChips extends StatelessWidget {
+  const _AiModelChips({
+    required this.models,
+    required this.currentModel,
+    required this.title,
+    required this.palette,
+    required this.onSelected,
+  });
+
+  final List<String> models;
+  final String currentModel;
+  final String title;
+  final OpenAverPalette palette;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    if (models.isEmpty) return const SizedBox.shrink();
+    final shown = models.take(24).toList();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: TextStyle(fontSize: 11.5, color: palette.textMuted)),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: shown
+                .map(
+                  (m) => ChoiceChip(
+                    label: Text(m, style: const TextStyle(fontSize: 11.5)),
+                    selected: m == currentModel,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) => onSelected(m),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiStatusBanner extends StatelessWidget {
+  const _AiStatusBanner({
+    required this.message,
+    required this.ok,
+    required this.palette,
+  });
+
+  final String? message;
+  final bool ok;
+  final OpenAverPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    if (message == null || message!.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text(
+        message!,
+        style: TextStyle(
+          fontSize: 12,
+          color: ok ? palette.success : palette.danger,
         ),
       ),
     );

@@ -162,9 +162,41 @@ class AppStrings {
         en: 'Favorite this actress first to pick a custom cover photo. Continue?',
         ko: '사진을 변경하려면 먼저 즐겨찾기에 추가해야 합니다. 계속할까요?',
       );
-  String get detectFocal => tr(zhCn: 'AI 人脸对焦', zhTw: 'AI 人臉對焦', ja: '顔フォーカス検出', en: 'Auto Focus', ko: 'AI 얼굴 초점');
+  String get detectFocal => tr(
+        zhCn: '人脸 / 裁切对焦',
+        zhTw: '人臉 / 裁切對焦',
+        ja: '顔・トリミング',
+        en: 'Face / Crop Focus',
+        ko: '얼굴 / 크롭 초점',
+      );
   String get focalUpdated => tr(zhCn: '对焦位置已更新', zhTw: '對焦位置已更新', ja: 'フォーカスを更新しました', en: 'Focus updated', ko: '초점 업데이트됨');
   String get focalNoFace => tr(zhCn: '未检测到人脸，保留默认构图', zhTw: '未偵測到人臉，保留預設構圖', ja: '顔が検出されませんでした', en: 'No face detected', ko: '얼굴이 감지되지 않음');
+  String get focalCropTitle => tr(zhCn: '封面裁剪对焦', zhTw: '封面裁剪對焦', ja: 'カバーフォーカス調整', en: 'Cover Focal Crop', ko: '커버 초점 크롭');
+  String get focalDetectLocalBtn => tr(zhCn: '检测人脸位置', zhTw: '偵測人臉位置', ja: '顔位置を検出', en: 'Detect Face', ko: '얼굴 위치 감지');
+  String get focalResetBtn => tr(zhCn: '默认右裁', zhTw: '預設右裁', ja: 'デフォルト', en: 'Reset Default', ko: '기본값');
+  String get focalSaveBtn => tr(zhCn: '保存焦点', zhTw: '儲存焦點', ja: '保存', en: 'Save Focus', ko: '초점 저장');
+  String get focalDragHint => tr(
+        zhCn: '在封面上拖动选框或滑块手动微调，也可点“检测人脸位置”自动定位（本地 Python 检测 / 远端 AI）。',
+        zhTw: '在封面上拖動選框或滑塊手動微調，也可點「偵測人臉位置」自動定位（本機 Python 偵測 / 遠端 AI）。',
+        ja: 'カバー上で枠をドラッグするか「顔位置を検出」で自動位置合わせできます。',
+        en: 'Drag the frame on the cover or run Detect Face (local Python or configured AI).',
+        ko: '커버에서 프레임을 드래그하거나 얼굴 감지로 자동 위치를 잡으세요.',
+      );
+  String get focalSavedMsg => tr(zhCn: '封面焦点已保存', zhTw: '封面焦點已儲存', ja: 'カバーフォーカスを保存しました', en: 'Cover focus saved', ko: '커버 초점 저장됨');
+  String get focalDisabledHint => tr(
+        zhCn: '自动人脸检测已在设置中禁用，请手动拖动调整位置。',
+        zhTw: '自動人臉偵測已在設定中停用，請手動拖動調整位置。',
+        ja: '自動顔検出は無効になっています。手動で調整してください。',
+        en: 'Auto face detection is disabled in Settings; adjust manually.',
+        ko: '자동 얼굴 감지가 비활성화되어 있습니다. 수동으로 조정하세요.',
+      );
+  String get focalStillDetectingHint => tr(
+        zhCn: '检测耗时较长仍在后台运行，请稍后重试或手动拖动。',
+        zhTw: '偵測耗時較長仍在背景執行，請稍後重試或手動拖動。',
+        ja: '検出がタイムアウトしました。しばらくしてから再試行するか手動で調整してください。',
+        en: 'Detection timed out; retry shortly or adjust manually.',
+        ko: '감지 시간이 초과되었습니다. 수동으로 조정하거나 다시 시도하세요.',
+      );
   String get aliases => tr(zhCn: '别名', zhTw: '別名', ja: '別名', en: 'Aliases', ko: '별명');
   String get birthLabel => tr(zhCn: '生日', zhTw: '生日', ja: '生年月日', en: 'Birth', ko: '생년월일');
   String get heightLabel => tr(zhCn: '身高', zhTw: '身高', ja: '身長', en: 'Height', ko: '신장');
@@ -415,6 +447,25 @@ class AppStrings {
   String get enableAiTranslateTitle => tr(zhCn: '启用 AI 翻译标题 / 简介', zhTw: '啟用 AI 翻譯標題 / 簡介', ja: 'AI 翻訳を有効にする', en: 'Enable AI Translation', ko: 'AI 번역 사용');
   String get translateProviderTitle => tr(zhCn: '翻译提供方', zhTw: '翻譯提供方', ja: '翻訳プロバイダー', en: 'Provider', ko: '번역 제공자');
   String get testConnection => tr(zhCn: '测试连接', zhTw: '測試連線', ja: '接続テスト', en: 'Test Connection', ko: '연결 테스트');
+  String get testTranslateBtn => tr(zhCn: '测试翻译', zhTw: '測試翻譯', ja: '翻訳テスト', en: 'Test Translate', ko: '번역 테스트');
+  String get fetchModelsBtn => tr(zhCn: '获取模型', zhTw: '取得模型', ja: 'モデル取得', en: 'Fetch Models', ko: '모델 가져오기');
+  String get presetsLabel => tr(zhCn: '供应商快速预设', zhTw: '供應商快速預設', ja: 'プロバイダプリセット', en: 'Quick Presets', ko: '빠른 프리셋');
+  String get quickModelSelectLabel => tr(zhCn: '可用模型快速选取', zhTw: '可用模型快速選取', ja: 'モデルクイック選択', en: 'Available Models', ko: '모델 빠른 선택');
+  String modelsLoadedCount(int count) => tr(
+        zhCn: '已获取 $count 个模型（点击下方即可填入）',
+        zhTw: '已取得 $count 個模型（點擊下方即可填入）',
+        ja: '$count 件のモデルを取得しました（タップして選択）',
+        en: 'Loaded $count models (tap below to select)',
+        ko: '$count개 모델 로드됨 (탭하여 선택)',
+      );
+  String get modelsFetchFailed => tr(zhCn: '连接或获取模型失败', zhTw: '連線或取得模型失敗', ja: 'モデル取得に失敗しました', en: 'Failed to fetch models', ko: '모델 가져오기 실패');
+  String get connectSuccess => tr(zhCn: '连接成功', zhTw: '連線成功', ja: '接続成功', en: 'Connection succeeded', ko: '연결 성공');
+  String get connectFailed => tr(zhCn: '连接失败', zhTw: '連線失敗', ja: '接続失敗', en: 'Connection failed', ko: '연결 실패');
+  String get serviceTypeLabel => tr(zhCn: '服务类型', zhTw: '服務類型', ja: 'サービス種別', en: 'Service Type', ko: '서비스 유형');
+  String get legacyEndpointType => tr(zhCn: '标准接口 (/v1/...)', zhTw: '標準介面 (/v1/...)', ja: '標準エンドポイント', en: 'Standard Endpoint', ko: '표준 엔드포인트');
+  String get qwenEmbeddingType => tr(zhCn: '阿里云百炼 (Qwen Embedding)', zhTw: '阿里雲百煉 (Qwen Embedding)', ja: 'Alibaba Cloud Qwen Embedding', en: 'Alibaba Qwen Embedding', ko: 'Alibaba Qwen Embedding');
+  String get openaiVisionType => tr(zhCn: 'OpenAI 兼容视觉模型 (Vision)', zhTw: 'OpenAI 相容視覺模型 (Vision)', ja: 'OpenAI互換 Vision VLM', en: 'OpenAI-Compatible Vision VLM', ko: 'OpenAI 호환 Vision VLM');
+  String get providerPlaceholder => tr(zhCn: '请选择提供方', zhTw: '請選擇提供方', ja: 'プロバイダーを選択', en: 'Select provider', ko: '제공자 선택');
   String get focalAutoEnabledTitle => tr(zhCn: '禁用自动人脸对焦检测', zhTw: '停用自動人臉對焦偵測', ja: '自動顔検出を無効化', en: 'Disable Auto Face Focus', ko: '자동 얼굴 초점 끄기');
   String get aiImageSimilarTitle => tr(zhCn: 'AI 封面相似度服务', zhTw: 'AI 封面相似度服務', ja: 'AI 類似画像サービス', en: 'AI Image Similarity', ko: 'AI 이미지 유사도');
   String get aiFacesTitle => tr(zhCn: 'AI 远端人脸识别', zhTw: 'AI 遠端人臉識別', ja: 'AI 顔検出エンドポイント', en: 'AI Remote Face Detection', ko: 'AI 원격 얼굴 인식');

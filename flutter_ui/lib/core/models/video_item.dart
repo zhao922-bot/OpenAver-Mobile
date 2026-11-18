@@ -224,13 +224,17 @@ class LibraryActressGroup {
   final String photoUrl;
 
   factory LibraryActressGroup.fromJson(Map<String, dynamic> json) {
-    final rawAliases = (json['aliases'] as List?) ?? const [];
     final name = (json['primary_name'] as String?) ??
         (json['name'] as String?) ??
         '';
+    final rawAliases = (json['aliases'] as List?) ?? (json['names'] as List?) ?? const [];
+    final aliases = rawAliases
+        .map((e) => e.toString().trim())
+        .where((e) => e.isNotEmpty && e != name)
+        .toList();
     return LibraryActressGroup(
       primaryName: name,
-      aliases: rawAliases.map((e) => e.toString()).toList(),
+      aliases: aliases,
       videoCount: (json['video_count'] as num?)?.toInt() ?? 0,
       isFavorite: json['is_favorite'] == true,
       photoUrl: (json['photo_url'] as String?) ?? '',

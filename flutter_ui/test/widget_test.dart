@@ -157,6 +157,23 @@ void main() {
     expect(actress.measurementsText, 'B:85 / W:58 / H:86');
     expect(actress.focalAlignment.x, closeTo(0.0, 0.001));
     expect(actress.focalAlignment.y, closeTo(-0.5, 0.001));
+
+    // Preserves non-zero fallback videoCount even when detail API returns video_count: 0
+    final merged = ActressProfile.fromJson(
+      {'name': 'Sakura', 'video_count': 0, 'is_favorite': true},
+      fallbackVideoCount: 7,
+    );
+    expect(merged.videoCount, 7);
+
+    // Parses backend /api/actresses/library `names` list into aliases excluding primary_name
+    final group = LibraryActressGroup.fromJson({
+      'primary_name': 'Sakura',
+      'names': ['Sakura', 'Saku', 'Sakura-Old'],
+      'video_count': 7,
+      'is_favorite': true,
+    });
+    expect(group.aliases, ['Saku', 'Sakura-Old']);
+    expect(group.videoCount, 7);
   });
 
   test('BuiltInPlayerPart parses multipart lists and falls back cleanly', () {
@@ -362,6 +379,7 @@ void main() {
     var shouldFail = true;
     var favoritedSakura = false;
     var photoReplaced = false;
+    var focalSaved = false;
 
     final mockApi = ApiClient(
       port: 8765,
@@ -429,6 +447,22 @@ void main() {
         if (opts.path == '/api/actresses') {
           return _jsonResponse({'success': true, 'actresses': []});
         }
+        if (opts.path == '/api/actresses/Sakura') {
+          if (!favoritedSakura) {
+            return _jsonResponse({'error': 'not_found'}, statusCode: 404);
+          }
+          return _jsonResponse({
+            'actress': {
+              'name': 'Sakura',
+              'aliases': ['Saku'],
+              'photo_url': '',
+              'photo_source': 'wiki',
+              'video_count': 0,
+              'is_favorite': true,
+            },
+            'is_favorite': true,
+          });
+        }
         if (opts.path == '/api/actresses/favorite') {
           favoritedSakura = true;
           return _jsonResponse({
@@ -438,9 +472,27 @@ void main() {
               'aliases': ['Saku'],
               'photo_url': '',
               'photo_source': 'wiki',
+              'video_count': 0,
               'is_favorite': true,
             },
           });
+        }
+        if (opts.path == '/api/showcase/video/detect-focal') {
+          final map = Map<String, dynamic>.from(opts.data as Map);
+          expect(map['path'], '/lib/ABC-001.mp4');
+          return _jsonResponse({
+            'success': true,
+            'auto_focal': '0.3500,0.5000',
+            'cover_path': 'file:///covers/ABC-001.jpg',
+            'reason': '',
+          });
+        }
+        if (opts.path == '/api/showcase/video/save-focal') {
+          final map = Map<String, dynamic>.from(opts.data as Map);
+          expect(map['path'], '/lib/ABC-001.mp4');
+          expect(map['expected_cover_path'], 'file:///covers/ABC-001.jpg');
+          focalSaved = true;
+          return _jsonResponse({'success': true, 'auto_focal': map['focal']});
         }
         if (opts.path == '/api/actresses/Sakura/photo-candidates') {
           return _sseResponse([
@@ -494,12 +546,24 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('ABC-002'), findsWidgets);
 
-    // Pop back to ABC-001 detail and tap Tag chip 'Drama'
+    // Pop back to ABC-001 detail, test Focal Crop Sheet, and tap Tag chip 'Drama'
     await tester.pageBack();
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Drama'),
+      find.text('Face / Crop Focus'),
       -200,
+      scrollable: detailScrollable,
+    );
+    await tester.tap(find.text('Face / Crop Focus'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save Focus'), findsOneWidget);
+    await tester.tap(find.text('Save Focus'));
+    await tester.pumpAndSettle();
+    expect(focalSaved, true);
+
+    await tester.scrollUntilVisible(
+      find.text('Drama'),
+      200,
       scrollable: detailScrollable,
     );
     await tester.tap(find.text('Drama'));
@@ -512,11 +576,14 @@ void main() {
     await tester.tap(find.text('Sakura'));
     await tester.pumpAndSettle();
     expect(find.byType(ActressDetailPage), findsOneWidget);
+    expect(find.text('Face / Crop Focus'), findsNothing);
+    expect(find.text('View Videos (3)'), findsOneWidget);
 
-    // Favorite & Change Photo flow
+    // Favorite & Change Photo flow (preserves video count 3!)
     await tester.tap(find.text('Favorite'));
     await tester.pumpAndSettle();
     expect(favoritedSakura, true);
+    expect(find.text('View Videos (3)'), findsOneWidget);
 
     await tester.tap(find.text('Change Photo'));
     await tester.pumpAndSettle();
@@ -632,11 +699,21 @@ void main() {
               'sources': [{'id': 'javbus', 'enabled': true, 'order': 0}],
               'source_links': {'dmm': true},
               'metatube': {'enabled': false},
-              'translate': {'enabled': false, 'provider': 'ollama'},
+              'translate': {
+                'enabled': true,
+                'provider': 'openai',
+                'openai': {'base_url': 'https://api.openai.com/v1', 'api_key': 'k', 'model': ''},
+              },
               'focal_device': {'disabled': false},
               'ai_services': {'image_similar': {}, 'faces': {}, 'tags': {}},
             },
           });
+        }
+        if (opts.path == '/api/openai/models') {
+          return _jsonResponse({'success': true, 'models': ['deepseek-chat', 'qwen-plus']});
+        }
+        if (opts.path == '/api/openai/test') {
+          return _jsonResponse({'success': true, 'translation': 'Test OK'});
         }
         return _jsonResponse({'success': true});
       }),
@@ -684,6 +761,19 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Appearance & General'), findsNWidgets(2));
+
+    // AI Settings section: presets, model quick-select, and connection test
+    await tester.tap(find.text('AI Services & Face Focus').first);
+    await tester.pumpAndSettle();
+    expect(find.text('DeepSeek'), findsOneWidget);
+    await tester.tap(find.text('Fetch Models'));
+    await tester.pumpAndSettle();
+    expect(find.text('qwen-plus'), findsOneWidget);
+    await tester.tap(find.text('qwen-plus'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test Translate'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connection succeeded: Test OK'), findsWidgets);
   });
 }
 
