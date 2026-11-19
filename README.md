@@ -1,430 +1,141 @@
+<div align="center">
+
 # OpenAver Mobile
 
+**完全本地运行的 [OpenAver](https://github.com/slive777/OpenAver) Android 移植版**
+
+原生 Flutter 界面 · 内嵌 Python 3.13 / FastAPI · 内置 MediaKit 播放器 · 无需电脑、NAS 或 Termux
+
 [![Build APK](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml/badge.svg)](https://github.com/zhao922-bot/OpenAver-Mobile/actions/workflows/build.yml)
+[![Latest Release](https://img.shields.io/github/v/release/zhao922-bot/OpenAver-Mobile?label=Release&color=ff8a4c)](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
+![Android 10+](https://img.shields.io/badge/Android-10%2B%20(arm64--v8a)-3DDC84?logo=android&logoColor=white)
+![Flutter 3.44](https://img.shields.io/badge/Flutter-3.44-02569B?logo=flutter&logoColor=white)
+![Python 3.13](https://img.shields.io/badge/Python-3.13%20Embedded-3776AB?logo=python&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-OpenAver Mobile 是 [OpenAver](https://github.com/slive777/OpenAver) 的非官方
-Android 移植版。当前移动端开发版本为 `v0.18.17-android-r60`，已对齐上游
-`v0.18.17` 的补完性能、批次搜索、来源修复、片库浏览和 AI 后处理体验；
-后续差异会按[分阶段计划](docs/v0.18.17-mobile-alignment-plan.md)继续收敛。
-内嵌代码基线为上游 `v0.18.17` 加本仓库补丁。
+[**下载最新 APK**](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r60-arm64-v8a.apk) ·
+[**全部版本与更新日志**](https://github.com/zhao922-bot/OpenAver-Mobile/releases) ·
+[**快速上手**](#-下载与安装) ·
+[**本地构建**](#-本地构建与测试) ·
+[**上游项目**](https://github.com/slive777/OpenAver)
 
-App 在手机内嵌 Python 3.13、FastAPI、Uvicorn 和 OpenAver Web 服务，不需要
-电脑、NAS、局域网服务器或 Termux。扫描、数据库、元数据搜索、NFO/封面写入和
-视频播放均由手机本地执行；视频保留在手机原目录。
+</div>
 
-## 下载
+---
 
-- [发布页](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest)
-- [直接下载 arm64-v8a APK](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r60-arm64-v8a.apk)
+## ✨ 为什么选择 OpenAver Mobile
 
-当前发布包：
+将完整的 OpenAver 后端直接打包进单个 Android APK：扫描片库、SQLite 索引、元数据刮削、NFO/封面/剧照写回、AI 翻译与视觉标签以及本地视频播放全部在手机端独立完成，**视频文件始终保留在原目录中**。
 
-- 文件名：`openaver-v0.18.17-android-r60-arm64-v8a.apk`
-- 包名：`dev.openaver.mobile`
-- 版本：`0.18.17-r60`（versionCode `18060`）
-- 架构：仅 `arm64-v8a`
-- 最低系统：Android 10（API 29）
-- 目标系统：Android 10（API 29）；外置 SD 卡写入使用系统目录授权桥接
-- SHA-256：发布后以 Release 附件中的 `SHA256SUMS.txt` 为准
+| 模块 | 核心能力 |
+| :--- | :--- |
+| **原生 Flutter 界面** | 展示库 / 搜索 / 片库管理 / 片库分析 / 设置五大模块；支持 **影院灰 · 纯黑 · 浅色** 三套主题与 **简中 · 繁中 · 日文 · 英文 · 韩文** 五语切换；保留一键切换经典 WebView 视图排错 |
+| **片库与女优墙** | 封面网格与列表浏览、服务端/客户端完整排序与多维筛选、分集视频（`cd1/cd2`）合并、女优资料与照片更换、原生 NDK 人脸检测与手动焦点裁剪 |
+| **多源聚合搜索** | 流式搜索与翻页加载、片商与常收女优胶囊、批量搜番号、以图查番、愿望单书签；内置 WebView Cloudflare 验证通路（JavLibrary / FC2-javten / Jable）与 Metatube 扩展 |
+| **内置与外置播放** | 内置 `MediaKit` 播放器支持倍速记忆、横屏沉浸、分集自动续播与本地 HTTP Range 拖动；支持随时调用系统外部播放器 |
+| **片库维护与 AI** | 前台服务保活后台扫描；一键补齐 NFO / 简介 / 标题翻译 / 剧照；统一文件名与目录规范化；片库健康分析与异常番号修复；支持 Ollama / Gemini / Claude / OpenAI 翻译、封面相似度、远端人脸与 AI 视觉标签 |
+| **安全与存储兼容** | 仅监听 `127.0.0.1` 随机端口 + 进程内随机 Token 鉴权；支持 Android SAF 外置 SD 卡目录授权写回与数据库 ZIP 一键备份/恢复 |
 
-本版变更见 [r60 发布说明](docs/releases/v0.18.17-android-r60.md)。
+---
 
-## 安装
+## 📦 下载与安装
 
-1. 在 64 位 ARM Android 10+ 手机上打开 APK，并允许安装未知应用。
-2. Android 11+：授予“所有文件访问权限”。
-3. Android 10：授予读取和写入手机存储权限。
-4. 如果视频在 SD 卡，打开左上角菜单 → “应用工具” → “授权可写目录”，在系统目录选择器中选中
-   与扫描目录相同的 SD 卡文件夹。Android 10 的传统存储权限可读取外置 SD 卡，
-   但任意文件写入仍需要这一步目录授权。
-5. 进入“列表生成”，点击文件夹按钮。
-6. 从 `/storage/emulated/0` 或 SD 卡选择视频目录并生成列表。
-7. 如果来源确实不应修改，可开启“只读”；OpenAver 会把生成内容写入应用私有媒体库。
+> 当前发布版基于上游 OpenAver `v0.18.17` + 移动端补丁层构建，完整改动请查看 [Release Notes](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest) 或 [r60 发布说明](docs/releases/v0.18.17-android-r60.md)。
 
-如果系统没有直接显示权限页，请手动进入：
+| 项目 | 说明 |
+| :--- | :--- |
+| **直接下载** | [`openaver-v0.18.17-android-r60-arm64-v8a.apk`](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r60-arm64-v8a.apk) |
+| **应用包名 / 版本** | `dev.openaver.mobile` · `0.18.17-r60` (`versionCode 18060`) |
+| **系统与架构要求** | Android 10+ (API 29+) · 仅 `arm64-v8a` |
+| **校验文件** | 见 Release 附件中的 `SHA256SUMS.txt` |
 
-`设置 → 应用 → OpenAver 移动版 → 权限`
+### 快速上手
 
-## 已实现
+1. **安装 APK**：在 64 位 Android 10+ 设备上允许“安装未知应用”并完成安装。
+2. **授予存储权限**：
+   - **Android 11+**：授予“所有文件访问权限”（如未自动弹出，可前往 `设置 → 应用 → OpenAver 移动版 → 权限`）。
+   - **Android 10 / 外置 SD 卡写入**：在 **设置 → 片库目录与展示 → SAF 可写目录授权** 中选择与扫描目录一致的 SD 卡文件夹。
+3. **添加目录并扫描**：进入 **设置** 添加视频目录（如 `/storage/emulated/0/...` 或 SD 卡目录；不想修改源目录可开启“只读来源”），随后在 **片库管理** 点击 **扫描片库** 即可开始浏览。
 
-- 完全本地运行的 Python/FastAPI 服务，仅监听 `127.0.0.1` 的本机端口（优先 8765，占用时自动切换）
-- 内嵌 API 使用进程内随机 token；WebView 使用 HttpOnly/SameSite Cookie，Java 代理使用 Bearer Header
-- 使用真实文件路径扫描手机内部存储和 SD 卡视频
-- SQLite 片库、列表生成、扫描结果持久化
-- 元数据搜索、NFO 与封面读取/写入、文件重命名
-- 本机 HTTP Range 视频服务，支持播放器拖动进度
-- JavLibrary Android WebView Cloudflare 验证窗口
-- FC2-javten 复用 Cloudflare WebView 验证通路
-- Jable 精确番号搜索，复用 Android WebView Cloudflare 验证；可抓取标题、封面、
-  女优、分类标签和简介（Jable 网页没有剧照图集）
-- JavDB `curl_cffi` 缺失时的网页 `requests` fallback
-- AVBase 女优资料 `requests` fallback 和 UTF-8 修复
-- 自定义来源 `fetch: cf` 的普通浏览器请求兼容模式
-- 简体中文、繁体中文、日文、英文和韩文界面；首次启动默认简体中文
-- Android 10 / API 29 上的安装、首次界面、存储授权、本地服务启动和视频扫描
-- Android 10 外置 SD 卡目录授权桥接，支持完整 NFO、封面、poster、fanart、
-  标题翻译和补抓剧照写回
-  （真机 LG G8X Android 10 验证）
-- Android 16 / API 36 模拟器上的启动、扫描、NFO 写入与播放验证
-- Python 源码预编译、非关键网络探测后台化、5 分钟启动等待和启动失败重试按钮
-- 启动诊断细化到数据目录、数据库、通知、权限表和后台任务阶段，并支持长按复制错误
-- 端口被残留服务占用时自动切换到后续空闲端口，并同步 WebView、健康检查和 Cloudflare 代理
-- 修复 `phase=ready` 后绑定端口失败导致的 `SystemExit: 1`
-- 修复 Pydantic v1 兼容层缺少 `model_copy()` 导致“补抓剧照失败”的问题
-- 修复 Android 返回键跨菜单后退的问题；弹窗、灯箱、抽屉和编辑层会按层级优先关闭
-- 标题翻译写回兼容 Android 文件系统的大小写规则，`.NFO` 不再被误判为不存在，并改为原子写入
-- r50：标题翻译按整段文字的简繁/假名比例判断，演员专名中的单个繁体字或短假名不会再让已翻译标题反复回到待翻译队列
-- r50：拒绝模型拒答、原文回显和非目标语言结果；临时超时/429/5xx 自动重试一次，失败不会误写 NFO
-- r50：改名流程会在 NFO 目标路径过期或缺失时重新定位或补建标题 NFO，不再因 `nfo_missing_after_rename` 中止
-- r50：统一命名会保留已有译文和 `original_title`，并改用不会触发 Android 去掉尾点的 `…` 截断标记，避免实际路径与数据库路径不一致
-- 修复灯箱多行标题第一、二行间距异常过大的问题
-- 左上角菜单的“应用工具”集中提供刷新、存储权限和 SD 卡目录授权入口
-- 补抓剧照增加来源 URL 规范化、JavDB Referer、图片内容校验、下载诊断和可重复重试
-- 补抓剧照区分“来源无剧照”“全部下载失败”“数据库写入失败”，不再显示模糊错误
-- Android 手动脸部对焦改由 arm64 NDK 原生级联检测执行，实测单张封面约 0.16–0.40 秒
-- 原生对焦健康检查会实际加载级联并调用检测入口，不再只检查 `.so` 是否存在
-- r14：补抓剧照逐图返回下载诊断，重复 URL 去重，损坏的既有剧照会删除重抓
-- r14：标题写回与剧照下载在 SD 卡直写被拒后自动转交 SAF；写入后校验字节，
-  失败时恢复旧 NFO
-- r14：Android 进程内脸部检测现在传递硬超时，并区分 `timeout`、`no_face`
-  与运行失败，不再无限占用后台线程
-- r14：构建工作流升级到使用当前 Node 运行时的 Actions 主版本
-- r15：`generate_nfo` 的文本原子写入接入 SAF，普通刮削和重新刮削可直接生成
-  SD 卡 NFO
-- r15：`crop_to_poster` 改为内存生成 JPEG 后统一落地，poster 可直接写入 SD 卡
-- r15：`generate_jellyfin_images` 与 readonly 侧车复制接入同一套 SAF 文件桥接，
-  fanart 和 curator 原图可逐字节复制到 SD 卡
-- r15：下载图片、衍生图片和 NFO 统一使用字节校验与原子替换路径，写入失败时
-  保留旧文件
-- r16：批量补全 NFO 改用统一 SAF 写入路径，修复外置 SD 卡上的
-  `PermissionError`，并兼容 Windows 拷入的 `.NFO` 大写扩展名
-- r16：新增“批量更换标签来源”，可按一个已启用来源重新获取普通标签并同步
-  NFO 与数据库；保留标题、封面、简介和用户标签，字幕侧车文件仍会保留
-  “中文字幕”属性
-- r16：批量标签任务离开页面或连接断开后会主动停止；Cloudflare 手动来源和
-  自定义来源不会出现在批量来源列表中
-- r17：仅进行移动端 UI 优化。扫描页新增片库概览/批量维护层级，标签来源控件
-  改为响应式操作行，输出路径支持一键复制
-- r17：运行状态卡支持折叠日志、错误自动展开和当前进度比例；移动端顶部导航
-  显示当前页面名称，硬件返回键会正确关闭批量标签确认弹窗
-- 批量维护区默认折叠；批量更换标签保留一个按钮，选择来源后直接执行。
-  标签和 NFO 补全不再提供 NFO 备份选项或创建备份文件，失败项可单独重试。
-- r18：扫描、NFO、标签、Jellyfin 图片和补完任务统一显示当前影片、成功/失败/
-  跳过数量、计时与预计剩余时间，并支持取消
-- r18：设置页增加固定保存栏，明确显示“有未保存更改”“正在保存”和“已保存”状态
-- r19：统一移动端错误卡为“发生了什么、影响范围、处理建议、详细日志”四段，
-  错误与警告 toast 也支持一键复制诊断信息
-- r19：补齐加载骨架、空状态、离线横幅、来源超时/无权限/不可达状态、部分成功
-  提示，以及扫描任务的当前影片、成功/失败/跳过摘要
-- r19：硬件返回键按“弹窗/灯箱/详情/页面”层级消费，搜索详情返回结果墙，
-  不再直接跳回上一个菜单；灯箱、剧照廊和编辑层保持同一套关闭顺序
-- r19：右侧悬浮按钮改为拖动后吸附屏幕边缘，空闲时半透明收起，并避让状态栏、
-  导航栏和屏幕安全区；主要触控目标统一到至少 48dp
-- r19：统一移动端主操作、次操作和危险操作的颜色/尺寸层级，收紧卡片圆角、
-  阴影和间距，并统一卡片、详情页、播放器标题的行数限制
-- r19：搜索空状态与错误卡恢复完整宽度；搜索栏左右操作区按实际按钮数量动态
-  收放，修复图标遮挡占位文字和小屏输入区域过窄
-- r20：片库分析页移除无实际信息的 OpenAver 品牌横幅，将影片数、年份、女优和
-  片商压缩为一条四列筛选栏，年份与主要图表在手机首屏即可看到
-- r21：重做片库分析“深入：女优与片商”区；环形图说明明确内圈/外圈、深浅色和
-  灰色含义，并标出“主力片商”的 4 部／80% 判定规则
-- r21：女优片商年表改用两位年份、横向滑动和高对比 16 色片商色盘；普通年份圆点
-  按该女优当年实际片商着色，不再全部显示灰色
-- r21：女优片商分布改为手机单列两行布局，名称、片数、片商家数和分段条不再
-  互相挤压；年表无数据时隐藏无意义的图例和滑动提示
-- r22：BAZOOKA 移出橙黄色系，避免与 Moodyz 混淆；片商圆点、图例和年表增加
-    圆形、方形、菱形、环形、条形编码，不再只依赖颜色区分
-- r22：手机端“说明”页改为专用本地操作指南，移除 Telegram、桌面更新检查、
-    AI 终端、服务器模式、快捷键等桌面内容；保留原作者致谢和 GitHub 链接
-- r22：停用桌面版新手引导，不再自动弹出或在说明页显示入口
-- r23：修复番号后直接接中文标题时无法识别番号、导致“缺件 0”的问题
-- r23：新增“统一文件名格式”预览与执行：支持 `ABC123`、`ABC_123`、
-    `ABC-123标题` → `ABC-123 标题`，同步处理 NFO、封面、poster、fanart 和字幕，
-    不动文件夹、`extrafanart` 和其他辅助文件；冲突不执行，失败自动回滚并保存清单
-- r24：修复外置存储亚微秒 mtime 波动导致预览被误判为过期、执行时只显示
-    `plan_changed` 的问题；计划变化时会自动刷新预览并再次要求确认
-- r24：新增“统一文件夹格式”，只规范扫描目录下一层的影片文件夹，并同步数据库中的
-    视频、封面和剧照路径；文件夹内文件保持原名，支持冲突阻断和失败回滚
-- r24：扫描页的“复制路径 / 设置 / 生成网页”改为统一高度、圆角和视觉层级的操作组；
-    文件名规范化说明不再展示无关的密钥文件示例
-- r25：修复部分 SD 卡目录提供器在重命名后短暂返回旧目录列表、导致已经成功的
-    重命名被判为 `rename_verify_failed` 并触发整批回滚的问题；改为校验系统返回的
-    新文档 URI 和实际显示名称
-- r25：回滚失败提示现在会附带具体错误原因，便于在不读取应用私有目录时定位问题
-- r26：SD 卡重命名改为以 Android `renameDocument()` 返回非空新 URI 作为成功依据，
-    不再依赖可能短暂滞后的目录列表或显示名；整批完成后再统一扫描验证
-- r26：若重命名仍失败，错误信息会附带具体旧文件名和新文件名
-- r27：识别 MTP/FUSE 复制到 SD 卡时因超过 255 字节而被截断的超长文件名；
-    可在数据库记录仍完整时按番号找回唯一视频，并修复到安全长度
-- r27：视频、封面、NFO、poster 和 fanart 共用同一条截断后的文件名主干，
-    超长标题以 `…` 结尾，避免侧车名称不一致或再次超过 Android 文件系统限制
-- r28：合并“统一文件名格式”和“统一文件夹格式”为一个统一命名流程
-- r28：可选择元数据来源，以该来源的标题决定番号后面的视频名和影片文件夹名；
-    预览会同时展示视频、侧车和文件夹变更，并支持整批失败回滚
-- r29：标签差异预览默认只勾选确实有变化的影片，可逐部取消或分页查看；
-    NFO 批量补齐同样改为显式选择，不再从预览误扩大到全部影片
-- r29：生成网页时只重扫 DB 缺封面、封面路径失效或基础资料不完整的影片；
-    若 NFO 未变，重新扫描不会用旧 NFO 覆盖数据库中的新标签和影片信息
-- r29：静态网页在 Android WebView 中统一通过图片 API 读取本地封面，
-    并把用户标签一并纳入详情和灯箱显示
-- r29：所有非空标题都可使用手动 AI 翻译；没有 NFO 时会自动创建 NFO，并把译文与原文写入 NFO 和片库
-- r29：生成网页后会提示仍缺少 NFO 的影片；SAF 写入使用不会追加 `.xml` 的文件类型，
-    并会自动复用旧版生成的 `.nfo.xml` 文件，避免重复创建
-- r29：修复女优浏览模式搜索框左侧模式按钮遮挡提示文字的问题
-- r30：Android 灯箱标题行的精选星标固定对齐标题第一行；多行标题不再让星标落到整块标题的垂直中间
-- r31：女优照片来源面板的“刷新”和“本地上传”按钮改为深色高对比样式，并扩大到 48px 触控区
-- r32：统一文件名与文件夹时，扫描根目录中的视频会自动建立对应文件夹并移入；保留 `cd1/cd2` 等分集标记并把同组分集放入同一文件夹；侧车文件不是前置条件
-- r33：完成 9 轮代码健康优化，不改变现有刮削、数据库和 SAF 写入行为；CI 现在会生成代码健康报告
-- r33：扫描、配置迁移、组合重命名、文件整理和文件名预览的最复杂函数已按职责拆分，最高复杂度从 93 降至 61
-- r33：统一 multipart 解析、Android 安全媒体 I/O、悬浮菜单控制和 toast 实现，移除重复主题 CSS 与残留调试注入器
-- r33：补充配置迁移、扫描取消/部分扫描保护、路径规划和媒体写入回归测试，并清理 Python 无效转义警告
-- r34：设置页的字号、语言和显示模式工具栏改为吸顶显示，并使用独立固定尺寸，
-  不随正文字号放大；扫描来源的“测试连接”与“全开/无码模式”在移动端保持同排对齐
-- r34：主设置项改为草稿模式，只有点击“保存设置”才写入；主题、字号和语言仍可即时预览，未保存离开时会提示
-- r34：来源顺序、启用状态、缩略图缓存、Metatube 开关和自动对焦开关都纳入统一的未保存状态判断
-- r34：关闭 Metatube 后不再立即断开，保存成功后才执行；自动对焦写入失败时会保留未保存状态，避免静默丢失
-- r35：启动阶段不再预建两个 Cloudflare 站点 WebView，改为首次实际任务时按需创建，
-  降低启动内存和主页面加载等待
-- r35：配置读取使用带文件签名校验的内存快照，并返回隔离副本，减少高频封面/API 请求重复读盘
-- r35：数据库 schema 初始化按数据根幂等执行，统一 SQLite 连接超时与 PRAGMA，并复用热点查询连接读取列信息
-- r36：展示库列表改为目录前缀 SQL 预过滤和显式字段投影，默认只序列化服务端当前页；
-  搜索、pill、随机排序和灯箱按需加载完整集合，并取消已被新请求取代的旧分页响应
-- r36：GSAP、GhostFly、BurstPicker、播放器及设置页辅助组件按页面加载；
-  Scanner 与 Insights 只加载所需动效运行时，不再连带加载 Flip、Physics2D 等重型插件
-- r37：展示库和女优墙的封面改为双阈值图片窗口：接近视口时异步加载，远离后释放
-  已解码图片并销毁图片节点；手机网格单页上限降为 45 张，避免整页图片长期占用内存
-- r38：扫描页新增“一键补齐未翻译标题”和“一键补齐缺失剧照”，只处理缺失项，
-  支持数量预览、SSE 进度、失败重试和取消
-- r38：统一文件名与文件夹改为单事务数据库更新并复用目录扫描结果，批量重命名在
-  大影片库下减少重复文件枚举和 SQLite 提交
-- r38：女优墙直接按别名组在 SQLite 服务端筛选，不再先下载整库再前端过滤；
-  封面加载失败自动重试一次，显式刷新封面时立即重新挂载图片窗口
-- r38：缩略图冷生成限制并发并跳过重复任务，降低扫描大量新视频后同时生成封面
-  缩略图造成的卡顿
-- r38：WebView 渲染进程被系统回收时自动重建并恢复当前页面，Cloudflare WebView
-  同步清理挂起请求，减少封面刷新和女优筛选过程中的闪退
-- r39：一键补齐未翻译标题改为 4 路并行翻译，日志实时显示每条的
-  `原标题 → 译文`，完成后只重新检查剩余缺失项
-- r39：一键补齐缺失剧照改为 3 路并行处理，日志实时显示 `[已完成/总数]`、
-  实际下载张数和磁盘现有张数，不再停留在静态的待补数量
-- r39：Android System WebView 低于 103 时显示明确的升级提示和更新入口，
-  避免旧系统 WebView 直接显示白屏
-- r40：修复展示库在搜索、女优筛选和列表刷新后，滚动位置附近卡片封面变空白、
-  必须刷新页面才恢复的问题；复用卡片时保留图片窗口和已加载状态，并补做缓存图片
-  的加载状态同步
-- r41：同一文件夹内的完整 `cd1/cd2` 等分集视频可共用一键补剧照任务，
-  剧照会同步写入全部分集记录；混有无关影片的文件夹仍会拒绝执行
-- r41：片库播放分集视频时可在 `cd1/cd2` 之间选择，网页播放器支持分段切换与
-  自动续播，Android 端会先弹出原生分段选择框
-- r42：升级 Pydantic v2 与 `pydantic-core 2.41.5`，同步加固 Android 打包与运行
-  依赖
-- r43：简体中文、繁体中文、日语和英语四种界面语言统一使用各自语言包，包括
-  Android 原生菜单与离开确认；修复日期、扫描/翻译/补剧照日志、错误提示及扫描
-  日志缓存仍显示其他语言的问题
-- r44：普通视频播放时同样提供外部播放器与内置播放器选择；分段视频继续支持
-  分段选择和内置播放器播放
-- r45：设置页支持数据库备份导出与导入，导入前校验格式、哈希、完整性和必需表，
-  失败时回滚；长任务使用前台服务，切换到后台后仍继续执行并显示完成通知
-- r46：网络重试尊重服务端 `Retry-After`，但最长只等待 15 秒，避免刮削或批量
-  任务因单个异常响应长时间卡住；补充数据库导入回滚测试与本地化依赖硬失败检查
-- r47：数据库导入前检查可用存储空间，空间不足时明确提示所需容量；清理任务保活
-  通知中未使用的内部参数，并完成最后一个 web menu 对话框的主题复核
-- r48：迁移 pydantic v1 弃用写法，改用 v2 的 `ConfigDict` 与
-  `field_validator`；保持默认值校验和旧环境兼容，清除全部 4 条弃用警告，
-  不改变现有刮削、数据库和播放行为
-- r49：完整分段视频在片库、扫描统计、女优、缺失检查、补翻译和补剧照等界面
-  统一按 1 部计算；统一命名在缺少 NFO 时生成只含标题信息的最小 NFO，
-  并继续同步数据库标题、原始标题和 NFO 标题
-- r51：标题翻译遇到模型的自然语言拒答（例如“该标题涉及……无法处理”）时，
-  按 `translation_refused` 记为失败而不是成功；不会覆盖数据库标题或 NFO，
-  并在四语言界面显示对应的安全/内容限制提示
-- r51 build 2：翻译提示词外层、字段标签、Ollama 示例标签和重试语句全部跟随
-  当前软件语言；简体中文提示词不再混入繁体中文，并增加四语言回归测试
-- r51 build 3：Android 手机版隐藏 Tag 别名管理中无实际用途的 AI agent
-  `/api/capabilities` 问号提示；手动 Tag 别名管理不受影响
-- r52：主要片商年表中的普通作品圆点按当年作品数量逐步放大，1 部为 8px，
-  10 部为 12.5px，10 部以上保持封顶尺寸，避免挤压年表行
-- r52：主要片商图例扩展为八种可辨识形状；紫色第四高频片商由近似圆形的环改为
-  三角形，新增十字、六边形等形状，并在四种界面语言中说明圆点大小的含义
-- r53：修复主要片商年表在 4 部以上直接切换为整块色卡、导致尺寸不再递增的问题；
-  所有非空年份统一按 1～10 部逐步放大到 12.5px，10 部以上封顶，主力片商年改用
-  淡色光晕标识
-- r54：新增 Jable 精确番号刮削来源，复用 Android WebView Cloudflare 验证，
-  支持标题、封面、女优、分类标签和简介，并可在高级搜索中手动选择
-- r54：Jable 标签只从影片信息区读取，不会混入站点头部导航、推荐影片或广告标签；
-  Jable 网页没有剧照图集，因此该来源返回空剧照，不把推荐封面和 Logo 误当剧照
-- r55：“批量更换标签来源”可直接选择 Jable；遇到 Cloudflare 验证时会打开验证窗口，
-  完成后自动继续并重试当前影片
-- r55：修复 Jable 不存在的番号返回 404 时被误报为验证窗口故障的问题；现在会正常
-  显示“所选来源没有结果”，不会中断整批任务
-- r56：移除仅用于开发演示的页面、脚本和静态图片，删除重复的 Bootstrap Icons
-  WOFF 字体，并将 ECharts 改为 Insights 所需的按需构建；静态图片减少约
-  3.44 MiB，ECharts 减少约 46.5%
-- r56：将五个 `lxml` 解析入口迁移到 BeautifulSoup `html.parser`，移除
-  `lxml`/libxml2/libxslt 运行时依赖；Release 包仅压缩自研 JS/CSS，不修改
-  `vendor` 源码
-- r56：最终 arm64 Release 约 `22.21 MiB`，较 r55 减少约 `6.53 MiB`；扫描、
-  浏览、搜索、Insights、设置、四语言、播放、翻译、NFO、剧照、数据库导入导出、
-  后台任务和真实设备 SD 卡路径均已回归验证
-- r57：移除 Android 包内无入口的桌面连接页、更新器、旧帮助页和桌面壳
-  CF 路由；不再启动桌面更新检查，并删除 PyWebView、连接状态和壳脚本残留
-- r57：设置页移除服务器模式、访问密码、局域网、Windows 播放器、关闭行为和
-  离线 HTML 导出入口，同时保留后端旧配置字段兼容；文件选择、目录选择、复制
-  路径和播放全部统一走 Android/移动端路径
-- r57：Android 原生 CF worker 改用移动专用端点，JavLibrary、FC2-javten 和
-  Jable 继续共用 WebView 验证；六页、四语言、数据库备份入口、扫描生成、
-  Insights、普通视频播放器选择和冷启动均在模拟器完成回归
-- v0.18.17-r1：无 NFO 的一键补完改为首家有效来源命中后直接采用，不再继续
-  请求后续来源；普通番号不再查询 D2Pass，日期型一本道、加勒比和 10musume
-  番号仍会正常查询
-- v0.18.17-r1：大批量补完预估改为无 NFO 约 1 秒/部、只缺封面约 10 秒/部；
-  批次搜索一次处理全部未搜索项，并正确支持暂停、继续、取消和重新载入
-- v0.18.17-r1：修复 MetaTube 新来源可用性、JavDB 冷门番号高级搜索和 jav321
-  标题尾部污染；移动端同步“片库管理”“更新片库”“待整理”等名称，继续保留
-  Jable、分段视频按 1 部计数及现有标题/NFO 写回逻辑
-- v0.18.17-r2：查不到资料时会显示可编辑空白卡，可改番号、指定来源重查，也可
-  手填标题、番号、片商、演员、标签并上传本地封面后整理入库
-- v0.18.17-r2：搜索页新增“常收女优”近 90 天新片入口，女优墙默认按最近常收
-  排序；Graphis 每轮优先返回两张照片，换图时排除本轮已看过的候选
-- v0.18.17-r2：文件名含 LTX 时自动补充“LTX”和“無碼破解”标签；灯箱用户标签
-  可直接点击筛选，纯数字搜索后点击演员、片商、标签等资料会自动清空数字
+---
 
-- v0.18.17-r3：新增完整韩文 Web UI 和 Android 原生界面资源，五种语言共用同一套
-  设置、说明、引导、扫描、翻译、错误提示和通知文案
-- v0.18.17-r3：设置页整理为来源、命名、片库、AI 与服务、系统五个分页，仍使用单一
-  表单，切页不会丢失未保存内容；直接访问或刷新可恢复当前分页
-- v0.18.17-r3：手机说明页整理为片库、整理与改名、排错与手动操作三个页签，并兼容
-  旧版说明页锚点；新手引导缩短为四步，手机端直接指向右侧菜单
-- v0.18.17-r4：搜索页新增图片查番号，支持本地选择、格式/大小校验、首次第三方
-  隐私确认、候选相似度与片库命中状态，并可将结果带入普通搜索
-- v0.18.17-r4：新增 OpenAI 官方翻译接口，可查询模型、测试翻译并参与现有标题
-  补翻译；灯箱简介支持按需读取 NFO `<plot>`、原文/译文切换、翻译写回与撤销
-- v0.18.17-r5：设置页把来源、命名、片库、AI 与系统拆成五个独立内容区，修复
-  AI 分页误用“AI 翻译”标题、翻译设置混入命名卡片以及手机端页签横向滚动、
-  顶部遮挡和长文字截断问题
-- v0.18.17-r5：手机设置页移除 Proxy 和 Metatube 连接入口，现有配置字段继续
-  保留兼容；“整理与命名”保留文件夹、文件名、NFO 格式、外部媒体库和对焦设置
-- v0.18.17-r5：AI 区新增标题翻译、图片相似和人脸三个子页；相似索引与人脸补跑
-  支持进度、停止、继续、失败提示，并通过 Android 前台服务在离开页面后继续运行
-- v0.18.17-r5：移动端当时不暴露 AI 标签入口；配置保存会保留标签设置字段，
-  远端服务密钥继续使用现有遮罩与本地配置机制
-- v0.18.17-r6：设置页新增 AI 标签子页，可从已配置的 Ollama、Gemini、Claude、
-  OpenAI 官方或 OpenAI 兼容服务选择视觉模型，支持连接测试、全库补跑、停止、
-  继续和带费用提示的全部重建
-- v0.18.17-r6：灯箱用户标签区新增 AI 标签按钮；只上传当前封面裁剪图，不发送
-  视频文件，AI 只追加词表内标签，不删除已有普通标签或用户标签
-- v0.18.17-r6：完整分段视频组只计 1 部、只调用 1 次视觉模型，但模型结果会逐
-  文件写入数据库和各自 NFO；关闭 AI 标签时所有入口直接拒绝调用模型
-- v0.18.17-r6：扫描完成后可增量补齐 AI 标签；单部失败会跳过并继续，认证、连接、
-  模型不支持等问题会停止整批并在设置页显示原因
-- v0.18.17-r6：首次刮削、真正重新刮削和自动整理入库后，可按现有开关自动执行
-  标题翻译、图片相似、人脸对焦和 AI 标签；补缺操作与重复入库不会重复调用 AI
-- v0.18.17-r7：扫描页新增“一键补齐简介”，只处理已有 NFO 且 `<plot>` 为空的
-  影片，不覆盖已有简介；没有 NFO 的影片继续使用原有缺件补全流程
-- v0.18.17-r7：补简介会从现有刮削来源获取完整简介，按当前界面语言全文翻译后
-  写入 `<plot>`，来源原文写入 `<originalplot>`；不会使用标题长度限制截断简介
-- v0.18.17-r7：补简介支持三路并行、实时进度、取消、失败重试和翻译日志预览；
-  完整分段视频组按 1 部计数，但组内所有空白 NFO 都会补齐
+## 🧩 架构概览
 
-## 限制
+```text
+┌──────────────────────────────────────────────────────────┐
+│  Flutter UI (Riverpod · 5 Tabs · MediaKit Player)        │
+│    ↕ HTTP/SSE (127.0.0.1 + Bearer Token)                 │
+│    ↕ MethodChannel (SAF · 文件选择 · 外置播放 · 保活)      │
+├──────────────────────────────────────────────────────────┤
+│  Android Native Layer (Java · SAF Bridge · CF WebView)   │
+├──────────────────────────────────────────────────────────┤
+│  Embedded Python 3.13 (Chaquopy · FastAPI · Uvicorn)     │
+│    ├─ SQLite 片库 / 书签 / 别名 / AI 索引                 │
+│    └─ Android NDK arm64 原生人脸焦点检测 (.so)            │
+└──────────────────────────────────────────────────────────┘
+```
 
-- 本项目只发布 Android APK；应用内不包含桌面窗口、托盘、自动更新器或局域网
-  服务器设置入口。
-- Android 没有 `curl_cffi` 原生轮子。JavDB 网页查询和 AVBase 女优资料使用行为
-  兼容的 `requests` fallback，不保证与桌面端完全相同。
-- 自定义来源 `fetch: cf` 使用普通浏览器请求兼容模式，不保证通过所有
-  Cloudflare 站点。
-- Jable 网页只提供封面和播放器拖动预览，没有剧照图集，因此 Jable 来源不提供剧照。
-- 自动检查更新已关闭；升级需安装新 APK。
-- 自动对焦仍遵循上游规则：有码/普通厂牌默认使用标准右裁，手动“自动侦测”不受此限制。
-- 播放能力取决于手机系统 WebView 编解码器。MP4/H.264/AAC 已验证；MKV、AVI、
-  RMVB 等格式即使能扫描，也可能无法在 WebView 中解码。
-- Android 11+ 使用 `MANAGE_EXTERNAL_STORAGE`；Android 10 的普通存储权限不足以
-  任意写入外置 SD 卡，必须额外完成一次“授权可写目录”。APK 面向手动侧载，
-  不适合直接上架 Google Play。
-- 这是非官方构建，与 OpenAver 上游作者没有隶属或背书关系。
+---
 
-## 构建
+## ⚠️ 已知说明与限制
 
-要求：
+- **侧载分发**：Android 11+ 使用 `MANAGE_EXTERNAL_STORAGE` 读写本地片库，仅面向手动侧载，不面向 Google Play。
+- **网络回退**：Android 无 `curl_cffi` 原生轮子，JavDB / AVBase 使用行为兼容的 `requests` 回退；自定义来源 `fetch: cf` 使用标准浏览器请求模式，不保证覆盖所有 Cloudflare 站点；Jable 站方不提供剧照图集。
+- **人脸对焦策略**：自动对焦遵循上游规则（有码/普通厂牌默认标准右裁，可在影片详情页随时点击“人脸 / 封面焦点”手动检测或拖拽微调）。
+- **无自动更新**：内置桌面更新检查已关闭，新版本请前往 [Releases](https://github.com/zhao922-bot/OpenAver-Mobile/releases) 下载覆盖安装。
+- **非官方声明**：本项目为社区非官方 Android 移植版，与 OpenAver 上游作者无隶属或背书关系。
 
-- JDK 17
-- Android SDK 36
-- Android NDK `28.2.13676358`
-- 可选：Python 3.13
-- Node.js 18+（Release 构建会使用固定版本的 ESBuild 压缩自研 JS/CSS）
+---
 
-设置 SDK 后构建：
+## 🛠️ 本地构建与测试
+
+### 环境要求
+
+- **JDK 17** · **Flutter `3.44.0`** · **Python `3.13`** · **Node.js `18+`**
+- **Android SDK `36`** · **Build Tools `36.0.0`** · **NDK `28.2.13676358`** · **CMake `3.22.1`**
+
+### 构建与校验命令
 
 ```powershell
+# 1. 安装前端按需构建依赖（首次 Release 构建需要）
+npm ci --prefix tools/echarts-build
+
+# 2. Flutter 静态检查与单元测试
+cd flutter_ui && flutter pub get && flutter analyze && flutter test && cd ..
+
+# 3. Python 后端回归测试
+python -m pip install -r requirements-test.txt
+python -m pytest tests/ -q
+
+# 4. 构建 arm64-v8a Release APK（默认未签名）
 $env:ANDROID_HOME = "C:\path\to\Android\Sdk"
 $env:OPENAVER_BUILD_PYTHON = "C:\path\to\python.exe"
-.\gradlew.bat assembleRelease
+.\gradlew.bat assembleRelease -Pabi=arm64-v8a -Ptarget-platform=android-arm64
 ```
 
-也可使用 Gradle 属性：
+<details>
+<summary><strong>展开查看：上游补丁同步、签名配置与 GitHub Actions 说明</strong></summary>
 
-```powershell
-.\gradlew.bat assembleRelease -PopenaverBuildPython="C:\path\to\python.exe"
-```
-
-未指定 `OPENAVER_BUILD_PYTHON` 或 `openaverBuildPython` 时，采用 Chaquopy 的
-Python 构建环境。Gradle 产物默认是未签名 APK，需要自行创建密钥、使用
-`zipalign` 对齐，再通过 `apksigner` 签名。仓库不会包含发布密钥或签名密码。
-
-首次执行 Release 构建前安装固定版本的前端构建依赖：
-
-```powershell
-npm ci --prefix tools/echarts-build
-```
-
-`minifyReleaseWebAssets` 只处理 Release 产物中的自研 JS/CSS，并排除
-`web/static/vendor`。仓库中的原始源码不会被覆盖，便于继续开发和排查问题。
-
-### GitHub Actions
-
-仓库内的 `Build APK` workflow 会在 `main` 分支 push 和 Pull Request 上运行
-Python 同步验证、pytest 冒烟测试，并构建未签名的 `arm64-v8a` Release APK。
-
-推送 `v*` tag 时，`Publish Android Release` workflow 会构建签名 APK、
-生成 `SHA256SUMS.txt` 并创建 GitHub Release。正式发布前在仓库
-`Settings → Secrets and variables → Actions` 配置：
-
-- `ANDROID_KEYSTORE_BASE64`：release keystore 的 Base64 内容
-- `KEYSTORE_PASSWORD`
-- `KEY_ALIAS`
-- `KEY_PASSWORD`
-
-本地构建可通过 `ANDROID_KEYSTORE_PATH`、`KEYSTORE_PASSWORD`、
-`KEY_ALIAS`、`KEY_PASSWORD` 提供签名；未提供时仍会生成未签名 APK，
-方便做验证构建。
-
-本地冒烟测试：
-
-```bash
-python -m pip install -r requirements-test.txt
-python -m pytest tests -q
-```
-
-### 上游同步
-
-`app/src/main/python/` 不是独立维护的第二份上游源码，而是固定的
-OpenAver `v0.17.18`（提交
-`af0d99741e63e71980773c9ade04c473407a60b7`）加 `patches/` 下有编号的
-补丁。`patches/manifest.json` 记录上游提交和每个补丁负责的文件。
-
-CI 在构建前执行：
+#### 上游补丁分层校验
+`app/src/main/python/` 由锁定的上游 OpenAver 提交（记录于 [`patches/manifest.json`](patches/manifest.json)）叠加 `patches/*.patch` 生成。修改任何 Python 文件后必须同步更新补丁并通过校验：
 
 ```bash
 python tools/verify_python_sync.py \
-  --upstream-root upstream \
+  --upstream-root /path/to/OpenAver \
   --source-root app/src/main/python
 ```
 
-该检查会确认上游提交匹配，然后在临时目录中重放全部补丁，并逐文件比较哈希。
-修改任何 Android Python 文件时，必须同时更新对应 patch；完整维护流程见
-[patches/README.md](patches/README.md)。
+完整维护流程请参阅 [patches/README.md](patches/README.md)。
 
-## 许可证
+#### 签名与自动化发布
+- **CI 检查**：向 `main` 推送或提交 PR 时，`Build APK` workflow 自动运行 Flutter 测试、上游补丁同步校验、pytest、JS 语法检查、Android JVM 单测并产出未签名 `arm64-v8a` APK。
+- **正式发布**：推送 `v*` tag 会触发 `Publish Android Release`，需在仓库 Secrets 配置 `ANDROID_KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`；本地构建可通过环境变量 `ANDROID_KEYSTORE_PATH` 等传入签名信息。
 
-上游 OpenAver 和本项目修改均采用 MIT License，详见 [LICENSE](LICENSE)。
+</details>
+
+---
+
+## 📄 致谢与许可证
+
+感谢 [slive777/OpenAver](https://github.com/slive777/OpenAver) 原项目及其贡献者。
+上游 OpenAver 与本仓库所有改动均基于 **MIT License** 开源，详见 [LICENSE](LICENSE)。
