@@ -241,8 +241,54 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
     try {
       final resp = await api.getJson('/api/collection/analysis');
       if (!mounted) return;
+      if (resp['success'] == false) {
+        _toast((resp['error'] ?? strings.taskFailed).toString());
+        return;
+      }
       final data = (resp['data'] as Map?)?.cast<String, dynamic>() ?? resp;
-      final groups = (data['groups'] as List?) ?? const [];
+      final rows = <(String, String)>[];
+      final rawGroups = data['groups'] as List?;
+      if (rawGroups != null && rawGroups.isNotEmpty) {
+        for (final g in rawGroups.whereType<Map>()) {
+          final title = (g['label'] ?? g['type'] ?? g['name'] ?? '').toString();
+          final count = (g['count'] ?? '').toString();
+          if (title.isNotEmpty) rows.add((title, count));
+        }
+      } else {
+        if (data['total_videos'] is num) {
+          rows.add((strings.analysisTotalVideos, '${(data['total_videos'] as num).toInt()}'));
+        }
+        final nfoStatus = data['nfo_status'];
+        if (nfoStatus is Map && nfoStatus['missing_nfo'] is num) {
+          rows.add((strings.analysisMissingNfo, '${(nfoStatus['missing_nfo'] as num).toInt()}'));
+        }
+        final corrupted = data['corrupted_numbers'];
+        if (corrupted is Map && corrupted['total'] is num) {
+          rows.add((strings.analysisCorruptedNumbers, '${(corrupted['total'] as num).toInt()}'));
+        }
+        final jpTags = data['japanese_tags'];
+        if (jpTags is Map && jpTags['total'] is num) {
+          rows.add((strings.analysisJapaneseTags, '${(jpTags['total'] as num).toInt()}'));
+        }
+        final emptyArr = data['empty_array_fields'];
+        if (emptyArr is Map) {
+          if (emptyArr['actresses'] is num) {
+            rows.add((strings.analysisEmptyActresses, '${(emptyArr['actresses'] as num).toInt()}'));
+          }
+          if (emptyArr['tags'] is num) {
+            rows.add((strings.analysisEmptyTags, '${(emptyArr['tags'] as num).toInt()}'));
+          }
+        }
+        final missingFields = data['missing_fields'];
+        if (missingFields is Map) {
+          missingFields.forEach((k, v) {
+            final count = (v is num) ? v.toInt() : 0;
+            if (count > 0) {
+              rows.add((strings.analysisMissingField(k.toString()), '$count'));
+            }
+          });
+        }
+      }
       await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
@@ -257,18 +303,17 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
               ),
               const Divider(height: 1),
               Expanded(
-                child: groups.isEmpty
+                child: rows.isEmpty
                     ? Center(child: Text(strings.renameAllClean))
                     : ListView.builder(
-                        itemCount: groups.length,
+                        itemCount: rows.length,
                         itemBuilder: (_, idx) {
-                          final g = groups[idx];
-                          if (g is! Map) return const SizedBox.shrink();
-                          final title = (g['label'] ?? g['type'] ?? g['name'] ?? '').toString();
-                          final count = (g['count'] ?? '').toString();
+                          final (title, count) = rows[idx];
                           return ListTile(
                             title: Text(title),
-                            trailing: count.isNotEmpty ? Text(count) : null,
+                            trailing: count.isNotEmpty
+                                ? Text(count, style: const TextStyle(fontWeight: FontWeight.w600))
+                                : null,
                           );
                         },
                       ),

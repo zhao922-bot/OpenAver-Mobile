@@ -27,7 +27,7 @@ class SearchResultDetailPage extends ConsumerStatefulWidget {
   final int initialIndex;
   final Map<String, LocalStatusInfo> localStatus;
   final Set<String> wishlistedNumbers;
-  final Future<void> Function(SearchResultItem item) onToggleWishlist;
+  final Future<bool?> Function(SearchResultItem item) onToggleWishlist;
   final ValueChanged<String> onSearchActor;
 
   @override
@@ -59,14 +59,14 @@ class _SearchResultDetailPageState extends ConsumerState<SearchResultDetailPage>
   }
 
   Future<void> _toggleBookmark(SearchResultItem item) async {
-    await widget.onToggleWishlist(item);
+    final nextState = await widget.onToggleWishlist(item);
+    if (nextState == null || !mounted) return;
     final key = item.number.toUpperCase();
-    if (!mounted) return;
     setState(() {
-      if (_wishlisted.contains(key)) {
-        _wishlisted.remove(key);
-      } else {
+      if (nextState) {
         _wishlisted.add(key);
+      } else {
+        _wishlisted.remove(key);
       }
     });
   }
@@ -81,11 +81,16 @@ class _SearchResultDetailPageState extends ConsumerState<SearchResultDetailPage>
         'mode': 'translate',
         'actors': item.actors,
         'number': item.number,
+        'force': true,
       });
       if (!mounted) return;
       final res = (resp['result'] as String?) ?? '';
       if (resp['success'] == true && res.isNotEmpty) {
         setState(() => _translatedTitles[item.number] = res);
+      } else if (resp['skipped'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.alreadyTargetLanguage)),
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text((resp['error'] ?? strings.translateFailed).toString())),

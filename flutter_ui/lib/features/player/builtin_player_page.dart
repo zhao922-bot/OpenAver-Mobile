@@ -64,6 +64,9 @@ class _BuiltInPlayerPageState extends State<BuiltInPlayerPage> {
       Media(streamUrl, httpHeaders: widget.api.authHeaders),
       play: true,
     );
+    if (_rate != 1.0) {
+      _player.setRate(_rate);
+    }
   }
 
   Future<void> _toggleLandscape() async {

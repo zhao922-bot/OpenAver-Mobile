@@ -339,8 +339,21 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     );
 
     try {
+      final lower = picked.name.toLowerCase();
+      final mime = (picked.mimeType ?? '').trim().toLowerCase();
+      final mediaType = (mime == 'image/jpeg' || mime == 'image/png' || mime == 'image/webp')
+          ? DioMediaType.parse(mime)
+          : lower.endsWith('.png')
+              ? DioMediaType('image', 'png')
+              : lower.endsWith('.webp')
+                  ? DioMediaType('image', 'webp')
+                  : DioMediaType('image', 'jpeg');
       final form = FormData.fromMap({
-        'file': await MultipartFile.fromFile(picked.path, filename: picked.name),
+        'file': await MultipartFile.fromFile(
+          picked.path,
+          filename: picked.name,
+          contentType: mediaType,
+        ),
       });
       final resp = await api.dio.post<dynamic>('/api/image-search', data: form);
       if (mounted) Navigator.of(context).pop();
@@ -388,18 +401,28 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     } catch (e) {
       debugPrint('imageSearch error: $e');
       if (mounted) Navigator.of(context).pop();
-      _toast(strings.requestFailed('$e'));
+      String msg = strings.requestFailed('$e');
+      if (e is DioException && e.response?.data is Map) {
+        final errBody = e.response!.data as Map;
+        final serverMsg = (errBody['message'] ?? errBody['error'] ?? '').toString();
+        if (serverMsg.isNotEmpty) msg = serverMsg;
+      }
+      _toast(msg);
     }
   }
 
-  Future<void> _toggleWishlist(SearchResultItem item) async {
+  Future<bool?> _toggleWishlist(SearchResultItem item) async {
     final strings = ref.read(stringsProvider);
     final key = item.number.toUpperCase();
     final api = ref.read(apiClientProvider);
     try {
       if (_wishlisted.contains(key)) {
-        await api.deleteJson('/api/wishlist/${Uri.encodeComponent(item.number)}');
-        if (mounted) setState(() => _wishlisted = {..._wishlisted}..remove(key));
+        final resp = await api.deleteJson('/api/wishlist/${Uri.encodeComponent(item.number)}');
+        if (resp['success'] == true) {
+          if (mounted) setState(() => _wishlisted = {..._wishlisted}..remove(key));
+          return false;
+        }
+        return null;
       } else {
         final resp = await api.postJson('/api/wishlist', data: {
           'number': item.number,
@@ -417,16 +440,20 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           'source': item.source,
           'url': item.url,
         });
-        if (!mounted) return;
+        if (!mounted) return null;
         if (resp['success'] == true) {
           setState(() => _wishlisted = {..._wishlisted, key});
+          return true;
         } else if (resp['already_owned'] == true) {
           _toast(strings.alreadyOwnedHint);
+          return null;
         }
+        return null;
       }
     } catch (e) {
       debugPrint('toggleWishlist error: $e');
       _toast(strings.requestFailed('$e'));
+      return null;
     }
   }
 
@@ -441,67 +468,73 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
-        builder: (ctx) => DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.72,
-          builder: (_, scrollCtrl) => Column(
-            children: [
-              ListTile(
-                title: Text(strings.wishlistCount(items.length), style: const TextStyle(fontWeight: FontWeight.w700)),
-                trailing: IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () => Navigator.of(ctx).pop(),
+        builder: (ctx) => StatefulBuilder(
+          builder: (sheetCtx, setSheetState) => DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.72,
+            builder: (_, scrollCtrl) => Column(
+              children: [
+                ListTile(
+                  title: Text(strings.wishlistCount(items.length), style: const TextStyle(fontWeight: FontWeight.w700)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.of(sheetCtx).pop(),
+                  ),
                 ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: items.isEmpty
-                    ? Center(child: Text(strings.emptyWishlist))
-                    : ListView.builder(
-                        controller: scrollCtrl,
-                        itemCount: items.length,
-                        itemBuilder: (_, idx) {
-                          final w = items[idx];
-                          final num = (w['number'] ?? '').toString();
-                          final title = (w['title'] ?? '').toString();
-                          final coverRaw = (w['cover'] ?? w['cover_url'] ?? '').toString();
-                          final coverProxy = coverRaw.isNotEmpty
-                              ? '/api/proxy-image?url=${Uri.encodeQueryComponent(coverRaw)}'
-                              : '';
-                          return ListTile(
-                            leading: coverProxy.isNotEmpty
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: SizedBox(
-                                      width: 56,
-                                      height: 40,
-                                      child: OpenAverNetworkImage(
-                                        api: api,
-                                        url: coverProxy,
-                                        targetDecodeWidth: 160,
+                const Divider(height: 1),
+                Expanded(
+                  child: items.isEmpty
+                      ? Center(child: Text(strings.emptyWishlist))
+                      : ListView.builder(
+                          controller: scrollCtrl,
+                          itemCount: items.length,
+                          itemBuilder: (_, idx) {
+                            final w = items[idx];
+                            final num = (w['number'] ?? '').toString();
+                            final title = (w['title'] ?? '').toString();
+                            final coverRaw = (w['cover'] ?? w['cover_url'] ?? '').toString();
+                            final coverUrl = coverRaw.isNotEmpty
+                                ? '/api/proxy-image?url=${Uri.encodeQueryComponent(coverRaw)}'
+                                : (num.isNotEmpty
+                                    ? '/api/wishlist/cover?number=${Uri.encodeQueryComponent(num)}'
+                                    : '');
+                            return ListTile(
+                              leading: coverUrl.isNotEmpty
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: SizedBox(
+                                        width: 56,
+                                        height: 40,
+                                        child: OpenAverNetworkImage(
+                                          api: api,
+                                          url: coverUrl,
+                                          targetDecodeWidth: 160,
+                                        ),
                                       ),
-                                    ),
-                                  )
-                                : null,
-                            title: Text(num, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            subtitle: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline_rounded),
-                              onPressed: () async {
-                                await api.deleteJson('/api/wishlist/${Uri.encodeComponent(num)}');
-                                if (ctx.mounted) Navigator.of(ctx).pop();
-                                _refreshWishlistMembership();
+                                    )
+                                  : null,
+                              title: Text(num, style: const TextStyle(fontWeight: FontWeight.w700)),
+                              subtitle: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded),
+                                onPressed: () async {
+                                  await api.deleteJson('/api/wishlist/${Uri.encodeComponent(num)}');
+                                  setSheetState(() {
+                                    items.removeWhere((e) => (e['number'] ?? '').toString() == num);
+                                  });
+                                  _refreshWishlistMembership();
+                                },
+                              ),
+                              onTap: () {
+                                Navigator.of(sheetCtx).pop();
+                                _startSearch(overrideQuery: num);
                               },
-                            ),
-                            onTap: () {
-                              Navigator.of(ctx).pop();
-                              _startSearch(overrideQuery: num);
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       );

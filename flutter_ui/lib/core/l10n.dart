@@ -556,4 +556,26 @@ class AppStrings {
         en: 'Pending: $pending',
         ko: '대기 중: $pending건',
       );
+
+  // Collection health analysis & translation status
+  String get analysisTotalVideos => tr(zhCn: '片库总影片数', zhTw: '片庫總影片數', ja: '総動画数', en: 'Total Videos', ko: '전체 동영상');
+  String get analysisMissingNfo => tr(zhCn: '缺失 NFO 元数据', zhTw: '缺失 NFO 中繼資料', ja: 'NFO 未作成', en: 'Missing NFO', ko: 'NFO 누락');
+  String get analysisCorruptedNumbers => tr(zhCn: '异常番号', zhTw: '異常番號', ja: '異常な品番', en: 'Corrupted Numbers', ko: '비정상 품번');
+  String get analysisJapaneseTags => tr(zhCn: '含日文标签影片', zhTw: '含日文標籤影片', ja: '日本語タグあり', en: 'Videos with Japanese Tags', ko: '일본어 태그 포함');
+  String get analysisEmptyActresses => tr(zhCn: '空女优列表', zhTw: '空女優列表', ja: '女優情報なし', en: 'Empty Actresses', ko: '배우 정보 없음');
+  String get analysisEmptyTags => tr(zhCn: '空标签列表', zhTw: '空標籤列表', ja: 'タグなし', en: 'Empty Tags', ko: '태그 없음');
+  String analysisMissingField(String field) => tr(
+        zhCn: '缺失字段：$field',
+        zhTw: '缺失欄位：$field',
+        ja: '欠損フィールド：$field',
+        en: 'Missing field: $field',
+        ko: '누락 필드: $field',
+      );
+  String get alreadyTargetLanguage => tr(
+        zhCn: '已是目标语言，无需翻译',
+        zhTw: '已是目標語言，無需翻譯',
+        ja: 'すでに対象言語のため翻訳不要です',
+        en: 'Already in target language',
+        ko: '이미 대상 언어입니다',
+      );
 }

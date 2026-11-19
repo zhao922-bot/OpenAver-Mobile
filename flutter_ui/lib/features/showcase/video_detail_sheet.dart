@@ -479,11 +479,14 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
         'mode': 'translate',
         'actors': widget.video.actresses,
         'number': widget.video.number,
+        'force': true,
       });
       if (!mounted) return;
       final translated = (resp['result'] as String?) ?? '';
       if (resp['success'] == true && translated.isNotEmpty) {
         await _saveTitle(translated);
+      } else if (resp['skipped'] == true) {
+        _showToast(strings.alreadyTargetLanguage);
       } else {
         _showToast((resp['error'] ?? strings.translateFailed).toString());
       }
@@ -639,174 +642,21 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
 
   Future<void> _openRescrapeDialog() async {
     final strings = ref.read(stringsProvider);
-    final numCtrl = TextEditingController(text: widget.video.number);
-    var source = 'auto';
-    await showModalBottomSheet<void>(
+    final api = ref.read(apiClientProvider);
+    final updated = await showModalBottomSheet<VideoItem>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (sheetCtx) {
-        var loading = false;
-        Map<String, dynamic>? preview;
-        String? statusError;
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            final api = ref.read(apiClientProvider);
-            Future<void> doPreview() async {
-              setSheetState(() {
-                loading = true;
-                statusError = null;
-              });
-              try {
-                final resp = await api.postJson('/api/rescrape/preview', data: {
-                  'number': numCtrl.text.trim(),
-                  'source': source,
-                });
-                setSheetState(() {
-                  loading = false;
-                  if (resp['success'] == true) {
-                    preview = resp;
-                  } else {
-                    statusError = (resp['error'] ?? strings.rescrapeNotFound).toString();
-                  }
-                });
-              } catch (e) {
-                setSheetState(() {
-                  loading = false;
-                  statusError = e.toString();
-                });
-              }
-            }
-
-            Future<void> doApply() async {
-              if (preview == null) return;
-              setSheetState(() => loading = true);
-              try {
-                final resp = await api.postJson('/api/enrich-single', data: {
-                  'file_path': widget.video.path,
-                  'number': numCtrl.text.trim(),
-                  'source': source,
-                  'mode': 'fill_missing',
-                  'metadata': preview,
-                  'overwrite_existing': true,
-                });
-                setSheetState(() => loading = false);
-                if (resp['success'] == true) {
-                  final fresh = await api.getJson(
-                    '/api/showcase/video',
-                    queryParameters: {'path': widget.video.path},
-                  );
-                  if (fresh['success'] == true && fresh['video'] is Map) {
-                    widget.onUpdated(VideoItem.fromJson(Map<String, dynamic>.from(fresh['video'])));
-                  }
-                  if (ctx.mounted) Navigator.of(ctx).pop();
-                  _showToast(strings.rescrapeUpdated);
-                } else {
-                  setSheetState(() {
-                    statusError = (resp['error'] ?? resp['reason'] ?? strings.saveFailed).toString();
-                  });
-                }
-              } catch (e) {
-                setSheetState(() {
-                  loading = false;
-                  statusError = e.toString();
-                });
-              }
-            }
-
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                16,
-                16,
-                MediaQuery.of(ctx).viewInsets.bottom + 16,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(strings.rescrape, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: numCtrl,
-                          decoration: InputDecoration(labelText: strings.numberLabel),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      DropdownButton<String>(
-                        value: source,
-                        items: [
-                          DropdownMenuItem(value: 'auto', child: Text(strings.autoLabel)),
-                          const DropdownMenuItem(value: 'javbus', child: Text('JavBus')),
-                          const DropdownMenuItem(value: 'javdb', child: Text('JavDB')),
-                          const DropdownMenuItem(value: 'dmm', child: Text('DMM')),
-                          const DropdownMenuItem(value: 'jav321', child: Text('Jav321')),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) setSheetState(() => source = v);
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (statusError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(statusError!, style: const TextStyle(color: Colors.redAccent)),
-                    ),
-                  if (preview != null)
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            (preview!['title'] ?? '').toString(),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${strings.makerLabel}: ${preview!['maker'] ?? '-'} · ${strings.releaseLabel}: ${preview!['date'] ?? '-'}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: loading ? null : doPreview,
-                          child: Text(loading ? strings.requesting : strings.previewRescrape),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: (loading || preview == null) ? null : doApply,
-                          child: Text(strings.applyOverwrite),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+      builder: (_) => _RescrapeSheet(
+        api: api,
+        strings: strings,
+        video: widget.video,
+      ),
     );
-    numCtrl.dispose();
+    if (updated != null && mounted) {
+      widget.onUpdated(updated);
+      _showToast(strings.rescrapeUpdated);
+    }
   }
 
   Future<void> _confirmDelete() async {
@@ -1809,6 +1659,249 @@ class _FocalCropSheetState extends State<_FocalCropSheet> {
                     child: Text(_saving ? widget.strings.saving : widget.strings.focalSaveBtn),
                   ),
                 ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RescrapeSheet extends StatefulWidget {
+  const _RescrapeSheet({
+    required this.api,
+    required this.strings,
+    required this.video,
+  });
+
+  final ApiClient api;
+  final AppStrings strings;
+  final VideoItem video;
+
+  @override
+  State<_RescrapeSheet> createState() => _RescrapeSheetState();
+}
+
+class _RescrapeSheetState extends State<_RescrapeSheet> {
+  late final TextEditingController _numCtrl;
+  String _source = 'auto';
+  bool _loading = false;
+  Map<String, dynamic>? _preview;
+  List<Map<String, dynamic>> _candidates = const [];
+  int _selectedCandidateIdx = 0;
+  String? _statusError;
+
+  @override
+  void initState() {
+    super.initState();
+    _numCtrl = TextEditingController(text: widget.video.number);
+  }
+
+  @override
+  void dispose() {
+    _numCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _doPreview() async {
+    setState(() {
+      _loading = true;
+      _statusError = null;
+    });
+    try {
+      final resp = await widget.api.postJson('/api/rescrape/preview', data: {
+        'number': _numCtrl.text.trim(),
+        'source': _source,
+      });
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        if (resp['success'] == true) {
+          final rawCands = (resp['candidates'] as List?)
+              ?.whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+          if (rawCands != null && rawCands.isNotEmpty) {
+            _candidates = rawCands;
+            _selectedCandidateIdx = 0;
+            _preview = rawCands.first;
+          } else {
+            _candidates = const [];
+            _selectedCandidateIdx = 0;
+            _preview = resp;
+          }
+        } else {
+          _candidates = const [];
+          _preview = null;
+          _statusError = (resp['detail'] ?? resp['error'] ?? widget.strings.rescrapeNotFound).toString();
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _statusError = e.toString();
+      });
+    }
+  }
+
+  Future<void> _doApply() async {
+    final chosen = _preview;
+    if (chosen == null) return;
+    setState(() {
+      _loading = true;
+      _statusError = null;
+    });
+    try {
+      final targetNumber = _numCtrl.text.trim();
+      final cleanMetadata = Map<String, dynamic>.from(chosen)
+        ..remove('success')
+        ..remove('candidates');
+      final resp = await widget.api.postJson('/api/enrich-single', data: {
+        'file_path': widget.video.path,
+        'number': targetNumber,
+        'source': _source,
+        'mode': 'refresh_full',
+        'metadata': cleanMetadata,
+        'write_cover': true,
+        'overwrite_existing': true,
+        'allow_number_change':
+            targetNumber.toUpperCase() != widget.video.number.toUpperCase(),
+      });
+      if (!mounted) return;
+      if (resp['success'] == true) {
+        VideoItem updated = widget.video;
+        final fresh = await widget.api.getJson(
+          '/api/showcase/video',
+          queryParameters: {'path': widget.video.path},
+        );
+        if (fresh['success'] == true && fresh['video'] is Map) {
+          updated = VideoItem.fromJson(Map<String, dynamic>.from(fresh['video'] as Map));
+        }
+        if (mounted) Navigator.of(context).pop(updated);
+      } else {
+        setState(() {
+          _loading = false;
+          _statusError =
+              (resp['detail'] ?? resp['error'] ?? resp['reason'] ?? widget.strings.saveFailed).toString();
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _statusError = e.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = widget.strings;
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(strings.rescrape, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _numCtrl,
+                  decoration: InputDecoration(labelText: strings.numberLabel),
+                ),
+              ),
+              const SizedBox(width: 10),
+              DropdownButton<String>(
+                value: _source,
+                items: [
+                  DropdownMenuItem(value: 'auto', child: Text(strings.autoLabel)),
+                  const DropdownMenuItem(value: 'javbus', child: Text('JavBus')),
+                  const DropdownMenuItem(value: 'javdb', child: Text('JavDB')),
+                  const DropdownMenuItem(value: 'dmm', child: Text('DMM')),
+                  const DropdownMenuItem(value: 'jav321', child: Text('Jav321')),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _source = v);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_statusError != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(_statusError!, style: const TextStyle(color: Colors.redAccent)),
+            ),
+          if (_candidates.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: List.generate(_candidates.length, (i) {
+                  final c = _candidates[i];
+                  final label = (c['date'] ?? c['maker'] ?? '#${i + 1}').toString();
+                  return ChoiceChip(
+                    label: Text('#${i + 1} $label', style: const TextStyle(fontSize: 11.5)),
+                    selected: _selectedCandidateIdx == i,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) => setState(() {
+                      _selectedCandidateIdx = i;
+                      _preview = _candidates[i];
+                    }),
+                  );
+                }),
+              ),
+            ),
+          if (_preview != null)
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    (_preview!['title'] ?? '').toString(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${strings.makerLabel}: ${_preview!['maker'] ?? '-'} · ${strings.releaseLabel}: ${_preview!['date'] ?? '-'}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _loading ? null : _doPreview,
+                  child: Text(_loading ? strings.requesting : strings.previewRescrape),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: (_loading || _preview == null) ? null : _doApply,
+                  child: Text(strings.applyOverwrite),
+                ),
               ),
             ],
           ),

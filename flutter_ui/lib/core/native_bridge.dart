@@ -59,11 +59,13 @@ class PickedFileInfo {
     required this.path,
     required this.name,
     required this.size,
+    this.mimeType,
   });
 
   final String path;
   final String name;
   final int size;
+  final String? mimeType;
 }
 
 class TreeAccessInfo {
@@ -208,6 +210,7 @@ class NativeBridge {
       path: (raw['path'] as String?) ?? '',
       name: (raw['name'] as String?) ?? 'upload.bin',
       size: (raw['size'] as int?) ?? 0,
+      mimeType: raw['mimeType'] as String?,
     );
   }
 

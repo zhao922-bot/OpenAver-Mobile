@@ -61,6 +61,7 @@ class _BrowseDirSheetState extends ConsumerState<BrowseDirSheet> {
           if (widget.expandVideos) 'expand': 'videos',
         },
       );
+      if (!mounted) return;
       if (resp['success'] == false) {
         setState(() {
           _loading = false;

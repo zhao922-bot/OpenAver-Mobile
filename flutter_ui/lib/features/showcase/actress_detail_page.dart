@@ -641,6 +641,21 @@ class _ActressPhotoPickerSheetState extends State<_ActressPhotoPickerSheet> {
     }
   }
 
+  static DioMediaType _imageMediaType(String filename, String? mimeType) {
+    final normalized = (mimeType ?? '').trim().toLowerCase();
+    if (normalized == 'image/jpeg' ||
+        normalized == 'image/png' ||
+        normalized == 'image/webp' ||
+        normalized == 'image/gif') {
+      return DioMediaType.parse(normalized);
+    }
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.png')) return DioMediaType('image', 'png');
+    if (lower.endsWith('.webp')) return DioMediaType('image', 'webp');
+    if (lower.endsWith('.gif')) return DioMediaType('image', 'gif');
+    return DioMediaType('image', 'jpeg');
+  }
+
   Future<void> _uploadLocal() async {
     if (_applying) return;
     final picked = await NativeBridge.instance.pickFile(
@@ -653,7 +668,11 @@ class _ActressPhotoPickerSheetState extends State<_ActressPhotoPickerSheet> {
     });
     try {
       final form = FormData.fromMap({
-        'file': await MultipartFile.fromFile(picked.path, filename: picked.name),
+        'file': await MultipartFile.fromFile(
+          picked.path,
+          filename: picked.name,
+          contentType: _imageMediaType(picked.name, picked.mimeType),
+        ),
       });
       final resp = await widget.api.dio.post<dynamic>(
         '/api/actresses/${Uri.encodeComponent(widget.profile.name)}/photo/upload',

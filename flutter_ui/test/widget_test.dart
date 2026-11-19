@@ -344,8 +344,16 @@ void main() {
         if (opts.path == '/api/search/favorite-files') {
           return _jsonResponse({'files': []});
         }
+        if (opts.path == '/api/wishlist' && opts.method == 'POST') {
+          return _jsonResponse({'success': false, 'already_owned': true});
+        }
         if (opts.path == '/api/wishlist') {
           return _jsonResponse([]);
+        }
+        if (opts.path == '/api/translate') {
+          final map = Map<String, dynamic>.from(opts.data as Map);
+          expect(map['force'], true);
+          return _jsonResponse({'success': true, 'skipped': true, 'reason': 'already_target_language'});
         }
         if (opts.path == '/api/search/makers') {
           return _jsonResponse({'available': false, 'makers': []});
@@ -381,6 +389,7 @@ void main() {
     var photoReplaced = false;
     var focalSaved = false;
     var aiTagged = false;
+    var rescraped = false;
 
     final mockApi = ApiClient(
       port: 8765,
@@ -501,6 +510,25 @@ void main() {
           aiTagged = true;
           return _jsonResponse({'success': true, 'added': ['Solo'], 'user_tags': ['Keep', 'Solo']});
         }
+        if (opts.path == '/api/rescrape/preview') {
+          return _jsonResponse({
+            'success': true,
+            'number': 'ABC-001',
+            'title': 'Fresh Title',
+            'maker': 'S1',
+            'date': '2025-02-01',
+          });
+        }
+        if (opts.path == '/api/enrich-single') {
+          final map = Map<String, dynamic>.from(opts.data as Map);
+          expect(map['mode'], 'refresh_full');
+          expect(map['write_cover'], true);
+          expect(map['overwrite_existing'], true);
+          expect(map['allow_number_change'], false);
+          expect((map['metadata'] as Map).containsKey('success'), false);
+          rescraped = true;
+          return _jsonResponse({'success': true});
+        }
         if (opts.path == '/api/actresses/Sakura/photo-candidates') {
           return _sseResponse([
             'event: candidate\ndata: {"source":"local_crop","thumb_url":"","full_url":"https://cand/1.jpg","id":"c1"}\n\n',
@@ -572,6 +600,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(aiTagged, true);
 
+    await tester.tap(find.text('Rescrape'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Preview'));
+    await tester.pumpAndSettle();
+    expect(find.text('Fresh Title'), findsOneWidget);
+    await tester.tap(find.text('Overwrite'));
+    await tester.pumpAndSettle();
+    expect(rescraped, true);
+
     await tester.scrollUntilVisible(
       find.text('Drama'),
       200,
@@ -623,8 +660,16 @@ void main() {
         if (opts.path == '/api/search/favorite-files') {
           return _jsonResponse({'files': []});
         }
+        if (opts.path == '/api/wishlist' && opts.method == 'POST') {
+          return _jsonResponse({'success': false, 'already_owned': true});
+        }
         if (opts.path == '/api/wishlist') {
           return _jsonResponse([]);
+        }
+        if (opts.path == '/api/translate') {
+          final map = Map<String, dynamic>.from(opts.data as Map);
+          expect(map['force'], true);
+          return _jsonResponse({'success': true, 'skipped': true, 'reason': 'already_target_language'});
         }
         if (opts.path == '/api/search/stream') {
           return _sseResponse([
@@ -661,6 +706,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SearchResultDetailPage), findsOneWidget);
 
+    // Bookmark rejected with already_owned should NOT turn bookmark icon filled
+    await tester.tap(find.byIcon(Icons.bookmark_add_outlined));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.bookmark_rounded), findsNothing);
+    expect(find.text('Already in local library'), findsOneWidget);
+
+    // Dismiss snackbar before tapping Translate chip, then verify force=true + skipped handling
+    ScaffoldMessenger.of(tester.element(find.byType(SearchResultDetailPage))).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('AI Translate'));
+    await tester.tap(find.text('AI Translate'));
+    await tester.pumpAndSettle();
+    expect(find.text('Already in target language'), findsOneWidget);
+
     await tester.pageBack();
     await tester.pumpAndSettle();
 
@@ -675,6 +734,7 @@ void main() {
     var aliasListRequested = false;
     var similarBackfillStarted = false;
     var metatubeConnected = false;
+    var sourcesProbed = false;
 
     final mockApi = ApiClient(
       port: 8765,
@@ -739,7 +799,14 @@ void main() {
           });
         }
         if (opts.path == '/api/collection/analysis') {
-          return _jsonResponse({'success': true, 'groups': [{'label': 'Corrupted', 'count': 1}]});
+          return _jsonResponse({
+            'total_videos': 42,
+            'nfo_status': {'has_nfo': 40, 'missing_nfo': 2},
+            'corrupted_numbers': {'total': 1, 'patterns': []},
+            'japanese_tags': {'total': 5},
+            'empty_array_fields': {'actresses': 1, 'tags': 2},
+            'missing_fields': {'title': 0, 'maker': 3},
+          });
         }
         if (opts.path == '/api/collection/fix-numbers/preview') {
           return _jsonResponse({
@@ -760,6 +827,17 @@ void main() {
         if (opts.path == '/api/settings/metatube/connect') {
           metatubeConnected = true;
           return _jsonResponse({'success': true, 'provider_count': 5});
+        }
+        if (opts.path == '/api/sources/probe') {
+          final map = Map<String, dynamic>.from(opts.data as Map);
+          expect(map['source_ids'], ['javbus']);
+          expect(map['proxy_scope'], 'dmm');
+          sourcesProbed = true;
+          return _jsonResponse({
+            'results': {
+              'javbus': {'state': 'ok', 'reason': 'ok', 'status': 200},
+            },
+          });
         }
         if (opts.path == '/api/ai/similar/status') {
           return _jsonResponse({'running': false, 'pending': 10, 'processed': 0, 'total': 10});
@@ -792,11 +870,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Library: 42 videos'), findsOneWidget);
 
-    // Scanner: Collection Analysis -> Fix Corrupted Numbers (uses affected + ids)
+    // Scanner: Collection Analysis -> Fix Corrupted Numbers (uses real backend schema + affected + ids)
     final scannerScroll = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(find.text('Library Health & Number Fix').first, 250, scrollable: scannerScroll);
     await tester.tap(find.text('Library Health & Number Fix').first);
     await tester.pumpAndSettle();
+    expect(find.text('Total Videos'), findsOneWidget);
+    expect(find.text('Missing NFO'), findsOneWidget);
+    expect(find.text('Corrupted Numbers'), findsOneWidget);
+    expect(find.text('Missing field: maker'), findsOneWidget);
     await tester.tap(find.text('Scan & Fix Corrupted Numbers'));
     await tester.pumpAndSettle();
     expect(find.text('ABC001-C -> ABC-001'), findsOneWidget);
@@ -862,9 +944,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(similarBackfillStarted, true);
 
-    // Metatube Connect button
+    // Metatube Connect + Source Probe (Map response) + Pending Scrape Folder typing
     await tester.tap(find.text('Search, Proxy & Sources').first);
     await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Pending Scrape Folder'),
+      '/storage/downloads',
+    );
+    await tester.pump();
+    expect(find.text('/storage/downloads'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Test Sources').first, 250, scrollable: settingsScroll);
+    await tester.tap(find.text('Test Sources').first);
+    await tester.pumpAndSettle();
+    expect(sourcesProbed, true);
+    expect(find.text('OK'), findsWidgets);
     await tester.scrollUntilVisible(find.text('Connect').first, 250, scrollable: settingsScroll);
     await tester.tap(find.text('Connect').first);
     await tester.pumpAndSettle();

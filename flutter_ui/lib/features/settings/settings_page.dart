@@ -261,23 +261,69 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<void> _probeSources() async {
     final strings = ref.read(stringsProvider);
+    final searchCfg = _section('search');
+    final proxyUrl = (searchCfg['proxy_url'] ?? '').toString().trim();
+    final proxyScope = searchCfg['proxy_scope'] == 'all' ? 'all' : 'dmm';
+    final rawSources = (_config['sources'] as List?)
+            ?.whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList() ??
+        const <Map<String, dynamic>>[];
+    var sourceIds = rawSources
+        .where((s) => s['enabled'] == true)
+        .map((s) => (s['id'] ?? '').toString().trim())
+        .where((id) => id.isNotEmpty)
+        .toList();
+    if (sourceIds.isEmpty) {
+      sourceIds = rawSources
+          .map((s) => (s['id'] ?? '').toString().trim())
+          .where((id) => id.isNotEmpty)
+          .toList();
+    }
     setState(() {
       _probingSources = true;
       _probeResults = const {};
     });
     try {
-      final resp = await ref.read(apiClientProvider).postJson('/api/sources/probe');
+      final resp = await ref.read(apiClientProvider).postJson(
+        '/api/sources/probe',
+        data: {
+          'proxy_url': proxyUrl,
+          'proxy_scope': proxyScope,
+          'source_ids': sourceIds,
+        },
+      );
       if (!mounted) return;
-      final results = (resp['results'] as List?) ?? (resp['sources'] as List?) ?? const [];
       final mapped = <String, String>{};
-      for (final item in results.whereType<Map>()) {
-        final id = (item['id'] ?? item['source'] ?? '').toString();
-        final ok = item['ok'] == true || item['reachable'] == true || item['state'] == 'ok';
+      String formatRow(Map<dynamic, dynamic> item) {
+        final state = (item['state'] ?? '').toString();
+        final reason = (item['reason'] ?? '').toString();
+        final ok = item['ok'] == true || item['reachable'] == true || state == 'ok';
         final latency = item['latency_ms'];
-        if (id.isNotEmpty) {
-          mapped[id] = ok
-              ? (latency != null ? 'OK (${latency}ms)' : 'OK')
-              : (item['state'] ?? 'ERR').toString();
+        if (ok) {
+          return latency != null ? 'OK (${latency}ms)' : 'OK';
+        }
+        if (state == 'skipped') {
+          return reason.isNotEmpty ? 'SKIP ($reason)' : 'SKIP';
+        }
+        final label = state.isNotEmpty ? state.toUpperCase() : 'ERR';
+        return reason.isNotEmpty && reason != state ? '$label ($reason)' : label;
+      }
+
+      final rawResults = resp['results'] ?? resp['sources'];
+      if (rawResults is Map) {
+        rawResults.forEach((k, v) {
+          final id = k.toString();
+          if (id.isNotEmpty && v is Map) {
+            mapped[id] = formatRow(v);
+          }
+        });
+      } else if (rawResults is List) {
+        for (final item in rawResults.whereType<Map>()) {
+          final id = (item['id'] ?? item['source'] ?? '').toString();
+          if (id.isNotEmpty) {
+            mapped[id] = formatRow(item);
+          }
         }
       }
       setState(() {
@@ -1269,7 +1315,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               children: [
                                 Expanded(
                                   child: TextFormField(
-                                    key: ValueKey('fav_$favoriteFolder'),
+                                    key: ValueKey('fav_$_presetRev'),
                                     initialValue: favoriteFolder,
                                     decoration: InputDecoration(labelText: strings.favoriteFolderTitle),
                                     onChanged: (v) => _markDirty(() => searchCfg['favorite_folder'] = v.trim()),
@@ -1284,7 +1330,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                       initialPath: favoriteFolder.isNotEmpty ? favoriteFolder : null,
                                     );
                                     if (picked != null && picked.isNotEmpty) {
-                                      _markDirty(() => searchCfg['favorite_folder'] = picked);
+                                      _markDirty(() {
+                                        searchCfg['favorite_folder'] = picked;
+                                        _presetRev++;
+                                      });
                                     }
                                   },
                                 ),
@@ -1340,11 +1389,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                     Text(id.toUpperCase()),
                                     if (probeState != null) ...[
                                       const SizedBox(width: 8),
-                                      Text(
-                                        probeState,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: probeState.startsWith('OK') ? palette.success : palette.danger,
+                                      Flexible(
+                                        child: Text(
+                                          probeState,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: probeState.startsWith('OK')
+                                                ? palette.success
+                                                : probeState.startsWith('SKIP')
+                                                    ? palette.textMuted
+                                                    : palette.danger,
+                                          ),
                                         ),
                                       ),
                                     ],

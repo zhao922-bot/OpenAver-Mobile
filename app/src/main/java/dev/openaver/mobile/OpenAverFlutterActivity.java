@@ -30,6 +30,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import io.flutter.embedding.android.FlutterActivity;
 import io.flutter.embedding.engine.FlutterEngine;
@@ -57,6 +59,9 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
     private static final String PREF_UI_MODE = "ui_mode";
     private static final String DEFAULT_UI_LOCALE = "zh-CN";
 
+    private static final long PICKED_CACHE_MAX_AGE_MS = 24L * 60L * 60L * 1000L;
+
+    private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
     private MethodChannel bridgeChannel;
     private MethodChannel.Result pendingTreeResult;
     private MethodChannel.Result pendingPickFileResult;
@@ -81,6 +86,28 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
         if (cfTransport != null && contentRoot != null) {
             cfTransport.setHost(this, contentRoot);
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (pendingTreeResult != null) {
+            pendingTreeResult.success(null);
+            pendingTreeResult = null;
+        }
+        if (pendingPickFileResult != null) {
+            pendingPickFileResult.success(null);
+            pendingPickFileResult = null;
+        }
+        if (pendingPermissionResult != null) {
+            pendingPermissionResult.success(false);
+            pendingPermissionResult = null;
+        }
+        if (bridgeChannel != null) {
+            bridgeChannel.setMethodCallHandler(null);
+            bridgeChannel = null;
+        }
+        ioExecutor.shutdownNow();
+        super.onDestroy();
     }
 
     @Override
@@ -194,7 +221,14 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
                 String tempPath = call.argument("tempPath");
                 String filename = call.argument("filename");
                 String mimeType = call.argument("mimeType");
-                result.success(saveToDownloads(tempPath, filename, mimeType));
+                ioExecutor.execute(() -> {
+                    String saved = saveToDownloads(tempPath, filename, mimeType);
+                    runOnUiThread(() -> {
+                        if (!isDestroyed()) {
+                            result.success(saved);
+                        }
+                    });
+                });
                 break;
             }
             case "syncNativeTheme": {
@@ -385,6 +419,21 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
         File pickedDir = new File(getCacheDir(), "picked");
         if (!pickedDir.exists()) {
             pickedDir.mkdirs();
+        } else {
+            long cutoff = System.currentTimeMillis() - PICKED_CACHE_MAX_AGE_MS;
+            File[] existingFiles = pickedDir.listFiles();
+            if (existingFiles != null) {
+                for (File stale : existingFiles) {
+                    if (stale.isFile() && stale.lastModified() < cutoff) {
+                        stale.delete();
+                    }
+                }
+            }
+        }
+        String mimeType = null;
+        try {
+            mimeType = resolver.getType(uri);
+        } catch (Exception ignored) {
         }
         File target = new File(pickedDir, System.currentTimeMillis() + "_" + name);
         try (InputStream in = resolver.openInputStream(uri);
@@ -407,6 +456,9 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
             payload.put("path", target.getAbsolutePath());
             payload.put("name", name);
             payload.put("size", size);
+            if (mimeType != null && !mimeType.isEmpty()) {
+                payload.put("mimeType", mimeType);
+            }
             return payload;
         } catch (Exception error) {
             target.delete();
@@ -509,7 +561,15 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
             pendingPickFileResult = null;
             if (callback != null) {
                 if (resultCode == RESULT_OK && data != null && data.getData() != null) {
-                    callback.success(copyPickedUriToCache(data.getData()));
+                    Uri pickedUri = data.getData();
+                    ioExecutor.execute(() -> {
+                        Map<String, Object> copied = copyPickedUriToCache(pickedUri);
+                        runOnUiThread(() -> {
+                            if (!isDestroyed()) {
+                                callback.success(copied);
+                            }
+                        });
+                    });
                 } else {
                     callback.success(null);
                 }
