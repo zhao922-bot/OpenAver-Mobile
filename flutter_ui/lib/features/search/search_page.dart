@@ -8,6 +8,7 @@ import '../../core/models/search_models.dart';
 import '../../core/native_bridge.dart';
 import '../player/builtin_player_page.dart';
 import '../shared/openaver_image.dart';
+import '../shared/prompt_dialog.dart';
 import 'search_result_detail_page.dart';
 
 class SearchPage extends ConsumerStatefulWidget {
@@ -22,6 +23,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   CancelToken? _searchCancel;
 
   bool _searching = false;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  String? _nextCursor;
+  String? _activeQuery;
+  String? _activeMakerKey;
+  String? _activeMakerName;
   bool _inResultsMode = false;
   String _activeSearchLabel = '';
   String? _searchError;
@@ -63,6 +70,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _queryCtrl.clear();
     setState(() {
       _searching = false;
+      _loadingMore = false;
+      _hasMore = false;
+      _nextCursor = null;
+      _activeQuery = null;
+      _activeMakerKey = null;
+      _activeMakerName = null;
       _inResultsMode = false;
       _activeSearchLabel = '';
       _searchError = null;
@@ -78,12 +91,25 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     try {
       final resp = await ref.read(apiClientProvider).getJson('/api/search/maker-capsules');
       if (!mounted) return;
+      if (resp['maker_search_enabled'] == false) {
+        setState(() => _makerCapsules = const []);
+        return;
+      }
+      final hidden = ((resp['hidden_keys'] as List?) ?? const [])
+          .map((e) => e.toString().trim().toLowerCase())
+          .where((e) => e.isNotEmpty)
+          .toSet();
       final list = (resp['makers'] as List?) ?? const [];
       setState(() {
         _makerCapsules = list
             .whereType<Map>()
-            .take(16)
             .map((e) => Map<String, dynamic>.from(e))
+            .where((m) {
+              final name = (m['maker'] ?? '').toString().trim().toLowerCase();
+              final key = (m['key'] ?? '').toString().trim().toLowerCase();
+              return name.isNotEmpty && !hidden.contains(name) && !hidden.contains(key);
+            })
+            .take(16)
             .toList();
       });
     } catch (e) {
@@ -155,6 +181,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
     setState(() {
       _searching = true;
+      _loadingMore = false;
+      _hasMore = false;
+      _nextCursor = null;
+      _activeQuery = makerKey == null ? q : null;
+      _activeMakerKey = makerKey;
+      _activeMakerName = makerName;
       _inResultsMode = true;
       _activeSearchLabel = makerName ?? q;
       _searchError = null;
@@ -196,8 +228,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 .whereType<Map>()
                 .map((e) => SearchResultItem.fromJson(Map<String, dynamic>.from(e)))
                 .toList();
+            final cursor = (event.data['cursor'] as String?)?.trim();
             setState(() {
               _results = parsed;
+              _hasMore = event.data['has_more'] == true;
+              _nextCursor = (cursor != null && cursor.isNotEmpty) ? cursor : null;
               _searching = false;
             });
             _checkLocalStatus(parsed);
@@ -225,26 +260,75 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
   }
 
+  Future<void> _loadMoreResults() async {
+    if (_searching || _loadingMore || !_hasMore) return;
+    if (_activeMakerKey == null && (_activeQuery == null || _activeQuery!.length < 2)) {
+      return;
+    }
+    final cancel = CancelToken();
+    _searchCancel = cancel;
+    setState(() => _loadingMore = true);
+    final api = ref.read(apiClientProvider);
+    final strings = ref.read(stringsProvider);
+    try {
+      await for (final event in api.streamSse(
+        '/api/search/stream',
+        queryParameters: {
+          'maker_key': ?_activeMakerKey,
+          'maker': ?_activeMakerName,
+          if (_activeMakerKey == null) 'q': _activeQuery,
+          'limit': 24,
+          'offset': _results.length,
+          if (_nextCursor != null && _nextCursor!.isNotEmpty) 'cursor': _nextCursor,
+        },
+        cancelToken: cancel,
+      )) {
+        if (!mounted) break;
+        if (event.type == 'result') {
+          final rawList = (event.data['data'] as List?) ?? const [];
+          final parsed = rawList
+              .whereType<Map>()
+              .map((e) => SearchResultItem.fromJson(Map<String, dynamic>.from(e)))
+              .toList();
+          final seen = _results.map((e) => e.number.toUpperCase()).toSet();
+          final appended = parsed.where((e) => seen.add(e.number.toUpperCase())).toList();
+          final cursor = (event.data['cursor'] as String?)?.trim();
+          setState(() {
+            _results = [..._results, ...appended];
+            _hasMore = event.data['has_more'] == true && appended.isNotEmpty;
+            _nextCursor = (cursor != null && cursor.isNotEmpty) ? cursor : null;
+            _loadingMore = false;
+          });
+          if (appended.isNotEmpty) {
+            _checkLocalStatus(appended, merge: true);
+          }
+        } else if (event.type == 'error') {
+          _toast((event.data['message'] ?? strings.taskFailed).toString());
+        }
+      }
+    } catch (e) {
+      debugPrint('loadMoreResults error: $e');
+      if (!cancel.isCancelled && mounted) {
+        _toast(strings.requestFailed('$e'));
+      }
+    } finally {
+      if (mounted && _loadingMore) {
+        setState(() => _loadingMore = false);
+      }
+    }
+  }
+
   Future<void> _openBatchSearchDialog() async {
     final strings = ref.read(stringsProvider);
-    final ctrl = TextEditingController();
-    final submitted = await showDialog<String>(
+    final submitted = await showPromptTextDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(strings.batchSearch),
-        content: TextField(
-          controller: ctrl,
-          maxLines: 6,
-          minLines: 3,
-          decoration: InputDecoration(hintText: strings.batchSearchHint),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(strings.cancel)),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text), child: Text(strings.startBatchSearch)),
-        ],
-      ),
+      title: strings.batchSearch,
+      hintText: strings.batchSearchHint,
+      minLines: 3,
+      maxLines: 6,
+      cancelLabel: strings.cancel,
+      confirmLabel: strings.startBatchSearch,
     );
-    ctrl.dispose();
     if (submitted == null || submitted.trim().isEmpty) return;
 
     final numbers = submitted
@@ -294,7 +378,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
   }
 
-  Future<void> _checkLocalStatus(List<SearchResultItem> items) async {
+  Future<void> _checkLocalStatus(List<SearchResultItem> items, {bool merge = false}) async {
     final numbers = items.map((e) => e.number).where((n) => n.isNotEmpty).toSet().toList();
     if (numbers.isEmpty) return;
     try {
@@ -303,7 +387,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         queryParameters: {'numbers': numbers.join(',')},
       );
       if (!mounted) return;
-      final parsed = <String, LocalStatusInfo>{};
+      final parsed = <String, LocalStatusInfo>{
+        if (merge) ..._localStatus,
+      };
       resp.forEach((k, v) {
         if (v is Map) {
           parsed[k.toUpperCase()] = LocalStatusInfo.fromJson(Map<String, dynamic>.from(v));
@@ -546,30 +632,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   Future<void> _scrapeFavoriteFile(FavoriteFileItem file) async {
     final strings = ref.read(stringsProvider);
-    final ctrl = TextEditingController(text: file.number);
-    final number = await showDialog<String>(
+    final number = await showPromptTextDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(strings.scrapeOrganizeTitle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(file.name, style: const TextStyle(fontSize: 12)),
-            const SizedBox(height: 10),
-            TextField(
-              controller: ctrl,
-              decoration: InputDecoration(labelText: strings.detectedNumberField),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(strings.cancel)),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text), child: Text(strings.startOrganize)),
-        ],
-      ),
+      title: strings.scrapeOrganizeTitle,
+      subtitle: file.name,
+      initialValue: file.number,
+      labelText: strings.detectedNumberField,
+      cancelLabel: strings.cancel,
+      confirmLabel: strings.startOrganize,
     );
-    ctrl.dispose();
     if (number == null || number.trim().isEmpty) return;
     _toast('${strings.startOrganize}: ${number.trim()}…');
     try {
@@ -766,9 +837,27 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                         )
                       : ListView.separated(
                           padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                          itemCount: _results.length,
+                          itemCount: _results.length + (_hasMore && !_searching ? 1 : 0),
                           separatorBuilder: (_, _) => const SizedBox(height: 10),
                           itemBuilder: (_, index) {
+                            if (index >= _results.length) {
+                              return Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  child: OutlinedButton.icon(
+                                    onPressed: _loadingMore ? null : _loadMoreResults,
+                                    icon: _loadingMore
+                                        ? const SizedBox(
+                                            width: 14,
+                                            height: 14,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          )
+                                        : const Icon(Icons.expand_more_rounded),
+                                    label: Text(_loadingMore ? strings.loading : strings.loadMoreResults),
+                                  ),
+                                ),
+                              );
+                            }
                             final r = _results[index];
                             final local = _localStatus[r.number.toUpperCase()];
                             final saved = _wishlisted.contains(r.number.toUpperCase());

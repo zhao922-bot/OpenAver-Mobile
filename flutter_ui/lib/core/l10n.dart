@@ -578,4 +578,18 @@ class AppStrings {
         en: 'Already in target language',
         ko: '이미 대상 언어입니다',
       );
+  String get loadMoreResults => tr(
+        zhCn: '加载更多结果',
+        zhTw: '載入更多結果',
+        ja: 'さらに読み込む',
+        en: 'Load More Results',
+        ko: '더 불러오기',
+      );
+  String scanSummary(int total, int inserted, int updated, int deleted) => tr(
+        zhCn: '共 $total 部（新增 $inserted / 更新 $updated / 移除 $deleted）',
+        zhTw: '共 $total 部（新增 $inserted / 更新 $updated / 移除 $deleted）',
+        ja: '合計 $total 件（新規 $inserted / 更新 $updated / 削除 $deleted）',
+        en: '$total videos (+$inserted / ~$updated / -$deleted)',
+        ko: '총 $total편 (추가 $inserted / 갱신 $updated / 삭제 $deleted)',
+      );
 }

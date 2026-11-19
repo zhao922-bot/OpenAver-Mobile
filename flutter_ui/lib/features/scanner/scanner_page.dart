@@ -7,6 +7,7 @@ import '../../core/app_theme.dart';
 import '../../core/l10n.dart';
 import '../../core/models/scanner_models.dart';
 import '../../core/native_bridge.dart';
+import '../shared/prompt_dialog.dart';
 
 class ScannerPage extends ConsumerStatefulWidget {
   const ScannerPage({super.key});
@@ -125,10 +126,21 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             });
           }
         } else if (event.type == 'done') {
+          var doneLine = msg;
+          if (doneLine.isEmpty && (event.data['video_count'] is num || event.data['stats'] is Map)) {
+            final stats = event.data['stats'] is Map
+                ? Map<String, dynamic>.from(event.data['stats'] as Map)
+                : const <String, dynamic>{};
+            final totalCount = (event.data['video_count'] as num?)?.toInt() ?? 0;
+            final inserted = (stats['inserted'] as num?)?.toInt() ?? 0;
+            final updated = (stats['updated'] as num?)?.toInt() ?? 0;
+            final deleted = (stats['deleted'] as num?)?.toInt() ?? 0;
+            doneLine = strings.scanSummary(totalCount, inserted, updated, deleted);
+          }
           setState(() {
             _progress = 1.0;
-            _statusLine = msg.isNotEmpty ? msg : strings.taskDone;
-            if (msg.isNotEmpty) _logs.add('✔ $msg');
+            _statusLine = doneLine.isNotEmpty ? doneLine : strings.taskDone;
+            if (doneLine.isNotEmpty) _logs.add('✔ $doneLine');
           });
         } else if (event.type == 'error') {
           setState(() {
@@ -867,19 +879,13 @@ class _AliasManagerSheetState extends State<_AliasManagerSheet> {
   }
 
   Future<void> _addAliasToGroup(String primaryName) async {
-    final ctrl = TextEditingController();
-    final alias = await showDialog<String>(
+    final raw = await showPromptTextDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${widget.strings.addSingleAlias}: $primaryName'),
-        content: TextField(controller: ctrl, autofocus: true),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(widget.strings.cancel)),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()), child: Text(widget.strings.confirm)),
-        ],
-      ),
+      title: '${widget.strings.addSingleAlias}: $primaryName',
+      cancelLabel: widget.strings.cancel,
+      confirmLabel: widget.strings.confirm,
     );
-    ctrl.dispose();
+    final alias = raw?.trim();
     if (alias == null || alias.isEmpty) return;
     try {
       final resp = await widget.api.postJson(

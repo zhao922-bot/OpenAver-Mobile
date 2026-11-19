@@ -111,8 +111,16 @@ public final class TaskKeepAliveService extends Service {
     }
 
     private Notification buildNotification() {
-        Intent launchIntent = new Intent(this, MainActivity.class)
-                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        String uiMode = prefs.getString("ui_mode", "flutter");
+        Intent launchIntent;
+        if ("flutter".equals(uiMode) && MobileRuntimeSession.isReady()) {
+            launchIntent = new Intent(this, OpenAverFlutterActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        } else {
+            launchIntent = new Intent(this, MainActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        }
         PendingIntent contentIntent = PendingIntent.getActivity(
                 this,
                 0,

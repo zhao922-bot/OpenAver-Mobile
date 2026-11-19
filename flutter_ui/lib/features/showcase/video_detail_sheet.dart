@@ -9,6 +9,7 @@ import '../../core/models/video_item.dart';
 import '../../core/native_bridge.dart';
 import '../player/builtin_player_page.dart';
 import '../shared/openaver_image.dart';
+import '../shared/prompt_dialog.dart';
 import 'sample_gallery_viewer.dart';
 
 class VideoDetailPage extends ConsumerStatefulWidget {
@@ -185,6 +186,14 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
     _titleCtrl = TextEditingController(text: widget.video.title);
     _loadPlot();
     _loadSimilar();
+  }
+
+  @override
+  void didUpdateWidget(covariant _VideoDetailBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_editingTitle && widget.video.title != oldWidget.video.title) {
+      _titleCtrl.text = widget.video.title;
+    }
   }
 
   @override
@@ -579,24 +588,13 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
 
   Future<void> _addUserTag() async {
     final strings = ref.read(stringsProvider);
-    final ctrl = TextEditingController();
-    final tag = await showDialog<String>(
+    final tag = await showPromptTextDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(strings.addUserTagTitle),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: InputDecoration(hintText: strings.tagNameHint),
-          onSubmitted: (v) => Navigator.of(ctx).pop(v),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(strings.cancel)),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text), child: Text(strings.confirm)),
-        ],
-      ),
+      title: strings.addUserTagTitle,
+      hintText: strings.tagNameHint,
+      cancelLabel: strings.cancel,
+      confirmLabel: strings.confirm,
     );
-    ctrl.dispose();
     if (tag == null || tag.trim().isEmpty) return;
     final api = ref.read(apiClientProvider);
     try {

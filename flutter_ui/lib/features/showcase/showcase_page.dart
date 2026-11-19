@@ -8,6 +8,7 @@ import '../../core/l10n.dart';
 import '../../core/models/actress_models.dart';
 import '../../core/models/video_item.dart';
 import '../shared/openaver_image.dart';
+import '../shared/prompt_dialog.dart';
 import 'actress_detail_page.dart';
 import 'video_detail_sheet.dart';
 
@@ -112,6 +113,22 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
     }
     if (_sort == 'random') {
       items = List<VideoItem>.from(items)..shuffle();
+    } else {
+      items = List<VideoItem>.from(items);
+      int cmpStr(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
+      items.sort((a, b) {
+        final cmp = switch (_sort) {
+          'size' => a.size.compareTo(b.size),
+          'mdate' => a.mtime.compareTo(b.mtime),
+          'actor' => cmpStr(a.actresses.join(','), b.actresses.join(',')),
+          'title' => cmpStr(a.title, b.title),
+          'num' => cmpStr(a.number, b.number),
+          'maker' => cmpStr(a.maker, b.maker),
+          'date' => a.releaseDate.compareTo(b.releaseDate),
+          _ => a.path.compareTo(b.path),
+        };
+        return _order == 'asc' ? cmp : -cmp;
+      });
     }
     return items;
   }
@@ -361,24 +378,13 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
 
   Future<void> _showAddActressDialog() async {
     final strings = ref.read(stringsProvider);
-    final ctrl = TextEditingController();
-    final name = await showDialog<String>(
+    final name = await showPromptTextDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(strings.addFavoriteActress),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: InputDecoration(hintText: strings.actressNameHint),
-          onSubmitted: (v) => Navigator.of(ctx).pop(v),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(strings.cancel)),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text), child: Text(strings.add)),
-        ],
-      ),
+      title: strings.addFavoriteActress,
+      hintText: strings.actressNameHint,
+      cancelLabel: strings.cancel,
+      confirmLabel: strings.add,
     );
-    ctrl.dispose();
     if (name == null || name.trim().isEmpty) return;
     final api = ref.read(apiClientProvider);
     try {

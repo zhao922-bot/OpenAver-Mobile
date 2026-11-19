@@ -649,9 +649,12 @@ void main() {
       httpClientAdapter: _MockAdapter((opts) async {
         if (opts.path == '/api/search/maker-capsules') {
           return _jsonResponse({
+            'maker_search_enabled': true,
             'makers': [
               {'maker': 'S1', 'total': 12},
+              {'maker': 'HiddenMaker', 'total': 4},
             ],
+            'hidden_keys': ['hiddenmaker'],
           });
         }
         if (opts.path == '/api/search/recent-actresses') {
@@ -672,8 +675,15 @@ void main() {
           return _jsonResponse({'success': true, 'skipped': true, 'reason': 'already_target_language'});
         }
         if (opts.path == '/api/search/stream') {
+          final offset = (opts.queryParameters['offset'] as num?)?.toInt() ?? 0;
+          if (offset == 0) {
+            return _sseResponse([
+              'data: {"type":"result","has_more":true,"cursor":"cur-2","data":[{"number":"SSIS-001","title":"Search Hit","cover":"","source":"javbus","actors":["Yua"],"tags":["Solo"]}]}\n\n',
+            ]);
+          }
+          expect(opts.queryParameters['cursor'], 'cur-2');
           return _sseResponse([
-            'data: {"type":"result","data":[{"number":"SSIS-001","title":"Search Hit","cover":"","source":"javbus","actors":["Yua"],"tags":["Solo"]}]}\n\n',
+            'data: {"type":"result","has_more":false,"data":[{"number":"SSIS-002","title":"Page Two Hit","cover":"","source":"javbus","actors":["Yua"],"tags":["Solo"]}]}\n\n',
           ]);
         }
         if (opts.path == '/api/search/local-status') {
@@ -695,11 +705,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('S1 (12)'), findsOneWidget);
+    expect(find.text('HiddenMaker (4)'), findsNothing);
     await tester.tap(find.text('S1 (12)'));
     await tester.pumpAndSettle();
 
     expect(find.text('SSIS-001'), findsOneWidget);
     expect(find.text('Back to Search Home'), findsOneWidget);
+    expect(find.text('Load More Results'), findsOneWidget);
+    await tester.tap(find.text('Load More Results'));
+    await tester.pumpAndSettle();
+    expect(find.text('SSIS-002'), findsOneWidget);
 
     // Tap result card -> opens SearchResultDetailPage
     await tester.tap(find.text('Search Hit'));
@@ -742,6 +757,11 @@ void main() {
       httpClientAdapter: _MockAdapter((opts) async {
         if (opts.path == '/api/gallery/stats') {
           return _jsonResponse({'data': {'total': 42}});
+        }
+        if (opts.path == '/api/gallery/generate') {
+          return _sseResponse([
+            'data: {"type":"done","video_count":42,"stats":{"inserted":3,"updated":2,"deleted":1}}\n\n',
+          ]);
         }
         if (opts.path == '/api/gallery/missing-check') {
           return _jsonResponse({
@@ -869,6 +889,11 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Library: 42 videos'), findsOneWidget);
+
+    // Scanner: Scan Library formats done event stats cleanly
+    await tester.tap(find.text('Scan Library'));
+    await tester.pumpAndSettle();
+    expect(find.text('42 videos (+3 / ~2 / -1)'), findsOneWidget);
 
     // Scanner: Collection Analysis -> Fix Corrupted Numbers (uses real backend schema + affected + ids)
     final scannerScroll = find.byType(Scrollable).first;
