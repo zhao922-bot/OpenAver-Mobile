@@ -163,6 +163,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
         setState(() => _runningTask = false);
         _loadStats();
         _checkMissing();
+        ref.read(libraryRevisionProvider.notifier).bump();
       }
     }
   }
@@ -227,6 +228,9 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                             'scope': 'files',
                           });
                           if (mounted) {
+                            if (execResp['success'] == true) {
+                              ref.read(libraryRevisionProvider.notifier).bump();
+                            }
                             _toast(execResp['success'] == true
                                 ? strings.renameCompleted
                                 : (execResp['error'] ?? strings.taskFailed).toString());
@@ -400,6 +404,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                         final failed = (applied['failed'] as num?)?.toInt() ?? 0;
                         _toast(strings.fixNumbersApplied(updated, failed));
                         _loadStats();
+                        ref.read(libraryRevisionProvider.notifier).bump();
                       },
                       child: Text(strings.fixNumbersBtn),
                     ),
@@ -449,6 +454,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
       await ref.read(apiClientProvider).deleteJson('/api/gallery/cache');
       _loadStats();
       _checkMissing();
+      ref.read(libraryRevisionProvider.notifier).bump();
     } catch (e) {
       debugPrint('clearCache error: $e');
       _toast(strings.requestFailed('$e'));

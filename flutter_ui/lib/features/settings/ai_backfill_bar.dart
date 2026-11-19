@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/l10n.dart';
+import '../../core/native_bridge.dart';
 
 class AiBackfillBar extends StatefulWidget {
   const AiBackfillBar({
@@ -29,6 +31,8 @@ class _AiBackfillBarState extends State<AiBackfillBar> {
   Map<String, dynamic>? _status;
   bool _busy = false;
   String? _message;
+  Timer? _pollTimer;
+  bool _keepAliveOwned = false;
 
   @override
   void initState() {
@@ -36,11 +40,42 @@ class _AiBackfillBarState extends State<AiBackfillBar> {
     _refresh();
   }
 
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    if (_keepAliveOwned) {
+      _keepAliveOwned = false;
+      NativeBridge.instance.setTaskKeepAlive(false);
+    }
+    super.dispose();
+  }
+
+  void _syncPollingAndKeepAlive(bool running) {
+    if (running) {
+      if (!_keepAliveOwned) {
+        _keepAliveOwned = true;
+        NativeBridge.instance.setTaskKeepAlive(true);
+      }
+      _pollTimer ??= Timer.periodic(const Duration(seconds: 3), (_) {
+        if (mounted) _refresh();
+      });
+    } else {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+      if (_keepAliveOwned) {
+        _keepAliveOwned = false;
+        NativeBridge.instance.setTaskKeepAlive(false);
+      }
+    }
+  }
+
   Future<void> _refresh() async {
     try {
       final resp = await widget.api.getJson(widget.statusEndpoint);
       if (!mounted) return;
+      final running = resp['running'] == true;
       setState(() => _status = resp);
+      _syncPollingAndKeepAlive(running);
     } catch (e) {
       debugPrint('AiBackfillBar refresh ${widget.statusEndpoint} error: $e');
     }
@@ -89,10 +124,15 @@ class _AiBackfillBarState extends State<AiBackfillBar> {
   Widget build(BuildContext context) {
     final palette = OpenAverPalette.of(context);
     final running = _status?['running'] == true;
-    final processed = (_status?['processed'] as num?)?.toInt() ?? 0;
+    final completedRaw = _status?['processed'] ??
+        _status?['indexed'] ??
+        _status?['tagged'] ??
+        _status?['done'];
+    final completed = (completedRaw as num?)?.toInt() ?? 0;
     final total = (_status?['total'] as num?)?.toInt() ?? 0;
     final pending = (_status?['pending'] as num?)?.toInt() ?? 0;
-    final stoppedReason = (_status?['stopped_reason'] ?? '').toString();
+    final stoppedReason =
+        (_status?['stopped_reason'] ?? _status?['stop_reason'] ?? _status?['kind'] ?? '').toString();
 
     return Container(
       margin: const EdgeInsets.only(top: 8),
@@ -108,7 +148,7 @@ class _AiBackfillBarState extends State<AiBackfillBar> {
           if (_status != null)
             Text(
               running
-                  ? widget.strings.backfillRunningLabel(processed, total)
+                  ? widget.strings.backfillRunningLabel(completed, total)
                   : '${widget.strings.backfillPendingLabel(pending)}${stoppedReason.isNotEmpty ? ' ($stoppedReason)' : ''}',
               style: TextStyle(fontSize: 12, color: palette.textSecondary),
             ),

@@ -652,6 +652,11 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
       ),
     );
     if (updated != null && mounted) {
+      await OpenAverNetworkImage.evictUrl(api, widget.video.coverUrl);
+      await OpenAverNetworkImage.evictUrl(api, widget.video.coverFullUrl);
+      await OpenAverNetworkImage.evictUrl(api, updated.coverUrl);
+      await OpenAverNetworkImage.evictUrl(api, updated.coverFullUrl);
+      if (!mounted) return;
       widget.onUpdated(updated);
       _showToast(strings.rescrapeUpdated);
     }

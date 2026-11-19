@@ -64,7 +64,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadAll());
   }
 
-  Future<void> _loadAll() async {
+  Future<void> _loadAll({bool syncUiPrefs = false}) async {
     final strings = ref.read(stringsProvider);
     setState(() {
       _loading = true;
@@ -79,8 +79,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (!mounted) return;
       final data = resp['data'];
       if (data is Map) {
+        final decoded = jsonDecode(jsonEncode(data)) as Map<String, dynamic>;
+        final general = decoded['general'];
+        if (general is Map) {
+          final savedFont = (general['font_size'] ?? '').toString();
+          if (savedFont.isNotEmpty) {
+            ref.read(fontSizeProvider.notifier).setFontSize(savedFont);
+          }
+          if (syncUiPrefs) {
+            final savedTheme = AppThemeMode.fromString(general['theme']?.toString());
+            ref.read(themeModeProvider.notifier).setTheme(savedTheme);
+            NativeBridge.instance.syncNativeTheme(savedTheme.id);
+            final savedLocale = (general['locale'] ?? '').toString();
+            if (AppStrings.supportedLocales.contains(savedLocale)) {
+              ref.read(localeProvider.notifier).setLocale(savedLocale);
+              NativeBridge.instance.syncUiLocale(savedLocale);
+            }
+          }
+        }
         setState(() {
-          _config = jsonDecode(jsonEncode(data)) as Map<String, dynamic>;
+          _config = decoded;
           _metatubeConnected = mtStatus['connected'] == true;
           _metatubeProviderCount = (mtStatus['providers'] as List?)?.length ?? 0;
           _treeInfo = tree;
@@ -147,6 +165,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (!mounted) return;
       if (resp.statusCode == 200 && body['success'] != false) {
         setState(() => _dirty = false);
+        ref.read(libraryRevisionProvider.notifier).bump();
         _toast(strings.saved);
       } else {
         _toast((body['detail'] ?? body['error'] ?? strings.saveFailed).toString());
@@ -204,12 +223,25 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (!mounted) return;
       if (resp['success'] == true) {
         final count = (resp['provider_count'] as num?)?.toInt() ?? 0;
+        final freshCfg = await ref
+            .read(apiClientProvider)
+            .getJson('/api/config')
+            .catchError((Object _) => <String, dynamic>{});
+        if (!mounted) return;
+        final freshData = freshCfg['data'];
         setState(() {
+          if (freshData is Map) {
+            if (freshData['sources'] is List) {
+              _config['sources'] = jsonDecode(jsonEncode(freshData['sources']));
+            }
+            if (freshData['metatube'] is Map) {
+              _config['metatube'] = jsonDecode(jsonEncode(freshData['metatube']));
+            }
+          }
           _metatubeConnected = true;
           _metatubeProviderCount = count;
           _metatubeStatusText = strings.metatubeConnectedCount(count);
         });
-        await _loadAll();
       } else {
         setState(() {
           _metatubeConnected = false;
@@ -756,6 +788,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final resp = await ref.read(apiClientProvider).dio.post<dynamic>('/api/database/import', data: form);
       final body = resp.data is Map ? Map<String, dynamic>.from(resp.data as Map) : const <String, dynamic>{};
       if (body['ok'] == true) {
+        ref.read(libraryRevisionProvider.notifier).bump();
         _toast(strings.restoreDone);
       } else {
         _toast((body['detail'] ?? body['error'] ?? strings.taskFailed).toString());
@@ -784,7 +817,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       await ref.read(apiClientProvider).deleteJson('/api/config');
       if (!mounted) return;
       _toast(strings.saved);
-      _loadAll();
+      _loadAll(syncUiPrefs: true);
     } catch (e) {
       debugPrint('resetFactoryConfig error: $e');
       _toast(strings.requestFailed('$e'));
@@ -795,6 +828,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final strings = ref.read(stringsProvider);
     try {
       await ref.read(apiClientProvider).postJson('/api/gallery/thumb/clear');
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+      ref.read(libraryRevisionProvider.notifier).bump();
       _toast(strings.thumbCacheCleared);
     } catch (e) {
       debugPrint('clearThumbnails error: $e');
@@ -841,7 +877,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final general = _section('general');
     final fontSize = (general['font_size'] ?? 'md').toString();
     final defaultPage = (general['default_page'] ?? 'search').toString();
-    final autoCheckUpdate = general['auto_check_update'] != false;
 
     final gallery = _section('gallery');
     final dirs = ((gallery['directories'] as List?) ?? const []).toList();
@@ -970,7 +1005,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 ButtonSegment(value: 'xl', label: Text('XL')),
                               ],
                               selected: {const {'xs', 'sm', 'md', 'lg', 'xl'}.contains(fontSize) ? fontSize : 'md'},
-                              onSelectionChanged: (v) => _markDirty(() => general['font_size'] = v.first),
+                              onSelectionChanged: (v) {
+                                ref.read(fontSizeProvider.notifier).setFontSize(v.first);
+                                _markDirty(() => general['font_size'] = v.first);
+                              },
                             ),
                             const SizedBox(height: 14),
                             DropdownButtonFormField<String>(
@@ -984,12 +1022,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               onChanged: (v) {
                                 if (v != null) _markDirty(() => general['default_page'] = v);
                               },
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(strings.autoCheckUpdateTitle),
-                              value: autoCheckUpdate,
-                              onChanged: (v) => _markDirty(() => general['auto_check_update'] = v),
                             ),
                           ],
                         ),
@@ -2038,7 +2070,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Text(strings.unsavedChanges, style: TextStyle(color: palette.warning, fontWeight: FontWeight.w600)),
                     const Spacer(),
                     TextButton(
-                      onPressed: _saving ? null : _loadAll,
+                      onPressed: _saving ? null : () => _loadAll(syncUiPrefs: true),
                       child: Text(strings.discardChanges),
                     ),
                     const SizedBox(width: 8),

@@ -74,6 +74,12 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
     final strings = ref.watch(stringsProvider);
     final api = ref.watch(apiClientProvider);
 
+    ref.listen<int>(libraryRevisionProvider, (prev, next) {
+      if (prev != next) {
+        _load();
+      }
+    });
+
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }

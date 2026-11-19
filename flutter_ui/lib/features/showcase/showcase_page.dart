@@ -631,6 +631,13 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
       }
     });
 
+    ref.listen<int>(libraryRevisionProvider, (prev, next) {
+      if (prev != next) {
+        _page = 1;
+        _loadData();
+      }
+    });
+
     return Scaffold(
       body: SafeArea(
         child: Column(

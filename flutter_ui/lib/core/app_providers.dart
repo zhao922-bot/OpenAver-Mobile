@@ -61,6 +61,40 @@ final stringsProvider = Provider<AppStrings>((ref) {
   return AppStrings(ref.watch(localeProvider));
 });
 
+double fontScaleFor(String size) {
+  return switch (size) {
+    'xs' => 0.88,
+    'sm' => 0.94,
+    'lg' => 1.08,
+    'xl' => 1.16,
+    _ => 1.0,
+  };
+}
+
+class FontSizeNotifier extends Notifier<String> {
+  @override
+  String build() => 'md';
+
+  void setFontSize(String size) {
+    state = const {'xs', 'sm', 'md', 'lg', 'xl'}.contains(size) ? size : 'md';
+  }
+}
+
+final fontSizeProvider = NotifierProvider<FontSizeNotifier, String>(
+  FontSizeNotifier.new,
+);
+
+class LibraryRevisionNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() => state = state + 1;
+}
+
+final libraryRevisionProvider = NotifierProvider<LibraryRevisionNotifier, int>(
+  LibraryRevisionNotifier.new,
+);
+
 class ActiveTabNotifier extends Notifier<int> {
   @override
   int build() => 0;

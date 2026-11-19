@@ -28,6 +28,7 @@ class OpenAverApp extends ConsumerStatefulWidget {
 class _OpenAverAppState extends ConsumerState<OpenAverApp> {
   final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
   bool _initialized = false;
+  bool _appliedStartupPrefs = false;
   DateTime? _lastBackPress;
   Timer? _bootstrapPoll;
 
@@ -75,6 +76,37 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
     if (mounted) {
       setState(() => _initialized = true);
     }
+    if (!_appliedStartupPrefs) {
+      _appliedStartupPrefs = true;
+      _loadStartupGeneralPrefs();
+    }
+  }
+
+  Future<void> _loadStartupGeneralPrefs() async {
+    try {
+      final resp = await ref.read(apiClientProvider).getJson('/api/config');
+      if (!mounted) return;
+      final data = resp['data'];
+      if (data is! Map) return;
+      final general = data['general'];
+      if (general is! Map) return;
+      final fontSize = (general['font_size'] ?? '').toString();
+      if (fontSize.isNotEmpty) {
+        ref.read(fontSizeProvider.notifier).setFontSize(fontSize);
+      }
+      final defaultPage = (general['default_page'] ?? '').toString();
+      final targetTab = switch (defaultPage) {
+        'search' => 1,
+        'gallery' => 2,
+        'showcase' => 0,
+        _ => null,
+      };
+      if (targetTab != null && ref.read(activeTabProvider) == 0 && targetTab != 0) {
+        ref.read(activeTabProvider.notifier).setTab(targetTab);
+      }
+    } catch (e) {
+      debugPrint('loadStartupGeneralPrefs skipped: $e');
+    }
   }
 
   Future<void> _bootstrap() async {
@@ -110,6 +142,7 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
   @override
   Widget build(BuildContext context) {
     final mode = ref.watch(themeModeProvider);
+    final fontSize = ref.watch(fontSizeProvider);
     final strings = ref.watch(stringsProvider);
     final activeTab = ref.watch(activeTabProvider);
 
@@ -121,11 +154,20 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
       SettingsPage(),
     ];
 
+    final scale = fontScaleFor(fontSize);
     return MaterialApp(
       navigatorKey: _navKey,
       debugShowCheckedModeBanner: false,
       title: 'OpenAver Mobile',
       theme: buildOpenAverTheme(mode),
+      builder: (context, child) {
+        if (child == null || scale == 1.0) return child ?? const SizedBox.shrink();
+        final media = MediaQuery.of(context);
+        return MediaQuery(
+          data: media.copyWith(textScaler: TextScaler.linear(scale)),
+          child: child,
+        );
+      },
       home: !_initialized
           ? Scaffold(
               body: Center(

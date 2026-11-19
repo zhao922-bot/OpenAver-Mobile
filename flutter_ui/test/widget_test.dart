@@ -860,11 +860,19 @@ void main() {
           });
         }
         if (opts.path == '/api/ai/similar/status') {
-          return _jsonResponse({'running': false, 'pending': 10, 'processed': 0, 'total': 10});
+          return _jsonResponse(
+            similarBackfillStarted
+                ? {'running': true, 'indexed': 7, 'total': 10, 'pending': 3}
+                : {'running': false, 'indexed': 0, 'total': 10, 'pending': 10},
+          );
         }
         if (opts.path == '/api/ai/similar/index') {
           similarBackfillStarted = true;
           return _jsonResponse({'status': 'started'});
+        }
+        if (opts.path == '/api/ai/similar/index/stop') {
+          similarBackfillStarted = false;
+          return _jsonResponse({'status': 'stopped'});
         }
         if (opts.path == '/api/openai/models') {
           return _jsonResponse({'success': true, 'models': ['deepseek-chat', 'qwen-plus']});
@@ -948,6 +956,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Appearance & General'), findsNWidgets(2));
+    expect(find.text('Check Updates on Startup'), findsNothing);
+    expect(fontScaleFor('xs'), lessThan(1.0));
+    expect(fontScaleFor('xl'), greaterThan(1.0));
 
     // AI Settings section: presets, model quick-select, and connection test
     await tester.tap(find.text('AI Services & Face Focus').first);
@@ -962,14 +973,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Connection succeeded: Test OK'), findsWidgets);
 
-    // AI BackfillBar start button
+    // AI BackfillBar start button reads `indexed` (not 0 / 10) and stops cleanly
     final settingsScroll = find.byType(Scrollable).last;
     await tester.scrollUntilVisible(find.text('Start Backfill').first, 250, scrollable: settingsScroll);
     await tester.tap(find.text('Start Backfill').first);
     await tester.pumpAndSettle();
     expect(similarBackfillStarted, true);
+    expect(find.text('Running: 7 / 10'), findsOneWidget);
+    await tester.tap(find.text('Stop').first);
+    await tester.pumpAndSettle();
+    expect(similarBackfillStarted, false);
 
-    // Metatube Connect + Source Probe (Map response) + Pending Scrape Folder typing
+    // Metatube Connect preserves unsaved drafts + Source Probe (Map response) + Pending Scrape Folder typing
     await tester.tap(find.text('Search, Proxy & Sources').first);
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -987,6 +1002,15 @@ void main() {
     await tester.tap(find.text('Connect').first);
     await tester.pumpAndSettle();
     expect(metatubeConnected, true);
+    // Unsaved bar remains visible because Connect did not wipe other unsaved drafts
+    expect(find.text('Unsaved changes'), findsOneWidget);
+
+    // Dismiss any SnackBar covering the sticky bottom bar, then test Discard rollback
+    ScaffoldMessenger.of(tester.element(find.byType(SettingsPage))).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unsaved changes'), findsNothing);
   });
 }
 
