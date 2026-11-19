@@ -459,28 +459,33 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       }
       await showModalBottomSheet<void>(
         context: context,
-        builder: (ctx) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                title: Text(strings.imageSearchCandidates, style: const TextStyle(fontWeight: FontWeight.w700)),
-              ),
-              ...candidates.map((c) {
-                final candidateNumber = (c['number'] ?? c['code'] ?? '').toString();
-                final sim = ((c['similarity'] as num?)?.toDouble() ?? 0.0) * 100;
-                final inLib = c['in_library'] == true;
-                return ListTile(
-                  title: Text(candidateNumber, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text(strings.matchConfidence(sim.toStringAsFixed(1), inLib)),
-                  trailing: const Icon(Icons.search_rounded),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _startSearch(overrideQuery: candidateNumber);
-                  },
-                );
-              }),
-            ],
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (ctx) => ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.72),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  title: Text(strings.imageSearchCandidates, style: const TextStyle(fontWeight: FontWeight.w700)),
+                ),
+                ...candidates.map((c) {
+                  final candidateNumber = (c['number'] ?? c['code'] ?? '').toString();
+                  final sim = ((c['similarity'] as num?)?.toDouble() ?? 0.0) * 100;
+                  final inLib = c['in_library'] == true;
+                  return ListTile(
+                    title: Text(candidateNumber, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text(strings.matchConfidence(sim.toStringAsFixed(1), inLib)),
+                    trailing: const Icon(Icons.search_rounded),
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _startSearch(overrideQuery: candidateNumber);
+                    },
+                  );
+                }),
+              ],
+            ),
           ),
         ),
       );
@@ -578,9 +583,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             final w = items[idx];
                             final num = (w['number'] ?? '').toString();
                             final title = (w['title'] ?? '').toString();
-                            final coverRaw = (w['cover'] ?? w['cover_url'] ?? '').toString();
+                            final rawCoverPrimary = (w['cover'] as String?)?.trim() ?? '';
+                            final rawCoverFallback = (w['cover_url'] as String?)?.trim() ?? '';
+                            final coverRaw = rawCoverPrimary.isNotEmpty ? rawCoverPrimary : rawCoverFallback;
                             final coverUrl = coverRaw.isNotEmpty
-                                ? '/api/proxy-image?url=${Uri.encodeQueryComponent(coverRaw)}'
+                                ? (coverRaw.startsWith('/api/')
+                                    ? coverRaw
+                                    : '/api/proxy-image?url=${Uri.encodeQueryComponent(coverRaw)}')
                                 : (num.isNotEmpty
                                     ? '/api/wishlist/cover?number=${Uri.encodeQueryComponent(num)}'
                                     : '');
@@ -862,7 +871,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             final local = _localStatus[r.number.toUpperCase()];
                             final saved = _wishlisted.contains(r.number.toUpperCase());
                             final coverProxy = r.cover.isNotEmpty
-                                ? '/api/proxy-image?url=${Uri.encodeQueryComponent(r.cover)}'
+                                ? (r.cover.startsWith('/api/')
+                                    ? r.cover
+                                    : '/api/proxy-image?url=${Uri.encodeQueryComponent(r.cover)}')
                                 : '';
 
                             return InkWell(

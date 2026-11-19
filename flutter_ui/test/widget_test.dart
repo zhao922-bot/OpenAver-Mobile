@@ -12,6 +12,7 @@ import 'package:flutter_ui/core/app_theme.dart';
 import 'package:flutter_ui/core/l10n.dart';
 import 'package:flutter_ui/core/models/actress_models.dart';
 import 'package:flutter_ui/core/models/scanner_models.dart';
+import 'package:flutter_ui/core/models/search_models.dart';
 import 'package:flutter_ui/core/models/video_item.dart';
 import 'package:flutter_ui/core/native_bridge.dart';
 import 'package:flutter_ui/features/insights/insights_page.dart';
@@ -560,6 +561,20 @@ void main() {
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
 
+    // Landscape sort & display sheet: Columns per Row is visible and selectable
+    tester.view.physicalSize = const Size(844, 390);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.tune_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Columns'), findsOneWidget);
+    await tester.ensureVisible(find.text('3x'));
+    await tester.tap(find.text('3x'));
+    await tester.pumpAndSettle();
+    tester.view.resetPhysicalSize();
+    await tester.pumpAndSettle();
+
     expect(find.text('ABC-001'), findsOneWidget);
 
     // Open VideoDetailPage -> tap Tag -> filters Showcase by tag!
@@ -717,6 +732,22 @@ void main() {
     expect(find.text('SSIS-002'), findsOneWidget);
 
     // Tap result card -> opens SearchResultDetailPage
+    final nonMetatubeItem = SearchResultItem.fromJson({
+      'number': 'SSIS-001',
+      'title': 'Search Hit',
+      'preview_cover_url': '',
+      'cover': 'https://pics.dmm.co.jp/digital/video/ssis00001/ssis00001pl.jpg',
+      'sample_images': [
+        'https://pics.dmm.co.jp/digital/video/ssis00001/ssis00001jp-1.jpg',
+        'https://pics.dmm.co.jp/digital/video/ssis00001/ssis00001jp-2.jpg',
+      ],
+      'preview_sample_images': ['', 'https://relay.example/sample-2.jpg'],
+    });
+    expect(nonMetatubeItem.cover, 'https://pics.dmm.co.jp/digital/video/ssis00001/ssis00001pl.jpg');
+    expect(nonMetatubeItem.sampleImages, [
+      'https://pics.dmm.co.jp/digital/video/ssis00001/ssis00001jp-1.jpg',
+      'https://relay.example/sample-2.jpg',
+    ]);
     await tester.tap(find.text('Search Hit'));
     await tester.pumpAndSettle();
     expect(find.byType(SearchResultDetailPage), findsOneWidget);
@@ -747,6 +778,7 @@ void main() {
   testWidgets('ScannerPage, InsightsPage, and SettingsPage render populated and error states', (tester) async {
     var fixNumbersAppliedIds = <int>[];
     var aliasListRequested = false;
+    var tagSourceUpdatedSource = '';
     var similarBackfillStarted = false;
     var metatubeConnected = false;
     var sourcesProbed = false;
@@ -761,6 +793,12 @@ void main() {
         if (opts.path == '/api/gallery/generate') {
           return _sseResponse([
             'data: {"type":"done","video_count":42,"stats":{"inserted":3,"updated":2,"deleted":1}}\n\n',
+          ]);
+        }
+        if (opts.path == '/api/gallery/tag-source-update') {
+          tagSourceUpdatedSource = (opts.queryParameters['source'] ?? '').toString();
+          return _sseResponse([
+            'data: {"type":"done","message":"Tag source updated (42)"}\n\n',
           ]);
         }
         if (opts.path == '/api/gallery/missing-check') {
@@ -903,8 +941,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('42 videos (+3 / ~2 / -1)'), findsOneWidget);
 
-    // Scanner: Collection Analysis -> Fix Corrupted Numbers (uses real backend schema + affected + ids)
+    // Scanner: Batch Fetch / Replace Tags opens source picker and streams /api/gallery/tag-source-update
     final scannerScroll = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(find.text('Batch Fetch / Replace Tags'), 250, scrollable: scannerScroll);
+    await tester.tap(find.text('Batch Fetch / Replace Tags').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Jable'), findsOneWidget);
+    await tester.tap(find.text('Jable'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Run Batch Update'));
+    await tester.pumpAndSettle();
+    expect(tagSourceUpdatedSource, 'jable');
+    expect(find.text('Tag source updated (42)'), findsOneWidget);
+
+    // Scanner: Collection Analysis -> Fix Corrupted Numbers (uses real backend schema + affected + ids)
     await tester.scrollUntilVisible(find.text('Library Health & Number Fix').first, 250, scrollable: scannerScroll);
     await tester.tap(find.text('Library Health & Number Fix').first);
     await tester.pumpAndSettle();

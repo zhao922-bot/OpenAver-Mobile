@@ -496,6 +496,8 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
   void _showSortSheet(AppStrings strings) {
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (ctx) {
         final sorts = [
           ('date', strings.sortDate),
@@ -507,17 +509,24 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
           ('size', strings.sortSize),
           ('random', strings.sortRandom),
         ];
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+        final maxSheetHeight = MediaQuery.sizeOf(ctx).height * 0.85;
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxSheetHeight),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Text(strings.sortAndDisplay, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                    const Spacer(),
+                    Expanded(
+                      child: Text(
+                        strings.sortAndDisplay,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     SegmentedButton<String>(
                       segments: [
                         ButtonSegment(value: 'desc', label: Text(strings.sortDesc)),
@@ -554,11 +563,16 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
                     );
                   }).toList(),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 Row(
                   children: [
-                    Text(strings.viewMode, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    const Spacer(),
+                    Expanded(
+                      child: Text(
+                        strings.viewMode,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     SegmentedButton<bool>(
                       segments: [
                         ButtonSegment(value: false, label: Text(strings.viewGrid)),
@@ -573,25 +587,28 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
                   ],
                 ),
                 if (!_listView) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Text(strings.columnsPerRow, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      const Spacer(),
-                      SegmentedButton<int?>(
-                        segments: [
-                          ButtonSegment(value: null, label: Text(strings.autoLabel)),
-                          ButtonSegment(value: 2, label: Text(strings.columnsCount(2))),
-                          ButtonSegment(value: 3, label: Text(strings.columnsCount(3))),
-                          ButtonSegment(value: 4, label: Text(strings.columnsCount(4))),
-                        ],
-                        selected: {_columnOverride},
-                        onSelectionChanged: (values) {
-                          setState(() => _columnOverride = values.first);
-                          Navigator.of(ctx).pop();
-                        },
-                      ),
-                    ],
+                  const SizedBox(height: 16),
+                  Text(
+                    strings.columnsPerRow,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<int?>(
+                      showSelectedIcon: false,
+                      segments: [
+                        ButtonSegment(value: null, label: Text(strings.autoLabel)),
+                        ButtonSegment(value: 2, label: Text(strings.columnsCount(2))),
+                        ButtonSegment(value: 3, label: Text(strings.columnsCount(3))),
+                        ButtonSegment(value: 4, label: Text(strings.columnsCount(4))),
+                      ],
+                      selected: {_columnOverride},
+                      onSelectionChanged: (values) {
+                        setState(() => _columnOverride = values.first);
+                        Navigator.of(ctx).pop();
+                      },
+                    ),
                   ),
                 ],
               ],

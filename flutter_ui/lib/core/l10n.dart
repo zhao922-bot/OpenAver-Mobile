@@ -592,4 +592,41 @@ class AppStrings {
         en: '$total videos (+$inserted / ~$updated / -$deleted)',
         ko: '총 $total편 (추가 $inserted / 갱신 $updated / 삭제 $deleted)',
       );
+
+  // Batch tag source fetch / replace
+  String get batchTagSourceTitle => tr(
+        zhCn: '批量获取 / 更换视频标签',
+        zhTw: '批次取得 / 更換影片標籤',
+        ja: '動画タグの一括取得・切替',
+        en: 'Batch Fetch / Replace Tags',
+        ko: '동영상 태그 일괄 가져오기 / 교체',
+      );
+  String get batchTagSourceDesc => tr(
+        zhCn: '从指定资料源批量获取并更新全库影片普通标签（保留自定义标签）',
+        zhTw: '從指定資料來源批次取得並更新全庫影片一般標籤（保留自訂標籤）',
+        ja: '指定ソースから全動画の通常タグを一括取得・置換（カスタムタグは保持）',
+        en: 'Fetch or replace ordinary tags across the library from one source',
+        ko: '지정한 소스에서 전체 라이브러리 일반 태그를 일괄 가져오기/교체',
+      );
+  String get batchTagSourceSelectHint => tr(
+        zhCn: '选择用于获取视频标签的资料源，可先预览变更再正式写入 NFO 与数据库。',
+        zhTw: '選擇用於取得影片標籤的資料來源，可先預覽變更再正式寫入 NFO 與資料庫。',
+        ja: 'タグを取得するソースを選択してください。書き込み前のプレビューも可能です。',
+        en: 'Choose a source to fetch video tags from. You can preview changes before writing.',
+        ko: '태그를 가져올 소스를 선택하세요. 저장 전 변경 사항을 미리 볼 수 있습니다.',
+      );
+  String get batchTagSourcePreviewBtn => tr(
+        zhCn: '预览变更',
+        zhTw: '預覽變更',
+        ja: '変更をプレビュー',
+        en: 'Preview Changes',
+        ko: '변경 미리보기',
+      );
+  String get batchTagSourceRunBtn => tr(
+        zhCn: '开始批量获取',
+        zhTw: '開始批次取得',
+        ja: '一括取得を開始',
+        en: 'Run Batch Update',
+        ko: '일괄 업데이트 시작',
+      );
 }

@@ -101,6 +101,27 @@ class _BuiltInPlayerPageState extends State<BuiltInPlayerPage> {
   @override
   Widget build(BuildContext context) {
     final isMultipart = widget.partPaths.length > 1;
+    final controlsTheme = MaterialVideoControlsThemeData(
+      displaySeekBar: true,
+      volumeGesture: true,
+      brightnessGesture: true,
+      seekGesture: true,
+      seekOnDoubleTap: true,
+      speedUpOnLongPress: true,
+      padding: EdgeInsets.only(bottom: _landscape ? 8.0 : 24.0),
+      bottomButtonBarMargin: EdgeInsets.only(
+        left: 16.0,
+        right: 8.0,
+        bottom: _landscape ? 8.0 : 12.0,
+      ),
+      seekBarMargin: EdgeInsets.only(
+        left: 16.0,
+        right: 16.0,
+        bottom: _landscape ? 48.0 : 54.0,
+      ),
+      seekBarContainerHeight: 36.0,
+    );
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: _landscape
@@ -154,32 +175,39 @@ class _BuiltInPlayerPageState extends State<BuiltInPlayerPage> {
                 ),
               ],
             ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Stack(
-              children: [
-                Center(child: Video(controller: _controller)),
-                if (_landscape)
-                  Positioned(
-                    top: MediaQuery.of(context).padding.top + 8,
-                    right: 12,
-                    child: IconButton.filled(
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black54,
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: const Icon(Icons.fullscreen_exit_rounded),
-                      onPressed: _toggleLandscape,
+      body: SafeArea(
+        top: _landscape,
+        bottom: true,
+        child: Column(
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  Center(
+                    child: MaterialVideoControlsTheme(
+                      normal: controlsTheme,
+                      fullscreen: controlsTheme,
+                      child: Video(controller: _controller),
                     ),
                   ),
-              ],
+                  if (_landscape)
+                    Positioned(
+                      top: 8,
+                      right: 12,
+                      child: IconButton.filled(
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black54,
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.fullscreen_exit_rounded),
+                        onPressed: _toggleLandscape,
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          if (isMultipart)
-            SafeArea(
-              top: false,
-              child: SizedBox(
+            if (isMultipart)
+              SizedBox(
                 height: 54,
                 child: ListView.separated(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -203,8 +231,8 @@ class _BuiltInPlayerPageState extends State<BuiltInPlayerPage> {
                   },
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -46,6 +46,32 @@ class SearchResultItem {
       return const [];
     }
 
+    String firstNonEmpty(List<dynamic> candidates) {
+      for (final c in candidates) {
+        if (c is String) {
+          final trimmed = c.trim();
+          if (trimmed.isNotEmpty) return trimmed;
+        }
+      }
+      return '';
+    }
+
+    List<String> resolveSamples() {
+      final rawSamples = json['sample_images'];
+      final rawPreviews = json['preview_sample_images'];
+      if (rawSamples is List) {
+        final previewList = rawPreviews is List ? rawPreviews : const <dynamic>[];
+        final resolved = <String>[];
+        for (var i = 0; i < rawSamples.length; i++) {
+          final preview = i < previewList.length ? previewList[i] : null;
+          final url = firstNonEmpty([preview, rawSamples[i]]);
+          if (url.isNotEmpty) resolved.add(url);
+        }
+        return resolved;
+      }
+      return parseList(rawSamples);
+    }
+
     return SearchResultItem(
       number: (json['number'] as String?) ?? '',
       title: (json['title'] as String?) ?? '',
@@ -59,8 +85,8 @@ class SearchResultItem {
       label: (json['label'] as String?) ?? '',
       date: (json['date'] as String?) ?? '',
       duration: (json['duration'] as num?)?.toInt(),
-      cover: ((json['preview_cover_url'] ?? json['cover'] ?? json['cover_url']) as String?) ?? '',
-      sampleImages: parseList(json['sample_images']),
+      cover: firstNonEmpty([json['preview_cover_url'], json['cover'], json['cover_url']]),
+      sampleImages: resolveSamples(),
       source: (json['source'] as String?) ?? '',
       url: (json['url'] as String?) ?? '',
       raw: json,

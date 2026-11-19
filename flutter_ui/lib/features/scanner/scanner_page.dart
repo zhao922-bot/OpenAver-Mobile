@@ -168,6 +168,158 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
     }
   }
 
+  Future<void> _openTagSourceSheet() async {
+    final strings = ref.read(stringsProvider);
+    final api = ref.read(apiClientProvider);
+
+    const reserved = <(String, String)>[
+      ('javlibrary', 'JavLibrary'),
+      ('fc-javten', 'FC2-javten'),
+      ('jable', 'Jable'),
+    ];
+    const fallbackEnabled = <(String, String)>[
+      ('javbus', 'JavBus'),
+      ('javdb', 'JavDB'),
+      ('dmm', 'DMM'),
+      ('jav321', 'Jav321'),
+    ];
+
+    final options = <(String, String)>[];
+    final seen = <String>{'auto', ...reserved.map((e) => e.$1)};
+    try {
+      final resp = await api.getJson('/api/config');
+      final cfgData = (resp['data'] as Map?)?.cast<String, dynamic>() ?? resp;
+      final rawSources = (cfgData['sources'] as List?) ?? const [];
+      final enabledRows = rawSources
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((s) => s['enabled'] == true && s['manual_only'] != true)
+          .toList()
+        ..sort((a, b) => ((a['order'] as num?)?.toInt() ?? 0).compareTo((b['order'] as num?)?.toInt() ?? 0));
+      for (final s in enabledRows) {
+        final id = (s['id'] ?? '').toString().trim();
+        if (id.isEmpty || seen.contains(id)) continue;
+        seen.add(id);
+        final rawName = (s['display_name_raw'] ?? '').toString().trim();
+        final keyName = (s['display_name_key'] ?? '').toString().trim();
+        final label = rawName.isNotEmpty ? rawName : (keyName.isNotEmpty ? keyName : id);
+        options.add((id, label));
+      }
+    } catch (e) {
+      debugPrint('openTagSourceSheet config error: $e');
+    }
+
+    if (options.isEmpty) {
+      for (final item in fallbackEnabled) {
+        if (seen.add(item.$1)) options.add(item);
+      }
+    }
+    options.addAll(reserved);
+    if (!mounted) return;
+
+    var selectedId = options.first.$1;
+    if (_scrapeSource != 'auto' && options.any((o) => o.$1 == _scrapeSource)) {
+      selectedId = _scrapeSource;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) {
+          final palette = OpenAverPalette.of(sheetCtx);
+          final selectedLabel = options
+              .firstWhere((o) => o.$1 == selectedId, orElse: () => (selectedId, selectedId))
+              .$2;
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheetCtx).height * 0.85),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.sell_outlined, color: palette.accent),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          strings.batchTagSourceTitle,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.of(sheetCtx).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    strings.batchTagSourceSelectHint,
+                    style: TextStyle(fontSize: 12.5, color: palette.textMuted),
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: options.map((opt) {
+                      return ChoiceChip(
+                        label: Text(opt.$2),
+                        selected: selectedId == opt.$1,
+                        onSelected: (_) => setSheetState(() => selectedId = opt.$1),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _runningTask
+                              ? null
+                              : () {
+                                  Navigator.of(sheetCtx).pop();
+                                  _runSseTask(
+                                    label: '${strings.batchTagSourcePreviewBtn} ($selectedLabel)',
+                                    path: '/api/gallery/tag-source-preview',
+                                    queryParameters: {'source': selectedId},
+                                  );
+                                },
+                          icon: const Icon(Icons.visibility_outlined, size: 18),
+                          label: Text(strings.batchTagSourcePreviewBtn),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _runningTask
+                              ? null
+                              : () {
+                                  Navigator.of(sheetCtx).pop();
+                                  _runSseTask(
+                                    label: '${strings.batchTagSourceTitle} ($selectedLabel)',
+                                    path: '/api/gallery/tag-source-update',
+                                    queryParameters: {'source': selectedId},
+                                  );
+                                },
+                          icon: const Icon(Icons.sell_outlined, size: 18),
+                          label: Text(strings.batchTagSourceRunBtn),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _openRenameSheet() async {
     final strings = ref.read(stringsProvider);
     final api = ref.read(apiClientProvider);
@@ -679,6 +831,12 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                         method: 'POST',
                         queryParameters: {'source': _scrapeSource},
                       ),
+            ),
+            _BackfillTile(
+              icon: Icons.sell_outlined,
+              title: strings.batchTagSourceTitle,
+              subtitle: strings.batchTagSourceDesc,
+              onTap: _runningTask ? null : _openTagSourceSheet,
             ),
             _BackfillTile(
               icon: Icons.image_outlined,
