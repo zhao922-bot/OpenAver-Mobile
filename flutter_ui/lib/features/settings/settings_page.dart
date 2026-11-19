@@ -8,6 +8,7 @@ import '../../core/app_theme.dart';
 import '../../core/l10n.dart';
 import '../../core/native_bridge.dart';
 import '../shared/browse_dir_sheet.dart';
+import 'ai_backfill_bar.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -52,6 +53,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   String? _tagsStatus;
   bool _tagsStatusOk = true;
 
+  bool _metatubeBusy = false;
+  bool _metatubeConnected = false;
+  int _metatubeProviderCount = 0;
+  String? _metatubeStatusText;
+
   @override
   void initState() {
     super.initState();
@@ -67,6 +73,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     try {
       final api = ref.read(apiClientProvider);
       final resp = await api.getJson('/api/config');
+      final mtStatus = await api.getJson('/api/settings/metatube/status').catchError((Object _) => <String, dynamic>{});
       final tree = await NativeBridge.instance.getStorageTreeInfo();
       final storage = await NativeBridge.instance.hasStorageAccess();
       if (!mounted) return;
@@ -74,6 +81,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (data is Map) {
         setState(() {
           _config = jsonDecode(jsonEncode(data)) as Map<String, dynamic>;
+          _metatubeConnected = mtStatus['connected'] == true;
+          _metatubeProviderCount = (mtStatus['providers'] as List?)?.length ?? 0;
           _treeInfo = tree;
           _storageGranted = storage;
           _dirty = false;
@@ -175,6 +184,79 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       dirs.add({'path': path, 'readonly': false, 'output_path': ''});
       gallery['directories'] = dirs;
     });
+  }
+
+  Future<void> _connectMetatube(Map<String, dynamic> metatube) async {
+    final strings = ref.read(stringsProvider);
+    setState(() {
+      _metatubeBusy = true;
+      _metatubeStatusText = null;
+    });
+    try {
+      final resp = await ref.read(apiClientProvider).postJson(
+        '/api/settings/metatube/connect',
+        data: {
+          'url': (metatube['url'] ?? '').toString().trim(),
+          'token': (metatube['token'] ?? '').toString().trim(),
+          'allow_lan': metatube['allow_lan'] == true,
+        },
+      );
+      if (!mounted) return;
+      if (resp['success'] == true) {
+        final count = (resp['provider_count'] as num?)?.toInt() ?? 0;
+        setState(() {
+          _metatubeConnected = true;
+          _metatubeProviderCount = count;
+          _metatubeStatusText = strings.metatubeConnectedCount(count);
+        });
+        await _loadAll();
+      } else {
+        setState(() {
+          _metatubeConnected = false;
+          _metatubeStatusText = (resp['error'] ?? strings.connectFailed).toString();
+        });
+      }
+    } catch (e) {
+      debugPrint('connectMetatube error: $e');
+      if (mounted) {
+        setState(() => _metatubeStatusText = strings.requestFailed('$e'));
+      }
+    } finally {
+      if (mounted) setState(() => _metatubeBusy = false);
+    }
+  }
+
+  Future<void> _disconnectMetatube() async {
+    final strings = ref.read(stringsProvider);
+    setState(() => _metatubeBusy = true);
+    try {
+      await ref.read(apiClientProvider).postJson('/api/settings/metatube/disconnect');
+      if (!mounted) return;
+      setState(() {
+        _metatubeConnected = false;
+        _metatubeProviderCount = 0;
+        _metatubeStatusText = strings.metatubeDisconnected;
+      });
+    } catch (e) {
+      debugPrint('disconnectMetatube error: $e');
+    } finally {
+      if (mounted) setState(() => _metatubeBusy = false);
+    }
+  }
+
+  Future<void> _retestMetatube() async {
+    final strings = ref.read(stringsProvider);
+    setState(() => _metatubeBusy = true);
+    try {
+      final resp = await ref.read(apiClientProvider).postJson('/api/settings/metatube/test');
+      if (!mounted) return;
+      _toast((resp['message'] ?? strings.connectSuccess).toString());
+    } catch (e) {
+      debugPrint('retestMetatube error: $e');
+      _toast(strings.requestFailed('$e'));
+    } finally {
+      if (mounted) setState(() => _metatubeBusy = false);
+    }
   }
 
   Future<void> _probeSources() async {
@@ -1327,7 +1409,44 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                   TextFormField(
                                     initialValue: (metatube['token'] ?? '').toString(),
                                     decoration: const InputDecoration(labelText: 'Token'),
+                                    obscureText: true,
                                     onChanged: (v) => _markDirty(() => metatube['token'] = v.trim()),
+                                  ),
+                                  SwitchListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: Text(strings.metatubeAllowLan),
+                                    value: metatube['allow_lan'] == true,
+                                    onChanged: (v) => _markDirty(() => metatube['allow_lan'] = v),
+                                  ),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 6,
+                                    children: [
+                                      FilledButton.tonalIcon(
+                                        onPressed: _metatubeBusy ? null : () => _connectMetatube(metatube),
+                                        icon: _metatubeBusy
+                                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                            : const Icon(Icons.link_rounded, size: 16),
+                                        label: Text(strings.metatubeConnect),
+                                      ),
+                                      if (_metatubeConnected)
+                                        OutlinedButton.icon(
+                                          onPressed: _metatubeBusy ? null : _retestMetatube,
+                                          icon: const Icon(Icons.network_check_rounded, size: 16),
+                                          label: Text(strings.metatubeRetest),
+                                        ),
+                                      if (_metatubeConnected)
+                                        TextButton(
+                                          onPressed: _metatubeBusy ? null : _disconnectMetatube,
+                                          child: Text(strings.metatubeDisconnect),
+                                        ),
+                                    ],
+                                  ),
+                                  _AiStatusBanner(
+                                    message: _metatubeStatusText ??
+                                        (_metatubeConnected ? strings.metatubeConnectedCount(_metatubeProviderCount) : null),
+                                    ok: _metatubeConnected,
+                                    palette: palette,
                                   ),
                                 ],
                               ],
@@ -1542,6 +1661,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 ok: _similarStatusOk,
                                 palette: palette,
                               ),
+                              AiBackfillBar(
+                                api: ref.read(apiClientProvider),
+                                strings: strings,
+                                statusEndpoint: '/api/ai/similar/status',
+                                startEndpoint: '/api/ai/similar/index',
+                                stopEndpoint: '/api/ai/similar/index/stop',
+                                rebuildEndpoint: '/api/ai/similar/index/rebuild',
+                              ),
                               const SizedBox(height: 6),
                             ],
                             SwitchListTile(
@@ -1644,6 +1771,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 message: _facesStatus,
                                 ok: _facesStatusOk,
                                 palette: palette,
+                              ),
+                              AiBackfillBar(
+                                api: ref.read(apiClientProvider),
+                                strings: strings,
+                                statusEndpoint: '/api/ai/faces/status',
+                                startEndpoint: '/api/ai/faces/recompute',
+                                stopEndpoint: '/api/ai/faces/recompute/stop',
+                                rebuildEndpoint: '/api/ai/faces/rebuild',
                               ),
                               const SizedBox(height: 6),
                             ],
@@ -1774,6 +1909,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 message: _tagsStatus,
                                 ok: _tagsStatusOk,
                                 palette: palette,
+                              ),
+                              AiBackfillBar(
+                                api: ref.read(apiClientProvider),
+                                strings: strings,
+                                statusEndpoint: '/api/ai/tags/backfill/status',
+                                startEndpoint: '/api/ai/tags/backfill',
+                                stopEndpoint: '/api/ai/tags/backfill/stop',
+                                rebuildEndpoint: '/api/ai/tags/backfill/rebuild',
                               ),
                             ],
                           ],

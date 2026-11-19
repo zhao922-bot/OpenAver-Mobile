@@ -380,6 +380,7 @@ void main() {
     var favoritedSakura = false;
     var photoReplaced = false;
     var focalSaved = false;
+    var aiTagged = false;
 
     final mockApi = ApiClient(
       port: 8765,
@@ -494,6 +495,12 @@ void main() {
           focalSaved = true;
           return _jsonResponse({'success': true, 'auto_focal': map['focal']});
         }
+        if (opts.path == '/api/ai/tags/videos') {
+          final map = Map<String, dynamic>.from(opts.data as Map);
+          expect(map['file_path'], '/lib/ABC-001.mp4');
+          aiTagged = true;
+          return _jsonResponse({'success': true, 'added': ['Solo'], 'user_tags': ['Keep', 'Solo']});
+        }
         if (opts.path == '/api/actresses/Sakura/photo-candidates') {
           return _sseResponse([
             'event: candidate\ndata: {"source":"local_crop","thumb_url":"","full_url":"https://cand/1.jpg","id":"c1"}\n\n',
@@ -560,6 +567,10 @@ void main() {
     await tester.tap(find.text('Save Focus'));
     await tester.pumpAndSettle();
     expect(focalSaved, true);
+
+    await tester.tap(find.text('AI Tags'));
+    await tester.pumpAndSettle();
+    expect(aiTagged, true);
 
     await tester.scrollUntilVisible(
       find.text('Drama'),
@@ -660,6 +671,11 @@ void main() {
   });
 
   testWidgets('ScannerPage, InsightsPage, and SettingsPage render populated and error states', (tester) async {
+    var fixNumbersAppliedIds = <int>[];
+    var aliasListRequested = false;
+    var similarBackfillStarted = false;
+    var metatubeConnected = false;
+
     final mockApi = ApiClient(
       port: 8765,
       token: 't',
@@ -698,16 +714,59 @@ void main() {
               'search': {'proxy_url': '', 'proxy_scope': 'dmm'},
               'sources': [{'id': 'javbus', 'enabled': true, 'order': 0}],
               'source_links': {'dmm': true},
-              'metatube': {'enabled': false},
+              'metatube': {'enabled': true, 'url': 'https://mt.example', 'token': 'tok', 'allow_lan': false},
               'translate': {
                 'enabled': true,
                 'provider': 'openai',
                 'openai': {'base_url': 'https://api.openai.com/v1', 'api_key': 'k', 'model': ''},
               },
               'focal_device': {'disabled': false},
-              'ai_services': {'image_similar': {}, 'faces': {}, 'tags': {}},
+              'ai_services': {
+                'image_similar': {'enabled': true, 'provider': 'endpoint', 'url': 'http://127.0.0.1:9000'},
+                'faces': {},
+                'tags': {},
+              },
             },
           });
+        }
+        if (opts.path == '/api/actress-aliases') {
+          aliasListRequested = true;
+          return _jsonResponse({
+            'success': true,
+            'groups': [
+              {'primary_name': 'Sakura', 'aliases': ['Saku']},
+            ],
+          });
+        }
+        if (opts.path == '/api/collection/analysis') {
+          return _jsonResponse({'success': true, 'groups': [{'label': 'Corrupted', 'count': 1}]});
+        }
+        if (opts.path == '/api/collection/fix-numbers/preview') {
+          return _jsonResponse({
+            'affected': [
+              {'id': 99, 'old_number': 'ABC001-C', 'new_number': 'ABC-001'},
+            ],
+            'total': 1,
+          });
+        }
+        if (opts.path == '/api/collection/fix-numbers/apply') {
+          final map = Map<String, dynamic>.from(opts.data as Map);
+          fixNumbersAppliedIds = ((map['ids'] as List?) ?? const []).map((e) => (e as num).toInt()).toList();
+          return _jsonResponse({'updated': fixNumbersAppliedIds.length, 'failed': 0});
+        }
+        if (opts.path == '/api/settings/metatube/status') {
+          return _jsonResponse({'connected': metatubeConnected, 'providers': []});
+        }
+        if (opts.path == '/api/settings/metatube/connect') {
+          metatubeConnected = true;
+          return _jsonResponse({'success': true, 'provider_count': 5});
+        }
+        if (opts.path == '/api/ai/similar/status') {
+          return _jsonResponse({'running': false, 'pending': 10, 'processed': 0, 'total': 10});
+        }
+        if (opts.path == '/api/ai/similar/index') {
+          similarBackfillStarted = true;
+          return _jsonResponse({'status': 'started'});
         }
         if (opts.path == '/api/openai/models') {
           return _jsonResponse({'success': true, 'models': ['deepseek-chat', 'qwen-plus']});
@@ -732,6 +791,27 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Library: 42 videos'), findsOneWidget);
+
+    // Scanner: Collection Analysis -> Fix Corrupted Numbers (uses affected + ids)
+    final scannerScroll = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(find.text('Library Health & Number Fix').first, 250, scrollable: scannerScroll);
+    await tester.tap(find.text('Library Health & Number Fix').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Scan & Fix Corrupted Numbers'));
+    await tester.pumpAndSettle();
+    expect(find.text('ABC001-C -> ABC-001'), findsOneWidget);
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(fixNumbersAppliedIds, [99]);
+
+    // Scanner: Actress Aliases uses plural /api/actress-aliases
+    await tester.scrollUntilVisible(find.text('Actress Aliases').first, 250, scrollable: scannerScroll);
+    await tester.tap(find.text('Actress Aliases').first);
+    await tester.pumpAndSettle();
+    expect(aliasListRequested, true);
+    expect(find.text('Saku'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.pumpAndSettle();
 
     await tester.pumpWidget(
       ProviderScope(
@@ -774,6 +854,21 @@ void main() {
     await tester.tap(find.text('Test Translate'));
     await tester.pumpAndSettle();
     expect(find.text('Connection succeeded: Test OK'), findsWidgets);
+
+    // AI BackfillBar start button
+    final settingsScroll = find.byType(Scrollable).last;
+    await tester.scrollUntilVisible(find.text('Start Backfill').first, 250, scrollable: settingsScroll);
+    await tester.tap(find.text('Start Backfill').first);
+    await tester.pumpAndSettle();
+    expect(similarBackfillStarted, true);
+
+    // Metatube Connect button
+    await tester.tap(find.text('Search, Proxy & Sources').first);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Connect').first, 250, scrollable: settingsScroll);
+    await tester.tap(find.text('Connect').first);
+    await tester.pumpAndSettle();
+    expect(metatubeConnected, true);
   });
 }
 

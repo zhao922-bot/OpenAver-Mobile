@@ -107,7 +107,10 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
 
     @Override
     public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
-        super.configureFlutterEngine(flutterEngine);
+        FlutterEngine cached = FlutterEngineCache.getInstance().get(MobileRuntimeSession.FLUTTER_ENGINE_ID);
+        if (cached != flutterEngine) {
+            super.configureFlutterEngine(flutterEngine);
+        }
         bridgeChannel = new MethodChannel(
                 flutterEngine.getDartExecutor().getBinaryMessenger(),
                 CHANNEL_NAME

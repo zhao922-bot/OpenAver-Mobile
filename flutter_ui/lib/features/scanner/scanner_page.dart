@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/api_client.dart';
 import '../../core/app_providers.dart';
 import '../../core/app_theme.dart';
+import '../../core/l10n.dart';
 import '../../core/models/scanner_models.dart';
 import '../../core/native_bridge.dart';
 
@@ -279,20 +281,70 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                     width: double.infinity,
                     child: FilledButton.tonal(
                       onPressed: () async {
-                        final preview = await api.postJson('/api/collection/fix-numbers/preview');
+                        final preview = await api.postJson(
+                          '/api/collection/fix-numbers/preview',
+                          data: {'rules': <String>[]},
+                        );
                         if (!ctx.mounted) return;
-                        final items = (preview['items'] as List?) ?? const [];
-                        if (items.isEmpty) {
+                        final affected = ((preview['affected'] ?? preview['items']) as List?)
+                                ?.whereType<Map>()
+                                .map((e) => Map<String, dynamic>.from(e))
+                                .toList() ??
+                            const <Map<String, dynamic>>[];
+                        if (affected.isEmpty) {
                           Navigator.of(ctx).pop();
                           _toast(strings.renameAllClean);
                           return;
                         }
-                        await api.postJson('/api/collection/fix-numbers/apply', data: {'items': items});
+                        final confirm = await showDialog<bool>(
+                          context: ctx,
+                          builder: (dCtx) => AlertDialog(
+                            title: Text(strings.fixNumbersPreviewTitle(affected.length)),
+                            content: SizedBox(
+                              width: double.maxFinite,
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: affected.length > 30 ? 30 : affected.length,
+                                itemBuilder: (_, i) {
+                                  final row = affected[i];
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 2),
+                                    child: Text(
+                                      '${row['old_number']} -> ${row['new_number']}',
+                                      style: const TextStyle(fontSize: 12.5),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(dCtx).pop(false),
+                                child: Text(strings.cancel),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.of(dCtx).pop(true),
+                                child: Text(strings.apply),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm != true || !ctx.mounted) return;
+                        final ids = affected
+                            .map((e) => (e['id'] as num?)?.toInt())
+                            .whereType<int>()
+                            .toList();
+                        final applied = await api.postJson(
+                          '/api/collection/fix-numbers/apply',
+                          data: {'ids': ids},
+                        );
                         if (ctx.mounted) Navigator.of(ctx).pop();
-                        _toast(strings.saved);
+                        final updated = (applied['updated'] as num?)?.toInt() ?? ids.length;
+                        final failed = (applied['failed'] as num?)?.toInt() ?? 0;
+                        _toast(strings.fixNumbersApplied(updated, failed));
                         _loadStats();
                       },
-                      child: Text(strings.apply),
+                      child: Text(strings.fixNumbersBtn),
                     ),
                   ),
                 ),
@@ -310,50 +362,16 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
   Future<void> _openAliasManager({required bool actressMode}) async {
     final strings = ref.read(stringsProvider);
     final api = ref.read(apiClientProvider);
-    final endpoint = actressMode ? '/api/actress-alias' : '/api/tag-alias';
-    final title = actressMode ? strings.actressAliasesManage : strings.tagAliasesManage;
-    try {
-      final resp = await api.getJson(endpoint);
-      if (!mounted) return;
-      final list = ((resp['groups'] ?? resp['aliases'] ?? resp['data']) as List?) ?? const [];
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        builder: (ctx) => SizedBox(
-          height: MediaQuery.of(ctx).size.height * 0.72,
-          child: Column(
-            children: [
-              ListTile(
-                title: Text('$title (${list.length})', style: const TextStyle(fontWeight: FontWeight.w700)),
-                trailing: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.of(ctx).pop()),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: list.isEmpty
-                    ? Center(child: Text(strings.emptyActresses))
-                    : ListView.builder(
-                        itemCount: list.length,
-                        itemBuilder: (_, idx) {
-                          final g = list[idx];
-                          if (g is! Map) return const SizedBox.shrink();
-                          final primary = (g['primary_name'] ?? g['name'] ?? '').toString();
-                          final aliases = ((g['aliases'] as List?) ?? const []).join(', ');
-                          return ListTile(
-                            title: Text(primary, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: aliases.isNotEmpty ? Text(aliases) : null,
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
-      );
-    } catch (e) {
-      debugPrint('openAliasManager error: $e');
-      _toast(strings.requestFailed('$e'));
-    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _AliasManagerSheet(
+        api: api,
+        strings: strings,
+        actressMode: actressMode,
+      ),
+    );
   }
 
   Future<void> _confirmClearCache() async {
@@ -672,6 +690,320 @@ class _BackfillTile extends StatelessWidget {
         subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: palette.textMuted)),
         trailing: const Icon(Icons.play_circle_outline_rounded),
         onTap: onTap,
+      ),
+    );
+  }
+}
+
+class _AliasManagerSheet extends StatefulWidget {
+  const _AliasManagerSheet({
+    required this.api,
+    required this.strings,
+    required this.actressMode,
+  });
+
+  final ApiClient api;
+  final AppStrings strings;
+  final bool actressMode;
+
+  @override
+  State<_AliasManagerSheet> createState() => _AliasManagerSheetState();
+}
+
+class _AliasManagerSheetState extends State<_AliasManagerSheet> {
+  final TextEditingController _primaryCtrl = TextEditingController();
+  final TextEditingController _aliasesCtrl = TextEditingController();
+  List<Map<String, dynamic>> _groups = const [];
+  bool _loading = true;
+  bool _busy = false;
+  String? _error;
+
+  String get _baseEndpoint => widget.actressMode ? '/api/actress-aliases' : '/api/tag-aliases';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGroups();
+  }
+
+  @override
+  void dispose() {
+    _primaryCtrl.dispose();
+    _aliasesCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadGroups() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final resp = await widget.api.getJson(_baseEndpoint);
+      if (!mounted) return;
+      final list = ((resp['groups'] ?? resp['aliases'] ?? resp['data']) as List?) ?? const [];
+      setState(() {
+        _groups = list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('AliasManagerSheet load error: $e');
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = widget.strings.requestFailed('$e');
+        });
+      }
+    }
+  }
+
+  Future<void> _searchOnline() async {
+    final name = _primaryCtrl.text.trim();
+    if (!widget.actressMode || name.isEmpty || _busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final resp = await widget.api.postJson(
+        '/api/actress-aliases/search-online',
+        data: {'name': name},
+      );
+      if (!mounted) return;
+      final suggested = (resp['suggested_aliases'] as List?)
+              ?.map((e) => e.toString().trim())
+              .where((e) => e.isNotEmpty)
+              .toList() ??
+          const <String>[];
+      if (suggested.isNotEmpty) {
+        _aliasesCtrl.text = suggested.join(', ');
+      } else {
+        setState(() => _error = (resp['message'] ?? widget.strings.aliasEmptyList).toString());
+      }
+    } catch (e) {
+      debugPrint('AliasManagerSheet searchOnline error: $e');
+      if (mounted) setState(() => _error = widget.strings.requestFailed('$e'));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _createGroup() async {
+    final primary = _primaryCtrl.text.trim();
+    if (primary.isEmpty || _busy) return;
+    final aliases = _aliasesCtrl.text
+        .split(RegExp(r'[,，\n]'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final resp = await widget.api.postJson(
+        _baseEndpoint,
+        data: {'primary_name': primary, 'aliases': aliases},
+      );
+      if (!mounted) return;
+      if (resp['success'] == true) {
+        _primaryCtrl.clear();
+        _aliasesCtrl.clear();
+        await _loadGroups();
+      } else {
+        setState(() => _error = (resp['error'] ?? widget.strings.saveFailed).toString());
+      }
+    } catch (e) {
+      debugPrint('AliasManagerSheet createGroup error: $e');
+      if (mounted) setState(() => _error = widget.strings.requestFailed('$e'));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _addAliasToGroup(String primaryName) async {
+    final ctrl = TextEditingController();
+    final alias = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${widget.strings.addSingleAlias}: $primaryName'),
+        content: TextField(controller: ctrl, autofocus: true),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(widget.strings.cancel)),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()), child: Text(widget.strings.confirm)),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (alias == null || alias.isEmpty) return;
+    try {
+      final resp = await widget.api.postJson(
+        '$_baseEndpoint/${Uri.encodeComponent(primaryName)}/alias',
+        data: {'alias': alias},
+      );
+      if (!mounted) return;
+      if (resp['success'] == true) {
+        await _loadGroups();
+      } else {
+        setState(() => _error = (resp['error'] ?? widget.strings.saveFailed).toString());
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = widget.strings.requestFailed('$e'));
+    }
+  }
+
+  Future<void> _removeAlias(String primaryName, String alias) async {
+    try {
+      await widget.api.deleteJson(
+        '$_baseEndpoint/${Uri.encodeComponent(primaryName)}/alias/${Uri.encodeComponent(alias)}',
+      );
+      if (mounted) await _loadGroups();
+    } catch (e) {
+      if (mounted) setState(() => _error = widget.strings.requestFailed('$e'));
+    }
+  }
+
+  Future<void> _deleteGroup(String primaryName) async {
+    try {
+      await widget.api.deleteJson('$_baseEndpoint/${Uri.encodeComponent(primaryName)}');
+      if (mounted) await _loadGroups();
+    } catch (e) {
+      if (mounted) setState(() => _error = widget.strings.requestFailed('$e'));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = OpenAverPalette.of(context);
+    final title = widget.actressMode
+        ? widget.strings.actressAliasesManage
+        : widget.strings.tagAliasesManage;
+
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.82,
+      child: Column(
+        children: [
+          ListTile(
+            title: Text('$title (${_groups.length})', style: const TextStyle(fontWeight: FontWeight.w700)),
+            trailing: IconButton(
+              icon: const Icon(Icons.close_rounded),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _primaryCtrl,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          labelText: widget.strings.aliasPrimaryHint,
+                        ),
+                      ),
+                    ),
+                    if (widget.actressMode) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _busy ? null : _searchOnline,
+                        child: Text(widget.strings.aliasSearchOnline),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _aliasesCtrl,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          labelText: widget.strings.aliasValuesHint,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _busy ? null : _createGroup,
+                      child: Text(widget.strings.addAliasGroup),
+                    ),
+                  ],
+                ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(_error!, style: TextStyle(color: palette.danger, fontSize: 12)),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _groups.isEmpty
+                    ? Center(child: Text(widget.strings.aliasEmptyList, style: TextStyle(color: palette.textMuted)))
+                    : ListView.builder(
+                        itemCount: _groups.length,
+                        itemBuilder: (_, idx) {
+                          final g = _groups[idx];
+                          final primary = (g['primary_name'] ?? g['name'] ?? '').toString();
+                          final aliases = ((g['aliases'] as List?) ?? const [])
+                              .map((e) => e.toString())
+                              .where((e) => e.isNotEmpty)
+                              .toList();
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(primary, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.add_rounded, size: 18),
+                                        tooltip: widget.strings.addSingleAlias,
+                                        onPressed: () => _addAliasToGroup(primary),
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.delete_outline_rounded, size: 18, color: palette.danger),
+                                        onPressed: () => _deleteGroup(primary),
+                                      ),
+                                    ],
+                                  ),
+                                  if (aliases.isNotEmpty)
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 4,
+                                      children: aliases
+                                          .map(
+                                            (a) => InputChip(
+                                              label: Text(a, style: const TextStyle(fontSize: 12)),
+                                              visualDensity: VisualDensity.compact,
+                                              onDeleted: () => _removeAlias(primary, a),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
       ),
     );
   }

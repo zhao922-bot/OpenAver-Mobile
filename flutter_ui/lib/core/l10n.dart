@@ -494,4 +494,66 @@ class AppStrings {
   String get saveSettings => tr(zhCn: '保存设置', zhTw: '儲存設定', ja: '保存', en: 'Save Settings', ko: '설정 저장');
   String get exportDone => tr(zhCn: '已保存备份到下载目录', zhTw: '已儲存備份到下載目錄', ja: 'ダウンロードに保存しました', en: 'Backup saved to Downloads', ko: '다운로드 폴더에 백업 저장됨');
   String get restoreDone => tr(zhCn: '数据库恢复成功', zhTw: '資料庫還原成功', ja: 'データベースを復元しました', en: 'Database restored', ko: 'DB 복원 완료');
+
+  // Alias manager & collection fix-numbers
+  String get aliasPrimaryHint => tr(zhCn: '主名称', zhTw: '主名稱', ja: 'メイン名', en: 'Primary name', ko: '대표 이름');
+  String get aliasValuesHint => tr(zhCn: '别名（逗号分隔）', zhTw: '別名（逗號分隔）', ja: '別名（カンマ区切り）', en: 'Aliases (comma-separated)', ko: '별명 (쉼표 구분)');
+  String get addAliasGroup => tr(zhCn: '新增别名组', zhTw: '新增別名組', ja: 'グループ追加', en: 'Add Group', ko: '그룹 추가');
+  String get addSingleAlias => tr(zhCn: '添加别名', zhTw: '新增別名', ja: '別名を追加', en: 'Add Alias', ko: '별명 추가');
+  String get aliasSearchOnline => tr(zhCn: '在线查别名', zhTw: '線上查別名', ja: 'オンライン検索', en: 'Search Online', ko: '온라인 검색');
+  String get aliasEmptyList => tr(zhCn: '暂无别名记录', zhTw: '暫無別名記錄', ja: '別名データがありません', en: 'No alias groups yet', ko: '별명 그룹 없음');
+  String get fixNumbersBtn => tr(zhCn: '扫描并修复异常番号', zhTw: '掃描並修復異常番號', ja: '品番異常を検出・修復', en: 'Scan & Fix Corrupted Numbers', ko: '비정상 품번 검사 및 복구');
+  String fixNumbersPreviewTitle(int count) => tr(
+        zhCn: '发现 $count 项可修复番号',
+        zhTw: '發現 $count 項可修復番號',
+        ja: '$count 件の修復候補が見つかりました',
+        en: 'Found $count numbers to fix',
+        ko: '$count개의 복구 대상 발견',
+      );
+  String fixNumbersApplied(int updated, int failed) => tr(
+        zhCn: '已修复 $updated 项（失败 $failed 项）',
+        zhTw: '已修復 $updated 項（失敗 $failed 項）',
+        ja: '$updated 件を修復しました（失敗 $failed 件）',
+        en: 'Fixed $updated items ($failed failed)',
+        ko: '$updated건 복구 완료 (실패 $failed건)',
+      );
+
+  // Metatube & AI Backfill controls
+  String get metatubeAllowLan => tr(zhCn: '允许局域网地址 (LAN)', zhTw: '允許區域網路位址 (LAN)', ja: 'LAN アドレスを許可', en: 'Allow LAN addresses', ko: 'LAN 주소 허용');
+  String get metatubeConnect => tr(zhCn: '连接', zhTw: '連線', ja: '接続', en: 'Connect', ko: '연결');
+  String get metatubeDisconnect => tr(zhCn: '断开', zhTw: '斷線', ja: '切断', en: 'Disconnect', ko: '연결 해제');
+  String get metatubeRetest => tr(zhCn: '重新探测', zhTw: '重新探測', ja: '再テスト', en: 'Retest', ko: '다시 테스트');
+  String metatubeConnectedCount(int count) => tr(
+        zhCn: '已连接（$count 个源）',
+        zhTw: '已連線（$count 個來源）',
+        ja: '接続済み（$count ソース）',
+        en: 'Connected ($count providers)',
+        ko: '연결됨 ($count개 소스)',
+      );
+  String get metatubeDisconnected => tr(zhCn: '未连接', zhTw: '未連線', ja: '未接続', en: 'Disconnected', ko: '연결 안 됨');
+  String get backfillStartBtn => tr(zhCn: '开始回填', zhTw: '開始回填', ja: 'バックフィル開始', en: 'Start Backfill', ko: '백필 시작');
+  String get backfillStopBtn => tr(zhCn: '停止', zhTw: '停止', ja: '停止', en: 'Stop', ko: '중지');
+  String get backfillRebuildBtn => tr(zhCn: '全部重建', zhTw: '全部重建', ja: 'すべて再構築', en: 'Rebuild All', ko: '전체 재구축');
+  String get backfillRebuildConfirm => tr(
+        zhCn: '确定清空已有结果并重新运行全库处理吗？',
+        zhTw: '確定清空既有結果並重新執行全庫處理嗎？',
+        ja: '既存データをクリアして全件再構築しますか？',
+        en: 'Clear existing results and rebuild for the entire library?',
+        ko: '기존 결과를 지우고 전체 라이브러리를 다시 처리할까요?',
+      );
+  String get backfillRefreshBtn => tr(zhCn: '刷新进度', zhTw: '重新整理進度', ja: '状態を更新', en: 'Refresh Status', ko: '상태 새로고침');
+  String backfillRunningLabel(int done, int total) => tr(
+        zhCn: '运行中：$done / $total',
+        zhTw: '執行中：$done / $total',
+        ja: '実行中：$done / $total',
+        en: 'Running: $done / $total',
+        ko: '진행 중: $done / $total',
+      );
+  String backfillPendingLabel(int pending) => tr(
+        zhCn: '待处理：$pending 项',
+        zhTw: '待處理：$pending 項',
+        ja: '未処理：$pending 件',
+        en: 'Pending: $pending',
+        ko: '대기 중: $pending건',
+      );
 }

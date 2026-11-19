@@ -11,7 +11,6 @@ import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.embedding.engine.FlutterEngineCache;
 import io.flutter.embedding.engine.dart.DartExecutor;
 import io.flutter.plugin.common.MethodChannel;
-import io.flutter.plugins.GeneratedPluginRegistrant;
 
 /**
  * Manages the pre-warmed cached FlutterEngine so MainActivity can overlap
@@ -34,7 +33,6 @@ final class FlutterEngineManager {
         }
         try {
             FlutterEngine engine = new FlutterEngine(appContext.getApplicationContext());
-            GeneratedPluginRegistrant.registerWith(engine);
             MethodChannel channel = new MethodChannel(
                     engine.getDartExecutor().getBinaryMessenger(),
                     OpenAverFlutterActivity.CHANNEL_NAME

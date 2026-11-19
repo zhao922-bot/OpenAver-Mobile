@@ -549,8 +549,8 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
     final api = ref.read(apiClientProvider);
     setState(() => _autoTagging = true);
     try {
-      final resp = await api.postJson('/api/tags/videos', data: {
-        'paths': [widget.video.path],
+      final resp = await api.postJson('/api/ai/tags/videos', data: {
+        'file_path': widget.video.path,
       });
       if (!mounted) return;
       if (resp['success'] == true) {
@@ -561,9 +561,10 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
         if (fresh['success'] == true && fresh['video'] is Map) {
           widget.onUpdated(VideoItem.fromJson(Map<String, dynamic>.from(fresh['video'])));
         }
-        _showToast(strings.saved);
+        final added = (resp['added'] as List?)?.map((e) => e.toString()).where((e) => e.isNotEmpty).toList() ?? const [];
+        _showToast(added.isNotEmpty ? '${strings.saved}: ${added.join(', ')}' : strings.saved);
       } else {
-        _showToast((resp['error'] ?? resp['detail'] ?? strings.saveFailed).toString());
+        _showToast((resp['detail'] ?? resp['reason'] ?? resp['error'] ?? strings.saveFailed).toString());
       }
     } catch (e) {
       debugPrint('autoTagVideo error: $e');
