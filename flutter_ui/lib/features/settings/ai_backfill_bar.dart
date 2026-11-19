@@ -145,13 +145,21 @@ class _AiBackfillBarState extends State<AiBackfillBar> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_status != null)
+          if (_status != null) ...[
             Text(
               running
                   ? widget.strings.backfillRunningLabel(completed, total)
                   : '${widget.strings.backfillPendingLabel(pending)}${stoppedReason.isNotEmpty ? ' ($stoppedReason)' : ''}',
               style: TextStyle(fontSize: 12, color: palette.textSecondary),
             ),
+            if (running) ...[
+              const SizedBox(height: 6),
+              LinearProgressIndicator(
+                value: (total > 0 && completed > 0) ? (completed / total).clamp(0.0, 1.0) : null,
+                minHeight: 4,
+              ),
+            ],
+          ],
           if (_message != null && _message!.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(_message!, style: TextStyle(fontSize: 11.5, color: palette.textMuted)),

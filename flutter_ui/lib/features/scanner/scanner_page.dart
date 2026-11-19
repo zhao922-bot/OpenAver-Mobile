@@ -111,12 +111,25 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
       )) {
         if (!mounted) break;
         final msg = (event.data['message'] ?? event.data['status'] ?? '').toString();
-        if (event.type == 'progress') {
+        if (event.type == 'progress' || event.type == 'result-item') {
           final current = (event.data['current'] as num?)?.toDouble() ?? 0;
           final total = (event.data['total'] as num?)?.toDouble() ?? 0;
+          final errorText = (event.data['error'] ?? '').toString().trim();
           setState(() {
-            _progress = total > 0 ? (current / total).clamp(0.0, 1.0) : null;
-            _statusLine = msg.isNotEmpty ? msg : '${current.toInt()} / ${total.toInt()}';
+            if (total > 0 && current > 0) {
+              _progress = (current / total).clamp(0.0, 1.0);
+            } else if (total > 0 && current <= 0 && _progress == null) {
+              _progress = null;
+            }
+            if (msg.isNotEmpty) {
+              _statusLine = msg;
+            } else if (total > 0) {
+              _statusLine = '${current.toInt()} / ${total.toInt()}';
+            }
+            if (event.type == 'result-item' && errorText.isNotEmpty) {
+              _logs.add(errorText);
+              if (_logs.length > 200) _logs.removeAt(0);
+            }
           });
         } else if (event.type == 'log') {
           if (msg.isNotEmpty) {

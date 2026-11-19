@@ -801,6 +801,14 @@ void main() {
             'data: {"type":"done","message":"Tag source updated (42)"}\n\n',
           ]);
         }
+        if (opts.path == '/api/gallery/backfill-plots') {
+          return _sseResponse([
+            'data: {"type":"progress","current":0,"total":2,"status":"Starting..."}\n\n',
+            'data: {"type":"result-item","current":1,"total":2,"status":"1 / 2","error":"SSIS-001 skipped"}\n\n',
+            'data: {"type":"result-item","current":2,"total":2,"status":"2 / 2"}\n\n',
+            'data: {"type":"done","message":"Plots done (2)"}\n\n',
+          ]);
+        }
         if (opts.path == '/api/gallery/missing-check') {
           return _jsonResponse({
             'success': true,
@@ -940,6 +948,13 @@ void main() {
     await tester.tap(find.text('Scan Library'));
     await tester.pumpAndSettle();
     expect(find.text('42 videos (+3 / ~2 / -1)'), findsOneWidget);
+
+    // Scanner: Backfill Plots consumes `result-item` progress & error logs cleanly
+    await tester.tap(find.text('Backfill Plots'));
+    await tester.pumpAndSettle();
+    expect(find.text('100%'), findsOneWidget);
+    expect(find.text('SSIS-001 skipped'), findsOneWidget);
+    expect(find.text('Plots done (2)'), findsOneWidget);
 
     // Scanner: Batch Fetch / Replace Tags opens source picker and streams /api/gallery/tag-source-update
     final scannerScroll = find.byType(Scrollable).first;
