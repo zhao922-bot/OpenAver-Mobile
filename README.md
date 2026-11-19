@@ -13,7 +13,7 @@
 ![Python 3.13](https://img.shields.io/badge/Python-3.13%20Embedded-3776AB?logo=python&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[**下载最新 APK**](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r85-arm64-v8a.apk) ·
+[**下载最新 APK**](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r86-arm64-v8a.apk) ·
 [**全部版本与更新日志**](https://github.com/zhao922-bot/OpenAver-Mobile/releases) ·
 [**快速上手**](#-下载与安装) ·
 [**本地构建**](#-本地构建与测试) ·
@@ -40,12 +40,12 @@
 
 ## 📦 下载与安装
 
-> 当前发布版基于上游 OpenAver `v0.18.17` + 移动端补丁层构建，完整改动请查看 [Release Notes](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest) 或 [r85 发布说明](docs/releases/v0.18.17-android-r85.md)。
+> 当前发布版基于上游 OpenAver `v0.18.17` + 移动端补丁层构建，完整改动请查看 [Release Notes](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest) 或 [r86 发布说明](docs/releases/v0.18.17-android-r86.md)。
 
 | 项目 | 说明 |
 | :--- | :--- |
-| **直接下载** | [`openaver-v0.18.17-android-r85-arm64-v8a.apk`](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r85-arm64-v8a.apk) |
-| **应用包名 / 版本** | `dev.openaver.mobile` · `0.18.17-r85` (`versionCode 18085`) |
+| **直接下载** | [`openaver-v0.18.17-android-r86-arm64-v8a.apk`](https://github.com/zhao922-bot/OpenAver-Mobile/releases/latest/download/openaver-v0.18.17-android-r86-arm64-v8a.apk) |
+| **应用包名 / 版本** | `dev.openaver.mobile` · `0.18.17-r86` (`versionCode 18086`) |
 | **系统与架构要求** | Android 10+ (API 29+) · 仅 `arm64-v8a` |
 | **校验文件** | 见 Release 附件中的 `SHA256SUMS.txt` |
 
