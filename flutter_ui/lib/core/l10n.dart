@@ -413,7 +413,14 @@ class AppStrings {
   String get readonlySource => tr(zhCn: '只读来源 (Media Server 模式)', zhTw: '唯讀來源 (Media Server 模式)', ja: '読み取り専用 (Media Server)', en: 'Read-only source', ko: '읽기 전용 소스');
   String get writableSource => tr(zhCn: '本地可写来源', zhTw: '本機可寫來源', ja: 'ローカル書き込み可', en: 'Writable local source', ko: '로컬 쓰기 가능 소스');
   String get addScanDir => tr(zhCn: '添加扫描目录', zhTw: '新增掃描目錄', ja: 'スキャンフォルダを追加', en: 'Add Library Folder', ko: '스캔 폴더 추가');
-  String get outputDirTitle => tr(zhCn: '整理输出目录 (留空为默认数据目录)', zhTw: '整理輸出目錄 (留空為預設資料目錄)', ja: '整理出力先フォルダ (空欄で既定)', en: 'Output Directory (empty = default)', ko: '정리 출력 폴더 (비우면 기본값)');
+  String get outputDirTitle => tr(zhCn: '整理输出目录', zhTw: '整理輸出目錄', ja: '整理先フォルダ', en: 'Output Directory', ko: '정리 출력 폴더');
+  String get outputDirHelp => tr(
+        zhCn: '留空时使用默认数据目录',
+        zhTw: '留空時使用預設資料目錄',
+        ja: '空欄の場合は既定のデータフォルダを使用します',
+        en: 'Leave blank to use the default data directory',
+        ko: '비워 두면 기본 데이터 폴더를 사용합니다',
+      );
   String get thumbCacheTitle => tr(zhCn: '本地 WebP 缩略图缓存', zhTw: '本機 WebP 縮圖快取', ja: 'ローカル WebP サムネイルキャッシュ', en: 'Local WebP Thumbnail Cache', ko: '로컬 WebP 썸네일 캐시');
   String get thumbCacheSub => tr(zhCn: '加速封面墙滑动帧率', zhTw: '加速封面牆滑動幀率', ja: 'スクロール性能を向上', en: 'Speeds up grid scrolling', ko: '그리드 스크롤 속도 향상');
   String get coverBadgesTitle => tr(zhCn: '显示封面角标 (字幕 / 分段)', zhTw: '顯示封面角標 (字幕 / 分段)', ja: 'カバーバッジを表示', en: 'Show Cover Badges', ko: '커버 배지 표시');
@@ -422,8 +429,10 @@ class AppStrings {
   String get thumbCacheCleared => tr(zhCn: '缩略图缓存已清空', zhTw: '縮圖快取已清空', ja: 'サムネイルキャッシュを削除しました', en: 'Thumbnail cache cleared', ko: '썸네일 캐시가 삭제됨');
 
   String get createFolderTitle => tr(zhCn: '整理时创建独立文件夹', zhTw: '整理時建立獨立資料夾', ja: '整理時に個別フォルダ作成', en: 'Create Subfolder on Organize', ko: '정리 시 하위 폴더 생성');
-  String get folderFormatTitle => tr(zhCn: '目录命名格式 (如 {actor})', zhTw: '目錄命名格式 (如 {actor})', ja: 'フォルダ名形式', en: 'Folder Format', ko: '폴더 형식');
-  String get filenameFormatTitle => tr(zhCn: '文件命名格式 (如 {num} {title})', zhTw: '檔案命名格式 (如 {num} {title})', ja: 'ファイル名形式', en: 'Filename Format', ko: '파일명 형식');
+  String get folderFormatTitle => tr(zhCn: '目录命名格式', zhTw: '目錄命名格式', ja: 'フォルダ名形式', en: 'Folder Format', ko: '폴더 형식');
+  String get folderFormatHelp => tr(zhCn: '例如 {actor}', zhTw: '例如 {actor}', ja: '例 {actor}', en: 'Example {actor}', ko: '예시 {actor}');
+  String get filenameFormatTitle => tr(zhCn: '文件命名格式', zhTw: '檔案命名格式', ja: 'ファイル名形式', en: 'Filename Format', ko: '파일명 형식');
+  String get filenameFormatHelp => tr(zhCn: '例如 {num} {title}', zhTw: '例如 {num} {title}', ja: '例 {num} {title}', en: 'Example {num} {title}', ko: '예시 {num} {title}');
   String get nfoTitleFormatTitle => tr(zhCn: 'NFO 标题格式', zhTw: 'NFO 標題格式', ja: 'NFO タイトル形式', en: 'NFO Title Format', ko: 'NFO 제목 형식');
   String get coverFilenameTitle => tr(zhCn: '封面文件名', zhTw: '封面檔案名稱', ja: 'カバーファイル名', en: 'Cover Filename', ko: '커버 파일명');
   String get downloadCoverTitle => tr(zhCn: '下载封面图片', zhTw: '下載封面圖片', ja: 'カバー画像をダウンロード', en: 'Download Cover', ko: '커버 다운로드');
@@ -432,8 +441,9 @@ class AppStrings {
   String get externalManagerTitle => tr(zhCn: '外部媒体服务器模式', zhTw: '外部媒體伺服器模式', ja: '外部メディアサーバー', en: 'External Media Manager', ko: '외부 미디어 관리자');
   String get maxTitleLengthTitle => tr(zhCn: '标题最大长度', zhTw: '標題最大長度', ja: 'タイトル最大文字数', en: 'Max Title Length', ko: '최대 제목 길이');
   String get maxFilenameLengthTitle => tr(zhCn: '文件名最大长度', zhTw: '檔名最大長度', ja: 'ファイル名最大文字数', en: 'Max Filename Length', ko: '최대 파일명 길이');
-  String get videoExtensionsTitle => tr(zhCn: '视频扩展名 (逗号分隔)', zhTw: '影片副檔名 (逗號分隔)', ja: '対象拡張子 (カンマ区切り)', en: 'Video Extensions', ko: '동영상 확장자');
-  String get suffixKeywordsTitle => tr(zhCn: '分段/版本后缀 (逗号分隔)', zhTw: '分段/版本後綴 (逗號分隔)', ja: 'サフィックスキーワード', en: 'Suffix Keywords', ko: '접미사 키워드');
+  String get videoExtensionsTitle => tr(zhCn: '视频扩展名', zhTw: '影片副檔名', ja: '対象拡張子', en: 'Video Extensions', ko: '동영상 확장자');
+  String get suffixKeywordsTitle => tr(zhCn: '分段 / 版本后缀', zhTw: '分段 / 版本後綴', ja: 'サフィックスキーワード', en: 'Suffix Keywords', ko: '접미사 키워드');
+  String get commaSeparatedHelp => tr(zhCn: '多项用逗号分隔', zhTw: '多個項目以逗號分隔', ja: '複数の項目はカンマ区切り', en: 'Separate multiple entries with commas', ko: '여러 항목은 쉼표로 구분');
 
   String get uncensoredModeTitle => tr(zhCn: '无码优先模式', zhTw: '無碼優先模式', ja: '無修正優先モード', en: 'Uncensored Priority Mode', ko: '노모 우선 모드');
   String get proxyUrlTitle => tr(zhCn: 'HTTP / SOCKS5 代理地址', zhTw: 'HTTP / SOCKS5 代理位址', ja: 'HTTP / SOCKS5 プロキシ URL', en: 'Proxy URL', ko: '프록시 URL');
@@ -446,6 +456,11 @@ class AppStrings {
 
   String get enableAiTranslateTitle => tr(zhCn: '启用 AI 翻译标题 / 简介', zhTw: '啟用 AI 翻譯標題 / 簡介', ja: 'AI 翻訳を有効にする', en: 'Enable AI Translation', ko: 'AI 번역 사용');
   String get translateProviderTitle => tr(zhCn: '翻译提供方', zhTw: '翻譯提供方', ja: '翻訳プロバイダー', en: 'Provider', ko: '번역 제공자');
+  String get serviceUrlLabel => tr(zhCn: '服务地址', zhTw: '服務位址', ja: 'サービス URL', en: 'Service URL', ko: '서비스 URL');
+  String get baseUrlLabel => tr(zhCn: 'API 基础地址', zhTw: 'API 基礎位址', ja: 'API ベース URL', en: 'API Base URL', ko: 'API 기본 URL');
+  String get apiKeyLabel => tr(zhCn: 'API 密钥', zhTw: 'API 金鑰', ja: 'API キー', en: 'API Key', ko: 'API 키');
+  String get accessTokenLabel => tr(zhCn: '访问令牌', zhTw: '存取權杖', ja: 'アクセストークン', en: 'Access Token', ko: '액세스 토큰');
+  String get modelLabel => tr(zhCn: '模型', zhTw: '模型', ja: 'モデル', en: 'Model', ko: '모델');
   String get testConnection => tr(zhCn: '测试连接', zhTw: '測試連線', ja: '接続テスト', en: 'Test Connection', ko: '연결 테스트');
   String get testTranslateBtn => tr(zhCn: '测试翻译', zhTw: '測試翻譯', ja: '翻訳テスト', en: 'Test Translate', ko: '번역 테스트');
   String get fetchModelsBtn => tr(zhCn: '获取模型', zhTw: '取得模型', ja: 'モデル取得', en: 'Fetch Models', ko: '모델 가져오기');

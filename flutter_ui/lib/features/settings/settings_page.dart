@@ -1011,9 +1011,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               },
                             ),
                             const SizedBox(height: 14),
-                            DropdownButtonFormField<String>(
+                            _SettingsDropdown(
+                              label: strings.defaultPageTitle,
                               initialValue: const {'search', 'gallery', 'showcase'}.contains(defaultPage) ? defaultPage : 'search',
-                              decoration: InputDecoration(labelText: strings.defaultPageTitle),
                               items: [
                                 DropdownMenuItem(value: 'search', child: Text(strings.tabSearch)),
                                 DropdownMenuItem(value: 'gallery', child: Text(strings.tabScanner)),
@@ -1055,27 +1055,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           ListTile(
                             leading: Icon(Icons.sd_storage_outlined, color: palette.accent),
                             title: Text(strings.safTreeTitle),
-                            subtitle: Text(_treeInfo.granted ? _treeInfo.description : strings.safNotConfigured),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (_treeInfo.granted)
-                                  IconButton(
-                                    icon: const Icon(Icons.link_off_rounded, size: 18),
-                                    onPressed: () async {
-                                      await NativeBridge.instance.clearStorageTree();
-                                      final updated = await NativeBridge.instance.getStorageTreeInfo();
-                                      if (mounted) setState(() => _treeInfo = updated);
-                                    },
-                                  ),
-                                TextButton(
-                                  onPressed: () async {
-                                    final updated = await NativeBridge.instance.openStorageTreePicker();
-                                    if (updated != null && mounted) {
-                                      setState(() => _treeInfo = updated);
-                                    }
-                                  },
-                                  child: Text(strings.authorize),
+                                Text(_treeInfo.granted ? _treeInfo.description : strings.safNotConfigured),
+                                Wrap(
+                                  spacing: 8,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () async {
+                                        final updated = await NativeBridge.instance.openStorageTreePicker();
+                                        if (updated != null && mounted) {
+                                          setState(() => _treeInfo = updated);
+                                        }
+                                      },
+                                      child: Text(strings.authorize),
+                                    ),
+                                    if (_treeInfo.granted)
+                                      IconButton(
+                                        icon: const Icon(Icons.link_off_rounded, size: 18),
+                                        onPressed: () async {
+                                          await NativeBridge.instance.clearStorageTree();
+                                          final updated = await NativeBridge.instance.getStorageTreeInfo();
+                                          if (mounted) setState(() => _treeInfo = updated);
+                                        },
+                                      ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -1130,9 +1136,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           const Divider(height: 1),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                            child: TextFormField(
+                            child: _SettingsTextField(
+                              label: strings.outputDirTitle,
+                              note: strings.outputDirHelp,
                               initialValue: outputDir,
-                              decoration: InputDecoration(labelText: strings.outputDirTitle),
                               onChanged: (v) => _markDirty(() => gallery['output_dir'] = v.trim()),
                             ),
                           ),
@@ -1189,27 +1196,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               value: createFolder,
                               onChanged: (v) => _markDirty(() => scraper['create_folder'] = v),
                             ),
-                            TextFormField(
+                            _SettingsTextField(
+                              label: strings.folderFormatTitle,
+                              note: strings.folderFormatHelp,
                               initialValue: folderFormat,
-                              decoration: InputDecoration(labelText: strings.folderFormatTitle),
                               onChanged: (v) => _markDirty(() => scraper['folder_format'] = v),
                             ),
-                            const SizedBox(height: 8),
-                            TextFormField(
+                            const SizedBox(height: _settingsFieldSpacing),
+                            _SettingsTextField(
+                              label: strings.filenameFormatTitle,
+                              note: strings.filenameFormatHelp,
                               initialValue: filenameFormat,
-                              decoration: InputDecoration(labelText: strings.filenameFormatTitle),
                               onChanged: (v) => _markDirty(() => scraper['filename_format'] = v),
                             ),
-                            const SizedBox(height: 8),
-                            TextFormField(
+                            const SizedBox(height: _settingsFieldSpacing),
+                            _SettingsTextField(
+                              label: strings.nfoTitleFormatTitle,
                               initialValue: nfoTitleFormat,
-                              decoration: InputDecoration(labelText: strings.nfoTitleFormatTitle),
                               onChanged: (v) => _markDirty(() => scraper['nfo_title_format'] = v),
                             ),
-                            const SizedBox(height: 8),
-                            TextFormField(
+                            const SizedBox(height: _settingsFieldSpacing),
+                            _SettingsTextField(
+                              label: strings.coverFilenameTitle,
                               initialValue: coverFilename,
-                              decoration: InputDecoration(labelText: strings.coverFilenameTitle),
                               onChanged: (v) => _markDirty(() => scraper['cover_filename'] = v.trim()),
                             ),
                             SwitchListTile(
@@ -1230,11 +1239,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               value: downloadSamples,
                               onChanged: (v) => _markDirty(() => scraper['download_sample_images'] = v),
                             ),
-                            DropdownButtonFormField<String>(
+                            _SettingsDropdown(
+                              label: strings.externalManagerTitle,
                               initialValue: const {'off', 'jellyfin', 'emby', 'kodi'}.contains(externalManager)
                                   ? externalManager
                                   : 'off',
-                              decoration: InputDecoration(labelText: strings.externalManagerTitle),
                               items: const [
                                 DropdownMenuItem(value: 'off', child: Text('Off')),
                                 DropdownMenuItem(value: 'jellyfin', child: Text('Jellyfin')),
@@ -1245,14 +1254,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 if (v != null) _markDirty(() => scraper['external_manager'] = v);
                               },
                             ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextFormField(
+                            const SizedBox(height: _settingsFieldSpacing),
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final width = constraints.maxWidth;
+                                final labelScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+                                final fieldWidth = width >= 360 * labelScale
+                                    ? (width - _settingsFieldSpacing) / 2
+                                    : width;
+                                final fields = [
+                                  _SettingsTextField(
+                                    label: strings.maxTitleLengthTitle,
                                     initialValue: '$maxTitleLength',
                                     keyboardType: TextInputType.number,
-                                    decoration: InputDecoration(labelText: strings.maxTitleLengthTitle),
                                     onChanged: (v) {
                                       final parsed = int.tryParse(v.trim());
                                       if (parsed != null && parsed > 0) {
@@ -1260,13 +1274,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                       }
                                     },
                                   ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: TextFormField(
+                                  _SettingsTextField(
+                                    label: strings.maxFilenameLengthTitle,
                                     initialValue: '$maxFilenameLength',
                                     keyboardType: TextInputType.number,
-                                    decoration: InputDecoration(labelText: strings.maxFilenameLengthTitle),
                                     onChanged: (v) {
                                       final parsed = int.tryParse(v.trim());
                                       if (parsed != null && parsed > 0) {
@@ -1274,13 +1285,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                       }
                                     },
                                   ),
-                                ),
-                              ],
+                                ];
+                                return Wrap(
+                                  spacing: _settingsFieldSpacing,
+                                  runSpacing: _settingsFieldSpacing,
+                                  children: [
+                                    for (final field in fields)
+                                      SizedBox(width: fieldWidth, child: field),
+                                  ],
+                                );
+                              },
                             ),
-                            const SizedBox(height: 8),
-                            TextFormField(
+                            const SizedBox(height: _settingsFieldSpacing),
+                            _SettingsTextField(
+                              label: strings.videoExtensionsTitle,
+                              note: strings.commaSeparatedHelp,
                               initialValue: videoExts,
-                              decoration: InputDecoration(labelText: strings.videoExtensionsTitle),
                               onChanged: (v) => _markDirty(() {
                                 scraper['video_extensions'] = v
                                     .split(',')
@@ -1289,10 +1309,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                     .toList();
                               }),
                             ),
-                            const SizedBox(height: 8),
-                            TextFormField(
+                            const SizedBox(height: _settingsFieldSpacing),
+                            _SettingsTextField(
+                              label: strings.suffixKeywordsTitle,
+                              note: strings.commaSeparatedHelp,
                               initialValue: suffixKeywords,
-                              decoration: InputDecoration(labelText: strings.suffixKeywordsTitle),
                               onChanged: (v) => _markDirty(() {
                                 scraper['suffix_keywords'] = v
                                     .split(',')
@@ -1320,54 +1341,48 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             onChanged: (v) => _markDirty(() => searchCfg['uncensored_mode_enabled'] = v),
                           ),
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                            child: TextFormField(
-                              initialValue: proxyUrl,
-                              decoration: InputDecoration(labelText: strings.proxyUrlTitle),
-                              onChanged: (v) => _markDirty(() => searchCfg['proxy_url'] = v.trim()),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                            child: DropdownButtonFormField<String>(
-                              initialValue: proxyScope == 'all' ? 'all' : 'dmm',
-                              decoration: InputDecoration(labelText: strings.proxyScopeTitle),
-                              items: const [
-                                DropdownMenuItem(value: 'dmm', child: Text('DMM')),
-                                DropdownMenuItem(value: 'all', child: Text('All')),
-                              ],
-                              onChanged: (v) {
-                                if (v != null) _markDirty(() => searchCfg['proxy_scope'] = v);
-                              },
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                            child: Row(
+                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              spacing: _settingsFieldSpacing,
                               children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    key: ValueKey('fav_$_presetRev'),
-                                    initialValue: favoriteFolder,
-                                    decoration: InputDecoration(labelText: strings.favoriteFolderTitle),
-                                    onChanged: (v) => _markDirty(() => searchCfg['favorite_folder'] = v.trim()),
-                                  ),
+                                _SettingsTextField(
+                                  label: strings.proxyUrlTitle,
+                                  initialValue: proxyUrl,
+                                  onChanged: (v) => _markDirty(() => searchCfg['proxy_url'] = v.trim()),
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.folder_open_rounded),
-                                  onPressed: () async {
-                                    final picked = await BrowseDirSheet.pickFolder(
-                                      context,
-                                      ref.read(apiClientProvider),
-                                      initialPath: favoriteFolder.isNotEmpty ? favoriteFolder : null,
-                                    );
-                                    if (picked != null && picked.isNotEmpty) {
+                                _SettingsDropdown(
+                                  label: strings.proxyScopeTitle,
+                                  initialValue: proxyScope == 'all' ? 'all' : 'dmm',
+                                  items: const [
+                                    DropdownMenuItem(value: 'dmm', child: Text('DMM')),
+                                    DropdownMenuItem(value: 'all', child: Text('All')),
+                                  ],
+                                  onChanged: (v) {
+                                    if (v != null) _markDirty(() => searchCfg['proxy_scope'] = v);
+                                  },
+                                ),
+                                _SettingsTextField(
+                                  key: ValueKey('fav_$_presetRev'),
+                                  label: strings.favoriteFolderTitle,
+                                  initialValue: favoriteFolder,
+                                  onChanged: (v) => _markDirty(() => searchCfg['favorite_folder'] = v.trim()),
+                                  trailing: IconButton.filledTonal(
+                                    icon: const Icon(Icons.folder_open_rounded),
+                                    tooltip: strings.chooseFolder,
+                                    onPressed: () async {
+                                      final picked = await BrowseDirSheet.pickFolder(
+                                        context,
+                                        ref.read(apiClientProvider),
+                                        initialPath: favoriteFolder.isNotEmpty ? favoriteFolder : null,
+                                      );
+                                      if (!mounted || picked == null || picked.isEmpty) return;
                                       _markDirty(() {
                                         searchCfg['favorite_folder'] = picked;
                                         _presetRev++;
                                       });
-                                    }
-                                  },
+                                    },
+                                  ),
                                 ),
                               ],
                             ),
@@ -1481,7 +1496,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                       .toList(),
                                 ),
                                 const SizedBox(height: 14),
-                                Text(strings.metatubeSectionTitle, style: const TextStyle(fontWeight: FontWeight.w600)),
                                 SwitchListTile(
                                   contentPadding: EdgeInsets.zero,
                                   title: Text(strings.metatubeSectionTitle),
@@ -1489,15 +1503,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                   onChanged: (v) => _markDirty(() => metatube['enabled'] = v),
                                 ),
                                 if (metatube['enabled'] == true) ...[
-                                  TextFormField(
+                                  _SettingsTextField(
+                                    label: strings.serviceUrlLabel,
                                     initialValue: (metatube['url'] ?? '').toString(),
-                                    decoration: const InputDecoration(labelText: 'Metatube URL'),
                                     onChanged: (v) => _markDirty(() => metatube['url'] = v.trim()),
                                   ),
-                                  const SizedBox(height: 8),
-                                  TextFormField(
+                                  const SizedBox(height: _settingsFieldSpacing),
+                                  _SettingsTextField(
+                                    label: strings.accessTokenLabel,
                                     initialValue: (metatube['token'] ?? '').toString(),
-                                    decoration: const InputDecoration(labelText: 'Token'),
                                     obscureText: true,
                                     onChanged: (v) => _markDirty(() => metatube['token'] = v.trim()),
                                   ),
@@ -1561,12 +1575,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               value: translateEnabled,
                               onChanged: (v) => _markDirty(() => translateCfg['enabled'] = v),
                             ),
-                            DropdownButtonFormField<String>(
+                            _SettingsDropdown(
+                              label: strings.translateProviderTitle,
                               initialValue: const {'ollama', 'gemini', 'openai', 'openai_official', 'claude'}
                                       .contains(translateProvider)
                                   ? translateProvider
                                   : 'ollama',
-                              decoration: InputDecoration(labelText: strings.translateProviderTitle),
                               items: const [
                                 DropdownMenuItem(value: 'ollama', child: Text('Ollama')),
                                 DropdownMenuItem(value: 'openai', child: Text('OpenAI Compatible')),
@@ -1604,43 +1618,37 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 }),
                               ),
                             ],
-                            const SizedBox(height: 8),
+                            const SizedBox(height: _settingsFieldSpacing),
                             if (translateProviderCfg.containsKey('url') || translateProvider == 'ollama')
-                              TextFormField(
+                              _SettingsTextField(
+                                label: strings.serviceUrlLabel,
                                 key: ValueKey('tr_url_${translateProvider}_$_presetRev'),
                                 initialValue: (translateProviderCfg['url'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'Endpoint URL'),
                                 onChanged: (v) => _markDirty(() => translateProviderCfg['url'] = v.trim()),
                               )
                             else
-                              TextFormField(
+                              _SettingsTextField(
+                                label: strings.baseUrlLabel,
                                 key: ValueKey('tr_base_${translateProvider}_$_presetRev'),
                                 initialValue: (translateProviderCfg['base_url'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'Base URL'),
                                 onChanged: (v) => _markDirty(() => translateProviderCfg['base_url'] = v.trim()),
                               ),
-                            const SizedBox(height: 8),
-                            TextFormField(
+                            const SizedBox(height: _settingsFieldSpacing),
+                            _SettingsTextField(
+                              label: strings.apiKeyLabel,
                               key: ValueKey('tr_key_${translateProvider}_$_presetRev'),
                               initialValue: (translateProviderCfg['api_key'] ?? '').toString(),
-                              decoration: const InputDecoration(labelText: 'API Key'),
                               obscureText: true,
                               onChanged: (v) => _markDirty(() => translateProviderCfg['api_key'] = v.trim()),
                             ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    key: ValueKey('tr_model_${translateProvider}_$_presetRev'),
-                                    initialValue: (translateProviderCfg['model'] ?? '').toString(),
-                                    decoration: const InputDecoration(labelText: 'Model'),
-                                    onChanged: (v) => _markDirty(() => translateProviderCfg['model'] = v.trim()),
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(height: _settingsFieldSpacing),
+                            _SettingsTextField(
+                              key: ValueKey('tr_model_${translateProvider}_$_presetRev'),
+                              label: strings.modelLabel,
+                              initialValue: (translateProviderCfg['model'] ?? '').toString(),
+                              onChanged: (v) => _markDirty(() => translateProviderCfg['model'] = v.trim()),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: _settingsFieldSpacing),
                             Wrap(
                               spacing: 8,
                               runSpacing: 6,
@@ -1692,9 +1700,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               onChanged: (v) => _markDirty(() => aiSimilar['enabled'] = v),
                             ),
                             if (aiSimilar['enabled'] == true) ...[
-                              DropdownButtonFormField<String>(
+                              _SettingsDropdown(
+                                label: strings.serviceTypeLabel,
                                 initialValue: aiSimilar['provider'] == 'qwen' ? 'qwen' : 'endpoint',
-                                decoration: InputDecoration(labelText: strings.serviceTypeLabel),
                                 items: [
                                   DropdownMenuItem(value: 'endpoint', child: Text(strings.legacyEndpointType)),
                                   DropdownMenuItem(value: 'qwen', child: Text(strings.qwenEmbeddingType)),
@@ -1715,29 +1723,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                   });
                                 },
                               ),
-                              const SizedBox(height: 8),
-                              TextFormField(
+                              const SizedBox(height: _settingsFieldSpacing),
+                              _SettingsTextField(
+                                label: strings.serviceUrlLabel,
                                 key: ValueKey('sim_url_$_presetRev'),
                                 initialValue: (aiSimilar['url'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'Similarity URL'),
                                 onChanged: (v) => _markDirty(() => aiSimilar['url'] = v.trim()),
                               ),
-                              const SizedBox(height: 8),
-                              TextFormField(
+                              const SizedBox(height: _settingsFieldSpacing),
+                              _SettingsTextField(
+                                label: strings.apiKeyLabel,
                                 key: ValueKey('sim_key_$_presetRev'),
                                 initialValue: (aiSimilar['api_key'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'API Key'),
                                 obscureText: true,
                                 onChanged: (v) => _markDirty(() => aiSimilar['api_key'] = v.trim()),
                               ),
-                              const SizedBox(height: 8),
-                              TextFormField(
+                              const SizedBox(height: _settingsFieldSpacing),
+                              _SettingsTextField(
+                                label: strings.modelLabel,
                                 key: ValueKey('sim_model_$_presetRev'),
                                 initialValue: (aiSimilar['model'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'Similarity Model'),
                                 onChanged: (v) => _markDirty(() => aiSimilar['model'] = v.trim()),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: _settingsFieldSpacing),
                               OutlinedButton.icon(
                                 onPressed: _testingSimilar ? null : () => _testSimilarConnection(aiSimilar),
                                 icon: _testingSimilar
@@ -1767,9 +1775,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               onChanged: (v) => _markDirty(() => aiFaces['enabled'] = v),
                             ),
                             if (aiFaces['enabled'] == true) ...[
-                              DropdownButtonFormField<String>(
+                              _SettingsDropdown(
+                                label: strings.serviceTypeLabel,
                                 initialValue: aiFaces['provider'] == 'openai' ? 'openai' : 'endpoint',
-                                decoration: InputDecoration(labelText: strings.serviceTypeLabel),
                                 items: [
                                   DropdownMenuItem(value: 'endpoint', child: Text(strings.legacyEndpointType)),
                                   DropdownMenuItem(value: 'openai', child: Text(strings.openaiVisionType)),
@@ -1802,29 +1810,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                   }),
                                 ),
                               ],
-                              const SizedBox(height: 8),
-                              TextFormField(
+                              const SizedBox(height: _settingsFieldSpacing),
+                              _SettingsTextField(
+                                label: strings.serviceUrlLabel,
                                 key: ValueKey('faces_url_$_presetRev'),
                                 initialValue: (aiFaces['url'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'Faces URL'),
                                 onChanged: (v) => _markDirty(() => aiFaces['url'] = v.trim()),
                               ),
-                              const SizedBox(height: 8),
-                              TextFormField(
+                              const SizedBox(height: _settingsFieldSpacing),
+                              _SettingsTextField(
+                                label: strings.apiKeyLabel,
                                 key: ValueKey('faces_key_$_presetRev'),
                                 initialValue: (aiFaces['api_key'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'API Key'),
                                 obscureText: true,
                                 onChanged: (v) => _markDirty(() => aiFaces['api_key'] = v.trim()),
                               ),
-                              const SizedBox(height: 8),
-                              TextFormField(
+                              const SizedBox(height: _settingsFieldSpacing),
+                              _SettingsTextField(
+                                label: strings.modelLabel,
                                 key: ValueKey('faces_model_$_presetRev'),
                                 initialValue: (aiFaces['model'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'Faces Model'),
                                 onChanged: (v) => _markDirty(() => aiFaces['model'] = v.trim()),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: _settingsFieldSpacing),
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 6,
@@ -1891,12 +1899,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               }),
                             ),
                             if (aiTags['enabled'] == true) ...[
-                              DropdownButtonFormField<String>(
+                              _SettingsDropdown(
+                                label: strings.translateProviderTitle,
                                 initialValue: const {'', 'ollama', 'gemini', 'claude', 'openai_official', 'openai'}
                                         .contains((aiTags['provider'] ?? '').toString())
                                     ? (aiTags['provider'] ?? '').toString()
                                     : '',
-                                decoration: InputDecoration(labelText: strings.translateProviderTitle),
                                 items: [
                                   DropdownMenuItem(value: '', child: Text(strings.providerPlaceholder)),
                                   const DropdownMenuItem(value: 'ollama', child: Text('Ollama')),
@@ -1941,29 +1949,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                   }),
                                 ),
                               ],
-                              const SizedBox(height: 8),
-                              TextFormField(
+                              const SizedBox(height: _settingsFieldSpacing),
+                              _SettingsTextField(
+                                label: strings.baseUrlLabel,
                                 key: ValueKey('tags_url_$_presetRev'),
                                 initialValue: (aiTags['base_url'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'Tags Base URL'),
                                 onChanged: (v) => _markDirty(() => aiTags['base_url'] = v.trim()),
                               ),
-                              const SizedBox(height: 8),
-                              TextFormField(
+                              const SizedBox(height: _settingsFieldSpacing),
+                              _SettingsTextField(
+                                label: strings.apiKeyLabel,
                                 key: ValueKey('tags_key_$_presetRev'),
                                 initialValue: (aiTags['api_key'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'API Key'),
                                 obscureText: true,
                                 onChanged: (v) => _markDirty(() => aiTags['api_key'] = v.trim()),
                               ),
-                              const SizedBox(height: 8),
-                              TextFormField(
+                              const SizedBox(height: _settingsFieldSpacing),
+                              _SettingsTextField(
+                                label: strings.modelLabel,
                                 key: ValueKey('tags_model_$_presetRev'),
                                 initialValue: (aiTags['model'] ?? '').toString(),
-                                decoration: const InputDecoration(labelText: 'Tags Model'),
                                 onChanged: (v) => _markDirty(() => aiTags['model'] = v.trim()),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: _settingsFieldSpacing),
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 6,
@@ -2065,19 +2073,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   color: palette.surface,
                   border: Border(top: BorderSide(color: palette.stroke)),
                 ),
-                child: Row(
+                child: OverflowBar(
+                  alignment: MainAxisAlignment.spaceBetween,
+                  overflowAlignment: OverflowBarAlignment.start,
+                  spacing: 12,
+                  overflowSpacing: 4,
                   children: [
                     Text(strings.unsavedChanges, style: TextStyle(color: palette.warning, fontWeight: FontWeight.w600)),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: _saving ? null : () => _loadAll(syncUiPrefs: true),
-                      child: Text(strings.discardChanges),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      onPressed: _saving ? null : _saveConfig,
-                      icon: const Icon(Icons.save_rounded, size: 18),
-                      label: Text(_saving ? strings.saving : strings.saveSettings),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        TextButton(
+                          onPressed: _saving ? null : () => _loadAll(syncUiPrefs: true),
+                          child: Text(strings.discardChanges),
+                        ),
+                        FilledButton.icon(
+                          onPressed: _saving ? null : _saveConfig,
+                          icon: const Icon(Icons.save_rounded, size: 18),
+                          label: Text(_saving ? strings.saving : strings.saveSettings),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -2087,6 +2103,129 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ),
     );
   }
+}
+
+const double _settingsFieldSpacing = 14;
+
+const _settingsInputDecoration = InputDecoration(
+  contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+  constraints: BoxConstraints(minHeight: 48),
+);
+
+class _SettingsField extends StatelessWidget {
+  const _SettingsField({
+    required this.label,
+    required this.child,
+    this.note,
+    this.trailing,
+  });
+
+  final String label;
+  final Widget child;
+  final String? note;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = OpenAverPalette.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    final input = MergeSemantics(
+      child: Semantics(label: label, hint: note, child: child),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ExcludeSemantics(
+          child: Text(
+            label,
+            style: textTheme.bodyMedium?.copyWith(
+              color: palette.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        if (trailing case final action?)
+          Row(
+            spacing: 8,
+            children: [Expanded(child: input), action],
+          )
+        else
+          input,
+        if (note case final help?) ...[
+          const SizedBox(height: 4),
+          ExcludeSemantics(
+            child: Text(
+              help,
+              style: textTheme.bodySmall?.copyWith(color: palette.textSecondary),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _SettingsTextField extends StatelessWidget {
+  const _SettingsTextField({
+    super.key,
+    required this.label,
+    required this.initialValue,
+    required this.onChanged,
+    this.note,
+    this.trailing,
+    this.keyboardType,
+    this.obscureText = false,
+  });
+
+  final String label;
+  final String initialValue;
+  final ValueChanged<String> onChanged;
+  final String? note;
+  final Widget? trailing;
+  final TextInputType? keyboardType;
+  final bool obscureText;
+
+  @override
+  Widget build(BuildContext context) => _SettingsField(
+        label: label,
+        note: note,
+        trailing: trailing,
+        child: TextFormField(
+          initialValue: initialValue,
+          decoration: _settingsInputDecoration,
+          keyboardType: keyboardType,
+          obscureText: obscureText,
+          onChanged: onChanged,
+        ),
+      );
+}
+
+class _SettingsDropdown extends StatelessWidget {
+  const _SettingsDropdown({
+    required this.label,
+    required this.initialValue,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String initialValue;
+  final List<DropdownMenuItem<String>> items;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) => _SettingsField(
+        label: label,
+        child: DropdownButtonFormField<String>(
+          initialValue: initialValue,
+          decoration: _settingsInputDecoration,
+          isExpanded: true,
+          itemHeight: null,
+          items: items,
+          onChanged: onChanged,
+        ),
+      );
 }
 
 class _SectionHeader extends StatelessWidget {

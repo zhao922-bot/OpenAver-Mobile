@@ -1029,17 +1029,26 @@ void main() {
     await tester.tap(find.text('AI Services & Face Focus').first);
     await tester.pumpAndSettle();
     expect(find.text('DeepSeek'), findsOneWidget);
+    await tester.ensureVisible(find.text('Fetch Models'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Fetch Models'));
     await tester.pumpAndSettle();
     expect(find.text('qwen-plus'), findsOneWidget);
+    await tester.ensureVisible(find.text('qwen-plus'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('qwen-plus'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Test Translate'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Test Translate'));
     await tester.pumpAndSettle();
     expect(find.text('Connection succeeded: Test OK'), findsWidgets);
 
     // AI BackfillBar start button reads `indexed` (not 0 / 10) and stops cleanly
-    final settingsScroll = find.byType(Scrollable).last;
+    final settingsScroll = find.descendant(
+      of: find.byType(ListView).first,
+      matching: find.byType(Scrollable),
+    ).first;
     await tester.scrollUntilVisible(find.text('Start Backfill').first, 250, scrollable: settingsScroll);
     await tester.tap(find.text('Start Backfill').first);
     await tester.pumpAndSettle();
@@ -1052,10 +1061,15 @@ void main() {
     // Metatube Connect preserves unsaved drafts + Source Probe (Map response) + Pending Scrape Folder typing
     await tester.tap(find.text('Search, Proxy & Sources').first);
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Pending Scrape Folder'),
-      '/storage/downloads',
+    final folderField = find.descendant(
+      of: find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == 'Pending Scrape Folder',
+      ),
+      matching: find.byType(TextFormField),
     );
+    await tester.ensureVisible(folderField);
+    await tester.pumpAndSettle();
+    await tester.enterText(folderField, '/storage/downloads');
     await tester.pump();
     expect(find.text('/storage/downloads'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Test Sources').first, 250, scrollable: settingsScroll);
@@ -1076,6 +1090,77 @@ void main() {
     await tester.tap(find.text('Discard'));
     await tester.pumpAndSettle();
     expect(find.text('Unsaved changes'), findsNothing);
+  });
+
+  testWidgets('Settings form labels stay above fields at large text sizes', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 780);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final strings = AppStrings('en');
+    final api = ApiClient(
+      port: 8765,
+      token: '',
+      httpClientAdapter: _MockAdapter((options) async {
+        if (options.path == '/api/config') {
+          return _jsonResponse({'data': {'scraper': {'folder_format': ''}}});
+        }
+        return _jsonResponse({});
+      }),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          localeProvider.overrideWith(() => _FixedLocaleNotifier('en')),
+          apiClientProvider.overrideWithValue(api),
+        ],
+        child: MaterialApp(
+          theme: buildOpenAverTheme(AppThemeMode.dim),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(1.5)),
+            child: child!,
+          ),
+          home: const SettingsPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final scrapingTab = find.widgetWithText(ChoiceChip, strings.secScraper);
+    await tester.ensureVisible(scrapingTab);
+    await tester.pumpAndSettle();
+    await tester.tap(scrapingTab);
+    await tester.pumpAndSettle();
+
+    final label = find.text(strings.folderFormatTitle);
+    final field = find.byType(TextFormField).first;
+    final example = find.text(strings.folderFormatHelp);
+    final labelRect = tester.getRect(label);
+    final fieldRect = tester.getRect(field);
+    expect(labelRect.left, fieldRect.left);
+    expect(labelRect.bottom, lessThan(fieldRect.top));
+    expect(tester.getTopLeft(example).dy, greaterThan(fieldRect.bottom));
+
+    await tester.enterText(field, '{maker}');
+    await tester.pumpAndSettle();
+    expect(tester.getRect(label), labelRect);
+    final fieldSemantics = tester.getSemantics(find.bySemanticsLabel(strings.folderFormatTitle));
+    expect(fieldSemantics.value, '{maker}');
+    expect(find.text(strings.saveSettings).hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    final titleLength = find.text(strings.maxTitleLengthTitle);
+    final filenameLength = find.text(strings.maxFilenameLengthTitle);
+    expect(tester.getTopLeft(titleLength).dx, tester.getTopLeft(filenameLength).dx);
+    expect(tester.getTopLeft(filenameLength).dy, greaterThan(tester.getBottomLeft(titleLength).dy));
+
+    tester.view.physicalSize = const Size(800, 780);
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(titleLength).dy, tester.getTopLeft(filenameLength).dy);
+    expect(tester.getTopLeft(filenameLength).dx, greaterThan(tester.getTopLeft(titleLength).dx));
+    expect(find.text('{maker}'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
 
