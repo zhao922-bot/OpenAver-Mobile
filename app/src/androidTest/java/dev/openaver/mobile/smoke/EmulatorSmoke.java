@@ -125,12 +125,7 @@ public final class EmulatorSmoke extends Instrumentation {
     }
 
     private void openFolder(File folder) {
-        AccessibilityNodeInfo row = awaitNode(folder.getName(), node -> node.isClickable()
-                && labelled(node, folder.getName()), UI_TIMEOUT_MS);
-        // Use the row's accessibility action while the folder sheet is animating.
-        if (!row.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-            throw new AssertionError("Could not open folder " + folder);
-        }
+        clickAccessible(folder.getName(), node -> labelled(node, folder.getName()));
         awaitNode("folder path " + folder, node -> labelled(node, folder.getPath()), UI_TIMEOUT_MS);
     }
 
@@ -139,7 +134,9 @@ public final class EmulatorSmoke extends Instrumentation {
         click("Scan Library", "扫描片库");
         awaitNode("successful scan completion", node -> label(node).contains("100%"), 45_000);
         click("Showcase", "浏览");
-        tap(awaitNode("indexed video", node -> label(node).contains(MOVIE), UI_TIMEOUT_MS));
+        clickAccessible("indexed video", node -> label(node).contains(MOVIE));
+        awaitNode("video details", node -> labelled(node, "Built-in Player", "内置播放器"),
+                UI_TIMEOUT_MS);
         openPart("CD1");
         awaitPlaybackTime(18, 45_000);
         leavePlayer();
@@ -265,6 +262,14 @@ public final class EmulatorSmoke extends Instrumentation {
 
     private void click(String... labels) {
         tap(awaitNode(String.join(" / ", labels), node -> labelled(node, labels), UI_TIMEOUT_MS));
+    }
+
+    private void clickAccessible(String description, Predicate<AccessibilityNodeInfo> matches) {
+        AccessibilityNodeInfo node = awaitNode(description,
+                candidate -> candidate.isClickable() && matches.test(candidate), UI_TIMEOUT_MS);
+        if (!node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            throw new AssertionError("Could not activate " + description);
+        }
     }
 
     private void tap(AccessibilityNodeInfo node) {
