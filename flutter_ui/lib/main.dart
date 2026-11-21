@@ -9,8 +9,10 @@ import 'features/insights/insights_page.dart';
 import 'features/player/builtin_player_page.dart';
 import 'features/scanner/scanner_page.dart';
 import 'features/search/search_page.dart';
+import 'features/settings/ai_backfill_bar.dart';
 import 'features/settings/settings_page.dart';
 import 'features/showcase/showcase_page.dart';
+import 'features/task_center/task_center_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,9 +28,12 @@ class OpenAverApp extends ConsumerStatefulWidget {
 }
 
 class _OpenAverAppState extends ConsumerState<OpenAverApp> {
+  static const _taskCenterTab = 5;
+
   final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
+  final GlobalKey<SearchPageState> _searchKey = GlobalKey<SearchPageState>();
   bool _initialized = false;
-  bool _appliedStartupPrefs = false;
+  bool _bootstrapApplied = false;
   DateTime? _lastBackPress;
   Timer? _bootstrapPoll;
 
@@ -56,30 +61,55 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
       );
     };
     NativeBridge.instance.onRuntimeReady = _applyBootstrapInfo;
+    NativeBridge.instance.onTaskCenterRequested = _onTaskCenterRequested;
+    ref.listenManual(stringsProvider, (_, strings) {
+      NativeBridge.instance.setTaskNotificationStrings(strings);
+    }, fireImmediately: true);
+    _onTaskCenterRequested();
     _bootstrap();
   }
 
   @override
   void dispose() {
     _bootstrapPoll?.cancel();
+    final bridge = NativeBridge.instance;
+    if (bridge.onTaskCenterRequested == _onTaskCenterRequested) {
+      bridge.onTaskCenterRequested = null;
+    }
+    if (bridge.onRuntimeReady == _applyBootstrapInfo) {
+      bridge.onRuntimeReady = null;
+    }
     super.dispose();
   }
 
+  void _onTaskCenterRequested() => unawaited(_openTaskCenter());
+
+  Future<void> _openTaskCenter() async {
+    if (!await NativeBridge.instance.consumeTaskCenterRequest() || !mounted) return;
+    _navKey.currentState?.popUntil((route) => route.isFirst);
+    _selectTab(_taskCenterTab);
+  }
+
+  void _selectTab(int index) {
+    ref.read(activeTabProvider.notifier).setTab(index);
+    if (index == _taskCenterTab && _initialized && _bootstrapApplied) {
+      unawaited(AiBackfillTask.refreshKnown(ref.read(apiClientProvider)));
+    }
+  }
+
   Future<void> _applyBootstrapInfo(BootstrapInfo info) async {
-    if (!info.ready) return;
+    if (!mounted || !info.ready || _bootstrapApplied) return;
+    _bootstrapApplied = true;
     _bootstrapPoll?.cancel();
     ref.read(bootstrapProvider.notifier).setBootstrap(info);
     final theme = AppThemeMode.fromString(info.theme);
     ref.read(themeModeProvider.notifier).setTheme(theme);
     ref.read(localeProvider.notifier).setLocale(info.uiLocale);
     await NativeBridge.instance.syncNativeTheme(theme.id);
-    if (mounted) {
-      setState(() => _initialized = true);
-    }
-    if (!_appliedStartupPrefs) {
-      _appliedStartupPrefs = true;
-      _loadStartupGeneralPrefs();
-    }
+    if (!mounted) return;
+    setState(() => _initialized = true);
+    unawaited(AiBackfillTask.refreshKnown(ref.read(apiClientProvider)));
+    unawaited(_loadStartupGeneralPrefs());
   }
 
   Future<void> _loadStartupGeneralPrefs() async {
@@ -112,6 +142,7 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
   Future<void> _bootstrap() async {
     try {
       final info = await NativeBridge.instance.getBootstrapInfo();
+      if (!mounted || _bootstrapApplied) return;
       if (info.ready) {
         await _applyBootstrapInfo(info);
         return;
@@ -146,12 +177,21 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
     final strings = ref.watch(stringsProvider);
     final activeTab = ref.watch(activeTabProvider);
 
-    const tabs = [
-      ShowcasePage(),
-      SearchPage(),
-      ScannerPage(),
-      InsightsPage(),
-      SettingsPage(),
+    final tabs = [
+      const ShowcasePage(),
+      SearchPage(key: _searchKey),
+      const ScannerPage(),
+      const InsightsPage(),
+      const SettingsPage(),
+      const TaskCenterPage(),
+    ];
+    final destinations = [
+      (Icons.grid_view_rounded, strings.tabShowcase),
+      (Icons.search_rounded, strings.tabSearch),
+      (Icons.radar_rounded, strings.tabScanner),
+      (Icons.pie_chart_outline_rounded, strings.tabInsights),
+      (Icons.settings_outlined, strings.tabSettings),
+      (Icons.task_alt_rounded, strings.taskCenterTab),
     ];
 
     final scale = fontScaleFor(fontSize);
@@ -185,12 +225,8 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
               canPop: false,
               onPopInvokedWithResult: (didPop, _) {
                 if (didPop) return;
-                if (activeTab == 1) {
-                  final resetHook = ref.read(searchResetHookProvider);
-                  if (resetHook.value) {
-                    resetHook.value = false;
-                    return;
-                  }
+                if (activeTab == 1 && _searchKey.currentState?.clearSearchResults() == true) {
+                  return;
                 }
                 if (activeTab != 0) {
                   ref.read(activeTabProvider.notifier).setTab(0);
@@ -216,82 +252,47 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
               child: LayoutBuilder(
                 builder: (_, constraints) {
                   final useRail = constraints.maxWidth >= 840;
-                  final bodyStack = IndexedStack(
-                    index: activeTab,
-                    children: tabs,
-                  );
-
-                  if (useRail) {
-                    return Scaffold(
-                      body: Row(
-                        children: [
+                  return Scaffold(
+                    body: Row(
+                      children: [
+                        if (useRail) ...[
                           SafeArea(
                             right: false,
                             child: NavigationRail(
+                              scrollable: true,
                               selectedIndex: activeTab,
                               labelType: NavigationRailLabelType.all,
-                              onDestinationSelected: (idx) =>
-                                  ref.read(activeTabProvider.notifier).setTab(idx),
+                              onDestinationSelected: _selectTab,
                               destinations: [
-                                NavigationRailDestination(
-                                  icon: const Icon(Icons.grid_view_rounded),
-                                  label: Text(strings.tabShowcase),
-                                ),
-                                NavigationRailDestination(
-                                  icon: const Icon(Icons.search_rounded),
-                                  label: Text(strings.tabSearch),
-                                ),
-                                NavigationRailDestination(
-                                  icon: const Icon(Icons.radar_rounded),
-                                  label: Text(strings.tabScanner),
-                                ),
-                                NavigationRailDestination(
-                                  icon: const Icon(Icons.pie_chart_outline_rounded),
-                                  label: Text(strings.tabInsights),
-                                ),
-                                NavigationRailDestination(
-                                  icon: const Icon(Icons.settings_outlined),
-                                  label: Text(strings.tabSettings),
-                                ),
+                                for (final (icon, label) in destinations)
+                                  NavigationRailDestination(
+                                    icon: Icon(icon),
+                                    label: Text(label),
+                                  ),
                               ],
                             ),
                           ),
                           const VerticalDivider(width: 1),
-                          Expanded(child: bodyStack),
                         ],
-                      ),
-                    );
-                  }
-
-                  return Scaffold(
-                    body: bodyStack,
-                    bottomNavigationBar: NavigationBar(
-                      selectedIndex: activeTab,
-                      onDestinationSelected: (idx) =>
-                          ref.read(activeTabProvider.notifier).setTab(idx),
-                      destinations: [
-                        NavigationDestination(
-                          icon: const Icon(Icons.grid_view_rounded),
-                          label: strings.tabShowcase,
-                        ),
-                        NavigationDestination(
-                          icon: const Icon(Icons.search_rounded),
-                          label: strings.tabSearch,
-                        ),
-                        NavigationDestination(
-                          icon: const Icon(Icons.radar_rounded),
-                          label: strings.tabScanner,
-                        ),
-                        NavigationDestination(
-                          icon: const Icon(Icons.pie_chart_outline_rounded),
-                          label: strings.tabInsights,
-                        ),
-                        NavigationDestination(
-                          icon: const Icon(Icons.settings_outlined),
-                          label: strings.tabSettings,
+                        Expanded(
+                          key: const ValueKey('app-tabs'),
+                          child: IndexedStack(index: activeTab, children: tabs),
                         ),
                       ],
                     ),
+                    bottomNavigationBar: useRail
+                        ? null
+                        : NavigationBar(
+                            selectedIndex: activeTab,
+                            labelBehavior: constraints.maxWidth < 420
+                                ? NavigationDestinationLabelBehavior.onlyShowSelected
+                                : NavigationDestinationLabelBehavior.alwaysShow,
+                            onDestinationSelected: _selectTab,
+                            destinations: [
+                              for (final (icon, label) in destinations)
+                                NavigationDestination(icon: Icon(icon), label: label),
+                            ],
+                          ),
                   );
                 },
               ),

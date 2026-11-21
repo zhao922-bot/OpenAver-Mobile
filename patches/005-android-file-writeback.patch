@@ -1296,7 +1296,7 @@
  
  
  # preserve-on-conflict 欄位集合（CD-98a-6）：比照 path — 首次 INSERT 帶 dataclass 預設值，
-@@ -189,6 +276,50 @@
+@@ -189,6 +276,67 @@
      "WHEN videos.crop_mode = 'manual' THEN 'auto' ELSE videos.crop_mode END"
  )
  
@@ -1340,6 +1340,23 @@
 +)
 +
 +
++def _showcase_upper(value: Optional[str]) -> Optional[str]:
++    """Match Dart's one-code-point uppercase mapping for video numbers."""
++    if value is None:
++        return None
++    upper = value.upper()
++    if len(upper) == len(value):
++        return upper
++    result = []
++    for char in value:
++        simple = char.upper()
++        if len(simple) > 1:
++            # Greek letters with ypogegrammeni have a single titlecase form.
++            simple = char.title()
++        result.append(simple if len(simple) == 1 else char)
++    return ''.join(result)
++
++
 +def _escape_like_prefix(value: str) -> str:
 +    """Escape SQLite LIKE wildcards before appending a trailing '%'."""
 +    return value.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
@@ -1347,7 +1364,7 @@
  
  class VideoRepository:
      """影片資料存取層"""
-@@ -201,16 +332,19 @@
+@@ -201,16 +349,19 @@
          """取得資料庫連線"""
          return connection.get_connection(self.db_path)
  
@@ -1371,7 +1388,7 @@
          return self._columns_cache
  
      def upsert(self, video: Video) -> int:
-@@ -364,267 +498,419 @@
+@@ -364,267 +515,419 @@
              self.upsert(video)
              return
  
@@ -2041,7 +2058,7 @@
  
      def upsert_batch(self, videos: List[Video]) -> tuple:
          """批次新增或更新
-@@ -726,8 +1012,30 @@
+@@ -726,8 +1029,30 @@
              cursor.execute("SELECT * FROM videos WHERE path = ?", (path,))
              row = cursor.fetchone()
              if row:
@@ -2073,7 +2090,7 @@
          finally:
              conn.close()
  
-@@ -832,7 +1140,152 @@
+@@ -832,7 +1157,171 @@
          try:
              cursor.execute("SELECT * FROM videos ORDER BY id")
              rows = cursor.fetchall()
@@ -2197,6 +2214,25 @@
 +        finally:
 +            conn.close()
 +
++    def get_showcase_lookup_rows(self, value: str, *, by_number: bool = False) -> List[Video]:
++        """Return exact matches in library order for the Showcase scope check."""
++        conn = self._get_connection()
++        try:
++            predicate = "title = ?"
++            if by_number:
++                # SQLite's built-in UPPER only handles ASCII. Flutter's number
++                # comparison was Unicode-aware, including for older DB rows.
++                conn.create_function("showcase_upper", 1, _showcase_upper)
++                predicate = "showcase_upper(number) = ?"
++                value = _showcase_upper(value)
++            columns = ', '.join(_SHOWCASE_COLUMNS)
++            rows = conn.execute(
++                f"SELECT {columns} FROM videos WHERE {predicate} ORDER BY id", (value,),
++            )
++            return [Video.from_row(row, list(_SHOWCASE_COLUMNS)) for row in rows]
++        finally:
++            conn.close()
++
 +    def get_insights_rows(
 +        self,
 +        configured_dir_uris: Optional[set[str]] = None,
@@ -2227,7 +2263,7 @@
          finally:
              conn.close()
  
-@@ -850,8 +1303,8 @@
+@@ -850,8 +1339,8 @@
          finally:
              conn.close()
  
@@ -2238,7 +2274,7 @@
  
          sample_count（TASK-118b-T9）：合法 JSON list → 實際張數。空字串／NULL／
          損毀 JSON／非 list 的合法 JSON 這四種壞值一律回傳哨兵值
-@@ -859,15 +1312,45 @@
+@@ -859,15 +1348,45 @@
          裁決④：壞資料要 fail-safe 成「需要重掃」，不得讓單筆壞資料中止整個
          SELECT／整次掃描）。真實檔案系統算出來的張數恆為 >= 0，-1 必定與任何
          真實張數不相等，呼叫端的比對式因此自然觸發重掃，不需要額外的例外分支。
@@ -2291,7 +2327,7 @@
                  sample_count = _SAMPLE_COUNT_UNKNOWN
                  if sample_images_raw:
                      try:
-@@ -876,7 +1359,22 @@
+@@ -876,7 +1395,22 @@
                              sample_count = len(parsed)
                      except (json.JSONDecodeError, TypeError):
                          pass
@@ -2315,7 +2351,7 @@
              return result
          finally:
              conn.close()
-@@ -885,7 +1383,7 @@
+@@ -885,7 +1419,7 @@
          """取得 {path: scrape_attempted_at} 索引，供 T3 `_should_skip` 冷啟動判斷用（TASK-89b-T1）。
  
          Additive read-only method。回傳的是 {path: int}——**不是** get_mtime_index() 的
@@ -2324,7 +2360,7 @@
          含 scrape_attempted_at == 0 的 row（不過濾）——呼叫端用 `.get(path, 0) > 0`
          統一判斷「從未試過」（key 不存在或值為 0 皆視為未試過）。
          """
-@@ -988,7 +1486,7 @@
+@@ -988,7 +1522,7 @@
              cursor.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
              row = cursor.fetchone()
              if row:
@@ -2333,7 +2369,7 @@
              return None
          finally:
              conn.close()
-@@ -1008,7 +1506,7 @@
+@@ -1008,7 +1542,7 @@
              )
              row = cursor.fetchone()
              if row:
@@ -2342,7 +2378,7 @@
              return None
          finally:
              conn.close()
-@@ -1044,8 +1542,9 @@
+@@ -1044,8 +1578,9 @@
  
              # 建立結果字典（使用原始輸入的 key）
              result = {}
@@ -2353,7 +2389,7 @@
                  if video.number:
                      # 找到原始輸入的 key
                      original_key = upper_to_original.get(video.number.upper())
-@@ -1109,7 +1608,8 @@
+@@ -1109,7 +1644,8 @@
                  (actress_name,)
              )
              rows = cursor.fetchall()
@@ -2363,7 +2399,7 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress json_each failed for %r (returning [])",
-@@ -1146,7 +1646,8 @@
+@@ -1146,7 +1682,8 @@
                  tuple(names)
              )
              rows = cursor.fetchall()
@@ -2373,7 +2409,7 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress_names json_each failed for %d names (returning [])",
-@@ -1156,25 +1657,145 @@
+@@ -1156,25 +1693,145 @@
          finally:
              conn.close()
  
@@ -2522,7 +2558,7 @@
          finally:
              conn.close()
  
-@@ -1193,6 +1814,20 @@
+@@ -1193,6 +1850,20 @@
              cursor.execute(
                  "UPDATE videos SET title = ?, original_title = ?, nfo_mtime = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?",
                  (title, original_title, nfo_mtime, path)
@@ -2543,7 +2579,7 @@
              )
              conn.commit()
              return cursor.rowcount > 0
-@@ -1343,7 +1978,13 @@
+@@ -1343,7 +2014,13 @@
          finally:
              conn.close()
  
@@ -2558,7 +2594,7 @@
          """安全更新 auto_focal 欄位（不碰其他欄位，CD-98a-6 mutator，鏡射 update_user_tags）。
  
          同時蓋章 focal_attempted_at = CURRENT_TIMESTAMP（單條 UPDATE 原子寫，Codex PR#105
-@@ -1383,13 +2024,57 @@
+@@ -1383,13 +2060,57 @@
          cursor = conn.cursor()
          try:
              cursor.execute(
@@ -2618,7 +2654,7 @@
          finally:
              conn.close()
  
-@@ -1566,7 +2251,7 @@
+@@ -1566,7 +2287,7 @@
                  """,
                  (escaped + '%', escaped + '%/%'),
              )

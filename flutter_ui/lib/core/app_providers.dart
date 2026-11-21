@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api_client.dart';
 import 'app_theme.dart';
@@ -129,11 +128,3 @@ final showcaseTagFilterProvider =
     NotifierProvider<ShowcaseTagFilterNotifier, String?>(
   ShowcaseTagFilterNotifier.new,
 );
-
-/// Optional GlobalKey used to let device back button clear active search results
-/// before switching tabs.
-final searchResetHookProvider = Provider<ValueNotifier<bool>>((ref) {
-  final notifier = ValueNotifier<bool>(false);
-  ref.onDispose(notifier.dispose);
-  return notifier;
-});

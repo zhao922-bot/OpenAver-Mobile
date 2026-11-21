@@ -1,0 +1,81 @@
+name: Android emulator smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emulator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      OPENAVER_BUILD_PYTHON: python
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Install pinned Android build tools
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' \
+            'ndk;28.2.13676358' 'cmake;3.22.1'
+      - uses: gradle/actions/setup-gradle@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+      - name: Get Flutter dependencies
+        working-directory: flutter_ui
+        run: flutter pub get
+      - name: Build x86-64 app and instrumentation APKs
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest \
+            -Pabi=x86_64 -Ptarget-platform=android-x64
+      - name: Set up test media encoder
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+      - name: Enable hardware acceleration on the hosted runner
+        run: sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+      - name: Run OpenAver on an Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: >-
+            python tools/run_android_smoke.py
+            --apk app/build/outputs/apk/debug/app-debug.apk
+            --test-apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            --artifacts build/emulator-smoke
+      - name: Upload emulator diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-emulator-smoke
+          path: build/emulator-smoke/
+          if-no-files-found: ignore
+          retention-days: 7

@@ -138,6 +138,7 @@ public final class MainActivity extends Activity {
     private boolean runtimeStarting;
     private boolean runtimeReady;
     private boolean runtimeFailed;
+    private boolean taskCenterRequested;
     private volatile int localPort = LOCAL_PORT;
     private volatile String localAuthToken = "";
     private volatile String localAuthCookieName = "";
@@ -168,6 +169,10 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        boolean fromNotification = OpenAverFlutterActivity.takeTaskCenterRequest(getIntent());
+        taskCenterRequested = shouldLaunchFlutterUi() && (savedInstanceState == null
+                ? fromNotification
+                : savedInstanceState.getBoolean(OpenAverFlutterActivity.STATE_TASK_CENTER_REQUESTED));
         setContentView(R.layout.activity_main);
         StorageBridge.initialize(this);
         SharedPreferences preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
@@ -956,16 +961,29 @@ public final class MainActivity extends Activity {
         webContainer.setVisibility(View.GONE);
         Intent intent = new Intent(this, OpenAverFlutterActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+        if (taskCenterRequested) {
+            intent.setAction(OpenAverFlutterActivity.ACTION_OPEN_TASK_CENTER);
+            taskCenterRequested = false;
+        }
         startActivityForResult(intent, REQUEST_FLUTTER_UI);
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        setIntent(intent);
-        if (runtimeReady && shouldLaunchFlutterUi()) {
+        if (!OpenAverFlutterActivity.takeTaskCenterRequest(intent) || !shouldLaunchFlutterUi()) {
+            return;
+        }
+        taskCenterRequested = true;
+        if (runtimeReady) {
             launchFlutterUi();
         }
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(OpenAverFlutterActivity.STATE_TASK_CENTER_REQUESTED, taskCenterRequested);
     }
 
     private void showPageError() {
@@ -1185,6 +1203,7 @@ public final class MainActivity extends Activity {
                     .edit()
                     .putString(PREF_UI_MODE, UI_MODE_FLUTTER)
                     .apply();
+            TaskKeepAliveService.refreshNotification();
             launchFlutterUi();
         });
         dialog.findViewById(R.id.menuAbout).setOnClickListener(view -> {
@@ -1548,7 +1567,7 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         FlutterEngineManager.destroy();
         MobileRuntimeSession.clear();
-        TaskKeepAliveService.stop(this);
+        TaskKeepAliveService.stopAll(this);
         mainHandler.removeCallbacksAndMessages(null);
         runtimeExecutor.shutdownNow();
         if (localAuthCookieName != null && !localAuthCookieName.isEmpty()) {

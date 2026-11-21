@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
@@ -22,10 +23,14 @@ class VideoDetailPage extends ConsumerStatefulWidget {
     required this.onSelectActress,
     this.onSelectTag,
     this.onSelectFilterText,
+    this.totalVideos,
+    this.loadMoreVideos,
   });
 
   final List<VideoItem> videos;
   final int initialIndex;
+  final int? totalVideos;
+  final Future<({List<VideoItem> videos, bool hasMore})?> Function()? loadMoreVideos;
   final ValueChanged<VideoItem> onVideoUpdated;
   final ValueChanged<String> onVideoDeleted;
   final ValueChanged<String> onSelectActress;
@@ -40,6 +45,9 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
   late final PageController _pageController;
   late List<VideoItem> _videos;
   late int _currentIndex;
+  late int _totalVideos;
+  late bool _hasMoreVideos;
+  bool _loadingMoreVideos = false;
 
   @override
   void initState() {
@@ -50,6 +58,34 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
       _videos.isEmpty ? 0 : _videos.length - 1,
     );
     _pageController = PageController(initialPage: _currentIndex);
+    _totalVideos = widget.totalVideos ?? _videos.length;
+    _hasMoreVideos = widget.loadMoreVideos != null;
+    if (_hasMoreVideos) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _prefetchVideos());
+    }
+  }
+
+  Future<void> _prefetchVideos() async {
+    if (!mounted || !_hasMoreVideos || _loadingMoreVideos ||
+        _currentIndex < _videos.length - 3) {
+      return;
+    }
+    _loadingMoreVideos = true;
+    try {
+      final result = await widget.loadMoreVideos!();
+      if (!mounted) return;
+      if (result == null) {
+        _hasMoreVideos = false;
+        return;
+      }
+      setState(() {
+        final seen = _videos.map((video) => video.path).toSet();
+        _videos.addAll(result.videos.where((video) => seen.add(video.path)));
+        _hasMoreVideos = result.hasMore;
+      });
+    } finally {
+      _loadingMoreVideos = false;
+    }
   }
 
   @override
@@ -79,7 +115,7 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
             padding: const EdgeInsets.only(right: 12),
             child: Center(
               child: Text(
-                '${_currentIndex + 1} / ${_videos.length}',
+                '${_currentIndex + 1} / $_totalVideos',
                 style: TextStyle(color: palette.textMuted, fontSize: 12),
               ),
             ),
@@ -89,20 +125,30 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
       body: PageView.builder(
         controller: _pageController,
         itemCount: _videos.length,
-        onPageChanged: (index) => setState(() => _currentIndex = index),
+        onPageChanged: (index) {
+          setState(() => _currentIndex = index);
+          _prefetchVideos();
+        },
         itemBuilder: (_, index) {
           final item = _videos[index];
           return _VideoDetailBody(
             key: ValueKey(item.path),
             video: item,
+            isCurrentVideo: () => mounted && _videos.isNotEmpty &&
+                _videos[_currentIndex].path == item.path,
             onUpdated: (updated) {
-              setState(() => _videos[index] = updated);
+              if (mounted) {
+                final index = _videos.indexWhere((video) => video.path == updated.path);
+                if (index != -1) setState(() => _videos[index] = updated);
+              }
               widget.onVideoUpdated(updated);
             },
             onDeleted: (deletedPath) {
               widget.onVideoDeleted(deletedPath);
+              if (!mounted || !_videos.any((v) => v.path == deletedPath)) return;
               setState(() {
                 _videos.removeWhere((v) => v.path == deletedPath);
+                _totalVideos--;
                 if (_currentIndex >= _videos.length && _videos.isNotEmpty) {
                   _currentIndex = _videos.length - 1;
                 }
@@ -134,6 +180,7 @@ class _VideoDetailBody extends ConsumerStatefulWidget {
   const _VideoDetailBody({
     super.key,
     required this.video,
+    required this.isCurrentVideo,
     required this.onUpdated,
     required this.onDeleted,
     required this.onSelectActress,
@@ -142,6 +189,7 @@ class _VideoDetailBody extends ConsumerStatefulWidget {
   });
 
   final VideoItem video;
+  final bool Function() isCurrentVideo;
   final ValueChanged<VideoItem> onUpdated;
   final ValueChanged<String> onDeleted;
   final ValueChanged<String> onSelectActress;
@@ -178,6 +226,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
 
   List<Map<String, dynamic>> _similar = const [];
   bool _similarLoading = false;
+  CancelToken? _similarLookup;
 
   @override
   void initState() {
@@ -198,6 +247,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
 
   @override
   void dispose() {
+    _similarLookup?.cancel();
     _samplesScroll.dispose();
     _plotCtrl.dispose();
     _titleCtrl.dispose();
@@ -268,38 +318,46 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
   Future<void> _openSimilarVideo(Map<String, dynamic> sim) async {
     final strings = ref.read(stringsProvider);
     final api = ref.read(apiClientProvider);
+    final path = (sim['path'] ?? '').toString();
     final number = (sim['number'] ?? '').toString().trim();
     final title = (sim['title'] ?? '').toString().trim();
+    if (path.isEmpty && number.isEmpty && title.isEmpty) {
+      _showToast(strings.videoNotInLibrary);
+      return;
+    }
+    _similarLookup?.cancel();
+    final cancel = CancelToken();
+    _similarLookup = cancel;
+
+    bool ownsLookup() => mounted && _similarLookup == cancel &&
+        widget.isCurrentVideo() && ModalRoute.of(context)?.isCurrent == true;
 
     try {
-      final resp = await api.getJson(
-        '/api/showcase/videos',
-        queryParameters: {'paged': false},
+      final resp = await api.dio.get<Map<String, dynamic>>(
+        '/api/showcase/video/lookup',
+        queryParameters: {
+          if (path.isNotEmpty) 'path': path,
+          if (number.isNotEmpty) 'number': number,
+          if (title.isNotEmpty) 'title': title,
+        },
+        cancelToken: cancel,
       );
-      if (!mounted) return;
-      if (resp['success'] != true) {
-        _showToast(strings.loadLibraryFailed);
-        return;
-      }
-      final parsed = VideosPageResponse.fromJson(resp);
-      var idx = -1;
-      if (number.isNotEmpty) {
-        idx = parsed.videos.indexWhere(
-          (v) => v.number.toUpperCase() == number.toUpperCase(),
-        );
-      }
-      if (idx == -1 && title.isNotEmpty) {
-        idx = parsed.videos.indexWhere((v) => v.title == title);
-      }
-      if (idx == -1) {
+      if (!mounted || !ownsLookup()) return;
+      if (resp.statusCode == 404) {
         _showToast(strings.videoNotInLibrary);
         return;
       }
+      final video = resp.data?['video'];
+      if (resp.data?['success'] != true || video is! Map<String, dynamic>) {
+        _showToast(strings.loadLibraryFailed);
+        return;
+      }
+      final item = VideoItem.fromJson(video);
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => VideoDetailPage(
-            videos: parsed.videos,
-            initialIndex: idx,
+            videos: [item],
+            initialIndex: 0,
             onVideoUpdated: widget.onUpdated,
             onVideoDeleted: widget.onDeleted,
             onSelectActress: widget.onSelectActress,
@@ -309,8 +367,11 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
         ),
       );
     } catch (e) {
+      if (!ownsLookup()) return;
       debugPrint('openSimilarVideo error: $e');
       _showToast(strings.requestFailed('$e'));
+    } finally {
+      if (_similarLookup == cancel) _similarLookup = null;
     }
   }
 

@@ -48,6 +48,8 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
     public static final int RESULT_EXIT_APP = 1001;
     public static final int RESULT_SWITCH_CLASSIC_WEB = 1002;
     public static final String EXTRA_TARGET_PATH = "target_path";
+    static final String ACTION_OPEN_TASK_CENTER = "dev.openaver.mobile.action.OPEN_TASK_CENTER";
+    static final String STATE_TASK_CENTER_REQUESTED = "task_center_requested";
 
     private static final int REQUEST_ALL_FILES_ACCESS = 5101;
     private static final int REQUEST_LEGACY_STORAGE = 5102;
@@ -66,21 +68,56 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
     private MethodChannel.Result pendingTreeResult;
     private MethodChannel.Result pendingPickFileResult;
     private MethodChannel.Result pendingPermissionResult;
+    private boolean taskCenterRequested;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        boolean fromNotification = takeTaskCenterRequest(getIntent());
+        taskCenterRequested = savedInstanceState == null ? fromNotification
+                : savedInstanceState.getBoolean(STATE_TASK_CENTER_REQUESTED);
         super.onCreate(savedInstanceState);
-        if (!MobileRuntimeSession.isReady()) {
+        boolean classicSelected = "web".equals(getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .getString(PREF_UI_MODE, "flutter"));
+        // MainActivity owns the runtime and receives the UI switch and exit results.
+        boolean needsLauncher = taskCenterRequested && (classicSelected || getCallingActivity() == null);
+        if (!MobileRuntimeSession.isReady() || needsLauncher) {
             Intent intent = new Intent(this, MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            if (taskCenterRequested && !classicSelected) {
+                intent.setAction(ACTION_OPEN_TASK_CENTER);
+            }
             startActivity(intent);
             finish();
         }
     }
 
     @Override
+    protected void onNewIntent(@NonNull Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        taskCenterRequested |= takeTaskCenterRequest(intent);
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(STATE_TASK_CENTER_REQUESTED, taskCenterRequested);
+    }
+
+    static boolean takeTaskCenterRequest(@Nullable Intent intent) {
+        if (intent == null || !ACTION_OPEN_TASK_CENTER.equals(intent.getAction())) {
+            return false;
+        }
+        intent.setAction(null);
+        return true;
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
+        if (taskCenterRequested && bridgeChannel != null && !isFinishing()) {
+            bridgeChannel.invokeMethod("taskCenterRequested", null);
+        }
         AndroidCfTransport cfTransport = MobileRuntimeSession.getCfTransport();
         FrameLayout contentRoot = findViewById(android.R.id.content);
         if (cfTransport != null && contentRoot != null) {
@@ -102,12 +139,24 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
             pendingPermissionResult.success(false);
             pendingPermissionResult = null;
         }
-        if (bridgeChannel != null) {
-            bridgeChannel.setMethodCallHandler(null);
-            bridgeChannel = null;
-        }
         ioExecutor.shutdownNow();
         super.onDestroy();
+    }
+
+    @Override
+    public void cleanUpFlutterEngine(@NonNull FlutterEngine flutterEngine) {
+        // The embedding detaches the old host before configuring a new one.
+        // Releasing the bridge here keeps a late onDestroy from replacing it.
+        if (bridgeChannel != null) {
+            if (shouldDestroyEngineWithHost()) {
+                bridgeChannel.setMethodCallHandler(null);
+                TaskKeepAliveService.setFlutterActive(this, false);
+            } else {
+                FlutterEngineManager.installBackgroundBridge(bridgeChannel, this);
+            }
+            bridgeChannel = null;
+        }
+        super.cleanUpFlutterEngine(flutterEngine);
     }
 
     @Override
@@ -151,6 +200,32 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
                 result.success(FlutterEngineManager.buildBootstrapPayload(this));
                 break;
             }
+            case "readPlaybackPosition": {
+                String path = call.argument("path");
+                long milliseconds = path == null ? 0L : getSharedPreferences(
+                        "playback_positions", MODE_PRIVATE
+                ).getLong(Uri.encode(path), 0L);
+                result.success(milliseconds);
+                break;
+            }
+            case "savePlaybackPosition": {
+                String path = call.argument("path");
+                Number milliseconds = call.argument("milliseconds");
+                if (path != null && !path.isEmpty() && milliseconds != null) {
+                    String key = Uri.encode(path);
+                    SharedPreferences.Editor editor = getSharedPreferences(
+                            "playback_positions", MODE_PRIVATE
+                    ).edit();
+                    if (milliseconds.longValue() > 0L) {
+                        editor.putLong(key, milliseconds.longValue());
+                    } else {
+                        editor.remove(key);
+                    }
+                    editor.apply();
+                }
+                result.success(null);
+                break;
+            }
             case "openExternalPlayer": {
                 String path = call.argument("path");
                 String parts = call.argument("parts");
@@ -178,13 +253,23 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
                 result.success(handled);
                 break;
             }
-            case "setTaskKeepAlive": {
-                Boolean active = call.argument("active");
-                if (Boolean.TRUE.equals(active)) {
-                    TaskKeepAliveService.start(this);
-                } else {
-                    TaskKeepAliveService.stop(this);
+            case "consumeTaskCenterRequest": {
+                boolean requested = taskCenterRequested && !isFinishing()
+                        && MobileRuntimeSession.isReady();
+                if (requested) {
+                    taskCenterRequested = false;
                 }
+                result.success(requested);
+                break;
+            }
+            case "setTaskKeepAlive": {
+                TaskKeepAliveService.setFlutterActive(
+                        this, Boolean.TRUE.equals(call.argument("active")));
+                result.success(null);
+                break;
+            }
+            case "updateTaskNotification": {
+                FlutterEngineManager.updateTaskNotification(call);
                 result.success(null);
                 break;
             }
@@ -272,6 +357,7 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
                         .edit()
                         .putString(PREF_UI_MODE, "web")
                         .apply();
+                TaskKeepAliveService.refreshNotification();
                 Intent data = new Intent();
                 data.putExtra(EXTRA_TARGET_PATH, path == null || path.isEmpty() ? "/showcase" : path);
                 setResult(RESULT_SWITCH_CLASSIC_WEB, data);

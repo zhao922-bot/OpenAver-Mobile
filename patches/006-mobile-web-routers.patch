@@ -9434,15 +9434,16 @@
  class AutoOrganizeConfigRequest(BaseModel):
 --- a/web/routers/showcase.py
 +++ b/web/routers/showcase.py
-@@ -7,6 +7,7 @@
+@@ -7,6 +7,8 @@
  """
  
  import os
++import random
 +import threading
  import uuid
  from pathlib import Path
  from typing import Optional
-@@ -17,12 +18,15 @@
+@@ -17,12 +19,15 @@
  from fastapi.responses import JSONResponse, Response
  from pydantic import BaseModel
  
@@ -9459,7 +9460,7 @@
  from core.path_utils import (
      is_path_under_dir,
      uri_to_local_fs_path,
-@@ -30,21 +34,39 @@
+@@ -30,21 +35,39 @@
  from core.logger import get_logger
  from core.platform_info import DSM_PERMISSION_HINT, is_synology
  from core.config import load_config, get_gallery_source_paths, get_configured_gallery_dirs
@@ -9480,7 +9481,8 @@
  from core.focal import device_state, format_focal, parse_focal
  from core.focal.subprocess_runner import run_detection
  from core import thumbnail_cache
- from core.multipart_group import group_rows, resolve_group
+-from core.multipart_group import group_rows, resolve_group
++from core.multipart_group import VideoGroup, group_rows, part_token, resolve_group
 +from core.i18n import get_config_locale, t as i18n_t
  
  logger = get_logger(__name__)
@@ -9500,7 +9502,7 @@
  
  
  class DetectFocalRequest(BaseModel):
-@@ -70,12 +92,61 @@
+@@ -70,12 +93,61 @@
      original_title: Optional[str] = None
  
  
@@ -9568,7 +9570,7 @@
      """將 Video ORM 物件序列化為前端 JSON dict（列表端點與單筆端點共用）。
  
      feature/71 T4：thumbnail_cache_enabled 開關決定 cover_url 走 thumb / image 分支。
-@@ -97,6 +168,29 @@
+@@ -97,6 +169,29 @@
      for img_uri in (v.sample_images or []):
          local_path = uri_to_local_fs_path(img_uri, path_mappings)
          sample_urls.append(f"/api/gallery/image?path={quote(local_path, safe='')}")
@@ -9598,7 +9600,7 @@
  
      return {
          "path": v.path,                                          # file:/// URI（開啟影片用）
-@@ -119,47 +213,138 @@
+@@ -119,47 +214,189 @@
          "user_tags": v.user_tags or [],              # list[str]，空時回空 list
          "user_rating": v.user_rating or 0,            # 精選標記（spec-123）；無條件輸出，未精選為 0（FE-ALPINE-06）
          "has_cover": bool(v.cover_path),             # DB 初判（不做 IO）
@@ -9653,8 +9655,6 @@
 -    依逗號拆多值、去除頭尾空白與 `W/` 弱驗證前綴，逐一比對是否等於 `etag`。
 -    """
 -    if not if_none_match:
--        return False
--    return etag in [tag.strip().removeprefix("W/") for tag in if_none_match.split(",")]
 +def _group_sort_key(group, sort: str):
 +    """Return the same primary sort value the showcase client uses."""
 +    video = group.members[0]
@@ -9675,14 +9675,58 @@
 +    return video.path or ''
 +
 +
-+def _sort_groups(groups, sort: str, order: str):
++def _browse_lower(value: str) -> str:
++    # Match Dart's simple lowercase mapping for dotted I and Greek sigma.
++    return value.replace('İ', 'i').replace('Σ', 'σ').lower()
++
++
++def _browse_csv_values(values):
++    # The mobile model splits and trims the comma-separated API fields.
++    return [value for part in ','.join(values or []).split(',') if (value := part.strip())]
++
++
++def _matches_browse_filters(video, keyword: str, tag: str, favorites_only: bool) -> bool:
++    if favorites_only and (video.user_rating or 0) <= 0:
+         return False
+-    return etag in [tag.strip().removeprefix("W/") for tag in if_none_match.split(",")]
++    if not (tag or keyword):
++        return True
++    tags = (*_browse_csv_values(video.tags), *(video.user_tags or []))
++    if tag and not any(_browse_lower(str(value)) == tag for value in tags):
++        return False
++    if not keyword:
++        return True
++    fields = (
++        video.number, video.title, video.maker, video.director, video.series, video.label,
++        *_browse_csv_values(video.actresses), *tags,
++    )
++    return any(keyword in _browse_lower(str(value)) for value in fields if value is not None)
++
++
++def _sort_groups(groups, sort: str, order: str, *,
++                 random_seed: Optional[int] = None, filtered: bool = False):
 +    """Sort before slicing so server pages have stable global order."""
 +    if sort == 'random':
-+        return groups
-+    reverse = order == 'desc'
-+    # Python's stable sort keeps DB insertion order for equal keys, matching
-+    # the browser's stable Array.sort() semantics used by legacy clients.
-+    return sorted(groups, key=lambda group: _group_sort_key(group, sort), reverse=reverse)
++        shuffled = list(groups)
++        random.Random(random_seed).shuffle(shuffled)
++        return shuffled
++
++    def key(group):
++        value = _group_sort_key(group, sort)
++        if not filtered:
++            return value
++        # Filtered mobile lists previously sorted their decoded display fields.
++        if sort == 'actor':
++            value = ','.join(_browse_csv_values(group.members[0].actresses))
++        if sort in {'actor', 'title', 'num', 'maker'}:
++            value = _browse_lower(value)
++        if sort == 'mdate':
++            return int(value)
++        # Dart compares strings by UTF-16 code unit.
++        return value.encode('utf-16-be') if isinstance(value, str) else value
++
++    # Keep DB insertion order for equal keys in either direction.
++    return sorted(groups, key=key, reverse=order == 'desc')
 +
 +
 +_etag_matches = etag_matches
@@ -9745,16 +9789,24 @@
 +    order: str = Query('desc'),
 +    paged: bool = Query(False),
 +    actress: Optional[str] = Query(None, max_length=200),
++    q: Optional[str] = None,
++    tag: Optional[str] = None,
++    favorites_only: bool = False,
++    random_seed: Optional[int] = None,
 +):
      """取得所有影片資料（用於 Showcase 頁面客戶端渲染）。
 +
 +    ``actress`` 可選：先以 AliasRepository.resolve() 展開別名群組，再在
 +    SQLite 的 json_each 上做精確 membership 篩選，避免前端為女優牆下載
 +    整份片庫。篩選後的 rows 才進入 group/sort/pagination。
++
++    Mobile browse filters match the displayed member of each logical group.
++    Seeded random requests use paging when requested. Unseeded random requests
++    retain the classic full-list contract.
  
      帶 ETag（CD-145a-8/11/12）：涵蓋 DB 內部寫入 revision、DB/-wal 檔案指紋（涵蓋外部
      抽換或還原備份）、無機密設定投影（來源資料夾／path_mappings／縮圖開關）三項，
-@@ -182,46 +367,98 @@
+@@ -182,71 +419,218 @@
  
          # 只取「當前設定資料夾」底下的記錄（DB 保留全部當 cache）
          config = load_config()
@@ -9767,7 +9819,12 @@
 +            'title', 'actor', 'num', 'maker', 'date', 'size', 'mdate', 'random'
 +        } else 'date'
 +        requested_order = 'asc' if order == 'asc' else 'desc'
-+        use_pagination = bool(paged and per_page > 0 and requested_sort != 'random')
++        use_pagination = bool(
++            paged and per_page > 0 and (requested_sort != 'random' or random_seed is not None)
++        )
++        keyword = _browse_lower((q or '').strip())
++        browse_tag = _browse_lower(tag or '')
++        has_browse_filters = bool(keyword or browse_tag or favorites_only)
 +
 +        # Direct Python callers (tests and internal callers) may omit the
 +        # FastAPI Query default entirely, in which case the default object is
@@ -9793,6 +9850,8 @@
 -        etag = compute_etag(get_showcase_revision(), compute_db_fingerprint(db_path), projection)
 -
 -        if _etag_matches(request.headers.get("if-none-match"), etag):
++        if has_browse_filters:
++            projection.update(q=keyword, tag=browse_tag, favorites_only=favorites_only)
 +        revision = get_showcase_revision()
 +        db_fingerprint = compute_db_fingerprint(db_path)
 +        etag = None
@@ -9826,10 +9885,18 @@
 +            db_fingerprint=db_fingerprint,
 +        )
 +
++        if has_browse_filters:
++            groups = [
++                group for group in groups
++                if _matches_browse_filters(group.members[0], keyword, browse_tag, favorites_only)
++            ]
 +        total = len(groups)
 +        total_pages = 1
 +        if use_pagination:
-+            groups = _sort_groups(groups, requested_sort, requested_order)
++            groups = _sort_groups(
++                groups, requested_sort, requested_order,
++                random_seed=random_seed, filtered=has_browse_filters,
++            )
 +            total_pages = max(1, (total + per_page - 1) // per_page)
 +            page = min(page, total_pages)
 +            start = (page - 1) * per_page
@@ -9867,7 +9934,68 @@
              "videos": [],
              "total": 0
          }, status_code=500)
-@@ -230,23 +467,43 @@
+ 
+ 
++def _find_showcase_video(repo, in_scope, path, number, title):
++    if path and in_scope(path):
++        video = repo.get_by_path(path)
++        if video is not None:
++            return video
++    for value, by_number in ((number, True), (title, False)):
++        if value:
++            for video in repo.get_showcase_lookup_rows(value, by_number=by_number):
++                if in_scope(video.path):
++                    return video
++    return None
++
++
++@router.get("/video/lookup")
++def lookup_video(
++    path: Optional[str] = None,
++    number: Optional[str] = None,
++    title: Optional[str] = None,
++):
++    """Find one logical Showcase video by path, exact number, or exact title."""
++    locale = None
++    try:
++        db_path = get_db_path()
++        if db_path.exists():
++            init_db(db_path)
++            config = load_config()
++            locale = _showcase_locale(config)
++            configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
++            repo = VideoRepository(db_path)
++
++            def in_scope(candidate):
++                return any(is_path_under_dir(candidate, uri) for uri in configured_dir_uris)
++
++            video = _find_showcase_video(
++                repo, in_scope, path, (number or '').strip(), (title or '').strip(),
++            )
++            if video is not None:
++                group = None
++                if part_token(uri_to_local_fs_path(video.path, path_mappings)):
++                    group = resolve_group(repo, video.path, path_mappings)
++                if group is None or not all(in_scope(member.path) for member in group.members):
++                    group = VideoGroup(members=[video], part_tokens=[])
++                return JSONResponse({
++                    "success": True,
++                    "video": _serialize_group(
++                        group, path_mappings, config.get('thumbnail_cache_enabled', False), locale,
++                    ),
++                })
++    except Exception as exc:
++        logger.error("取得單筆影片失敗: %s", exc)
++        return JSONResponse({
++            "success": False,
++            "error": _showcase_text("video_data_load_failed", locale or _showcase_locale()),
++        }, status_code=500)
++    return JSONResponse({
++        "success": False,
++        "error": _showcase_text("video_not_found", locale or _showcase_locale()),
++    }, status_code=404)
++
++
  @router.get("/video")
  def get_video(path: str = Query(..., description="file:/// URI")):
      """取得單筆影片資料（用於 T3 refreshVideoData enrich 後刷新卡片）"""
@@ -9914,7 +10042,7 @@
  
          thumb_enabled = config.get('thumbnail_cache_enabled', False)
  
-@@ -257,14 +514,22 @@
+@@ -257,14 +641,22 @@
          group = resolve_group(repo, path, path_mappings, folder_source_uri=v.path)
          if group is None:
              return JSONResponse({"success": True,
@@ -9940,7 +10068,7 @@
  
  
  @router.delete("/video")
-@@ -353,30 +618,58 @@
+@@ -353,30 +745,58 @@
      ⚠️ 停用狀態已於上方端點層短路，不會走到這裡，所以「關掉之後直接進手動」不受鎖排隊影響。
      **不進 capabilities（不揭露）。**
      """
@@ -10004,7 +10132,7 @@
  
          # 152d-T-D8：停用時在這裡就回，不要進 run_detection ——
          # pre_spawn_check 跑在全域 _slot_lock 裡面（subprocess_runner.py:298→309），
-@@ -430,7 +723,13 @@
+@@ -430,7 +850,13 @@
  
      except Exception as e:
          logger.error("偵測焦點失敗: %s", e)
@@ -10019,7 +10147,7 @@
  
  
  @router.post("/video/save-focal")
-@@ -451,58 +750,102 @@
+@@ -451,58 +877,102 @@
      rescrape 期間換了封面）→ 409，DB 不變，前端應提示使用者重新開啟裁切工具。
      `def`（非 async）→ Starlette threadpool。**不進 capabilities（不揭露）。**
      """
@@ -10141,7 +10269,7 @@
  
  
  def _new_original_title(req, video) -> str:
-@@ -513,35 +856,20 @@
+@@ -513,35 +983,20 @@
  
  
  def _locate_readonly_nfo(video, path_mappings: dict, output_uri: str):
@@ -10188,7 +10316,7 @@
  
  
  def _write_title_nfo(nfo_path: str, video, body: str, new_original: str, fmt: str) -> Optional[str]:
-@@ -556,28 +884,114 @@
+@@ -556,28 +1011,114 @@
          return "no_nfo"
      except NfoParseError:
          return "nfo_unreadable"
@@ -10307,7 +10435,7 @@
  
      # 取實際寫入那份 NFO 的 mtime；取不到沿用舊值（下次掃描最多多讀一次）
      new_mtime = nfo_mtime_or_none(Path(nfo_path))
-@@ -587,11 +1001,22 @@
+@@ -587,11 +1128,22 @@
          written = repo.update_titles(video.path, body, new_original, new_mtime)
      except Exception as e:
          logger.error("[title-writeback] DB 寫入失敗: %s", e)
@@ -10333,7 +10461,7 @@
              "nfo_updated": True}
  
  
-@@ -602,25 +1027,29 @@
+@@ -602,25 +1154,29 @@
      失敗一律 HTTP 200 ＋ {success:false, error:<code>}。`def`（非 async）→ threadpool。
      端點內不呼叫翻譯；唯讀來源只改輸出夾那份 NFO，來源零寫入。
      """

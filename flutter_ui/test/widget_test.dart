@@ -391,6 +391,17 @@ void main() {
     var focalSaved = false;
     var aiTagged = false;
     var rescraped = false;
+    var similarLookups = 0;
+    const secondVideo = {
+      'path': '/lib/ABC-002.mp4',
+      'title': 'Second Video',
+      'number': 'ABC-002',
+      'actors': <String>[],
+      'tags': <String>[],
+      'user_tags': <String>[],
+      'cover_url': '',
+      'cover_full_url': '',
+    };
 
     final mockApi = ApiClient(
       port: 8765,
@@ -402,7 +413,7 @@ void main() {
           }
           return _jsonResponse({
             'success': true,
-            'total': 2,
+            'total': opts.queryParameters['tag'] == null ? 2 : 1,
             'page': 1,
             'per_page': 45,
             'total_pages': 1,
@@ -418,27 +429,22 @@ void main() {
                 'cover_url': '',
                 'cover_full_url': '',
               },
-              {
-                'path': '/lib/ABC-002.mp4',
-                'title': 'Second Video',
-                'number': 'ABC-002',
-                'actors': [],
-                'tags': [],
-                'user_tags': [],
-                'cover_url': '',
-                'cover_full_url': '',
-              },
+              if (opts.queryParameters['tag'] == null) secondVideo,
             ],
           });
+        }
+        if (opts.path == '/api/showcase/video/lookup') {
+          expect(opts.queryParameters['path'], secondVideo['path']);
+          expect(opts.queryParameters['number'], secondVideo['number']);
+          similarLookups++;
+          return _jsonResponse({'success': true, 'video': secondVideo});
         }
         if (opts.path == '/api/showcase/video/plot') {
           return _jsonResponse({'success': true, 'plot': 'Story text', 'original_plot': ''});
         }
         if (opts.path.startsWith('/api/similar-covers/by-number/')) {
           return _jsonResponse({
-            'results': [
-              {'number': 'ABC-002', 'title': 'Second Video', 'cover_url': ''},
-            ],
+            'results': [secondVideo],
           });
         }
         if (opts.path == '/api/actresses/library') {
@@ -594,7 +600,8 @@ void main() {
     );
     await tester.tap(find.text('ABC-002').last);
     await tester.pumpAndSettle();
-    expect(find.text('ABC-002'), findsWidgets);
+    expect(similarLookups, 1);
+    expect(find.widgetWithText(AppBar, 'ABC-002'), findsOneWidget);
 
     // Pop back to ABC-001 detail, test Focal Crop Sheet, and tap Tag chip 'Drama'
     await tester.pageBack();
@@ -957,8 +964,18 @@ void main() {
     expect(find.text('Plots done (2)'), findsOneWidget);
 
     // Scanner: Batch Fetch / Replace Tags opens source picker and streams /api/gallery/tag-source-update
-    final scannerScroll = find.byType(Scrollable).first;
-    await tester.scrollUntilVisible(find.text('Batch Fetch / Replace Tags'), 250, scrollable: scannerScroll);
+    final scannerScroll = tester.state<ScrollableState>(find.byType(Scrollable).first).position;
+    // Scroll the page directly because dragging its center can hit the task log.
+    Future<void> showScannerItem(Finder item) async {
+      while (item.evaluate().isEmpty && scannerScroll.extentAfter > 0) {
+        final distance = scannerScroll.extentAfter.clamp(0.0, 250.0);
+        scannerScroll.jumpTo(scannerScroll.pixels + distance);
+        await tester.pump();
+      }
+      await tester.ensureVisible(item.first);
+    }
+
+    await showScannerItem(find.text('Batch Fetch / Replace Tags'));
     await tester.tap(find.text('Batch Fetch / Replace Tags').first);
     await tester.pumpAndSettle();
     expect(find.text('Jable'), findsOneWidget);
@@ -967,15 +984,25 @@ void main() {
     await tester.tap(find.text('Run Batch Update'));
     await tester.pumpAndSettle();
     expect(tagSourceUpdatedSource, 'jable');
+    scannerScroll.jumpTo(0);
+    await tester.pumpAndSettle();
     expect(find.text('Tag source updated (42)'), findsOneWidget);
 
     // Scanner: Collection Analysis -> Fix Corrupted Numbers (uses real backend schema + affected + ids)
-    await tester.scrollUntilVisible(find.text('Library Health & Number Fix').first, 250, scrollable: scannerScroll);
+    await showScannerItem(find.text('Library Health & Number Fix'));
     await tester.tap(find.text('Library Health & Number Fix').first);
     await tester.pumpAndSettle();
     expect(find.text('Total Videos'), findsOneWidget);
     expect(find.text('Missing NFO'), findsOneWidget);
     expect(find.text('Corrupted Numbers'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Missing field: maker'),
+      120,
+      scrollable: find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(Scrollable),
+      ),
+    );
     expect(find.text('Missing field: maker'), findsOneWidget);
     await tester.tap(find.text('Scan & Fix Corrupted Numbers'));
     await tester.pumpAndSettle();
@@ -985,7 +1012,7 @@ void main() {
     expect(fixNumbersAppliedIds, [99]);
 
     // Scanner: Actress Aliases uses plural /api/actress-aliases
-    await tester.scrollUntilVisible(find.text('Actress Aliases').first, 250, scrollable: scannerScroll);
+    await showScannerItem(find.text('Actress Aliases'));
     await tester.tap(find.text('Actress Aliases').first);
     await tester.pumpAndSettle();
     expect(aliasListRequested, true);
@@ -1006,6 +1033,11 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Release Year Distribution'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('HD (1)'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('HD (1)'), findsOneWidget);
 
     await tester.pumpWidget(
@@ -1026,7 +1058,9 @@ void main() {
     expect(fontScaleFor('xl'), greaterThan(1.0));
 
     // AI Settings section: presets, model quick-select, and connection test
-    await tester.tap(find.text('AI Services & Face Focus').first);
+    final aiSettingsTab = find.text('AI Services & Face Focus').first;
+    await tester.ensureVisible(aiSettingsTab);
+    await tester.tap(aiSettingsTab);
     await tester.pumpAndSettle();
     expect(find.text('DeepSeek'), findsOneWidget);
     await tester.ensureVisible(find.text('Fetch Models'));
@@ -1049,17 +1083,24 @@ void main() {
       of: find.byType(ListView).first,
       matching: find.byType(Scrollable),
     ).first;
-    await tester.scrollUntilVisible(find.text('Start Backfill').first, 250, scrollable: settingsScroll);
-    await tester.tap(find.text('Start Backfill').first);
-    await tester.pumpAndSettle();
+    Future<void> tapSettingsAction(String label) async {
+      final action = find.text(label);
+      await tester.scrollUntilVisible(action, 250, scrollable: settingsScroll);
+      await tester.pumpAndSettle();
+      await tester.tap(action.first);
+      await tester.pumpAndSettle();
+    }
+
+    await tapSettingsAction('Start Backfill');
     expect(similarBackfillStarted, true);
     expect(find.text('Running: 7 / 10'), findsOneWidget);
-    await tester.tap(find.text('Stop').first);
-    await tester.pumpAndSettle();
+    await tapSettingsAction('Stop');
     expect(similarBackfillStarted, false);
 
     // Metatube Connect preserves unsaved drafts + Source Probe (Map response) + Pending Scrape Folder typing
-    await tester.tap(find.text('Search, Proxy & Sources').first);
+    final sourcesTab = find.text('Search, Proxy & Sources').first;
+    await tester.ensureVisible(sourcesTab);
+    await tester.tap(sourcesTab);
     await tester.pumpAndSettle();
     final folderField = find.descendant(
       of: find.byWidgetPredicate(
@@ -1072,14 +1113,10 @@ void main() {
     await tester.enterText(folderField, '/storage/downloads');
     await tester.pump();
     expect(find.text('/storage/downloads'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Test Sources').first, 250, scrollable: settingsScroll);
-    await tester.tap(find.text('Test Sources').first);
-    await tester.pumpAndSettle();
+    await tapSettingsAction('Test Sources');
     expect(sourcesProbed, true);
     expect(find.text('OK'), findsWidgets);
-    await tester.scrollUntilVisible(find.text('Connect').first, 250, scrollable: settingsScroll);
-    await tester.tap(find.text('Connect').first);
-    await tester.pumpAndSettle();
+    await tapSettingsAction('Connect');
     expect(metatubeConnected, true);
     // Unsaved bar remains visible because Connect did not wipe other unsaved drafts
     expect(find.text('Unsaved changes'), findsOneWidget);

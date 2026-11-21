@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
@@ -34,12 +36,15 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
   bool _listView = false;
   String _sort = 'date';
   String _order = 'desc';
+  int? _randomSeed;
   int? _columnOverride; // null = responsive Auto
   int _page = 1;
   int _totalPages = 1;
   int _total = 0;
   static const int _perPage = 45;
-  Timer? _searchDebounce;
+  Timer? _reloadTimer;
+  CancelToken? _loadCancel;
+  Future<void>? _pendingMore;
 
   @override
   void initState() {
@@ -50,11 +55,43 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
+    _reloadTimer?.cancel();
+    _cancelLoad();
     _searchCtrl.dispose();
     _gridScroll.removeListener(_onScroll);
     _gridScroll.dispose();
     super.dispose();
+  }
+
+  void _cancelLoad() {
+    final cancel = _loadCancel;
+    _loadCancel = null;
+    _pendingMore = null;
+    cancel?.cancel();
+  }
+
+  bool _ownsLoad(CancelToken cancel) => mounted && _loadCancel == cancel;
+
+  void _resetLoadingState() {
+    _loading = true;
+    _loadingMore = false;
+    _error = null;
+    _page = 1;
+    _totalPages = 1;
+    _total = 0;
+  }
+
+  void _scheduleLoad(Duration delay) {
+    _reloadTimer?.cancel();
+    _cancelLoad();
+    setState(_resetLoadingState);
+    _reloadTimer = Timer(delay, _loadData);
+  }
+
+  void _onFilterChanged(String? previous, String? next) {
+    _actressMode = false;
+    // Clearing both filters is a single user action.
+    _scheduleLoad(Duration.zero);
   }
 
   void _onScroll() {
@@ -74,93 +111,46 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
     return 3;
   }
 
-  bool get _usesClientFilter {
+  Future<Map<String, dynamic>> _fetchVideoPage(int page, CancelToken cancel) {
     final query = _searchCtrl.text.trim();
-    final tagFilter = ref.read(showcaseTagFilterProvider);
-    return query.isNotEmpty ||
-        _favoritesOnly ||
-        _sort == 'random' ||
-        (tagFilter != null && tagFilter.isNotEmpty);
-  }
-
-  List<VideoItem> _filterClientVideos(List<VideoItem> raw) {
-    final query = _searchCtrl.text.trim().toLowerCase();
-    final tagFilter = ref.read(showcaseTagFilterProvider);
-    var items = raw;
-    if (_favoritesOnly) {
-      items = items.where((v) => v.isFavorite).toList();
-    }
-    if (tagFilter != null && tagFilter.isNotEmpty) {
-      final lowerTag = tagFilter.toLowerCase();
-      items = items
-          .where((v) =>
-              v.tags.any((t) => t.toLowerCase() == lowerTag) ||
-              v.userTags.any((t) => t.toLowerCase() == lowerTag))
-          .toList();
-    }
-    if (query.isNotEmpty) {
-      items = items.where((v) {
-        return v.number.toLowerCase().contains(query) ||
-            v.title.toLowerCase().contains(query) ||
-            v.maker.toLowerCase().contains(query) ||
-            v.director.toLowerCase().contains(query) ||
-            v.series.toLowerCase().contains(query) ||
-            v.label.toLowerCase().contains(query) ||
-            v.actresses.any((a) => a.toLowerCase().contains(query)) ||
-            v.tags.any((t) => t.toLowerCase().contains(query)) ||
-            v.userTags.any((t) => t.toLowerCase().contains(query));
-      }).toList();
-    }
-    if (_sort == 'random') {
-      items = List<VideoItem>.from(items)..shuffle();
-    } else {
-      items = List<VideoItem>.from(items);
-      int cmpStr(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
-      items.sort((a, b) {
-        final cmp = switch (_sort) {
-          'size' => a.size.compareTo(b.size),
-          'mdate' => a.mtime.compareTo(b.mtime),
-          'actor' => cmpStr(a.actresses.join(','), b.actresses.join(',')),
-          'title' => cmpStr(a.title, b.title),
-          'num' => cmpStr(a.number, b.number),
-          'maker' => cmpStr(a.maker, b.maker),
-          'date' => a.releaseDate.compareTo(b.releaseDate),
-          _ => a.path.compareTo(b.path),
-        };
-        return _order == 'asc' ? cmp : -cmp;
-      });
-    }
-    return items;
+    final actress = ref.read(showcaseActressFilterProvider);
+    final tag = ref.read(showcaseTagFilterProvider);
+    return ref.read(apiClientProvider).getJson(
+      '/api/showcase/videos',
+      queryParameters: {
+        'paged': true,
+        'page': page,
+        'per_page': _perPage,
+        'sort': _sort,
+        'order': _order,
+        if (query.isNotEmpty) 'q': query,
+        if (actress != null && actress.isNotEmpty) 'actress': actress,
+        if (tag != null && tag.isNotEmpty) 'tag': tag,
+        if (_favoritesOnly) 'favorites_only': true,
+        if (_sort == 'random') 'random_seed': _randomSeed,
+      },
+      cancelToken: cancel,
+    );
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
+    _reloadTimer?.cancel();
+    _reloadTimer = null;
+    _cancelLoad();
+    final cancel = CancelToken();
+    _loadCancel = cancel;
+    setState(_resetLoadingState);
+
     if (_actressMode) {
-      await _loadActresses();
+      await _loadActresses(cancel);
       return;
     }
-    final api = ref.read(apiClientProvider);
     final strings = ref.read(stringsProvider);
-    final actressFilter = ref.read(showcaseActressFilterProvider);
-    final useClientFilter = _usesClientFilter;
 
-    setState(() {
-      _loading = true;
-      _error = null;
-      _page = 1;
-    });
     try {
-      final resp = await api.getJson(
-        '/api/showcase/videos',
-        queryParameters: {
-          'paged': useClientFilter ? false : true,
-          'page': 1,
-          'per_page': useClientFilter ? 0 : _perPage,
-          'sort': _sort,
-          'order': _order,
-          if (actressFilter != null && actressFilter.isNotEmpty) 'actress': actressFilter,
-        },
-      );
-      if (!mounted) return;
+      final resp = await _fetchVideoPage(1, cancel);
+      if (!_ownsLoad(cancel)) return;
       if (resp['success'] != true) {
         setState(() {
           _loading = false;
@@ -169,17 +159,16 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
         return;
       }
       final parsed = VideosPageResponse.fromJson(resp);
-      final items = useClientFilter ? _filterClientVideos(parsed.videos) : parsed.videos;
       setState(() {
-        _videos = items;
-        _total = useClientFilter ? items.length : parsed.total;
-        _page = useClientFilter ? 1 : parsed.page;
-        _totalPages = useClientFilter ? 1 : parsed.totalPages;
+        _videos = parsed.videos;
+        _total = parsed.total;
+        _page = parsed.page;
+        _totalPages = parsed.totalPages;
         _loading = false;
       });
     } catch (e) {
+      if (!_ownsLoad(cancel)) return;
       debugPrint('Showcase _loadData error: $e');
-      if (!mounted) return;
       setState(() {
         _loading = false;
         _error = e.toString();
@@ -187,25 +176,21 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
     }
   }
 
-  Future<void> _loadMore() async {
-    if (_loadingMore || _usesClientFilter || _page >= _totalPages) return;
-    final api = ref.read(apiClientProvider);
-    final actressFilter = ref.read(showcaseActressFilterProvider);
-    final nextPage = _page + 1;
+  Future<void> _loadMore() {
+    final pending = _pendingMore;
+    if (pending != null) return pending;
+    final cancel = _loadCancel;
+    if (cancel == null || _loading || _actressMode || _page >= _totalPages) {
+      return Future.value();
+    }
+    return _pendingMore = _requestMore(_page + 1, cancel);
+  }
+
+  Future<void> _requestMore(int page, CancelToken cancel) async {
     setState(() => _loadingMore = true);
     try {
-      final resp = await api.getJson(
-        '/api/showcase/videos',
-        queryParameters: {
-          'paged': true,
-          'page': nextPage,
-          'per_page': _perPage,
-          'sort': _sort,
-          'order': _order,
-          if (actressFilter != null && actressFilter.isNotEmpty) 'actress': actressFilter,
-        },
-      );
-      if (!mounted) return;
+      final resp = await _fetchVideoPage(page, cancel);
+      if (!_ownsLoad(cancel)) return;
       if (resp['success'] == true) {
         final parsed = VideosPageResponse.fromJson(resp);
         final seen = _videos.map((e) => e.path).toSet();
@@ -218,30 +203,28 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
         });
       }
     } catch (e) {
+      if (!_ownsLoad(cancel)) return;
       debugPrint('Showcase _loadMore error: $e');
-      if (mounted) {
-        _toast(ref.read(stringsProvider).requestFailed('$e'));
-      }
+      _toast(ref.read(stringsProvider).requestFailed('$e'));
     } finally {
-      if (mounted) setState(() => _loadingMore = false);
+      if (_ownsLoad(cancel)) {
+        _pendingMore = null;
+        setState(() => _loadingMore = false);
+      }
     }
   }
 
-  Future<void> _loadActresses() async {
+  Future<void> _loadActresses(CancelToken cancel) async {
     final api = ref.read(apiClientProvider);
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
     try {
-      final libFuture = api.getJson('/api/actresses/library');
-      final favFuture = api.getJson('/api/actresses').catchError((Object e) {
-        debugPrint('fetch /api/actresses error: $e');
+      final libFuture = api.getJson('/api/actresses/library', cancelToken: cancel);
+      final favFuture = api.getJson('/api/actresses', cancelToken: cancel).catchError((Object e) {
+        if (_ownsLoad(cancel)) debugPrint('fetch /api/actresses error: $e');
         return <String, dynamic>{};
       });
       final libResp = await libFuture;
       final favResp = await favFuture;
-      if (!mounted) return;
+      if (!_ownsLoad(cancel)) return;
 
       final favByName = <String, ActressProfile>{};
       final favList = (favResp['actresses'] as List?) ?? const [];
@@ -315,8 +298,8 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
         _loading = false;
       });
     } catch (e) {
+      if (!_ownsLoad(cancel)) return;
       debugPrint('Showcase _loadActresses error: $e');
-      if (!mounted) return;
       setState(() {
         _loading = false;
         _error = e.toString();
@@ -385,7 +368,7 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
       cancelLabel: strings.cancel,
       confirmLabel: strings.add,
     );
-    if (name == null || name.trim().isEmpty) return;
+    if (!mounted || name == null || name.trim().isEmpty) return;
     final api = ref.read(apiClientProvider);
     try {
       final resp = await api.dio.post<dynamic>(
@@ -398,7 +381,7 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
       if (!mounted) return;
       if (resp.statusCode == 200 || resp.statusCode == 409) {
         _toast(resp.statusCode == 409 ? strings.actressAlreadyExists : strings.actressAdded);
-        _loadActresses();
+        if (_actressMode) _loadData();
       } else {
         _toast((body['message'] ?? body['error'] ?? strings.saveFailed).toString());
       }
@@ -427,70 +410,86 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
           actresses: _actresses,
           initialIndex: index,
           onActressUpdated: _updateActressItem,
-          onViewVideos: (name) {
-            ref.read(showcaseActressFilterProvider.notifier).setActress(name);
-            setState(() {
-              _actressMode = false;
-              _page = 1;
-            });
-            _loadData();
-          },
+          onViewVideos: _showActressVideos,
         ),
       ),
     );
   }
 
-  void _openDetail(int index) {
-    Navigator.of(context).push(
+  void _showActressVideos(String name) {
+    if (ref.read(showcaseActressFilterProvider) == name) {
+      if (_actressMode) {
+        setState(() => _actressMode = false);
+        _loadData();
+      }
+      return;
+    }
+    ref.read(showcaseActressFilterProvider.notifier).setActress(name);
+  }
+
+  Future<void> _openDetail(int index) async {
+    final cancel = _loadCancel;
+    final videos = _videos;
+    final total = _total;
+    final hasMore = _page < _totalPages;
+    var browseChanged = false;
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => VideoDetailPage(
-          videos: _videos,
+          videos: videos,
           initialIndex: index,
+          totalVideos: total,
+          loadMoreVideos: cancel == null || !hasMore
+              ? null
+              : () async {
+                  if (browseChanged || !_ownsLoad(cancel)) return null;
+                  await _loadMore();
+                  if (browseChanged || !_ownsLoad(cancel)) return null;
+                  return (videos: _videos, hasMore: _page < _totalPages);
+                },
           onVideoUpdated: (updated) {
-            if (!mounted) return;
-            setState(() {
-              final idx = _videos.indexWhere((v) => v.path == updated.path);
-              if (idx != -1) {
+            if (!mounted || (cancel != null && !_ownsLoad(cancel))) return;
+            final idx = _videos.indexWhere((v) => v.path == updated.path);
+            final previous = idx == -1 ? null : _videos[idx];
+            if (_searchCtrl.text.trim().isNotEmpty ||
+                ref.read(showcaseTagFilterProvider) != null ||
+                (_favoritesOnly && previous?.isFavorite != updated.isFavorite) ||
+                (_sort == 'title' && previous?.title != updated.title)) {
+              browseChanged = true;
+            }
+            if (idx != -1) {
+              setState(() {
                 final copy = List<VideoItem>.from(_videos);
                 copy[idx] = updated;
                 _videos = copy;
-              }
-            });
+              });
+            }
           },
           onVideoDeleted: (deletedPath) {
-            if (!mounted) return;
-            setState(() {
-              _videos = _videos.where((v) => v.path != deletedPath).toList();
-              _total = (_total - 1).clamp(0, _total);
-            });
+            if (!mounted || (cancel != null && !_ownsLoad(cancel))) return;
+            browseChanged = true;
+            if (_videos.any((v) => v.path == deletedPath)) {
+              setState(() {
+                _videos = _videos.where((v) => v.path != deletedPath).toList();
+                _total = (_total - 1).clamp(0, _total);
+              });
+            }
           },
-          onSelectActress: (name) {
-            ref.read(showcaseActressFilterProvider.notifier).setActress(name);
-            setState(() {
-              _actressMode = false;
-              _page = 1;
-            });
-            _loadData();
-          },
+          onSelectActress: _showActressVideos,
           onSelectTag: (tag) {
             ref.read(showcaseTagFilterProvider.notifier).setTag(tag);
-            setState(() {
-              _actressMode = false;
-              _page = 1;
-            });
-            _loadData();
           },
           onSelectFilterText: (term) {
             _searchCtrl.text = term;
-            setState(() {
-              _actressMode = false;
-              _page = 1;
-            });
+            setState(() => _actressMode = false);
             _loadData();
           },
         ),
       ),
     );
+    if (browseChanged && mounted && (cancel == null || _ownsLoad(cancel))) {
+      _loadData();
+    }
   }
 
   void _showSortSheet(AppStrings strings) {
@@ -555,6 +554,7 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
                       onSelected: (_) {
                         setState(() {
                           _sort = s.$1;
+                          _randomSeed = _sort == 'random' ? Random().nextInt(1 << 31) : null;
                           _page = 1;
                         });
                         Navigator.of(ctx).pop();
@@ -632,28 +632,9 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
     final actressFilter = ref.watch(showcaseActressFilterProvider);
     final tagFilter = ref.watch(showcaseTagFilterProvider);
 
-    ref.listen<String?>(showcaseActressFilterProvider, (prev, next) {
-      if (prev != next) {
-        _page = 1;
-        _actressMode = false;
-        _loadData();
-      }
-    });
-
-    ref.listen<String?>(showcaseTagFilterProvider, (prev, next) {
-      if (prev != next) {
-        _page = 1;
-        _actressMode = false;
-        _loadData();
-      }
-    });
-
-    ref.listen<int>(libraryRevisionProvider, (prev, next) {
-      if (prev != next) {
-        _page = 1;
-        _loadData();
-      }
-    });
+    ref.listen<String?>(showcaseActressFilterProvider, _onFilterChanged);
+    ref.listen<String?>(showcaseTagFilterProvider, _onFilterChanged);
+    ref.listen(libraryRevisionProvider, (_, _) => _loadData());
 
     return Scaffold(
       body: SafeArea(
@@ -679,11 +660,7 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
                                 },
                               ),
                       ),
-                      onChanged: (_) {
-                        setState(() {});
-                        _searchDebounce?.cancel();
-                        _searchDebounce = Timer(const Duration(milliseconds: 280), _loadData);
-                      },
+                      onChanged: (_) => _scheduleLoad(const Duration(milliseconds: 280)),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -714,14 +691,15 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
                     label: Text('${strings.allVideos} ($_total)'),
                     selected: !_actressMode && !_favoritesOnly && actressFilter == null && tagFilter == null,
                     onSelected: (_) {
-                      ref.read(showcaseActressFilterProvider.notifier).setActress(null);
-                      ref.read(showcaseTagFilterProvider.notifier).setTag(null);
+                      final hasFilters = ref.read(showcaseActressFilterProvider) != null ||
+                          ref.read(showcaseTagFilterProvider) != null;
                       setState(() {
                         _actressMode = false;
                         _favoritesOnly = false;
-                        _page = 1;
                       });
-                      _loadData();
+                      ref.read(showcaseActressFilterProvider.notifier).setActress(null);
+                      ref.read(showcaseTagFilterProvider.notifier).setTag(null);
+                      if (!hasFilters) _loadData();
                     },
                   ),
                   const SizedBox(width: 8),
@@ -758,8 +736,6 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
                       selected: true,
                       onDeleted: () {
                         ref.read(showcaseActressFilterProvider.notifier).setActress(null);
-                        setState(() => _page = 1);
-                        _loadData();
                       },
                     ),
                   ],
@@ -771,8 +747,6 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
                       selected: true,
                       onDeleted: () {
                         ref.read(showcaseTagFilterProvider.notifier).setTag(null);
-                        setState(() => _page = 1);
-                        _loadData();
                       },
                     ),
                   ],
@@ -1017,7 +991,7 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
                       padding: EdgeInsets.all(8),
                       child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
                     )
-                  : (_page < _totalPages && !_usesClientFilter
+                  : (_page < _totalPages
                       ? OutlinedButton(onPressed: _loadMore, child: Text(strings.loadingMore))
                       : Text(
                           '${_videos.length} / $_total · ${strings.allLoaded}',

@@ -10,6 +10,7 @@ import java.util.Map;
 import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.embedding.engine.FlutterEngineCache;
 import io.flutter.embedding.engine.dart.DartExecutor;
+import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
 /**
@@ -37,21 +38,7 @@ final class FlutterEngineManager {
                     engine.getDartExecutor().getBinaryMessenger(),
                     OpenAverFlutterActivity.CHANNEL_NAME
             );
-            channel.setMethodCallHandler((call, result) -> {
-                switch (call.method) {
-                    case "getBootstrapInfo":
-                        result.success(buildBootstrapPayload(appContext));
-                        break;
-                    case "syncNativeTheme":
-                    case "syncUiLocale":
-                    case "setTaskKeepAlive":
-                        result.success(null);
-                        break;
-                    default:
-                        result.notImplemented();
-                        break;
-                }
-            });
+            installBackgroundBridge(channel, appContext);
             engine.getDartExecutor().executeDartEntrypoint(
                     DartExecutor.DartEntrypoint.createDefault()
             );
@@ -61,6 +48,48 @@ final class FlutterEngineManager {
             Log.w(TAG, "FlutterEngine prewarm skipped; falling back to on-demand engine", error);
             return null;
         }
+    }
+
+    static void installBackgroundBridge(MethodChannel channel, Context context) {
+        Context appContext = context.getApplicationContext();
+        channel.setMethodCallHandler((call, result) -> {
+            switch (call.method) {
+                case "getBootstrapInfo":
+                    result.success(buildBootstrapPayload(appContext));
+                    break;
+                case "syncNativeTheme":
+                case "syncUiLocale":
+                    result.success(null);
+                    break;
+                case "consumeTaskCenterRequest":
+                    result.success(false);
+                    break;
+                case "setTaskKeepAlive":
+                    TaskKeepAliveService.setFlutterActive(
+                            appContext, Boolean.TRUE.equals(call.argument("active")));
+                    result.success(null);
+                    break;
+                case "updateTaskNotification":
+                    updateTaskNotification(call);
+                    result.success(null);
+                    break;
+                default:
+                    result.notImplemented();
+                    break;
+            }
+        });
+    }
+
+    static void updateTaskNotification(MethodCall call) {
+        Number taskCount = call.argument("taskCount");
+        Number progressCurrent = call.argument("progressCurrent");
+        Number progressTotal = call.argument("progressTotal");
+        TaskKeepAliveService.updateFlutterNotification(
+                taskCount == null ? 0 : taskCount.intValue(),
+                progressCurrent == null ? 0 : progressCurrent.intValue(),
+                progressCurrent == null || progressTotal == null ? 0 : progressTotal.intValue(),
+                call.argument("taskSummary")
+        );
     }
 
     static void notifyRuntimeReady(Context context) {

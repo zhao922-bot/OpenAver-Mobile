@@ -7,7 +7,7 @@ GET /api/similar-covers 端點（57b-T2）。
 - GET /api/similar-covers/{video_id}
 
 v0.8.7 rule-based ranker 取代 v0.8.6 CLIP embedding。
-API response shape 完全不變（CD-57b-5）。
+API response shape 相容（CD-57b-5），results 附帶 Showcase 查詢使用的 path。
 """
 from __future__ import annotations
 
@@ -102,6 +102,7 @@ def _compute_similar_covers(video_id: int, limit: int) -> dict:
         fresh_auto_focal, fresh_crop_mode = focal_crop_map.get(v.path, (v.auto_focal, v.crop_mode))
         results.append({
             "video_id": v.id,
+            "path": v.path,
             "number": v.number,
             "title": v.title,
             "cover_path": v.cover_path,

@@ -316,6 +316,23 @@ _INSIGHTS_COLUMNS = (
 )
 
 
+def _showcase_upper(value: Optional[str]) -> Optional[str]:
+    """Match Dart's one-code-point uppercase mapping for video numbers."""
+    if value is None:
+        return None
+    upper = value.upper()
+    if len(upper) == len(value):
+        return upper
+    result = []
+    for char in value:
+        simple = char.upper()
+        if len(simple) > 1:
+            # Greek letters with ypogegrammeni have a single titlecase form.
+            simple = char.title()
+        result.append(simple if len(simple) == 1 else char)
+    return ''.join(result)
+
+
 def _escape_like_prefix(value: str) -> str:
     """Escape SQLite LIKE wildcards before appending a trailing '%'."""
     return value.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
@@ -1256,6 +1273,25 @@ class VideoRepository:
                 Video.from_row(row, list(_SHOWCASE_COLUMNS))
                 for row in cursor.fetchall()
             ]
+        finally:
+            conn.close()
+
+    def get_showcase_lookup_rows(self, value: str, *, by_number: bool = False) -> List[Video]:
+        """Return exact matches in library order for the Showcase scope check."""
+        conn = self._get_connection()
+        try:
+            predicate = "title = ?"
+            if by_number:
+                # SQLite's built-in UPPER only handles ASCII. Flutter's number
+                # comparison was Unicode-aware, including for older DB rows.
+                conn.create_function("showcase_upper", 1, _showcase_upper)
+                predicate = "showcase_upper(number) = ?"
+                value = _showcase_upper(value)
+            columns = ', '.join(_SHOWCASE_COLUMNS)
+            rows = conn.execute(
+                f"SELECT {columns} FROM videos WHERE {predicate} ORDER BY id", (value,),
+            )
+            return [Video.from_row(row, list(_SHOWCASE_COLUMNS)) for row in rows]
         finally:
             conn.close()
 

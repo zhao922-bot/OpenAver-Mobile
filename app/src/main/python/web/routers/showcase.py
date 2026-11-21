@@ -7,6 +7,7 @@ Showcase API 路由 - 影片展示資料端點
 """
 
 import os
+import random
 import threading
 import uuid
 from pathlib import Path
@@ -50,7 +51,7 @@ from core.android_storage import (
 from core.focal import device_state, format_focal, parse_focal
 from core.focal.subprocess_runner import run_detection
 from core import thumbnail_cache
-from core.multipart_group import group_rows, resolve_group
+from core.multipart_group import VideoGroup, group_rows, part_token, resolve_group
 from core.i18n import get_config_locale, t as i18n_t
 
 logger = get_logger(__name__)
@@ -270,14 +271,57 @@ def _group_sort_key(group, sort: str):
     return video.path or ''
 
 
-def _sort_groups(groups, sort: str, order: str):
+def _browse_lower(value: str) -> str:
+    # Match Dart's simple lowercase mapping for dotted I and Greek sigma.
+    return value.replace('İ', 'i').replace('Σ', 'σ').lower()
+
+
+def _browse_csv_values(values):
+    # The mobile model splits and trims the comma-separated API fields.
+    return [value for part in ','.join(values or []).split(',') if (value := part.strip())]
+
+
+def _matches_browse_filters(video, keyword: str, tag: str, favorites_only: bool) -> bool:
+    if favorites_only and (video.user_rating or 0) <= 0:
+        return False
+    if not (tag or keyword):
+        return True
+    tags = (*_browse_csv_values(video.tags), *(video.user_tags or []))
+    if tag and not any(_browse_lower(str(value)) == tag for value in tags):
+        return False
+    if not keyword:
+        return True
+    fields = (
+        video.number, video.title, video.maker, video.director, video.series, video.label,
+        *_browse_csv_values(video.actresses), *tags,
+    )
+    return any(keyword in _browse_lower(str(value)) for value in fields if value is not None)
+
+
+def _sort_groups(groups, sort: str, order: str, *,
+                 random_seed: Optional[int] = None, filtered: bool = False):
     """Sort before slicing so server pages have stable global order."""
     if sort == 'random':
-        return groups
-    reverse = order == 'desc'
-    # Python's stable sort keeps DB insertion order for equal keys, matching
-    # the browser's stable Array.sort() semantics used by legacy clients.
-    return sorted(groups, key=lambda group: _group_sort_key(group, sort), reverse=reverse)
+        shuffled = list(groups)
+        random.Random(random_seed).shuffle(shuffled)
+        return shuffled
+
+    def key(group):
+        value = _group_sort_key(group, sort)
+        if not filtered:
+            return value
+        # Filtered mobile lists previously sorted their decoded display fields.
+        if sort == 'actor':
+            value = ','.join(_browse_csv_values(group.members[0].actresses))
+        if sort in {'actor', 'title', 'num', 'maker'}:
+            value = _browse_lower(value)
+        if sort == 'mdate':
+            return int(value)
+        # Dart compares strings by UTF-16 code unit.
+        return value.encode('utf-16-be') if isinstance(value, str) else value
+
+    # Keep DB insertion order for equal keys in either direction.
+    return sorted(groups, key=key, reverse=order == 'desc')
 
 
 _etag_matches = etag_matches
@@ -339,12 +383,20 @@ def get_videos(
     order: str = Query('desc'),
     paged: bool = Query(False),
     actress: Optional[str] = Query(None, max_length=200),
+    q: Optional[str] = None,
+    tag: Optional[str] = None,
+    favorites_only: bool = False,
+    random_seed: Optional[int] = None,
 ):
     """取得所有影片資料（用於 Showcase 頁面客戶端渲染）。
 
     ``actress`` 可選：先以 AliasRepository.resolve() 展開別名群組，再在
     SQLite 的 json_each 上做精確 membership 篩選，避免前端為女優牆下載
     整份片庫。篩選後的 rows 才進入 group/sort/pagination。
+
+    Mobile browse filters match the displayed member of each logical group.
+    Seeded random requests use paging when requested. Unseeded random requests
+    retain the classic full-list contract.
 
     帶 ETag（CD-145a-8/11/12）：涵蓋 DB 內部寫入 revision、DB/-wal 檔案指紋（涵蓋外部
     抽換或還原備份）、無機密設定投影（來源資料夾／path_mappings／縮圖開關）三項，
@@ -376,7 +428,12 @@ def get_videos(
             'title', 'actor', 'num', 'maker', 'date', 'size', 'mdate', 'random'
         } else 'date'
         requested_order = 'asc' if order == 'asc' else 'desc'
-        use_pagination = bool(paged and per_page > 0 and requested_sort != 'random')
+        use_pagination = bool(
+            paged and per_page > 0 and (requested_sort != 'random' or random_seed is not None)
+        )
+        keyword = _browse_lower((q or '').strip())
+        browse_tag = _browse_lower(tag or '')
+        has_browse_filters = bool(keyword or browse_tag or favorites_only)
 
         # Direct Python callers (tests and internal callers) may omit the
         # FastAPI Query default entirely, in which case the default object is
@@ -399,6 +456,8 @@ def get_videos(
             "order": requested_order if use_pagination else 'client',
             "actress_names": actress_names or [],
         }
+        if has_browse_filters:
+            projection.update(q=keyword, tag=browse_tag, favorites_only=favorites_only)
         revision = get_showcase_revision()
         db_fingerprint = compute_db_fingerprint(db_path)
         etag = None
@@ -424,10 +483,18 @@ def get_videos(
             db_fingerprint=db_fingerprint,
         )
 
+        if has_browse_filters:
+            groups = [
+                group for group in groups
+                if _matches_browse_filters(group.members[0], keyword, browse_tag, favorites_only)
+            ]
         total = len(groups)
         total_pages = 1
         if use_pagination:
-            groups = _sort_groups(groups, requested_sort, requested_order)
+            groups = _sort_groups(
+                groups, requested_sort, requested_order,
+                random_seed=random_seed, filtered=has_browse_filters,
+            )
             total_pages = max(1, (total + per_page - 1) // per_page)
             page = min(page, total_pages)
             start = (page - 1) * per_page
@@ -462,6 +529,66 @@ def get_videos(
             "videos": [],
             "total": 0
         }, status_code=500)
+
+
+def _find_showcase_video(repo, in_scope, path, number, title):
+    if path and in_scope(path):
+        video = repo.get_by_path(path)
+        if video is not None:
+            return video
+    for value, by_number in ((number, True), (title, False)):
+        if value:
+            for video in repo.get_showcase_lookup_rows(value, by_number=by_number):
+                if in_scope(video.path):
+                    return video
+    return None
+
+
+@router.get("/video/lookup")
+def lookup_video(
+    path: Optional[str] = None,
+    number: Optional[str] = None,
+    title: Optional[str] = None,
+):
+    """Find one logical Showcase video by path, exact number, or exact title."""
+    locale = None
+    try:
+        db_path = get_db_path()
+        if db_path.exists():
+            init_db(db_path)
+            config = load_config()
+            locale = _showcase_locale(config)
+            configured_dir_uris, path_mappings = get_configured_gallery_dirs(config)
+            repo = VideoRepository(db_path)
+
+            def in_scope(candidate):
+                return any(is_path_under_dir(candidate, uri) for uri in configured_dir_uris)
+
+            video = _find_showcase_video(
+                repo, in_scope, path, (number or '').strip(), (title or '').strip(),
+            )
+            if video is not None:
+                group = None
+                if part_token(uri_to_local_fs_path(video.path, path_mappings)):
+                    group = resolve_group(repo, video.path, path_mappings)
+                if group is None or not all(in_scope(member.path) for member in group.members):
+                    group = VideoGroup(members=[video], part_tokens=[])
+                return JSONResponse({
+                    "success": True,
+                    "video": _serialize_group(
+                        group, path_mappings, config.get('thumbnail_cache_enabled', False), locale,
+                    ),
+                })
+    except Exception as exc:
+        logger.error("取得單筆影片失敗: %s", exc)
+        return JSONResponse({
+            "success": False,
+            "error": _showcase_text("video_data_load_failed", locale or _showcase_locale()),
+        }, status_code=500)
+    return JSONResponse({
+        "success": False,
+        "error": _showcase_text("video_not_found", locale or _showcase_locale()),
+    }, status_code=404)
 
 
 @router.get("/video")

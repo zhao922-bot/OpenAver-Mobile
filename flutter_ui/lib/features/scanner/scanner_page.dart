@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +9,9 @@ import '../../core/app_theme.dart';
 import '../../core/l10n.dart';
 import '../../core/models/scanner_models.dart';
 import '../../core/native_bridge.dart';
+import '../settings/ai_backfill_bar.dart';
 import '../shared/prompt_dialog.dart';
+import '../task_center/task_center.dart';
 
 class ScannerPage extends ConsumerStatefulWidget {
   const ScannerPage({super.key});
@@ -23,17 +27,20 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
   String? _loadError;
   String _scrapeSource = 'auto';
 
-  bool _runningTask = false;
+  CancelToken? _taskCancel;
+  TaskJob? _centerJob;
+  bool _taskFinished = false;
+  bool get _runningTask => _taskCancel != null;
   String _taskLabel = '';
   double? _progress;
   String _statusLine = '';
   final List<String> _logs = [];
-  CancelToken? _taskCancel;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _loadStats();
       _checkMissing();
     });
@@ -41,7 +48,8 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
 
   @override
   void dispose() {
-    _taskCancel?.cancel();
+    final cancel = _taskCancel;
+    if (cancel != null && !cancel.isCancelled) cancel.cancel();
     super.dispose();
   }
 
@@ -86,22 +94,57 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
     String method = 'GET',
     Map<String, dynamic>? queryParameters,
     Object? data,
+    String? taskSubject,
   }) async {
-    if (_runningTask) return;
+    if (!mounted || _runningTask) return;
     final strings = ref.read(stringsProvider);
+    final api = ref.read(apiClientProvider);
+    final center = TaskCenter.forApi(api);
+    final kind = switch (path) {
+      '/api/gallery/generate' => TaskKind.scan,
+      '/api/gallery/tag-source-update' => TaskKind.batchTag,
+      '/api/gallery/tag-source-preview' => TaskKind.batchTagPreview,
+      _ => null,
+    };
     final cancel = CancelToken();
-    _taskCancel = cancel;
     setState(() {
-      _runningTask = true;
+      _taskCancel = cancel;
+      _taskFinished = false;
       _taskLabel = label;
       _progress = null;
       _statusLine = strings.starting;
       _logs.clear();
     });
-    await NativeBridge.instance.setTaskKeepAlive(true);
+    final keepAlive = NativeBridge.instance.acquireTaskKeepAlive();
+    final job = kind == null ? null : center.begin(kind, subject: taskSubject);
+    _centerJob = job;
+    if (job != null) {
+      job.setCancel(() async => _cancelTask(), available: () => !_taskFinished);
+    } else {
+      center.actionsChanged();
+    }
+
+    void offerRetry({String? numbers}) {
+      if (job == null) return;
+      job.setRetry(
+        () async {
+          unawaited(_runSseTask(
+            label: label,
+            path: path,
+            queryParameters: numbers == null
+                ? queryParameters
+                : {...?queryParameters, 'numbers': numbers},
+            taskSubject: taskSubject,
+          ));
+        },
+        available: () => mounted && !_runningTask &&
+            identical(api, ref.read(apiClientProvider)),
+      );
+    }
+
+    if (kind == TaskKind.scan || kind == TaskKind.batchTagPreview) offerRetry();
 
     try {
-      final api = ref.read(apiClientProvider);
       await for (final event in api.streamSse(
         path,
         method: method,
@@ -109,76 +152,163 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
         data: data,
         cancelToken: cancel,
       )) {
-        if (!mounted) break;
-        final msg = (event.data['message'] ?? event.data['status'] ?? '').toString();
-        if (event.type == 'progress' || event.type == 'result-item') {
-          final current = (event.data['current'] as num?)?.toDouble() ?? 0;
-          final total = (event.data['total'] as num?)?.toDouble() ?? 0;
-          final errorText = (event.data['error'] ?? '').toString().trim();
+        if (!mounted || cancel.isCancelled) break;
+        // The server closes the stream after its terminal event and cleanup.
+        if (_taskFinished) continue;
+        final msg = _taskText(event.data['message'] ?? event.data['status']);
+        if (event.type == 'done') {
+          final rawSummary = event.data['summary'];
+          final summary = rawSummary is Map ? rawSummary : const {};
+          final cancelled = event.data['cancelled'] == true ||
+              summary['cancelled'] == true;
+          final total = _taskInt(summary['total']);
+          final failed = _taskInt(summary['failed']);
+          final failedItems = summary['failed_items'];
+          final items = failedItems is List ? failedItems.whereType<Map>() : null;
+          if (items != null && (failed ?? 0) > 0 &&
+              (kind == TaskKind.batchTag || kind == TaskKind.batchTagPreview)) {
+            final numbers = items
+                .map((item) => _taskText(item['number']))
+                .where((number) => number.isNotEmpty && !number.contains(','))
+                .toSet()
+                .join(',');
+            if (numbers.isNotEmpty &&
+                Uri.encodeQueryComponent(numbers).length <= 4096) {
+              offerRetry(numbers: numbers);
+            }
+          }
+          var doneLine = msg;
+          if (!cancelled && doneLine.isEmpty &&
+              (event.data['video_count'] is num || event.data['stats'] is Map)) {
+            final stats = (event.data['stats'] as Map?) ?? const {};
+            doneLine = strings.scanSummary(
+              _taskInt(event.data['video_count']) ?? 0,
+              _taskInt(stats['inserted']) ?? 0,
+              _taskInt(stats['updated']) ?? 0,
+              _taskInt(stats['deleted']) ?? 0,
+            );
+          }
+          job?.report(
+            status: cancelled ? TaskStatus.cancelled : TaskStatus.succeeded,
+            message: doneLine,
+            current: cancelled ? null : total ?? job.total,
+            total: total,
+            failureCount: failed,
+            failureExamples: items?.map((item) {
+              final number = _taskText(item['number']);
+              final error = _taskText(item['error']);
+              return [number, error].where((text) => text.isNotEmpty).join(' · ');
+            }),
+          );
+          _finishTask(
+            doneLine.isNotEmpty ? doneLine :
+                (cancelled ? strings.taskCancelled : strings.taskDone),
+            marker: cancelled ? '■' : '',
+            succeeded: !cancelled,
+          );
+        } else if (event.type == 'error') {
+          final message = msg.isNotEmpty ? msg : strings.taskFailed;
+          job?.report(status: TaskStatus.failed, message: message);
+          _finishTask(message, marker: '✖');
+        } else if (event.type == 'progress' || event.type == 'result-item') {
+          final current = _taskInt(event.data['current']);
+          final total = _taskInt(event.data['total']);
+          final errorText = _taskText(event.data['error']);
+          if (current != null && total != null && total > 0) {
+            keepAlive.updateProgress(current, total);
+          }
+          job?.report(
+            current: current,
+            total: total,
+            message: msg.isNotEmpty ? msg : null,
+            failureCount: _taskInt(event.data['failed']),
+            failureExample: event.type == 'result-item' ? errorText : null,
+          );
           setState(() {
-            if (total > 0 && current > 0) {
-              _progress = (current / total).clamp(0.0, 1.0);
-            } else if (total > 0 && current <= 0 && _progress == null) {
-              _progress = null;
+            if (current != null && total != null && total > 0) {
+              _progress = (current / total).clamp(0.0, 0.99);
             }
             if (msg.isNotEmpty) {
               _statusLine = msg;
-            } else if (total > 0) {
-              _statusLine = '${current.toInt()} / ${total.toInt()}';
+            } else if (current != null && total != null && total > 0) {
+              _statusLine = '$current / $total';
             }
             if (event.type == 'result-item' && errorText.isNotEmpty) {
-              _logs.add(errorText);
-              if (_logs.length > 200) _logs.removeAt(0);
+              _appendTaskLog(errorText);
             }
           });
-        } else if (event.type == 'log') {
-          if (msg.isNotEmpty) {
-            setState(() {
-              _logs.add(msg);
-              if (_logs.length > 200) _logs.removeAt(0);
-            });
+        } else if (event.type == 'log' && msg.isNotEmpty) {
+          if (kind == TaskKind.scan) {
+            switch (event.data['level']) {
+              case 'error':
+                job?.report(failureExample: msg);
+              case 'warn' || 'warning':
+                job?.report(warningExample: msg);
+            }
           }
-        } else if (event.type == 'done') {
-          var doneLine = msg;
-          if (doneLine.isEmpty && (event.data['video_count'] is num || event.data['stats'] is Map)) {
-            final stats = event.data['stats'] is Map
-                ? Map<String, dynamic>.from(event.data['stats'] as Map)
-                : const <String, dynamic>{};
-            final totalCount = (event.data['video_count'] as num?)?.toInt() ?? 0;
-            final inserted = (stats['inserted'] as num?)?.toInt() ?? 0;
-            final updated = (stats['updated'] as num?)?.toInt() ?? 0;
-            final deleted = (stats['deleted'] as num?)?.toInt() ?? 0;
-            doneLine = strings.scanSummary(totalCount, inserted, updated, deleted);
-          }
-          setState(() {
-            _progress = 1.0;
-            _statusLine = doneLine.isNotEmpty ? doneLine : strings.taskDone;
-            if (doneLine.isNotEmpty) _logs.add('✔ $doneLine');
-          });
-        } else if (event.type == 'error') {
-          setState(() {
-            _statusLine = msg.isNotEmpty ? msg : strings.taskFailed;
-            if (msg.isNotEmpty) _logs.add('✖ $msg');
-          });
+          setState(() => _appendTaskLog(msg));
         }
       }
+      if (mounted && !cancel.isCancelled && !_taskFinished) {
+        job?.report(status: TaskStatus.interrupted, message: strings.taskStreamInterrupted);
+        _finishTask(strings.taskStreamInterrupted, marker: '✖');
+      }
     } catch (e) {
-      debugPrint('Scanner SSE error: $e');
-      if (!cancel.isCancelled && mounted) {
-        setState(() {
-          _statusLine = strings.requestFailed('$e');
-          _logs.add('✖ $e');
-        });
+      if (mounted && !cancel.isCancelled && !_taskFinished) {
+        debugPrint('Scanner SSE error: ${e.runtimeType}');
+        job?.report(status: TaskStatus.interrupted, message: strings.taskStreamInterrupted);
+        _finishTask(strings.requestFailed('$e'), marker: '✖');
       }
     } finally {
-      await NativeBridge.instance.setTaskKeepAlive(false);
+      if (job?.isActive == true) {
+        job!.report(
+          status: mounted && cancel.isCancelled ? TaskStatus.cancelled : TaskStatus.interrupted,
+          message: mounted && cancel.isCancelled ? strings.taskAborted : strings.taskStreamInterrupted,
+        );
+      }
+      keepAlive.release();
       if (mounted) {
-        setState(() => _runningTask = false);
+        setState(() {
+          _centerJob = null;
+          _taskCancel = null;
+        });
+        center.actionsChanged();
         _loadStats();
         _checkMissing();
         ref.read(libraryRevisionProvider.notifier).bump();
+        if (kind == TaskKind.scan && job?.status == TaskStatus.succeeded) {
+          unawaited(AiBackfillTask.refreshKnown(api));
+        }
       }
     }
+  }
+
+  void _cancelTask() {
+    final cancel = _taskCancel;
+    if (cancel == null || _taskFinished) return;
+    final message = ref.read(stringsProvider).taskAborted;
+    _finishTask(message);
+    _centerJob?.report(status: TaskStatus.cancelling);
+    cancel.cancel();
+  }
+
+  static String _taskText(Object? value) => value?.toString().trim() ?? '';
+  static int? _taskInt(Object? value) => value is num ? value.toInt() : null;
+
+
+  void _finishTask(String message, {String marker = '', bool succeeded = false}) {
+    setState(() {
+      _taskFinished = true;
+      if (succeeded) _progress = 1.0;
+      _statusLine = message;
+      final logMarker = succeeded ? '✔' : marker;
+      _appendTaskLog(logMarker.isEmpty ? message : '$logMarker $message');
+    });
+  }
+
+  void _appendTaskLog(String message) {
+    _logs.add(message);
+    if (_logs.length > 200) _logs.removeAt(0);
   }
 
   Future<void> _openTagSourceSheet() async {
@@ -299,6 +429,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                                     label: '${strings.batchTagSourcePreviewBtn} ($selectedLabel)',
                                     path: '/api/gallery/tag-source-preview',
                                     queryParameters: {'source': selectedId},
+                                    taskSubject: selectedLabel,
                                   );
                                 },
                           icon: const Icon(Icons.visibility_outlined, size: 18),
@@ -316,6 +447,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                                     label: '${strings.batchTagSourceTitle} ($selectedLabel)',
                                     path: '/api/gallery/tag-source-update',
                                     queryParameters: {'source': selectedId},
+                                    taskSubject: selectedLabel,
                                   );
                                 },
                           icon: const Icon(Icons.sell_outlined, size: 18),
@@ -690,13 +822,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                       if (_runningTask) ...[
                         const SizedBox(width: 10),
                         FilledButton.tonalIcon(
-                          onPressed: () {
-                            _taskCancel?.cancel();
-                            setState(() {
-                              _runningTask = false;
-                              _logs.add(strings.taskAborted);
-                            });
-                          },
+                          onPressed: _taskFinished ? null : _cancelTask,
                           icon: const Icon(Icons.stop_rounded),
                           label: Text(strings.stopTask),
                         ),
@@ -707,7 +833,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
               ),
             ),
 
-            if (_runningTask || _logs.isNotEmpty) ...[
+            if (_taskLabel.isNotEmpty) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(14),
@@ -721,14 +847,19 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                   children: [
                     Row(
                       children: [
-                        Text(_taskLabel, style: TextStyle(fontWeight: FontWeight.w700, color: palette.accent)),
-                        const Spacer(),
+                        Expanded(
+                          child: Text(_taskLabel, style: TextStyle(fontWeight: FontWeight.w700, color: palette.accent)),
+                        ),
+                        const SizedBox(width: 8),
                         if (_progress != null)
                           Text('${(_progress! * 100).toStringAsFixed(0)}%', style: TextStyle(color: palette.textMuted, fontSize: 12)),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    LinearProgressIndicator(value: _runningTask ? _progress : 1.0, minHeight: 5),
+                    LinearProgressIndicator(
+                      value: _progress ?? (_taskFinished ? 0.0 : null),
+                      minHeight: 5,
+                    ),
                     const SizedBox(height: 6),
                     Text(_statusLine, style: TextStyle(fontSize: 12, color: palette.textSecondary)),
                     if (_logs.isNotEmpty) ...[
@@ -757,10 +888,12 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             ],
 
             const SizedBox(height: 16),
-            Row(
+            Wrap(
+              spacing: 8,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(strings.missingCheckTitle, style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
-                const Spacer(),
                 DropdownButton<String>(
                   value: _scrapeSource,
                   underline: const SizedBox.shrink(),

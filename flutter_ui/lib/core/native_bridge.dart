@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
+import 'l10n.dart';
 
 class BootstrapInfo {
   const BootstrapInfo({
@@ -120,6 +124,17 @@ typedef BuiltInPlayerCallback = void Function(
 
 typedef RuntimeReadyCallback = void Function(BootstrapInfo info);
 
+class TaskKeepAliveLease {
+  TaskKeepAliveLease._(this._bridge);
+
+  final NativeBridge _bridge;
+
+  void updateProgress(int? current, int? total) =>
+      _bridge._updateTaskProgress(this, current, total);
+
+  void release() => _bridge._releaseTaskKeepAlive(this);
+}
+
 class NativeBridge {
   NativeBridge._() {
     _channel.setMethodCallHandler(_handleIncoming);
@@ -130,6 +145,16 @@ class NativeBridge {
 
   BuiltInPlayerCallback? onOpenBuiltInPlayer;
   RuntimeReadyCallback? onRuntimeReady;
+  VoidCallback? onTaskCenterRequested;
+
+  Future<bool> consumeTaskCenterRequest() async {
+    try {
+      return await _channel.invokeMethod<bool>('consumeTaskCenterRequest') == true;
+    } catch (e) {
+      debugPrint('Task Center request unavailable: ${e.runtimeType}');
+      return false;
+    }
+  }
 
   Future<void> _handleIncoming(MethodCall call) async {
     if (call.method == 'openBuiltInPlayer') {
@@ -140,6 +165,8 @@ class NativeBridge {
       if (parts.isNotEmpty) {
         onOpenBuiltInPlayer?.call(path.isNotEmpty ? path : parts.first.path, part, parts);
       }
+    } else if (call.method == 'taskCenterRequested') {
+      onTaskCenterRequested?.call();
     } else if (call.method == 'onRuntimeReady') {
       final raw = call.arguments as Map<Object?, Object?>?;
       if (raw != null) {
@@ -153,6 +180,29 @@ class NativeBridge {
     return BootstrapInfo.fromMap(raw ?? const {});
   }
 
+  Future<Duration> readPlaybackPosition(String path) async {
+    try {
+      final milliseconds = await _channel.invokeMethod<int>(
+        'readPlaybackPosition',
+        {'path': path},
+      );
+      return Duration(milliseconds: milliseconds ?? 0);
+    } catch (_) {
+      return Duration.zero;
+    }
+  }
+
+  Future<void> savePlaybackPosition(String path, Duration position) async {
+    try {
+      await _channel.invokeMethod<void>('savePlaybackPosition', {
+        'path': path,
+        'milliseconds': position.inMilliseconds,
+      });
+    } catch (error) {
+      debugPrint('Unable to save playback position: ${error.runtimeType}');
+    }
+  }
+
   Future<bool> openExternalPlayer({required String path, String? partsJson}) async {
     final result = await _channel.invokeMethod<bool>('openExternalPlayer', {
       'path': path,
@@ -161,7 +211,71 @@ class NativeBridge {
     return result ?? false;
   }
 
-  Future<void> setTaskKeepAlive(bool active) async {
+  final _taskKeepAliveLeases = <TaskKeepAliveLease, (int, int)?>{};
+  (int, (int, int)?, String)? _lastTaskNotification;
+  AppStrings _taskNotificationStrings = AppStrings('zh-CN');
+
+  void setTaskNotificationStrings(AppStrings strings) {
+    _taskNotificationStrings = strings;
+    _publishTaskNotification();
+  }
+
+  TaskKeepAliveLease acquireTaskKeepAlive() {
+    final lease = TaskKeepAliveLease._(this);
+    _taskKeepAliveLeases[lease] = null;
+    if (_taskKeepAliveLeases.length == 1) {
+      unawaited(_setTaskKeepAlive(true));
+    }
+    _publishTaskNotification();
+    return lease;
+  }
+
+  void _updateTaskProgress(TaskKeepAliveLease lease, int? current, int? total) {
+    if (!_taskKeepAliveLeases.containsKey(lease)) return;
+    _taskKeepAliveLeases[lease] = current != null && total != null && total > 0
+        ? (current.clamp(0, total), total)
+        : null;
+    _publishTaskNotification();
+  }
+
+  void _releaseTaskKeepAlive(TaskKeepAliveLease lease) {
+    if (!_taskKeepAliveLeases.containsKey(lease)) return;
+    _taskKeepAliveLeases.remove(lease);
+    if (_taskKeepAliveLeases.isEmpty) {
+      _lastTaskNotification = null;
+      unawaited(_setTaskKeepAlive(false));
+    } else {
+      _publishTaskNotification();
+    }
+  }
+
+  void _publishTaskNotification() {
+    final count = _taskKeepAliveLeases.length;
+    if (count == 0) return;
+    // Different workers may count different units. Display the task count
+    // when several are active, and the remaining worker's progress when alone.
+    final progress = count == 1 ? _taskKeepAliveLeases.values.single : null;
+    final summary = _taskNotificationStrings.taskCenterNotificationCount(count);
+    final notification = (count, progress, summary);
+    if (notification == _lastTaskNotification) return;
+    _lastTaskNotification = notification;
+    unawaited(_sendTaskNotification(count, progress, summary));
+  }
+
+  Future<void> _sendTaskNotification(int count, (int, int)? progress, String summary) async {
+    try {
+      await _channel.invokeMethod<void>('updateTaskNotification', {
+        'taskCount': count,
+        if (progress != null) 'progressCurrent': progress.$1,
+        if (progress != null) 'progressTotal': progress.$2,
+        'taskSummary': summary,
+      });
+    } catch (e) {
+      debugPrint('Task notification update unavailable: ${e.runtimeType}');
+    }
+  }
+
+  Future<void> _setTaskKeepAlive(bool active) async {
     try {
       await _channel.invokeMethod<void>('setTaskKeepAlive', {'active': active});
     } catch (e) {

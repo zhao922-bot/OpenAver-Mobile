@@ -72,6 +72,14 @@ class AppStrings {
         ko: '작업 실패: $err',
       );
 
+  String get playbackFailed => tr(
+        zhCn: '无法播放此视频',
+        zhTw: '無法播放此影片',
+        ja: '動画を再生できません',
+        en: 'Unable to play this video',
+        ko: '동영상을 재생할 수 없습니다',
+      );
+
   // Showcase & Actress Wall
   String get searchLibraryHint => tr(
         zhCn: '搜索番号、标题、演员、片商、标签…',
@@ -367,6 +375,20 @@ class AppStrings {
   String get taskDone => tr(zhCn: '任务完成', zhTw: '任務完成', ja: 'タスク完了', en: 'Task completed', ko: '작업 완료');
   String get taskFailed => tr(zhCn: '执行失败', zhTw: '執行失敗', ja: '実行失敗', en: 'Task failed', ko: '실행 실패');
   String get taskAborted => tr(zhCn: '■ 用户已请求中止任务', zhTw: '■ 使用者已請求中止任務', ja: '■ ユーザーにより中止されました', en: '■ Cancelled by user', ko: '■ 사용자에 의해 중지됨');
+  String get taskCancelled => tr(
+    zhCn: '任务已取消',
+    zhTw: '任務已取消',
+    ja: 'タスクはキャンセルされました',
+    en: 'Task cancelled',
+    ko: '작업이 취소되었습니다',
+  );
+  String get taskStreamInterrupted => tr(
+    zhCn: '任务结束前连接已断开',
+    zhTw: '任務結束前連線已中斷',
+    ja: 'タスクの終了前に接続が切断されました',
+    en: 'Connection closed before the task reported a result',
+    ko: '작업 결과를 받기 전에 연결이 끊겼습니다',
+  );
   String get checking => tr(zhCn: '检查中…', zhTw: '檢查中…', ja: '確認中…', en: 'Checking…', ko: '확인 중…');
   String get scrapeSourceLabel => tr(zhCn: '补全来源', zhTw: '補全來源', ja: '補完ソース', en: 'Source', ko: '소스');
 
@@ -644,4 +666,186 @@ class AppStrings {
         en: 'Run Batch Update',
         ko: '일괄 업데이트 시작',
       );
+
+  // Task Center
+  String get taskCenterTitle => tr(
+        zhCn: '任务中心', zhTw: '任務中心', ja: 'タスクセンター',
+        en: 'Task Center', ko: '작업 센터',
+      );
+  String get taskCenterTab => tr(
+        zhCn: '任务', zhTw: '任務', ja: 'タスク', en: 'Tasks', ko: '작업',
+      );
+  String taskCenterNotificationCount(int count) => tr(
+        zhCn: '$count 个任务正在进行',
+        zhTw: '$count 個任務正在進行',
+        ja: '$count 件のタスクが実行中',
+        en: count == 1 ? '1 active task' : '$count active tasks',
+        ko: '진행 중인 작업 $count개',
+      );
+  String get taskCenterCurrent => tr(
+        zhCn: '当前任务', zhTw: '目前任務', ja: '進行中のタスク',
+        en: 'Current tasks', ko: '진행 중인 작업',
+      );
+  String get taskCenterRecent => tr(
+        zhCn: '最近任务', zhTw: '最近的任務', ja: '最近のタスク',
+        en: 'Recent tasks', ko: '최근 작업',
+      );
+  String get taskCenterEmpty => tr(
+        zhCn: '暂无当前或最近的任务',
+        zhTw: '目前沒有進行中或最近的任務',
+        ja: '進行中または最近のタスクはありません',
+        en: 'No current or recent tasks',
+        ko: '진행 중이거나 최근에 실행한 작업이 없습니다',
+      );
+  String get taskCenterScan => tr(
+        zhCn: '片库扫描', zhTw: '片庫掃描', ja: 'ライブラリのスキャン',
+        en: 'Library scan', ko: '라이브러리 스캔',
+      );
+  String get taskCenterBatchTag => tr(
+        zhCn: '批量更新标签', zhTw: '批次更新標籤', ja: 'タグの一括更新',
+        en: 'Batch tag update', ko: '태그 일괄 업데이트',
+      );
+  String get taskCenterBatchTagPreview => tr(
+        zhCn: '批量标签预览', zhTw: '批次標籤預覽', ja: 'タグ一括更新のプレビュー',
+        en: 'Batch tag preview', ko: '태그 일괄 업데이트 미리보기',
+      );
+  String get taskCenterSimilar => tr(
+        zhCn: 'AI 相似推荐索引', zhTw: 'AI 相似推薦索引', ja: 'AI 類似作品のインデックス作成',
+        en: 'AI similarity indexing', ko: 'AI 유사 작품 색인',
+      );
+  String get taskCenterFaces => tr(
+        zhCn: 'AI 人脸回填', zhTw: 'AI 人臉回填', ja: 'AI 顔検出のバックフィル',
+        en: 'AI face detection backfill', ko: 'AI 얼굴 감지 백필',
+      );
+  String get taskCenterAiTags => tr(
+        zhCn: 'AI 标签回填', zhTw: 'AI 標籤回填', ja: 'AI タグのバックフィル',
+        en: 'AI tag backfill', ko: 'AI 태그 백필',
+      );
+  String get taskCenterRunning => tr(
+        zhCn: '运行中', zhTw: '執行中', ja: '実行中', en: 'Running', ko: '실행 중',
+      );
+  String get taskCenterCancelling => tr(
+        zhCn: '正在取消', zhTw: '正在取消', ja: 'キャンセル中',
+        en: 'Cancelling', ko: '취소 중',
+      );
+  String get taskCenterCompletedWithFailures => tr(
+        zhCn: '已完成，部分失败', zhTw: '已完成，部分失敗', ja: '一部失敗して完了',
+        en: 'Completed with failures', ko: '완료됨 (일부 실패)',
+      );
+  String get taskCenterCancelled => tr(
+        zhCn: '已取消', zhTw: '已取消', ja: 'キャンセル済み',
+        en: 'Cancelled', ko: '취소됨',
+      );
+  String get taskCenterStopped => tr(
+        zhCn: '已停止', zhTw: '已停止', ja: '停止済み', en: 'Stopped', ko: '중지됨',
+      );
+  String get taskCenterInterrupted => tr(
+        zhCn: '已中断', zhTw: '已中斷', ja: '中断', en: 'Interrupted', ko: '중단됨',
+      );
+  String taskCenterProcessed(int count) => tr(
+        zhCn: '已处理 $count 项', zhTw: '已處理 $count 項',
+        ja: '$count 件処理済み', en: '$count processed', ko: '$count건 처리됨',
+      );
+  String taskCenterProgress(int current, int total) => tr(
+        zhCn: '已处理 $current / $total 项', zhTw: '已處理 $current / $total 項',
+        ja: '$current / $total 件処理済み', en: '$current of $total processed',
+        ko: '$total건 중 $current건 처리됨',
+      );
+  String get taskCenterProgressUnknown => tr(
+        zhCn: '等待进度信息', zhTw: '等待進度資訊', ja: '進捗情報を待機中',
+        en: 'Waiting for progress', ko: '진행 정보 대기 중',
+      );
+  String taskCenterFailureCount(int count) => tr(
+        zhCn: '$count 项失败', zhTw: '$count 項失敗', ja: '$count 件失敗',
+        en: count == 1 ? '1 item failed' : '$count items failed',
+        ko: '$count건 실패',
+      );
+  String taskCenterWarningCount(int count) => tr(
+        zhCn: '$count 条警告', zhTw: '$count 則警告', ja: '警告 $count 件',
+        en: count == 1 ? '1 warning' : '$count warnings', ko: '경고 $count건',
+      );
+  String get taskCenterWarningExamples => tr(
+        zhCn: '警告示例', zhTw: '警告範例', ja: '警告の例',
+        en: 'Sample warnings', ko: '경고 예시',
+      );
+  String get taskCenterFailureExamples => tr(
+        zhCn: '错误示例', zhTw: '錯誤範例', ja: 'エラーの例',
+        en: 'Sample errors', ko: '오류 예시',
+      );
+  String get taskCenterDetails => tr(
+        zhCn: '任务详情', zhTw: '任務詳情', ja: 'タスクの詳細',
+        en: 'Task details', ko: '작업 상세',
+      );
+  String taskCenterSource(String source) => tr(
+        zhCn: '来源：$source', zhTw: '來源：$source', ja: '取得元：$source',
+        en: 'Source: $source', ko: '출처: $source',
+      );
+  String taskCenterStarted(String time) => tr(
+        zhCn: '开始于 $time', zhTw: '開始於 $time', ja: '開始時刻：$time',
+        en: 'Started at $time', ko: '시작: $time',
+      );
+  String taskCenterFinished(String time) => tr(
+        zhCn: '结束于 $time', zhTw: '結束於 $time', ja: '終了時刻：$time',
+        en: 'Finished at $time', ko: '종료: $time',
+      );
+  String get taskCenterActionFailed => tr(
+        zhCn: '无法执行此操作', zhTw: '無法執行此操作', ja: '操作を実行できませんでした',
+        en: 'Unable to complete the action', ko: '작업을 완료할 수 없습니다',
+      );
+  String taskCenterReason(String reason) => switch (reason) {
+        'disabled' || 'not_enabled' => tr(
+            zhCn: '此功能已禁用', zhTw: '此功能已停用', ja: 'この機能は無効です',
+            en: 'This feature is disabled', ko: '이 기능은 꺼져 있습니다',
+          ),
+        'request_failed' || 'test_failed' => taskCenterActionFailed,
+        'error' => taskFailed,
+        'model_changed' => tr(
+            zhCn: '服务模型已更改', zhTw: '服務模型已變更', ja: 'サービスのモデルが変更されました',
+            en: 'The service model changed', ko: '서비스 모델이 변경되었습니다',
+          ),
+        'nothing_pending' || 'nothing_to_do' => tr(
+            zhCn: '没有待处理项目', zhTw: '沒有待處理項目', ja: '処理待ちの項目はありません',
+            en: 'No pending items', ko: '처리할 항목이 없습니다',
+          ),
+        'no_target' => tr(
+            zhCn: '尚未设定目标模型', zhTw: '尚未設定目標模型', ja: '対象モデルが未設定です',
+            en: 'The target model is not configured', ko: '대상 모델이 설정되지 않았습니다',
+          ),
+        'connection_changed' => tr(
+            zhCn: '服务连接已更改', zhTw: '服務連線已變更', ja: 'サービスの接続設定が変更されました',
+            en: 'The service connection changed', ko: '서비스 연결이 변경되었습니다',
+          ),
+        'auth' => tr(
+            zhCn: '服务身份验证失败', zhTw: '服務驗證失敗', ja: 'サービスの認証に失敗しました',
+            en: 'Service authentication failed', ko: '서비스 인증에 실패했습니다',
+          ),
+        'contract' => tr(
+            zhCn: '服务响应与预期不符', zhTw: '服務回應不符預期', ja: 'サービスの応答形式が想定と異なります',
+            en: 'The service returned an incompatible response', ko: '서비스 응답 형식이 호환되지 않습니다',
+          ),
+        'unreachable' => tr(
+            zhCn: '无法连接服务', zhTw: '無法連線至服務', ja: 'サービスに接続できません',
+            en: 'The service could not be reached', ko: '서비스에 연결할 수 없습니다',
+          ),
+        'not_configured' => tr(
+            zhCn: '尚未配置服务', zhTw: '尚未設定服務', ja: 'サービスが設定されていません',
+            en: 'The service is not configured', ko: '서비스가 설정되지 않았습니다',
+          ),
+        'model_unsupported' => tr(
+            zhCn: '当前模型不支持此任务', zhTw: '目前的模型不支援此任務', ja: '現在のモデルはこのタスクに対応していません',
+            en: 'The current model does not support this task', ko: '현재 모델이 이 작업을 지원하지 않습니다',
+          ),
+        'quota' => tr(
+            zhCn: '服务用量已达上限', zhTw: '服務用量已達上限', ja: 'サービスの利用上限に達しました',
+            en: 'The service usage limit was reached', ko: '서비스 사용 한도에 도달했습니다',
+          ),
+        'user' => tr(
+            zhCn: '用户请求停止', zhTw: '使用者要求停止', ja: 'ユーザーが停止を要求しました',
+            en: 'Stopped by request', ko: '사용자 요청으로 중지되었습니다',
+          ),
+        _ => tr(
+            zhCn: '原因：$reason', zhTw: '原因：$reason', ja: '理由：$reason',
+            en: 'Reason: $reason', ko: '이유: $reason',
+          ),
+      };
 }

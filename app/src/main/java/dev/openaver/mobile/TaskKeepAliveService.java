@@ -9,11 +9,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
-import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.util.Log;
 
 import java.util.Locale;
+import java.util.Objects;
 
 public final class TaskKeepAliveService extends Service {
     private static final String TAG = "OpenAverTaskKeepAlive";
@@ -22,9 +24,19 @@ public final class TaskKeepAliveService extends Service {
     private static final String PREFS_NAME = "openaver_mobile";
     private static final String PREF_UI_LOCALE = "ui_locale";
     private static final String DEFAULT_UI_LOCALE = "zh-CN";
+    private static final long NOTIFICATION_REFRESH_INTERVAL_MS = 750L;
 
-    private static volatile boolean running = false;
-    private static volatile boolean requested = false;
+    private static TaskKeepAliveService runningService;
+    private static boolean requested = false;
+    private static boolean classicRequested = false;
+    private static boolean flutterRequested = false;
+    private static int flutterTaskCount;
+    private static int flutterProgressCurrent;
+    private static int flutterProgressTotal;
+    private static String flutterTaskSummary;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable notificationRefresh = this::refreshNotificationNow;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -39,13 +51,84 @@ public final class TaskKeepAliveService extends Service {
     }
 
     static boolean isRunning() {
-        return running;
+        return runningService != null;
     }
 
     static void start(Context context) {
-        requested = true;
-        createNotificationChannel(context);
-        startNow(context);
+        classicRequested = true;
+        updateRequested(context);
+    }
+
+    static void stop(Context context) {
+        classicRequested = false;
+        updateRequested(context);
+    }
+
+    static void setFlutterActive(Context context, boolean active) {
+        if (active == flutterRequested) {
+            return;
+        }
+        flutterRequested = active;
+        if (!active) {
+            clearFlutterNotification();
+        }
+        updateRequested(context);
+        refreshNotification();
+    }
+
+    static void stopAll(Context context) {
+        classicRequested = false;
+        flutterRequested = false;
+        clearFlutterNotification();
+        updateRequested(context);
+    }
+
+    static void updateFlutterNotification(int taskCount, int current, int total, String summary) {
+        if (!flutterRequested) {
+            return;
+        }
+        taskCount = Math.max(0, taskCount);
+        total = taskCount > 0 ? Math.max(0, total) : 0;
+        current = Math.max(0, Math.min(current, total));
+        summary = taskCount > 0 && summary != null && !summary.trim().isEmpty() ? summary : null;
+        if (taskCount == flutterTaskCount && current == flutterProgressCurrent
+                && total == flutterProgressTotal && Objects.equals(summary, flutterTaskSummary)) {
+            return;
+        }
+        flutterTaskCount = taskCount;
+        flutterProgressCurrent = current;
+        flutterProgressTotal = total;
+        flutterTaskSummary = summary;
+        if (runningService != null) {
+            runningService.scheduleNotificationRefresh();
+        }
+    }
+
+    static void refreshNotification() {
+        if (runningService != null) {
+            runningService.refreshNotificationNow();
+        }
+    }
+
+    private static void clearFlutterNotification() {
+        flutterTaskCount = 0;
+        flutterProgressCurrent = 0;
+        flutterProgressTotal = 0;
+        flutterTaskSummary = null;
+    }
+
+    private static void updateRequested(Context context) {
+        boolean active = classicRequested || flutterRequested;
+        if (active == requested) {
+            return;
+        }
+        requested = active;
+        if (active) {
+            createNotificationChannel(context);
+            startNow(context);
+        } else {
+            stopNow(context);
+        }
     }
 
     private static void startNow(Context context) {
@@ -57,11 +140,10 @@ public final class TaskKeepAliveService extends Service {
         }
     }
 
-    static void stop(Context context) {
-        requested = false;
+    private static void stopNow(Context context) {
         // A pending foreground start must reach startForeground before being
         // stopped, otherwise Android can kill the app for missing its deadline.
-        if (!running) {
+        if (!isRunning()) {
             return;
         }
         try {
@@ -75,7 +157,7 @@ public final class TaskKeepAliveService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         createNotificationChannel(this);
         startForeground(NOTIFICATION_ID, buildNotification());
-        running = true;
+        runningService = this;
         if (!requested) {
             stopSelf();
         }
@@ -84,9 +166,27 @@ public final class TaskKeepAliveService extends Service {
 
     @Override
     public void onDestroy() {
-        running = false;
+        runningService = null;
+        handler.removeCallbacks(notificationRefresh);
         stopForeground(true);
         super.onDestroy();
+    }
+
+    private void scheduleNotificationRefresh() {
+        if (!handler.hasCallbacks(notificationRefresh)) {
+            handler.postDelayed(notificationRefresh, NOTIFICATION_REFRESH_INTERVAL_MS);
+        }
+    }
+
+    private void refreshNotificationNow() {
+        handler.removeCallbacks(notificationRefresh);
+        if (!requested) {
+            return;
+        }
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager != null) {
+            manager.notify(NOTIFICATION_ID, buildNotification());
+        }
     }
 
     @Override
@@ -112,14 +212,13 @@ public final class TaskKeepAliveService extends Service {
 
     private Notification buildNotification() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        String uiMode = prefs.getString("ui_mode", "flutter");
-        Intent launchIntent;
-        if ("flutter".equals(uiMode) && MobileRuntimeSession.isReady()) {
-            launchIntent = new Intent(this, OpenAverFlutterActivity.class)
-                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        } else {
-            launchIntent = new Intent(this, MainActivity.class)
-                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        boolean flutterUi = "flutter".equals(prefs.getString("ui_mode", "flutter"));
+        Class<?> launchActivity = flutterUi && MobileRuntimeSession.isReady()
+                ? OpenAverFlutterActivity.class : MainActivity.class;
+        Intent launchIntent = new Intent(this, launchActivity)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        if (flutterUi) {
+            launchIntent.setAction(OpenAverFlutterActivity.ACTION_OPEN_TASK_CENTER);
         }
         PendingIntent contentIntent = PendingIntent.getActivity(
                 this,
@@ -128,10 +227,13 @@ public final class TaskKeepAliveService extends Service {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
+        boolean showFlutterTasks = flutterUi && flutterRequested && flutterTaskCount > 0;
+        String message = showFlutterTasks && flutterTaskSummary != null
+                ? flutterTaskSummary : getString(R.string.task_keepalive_message);
         Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_openaver)
                 .setContentTitle(getString(R.string.task_keepalive_title))
-                .setContentText(getString(R.string.task_keepalive_message))
+                .setContentText(message)
                 .setContentIntent(contentIntent)
                 .setColor(getColor(R.color.accent))
                 .setCategory(Notification.CATEGORY_PROGRESS)
@@ -139,6 +241,12 @@ public final class TaskKeepAliveService extends Service {
                 .setOnlyAlertOnce(true)
                 .setShowWhen(false)
                 .setVisibility(Notification.VISIBILITY_PUBLIC);
+        if (showFlutterTasks) {
+            builder.setNumber(flutterTaskCount);
+            if (flutterProgressTotal > 0) {
+                builder.setProgress(flutterProgressTotal, flutterProgressCurrent, false);
+            }
+        }
         return builder.build();
     }
 }

@@ -20,9 +20,12 @@ class SettingsPage extends ConsumerStatefulWidget {
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _loading = true;
   bool _saving = false;
-  bool _dirty = false;
+  int _draftRevision = 0;
+  int _savedRevision = 0;
   String? _error;
   String _activeSection = 'all';
+
+  bool get _dirty => _draftRevision != _savedRevision;
 
   Map<String, dynamic> _config = {};
   TreeAccessInfo _treeInfo = const TreeAccessInfo(granted: false, description: '');
@@ -103,7 +106,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _metatubeProviderCount = (mtStatus['providers'] as List?)?.length ?? 0;
           _treeInfo = tree;
           _storageGranted = storage;
-          _dirty = false;
+          _savedRevision = _draftRevision;
           _loading = false;
         });
       } else {
@@ -125,7 +128,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   void _markDirty(VoidCallback mutate) {
     setState(() {
       mutate();
-      _dirty = true;
+      _draftRevision++;
     });
   }
 
@@ -156,17 +159,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _saveConfig() async {
+    if (_saving || !_dirty) return;
     final strings = ref.read(stringsProvider);
+    final revision = _draftRevision;
     setState(() => _saving = true);
     try {
+      final snapshot = jsonDecode(jsonEncode(_config)) as Map<String, dynamic>;
       final api = ref.read(apiClientProvider);
-      final resp = await api.dio.put<dynamic>('/api/config', data: _config);
+      final resp = await api.dio.put<dynamic>('/api/config', data: snapshot);
       final body = resp.data is Map ? Map<String, dynamic>.from(resp.data as Map) : const <String, dynamic>{};
       if (!mounted) return;
       if (resp.statusCode == 200 && body['success'] != false) {
-        setState(() => _dirty = false);
+        if (_draftRevision == revision) {
+          _savedRevision = revision;
+          _toast(strings.saved);
+        }
         ref.read(libraryRevisionProvider.notifier).bump();
-        _toast(strings.saved);
       } else {
         _toast((body['detail'] ?? body['error'] ?? strings.saveFailed).toString());
       }
@@ -180,18 +188,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<void> _applyTheme(AppThemeMode mode) async {
     ref.read(themeModeProvider.notifier).setTheme(mode);
-    await NativeBridge.instance.syncNativeTheme(mode.id);
     _markDirty(() {
       _section('general')['theme'] = mode.id;
     });
+    await NativeBridge.instance.syncNativeTheme(mode.id);
   }
 
   Future<void> _applyLocale(String locale) async {
     ref.read(localeProvider.notifier).setLocale(locale);
-    await NativeBridge.instance.syncUiLocale(locale);
     _markDirty(() {
       _section('general')['locale'] = locale;
     });
+    await NativeBridge.instance.syncUiLocale(locale);
   }
 
   Future<void> _addGalleryDir() async {
@@ -420,7 +428,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           if ((sub['model'] ?? '').toString().trim().isEmpty) {
             sub['model'] = (resp['default_model'] ?? models.first).toString();
             _presetRev++;
-            _dirty = true;
+            _draftRevision++;
           }
           _translateStatus = strings.modelsLoadedCount(models.length);
           _translateStatusOk = true;
@@ -569,7 +577,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           if ((aiFaces['model'] ?? '').toString().trim().isEmpty) {
             aiFaces['model'] = models.first;
             _presetRev++;
-            _dirty = true;
+            _draftRevision++;
           }
           _facesStatus = strings.modelsLoadedCount(models.length);
           _facesStatusOk = true;
@@ -664,7 +672,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           if ((aiTags['model'] ?? '').toString().trim().isEmpty) {
             aiTags['model'] = models.first;
             _presetRev++;
-            _dirty = true;
+            _draftRevision++;
           }
           _tagsStatus = strings.modelsLoadedCount(models.length);
           _tagsStatusOk = true;

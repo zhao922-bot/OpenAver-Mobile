@@ -15,10 +15,10 @@ class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
   @override
-  ConsumerState<SearchPage> createState() => _SearchPageState();
+  ConsumerState<SearchPage> createState() => SearchPageState();
 }
 
-class _SearchPageState extends ConsumerState<SearchPage> {
+class SearchPageState extends ConsumerState<SearchPage> {
   final TextEditingController _queryCtrl = TextEditingController();
   CancelToken? _searchCancel;
 
@@ -56,17 +56,27 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   @override
   void dispose() {
-    _searchCancel?.cancel();
+    _cancelSearch();
     _queryCtrl.dispose();
     super.dispose();
   }
 
-  void _syncBackHook() {
-    ref.read(searchResetHookProvider).value = _inResultsMode;
+  void _cancelSearch() {
+    final cancel = _searchCancel;
+    _searchCancel = null;
+    cancel?.cancel();
+  }
+
+  bool _ownsSearch(CancelToken cancel) => mounted && _searchCancel == cancel;
+
+  bool clearSearchResults() {
+    if (!_inResultsMode) return false;
+    _returnToHome();
+    return true;
   }
 
   void _returnToHome() {
-    _searchCancel?.cancel();
+    _cancelSearch();
     _queryCtrl.clear();
     setState(() {
       _searching = false;
@@ -84,7 +94,35 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       _results = const [];
       _localStatus = const {};
     });
-    _syncBackHook();
+  }
+
+  CancelToken _beginSearch({
+    required String label,
+    required String mode,
+    String? query,
+    String? makerKey,
+    String? makerName,
+  }) {
+    _cancelSearch();
+    final cancel = CancelToken();
+    _searchCancel = cancel;
+    setState(() {
+      _searching = true;
+      _loadingMore = false;
+      _hasMore = false;
+      _nextCursor = null;
+      _activeQuery = query;
+      _activeMakerKey = makerKey;
+      _activeMakerName = makerName;
+      _inResultsMode = true;
+      _activeSearchLabel = label;
+      _searchError = null;
+      _searchMode = mode;
+      _sourceStatuses.clear();
+      _results = const [];
+      _localStatus = const {};
+    });
+    return cancel;
   }
 
   Future<void> _loadMakerCapsules() async {
@@ -175,27 +213,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     } else if (makerName != null && makerName.isNotEmpty) {
       _queryCtrl.text = makerName;
     }
-    _searchCancel?.cancel();
-    final cancel = CancelToken();
-    _searchCancel = cancel;
-
-    setState(() {
-      _searching = true;
-      _loadingMore = false;
-      _hasMore = false;
-      _nextCursor = null;
-      _activeQuery = makerKey == null ? q : null;
-      _activeMakerKey = makerKey;
-      _activeMakerName = makerName;
-      _inResultsMode = true;
-      _activeSearchLabel = makerName ?? q;
-      _searchError = null;
-      _results = const [];
-      _localStatus = const {};
-      _sourceStatuses.clear();
-      _searchMode = makerKey != null ? 'maker' : '';
-    });
-    _syncBackHook();
+    final cancel = _beginSearch(
+      label: makerName ?? q,
+      mode: makerKey == null ? '' : 'maker',
+      query: makerKey == null ? q : null,
+      makerKey: makerKey,
+      makerName: makerName,
+    );
 
     final api = ref.read(apiClientProvider);
     final strings = ref.read(stringsProvider);
@@ -210,7 +234,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         },
         cancelToken: cancel,
       )) {
-        if (!mounted) break;
+        if (!_ownsSearch(cancel)) break;
         switch (event.type) {
           case 'mode':
             setState(() => _searchMode = (event.data['mode'] ?? '').toString());
@@ -233,40 +257,28 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               _results = parsed;
               _hasMore = event.data['has_more'] == true;
               _nextCursor = (cursor != null && cursor.isNotEmpty) ? cursor : null;
-              _searching = false;
             });
-            _checkLocalStatus(parsed);
+            unawaited(_checkLocalStatus(parsed, cancel));
             break;
           case 'error':
             setState(() {
               _searchError = (event.data['message'] ?? strings.taskFailed).toString();
-              _searching = false;
             });
             break;
         }
       }
     } catch (e) {
+      if (!_ownsSearch(cancel)) return;
       debugPrint('stream search error: $e');
-      if (!cancel.isCancelled && mounted) {
-        setState(() {
-          _searching = false;
-          _searchError = e.toString();
-        });
-      }
+      setState(() => _searchError = e.toString());
     } finally {
-      if (mounted && _searching) {
-        setState(() => _searching = false);
-      }
+      if (_ownsSearch(cancel)) setState(() => _searching = false);
     }
   }
 
   Future<void> _loadMoreResults() async {
-    if (_searching || _loadingMore || !_hasMore) return;
-    if (_activeMakerKey == null && (_activeQuery == null || _activeQuery!.length < 2)) {
-      return;
-    }
-    final cancel = CancelToken();
-    _searchCancel = cancel;
+    final cancel = _searchCancel;
+    if (cancel == null || _searching || _loadingMore || !_hasMore) return;
     setState(() => _loadingMore = true);
     final api = ref.read(apiClientProvider);
     final strings = ref.read(stringsProvider);
@@ -283,7 +295,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         },
         cancelToken: cancel,
       )) {
-        if (!mounted) break;
+        if (!_ownsSearch(cancel)) break;
         if (event.type == 'result') {
           final rawList = (event.data['data'] as List?) ?? const [];
           final parsed = rawList
@@ -297,24 +309,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             _results = [..._results, ...appended];
             _hasMore = event.data['has_more'] == true && appended.isNotEmpty;
             _nextCursor = (cursor != null && cursor.isNotEmpty) ? cursor : null;
-            _loadingMore = false;
           });
-          if (appended.isNotEmpty) {
-            _checkLocalStatus(appended, merge: true);
-          }
+          unawaited(_checkLocalStatus(appended, cancel));
         } else if (event.type == 'error') {
           _toast((event.data['message'] ?? strings.taskFailed).toString());
         }
       }
     } catch (e) {
+      if (!_ownsSearch(cancel)) return;
       debugPrint('loadMoreResults error: $e');
-      if (!cancel.isCancelled && mounted) {
-        _toast(strings.requestFailed('$e'));
-      }
+      _toast(strings.requestFailed('$e'));
     } finally {
-      if (mounted && _loadingMore) {
-        setState(() => _loadingMore = false);
-      }
+      if (_ownsSearch(cancel)) setState(() => _loadingMore = false);
     }
   }
 
@@ -329,7 +335,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       cancelLabel: strings.cancel,
       confirmLabel: strings.startBatchSearch,
     );
-    if (submitted == null || submitted.trim().isEmpty) return;
+    if (!mounted || submitted == null || submitted.trim().isEmpty) return;
 
     final numbers = submitted
         .split(RegExp(r'[\s,;\n\r]+'))
@@ -338,24 +344,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         .toList();
     if (numbers.isEmpty) return;
 
-    setState(() {
-      _searching = true;
-      _inResultsMode = true;
-      _activeSearchLabel = '${strings.batchSearch} (${numbers.length})';
-      _searchError = null;
-      _results = const [];
-      _localStatus = const {};
-      _sourceStatuses.clear();
-      _searchMode = 'batch';
-    });
-    _syncBackHook();
+    final cancel = _beginSearch(
+      label: '${strings.batchSearch} (${numbers.length})',
+      mode: 'batch',
+    );
 
     try {
       final resp = await ref.read(apiClientProvider).postJson(
         '/api/batch-search',
         data: {'numbers': numbers, 'include_covers': true},
+        cancelToken: cancel,
       );
-      if (!mounted) return;
+      if (!_ownsSearch(cancel)) return;
       final rawResults = (resp['results'] as Map?) ?? const {};
       final items = <SearchResultItem>[];
       rawResults.forEach((_, val) {
@@ -363,33 +363,28 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           items.add(SearchResultItem.fromJson(Map<String, dynamic>.from(val)));
         }
       });
-      setState(() {
-        _results = items;
-        _searching = false;
-      });
-      _checkLocalStatus(items);
+      setState(() => _results = items);
+      unawaited(_checkLocalStatus(items, cancel));
     } catch (e) {
+      if (!_ownsSearch(cancel)) return;
       debugPrint('batchSearch error: $e');
-      if (!mounted) return;
-      setState(() {
-        _searching = false;
-        _searchError = e.toString();
-      });
+      setState(() => _searchError = e.toString());
+    } finally {
+      if (_ownsSearch(cancel)) setState(() => _searching = false);
     }
   }
 
-  Future<void> _checkLocalStatus(List<SearchResultItem> items, {bool merge = false}) async {
+  Future<void> _checkLocalStatus(List<SearchResultItem> items, CancelToken cancel) async {
     final numbers = items.map((e) => e.number).where((n) => n.isNotEmpty).toSet().toList();
     if (numbers.isEmpty) return;
     try {
       final resp = await ref.read(apiClientProvider).getJson(
         '/api/search/local-status',
         queryParameters: {'numbers': numbers.join(',')},
+        cancelToken: cancel,
       );
-      if (!mounted) return;
-      final parsed = <String, LocalStatusInfo>{
-        if (merge) ..._localStatus,
-      };
+      if (!_ownsSearch(cancel)) return;
+      final parsed = <String, LocalStatusInfo>{..._localStatus};
       resp.forEach((k, v) {
         if (v is Map) {
           parsed[k.toUpperCase()] = LocalStatusInfo.fromJson(Map<String, dynamic>.from(v));
@@ -397,7 +392,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       });
       setState(() => _localStatus = parsed);
     } catch (e) {
-      debugPrint('checkLocalStatus error: $e');
+      if (_ownsSearch(cancel)) debugPrint('checkLocalStatus error: $e');
     }
   }
 
@@ -696,16 +691,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final strings = ref.watch(stringsProvider);
     final palette = OpenAverPalette.of(context);
 
-    // Respond if parent PopScope cleared reset hook
-    final resetHook = ref.watch(searchResetHookProvider);
-    if (!resetHook.value && _inResultsMode && !_searching) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !resetHook.value && _inResultsMode) {
-          _returnToHome();
-        }
-      });
-    }
-
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -733,7 +718,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             ? IconButton(
                                 icon: const Icon(Icons.stop_circle_outlined),
                                 onPressed: () {
-                                  _searchCancel?.cancel();
+                                  _cancelSearch();
                                   setState(() => _searching = false);
                                 },
                               )

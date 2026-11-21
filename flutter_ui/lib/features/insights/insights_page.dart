@@ -5,6 +5,7 @@ import '../../core/app_providers.dart';
 import '../../core/app_theme.dart';
 import '../../core/models/insights_models.dart';
 import '../shared/openaver_image.dart';
+import 'insights_chart_cache.dart';
 
 class InsightsPage extends ConsumerStatefulWidget {
   const InsightsPage({super.key});
@@ -16,7 +17,8 @@ class InsightsPage extends ConsumerStatefulWidget {
 class _InsightsPageState extends ConsumerState<InsightsPage> {
   bool _loading = true;
   String? _error;
-  InsightsSnapshot? _snapshot;
+  InsightsChartCache? _charts;
+  int _loadGeneration = 0;
 
   int? _selectedYear;
   String? _selectedMaker;
@@ -39,6 +41,8 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
+    final generation = ++_loadGeneration;
     final strings = ref.read(stringsProvider);
     setState(() {
       _loading = true;
@@ -46,7 +50,7 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
     });
     try {
       final resp = await ref.read(apiClientProvider).getJson('/api/insights/snapshot');
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       if (resp['success'] != true) {
         setState(() {
           _loading = false;
@@ -54,18 +58,59 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
         });
         return;
       }
+      final snapshot = InsightsSnapshot.fromJson(resp);
       setState(() {
-        _snapshot = InsightsSnapshot.fromJson(resp);
+        if (_selectedYear != null &&
+            !snapshot.records.any((record) => record.year == _selectedYear)) {
+          _selectedYear = null;
+        }
+        if (_selectedMaker != null &&
+            !snapshot.records.any((record) => record.maker?.trim() == _selectedMaker)) {
+          _selectedMaker = null;
+        }
+        _charts = InsightsChartCache(snapshot);
         _loading = false;
       });
     } catch (e) {
+      if (!mounted || generation != _loadGeneration) return;
       debugPrint('Insights _load error: $e');
-      if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e.toString();
+        _error = strings.loadLibraryFailed;
       });
     }
+  }
+
+  Widget _buildRefreshBody(Widget child) {
+    final strings = ref.watch(stringsProvider);
+    final error = _error;
+    return Column(
+      children: [
+        if (_loading) LinearProgressIndicator(semanticsLabel: strings.loading),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      error,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: OpenAverPalette.of(context).danger),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(onPressed: _load, child: Text(strings.retry)),
+              ],
+            ),
+          ),
+        Expanded(child: RefreshIndicator(onRefresh: _load, child: child)),
+      ],
+    );
   }
 
   @override
@@ -80,10 +125,12 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
       }
     });
 
-    if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-    if (_error != null) {
+    final charts = _charts;
+    if (charts == null) {
+      final error = _error;
+      if (error == null) {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
       return Scaffold(
         body: Center(
           child: Padding(
@@ -91,7 +138,7 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_error!, style: TextStyle(color: palette.danger)),
+                Text(error, style: TextStyle(color: palette.danger)),
                 const SizedBox(height: 12),
                 FilledButton(onPressed: _load, child: Text(strings.retry)),
               ],
@@ -101,78 +148,42 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
       );
     }
 
-    final snap = _snapshot!;
+    final snap = charts.snapshot;
     if (snap.records.isEmpty) {
       return Scaffold(
-        body: RefreshIndicator(
-          onRefresh: _load,
-          child: ListView(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 96, horizontal: 24),
-                child: Column(
-                  children: [
-                    Icon(Icons.pie_chart_outline_rounded, size: 48, color: palette.textMuted),
-                    const SizedBox(height: 12),
-                    Text(strings.insightsEmpty, style: TextStyle(color: palette.textMuted)),
-                  ],
+        body: SafeArea(
+          child: _buildRefreshBody(
+            ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 96, horizontal: 24),
+                  child: Column(
+                    children: [
+                      Icon(Icons.pie_chart_outline_rounded, size: 48, color: palette.textMuted),
+                      const SizedBox(height: 12),
+                      Text(strings.insightsEmpty, style: TextStyle(color: palette.textMuted)),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
     }
 
-    final filtered = snap.records.where((r) {
-      if (_selectedYear != null && r.year != _selectedYear) return false;
-      if (_selectedMaker != null && (r.maker ?? '') != _selectedMaker) return false;
-      return true;
-    }).toList();
-
-    final yearCounts = <int, int>{};
-    final makerCounts = <String, int>{};
-    final actressCounts = <String, int>{};
-    final tagCounts = <String, int>{};
-
-    for (final r in filtered) {
-      if (r.year != null) {
-        yearCounts[r.year!] = (yearCounts[r.year!] ?? 0) + 1;
-      }
-      final mk = (r.maker ?? '').trim();
-      if (mk.isNotEmpty) {
-        makerCounts[mk] = (makerCounts[mk] ?? 0) + 1;
-      }
-      for (final a in r.actresses) {
-        actressCounts[a] = (actressCounts[a] ?? 0) + 1;
-      }
-      for (final t in r.tags) {
-        tagCounts[t] = (tagCounts[t] ?? 0) + 1;
-      }
-    }
-
-    final sortedYears = yearCounts.keys.toList()..sort();
-    final yearSpan = sortedYears.isEmpty
-        ? '-'
-        : (sortedYears.length == 1
-            ? '${sortedYears.first}'
-            : '${sortedYears.first}-${sortedYears.last}');
-
-    final sortedMakers = makerCounts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final topMakers = sortedMakers.take(8).toList();
-    final sortedActresses = actressCounts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final topActresses = sortedActresses.take(25).toList();
-    final sortedTags = tagCounts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final topTags = sortedTags.take(24).toList();
+    final data = charts.forFilters(year: _selectedYear, maker: _selectedMaker);
+    final sortedYears = data.sortedYears;
+    final topMakers = data.topMakers;
+    final topActresses = data.topActresses;
+    final topTags = data.topTags;
 
     return Scaffold(
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          child: ListView(
+        child: _buildRefreshBody(
+          ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
             children: [
               GridView.count(
@@ -182,10 +193,10 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
                 crossAxisSpacing: 8,
                 childAspectRatio: 1.25,
                 children: [
-                  _SummaryTile(label: strings.insightsVideos, value: '${filtered.length}', palette: palette),
-                  _SummaryTile(label: strings.insightsYears, value: yearSpan, palette: palette),
-                  _SummaryTile(label: strings.insightsActresses, value: '${actressCounts.length}', palette: palette),
-                  _SummaryTile(label: strings.insightsMakers, value: '${makerCounts.length}', palette: palette),
+                  _SummaryTile(label: strings.insightsVideos, value: '${data.videoCount}', palette: palette),
+                  _SummaryTile(label: strings.insightsYears, value: data.yearSpan, palette: palette),
+                  _SummaryTile(label: strings.insightsActresses, value: '${data.actressCount}', palette: palette),
+                  _SummaryTile(label: strings.insightsMakers, value: '${data.makerCount}', palette: palette),
                 ],
               ),
 
@@ -265,7 +276,7 @@ class _InsightsPageState extends ConsumerState<InsightsPage> {
                               x: i,
                               barRods: [
                                 BarChartRodData(
-                                  toY: yearCounts[sortedYears[i]]!.toDouble(),
+                                  toY: data.yearCounts[sortedYears[i]]!.toDouble(),
                                   width: sortedYears.length > 16 ? 8 : 14,
                                   borderRadius: BorderRadius.circular(4),
                                   color: _selectedYear == sortedYears[i]

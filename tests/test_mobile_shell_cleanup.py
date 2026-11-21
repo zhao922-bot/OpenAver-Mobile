@@ -268,10 +268,10 @@ def test_android_tasks_use_foreground_keepalive_and_do_not_pause_webview():
     ).read_text(encoding="utf-8")
 
     assert service.index("startForeground(NOTIFICATION_ID, buildNotification());") < (
-        service.index("running = true;")
+        service.index("runningService = this;")
     )
     assert "return START_NOT_STICKY;" in service
-    assert "running = false;" in service
+    assert "runningService = null;" in service
     assert "TaskKeepAliveService.isRunning()" in activity
     assert "if (webView != null && !TaskKeepAliveService.isRunning())" in activity
     assert '"openaver-task".equals(scheme)' in activity
