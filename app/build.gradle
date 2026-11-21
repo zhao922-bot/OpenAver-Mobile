@@ -3,7 +3,7 @@ plugins {
     id "com.chaquo.python"
 }
 
-def openaverRelease = "v0.18.17-r88"
+def openaverRelease = "v0.18.17-r89"
 def openaverCommit = "af0d99741e63e71980773c9ade04c473407a60b7"
 def requestedAbis = (project.findProperty("abi") ?: "arm64-v8a")
         .split(",")
@@ -32,8 +32,8 @@ android {
         minSdk 29
         targetSdk 29
         testInstrumentationRunner "dev.openaver.mobile.smoke.EmulatorSmoke"
-        versionCode 18088
-        versionName "0.18.17-r88"
+        versionCode 18089
+        versionName "0.18.17-r89"
 
         buildConfigField "String", "OPENAVER_RELEASE", "\"${openaverRelease}\""
         buildConfigField "String", "OPENAVER_COMMIT", "\"${openaverCommit}\""
