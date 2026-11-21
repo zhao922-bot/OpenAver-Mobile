@@ -34,6 +34,7 @@ public final class EmulatorSmoke extends Instrumentation {
     private static final Pattern PLAYER_TIME = Pattern.compile("(\\d{2}):(\\d{2}) / 02:00");
 
     private UiAutomation automation;
+    private boolean launcherRecovered;
 
     @Override
     public void onCreate(Bundle arguments) {
@@ -73,14 +74,15 @@ public final class EmulatorSmoke extends Instrumentation {
             tap(awaitNode("storage permission button", node -> {
                 String id = node.getViewIdResourceName();
                 return id != null && id.endsWith(":id/permissionButton");
-            }, UI_TIMEOUT_MS));
+            }, 75_000, intent));
             tap(awaitNode("Android all-files access switch", node ->
                     "com.android.settings".equals(String.valueOf(node.getPackageName()))
                             && node.isCheckable() && !node.isChecked(), UI_TIMEOUT_MS));
             back();
         }
 
-        awaitNode("Flutter settings tab", node -> labelled(node, "Settings", "设置"), 90_000);
+        awaitNode("Flutter settings tab", node -> labelled(node, "Settings", "设置"),
+                90_000, intent);
         stage("Host and Flutter UI launched");
     }
 
@@ -267,13 +269,33 @@ public final class EmulatorSmoke extends Instrumentation {
 
     private AccessibilityNodeInfo awaitNode(String description, Predicate<AccessibilityNodeInfo> test,
                                              long timeout) {
+        return awaitNode(description, test, timeout, null);
+    }
+
+    private AccessibilityNodeInfo awaitNode(String description, Predicate<AccessibilityNodeInfo> test,
+                                             long timeout, Intent startup) {
         long deadline = SystemClock.uptimeMillis() + timeout;
         do {
             AccessibilityNodeInfo found = find(test);
             if (found != null) return found;
+            if (startup != null && !launcherRecovered && dismissLauncherAnr()) {
+                launcherRecovered = true;
+                stage("Closed the emulator's unresponsive Pixel Launcher and reopened OpenAver");
+                getTargetContext().startActivity(startup);
+            }
             SystemClock.sleep(50);
         } while (SystemClock.uptimeMillis() < deadline);
         throw new AssertionError("Timed out waiting for " + description);
+    }
+
+    private boolean dismissLauncherAnr() {
+        // A hosted emulator can surface the launcher error while the app is starting.
+        // Only recover from this system dialog, leaving OpenAver errors visible.
+        if (find(node -> labelled(node, "Pixel Launcher isn't responding")) == null) return false;
+        AccessibilityNodeInfo close = find(node -> node.isClickable() && labelled(node, "Close app"));
+        if (close == null) return false;
+        tap(close);
+        return true;
     }
 
     private AccessibilityNodeInfo find(Predicate<AccessibilityNodeInfo> test) {
