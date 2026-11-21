@@ -43,6 +43,7 @@ class _BuiltInPlayerPageState extends ConsumerState<BuiltInPlayerPage> {
   int _loadGeneration = 0;
   String? _loadedPath;
   Duration _lastSavedPosition = Duration.zero;
+  Duration _resumeFloor = Duration.zero;
 
   @override
   void initState() {
@@ -89,18 +90,19 @@ class _BuiltInPlayerPageState extends ConsumerState<BuiltInPlayerPage> {
       await _player.open(Media(streamUrl, httpHeaders: widget.api.authHeaders));
       if (!_ownsLoad(generation)) return;
 
-      if (savedPosition > Duration.zero) {
-        final duration = await _readPlaybackDuration();
-        if (!_ownsLoad(generation)) return;
-        if (savedPosition < duration) {
-          await _waitForPlaybackStart();
-          if (!_ownsLoad(generation)) return;
-          await _player.seek(savedPosition);
-          if (!_ownsLoad(generation)) return;
-        }
+      final restored =
+          savedPosition == Duration.zero ||
+          await _restorePosition(generation, savedPosition);
+      if (!_ownsLoad(generation)) return;
+      if (!restored) {
+        debugPrint(
+          'Could not restore bookmark at ${savedPosition.inMilliseconds}ms. '
+          'Player is at ${_player.state.position.inMilliseconds}ms.',
+        );
       }
       _loadedPath = path;
       _lastSavedPosition = savedPosition;
+      _resumeFloor = restored ? Duration.zero : savedPosition;
       if (_rate != 1.0) await _player.setRate(_rate);
     } catch (_) {
       if (generation == _loadGeneration) _showPlaybackFailure();
@@ -110,41 +112,54 @@ class _BuiltInPlayerPageState extends ConsumerState<BuiltInPlayerPage> {
   bool _ownsLoad(int generation) =>
       mounted && generation == _loadGeneration && !_playbackFailed;
 
-  Future<Duration> _readPlaybackDuration() async {
-    final duration = _player.state.duration;
-    if (duration > Duration.zero) return duration;
-    try {
-      return await _player.stream.duration
-          .timeout(const Duration(seconds: 5))
-          .firstWhere(
-            (value) => value > Duration.zero,
-            orElse: () => Duration.zero,
-          );
-    } on TimeoutException {
-      return Duration.zero;
+  Future<bool> _restorePosition(int generation, Duration bookmark) async {
+    final ready = await _waitForPlayerState(
+      generation,
+      const Duration(seconds: 6),
+      (state) =>
+          state.duration > Duration.zero && state.position > Duration.zero,
+    );
+    if (!ready) return false;
+    // A previously saved position can outlast a shortened or replaced file.
+    if (bookmark >= _player.state.duration) return true;
+
+    // media_kit can accept a seek before the decoder can apply it.
+    final earliest = bookmark - const Duration(milliseconds: 750);
+    for (var attempt = 0; attempt < 2 && _ownsLoad(generation); attempt++) {
+      await _player.seek(bookmark);
+      if (await _waitForPlayerState(
+        generation,
+        const Duration(milliseconds: 1500),
+        (state) => state.position >= earliest && state.position > Duration.zero,
+      )) {
+        return true;
+      }
     }
+    return false;
   }
 
-  Future<void> _waitForPlaybackStart() async {
-    if (_player.state.position > Duration.zero) return;
-    try {
-      await _player.stream.position
-          .timeout(const Duration(seconds: 5))
-          .firstWhere(
-            (position) => position > Duration.zero,
-            orElse: () => Duration.zero,
-          );
-    } on TimeoutException {
-      // Some formats report no position until playback advances on its own.
+  Future<bool> _waitForPlayerState(
+    int generation,
+    Duration timeout,
+    bool Function(PlayerState) matches,
+  ) async {
+    final elapsed = Stopwatch()..start();
+    while (_ownsLoad(generation)) {
+      if (matches(_player.state)) return true;
+      if (elapsed.elapsed >= timeout) break;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
     }
+    return false;
   }
 
   void _savePosition() {
     final path = _loadedPath;
     if (path == null || _player.state.completed || _playbackFailed) return;
     final position = _player.state.position;
-    // The player initially reports zero while opening or restoring a file.
-    if (position <= Duration.zero || position == _lastSavedPosition) return;
+    // Keep an unrestored bookmark until playback reaches it.
+    if (position <= Duration.zero || position < _resumeFloor) return;
+    _resumeFloor = Duration.zero;
+    if (position == _lastSavedPosition) return;
     _lastSavedPosition = position;
     unawaited(NativeBridge.instance.savePlaybackPosition(path, position));
   }

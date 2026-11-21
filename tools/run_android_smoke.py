@@ -59,6 +59,7 @@ def run_tests(args, parser):
         for filename, adb_args in (
             ("screen.png", ("exec-out", "screencap", "-p")),
             ("logcat.txt", ("logcat", "-d", "-t", "700")),
+            ("flutter-logcat.txt", ("logcat", "-d", "-s", "flutter:V", "AndroidRuntime:E")),
         ):
             try:
                 with (args.artifacts / filename).open("wb") as output:
