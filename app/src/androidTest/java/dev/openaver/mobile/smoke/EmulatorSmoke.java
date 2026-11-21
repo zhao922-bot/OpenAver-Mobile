@@ -18,7 +18,10 @@ import android.view.MotionEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +54,7 @@ public final class EmulatorSmoke extends Instrumentation {
             info.flags |= AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;
             automation.setServiceInfo(info);
             startHost();
+            installFixture();
             configureLibrary();
             scanAndPlay();
             cancelScan();
@@ -86,6 +90,22 @@ public final class EmulatorSmoke extends Instrumentation {
         stage("Host and Flutter UI launched");
     }
 
+    private File fixtureDirectory() {
+        return new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+                LIBRARY);
+    }
+
+    private void installFixture() throws IOException {
+        File folder = fixtureDirectory();
+        Files.createDirectories(folder.toPath());
+        for (int part = 1; part <= 2; part++) {
+            File target = new File(folder, MOVIE + "-CD" + part + ".mp4");
+            try (InputStream clip = getContext().getAssets().open("smoke.mp4")) {
+                Files.copy(clip, target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+    }
+
     private void configureLibrary() {
         click("Settings", "设置");
         if (find(node -> labelled(node, "Save Settings", "Appearance & General")) == null) {
@@ -95,12 +115,23 @@ public final class EmulatorSmoke extends Instrumentation {
                 && labelled(node, "Library & Display", "片库目录与展示"), UI_TIMEOUT_MS));
         scrollTo("Add Library Folder", "添加扫描目录");
         click("Add Library Folder", "添加扫描目录");
-        click("Movies");
-        click(LIBRARY);
+        File folder = fixtureDirectory();
+        openFolder(folder.getParentFile());
+        openFolder(folder);
         click("Select Current Folder", "选择当前目录");
         click("Save Settings", "保存设置");
         awaitNode("save confirmed", node -> labelled(node, "Saved", "已保存"), UI_TIMEOUT_MS);
         stage("Library folder saved through Settings");
+    }
+
+    private void openFolder(File folder) {
+        AccessibilityNodeInfo row = awaitNode(folder.getName(), node -> node.isClickable()
+                && labelled(node, folder.getName()), UI_TIMEOUT_MS);
+        // Use the row's accessibility action while the folder sheet is animating.
+        if (!row.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            throw new AssertionError("Could not open folder " + folder);
+        }
+        awaitNode("folder path " + folder, node -> labelled(node, folder.getPath()), UI_TIMEOUT_MS);
     }
 
     private void scanAndPlay() {
@@ -156,8 +187,7 @@ public final class EmulatorSmoke extends Instrumentation {
 
     private void cancelScan() throws Exception {
         // Enough local entries to keep the real scanner busy while the test presses Stop.
-        File folder = new File(Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_MOVIES), LIBRARY + "/cancel-fixtures");
+        File folder = new File(fixtureDirectory(), "cancel-fixtures");
         Files.createDirectories(folder.toPath());
         byte[] contents = {0};
         for (int i = 0; i < 4_096; i++) {

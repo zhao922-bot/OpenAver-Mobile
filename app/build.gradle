@@ -81,6 +81,10 @@ android {
         buildConfig true
     }
 
+    sourceSets {
+        androidTest.assets.srcDir(layout.buildDirectory.dir("generated/android-smoke-assets"))
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

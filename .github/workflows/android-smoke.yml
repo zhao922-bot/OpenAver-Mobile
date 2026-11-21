@@ -44,17 +44,19 @@ jobs:
       - name: Get Flutter dependencies
         working-directory: flutter_ui
         run: flutter pub get
-      - name: Build x86-64 app and instrumentation APKs
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest \
-            -Pabi=x86_64 -Ptarget-platform=android-x64
-      - name: Set up test media encoder
+      - name: Generate synthetic playback fixture
         run: |
           if ! command -v ffmpeg >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y ffmpeg
           fi
+          python tools/run_android_smoke.py generate-media \
+            --output app/build/generated/android-smoke-assets/smoke.mp4
+      - name: Build x86-64 app and instrumentation APKs
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest \
+            -Pabi=x86_64 -Ptarget-platform=android-x64
       - name: Enable hardware acceleration on the hosted runner
         run: sudo setfacl -m "u:$(id -un):rw" /dev/kvm
       - name: Run OpenAver on an Android emulator
@@ -67,7 +69,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: >-
-            python tools/run_android_smoke.py
+            python tools/run_android_smoke.py run
             --apk app/build/outputs/apk/debug/app-debug.apk
             --test-apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             --artifacts build/emulator-smoke

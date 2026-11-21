@@ -1,27 +1,28 @@
 #!/usr/bin/env python3
-"""Install and test the debug APK on a clean Android API 35 emulator."""
+"""Prepare and run smoke tests for a clean Android API 35 emulator."""
 
 import argparse
 import subprocess
-import tempfile
 from pathlib import Path
 
 
 PACKAGE = "dev.openaver.mobile.debug"
 RUNNER = f"{PACKAGE}.test/dev.openaver.mobile.smoke.EmulatorSmoke"
-LIBRARY = "/sdcard/Movies/OpenAverSmoke"
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--apk", type=Path, required=True)
-    parser.add_argument("--test-apk", type=Path, required=True)
-    parser.add_argument("--adb", default="adb")
-    parser.add_argument("--device", help="adb serial of a clean emulator")
-    parser.add_argument("--ffmpeg", default="ffmpeg")
-    parser.add_argument("--artifacts", type=Path, required=True)
-    args = parser.parse_args()
+def generate_media(args):
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([
+        args.ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "testsrc2=size=240x160:rate=15",
+        "-f", "lavfi", "-i", "sine=frequency=200:sample_rate=44100",
+        "-t", "120", "-c:v", "libx264", "-threads", "2", "-preset", "ultrafast",
+        "-g", "15", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+        "-c:a", "aac", "-af", "volume=0.01", str(args.output),
+    ], check=True, timeout=90)
 
+
+def run_tests(args, parser):
     adb = [args.adb]
     if args.device:
         adb.extend(["-s", args.device])
@@ -42,26 +43,14 @@ def main():
 
     args.artifacts.mkdir(parents=True, exist_ok=True)
     try:
-        with tempfile.TemporaryDirectory(prefix="openaver-smoke-") as tmp:
-            clip = Path(tmp) / "smoke.mp4"
-            subprocess.run([
-                args.ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
-                "-f", "lavfi", "-i", "testsrc2=size=240x160:rate=15",
-                "-f", "lavfi", "-i", "sine=frequency=200:sample_rate=44100",
-                "-t", "120", "-c:v", "libx264", "-threads", "2", "-preset", "ultrafast",
-                "-g", "15", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                "-c:a", "aac", "-af", "volume=0.01", str(clip),
-            ], check=True, timeout=90)
-            command("shell", "mkdir", "-p", LIBRARY, check=True)
-            for part in (1, 2):
-                command("push", str(clip), f"{LIBRARY}/TST-12400-CD{part}.mp4", check=True)
         command("install", str(args.apk), check=True, timeout=120)
         command("install", str(args.test_apk), check=True, timeout=120)
 
-        with (args.artifacts / "instrumentation.txt").open("w", encoding="utf-8") as output:
+        report_path = args.artifacts / "instrumentation.txt"
+        with report_path.open("w", encoding="utf-8") as output:
             result = command("shell", "am", "instrument", "-w", "-r", RUNNER,
                              stdout=output, stderr=subprocess.STDOUT, timeout=420)
-        report = (args.artifacts / "instrumentation.txt").read_text(encoding="utf-8")
+        report = report_path.read_text(encoding="utf-8")
         print(report, end="")
         if (result.returncode != 0 or "OpenAver emulator smoke passed" not in report
                 or "INSTRUMENTATION_CODE: -1" not in report):
@@ -77,6 +66,28 @@ def main():
             except (OSError, subprocess.SubprocessError):
                 pass
         raise
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    subcommands = parser.add_subparsers(dest="command", required=True)
+
+    generate = subcommands.add_parser("generate-media", help="Generate the instrumentation asset")
+    generate.add_argument("--output", type=Path, required=True)
+    generate.add_argument("--ffmpeg", default="ffmpeg")
+
+    run = subcommands.add_parser("run", help="Install and run the app and test APKs")
+    run.add_argument("--apk", type=Path, required=True)
+    run.add_argument("--test-apk", type=Path, required=True)
+    run.add_argument("--adb", default="adb")
+    run.add_argument("--device", help="adb serial of a clean emulator")
+    run.add_argument("--artifacts", type=Path, required=True)
+
+    args = parser.parse_args()
+    if args.command == "generate-media":
+        generate_media(args)
+    else:
+        run_tests(args, run)
 
 
 if __name__ == "__main__":
