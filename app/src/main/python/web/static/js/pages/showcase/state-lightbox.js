@@ -10,7 +10,7 @@
  * 從 state-base.js import 共用大陣列（F1：移出 Alpine reactive scope）。
  */
 
-import { _filteredVideos, _filteredActresses, _killLightboxTimelines, _NO_COVER_PLACEHOLDER, _recomputeVideoBadges, _recomputeCardActorAges, _actresses, _nameToGroup } from '@/showcase/state-base.js';
+import { _videos, _filteredVideos, _filteredActresses, _killLightboxTimelines, _NO_COVER_PLACEHOLDER, _recomputeVideoBadges, _recomputeCardActorAges, _actresses, _nameToGroup } from '@/showcase/state-base.js';
 import { POSTER_CROP_MAX_W } from '@/shared/breakpoints.js';
 import { detectSwipe } from '@/shared/swipe.js';
 import { isHorizontalWheel, isVerticalWheel, createWheelNav } from '@/shared/wheel-nav.js';
@@ -48,6 +48,7 @@ export function stateLightbox() {
     const wheelNavLightboxActress = createWheelNav();
     const wheelNavSampleGallery = createWheelNav();
     const wheelNavPage = createWheelNav();
+    const refreshRequests = new Map();
     // 102d P2b（owner 拍板 2026-07-19）：overlay 垂直滾輪＝上/下一張。獨立軸別累積器
     // （非取代上面三個水平版——同一接線點兩軸各自累積/冷卻，見 wheel-nav.js 頂部說明）。
     // 牆翻頁（wheelNavPage）無垂直版：牆是「垂直捲動有意義」的頁面主體，不吃垂直滾輪。
@@ -788,7 +789,7 @@ export function stateLightbox() {
             if (this._pickerOpen) {
                 this._lbTouchStartX = null; this._lbTouchStartY = null; return;
             }
-            if (this.rescrapeOpen) {
+            if (this.rescrapeOpen || this.videoElementsOpen) {
                 this._lbTouchStartX = null; this._lbTouchStartY = null; return;
             }
             if (this.deleteVideoModalOpen) {
@@ -1033,50 +1034,52 @@ export function stateLightbox() {
         },
 
         async refreshVideoData(video) {
+            const path = video?.path;
+            if (!path) return false;
+            const request = Symbol();
+            refreshRequests.set(path, request);
             try {
-                const resp = await fetch(`/api/showcase/video?path=${encodeURIComponent(video.path)}`);
-                if (!resp.ok) return;
+                const resp = await fetch(`/api/showcase/video?path=${encodeURIComponent(path)}`);
+                if (!resp.ok) return false;
                 const data = await resp.json();
-                if (data.success && data.video) {
-                    // BUGfix-lightbox-cover-stale: 共用同一個 timestamp，確保 grid 與 lightbox overlay 同步 bust。
-                    const _t = Date.now();
-                    if (data.video.cover_url) {
-                        data.video.cover_url = data.video.cover_url + '&t=' + _t;
+                if (refreshRequests.get(path) !== request || !data.success || data.video?.path !== path) return false;
+                const updated = data.video;
+                const version = Date.now();
+                const versioned = url => url?.startsWith('/api/gallery/')
+                    ? `${url}${url.includes('?') ? '&' : '?'}t=${version}` : url;
+                updated.cover_url = versioned(updated.cover_url);
+                updated.cover_full_url = versioned(updated.cover_full_url);
+                if (Array.isArray(updated.sample_images)) updated.sample_images = updated.sample_images.map(versioned);
+                // Reactive card/detail copies may differ from the collection's backing row.
+                const copies = new Set([video, this.currentLightboxVideo,
+                    this.paginatedVideos?.find(row => row.path === path),
+                    _videos.find(row => row.path === path), _filteredVideos.find(row => row.path === path)]);
+                for (const copy of copies) {
+                    if (copy?.path !== path) continue;
+                    if (updated.cover_url) {
+                        copy._coverRequested = true;
+                        copy._imgLoaded = false;
+                        copy._coverRetryCount = 0;
                     }
-                    // cover_full_url 恆為 /api/gallery/image（max-age=86400），URL 不變瀏覽器吃舊快取。
-                    // 同步追加 &t= cache-bust，確保 lightbox overlay（.lb-full）顯示新封面。
-                    if (data.video.cover_full_url) {
-                        data.video.cover_full_url = data.video.cover_full_url + '&t=' + _t;
-                    }
-                    // 67-A2/CD-67-3b: data.video 不帶 _imgLoaded → 舊 true 殘留會讓新封面跳過 skeleton/fade。
-                    // Object.assign 前 reset，讓補封面/重抓的新 cover_url（含上面 &t= cache-bust）重走 skeleton→@load→淡入。
-                    if (data.video.cover_url) {
-                        // An explicit cover refresh should not wait for the card
-                        // to re-enter the image window.
-                        video._coverRequested = true;
-                        video._imgLoaded = false;
-                        video._coverRetryCount = 0;
-                    }
-                    Object.assign(video, data.video);
-                    _recomputeVideoBadges(video);
-                    _recomputeCardActorAges(video);
-                    // BUGfix-lightbox-cover-stale: 若燈箱正開在這支影片，重置 blur-up overlay，
-                    // 讓 cover_full_url（已 bust）重新觸發 @load → _lbFullLoaded 淡入。
-                    // 用 === video 守住：燈箱開在別支影片時不誤 reset。
-                    // 必須在 Object.assign 之後呼叫（src 已更新，$nextTick complete-check 才讀到新 URL）。
-                    if (this.currentLightboxVideo === video) {
-                        this._refreshLbFullBlurUp();
-                        this._refreshLbActorAges();
-                    }
+                    Object.assign(copy, updated);
+                    _recomputeVideoBadges(copy);
+                    _recomputeCardActorAges(copy);
                 }
-            } catch (e) {
-                // refresh 失敗不顯示額外 toast
+                if (this.lightboxOpen && this.currentLightboxVideo?.path === path) {
+                    this._refreshLbFullBlurUp();
+                    this._refreshLbActorAges();
+                }
+                return true;
+            } catch {
+                return false;
+            } finally {
+                if (refreshRequests.get(path) === request) refreshRequests.delete(path);
             }
         },
 
-
         // --- 快捷鍵 (M4c 完整實作) ---
         handleKeydown(e) {
+            if (this.videoElementsOpen) return;
             // The display dialog owns its controls, including select arrows.
             if (this.displayOpen) {
                 if (e.key === 'Escape') {
@@ -1165,7 +1168,7 @@ export function stateLightbox() {
                 e.stopPropagation();
                 return;
             }
-            if (this.rescrapeOpen) return;
+            if (this.rescrapeOpen || this.videoElementsOpen) return;
 
             // C-1: 刪除確認框開啟時，Esc 只關刪除框、其餘鍵不穿透到燈箱（鏡像 removeActressModalOpen）
             if (e.key === 'Escape' && this.deleteVideoModalOpen) {
@@ -1288,7 +1291,7 @@ export function stateLightbox() {
             if (this._pickerOpen) return;
 
             // 4. rescrape 彈窗開啟時鎖
-            if (this.rescrapeOpen) return;
+            if (this.rescrapeOpen || this.videoElementsOpen) return;
 
             // 5. 刪除確認框開啟時鎖
             if (this.deleteVideoModalOpen) return;

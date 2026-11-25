@@ -32,6 +32,10 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
 
   final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
   final GlobalKey<SearchPageState> _searchKey = GlobalKey<SearchPageState>();
+  final _visitedTabs = <int, Widget>{};
+  final _initialTaskRequest = Completer<void>();
+  int? _taskReturnTab;
+  bool _initialTabChosen = false;
   bool _initialized = false;
   bool _bootstrapApplied = false;
   DateTime? _lastBackPress;
@@ -65,8 +69,16 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
     ref.listenManual(stringsProvider, (_, strings) {
       NativeBridge.instance.setTaskNotificationStrings(strings);
     }, fireImmediately: true);
-    _onTaskCenterRequested();
     _bootstrap();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // A prewarmed engine has no activity to supply its launch intent yet.
+    if (!_initialTaskRequest.isCompleted && !MediaQuery.sizeOf(context).isEmpty) {
+      _initialTaskRequest.complete(_openTaskCenter());
+    }
   }
 
   @override
@@ -87,10 +99,15 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
   Future<void> _openTaskCenter() async {
     if (!await NativeBridge.instance.consumeTaskCenterRequest() || !mounted) return;
     _navKey.currentState?.popUntil((route) => route.isFirst);
+    final previous = ref.read(activeTabProvider);
+    if (previous != _taskCenterTab) _taskReturnTab = previous;
     _selectTab(_taskCenterTab);
   }
 
   void _selectTab(int index) {
+    if (!_initialTabChosen) setState(() => _initialTabChosen = true);
+    if (index != _taskCenterTab) _taskReturnTab = null;
+    _lastBackPress = null;
     ref.read(activeTabProvider.notifier).setTab(index);
     if (index == _taskCenterTab && _initialized && _bootstrapApplied) {
       unawaited(AiBackfillTask.refreshKnown(ref.read(apiClientProvider)));
@@ -106,9 +123,12 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
     ref.read(themeModeProvider.notifier).setTheme(theme);
     ref.read(localeProvider.notifier).setLocale(info.uiLocale);
     await NativeBridge.instance.syncNativeTheme(theme.id);
+    await _initialTaskRequest.future;
     if (!mounted) return;
     setState(() => _initialized = true);
-    unawaited(AiBackfillTask.refreshKnown(ref.read(apiClientProvider)));
+    if (ref.read(activeTabProvider) == _taskCenterTab) {
+      unawaited(AiBackfillTask.refreshKnown(ref.read(apiClientProvider)));
+    }
     unawaited(_loadStartupGeneralPrefs());
   }
 
@@ -131,11 +151,13 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
         'showcase' => 0,
         _ => null,
       };
-      if (targetTab != null && ref.read(activeTabProvider) == 0 && targetTab != 0) {
+      if (!_initialTabChosen && targetTab != null) {
         ref.read(activeTabProvider.notifier).setTab(targetTab);
       }
     } catch (e) {
       debugPrint('loadStartupGeneralPrefs skipped: $e');
+    } finally {
+      if (mounted && !_initialTabChosen) setState(() => _initialTabChosen = true);
     }
   }
 
@@ -164,35 +186,35 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
       });
     } catch (e) {
       debugPrint('Bootstrap error: $e');
+      await _initialTaskRequest.future;
       if (mounted) {
-        setState(() => _initialized = true);
+        setState(() {
+          _initialTabChosen = true;
+          _initialized = true;
+        });
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_initialTaskRequest.isCompleted) return const SizedBox.shrink();
     final mode = ref.watch(themeModeProvider);
     final fontSize = ref.watch(fontSizeProvider);
     final strings = ref.watch(stringsProvider);
     final activeTab = ref.watch(activeTabProvider);
 
-    final tabs = [
-      const ShowcasePage(),
-      SearchPage(key: _searchKey),
-      const ScannerPage(),
-      const InsightsPage(),
-      const SettingsPage(),
-      const TaskCenterPage(),
-    ];
     final destinations = [
-      (Icons.grid_view_rounded, strings.tabShowcase),
-      (Icons.search_rounded, strings.tabSearch),
-      (Icons.radar_rounded, strings.tabScanner),
-      (Icons.pie_chart_outline_rounded, strings.tabInsights),
-      (Icons.settings_outlined, strings.tabSettings),
-      (Icons.task_alt_rounded, strings.taskCenterTab),
+      (Icons.grid_view_rounded, strings.tabShowcase, () => const ShowcasePage()),
+      (Icons.search_rounded, strings.tabSearch, () => SearchPage(key: _searchKey)),
+      (Icons.radar_rounded, strings.tabScanner, () => const ScannerPage()),
+      (Icons.pie_chart_outline_rounded, strings.tabInsights, () => const InsightsPage()),
+      (Icons.settings_outlined, strings.tabSettings, () => const SettingsPage()),
+      (Icons.task_alt_rounded, strings.taskCenterTab, () => const TaskCenterPage()),
     ];
+    if (_initialized && _initialTabChosen) {
+      _visitedTabs.putIfAbsent(activeTab, destinations[activeTab].$3);
+    }
 
     final scale = fontScaleFor(fontSize);
     return MaterialApp(
@@ -229,7 +251,7 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
                   return;
                 }
                 if (activeTab != 0) {
-                  ref.read(activeTabProvider.notifier).setTab(0);
+                  _selectTab(activeTab == _taskCenterTab ? _taskReturnTab ?? 0 : 0);
                   return;
                 }
                 final now = DateTime.now();
@@ -264,7 +286,7 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
                               labelType: NavigationRailLabelType.all,
                               onDestinationSelected: _selectTab,
                               destinations: [
-                                for (final (icon, label) in destinations)
+                                for (final (icon, label, _) in destinations)
                                   NavigationRailDestination(
                                     icon: Icon(icon),
                                     label: Text(label),
@@ -276,7 +298,15 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
                         ],
                         Expanded(
                           key: const ValueKey('app-tabs'),
-                          child: IndexedStack(index: activeTab, children: tabs),
+                          child: !_initialTabChosen
+                              ? const Center(child: CircularProgressIndicator())
+                              : IndexedStack(
+                                  index: activeTab,
+                                  children: [
+                                    for (var i = 0; i < destinations.length; i++)
+                                      _visitedTabs[i] ?? const SizedBox.shrink(),
+                                  ],
+                                ),
                         ),
                       ],
                     ),
@@ -289,7 +319,7 @@ class _OpenAverAppState extends ConsumerState<OpenAverApp> {
                                 : NavigationDestinationLabelBehavior.alwaysShow,
                             onDestinationSelected: _selectTab,
                             destinations: [
-                              for (final (icon, label) in destinations)
+                              for (final (icon, label, _) in destinations)
                                 NavigationDestination(icon: Icon(icon), label: label),
                             ],
                           ),

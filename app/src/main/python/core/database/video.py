@@ -2,8 +2,9 @@
 import sqlite3
 import json
 from dataclasses import dataclass, field, asdict, fields
+from functools import cached_property
 from pathlib import Path
-from typing import NamedTuple, Optional, List, Tuple
+from typing import Iterator, NamedTuple, Optional, List, Sequence, Tuple
 from datetime import datetime
 
 from core.logger import get_logger
@@ -32,6 +33,15 @@ class MtimeIndexEntry(NamedTuple):
     sample_count: int
     cover_path: str
     metadata_complete: bool
+
+
+def _decode_video_json(raw):
+    if raw:
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+    return []
 
 
 @dataclass
@@ -187,42 +197,13 @@ class Video:
             self.cover_path = existing.cover_path
 
     @classmethod
-    def from_row(cls, row: tuple, columns: List[str]) -> 'Video':
+    def from_row(cls, row: tuple, columns: Sequence[str]) -> 'Video':
         """從資料庫 row 建立"""
         data = dict(zip(columns, row, strict=True))
 
         # 反序列化 JSON 欄位
-        if 'actresses' in data and data['actresses']:
-            try:
-                data['actresses'] = json.loads(data['actresses'])
-            except json.JSONDecodeError:
-                data['actresses'] = []
-        else:
-            data['actresses'] = []
-
-        if 'tags' in data and data['tags']:
-            try:
-                data['tags'] = json.loads(data['tags'])
-            except json.JSONDecodeError:
-                data['tags'] = []
-        else:
-            data['tags'] = []
-
-        if 'user_tags' in data and data['user_tags']:
-            try:
-                data['user_tags'] = json.loads(data['user_tags'])
-            except json.JSONDecodeError:
-                data['user_tags'] = []
-        else:
-            data['user_tags'] = []
-
-        if 'sample_images' in data and data['sample_images']:
-            try:
-                data['sample_images'] = json.loads(data['sample_images'])
-            except json.JSONDecodeError:
-                data['sample_images'] = []
-        else:
-            data['sample_images'] = []
+        for key in ('actresses', 'tags', 'user_tags', 'sample_images'):
+            data[key] = _decode_video_json(data.get(key))
 
         # 反序列化 datetime
         if 'created_at' in data and data['created_at']:
@@ -276,31 +257,54 @@ _FOCAL_CROP_MODE_CASE_SQL = (
     "WHEN videos.crop_mode = 'manual' THEN 'auto' ELSE videos.crop_mode END"
 )
 
-# The showcase list only needs these columns. Keeping the projection explicit
-# avoids pulling migration-only and write-back fields for every card.
-_SHOWCASE_COLUMNS = (
-    'path',
-    'number',
-    'title',
-    'original_title',
-    'actresses',
-    'maker',
-    'director',
-    'series',
-    'label',
-    'tags',
-    'sample_images',
-    'user_tags',
-    'duration',
-    'size_bytes',
-    'cover_path',
-    'release_date',
-    'mtime',
-    'nfo_mtime',
-    'auto_focal',
-    'crop_mode',
-    'user_rating',
-)
+
+@dataclass
+class _ShowcaseRow:
+    """A row from the SQLite snapshot used throughout a browse request.
+
+    Keep JSON in its stored form until a filter, sort or visible card needs it.
+    A later page can then reuse that value without a second database read.
+    """
+    path: str
+    number: Optional[str]
+    title: Optional[str]
+    original_title: Optional[str]
+    actresses_json: Optional[str]
+    maker: Optional[str]
+    director: Optional[str]
+    series: Optional[str]
+    label: Optional[str]
+    tags_json: Optional[str]
+    sample_images_json: Optional[str]
+    user_tags_json: Optional[str]
+    duration: Optional[int]
+    size_bytes: Optional[int]
+    cover_path: Optional[str]
+    release_date: Optional[str]
+    mtime: Optional[float]
+    nfo_mtime: Optional[float]
+    auto_focal: Optional[str]
+    crop_mode: Optional[str]
+    user_rating: Optional[int]
+
+    @cached_property
+    def actresses(self):
+        return _decode_video_json(self.actresses_json)
+
+    @cached_property
+    def tags(self):
+        return _decode_video_json(self.tags_json)
+
+    @cached_property
+    def sample_images(self):
+        return _decode_video_json(self.sample_images_json)
+
+    @cached_property
+    def user_tags(self):
+        return _decode_video_json(self.user_tags_json)
+
+
+_SHOWCASE_COLUMNS = tuple(f.name.removesuffix('_json') for f in fields(_ShowcaseRow))
 
 # Insights snapshot only needs these fields for grouping and chart aggregation.
 _INSIGHTS_COLUMNS = (
@@ -1227,6 +1231,27 @@ class VideoRepository:
         configured_dir_uris: set[str],
         actress_names: Optional[List[str]] = None,
     ) -> List[Video]:
+        """Return hydrated Video objects for callers that need the full projection."""
+        return [
+            Video.from_row(row, _SHOWCASE_COLUMNS)
+            for row in self._iter_showcase_values(configured_dir_uris, actress_names)
+        ]
+
+    def get_showcase_browse_rows(
+        self,
+        configured_dir_uris: set[str],
+        actress_names: Optional[List[str]] = None,
+    ) -> List[_ShowcaseRow]:
+        return [
+            _ShowcaseRow(*row)
+            for row in self._iter_showcase_values(configured_dir_uris, actress_names)
+        ]
+
+    def _iter_showcase_values(
+        self,
+        configured_dir_uris: set[str],
+        actress_names: Optional[List[str]] = None,
+    ) -> Iterator[tuple]:
         """Load the showcase projection only for configured gallery roots.
 
         The SQL predicate is intentionally a broad prefix prefilter; callers
@@ -1240,7 +1265,7 @@ class VideoRepository:
         aliases first; this method deliberately does not know alias semantics.
         """
         if not configured_dir_uris:
-            return []
+            return
 
         scope_clauses: List[str] = []
         params: List[str] = []
@@ -1268,11 +1293,7 @@ class VideoRepository:
         )
         conn = self._get_connection()
         try:
-            cursor = conn.execute(query, params)
-            return [
-                Video.from_row(row, list(_SHOWCASE_COLUMNS))
-                for row in cursor.fetchall()
-            ]
+            yield from conn.execute(query, params)
         finally:
             conn.close()
 
@@ -1960,6 +1981,56 @@ class VideoRepository:
         finally:
             conn.close()
 
+    def other_video_uses_cover(self, path: str, cover_uri: str, cover_fs: str) -> bool:
+        """Check canonical and legacy cover references before replacing bytes."""
+        conn = self._get_connection()
+        try:
+            return conn.execute(
+                'SELECT 1 FROM videos WHERE cover_path IN (?, ?) AND path != ? LIMIT 1',
+                (cover_uri, cover_fs, path),
+            ).fetchone() is not None
+        finally:
+            conn.close()
+
+    def paths_in_managed_output(self, output_dir: str) -> List[str]:
+        """Read physical co-owners of one managed output directory."""
+        conn = self._get_connection()
+        try:
+            return [row[0] for row in conn.execute(
+                "SELECT path FROM videos WHERE output_dir = ?", (output_dir,)
+            )]
+        finally:
+            conn.close()
+
+    def replace_detail_element(self, path, element, value, nfo_mtime, new_output=None):
+        """Index the selected field and its output binding in one transaction."""
+        assignments = {
+            'plot': ('nfo_mtime = ?', [nfo_mtime]),
+            'tags': ('tags = ?, nfo_mtime = ?', [json.dumps(value, ensure_ascii=False), nfo_mtime]),
+            'samples': ('sample_images = ?', [json.dumps(value, ensure_ascii=False)]),
+            'cover': ("cover_path = ?, auto_focal = '', crop_mode = 'auto', focal_attempted_at = NULL", [value]),
+        }
+        columns, values = assignments[element]
+        conn = self._get_connection()
+        try:
+            with conn:
+                guard = ''
+                if new_output:
+                    columns += ', output_dir = ?'
+                    values.append(new_output)
+                    guard = " AND coalesce(output_dir, '') = ''"
+                sql = f'UPDATE videos SET {columns}, updated_at = CURRENT_TIMESTAMP WHERE path = ?{guard}'
+                if conn.execute(sql, [*values, path]).rowcount != 1:
+                    raise RuntimeError('Selected video changed during rescrape')
+        finally:
+            conn.close()
+        if element == 'tags':
+            try:
+                from core.similar.ranker_cache import SimilarRankerCache
+                SimilarRankerCache.invalidate()
+            except Exception:
+                logger.exception('SimilarRankerCache invalidate failed (non-fatal)')
+
     def set_output_dir_if_empty(self, path: str, output_dir: str) -> bool:
         """安全設定 output_dir 欄位，僅在既有值為空時寫入（P2-B parity closeout）。
 
@@ -2180,7 +2251,7 @@ class VideoRepository:
         try:
             cursor.execute(
                 "UPDATE videos SET cover_path = ?, updated_at = CURRENT_TIMESTAMP "
-                "WHERE path = ? AND cover_path = ?",
+                "WHERE path = ? AND cover_path IS ?",
                 (new_cover_path, path, expected_old_cover_path)
             )
             conn.commit()

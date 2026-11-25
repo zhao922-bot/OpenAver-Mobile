@@ -1548,6 +1548,18 @@
       "folder_dirty": "You have unsaved folder changes",
       "confirm": "{message} Leave anyway?"
     },
+    "elements": {
+      "title": "Fill missing metadata",
+      "hint": "Choose a source for each field you want to fill. Existing values are kept.",
+      "cover": "Cover",
+      "plot": "Synopsis",
+      "samples": "Sample images",
+      "tags": "Tags",
+      "skip": "Skip",
+      "run": "Run",
+      "summary": "Filled {success} · Skipped {skipped} · Failed {failed}",
+      "create_nfos": "Create missing NFO files"
+    },
     "plot_flow": {
       "title": "Synopses saved",
       "confirm": "Found and saved original synopses for {n} videos. Translate these into the current app language? Originals are kept if translation fails.",
@@ -1620,6 +1632,13 @@
       "server_error": "Server error ({status})",
       "load_failed": "Load failed",
       "cannot_connect": "Cannot connect to server"
+    },
+    "elements": {
+      "updated": "Updated",
+      "title": "Re-scrape metadata",
+      "hint": "Choose a source for each field you want to replace for this video.",
+      "summary": "Updated {success} · Skipped {skipped} · Failed {failed}",
+      "interrupted": "The connection ended before the task finished."
     },
     "rescrape": {
       "modal_title": "Advanced Re-scrape",
@@ -2740,6 +2759,7 @@
   },
   "runtime": {
     "scanner": {
+      "shared_detail_asset": "This file is shared by multiple videos and cannot be replaced for this video alone.",
       "readonly_start": "Read-only generation: {path}",
       "readonly_output_missing": "{path}: output folder is not configured; skipped",
       "readonly_unreachable": "{path}: source is unreachable; skipped",

@@ -32,7 +32,6 @@ lower()」；回傳給前端的顯示值（`part_tokens` 的 token 字面）不�
 from dataclasses import dataclass
 from typing import Callable, Generic, List, Optional, Tuple, TypeVar
 import os
-import re
 
 from core.multipart_tokens import detect_multipart_token, strip_part_token
 from core.path_utils import to_file_uri, uri_to_fs_path, uri_to_local_fs_path
@@ -46,7 +45,7 @@ T = TypeVar('T')  # 呼叫端的 row 型別（Video ORM 物件、或任意帶 pa
 def normalize_stem_key(stem: str) -> str:
     """CD-122-3：剝 token 後的 stem 正規化比對鍵（去空白 + lower）。"""
     stripped = strip_part_token(stem)
-    return re.sub(r'\s+', '', stripped).lower()
+    return ''.join(stripped.split()).lower()
 
 
 def group_key(fs_path: str) -> Tuple[str, str]:
@@ -55,8 +54,8 @@ def group_key(fs_path: str) -> Tuple[str, str]:
     fs_path 必須是 Zone 1 原生路徑（呼叫端已用 path_utils 轉換過），本函式內只做
     檔名尾端字串運算，不碰 file:// URI。
     """
-    folder = os.path.dirname(fs_path)
-    stem = os.path.splitext(os.path.basename(fs_path))[0]
+    folder, filename = os.path.split(fs_path)
+    stem = os.path.splitext(filename)[0]
     return (folder, normalize_stem_key(stem))
 
 
@@ -114,19 +113,17 @@ def group_rows(rows: List[T], fs_path_of: Callable[[T], str]) -> List['VideoGrou
     # 而這個迴圈跑遍整個片庫（`GET /api/showcase/videos` 每次載入都跑一遍 2000+ 列），
     # 所以每列只轉一次、後面全部重用（/simplify 效率條目）。
     buckets: dict = {}
-    order: List[Tuple[str, str]] = []
     for row in rows:
         fs_path = fs_path_of(row)
-        key = group_key(fs_path)
-        if key not in buckets:
-            buckets[key] = []
-            order.append(key)
-        buckets[key].append((row, fs_path))
+        buckets.setdefault(group_key(fs_path), []).append((row, fs_path))
 
     groups: List[VideoGroup] = []
-    for key in order:
-        # parsed: [(row, token, number)]，每列的 token/段號也只解析一次（同上）。
-        parsed = [(r, *part_info(fs_path)) for r, fs_path in buckets[key]]
+    # Dict iteration preserves the first occurrence of every normalized key.
+    for bucket in buckets.values():
+        if len(bucket) == 1:
+            groups.append(VideoGroup(members=[bucket[0][0]], part_tokens=[]))
+            continue
+        parsed = [(row, *part_info(fs_path)) for row, fs_path in bucket]
         members = [r for r, _, _ in parsed]
         tokens = [t for _, t, _ in parsed]
 
@@ -145,9 +142,7 @@ def group_rows(rows: List[T], fs_path_of: Callable[[T], str]) -> List['VideoGrou
         # 比對用 part **number** 而非 token 字面：`cd1` 與 `pt1` 字面不同但都是第 1 段，
         # 同樣是衝突（這條順手把 Codex 沒點名的同款漏洞一起堵掉）。
         part_numbers = [n for _, _, n in parsed]
-        if (len(members) < 2
-                or not all(tokens)
-                or len(set(part_numbers)) != len(part_numbers)):
+        if not all(tokens) or len(set(part_numbers)) != len(part_numbers):
             for row in members:
                 groups.append(VideoGroup(members=[row], part_tokens=[]))
             continue

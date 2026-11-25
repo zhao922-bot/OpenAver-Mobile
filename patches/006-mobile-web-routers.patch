@@ -4045,7 +4045,7 @@
          return {
              "success": True,
              "data": {
-@@ -1046,125 +2748,2196 @@
+@@ -1046,125 +2748,2254 @@
                  "missing_cover": missing_cover,
                  "total_missing": total_missing,
                  "items": items,
@@ -5388,6 +5388,64 @@
 +        })
 +
 +
++class ElementBackfillRequest(BaseModel):
++    sources: Dict[str, str]
++
++
++@router.get("/backfill-elements/sources")
++def get_element_backfill_sources(request: Request):
++    from core.element_sources import element_sources
++    from web.shell_identity import cf_availability_here
++
++    return {"success": True, "sources": element_sources(load_config(), cf_availability_here(request))}
++
++
++def _element_backfill_generator(cancel_event, sources, shell, file_path=None):
++    from core.element_backfill import backfill_events
++    from core.element_sources import element_sources
++
++    try:
++        config = load_config()
++        options = element_sources(config, shell)
++        if not sources or any(
++            source not in {item['id'] for item in options.get(field, ())}
++            for field, source in sources.items()
++        ):
++            yield _sse_event({"type": "error", "message": _runtime_text(
++                "scanner", "batch_unknown_source", _active_locale(config))})
++            return
++        for event in backfill_events(get_db_path(), config, sources, cancel_event, file_path=file_path):
++            yield _sse_event(event)
++    except Exception:
++        logger.exception("Element backfill failed")
++        yield _sse_event({"type": "error", "message": _runtime_text(
++            "scanner", "generate_failed", _active_locale())})
++
++
++@router.post("/backfill-elements")
++async def backfill_elements(request: Request, body: ElementBackfillRequest):
++    from web.shell_identity import cf_availability_here
++
++    shell = cf_availability_here(request)
++    return await _cancelable_sse_response(
++        request, lambda cancel: _element_backfill_generator(cancel, body.sources, shell),
++    )
++
++
++class ElementRescrapeRequest(ElementBackfillRequest):
++    file_path: str = Field(min_length=1)
++
++
++@router.post("/rescrape-elements")
++async def rescrape_elements(request: Request, body: ElementRescrapeRequest):
++    from web.shell_identity import cf_availability_here
++
++    shell = cf_availability_here(request)
++    return await _cancelable_sse_response(
++        request, lambda cancel: _element_backfill_generator(cancel, body.sources, shell, body.file_path),
++    )
++
++
 +@router.post("/backfill-titles")
 +async def backfill_titles(request: Request):
 +    """SSE: translate all titles that differ from the active UI language."""
@@ -6313,7 +6371,7 @@
  
  
  @router.get("/actress-stats")
-@@ -1177,12 +4950,25 @@
+@@ -1177,12 +5008,25 @@
              return {"success": True, "data": {"count": 0}}
  
          repo = VideoRepository(db_path)
@@ -6341,7 +6399,7 @@
  
  
  # === Jellyfin 圖片批次補齊 ===
-@@ -1191,30 +4977,43 @@
+@@ -1191,30 +5035,43 @@
      """檢查 DB 中有多少影片缺少 poster/fanart"""
      videos = repo.get_all()
      need_update = []
@@ -6403,7 +6461,7 @@
      try:
          # Codex PR#123 P2：gate 必須排在 get_db_path() 之前——get_db_path() 內部會
          # mkdir 建立 output/ 資料夾（core/database/connection.py:15-22），是有副作用
-@@ -1224,17 +5023,29 @@
+@@ -1224,17 +5081,29 @@
          # done + updated:0（off 時零寫入），且與 _check_jellyfin_needed() 的順序
          # 不對稱。config 只讀一次，下面 path_mappings 沿用同一個 config。
          config = load_config()
@@ -6435,7 +6493,7 @@
              return
  
          repo = VideoRepository(db_path)
-@@ -1246,13 +5057,31 @@
+@@ -1246,13 +5115,31 @@
          if total == 0:
              _jellyfin_cache_result = None
              _jellyfin_cache_time = 0
@@ -6469,7 +6527,7 @@
              # Codex PR#122 P2-b：開頭 gate 一次不夠——批次跑到一半使用者可能把
              # external_manager 切成 off（或非白名單），剩餘項目仍會繼續產生
              # poster/fanart，違反 AC8 的 TOCTOU 洞。每筆重讀成本可忽略（產一張圖
-@@ -1261,45 +5090,129 @@
+@@ -1261,45 +5148,129 @@
              current_config = load_config()
              current_external_manager = current_config.get('scraper', {}).get('external_manager', 'off')
              if current_external_manager not in STEM_IMAGE_MODES:
@@ -6616,7 +6674,7 @@
  
  
  def _check_jellyfin_needed() -> dict | None:
-@@ -1359,348 +5272,21 @@
+@@ -1359,348 +5330,21 @@
  
  
  @router.get("/jellyfin-update")
@@ -9548,7 +9606,7 @@
 +_DEFAULT_NEEDS_TRANSLATE = _needs_translate
 +_DEFAULT_CAN_MANUAL_TRANSLATE = _can_manual_translate
 +_DEFAULT_VIDEO_REPOSITORY = VideoRepository
-+_DEFAULT_GET_SHOWCASE_ROWS = VideoRepository.get_showcase_rows
++_DEFAULT_GET_SHOWCASE_BROWSE_ROWS = VideoRepository.get_showcase_browse_rows
 +
 +_showcase_groups_cache_lock = threading.Lock()
 +_showcase_groups_cache: Optional[tuple[tuple, tuple]] = None
@@ -9746,7 +9804,7 @@
 +
 +    can_cache = (
 +        VideoRepository is _DEFAULT_VIDEO_REPOSITORY
-+        and VideoRepository.get_showcase_rows is _DEFAULT_GET_SHOWCASE_ROWS
++        and VideoRepository.get_showcase_browse_rows is _DEFAULT_GET_SHOWCASE_BROWSE_ROWS
 +    )
 +    cache_key = None
 +    if can_cache:
@@ -9766,7 +9824,7 @@
 +
 +    repo = VideoRepository(db_path)
 +    all_videos = [
-+        v for v in repo.get_showcase_rows(configured_dir_uris, actress_names)
++        v for v in repo.get_showcase_browse_rows(configured_dir_uris, actress_names)
 +        if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)
 +    ]
 +    groups = group_rows(

@@ -1175,19 +1175,20 @@
 +        _ensured_db_dir = None
 --- a/core/database/video.py
 +++ b/core/database/video.py
-@@ -1,9 +1,9 @@
+@@ -1,9 +1,10 @@
  """core.database.video — Video 資料模型與 VideoRepository（spec-87 子模組）。"""
  import sqlite3
  import json
 -from dataclasses import dataclass, field, asdict
 +from dataclasses import dataclass, field, asdict, fields
++from functools import cached_property
  from pathlib import Path
 -from typing import Optional, List, Tuple
-+from typing import NamedTuple, Optional, List, Tuple
++from typing import Iterator, NamedTuple, Optional, List, Sequence, Tuple
  from datetime import datetime
  
  from core.logger import get_logger
-@@ -17,6 +17,21 @@
+@@ -17,6 +18,30 @@
  # 算出來的張數恆為 >= 0，兩者永遠不相等，比對式會自然觸發重掃（見
  # get_mtime_index() docstring，TASK-118b-T9 Opus 裁決④）。
  _SAMPLE_COUNT_UNKNOWN = -1
@@ -1206,10 +1207,19 @@
 +    sample_count: int
 +    cover_path: str
 +    metadata_complete: bool
++
++
++def _decode_video_json(raw):
++    if raw:
++        try:
++            return json.loads(raw)
++        except json.JSONDecodeError:
++            pass
++    return []
  
  
  @dataclass
-@@ -106,6 +121,71 @@
+@@ -106,43 +131,79 @@
              data['updated_at'] = self.updated_at.isoformat()
          return data
  
@@ -1279,9 +1289,49 @@
 +            self.cover_path = existing.cover_path
 +
      @classmethod
-     def from_row(cls, row: tuple, columns: List[str]) -> 'Video':
+-    def from_row(cls, row: tuple, columns: List[str]) -> 'Video':
++    def from_row(cls, row: tuple, columns: Sequence[str]) -> 'Video':
          """從資料庫 row 建立"""
-@@ -153,7 +233,14 @@
+         data = dict(zip(columns, row, strict=True))
+ 
+         # 反序列化 JSON 欄位
+-        if 'actresses' in data and data['actresses']:
+-            try:
+-                data['actresses'] = json.loads(data['actresses'])
+-            except json.JSONDecodeError:
+-                data['actresses'] = []
+-        else:
+-            data['actresses'] = []
+-
+-        if 'tags' in data and data['tags']:
+-            try:
+-                data['tags'] = json.loads(data['tags'])
+-            except json.JSONDecodeError:
+-                data['tags'] = []
+-        else:
+-            data['tags'] = []
+-
+-        if 'user_tags' in data and data['user_tags']:
+-            try:
+-                data['user_tags'] = json.loads(data['user_tags'])
+-            except json.JSONDecodeError:
+-                data['user_tags'] = []
+-        else:
+-            data['user_tags'] = []
+-
+-        if 'sample_images' in data and data['sample_images']:
+-            try:
+-                data['sample_images'] = json.loads(data['sample_images'])
+-            except json.JSONDecodeError:
+-                data['sample_images'] = []
+-        else:
+-            data['sample_images'] = []
++        for key in ('actresses', 'tags', 'user_tags', 'sample_images'):
++            data[key] = _decode_video_json(data.get(key))
+ 
+         # 反序列化 datetime
+         if 'created_at' in data and data['created_at']:
+@@ -153,7 +214,14 @@
              if isinstance(data['updated_at'], str):
                  data['updated_at'] = datetime.fromisoformat(data['updated_at'])
  
@@ -1296,35 +1346,57 @@
  
  
  # preserve-on-conflict 欄位集合（CD-98a-6）：比照 path — 首次 INSERT 帶 dataclass 預設值，
-@@ -189,6 +276,67 @@
-     "WHEN videos.crop_mode = 'manual' THEN 'auto' ELSE videos.crop_mode END"
+@@ -190,6 +258,90 @@
  )
  
-+# The showcase list only needs these columns. Keeping the projection explicit
-+# avoids pulling migration-only and write-back fields for every card.
-+_SHOWCASE_COLUMNS = (
-+    'path',
-+    'number',
-+    'title',
-+    'original_title',
-+    'actresses',
-+    'maker',
-+    'director',
-+    'series',
-+    'label',
-+    'tags',
-+    'sample_images',
-+    'user_tags',
-+    'duration',
-+    'size_bytes',
-+    'cover_path',
-+    'release_date',
-+    'mtime',
-+    'nfo_mtime',
-+    'auto_focal',
-+    'crop_mode',
-+    'user_rating',
-+)
+ 
++@dataclass
++class _ShowcaseRow:
++    """A row from the SQLite snapshot used throughout a browse request.
++
++    Keep JSON in its stored form until a filter, sort or visible card needs it.
++    A later page can then reuse that value without a second database read.
++    """
++    path: str
++    number: Optional[str]
++    title: Optional[str]
++    original_title: Optional[str]
++    actresses_json: Optional[str]
++    maker: Optional[str]
++    director: Optional[str]
++    series: Optional[str]
++    label: Optional[str]
++    tags_json: Optional[str]
++    sample_images_json: Optional[str]
++    user_tags_json: Optional[str]
++    duration: Optional[int]
++    size_bytes: Optional[int]
++    cover_path: Optional[str]
++    release_date: Optional[str]
++    mtime: Optional[float]
++    nfo_mtime: Optional[float]
++    auto_focal: Optional[str]
++    crop_mode: Optional[str]
++    user_rating: Optional[int]
++
++    @cached_property
++    def actresses(self):
++        return _decode_video_json(self.actresses_json)
++
++    @cached_property
++    def tags(self):
++        return _decode_video_json(self.tags_json)
++
++    @cached_property
++    def sample_images(self):
++        return _decode_video_json(self.sample_images_json)
++
++    @cached_property
++    def user_tags(self):
++        return _decode_video_json(self.user_tags_json)
++
++
++_SHOWCASE_COLUMNS = tuple(f.name.removesuffix('_json') for f in fields(_ShowcaseRow))
 +
 +# Insights snapshot only needs these fields for grouping and chart aggregation.
 +_INSIGHTS_COLUMNS = (
@@ -1361,10 +1433,11 @@
 +    """Escape SQLite LIKE wildcards before appending a trailing '%'."""
 +    return value.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
 +
- 
++
  class VideoRepository:
      """影片資料存取層"""
-@@ -201,16 +349,19 @@
+ 
+@@ -201,16 +353,19 @@
          """取得資料庫連線"""
          return connection.get_connection(self.db_path)
  
@@ -1388,7 +1461,7 @@
          return self._columns_cache
  
      def upsert(self, video: Video) -> int:
-@@ -364,267 +515,419 @@
+@@ -364,267 +519,419 @@
              self.upsert(video)
              return
  
@@ -2058,7 +2131,7 @@
  
      def upsert_batch(self, videos: List[Video]) -> tuple:
          """批次新增或更新
-@@ -726,8 +1029,30 @@
+@@ -726,8 +1033,30 @@
              cursor.execute("SELECT * FROM videos WHERE path = ?", (path,))
              row = cursor.fetchone()
              if row:
@@ -2090,7 +2163,7 @@
          finally:
              conn.close()
  
-@@ -832,7 +1157,171 @@
+@@ -832,7 +1161,188 @@
          try:
              cursor.execute("SELECT * FROM videos ORDER BY id")
              rows = cursor.fetchall()
@@ -2165,6 +2238,27 @@
 +        configured_dir_uris: set[str],
 +        actress_names: Optional[List[str]] = None,
 +    ) -> List[Video]:
++        """Return hydrated Video objects for callers that need the full projection."""
++        return [
++            Video.from_row(row, _SHOWCASE_COLUMNS)
++            for row in self._iter_showcase_values(configured_dir_uris, actress_names)
++        ]
++
++    def get_showcase_browse_rows(
++        self,
++        configured_dir_uris: set[str],
++        actress_names: Optional[List[str]] = None,
++    ) -> List[_ShowcaseRow]:
++        return [
++            _ShowcaseRow(*row)
++            for row in self._iter_showcase_values(configured_dir_uris, actress_names)
++        ]
++
++    def _iter_showcase_values(
++        self,
++        configured_dir_uris: set[str],
++        actress_names: Optional[List[str]] = None,
++    ) -> Iterator[tuple]:
 +        """Load the showcase projection only for configured gallery roots.
 +
 +        The SQL predicate is intentionally a broad prefix prefilter; callers
@@ -2178,7 +2272,7 @@
 +        aliases first; this method deliberately does not know alias semantics.
 +        """
 +        if not configured_dir_uris:
-+            return []
++            return
 +
 +        scope_clauses: List[str] = []
 +        params: List[str] = []
@@ -2206,11 +2300,7 @@
 +        )
 +        conn = self._get_connection()
 +        try:
-+            cursor = conn.execute(query, params)
-+            return [
-+                Video.from_row(row, list(_SHOWCASE_COLUMNS))
-+                for row in cursor.fetchall()
-+            ]
++            yield from conn.execute(query, params)
 +        finally:
 +            conn.close()
 +
@@ -2263,7 +2353,7 @@
          finally:
              conn.close()
  
-@@ -850,8 +1339,8 @@
+@@ -850,8 +1360,8 @@
          finally:
              conn.close()
  
@@ -2274,7 +2364,7 @@
  
          sample_count（TASK-118b-T9）：合法 JSON list → 實際張數。空字串／NULL／
          損毀 JSON／非 list 的合法 JSON 這四種壞值一律回傳哨兵值
-@@ -859,15 +1348,45 @@
+@@ -859,15 +1369,45 @@
          裁決④：壞資料要 fail-safe 成「需要重掃」，不得讓單筆壞資料中止整個
          SELECT／整次掃描）。真實檔案系統算出來的張數恆為 >= 0，-1 必定與任何
          真實張數不相等，呼叫端的比對式因此自然觸發重掃，不需要額外的例外分支。
@@ -2327,7 +2417,7 @@
                  sample_count = _SAMPLE_COUNT_UNKNOWN
                  if sample_images_raw:
                      try:
-@@ -876,7 +1395,22 @@
+@@ -876,7 +1416,22 @@
                              sample_count = len(parsed)
                      except (json.JSONDecodeError, TypeError):
                          pass
@@ -2351,7 +2441,7 @@
              return result
          finally:
              conn.close()
-@@ -885,7 +1419,7 @@
+@@ -885,7 +1440,7 @@
          """取得 {path: scrape_attempted_at} 索引，供 T3 `_should_skip` 冷啟動判斷用（TASK-89b-T1）。
  
          Additive read-only method。回傳的是 {path: int}——**不是** get_mtime_index() 的
@@ -2360,7 +2450,7 @@
          含 scrape_attempted_at == 0 的 row（不過濾）——呼叫端用 `.get(path, 0) > 0`
          統一判斷「從未試過」（key 不存在或值為 0 皆視為未試過）。
          """
-@@ -988,7 +1522,7 @@
+@@ -988,7 +1543,7 @@
              cursor.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
              row = cursor.fetchone()
              if row:
@@ -2369,7 +2459,7 @@
              return None
          finally:
              conn.close()
-@@ -1008,7 +1542,7 @@
+@@ -1008,7 +1563,7 @@
              )
              row = cursor.fetchone()
              if row:
@@ -2378,7 +2468,7 @@
              return None
          finally:
              conn.close()
-@@ -1044,8 +1578,9 @@
+@@ -1044,8 +1599,9 @@
  
              # 建立結果字典（使用原始輸入的 key）
              result = {}
@@ -2389,7 +2479,7 @@
                  if video.number:
                      # 找到原始輸入的 key
                      original_key = upper_to_original.get(video.number.upper())
-@@ -1109,7 +1644,8 @@
+@@ -1109,7 +1665,8 @@
                  (actress_name,)
              )
              rows = cursor.fetchall()
@@ -2399,7 +2489,7 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress json_each failed for %r (returning [])",
-@@ -1146,7 +1682,8 @@
+@@ -1146,7 +1703,8 @@
                  tuple(names)
              )
              rows = cursor.fetchall()
@@ -2409,7 +2499,7 @@
          except sqlite3.OperationalError:
              logger.exception(
                  "get_videos_by_actress_names json_each failed for %d names (returning [])",
-@@ -1156,25 +1693,145 @@
+@@ -1156,25 +1714,145 @@
          finally:
              conn.close()
  
@@ -2558,7 +2648,7 @@
          finally:
              conn.close()
  
-@@ -1193,6 +1850,20 @@
+@@ -1193,6 +1871,20 @@
              cursor.execute(
                  "UPDATE videos SET title = ?, original_title = ?, nfo_mtime = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?",
                  (title, original_title, nfo_mtime, path)
@@ -2579,7 +2669,64 @@
              )
              conn.commit()
              return cursor.rowcount > 0
-@@ -1343,7 +2014,13 @@
+@@ -1289,6 +1981,56 @@
+         finally:
+             conn.close()
+ 
++    def other_video_uses_cover(self, path: str, cover_uri: str, cover_fs: str) -> bool:
++        """Check canonical and legacy cover references before replacing bytes."""
++        conn = self._get_connection()
++        try:
++            return conn.execute(
++                'SELECT 1 FROM videos WHERE cover_path IN (?, ?) AND path != ? LIMIT 1',
++                (cover_uri, cover_fs, path),
++            ).fetchone() is not None
++        finally:
++            conn.close()
++
++    def paths_in_managed_output(self, output_dir: str) -> List[str]:
++        """Read physical co-owners of one managed output directory."""
++        conn = self._get_connection()
++        try:
++            return [row[0] for row in conn.execute(
++                "SELECT path FROM videos WHERE output_dir = ?", (output_dir,)
++            )]
++        finally:
++            conn.close()
++
++    def replace_detail_element(self, path, element, value, nfo_mtime, new_output=None):
++        """Index the selected field and its output binding in one transaction."""
++        assignments = {
++            'plot': ('nfo_mtime = ?', [nfo_mtime]),
++            'tags': ('tags = ?, nfo_mtime = ?', [json.dumps(value, ensure_ascii=False), nfo_mtime]),
++            'samples': ('sample_images = ?', [json.dumps(value, ensure_ascii=False)]),
++            'cover': ("cover_path = ?, auto_focal = '', crop_mode = 'auto', focal_attempted_at = NULL", [value]),
++        }
++        columns, values = assignments[element]
++        conn = self._get_connection()
++        try:
++            with conn:
++                guard = ''
++                if new_output:
++                    columns += ', output_dir = ?'
++                    values.append(new_output)
++                    guard = " AND coalesce(output_dir, '') = ''"
++                sql = f'UPDATE videos SET {columns}, updated_at = CURRENT_TIMESTAMP WHERE path = ?{guard}'
++                if conn.execute(sql, [*values, path]).rowcount != 1:
++                    raise RuntimeError('Selected video changed during rescrape')
++        finally:
++            conn.close()
++        if element == 'tags':
++            try:
++                from core.similar.ranker_cache import SimilarRankerCache
++                SimilarRankerCache.invalidate()
++            except Exception:
++                logger.exception('SimilarRankerCache invalidate failed (non-fatal)')
++
+     def set_output_dir_if_empty(self, path: str, output_dir: str) -> bool:
+         """安全設定 output_dir 欄位，僅在既有值為空時寫入（P2-B parity closeout）。
+ 
+@@ -1343,7 +2085,13 @@
          finally:
              conn.close()
  
@@ -2594,7 +2741,7 @@
          """安全更新 auto_focal 欄位（不碰其他欄位，CD-98a-6 mutator，鏡射 update_user_tags）。
  
          同時蓋章 focal_attempted_at = CURRENT_TIMESTAMP（單條 UPDATE 原子寫，Codex PR#105
-@@ -1383,13 +2060,57 @@
+@@ -1383,13 +2131,57 @@
          cursor = conn.cursor()
          try:
              cursor.execute(
@@ -2654,7 +2801,16 @@
          finally:
              conn.close()
  
-@@ -1566,7 +2287,7 @@
+@@ -1459,7 +2251,7 @@
+         try:
+             cursor.execute(
+                 "UPDATE videos SET cover_path = ?, updated_at = CURRENT_TIMESTAMP "
+-                "WHERE path = ? AND cover_path = ?",
++                "WHERE path = ? AND cover_path IS ?",
+                 (new_cover_path, path, expected_old_cover_path)
+             )
+             conn.commit()
+@@ -1566,7 +2358,7 @@
                  """,
                  (escaped + '%', escaped + '%/%'),
              )
@@ -2689,6 +2845,685 @@
 +        for tag in if_none_match.split(",")
 +    ]
 +
+--- /dev/null
++++ b/core/element_backfill.py
+@@ -0,0 +1,415 @@
++"""Fill explicitly selected library fields from a single source per field."""
++from collections import Counter
++from pathlib import Path
++from threading import RLock
++
++from core import enricher
++from core.android_storage import AndroidStoragePermissionError
++from core.config import get_configured_gallery_dirs
++from core.cover_layout import resolve_cover_target
++from core.database import VideoRepository
++from core.element_sources import ELEMENTS
++from core.gallery_scanner import VideoScanner
++from core.i18n import get_config_locale, t
++from core.library_titles import rows_in_library_dirs
++from core.media_io import ensure_directory
++from core.logger import get_logger
++from core.multipart_group import VideoGroup, logical_video_groups
++from core.nfo_locator import locate_nfo_for_video
++from core.nfo_read import nfo_merged_tags
++from core.nfo_updater import parse_nfo, replace_nfo_tags
++from core.path_utils import is_path_under_dir, to_file_uri, uri_to_local_fs_path
++from core.plot_backfill import PlotBackfillCandidate, PlotTranslationBatch, candidate_number, clean_summary_text
++from core.plot_writeback import fill_empty_nfo_plot
++from core.readonly_paths import _build_old_base, _resolve_movie_dir, _format_data, resolve_owning_output_root
++from core.video_extensions import get_video_extensions
++from core.scraper import search_jav_single_source
++from core.title_language import plot_needs_translation
++from core.title_writeback import strip_illegal_xml_chars
++
++logger = get_logger(__name__)
++# Two simultaneous fill requests may choose different sources. Recheck the
++# live row and filesystem under this lock before committing either result.
++_WRITE_LOCK = RLock()
++
++
++_FIELD_VALUES = {
++    'cover': ('cover', 'api.cover_not_found'),
++    'plot': ('_summary', 'plots.error_no_summary'),
++    'samples': ('sample_images', 'samples.error_no_sample_images'),
++    'tags': ('tags', 'scanner.tag_source_no_tags'),
++}
++
++
++class _NeedCard(Exception):
++    pass
++
++
++class _FieldError(Exception):
++    """A localization key suitable for showing in a field result."""
++
++
++def _strings(values):
++    if not isinstance(values, list):
++        return []
++    cleaned = (strip_illegal_xml_chars(value).strip() for value in values if isinstance(value, str))
++    return list(dict.fromkeys(filter(None, cleaned)))
++
++
++def _card_value(card, key, error):
++    if card is None:
++        raise _NeedCard
++    value = card.get(key)
++    if key in ('tags', 'sample_images'):
++        value = _strings(value)
++    elif key == '_summary':
++        value = strip_illegal_xml_chars(clean_summary_text(value))
++    if not value:
++        raise _FieldError(error)
++    return value
++
++
++def _lookup(number, source):
++    if not number:
++        raise _FieldError('scanner.source_rename_missing_number')
++    try:
++        card = search_jav_single_source(number, source=source, surface_access_errors=True)
++    except Exception as exc:
++        logger.warning('Element lookup failed for %s at %s (%s)', number, source, type(exc).__name__)
++        raise _FieldError('plots.error_search_failed') from exc
++    if not card:
++        raise _FieldError('plots.error_not_found')
++    ids = {card[key] for key in ('source', '_source') if card.get(key)}
++    if ids != {source}:
++        raise _FieldError('scanner.batch_unknown_source')
++    return card
++
++
++class _Movie:
++    def __init__(self, repo, config, group, shared_folder, cancel, scanner):
++        self.repo = repo
++        self.config = config
++        self.group = group
++        self.number = next(filter(None, map(candidate_number, group.members)), '')
++        self.mappings = config.get('gallery', {}).get('path_mappings', {})
++        self.manager = config.get('scraper', {}).get('external_manager', 'off')
++        self.shared_folder = shared_folder
++        self.scanner = scanner
++        self.cancel = cancel
++        self.cards = {}
++        self.plot_targets = {}
++        self.source_plot = ''
++
++    def require_value(self, row, element, card):
++        if element == 'tags' and _strings(row.tags):
++            return
++        key, error = _FIELD_VALUES[element]
++        _card_value(card, key, error)
++
++    def paths(self, row, element, card, *, defer_output=False):
++        video = Path(uri_to_local_fs_path(row.path, self.mappings))
++        owning = resolve_owning_output_root(row.path, self.config)
++        stem = video.stem
++        if owning:
++            _, output_root, output_uri = owning
++            if not output_uri or (row.output_dir and not is_path_under_dir(row.output_dir, output_uri)):
++                raise _FieldError('samples.error_output_root_missing')
++            scraper = self.config.get('scraper', {})
++            stem = _build_old_base(row, str(video), scraper) or video.stem
++            if row.output_dir:
++                folder = Path(uri_to_local_fs_path(row.output_dir, self.mappings))
++            else:
++                self.require_value(row, element, card)
++                meta = dict(number=self.number, title=row.title, actors=row.actresses,
++                            maker=row.maker, date=row.release_date)
++                folder, uri = _resolve_movie_dir(
++                    self.repo, row.path, row, output_root, output_uri,
++                    _format_data(meta, str(video), scraper), scraper, set(), self.mappings,
++                )
++            if not folder.resolve().is_relative_to(Path(output_root).resolve()):
++                raise _FieldError('samples.error_output_root_missing')
++            if not defer_output and not folder.is_dir():
++                self.require_value(row, element, card)
++                ensure_directory(folder)
++            if not defer_output and not row.output_dir:
++                if not self.repo.set_output_dir_if_empty(row.path, uri):
++                    raise _FieldError('samples.error_db_write_failed')
++                row.output_dir = uri
++        else:
++            if not video.is_file():
++                raise _FieldError('samples.error_file_not_found')
++            folder = video.parent
++        nfo = folder / (stem + '.nfo')
++        if element != 'samples':
++            located, error = locate_nfo_for_video(row, self.config, self.mappings)
++            if error and error != 'no_nfo' and (defer_output or element != 'cover'):
++                raise _FieldError('plots.error_nfo_unreadable')
++            if located:
++                nfo = Path(located)
++        if (element != 'samples' and nfo.is_symlink()) or nfo.parent.resolve() != folder.resolve():
++            raise _FieldError('plots.error_nfo_unreadable')
++        return nfo, bool(owning)
++
++    def ensure_nfo(self, row, nfo, asset_path=None):
++        if nfo.exists():
++            return
++        # A new sidecar must survive a rescan without erasing cached metadata.
++        # Seed solely from this row; never serialize the whole scraper card.
++        asset_path = asset_path or nfo
++        created = enricher._write_nfo(
++            str(nfo), self.number, enricher._video_to_meta(row), write_nfo=True,
++            overwrite_existing=False, has_subtitle=False, user_tags=row.user_tags or [],
++            external_manager=self.manager, has_poster=asset_path.with_name(asset_path.stem + '-poster.jpg').is_file(),
++            has_fanart=asset_path.with_name(asset_path.stem + '-fanart.jpg').is_file(),
++            nfo_title_format=self.config.get('scraper', {}).get('nfo_title_format', '[{num}]{title}'),
++        )
++        if not created:
++            raise _FieldError('plots.error_nfo_write_failed')
++
++    def sync_mtime(self, row, nfo):
++        mtime = nfo.stat().st_mtime
++        if row.nfo_mtime != mtime and not self.repo.update_nfo_mtime(row.path, mtime):
++            raise _FieldError('plots.error_db_write_failed')
++
++    def fill_text(self, element, row, nfo, card):
++        root = None
++        if nfo.is_file():
++            _, root = parse_nfo(str(nfo))
++            if root is None:
++                raise _FieldError('plots.error_nfo_unreadable')
++        if element == 'plot':
++            if root is not None and (root.findtext('plot') or '').strip():
++                if str(nfo) in self.plot_targets:
++                    self.plot_targets[str(nfo)].append(row.path)
++                    self.sync_mtime(row, nfo)
++                return False
++            plot = _card_value(card, '_summary', 'plots.error_no_summary')
++            original = (root.findtext('originalplot') or '').strip() if root is not None else ''
++            self.ensure_nfo(row, nfo)
++            changed = fill_empty_nfo_plot(nfo, new_plot=plot, new_original=original or plot)
++            if changed and (not original or original == plot):
++                self.source_plot = plot
++                self.plot_targets[str(nfo)] = [row.path]
++            self.sync_mtime(row, nfo)
++            return changed
++
++        disk_tags = nfo_merged_tags(root) if root is not None else []
++        cached = _strings(row.tags)
++        if disk_tags and cached:
++            return False
++        tags = disk_tags or cached or _card_value(card, 'tags', 'scanner.tag_source_no_tags')
++        if not disk_tags:
++            self.ensure_nfo(row, nfo)
++            if not replace_nfo_tags(str(nfo), tags):
++                raise _FieldError('scanner.tag_source_nfo_failed')
++        if not cached and not self.repo.update_tags_if_changed(row.path, tags):
++            raise _FieldError('scanner.tag_source_db_failed')
++        self.sync_mtime(row, nfo)
++        return True
++
++    def has_other_movies(self, folder):
++        if self.shared_folder:
++            return True
++        members = {Path(uri_to_local_fs_path(r.path, self.mappings)) for r in self.group.members}
++        extensions = get_video_extensions(self.config)
++        return any(p.suffix.lower() in extensions and p not in members and p.is_file()
++                   for p in folder.iterdir())
++
++    def fill_cover(self, row, nfo, readonly, card):
++        thumb = None
++        if nfo.is_file():
++            _, root = parse_nfo(str(nfo))
++            if root is not None:
++                thumb = root.findtext('thumb')
++        cover = self.scanner.find_cover_image(str(nfo), thumb)
++        if cover and not readonly and self.has_other_movies(nfo.parent):
++            if Path(cover).stem.casefold() not in {
++                nfo.stem.casefold(), (nfo.stem + '-poster').casefold(), (nfo.stem + '-fanart').casefold(),
++            }:
++                cover = self.scanner._resolve_thumb_path(thumb, nfo.parent) if thumb else ''
++        if not cover:
++            url = _card_value(card, 'cover', 'api.cover_not_found')
++            cover = resolve_cover_target(str(nfo.with_suffix('')), self.manager)
++            if Path(cover).is_symlink() or not enricher._write_cover(str(nfo), url, True, False,
++                    external_manager=self.manager, preview_cover_url=card.get('preview_cover_url', '')):
++                raise _FieldError('api.cover_not_found')
++        uri = to_file_uri(cover, self.mappings)
++        if not self.repo.update_cover_path_preserve_focal(row.path, uri, row.cover_path):
++            raise _FieldError('plots.error_db_write_failed')
++        return True
++
++    def fill_samples(self, row, nfo, readonly, card):
++        if not readonly and self.has_other_movies(nfo.parent):
++            raise _FieldError('samples.error_multi_video_folder')
++        folder = nfo.parent / 'extrafanart'
++        if folder.is_symlink():
++            raise _FieldError('samples.error_sample_write_failed')
++        def disk_images():
++            if not folder.is_dir():
++                return []
++            if any(p.is_symlink() for p in folder.iterdir()):
++                raise _FieldError('samples.error_sample_write_failed')
++            return [to_file_uri(str(p), self.mappings)
++                    for p in sorted(VideoScanner._iter_extrafanart_images(folder))
++                    if enricher._is_valid_sample_file(str(p))]
++
++        uris = disk_images()
++        failed = 0
++        if not uris:
++            urls = _card_value(card, 'sample_images', 'samples.error_no_sample_images')
++            try:
++                result = enricher._write_extrafanart(str(nfo), urls, True, self.mappings,
++                    preview_sample_images=card.get('preview_sample_images'), base_url=card.get('url', ''),
++                    cancel_event=self.cancel)
++                uris, failed = result.uris, result.failed
++            except enricher.SampleBackfillCancelled:
++                # The downloader may already have committed an image when the
++                # cancellation arrived. Make those images visible to the DB.
++                uris = disk_images()
++                if not uris:
++                    raise
++        if not uris:
++            raise _FieldError('samples.error_sample_download_failed')
++        if not self.repo.update_sample_images(row.path, uris):
++            raise _FieldError('samples.error_db_write_failed')
++        if failed:
++            raise _PartialSamples(failed)
++        return True
++
++    def apply(self, element, path, card):
++        with _WRITE_LOCK:
++            if self.cancel.is_set():
++                raise enricher.SampleBackfillCancelled()
++            row = self.repo.get_by_path(path)
++            if row is None:
++                raise _FieldError('samples.error_file_not_found')
++            if element == 'cover' and row.cover_path:
++                if Path(uri_to_local_fs_path(row.cover_path, self.mappings)).is_file():
++                    return False
++            if element == 'samples':
++                base = Path(uri_to_local_fs_path(row.path, self.mappings)).parent
++                for uri in _strings(row.sample_images):
++                    if uri.startswith(('https://', 'http://')):
++                        continue
++                    sample = Path(uri_to_local_fs_path(uri, self.mappings))
++                    if (base / sample).is_file():
++                        return False
++            nfo, readonly = self.paths(row, element, card)
++            if element == 'cover':
++                return self.fill_cover(row, nfo, readonly, card)
++            if element == 'samples':
++                return self.fill_samples(row, nfo, readonly, card)
++            return self.fill_text(element, row, nfo, card)
++
++    def fill_member(self, element, source, path):
++        try:
++            return self.apply(element, path, None)
++        except _NeedCard:
++            pass
++        if self.cancel.is_set():
++            raise enricher.SampleBackfillCancelled()
++        if source not in self.cards:
++            try:
++                self.cards[source] = _lookup(self.number, source)
++            except _FieldError as exc:
++                self.cards[source] = exc
++        card = self.cards[source]
++        if isinstance(card, _FieldError):
++            raise card
++        return self.apply(element, path, card)
++
++    def save_translation_scope(self, batch, locale):
++        row = self.group.members[0]
++        if not self.plot_targets or not plot_needs_translation(self.source_plot, locale, proper_terms=row.actresses or []):
++            return
++        targets = tuple(self.plot_targets.items())
++        candidate = PlotBackfillCandidate(row.path, self.number, row.title,
++            tuple(member.path for member in self.group.members), targets, tuple(row.actresses or []))
++        batch.add(candidate, targets, self.source_plot)
++
++
++class _PartialSamples(Exception):
++    pass
++
++
++def backfill_events(db_path, config, sources, cancel, *, file_path=None):
++    locale = get_config_locale(config)
++    summary = {'success': 0, 'failed': 0, 'skipped': 0, 'total': 0, 'failed_items': [],
++               'fields_filled': dict.fromkeys(ELEMENTS, 0), 'translation_batch': '', 'translation_count': 0}
++    batch = PlotTranslationBatch(db_path)
++    groups = []
++    if not db_path.exists() and not cancel.is_set():
++        yield {'type': 'error', 'message': t('runtime.plots.db_missing', locale)}
++        return
++    if not cancel.is_set():
++        repo = VideoRepository(db_path)
++        directories, mappings = get_configured_gallery_dirs(config)
++        movie_type = _Movie
++        if file_path is None:
++            groups = logical_video_groups(rows_in_library_dirs(repo.get_all(), directories), mappings)
++        else:
++            from core.element_rescrape import DetailMovie
++            row = repo.get_by_path(file_path)
++            if not row or not rows_in_library_dirs([row], directories):
++                yield {'type': 'error', 'message': t('runtime.samples.error_file_not_found', locale)}
++                return
++            groups = [VideoGroup([row], [])]
++            movie_type = DetailMovie
++        scanner = VideoScanner(mappings)
++    folders = Counter(group.members[0].path.rsplit('/', 1)[0] for group in groups)
++    total = len(groups)
++    for index, group in enumerate(groups, 1):
++        if cancel.is_set():
++            break
++        path = group.members[0].path
++        movie = movie_type(repo, config, group, folders[path.rsplit('/', 1)[0]] > 1, cancel, scanner)
++        identity = {'number': movie.number, 'file_path': path}
++        label = movie.number or path.rsplit('/', 1)[-1]
++        yield {'type': 'progress', 'current': index - 1, 'total': total, **identity, 'message': label}
++        for element, source in sources.items():
++            changed = False
++            failures = []
++            for row in group.members:
++                if cancel.is_set():
++                    break
++                try:
++                    changed |= movie.fill_member(element, source, row.path)
++                except enricher.SampleBackfillCancelled:
++                    break
++                except _PartialSamples as exc:
++                    changed = True
++                    failures.append(f'{row.path}: {exc} × ' + t('runtime.samples.error_sample_write_failed', locale))
++                except (OSError, _FieldError) as exc:
++                    key = str(exc) if isinstance(exc, _FieldError) else 'scanner.generate_failed'
++                    if isinstance(exc, AndroidStoragePermissionError):
++                        key = 'samples.error_storage_permission_required'
++                    failures.append(t('runtime.' + key, locale, number=movie.number))
++                except Exception:
++                    logger.exception('Failed to fill %s for %s', element, row.path)
++                    failures.append(t('runtime.scanner.generate_failed', locale))
++            if element == 'plot':
++                previous_batch_size = len(batch.items)
++                try:
++                    movie.save_translation_scope(batch, locale)
++                except OSError:
++                    del batch.items[previous_batch_size:]
++                    failures.append(t('runtime.plots.error_db_write_failed', locale))
++            if cancel.is_set() and not (changed or failures):
++                break
++            item = {**identity, 'element': element, 'source': source}
++            error = ' / '.join(dict.fromkeys(failures))
++            if changed:
++                summary['success'] += int(not error)
++                summary['fields_filled'][element] += 1
++            if error:
++                summary['failed'] += 1
++                summary['failed_items'].append({**item, 'error': error})
++            skipped = not (changed or error)
++            summary['skipped'] += int(skipped)
++            yield {'type': 'result-item', **item, 'current': index, 'total': total,
++                   'success': changed and not error, 'partial': bool(changed and error),
++                   'skipped': skipped, 'error': error, 'message': error or label}
++    summary.update(total=summary['success'] + summary['skipped'] + summary['failed'],
++                   translation_batch=batch.id if batch.items else '', translation_count=len(batch.items))
++    yield {'type': 'done', 'cancelled': cancel.is_set(), 'summary': summary,
++           'message': t('runtime.scanner.done', locale)}
+--- /dev/null
++++ b/core/element_rescrape.py
+@@ -0,0 +1,200 @@
++"""Replace selected fields of one video, staging each field before publication."""
++import os
++from pathlib import Path
++from shutil import copy2
++from tempfile import TemporaryDirectory
++
++from core import android_storage, enricher, thumbnail_cache
++from core.cover_layout import resolve_cover_target
++from core.element_backfill import _Movie, _FieldError, _card_value, _FIELD_VALUES, _WRITE_LOCK, logger
++from core.media_io import delete_file, ensure_directory, write_bytes
++from core.nfo_locator import locate_nfo_for_video
++from core.nfo_read import nfo_merged_tags
++from core.nfo_updater import parse_nfo, replace_nfo_tags
++from core.path_utils import to_file_uri, uri_to_local_fs_path
++from core.plot_writeback import rewrite_nfo_plot
++from core.readonly_source import is_path_readonly, readonly_source_prefixes, writable_source_prefixes
++from core.video_extensions import get_video_extensions
++
++
++def _publish(files, temp, cancel, commit):
++    """Publish one field's files and index. Undo published files on failure."""
++    backups = {}
++    changed = []
++    new_dirs = set()
++    for target in files:
++        if target.is_symlink() or (target.exists() and not target.is_file()):
++            raise _FieldError('scanner.generate_failed')
++        if target.exists():
++            backup = temp / f'backup-{len(backups)}'
++            copy2(target, backup)
++            backups[target] = backup
++    try:
++        for target, staged in files.items():
++            enricher._raise_if_cancelled(cancel)
++            if staged is not None:
++                for directory in target.parents:
++                    if directory.exists():
++                        break
++                    new_dirs.add(directory)
++                ensure_directory(target.parent)
++                changed.append(target)
++                write_bytes(target, staged.read_bytes())
++            else:
++                changed.append(target)
++                delete_file(target)
++        enricher._raise_if_cancelled(cancel)
++        commit()
++    except Exception:
++        for target in reversed(changed):
++            try:
++                if target not in backups:
++                    delete_file(target)
++                else:
++                    backup = backups[target]
++                    write_bytes(target, backup.read_bytes())
++                    stat = backup.stat()
++                    os.utime(target, ns=(stat.st_atime_ns, stat.st_mtime_ns))
++            except OSError:
++                logger.exception('Could not restore rescrape backup for %s', target)
++        for directory in sorted(new_dirs, key=lambda path: len(path.parts), reverse=True):
++            try:
++                if directory.is_dir() and not any(directory.iterdir()):
++                    try:
++                        directory.rmdir()
++                    except OSError as exc:
++                        if not android_storage.is_access_error(exc):
++                            raise
++                        android_storage.delete(str(directory))
++            except OSError:
++                logger.warning('Could not remove empty rescrape directory %s', directory, exc_info=True)
++        raise
++
++
++class DetailMovie(_Movie):
++    def _fs(self, uri):
++        return Path(uri_to_local_fs_path(uri, self.mappings))
++
++    def _uri(self, file):
++        return to_file_uri(str(file), self.mappings)
++
++    def _check_ownership(self, row, element, nfo, readonly):
++        video = self._fs(row.path)
++        if not video.is_file():
++            raise _FieldError('samples.error_file_not_found')
++        gallery = self.config.get('gallery', {})
++        if is_path_readonly(self._uri(nfo.resolve()), readonly_source_prefixes(gallery, self.mappings),
++                            writable_source_prefixes(gallery, self.mappings)):
++            raise _FieldError('samples.error_output_root_missing')
++        if readonly and row.output_dir:
++            other_paths = [p for p in self.repo.paths_in_managed_output(row.output_dir) if p != row.path]
++            if element == 'samples' and other_paths:
++                raise _FieldError('scanner.shared_detail_asset')
++            for other in self.repo.get_by_paths(other_paths).values():
++                located, error = locate_nfo_for_video(other, self.config, self.mappings)
++                if error or Path(located) == nfo:
++                    raise _FieldError('scanner.shared_detail_asset')
++
++        # NFOs/canonical covers are stem-scoped; extrafanart is folder-scoped.
++        # Include unindexed physical neighbors and indexed same-stem versions.
++        extensions = get_video_extensions(self.config)
++        if not readonly:
++            aliases = [self._uri(video.with_suffix(ext)) for ext in extensions]
++            if any(p != row.path for p in self.repo.get_by_paths(aliases)):
++                raise _FieldError('scanner.shared_detail_asset')
++        cover = self._cover_target(nfo) if element == 'cover' else None
++        if cover and self.repo.other_video_uses_cover(row.path, self._uri(cover), str(cover)):
++            raise _FieldError('scanner.shared_detail_asset')
++        if not nfo.parent.is_dir():
++            return
++        for neighbor in nfo.parent.iterdir():
++            if neighbor == video or neighbor.suffix.lower() not in extensions or not neighbor.is_file():
++                continue
++            if element == 'samples' or neighbor.stem.casefold() == nfo.stem.casefold():
++                raise _FieldError('scanner.shared_detail_asset')
++            if cover:
++                stem = neighbor.stem.casefold()
++                if cover.stem.casefold() in {stem, stem + '-poster', stem + '-fanart', 'cover', 'folder', 'fanart', 'poster'}:
++                    raise _FieldError('scanner.shared_detail_asset')
++
++    def _text(self, row, element, value, nfo, temp):
++        staged = temp / nfo.name
++        if nfo.exists():
++            copy2(nfo, staged)
++        else:
++            self.ensure_nfo(row, staged, asset_path=nfo)
++        if element == 'plot':
++            rewrite_nfo_plot(staged, new_plot=value, new_original=value, allow_empty_existing=True)
++        else:
++            if not replace_nfo_tags(str(staged), value):
++                raise _FieldError('scanner.tag_source_nfo_failed')
++            _, root = parse_nfo(str(staged))
++            value = nfo_merged_tags(root)
++        return {nfo: staged}, value
++
++    def _cover(self, value, card, nfo, temp):
++        staged = temp / 'cover.jpg'
++        if not enricher._write_cover(str(temp / 'cover.nfo'), value, True, True,
++                                     preview_cover_url=card.get('preview_cover_url', '')):
++            raise _FieldError('api.cover_not_found')
++        if not enricher._is_valid_sample_file(str(staged)):
++            raise _FieldError('api.cover_not_found')
++        target = self._cover_target(nfo)
++        return {target: staged}, self._uri(target)
++
++    def _cover_target(self, nfo):
++        target = Path(resolve_cover_target(str(nfo.with_suffix('')), self.manager))
++        # A same-stem PNG/WEBP is preferred over a new manager-style fanart JPEG.
++        # The canonical .jpg has priority on the next physical library scan.
++        existing = self.scanner.find_cover_image(str(nfo))
++        if existing and Path(existing).stem == nfo.stem:
++            target = nfo.with_suffix('.jpg')
++        return target
++
++    def _samples(self, value, card, nfo, temp):
++        folder = nfo.parent / 'extrafanart'
++        if folder.is_symlink():
++            raise _FieldError('samples.error_sample_write_failed')
++        result = enricher._write_extrafanart(str(temp / 'video'), value, True, {},
++            preview_sample_images=card.get('preview_sample_images'), base_url=card.get('url', ''),
++            cancel_event=self.cancel)
++        if not result.uris or result.failed:
++            raise _FieldError('samples.error_sample_download_failed')
++        images = [Path(uri_to_local_fs_path(uri, {})) for uri in result.uris]
++        files = {folder / image.name: image for image in images}
++        uris = [self._uri(path) for path in files]
++        if folder.exists():
++            for old in self.scanner._iter_extrafanart_images(folder):
++                files.setdefault(old, None)
++        return files, uris
++
++    def apply(self, element, path, card):
++        value = _card_value(card, *_FIELD_VALUES[element])
++        with _WRITE_LOCK, TemporaryDirectory() as tempdir:
++            enricher._raise_if_cancelled(self.cancel)
++            row = self.repo.get_by_path(path)
++            if not row:
++                raise _FieldError('samples.error_file_not_found')
++            nfo, readonly = self.paths(row, element, card, defer_output=True)
++            self._check_ownership(row, element, nfo, readonly)
++            temp = Path(tempdir)
++            if element in ('plot', 'tags'):
++                files, value = self._text(row, element, value, nfo, temp)
++            elif element == 'cover':
++                files, value = self._cover(value, card, nfo, temp)
++            else:
++                files, value = self._samples(value, card, nfo, temp)
++            new_output = self._uri(nfo.parent) if readonly and not row.output_dir else None
++            def commit():
++                mtime = nfo.stat().st_mtime if element in ('plot', 'tags') else None
++                self.repo.replace_detail_element(row.path, element, value, mtime, new_output)
++            _publish(files, temp, self.cancel, commit)
++            if element == 'plot':
++                self.source_plot = value
++                self.plot_targets[str(nfo)] = [row.path]
++            if element == 'cover':
++                try:
++                    thumbnail_cache.invalidate(row.path)
++                except OSError:
++                    logger.warning('Thumbnail cache invalidation failed for %s', row.path, exc_info=True)
++            return True
+--- /dev/null
++++ b/core/element_sources.py
+@@ -0,0 +1,55 @@
++"""Field capabilities exposed by the explicit maintenance source picker."""
++from core.custom_source.views import custom_source_views
++from core.metatube.state import metatube_state
++from core.source_config import get_manual_only_sources
++from core.scraper import source_display_name
++
++ELEMENTS = ('cover', 'plot', 'samples', 'tags')
++# Fields returned by each built-in's detail parser. A supported field can
++# still be absent on a particular release.
++_BUILTIN = {
++    'dmm': ELEMENTS, 'jav321': ELEMENTS, 'd2pass': ELEMENTS, 'heyzo': ELEMENTS,
++    'fc-javten': ELEMENTS, 'jable': ELEMENTS,
++    'javbus': ('cover', 'samples', 'tags'), 'javdb': ('cover', 'samples', 'tags'),
++    'fc2': ('cover', 'samples', 'tags'), 'javlibrary': ('cover', 'samples', 'tags'),
++    'avsox': ('cover', 'tags'),
++}
++_CUSTOM_FIELDS = {'cover': 'cover', 'summary': 'plot', 'sample_images': 'samples', 'tags': 'tags'}
++
++
++def element_sources(config, shell):
++    options = {field: [] for field in ELEMENTS}
++    manual = get_manual_only_sources()
++    manual_ids = {source.id for source in manual}
++    availability = metatube_state.availability_map()
++    rows = [row for row in config.get('sources', []) if isinstance(row, dict)]
++    seen = set()
++
++    def add(source, label, fields):
++        if source in seen:
++            return
++        seen.add(source)
++        for field in fields:
++            options[field].append({'id': source, 'label': label or source})
++
++    for row in sorted(rows, key=lambda row: row.get('order', 0)):
++        source = row.get('id')
++        if not isinstance(source, str) or not row.get('enabled') or source in manual_ids:
++            continue
++        fields = _BUILTIN.get(source, ())
++        if source.startswith('metatube:') and availability.get(source):
++            fields = ELEMENTS
++        if fields:
++            add(source, row.get('display_name_raw') or source_display_name(source), fields)
++    if shell.get('available'):
++        sites = shell.get('sites')
++        for source in manual:
++            if sites is None or source.id in sites:
++                add(source.id, source.display_name_key, _BUILTIN[source.id])
++    for view in custom_source_views():
++        if view.routable:
++            spec = view.loaded.spec
++            if spec.fetch == 'cf' and not shell.get('available'):
++                continue
++            add(view.config.id, spec.name, [_CUSTOM_FIELDS[f.name] for f in spec.fields if f.name in _CUSTOM_FIELDS])
++    return options
 --- a/core/enricher.py
 +++ b/core/enricher.py
 @@ -2,12 +2,15 @@
@@ -4204,11 +5039,14 @@
  用它們判斷「哪些 DB 列屬於同一組」，兩件事故意不合併，見 CD-122-2）＋ `os.path`
  （Zone 1 字串運算，同 `core/cover_layout.py` 先例：呼叫端已把 file:// URI 轉成 fs
  path 才傳進來，不在此模組碰 URI，不違反 `path_utils.py` 的跨 Zone 轉換禁止清單）。
-@@ -34,15 +34,18 @@
+@@ -32,18 +32,20 @@
+ from dataclasses import dataclass
+ from typing import Callable, Generic, List, Optional, Tuple, TypeVar
  import os
- import re
- 
+-import re
+-
 -from core.organizer import _detect_multipart_token, _strip_part_token
++
 +from core.multipart_tokens import detect_multipart_token, strip_part_token
  from core.path_utils import to_file_uri, uri_to_fs_path, uri_to_local_fs_path
 +from core.logger import get_logger
@@ -4221,11 +5059,24 @@
  def normalize_stem_key(stem: str) -> str:
      """CD-122-3：剝 token 後的 stem 正規化比對鍵（去空白 + lower）。"""
 -    stripped = _strip_part_token(stem)
+-    return re.sub(r'\s+', '', stripped).lower()
 +    stripped = strip_part_token(stem)
-     return re.sub(r'\s+', '', stripped).lower()
++    return ''.join(stripped.split()).lower()
  
  
-@@ -61,10 +64,10 @@
+ def group_key(fs_path: str) -> Tuple[str, str]:
+@@ -52,8 +54,8 @@
+     fs_path 必須是 Zone 1 原生路徑（呼叫端已用 path_utils 轉換過），本函式內只做
+     檔名尾端字串運算，不碰 file:// URI。
+     """
+-    folder = os.path.dirname(fs_path)
+-    stem = os.path.splitext(os.path.basename(fs_path))[0]
++    folder, filename = os.path.split(fs_path)
++    stem = os.path.splitext(filename)[0]
+     return (folder, normalize_stem_key(stem))
+ 
+ 
+@@ -61,10 +63,10 @@
      """(token 字面, 段號) 一次解析。
  
      `part_token()` / `part_number()` 是它的兩個單欄位包裝，保留給只要一半的呼叫端；
@@ -4238,10 +5089,50 @@
      if match:
          return match[0], match[1]
      return None, 1  # 單檔片（無 token）視為 part 1
-@@ -157,6 +160,75 @@
+@@ -111,19 +113,17 @@
+     # 而這個迴圈跑遍整個片庫（`GET /api/showcase/videos` 每次載入都跑一遍 2000+ 列），
+     # 所以每列只轉一次、後面全部重用（/simplify 效率條目）。
+     buckets: dict = {}
+-    order: List[Tuple[str, str]] = []
+     for row in rows:
+         fs_path = fs_path_of(row)
+-        key = group_key(fs_path)
+-        if key not in buckets:
+-            buckets[key] = []
+-            order.append(key)
+-        buckets[key].append((row, fs_path))
++        buckets.setdefault(group_key(fs_path), []).append((row, fs_path))
+ 
+     groups: List[VideoGroup] = []
+-    for key in order:
+-        # parsed: [(row, token, number)]，每列的 token/段號也只解析一次（同上）。
+-        parsed = [(r, *part_info(fs_path)) for r, fs_path in buckets[key]]
++    # Dict iteration preserves the first occurrence of every normalized key.
++    for bucket in buckets.values():
++        if len(bucket) == 1:
++            groups.append(VideoGroup(members=[bucket[0][0]], part_tokens=[]))
++            continue
++        parsed = [(row, *part_info(fs_path)) for row, fs_path in bucket]
+         members = [r for r, _, _ in parsed]
+         tokens = [t for _, t, _ in parsed]
+ 
+@@ -142,9 +142,7 @@
+         # 比對用 part **number** 而非 token 字面：`cd1` 與 `pt1` 字面不同但都是第 1 段，
+         # 同樣是衝突（這條順手把 Codex 沒點名的同款漏洞一起堵掉）。
+         part_numbers = [n for _, _, n in parsed]
+-        if (len(members) < 2
+-                or not all(tokens)
+-                or len(set(part_numbers)) != len(part_numbers)):
++        if not all(tokens) or len(set(part_numbers)) != len(part_numbers):
+             for row in members:
+                 groups.append(VideoGroup(members=[row], part_tokens=[]))
+             continue
+@@ -155,6 +153,75 @@
+             part_tokens=[t for _, t, _ in order_pairs],
+         ))
      return groups
- 
- 
++
++
 +def logical_video_groups(
 +    rows: List[T],
 +    path_mappings: dict,
@@ -4309,11 +5200,9 @@
 +        seen.add(group_key)
 +        result.append(group)
 +    return result
-+
-+
+ 
+ 
  def resolve_group_for_path(
-     target_uri: str,
-     candidates: List[T],
 --- /dev/null
 +++ b/core/multipart_tokens.py
 @@ -0,0 +1,64 @@

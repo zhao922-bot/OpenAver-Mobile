@@ -1548,6 +1548,18 @@
       "folder_dirty": "저장되지 않은 폴더 변경 사항이 있습니다",
       "confirm": "{message}나가시겠습니까?"
     },
+    "elements": {
+      "title": "누락된 메타데이터 채우기",
+      "hint": "채울 항목마다 출처를 선택하세요. 기존 값은 유지됩니다.",
+      "cover": "표지",
+      "plot": "줄거리",
+      "samples": "샘플 이미지",
+      "tags": "태그",
+      "skip": "건너뛰기",
+      "run": "실행",
+      "summary": "완료 {success} · 건너뜀 {skipped} · 실패 {failed}",
+      "create_nfos": "누락된 NFO 파일 만들기"
+    },
     "plot_flow": {
       "title": "줄거리가 저장되었습니다",
       "confirm": "이번 검색에서 영상 {n}편의 줄거리 원문을 찾아 저장했습니다. 현재 앱 언어로 번역할까요? 번역에 실패해도 원문은 유지됩니다.",
@@ -1620,6 +1632,13 @@
       "server_error": "서버 오류 ({status})",
       "load_failed": "불러오기 실패",
       "cannot_connect": "서버에 연결할 수 없습니다"
+    },
+    "elements": {
+      "updated": "업데이트됨",
+      "title": "메타데이터 다시 가져오기",
+      "hint": "이 동영상에서 덮어쓸 항목별로 출처를 선택하세요.",
+      "summary": "업데이트 {success}개 · 건너뜀 {skipped}개 · 실패 {failed}개",
+      "interrupted": "작업이 끝나기 전에 연결이 끊어졌습니다."
     },
     "rescrape": {
       "modal_title": "고급 스크래핑",
@@ -2740,6 +2759,7 @@
   },
   "runtime": {
     "scanner": {
+      "shared_detail_asset": "여러 동영상이 이 파일을 공유하므로 이 동영상에 대해서만 교체할 수 없습니다.",
       "readonly_start": "읽기 전용 생성: {path}",
       "readonly_output_missing": "{path}: 출력 폴더가 구성되지 않았습니다. 건너뛰었습니다",
       "readonly_unreachable": "{path}: 소스에 연결할 수 없습니다. 건너뛰었습니다",

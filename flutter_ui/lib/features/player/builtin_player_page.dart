@@ -103,6 +103,10 @@ class _BuiltInPlayerPageState extends ConsumerState<BuiltInPlayerPage> {
       _loadedPath = path;
       _lastSavedPosition = savedPosition;
       _resumeFloor = restored ? Duration.zero : savedPosition;
+      if (_player.state.completed) {
+        _onCompleted(true);
+        return;
+      }
       if (_rate != 1.0) await _player.setRate(_rate);
     } catch (_) {
       if (generation == _loadGeneration) _showPlaybackFailure();
@@ -161,12 +165,22 @@ class _BuiltInPlayerPageState extends ConsumerState<BuiltInPlayerPage> {
     _resumeFloor = Duration.zero;
     if (position == _lastSavedPosition) return;
     _lastSavedPosition = position;
-    unawaited(NativeBridge.instance.savePlaybackPosition(path, position));
+    unawaited(NativeBridge.instance.savePlaybackPosition(
+      path,
+      position,
+      title: widget.title,
+      partIndex: _currentPart,
+      partLabel: _currentPart < widget.partTokens.length
+          ? widget.partTokens[_currentPart]
+          : '',
+    ));
   }
 
   void _onCompleted(bool completed) {
     final path = _loadedPath;
-    if (!mounted || !completed || path == null || _playbackFailed) return;
+    if (!mounted || !completed || !_player.state.completed || path == null || _playbackFailed) {
+      return;
+    }
     _lastSavedPosition = Duration.zero;
     unawaited(NativeBridge.instance.savePlaybackPosition(path, Duration.zero));
     if (_currentPart + 1 < widget.partPaths.length) {
@@ -200,9 +214,22 @@ class _BuiltInPlayerPageState extends ConsumerState<BuiltInPlayerPage> {
     if (mounted) setState(() {});
   }
 
+  void _finishPlayback() {
+    // A popped route stays mounted during its exit transition. Flush before
+    // Showcase reads the bookmark and prevent a late load from saving again.
+    if (_loadedPath != null && _player.state.completed) {
+      unawaited(NativeBridge.instance.savePlaybackPosition(_loadedPath!, Duration.zero));
+    } else {
+      _savePosition();
+    }
+    _loadGeneration++;
+    _loadedPath = null;
+    _acceptPlayerErrors = false;
+  }
+
   @override
   void dispose() {
-    _savePosition();
+    _finishPlayback();
     _saveTimer.cancel();
     _lifecycleListener.dispose();
     unawaited(_completedSub.cancel());
@@ -238,7 +265,7 @@ class _BuiltInPlayerPageState extends ConsumerState<BuiltInPlayerPage> {
       seekBarContainerHeight: 36.0,
     );
 
-    return Scaffold(
+    final page = Scaffold(
       backgroundColor: Colors.black,
       appBar: _landscape
           ? null
@@ -381,6 +408,12 @@ class _BuiltInPlayerPageState extends ConsumerState<BuiltInPlayerPage> {
           ],
         ),
       ),
+    );
+    return PopScope<void>(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _finishPlayback();
+      },
+      child: page,
     );
   }
 }

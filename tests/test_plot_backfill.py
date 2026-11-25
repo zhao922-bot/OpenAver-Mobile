@@ -290,11 +290,12 @@ def test_plot_backfill_frontend_contract():
     ).read_text(encoding="utf-8")
 
     assert '@router.post("/backfill-plots")' in scanner
-    assert "/api/gallery/backfill-plots" in state
-    assert "openMaintenanceSourcePicker('plots')" in template
+    assert "openElementPicker()" in template
+    assert "openMaintenanceSourcePicker('plots')" not in template
+    assert "openMaintenanceSourcePicker('samples')" not in template
     assert "plotBackfillDrilldownPayload" in template
-    assert "url: '/api/gallery/backfill-plots'" in state
-    assert "taskKind: 'plot-backfill'" in state
+    assert "url: '/api/gallery/backfill-elements'" in state
+    assert "taskKind: 'element-backfill'" in state
 
 
 @pytest.fixture

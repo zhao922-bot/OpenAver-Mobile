@@ -1,5 +1,6 @@
 package dev.openaver.mobile.smoke;
 
+import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Activity;
 import android.app.Instrumentation;
@@ -16,6 +17,8 @@ import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+
+import dev.openaver.mobile.ColdTaskNotification;
 
 import java.io.File;
 import java.io.IOException;
@@ -38,10 +41,12 @@ public final class EmulatorSmoke extends Instrumentation {
 
     private UiAutomation automation;
     private boolean launcherRecovered;
+    private boolean coldNotification;
 
     @Override
     public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
+        coldNotification = arguments != null && "cold-notification".equals(arguments.getString("scenario"));
         start();
     }
 
@@ -53,12 +58,19 @@ public final class EmulatorSmoke extends Instrumentation {
             AccessibilityServiceInfo info = automation.getServiceInfo();
             info.flags |= AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;
             automation.setServiceInfo(info);
-            startHost();
-            installFixture();
-            configureLibrary();
-            scanAndPlay();
-            cancelScan();
-            result.putString("stream", "\nOpenAver emulator smoke passed\n");
+            if (coldNotification) {
+                verifyColdNotification();
+                result.putString("stream", "\nCold notification opened Task Center\n");
+            } else {
+                startHost();
+                enableTaskNotifications();
+                installFixture();
+                configureLibrary();
+                scanAndPlay();
+                cancelScan();
+                verifyBackgroundNotification();
+                result.putString("stream", "\nOpenAver emulator smoke passed\n");
+            }
             finish(Activity.RESULT_OK, result);
         } catch (Exception | AssertionError error) {
             result.putString("stream", "\n" + android.util.Log.getStackTraceString(error)
@@ -88,6 +100,23 @@ public final class EmulatorSmoke extends Instrumentation {
         awaitNode("Flutter settings tab", node -> labelled(node, "Settings", "设置"),
                 90_000, intent);
         stage("Host and Flutter UI launched");
+    }
+
+    private void enableTaskNotifications() {
+        Context context = getTargetContext();
+        android.app.NotificationManager notifications = context.getSystemService(android.app.NotificationManager.class);
+        if (notifications.areNotificationsEnabled()) return;
+        context.startActivity(new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.getPackageName())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        Predicate<AccessibilityNodeInfo> toggle = node ->
+                "com.android.settings".contentEquals(String.valueOf(node.getPackageName()))
+                        && node.isCheckable() && node.isEnabled();
+        tap(awaitNode("Android app notifications switch", toggle.and(node -> !node.isChecked()), UI_TIMEOUT_MS));
+        awaitNode("notifications enabled in Android settings", toggle.and(node -> node.isChecked()
+                && notifications.areNotificationsEnabled()), UI_TIMEOUT_MS);
+        back();
+        awaitNode("OpenAver after notification settings", node -> labelled(node, "Settings", "设置"), UI_TIMEOUT_MS);
     }
 
     private File fixtureDirectory() {
@@ -153,9 +182,26 @@ public final class EmulatorSmoke extends Instrumentation {
         stage("CD1 saved at " + bookmark + "s");
         openPart("CD1");
         int resumed = awaitPlaybackTime(bookmark - 2, 10_000);
+        // Advance beyond the restored bookmark so CD1 is the latest save after CD2.
+        awaitPlaybackTime(bookmark + 2, 10_000);
         leavePlayer();
         back();
         stage("Media scanned, segments stayed independent, and CD1 resumed at " + resumed + "s");
+
+        int latest = savedFirstPartSeconds();
+        // ListTile can merge its title and subtitle into one accessibility label.
+        tap(awaitNode("Continue Watching tile", node -> {
+            String title = label(node).split("\n", 2)[0];
+            return title.equals("Continue Watching") || title.equals("继续观看");
+        }, UI_TIMEOUT_MS));
+        awaitNode("selected CD1 in the resumed playlist", node -> labelled(node, "CD1")
+                && node.isSelected(), UI_TIMEOUT_MS);
+        int continued = awaitPlaybackTime(Math.max(bookmark, latest) - 2, 10_000);
+        if (continued > latest + 10) {
+            throw new AssertionError("Continue Watching jumped from " + latest + "s to " + continued + "s");
+        }
+        click("Back");
+        stage("Continue Watching reopened CD1 at " + continued + "s");
     }
 
     private int savedFirstPartSeconds() {
@@ -201,13 +247,65 @@ public final class EmulatorSmoke extends Instrumentation {
             throw new AssertionError("A cancelled scan rendered as complete");
         }
         click("Tasks", "任务");
-        awaitNode("task center", node -> labelled(node, "Task Center", "任务中心"),
-                UI_TIMEOUT_MS);
+        awaitTaskCenter(UI_TIMEOUT_MS);
         awaitNode("recent cancelled scan", node -> {
             String text = label(node);
             return text.contains("Cancelled by user") || text.contains("用户已请求中止任务");
         }, UI_TIMEOUT_MS);
         stage("Active scan cancelled and recorded in Task Center");
+    }
+
+    private void verifyBackgroundNotification() {
+        // Reuse the large fixture after the original cancellation check has completed.
+        click("Scanner", "片库");
+        click("Scan Library", "扫描片库");
+        awaitNode("active scan before Home", node -> labelled(node, "Stop Task", "停止任务"), UI_TIMEOUT_MS);
+        goHome();
+        tapTaskNotification();
+        awaitTaskCenter(UI_TIMEOUT_MS);
+        stage("Scan notification returned the background app to Task Center");
+    }
+
+    private void verifyColdNotification() {
+        // This invocation starts before either activity or the cached Flutter engine.
+        // Model a pending task with the same service lease used by the Flutter bridge.
+        goHome();
+        runOnMainSync(() -> ColdTaskNotification.start(getTargetContext()));
+        try {
+            tapTaskNotification();
+            awaitTaskCenter(90_000);
+            awaitNode("cancelled scan restored after restart", node -> {
+                String text = label(node);
+                return text.contains("Cancelled by user") || text.contains("用户已请求中止任务");
+            }, UI_TIMEOUT_MS);
+        } finally {
+            runOnMainSync(() -> ColdTaskNotification.stop(getTargetContext()));
+        }
+    }
+
+    private void goHome() {
+        Intent home = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME);
+        String launcher = home.resolveActivity(getTargetContext().getPackageManager()).getPackageName();
+        if (!automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)) {
+            throw new AssertionError("Android could not go Home");
+        }
+        awaitNode("home launcher " + launcher, node -> launcher.equals(String.valueOf(node.getPackageName())),
+                UI_TIMEOUT_MS);
+    }
+
+    private void tapTaskNotification() {
+        if (!automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)) {
+            throw new AssertionError("Android could not open the notification shade");
+        }
+        awaitNode("System UI notification shade", node -> "com.android.systemui".equals(
+                String.valueOf(node.getPackageName())), UI_TIMEOUT_MS);
+        tap(awaitNode("OpenAver task notification title", node -> labelled(node,
+                "OpenAver is working", "OpenAver 正在处理任务"), UI_TIMEOUT_MS));
+    }
+
+    private void awaitTaskCenter(long timeout) {
+        awaitNode("task center", node -> labelled(node, "Task Center", "任务中心")
+                && getTargetContext().getPackageName().equals(String.valueOf(node.getPackageName())), timeout);
     }
 
     private int awaitPlaybackTime(int minimum, long timeout) {

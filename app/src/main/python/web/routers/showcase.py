@@ -129,7 +129,7 @@ def _can_manual_translate(
 _DEFAULT_NEEDS_TRANSLATE = _needs_translate
 _DEFAULT_CAN_MANUAL_TRANSLATE = _can_manual_translate
 _DEFAULT_VIDEO_REPOSITORY = VideoRepository
-_DEFAULT_GET_SHOWCASE_ROWS = VideoRepository.get_showcase_rows
+_DEFAULT_GET_SHOWCASE_BROWSE_ROWS = VideoRepository.get_showcase_browse_rows
 
 _showcase_groups_cache_lock = threading.Lock()
 _showcase_groups_cache: Optional[tuple[tuple, tuple]] = None
@@ -341,7 +341,7 @@ def _load_showcase_groups(
 
     can_cache = (
         VideoRepository is _DEFAULT_VIDEO_REPOSITORY
-        and VideoRepository.get_showcase_rows is _DEFAULT_GET_SHOWCASE_ROWS
+        and VideoRepository.get_showcase_browse_rows is _DEFAULT_GET_SHOWCASE_BROWSE_ROWS
     )
     cache_key = None
     if can_cache:
@@ -361,7 +361,7 @@ def _load_showcase_groups(
 
     repo = VideoRepository(db_path)
     all_videos = [
-        v for v in repo.get_showcase_rows(configured_dir_uris, actress_names)
+        v for v in repo.get_showcase_browse_rows(configured_dir_uris, actress_names)
         if any(is_path_under_dir(v.path, uri) for uri in configured_dir_uris)
     ]
     groups = group_rows(

@@ -1548,6 +1548,18 @@
       "folder_dirty": "保存していないフォルダの変更があります",
       "confirm": "{message}移動してもよろしいですか？"
     },
+    "elements": {
+      "title": "不足しているメタデータを補完",
+      "hint": "補完する項目ごとに取得元を選択してください。既存の値は保持されます。",
+      "cover": "ジャケット",
+      "plot": "あらすじ",
+      "samples": "サンプル画像",
+      "tags": "タグ",
+      "skip": "スキップ",
+      "run": "実行",
+      "summary": "補完 {success} · スキップ {skipped} · 失敗 {failed}",
+      "create_nfos": "不足している NFO ファイルを作成"
+    },
     "plot_flow": {
       "title": "あらすじを保存しました",
       "confirm": "今回見つかった {n} 本のあらすじ原文を保存しました。現在のアプリ言語に翻訳しますか？翻訳に失敗しても原文は保持されます。",
@@ -1620,6 +1632,13 @@
       "server_error": "サーバーエラー ({status})",
       "load_failed": "読み込みに失敗しました",
       "cannot_connect": "サーバーに接続できません"
+    },
+    "elements": {
+      "updated": "更新済み",
+      "title": "メタデータを再取得",
+      "hint": "この動画で上書きする項目ごとに取得元を選択してください。",
+      "summary": "更新 {success} 件 · スキップ {skipped} 件 · 失敗 {failed} 件",
+      "interrupted": "処理が完了する前に接続が切れました。"
     },
     "rescrape": {
       "modal_title": "高度な再スクレイプ",
@@ -2740,6 +2759,7 @@
   },
   "runtime": {
     "scanner": {
+      "shared_detail_asset": "このファイルは複数の動画で共有されているため、この動画だけで置き換えることはできません。",
       "readonly_start": "読み取り専用の生成：{path}",
       "readonly_output_missing": "{path}：出力フォルダーが未設定のためスキップしました",
       "readonly_unreachable": "{path}：ソースに接続できないためスキップしました",

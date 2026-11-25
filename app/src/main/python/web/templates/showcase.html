@@ -895,7 +895,7 @@
         <!-- Lightbox (M3a) -->
         <div class="showcase-lightbox"
              :class="{ 'show': lightboxOpen }"
-             x-trap.inert="lightboxOpen && !sampleGalleryOpen && !removeActressModalOpen && !rescrapeOpen && !deleteVideoModalOpen && !similarModeMobileOpen"
+             x-trap.inert="lightboxOpen && !sampleGalleryOpen && !removeActressModalOpen && !rescrapeOpen && !videoElementsOpen && !deleteVideoModalOpen && !similarModeMobileOpen"
              @touchstart.passive="_lbTouchStart($event)"
              @touchend.passive="_lbTouchEnd($event)"
              @click="handleLightboxBackdropClick($event)">
@@ -1380,9 +1380,9 @@
                                         <!-- 62b-1: 進階重刮 ⚙ 入口（番號旁 inline 細鈕，常駐顯示）-->
                                         <button type="button"
                                                 class="lb-rescrape-gear"
-                                                @click.stop="openRescrape(currentLightboxVideo, 'lightbox')"
-                                                data-tooltip="{{ t('showcase.rescrape.entry_tooltip') }}"
-                                                aria-label="{{ t('showcase.rescrape.entry_tooltip') }}">
+                                                @click.stop="openVideoElements()"
+                                                data-tooltip="{{ t('showcase.elements.title') }}"
+                                                aria-label="{{ t('showcase.elements.title') }}">
                                             <i class="bi bi-gear" aria-hidden="true"></i>
                                         </button>
                                     </span>
@@ -1716,9 +1716,9 @@
                                 </button>
                                 <button type="button"
                                         class="lb-mobile-action-btn"
-                                        @click.stop="openRescrape(currentLightboxVideo, 'lightbox')">
+                                        @click.stop="openVideoElements()">
                                     <i class="bi bi-gear" aria-hidden="true"></i>
-                                    <span>{{ t('showcase.rescrape.entry_tooltip') }}</span>
+                                    <span>{{ t('showcase.elements.title') }}</span>
                                 </button>
                                 <button type="button"
                                         class="lb-mobile-action-btn lb-mobile-action-btn--danger"
@@ -2001,7 +2001,7 @@
     <!-- Sample Gallery Overlay (T7) -->
     <div class="sample-gallery"
          :class="{ 'show': sampleGalleryOpen }"
-         x-trap.inert="sampleGalleryOpen && !rescrapeOpen && !removeActressModalOpen && !deleteVideoModalOpen"
+         x-trap.inert="sampleGalleryOpen && !rescrapeOpen && !videoElementsOpen && !removeActressModalOpen && !deleteVideoModalOpen"
          @click.self="closeSampleGallery()"
          @touchstart.passive="$event.target?.closest?.('.sg-thumbs') ? (_sgTouchStartX = null) : _sgTouchStart($event)"
          @touchend.passive="$event.target?.closest?.('.sg-thumbs') ? (_sgTouchStartX = null) : _sgTouchEnd($event)">
@@ -2588,6 +2588,38 @@
             <button type="button" class="btn btn-primary native-panel-done" @click="displayOpen = false">{{ t('showcase.display.done') }}</button>
         </section>
     </div>
+    <dialog class="modal fluent-modal" x-ref="videoElementsDialog" aria-labelledby="videoElementsTitle"
+            @close="if (!$el.open) closeVideoElements()" @click.self="closeVideoElements()" @keydown.stop @wheel.stop>
+        <div class="modal-box fluent-modal-box">
+            <h3 class="fluent-modal-title" id="videoElementsTitle">{{ t('showcase.elements.title') }}</h3>
+            <p class="fluent-modal-body">{{ t('showcase.elements.hint') }}</p>
+            <p class="text-sm break-all" dir="auto" x-text="videoElementsPath"></p>
+            <span x-show="videoElementsLoading || videoElementsRunning" class="loading loading-spinner loading-sm" role="status"></span>
+            <fieldset class="grid gap-3" x-show="!videoElementsLoading" :disabled="videoElementsSubmitted">
+                {% for field in ['cover', 'plot', 'samples', 'tags'] %}
+                <div>
+                    <label for="element-{{ field }}">{{ t('scanner.elements.' ~ field) }}</label>
+                    {% include '_element_source_select.html' %}
+                </div>
+                {% endfor %}
+            </fieldset>
+            <ul x-show="videoElementResults.length" aria-live="polite">
+                <template x-for="item in videoElementResults" :key="item.field">
+                    <li><strong x-text="t('scanner.elements.' + item.field)"></strong> · <span x-text="item.message"></span></li>
+                </template>
+            </ul>
+            <p class="fluent-modal-body" x-text="videoElementsStatus" role="status"></p>
+            <div class="modal-action fluent-modal-actions">
+                <button type="button" class="btn btn-ghost" x-show="!videoElementsRunning" @click="closeVideoElements()">{{ t('common.close') }}</button>
+                <button type="button" class="btn btn-ghost" x-show="videoElementsRunning" @click="cancelVideoElements()">{{ t('scanner.task.cancel') }}</button>
+                <button type="button" class="btn btn-primary" x-show="!videoElementsSubmitted" @click="runVideoElements()"
+                        :disabled="videoElementsLoading || !Object.keys(selectedVideoElements).length || videoElementsPath !== currentLightboxVideo?.path">
+                    {{ t('scanner.elements.run') }}
+                </button>
+            </div>
+        </div>
+    </dialog>
+
     {% include '_rescrape_modal.html' %}
 </div>
 {% endblock %}

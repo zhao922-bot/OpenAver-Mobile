@@ -7,11 +7,11 @@ import '../../core/api_client.dart';
 import '../../core/app_providers.dart';
 import '../../core/app_theme.dart';
 import '../../core/l10n.dart';
-import '../../core/models/scanner_models.dart';
 import '../../core/native_bridge.dart';
 import '../settings/ai_backfill_bar.dart';
 import '../shared/prompt_dialog.dart';
 import '../task_center/task_center.dart';
+import 'metadata_source_sheet.dart';
 
 class ScannerPage extends ConsumerStatefulWidget {
   const ScannerPage({super.key});
@@ -22,10 +22,9 @@ class ScannerPage extends ConsumerStatefulWidget {
 
 class _ScannerPageState extends ConsumerState<ScannerPage> {
   int _totalVideos = 0;
-  MissingCheckSummary? _missing;
-  bool _checkingMissing = false;
+  bool _choosingSources = false;
+  bool _loadingTranslation = false;
   String? _loadError;
-  String _scrapeSource = 'auto';
 
   CancelToken? _taskCancel;
   TaskJob? _centerJob;
@@ -42,7 +41,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _loadStats();
-      _checkMissing();
     });
   }
 
@@ -70,24 +68,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
     }
   }
 
-  Future<void> _checkMissing() async {
-    setState(() => _checkingMissing = true);
-    try {
-      final resp = await ref.read(apiClientProvider).getJson('/api/gallery/missing-check');
-      if (!mounted) return;
-      if (resp['success'] == true) {
-        setState(() => _missing = MissingCheckSummary.fromJson(resp));
-      }
-    } catch (e) {
-      debugPrint('Scanner _checkMissing error: $e');
-      if (mounted) {
-        _toast(ref.read(stringsProvider).requestFailed('$e'));
-      }
-    } finally {
-      if (mounted) setState(() => _checkingMissing = false);
-    }
-  }
-
   Future<void> _runSseTask({
     required String label,
     required String path,
@@ -104,6 +84,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
       '/api/gallery/generate' => TaskKind.scan,
       '/api/gallery/tag-source-update' => TaskKind.batchTag,
       '/api/gallery/tag-source-preview' => TaskKind.batchTagPreview,
+      metadataBackfillPath => TaskKind.metadataBackfill,
       _ => null,
     };
     final cancel = CancelToken();
@@ -131,18 +112,24 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
           unawaited(_runSseTask(
             label: label,
             path: path,
+            method: method,
+            data: data,
             queryParameters: numbers == null
                 ? queryParameters
                 : {...?queryParameters, 'numbers': numbers},
             taskSubject: taskSubject,
           ));
         },
-        available: () => mounted && !_runningTask &&
+        available: () => mounted && !_runningTask && !_choosingSources &&
             identical(api, ref.read(apiClientProvider)),
       );
     }
 
-    if (kind == TaskKind.scan || kind == TaskKind.batchTagPreview) offerRetry();
+    if (kind == TaskKind.scan ||
+        kind == TaskKind.batchTagPreview ||
+        kind == TaskKind.metadataBackfill) {
+      offerRetry();
+    }
 
     try {
       await for (final event in api.streamSse(
@@ -161,7 +148,10 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
           final summary = rawSummary is Map ? rawSummary : const {};
           final cancelled = event.data['cancelled'] == true ||
               summary['cancelled'] == true;
-          final total = _taskInt(summary['total']);
+          // Metadata progress counts videos, while its summary counts fields.
+          final total = kind == TaskKind.metadataBackfill
+              ? job?.total
+              : _taskInt(summary['total']);
           final failed = _taskInt(summary['failed']);
           final failedItems = summary['failed_items'];
           final items = failedItems is List ? failedItems.whereType<Map>() : null;
@@ -178,6 +168,12 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             }
           }
           var doneLine = msg;
+          final filled = _taskInt(summary['success']);
+          if (!cancelled && kind == TaskKind.metadataBackfill && filled != null) {
+            doneLine = strings.metadataSummary(
+              filled, failed ?? 0, _taskInt(summary['skipped']) ?? 0,
+            );
+          }
           if (!cancelled && doneLine.isEmpty &&
               (event.data['video_count'] is num || event.data['stats'] is Map)) {
             final stats = (event.data['stats'] as Map?) ?? const {};
@@ -195,9 +191,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             total: total,
             failureCount: failed,
             failureExamples: items?.map((item) {
-              final number = _taskText(item['number']);
+              final number = _taskText(item['number'] ?? item['file_path']);
+              final field = MetadataField.values.asNameMap()[item['element']]?.label(strings) ?? '';
+              final source = _taskText(item['source']);
               final error = _taskText(item['error']);
-              return [number, error].where((text) => text.isNotEmpty).join(' · ');
+              return [number, field, source, error].where((text) => text.isNotEmpty).join(' · ');
             }),
           );
           _finishTask(
@@ -274,7 +272,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
         });
         center.actionsChanged();
         _loadStats();
-        _checkMissing();
         ref.read(libraryRevisionProvider.notifier).bump();
         if (kind == TaskKind.scan && job?.status == TaskStatus.succeeded) {
           unawaited(AiBackfillTask.refreshKnown(api));
@@ -309,6 +306,71 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
   void _appendTaskLog(String message) {
     _logs.add(message);
     if (_logs.length > 200) _logs.removeAt(0);
+  }
+
+  Future<void> _openMetadataSources() async {
+    if (_runningTask || _choosingSources) return;
+    final api = ref.read(apiClientProvider);
+    final strings = ref.read(stringsProvider);
+    _choosingSources = true;
+    try {
+      final selection = await showModalBottomSheet<SourceSelection>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (_) => MetadataSourceSheet(api: api, strings: strings),
+      );
+      if (selection == null || selection.isEmpty || !mounted ||
+          !identical(api, ref.read(apiClientProvider))) {
+        return;
+      }
+      unawaited(_runSseTask(
+        label: strings.metadataBackfill,
+        path: metadataBackfillPath,
+        method: 'POST',
+        data: {
+          'sources': {for (final entry in selection.entries) entry.key.name: entry.value.id},
+        },
+        taskSubject: selection.entries
+            .map((entry) => '${entry.key.label(strings)} · ${entry.value.label}')
+            .join(', '),
+      ));
+    } finally {
+      _choosingSources = false;
+    }
+  }
+
+  Future<void> _translatePendingPlots() async {
+    if (_runningTask || _loadingTranslation) return;
+    final strings = ref.read(stringsProvider);
+    final api = ref.read(apiClientProvider);
+    setState(() => _loadingTranslation = true);
+    try {
+      final resp = await api.getJson('/api/gallery/missing-check');
+      if (!mounted) return;
+      if (resp['success'] != true) {
+        _toast((resp['error'] ?? strings.taskFailed).toString());
+        return;
+      }
+      final data = resp['data'] as Map? ?? resp;
+      final batches = data['pending_plot_translations'] as List? ?? const [];
+      for (final batch in batches) {
+        final id = batch is Map ? batch['batch_id'] : batch;
+        if (id is! String || id.isEmpty) continue;
+        await _runSseTask(
+          label: strings.translatePendingPlots,
+          path: '/api/gallery/translate-backfilled-plots',
+          method: 'POST',
+          data: {'batch_id': id},
+        );
+        return;
+      }
+      _toast(strings.noPendingPlots);
+    } catch (e) {
+      _toast(strings.requestFailed('$e'));
+    } finally {
+      if (mounted) setState(() => _loadingTranslation = false);
+    }
   }
 
   Future<void> _openTagSourceSheet() async {
@@ -361,10 +423,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
     if (!mounted) return;
 
     var selectedId = options.first.$1;
-    if (_scrapeSource != 'auto' && options.any((o) => o.$1 == _scrapeSource)) {
-      selectedId = _scrapeSource;
-    }
-
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -750,7 +808,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
     try {
       await ref.read(apiClientProvider).deleteJson('/api/gallery/cache');
       _loadStats();
-      _checkMissing();
       ref.read(libraryRevisionProvider.notifier).bump();
     } catch (e) {
       debugPrint('clearCache error: $e');
@@ -767,7 +824,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
   Widget build(BuildContext context) {
     final strings = ref.watch(stringsProvider);
     final palette = OpenAverPalette.of(context);
-    final missing = _missing;
 
     return Scaffold(
       body: SafeArea(
@@ -795,10 +851,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                         ),
                       ),
                       IconButton(
-                        onPressed: () {
-                          _loadStats();
-                          _checkMissing();
-                        },
+                        onPressed: _loadStats,
                         icon: const Icon(Icons.refresh_rounded, size: 20),
                       ),
                     ],
@@ -888,75 +941,20 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             ],
 
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(strings.missingCheckTitle, style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
-                DropdownButton<String>(
-                  value: _scrapeSource,
-                  underline: const SizedBox.shrink(),
-                  items: [
-                    DropdownMenuItem(value: 'auto', child: Text('${strings.scrapeSourceLabel}: ${strings.autoLabel}')),
-                    const DropdownMenuItem(value: 'javbus', child: Text('JavBus')),
-                    const DropdownMenuItem(value: 'javdb', child: Text('JavDB')),
-                    const DropdownMenuItem(value: 'dmm', child: Text('DMM')),
-                    const DropdownMenuItem(value: 'jav321', child: Text('Jav321')),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) setState(() => _scrapeSource = v);
-                  },
-                ),
-                if (_checkingMissing)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 8),
-                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                  )
-                else
-                  TextButton(onPressed: _checkMissing, child: Text(strings.checkMissing)),
-              ],
-            ),
-            const SizedBox(height: 6),
             _BackfillTile(
-              icon: Icons.description_outlined,
-              title: strings.backfillNfo,
-              subtitle: missing == null ? strings.checking : strings.backfillNfoDesc(missing.totalMissing),
-              onTap: _runningTask
-                  ? null
-                  : () => _runSseTask(label: strings.backfillNfo, path: '/api/gallery/update'),
+              icon: Icons.library_books_outlined,
+              title: strings.metadataBackfill,
+              subtitle: strings.metadataFieldsDescription,
+              onTap: _runningTask ? null : _openMetadataSources,
             ),
             _BackfillTile(
-              icon: Icons.article_outlined,
-              title: strings.backfillPlots,
-              subtitle: missing == null ? strings.checking : strings.backfillPlotsDesc(missing.missingPlots),
-              onTap: _runningTask
-                  ? null
-                  : () => _runSseTask(
-                        label: strings.backfillPlots,
-                        path: '/api/gallery/backfill-plots',
-                        method: 'POST',
-                        queryParameters: {'source': _scrapeSource},
-                      ),
+              icon: Icons.g_translate_rounded,
+              title: strings.translatePendingPlots,
+              onTap: _runningTask || _loadingTranslation ? null : _translatePendingPlots,
             ),
-            if (missing != null && missing.pendingTranslationBatchIds.isNotEmpty)
-              _BackfillTile(
-                icon: Icons.g_translate_rounded,
-                title: strings.translatePendingPlots,
-                subtitle: '${missing.pendingTranslationBatchIds.length}',
-                onTap: _runningTask
-                    ? null
-                    : () => _runSseTask(
-                          label: strings.translatePendingPlots,
-                          path: '/api/gallery/translate-backfilled-plots',
-                          method: 'POST',
-                          data: {'batch_id': missing.pendingTranslationBatchIds.first},
-                        ),
-              ),
             _BackfillTile(
               icon: Icons.translate_rounded,
               title: strings.backfillTitles,
-              subtitle: missing == null ? strings.checking : strings.backfillTitlesDesc(missing.untranslatedTitles),
               onTap: _runningTask
                   ? null
                   : () => _runSseTask(
@@ -964,25 +962,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                         path: '/api/gallery/backfill-titles',
                         method: 'POST',
                       ),
-            ),
-            _BackfillTile(
-              icon: Icons.photo_library_outlined,
-              title: strings.backfillSamples,
-              subtitle: missing == null ? strings.checking : strings.backfillSamplesDesc(missing.missingSamples),
-              onTap: _runningTask
-                  ? null
-                  : () => _runSseTask(
-                        label: strings.backfillSamples,
-                        path: '/api/gallery/backfill-samples',
-                        method: 'POST',
-                        queryParameters: {'source': _scrapeSource},
-                      ),
-            ),
-            _BackfillTile(
-              icon: Icons.sell_outlined,
-              title: strings.batchTagSourceTitle,
-              subtitle: strings.batchTagSourceDesc,
-              onTap: _runningTask ? null : _openTagSourceSheet,
             ),
             _BackfillTile(
               icon: Icons.image_outlined,
@@ -994,37 +973,47 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             ),
 
             const SizedBox(height: 14),
-            Text(strings.advancedMaintenance, style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
-            const SizedBox(height: 6),
-            _BackfillTile(
-              icon: Icons.drive_file_rename_outline_rounded,
-              title: strings.renameNormalize,
-              subtitle: strings.renameNormalizeDesc,
-              onTap: _runningTask ? null : _openRenameSheet,
-            ),
-            _BackfillTile(
-              icon: Icons.health_and_safety_outlined,
-              title: strings.collectionAnalysis,
-              subtitle: strings.collectionAnalysis,
-              onTap: _runningTask ? null : _openCollectionAnalysisSheet,
-            ),
-            _BackfillTile(
-              icon: Icons.face_retouching_natural_outlined,
-              title: strings.actressAliasesManage,
-              subtitle: strings.actressAliasesManage,
-              onTap: _runningTask ? null : () => _openAliasManager(actressMode: true),
-            ),
-            _BackfillTile(
-              icon: Icons.label_outline_rounded,
-              title: strings.tagAliasesManage,
-              subtitle: strings.tagAliasesManage,
-              onTap: _runningTask ? null : () => _openAliasManager(actressMode: false),
-            ),
-            _BackfillTile(
-              icon: Icons.delete_sweep_outlined,
-              title: strings.clearCache,
-              subtitle: strings.clearCacheDesc,
-              onTap: _runningTask ? null : _confirmClearCache,
+            ExpansionTile(
+              key: const PageStorageKey('scannerMaintenance'),
+              title: Text(strings.advancedMaintenance, style: const TextStyle(fontWeight: FontWeight.w700)),
+              children: [
+                _BackfillTile(
+                  icon: Icons.sell_outlined,
+                  title: strings.batchTagSourceTitle,
+                  subtitle: strings.batchTagSourceDesc,
+                  onTap: _runningTask ? null : _openTagSourceSheet,
+                ),
+                _BackfillTile(
+                  icon: Icons.drive_file_rename_outline_rounded,
+                  title: strings.renameNormalize,
+                  subtitle: strings.renameNormalizeDesc,
+                  onTap: _runningTask ? null : _openRenameSheet,
+                ),
+                _BackfillTile(
+                  icon: Icons.health_and_safety_outlined,
+                  title: strings.collectionAnalysis,
+                  subtitle: strings.collectionAnalysis,
+                  onTap: _runningTask ? null : _openCollectionAnalysisSheet,
+                ),
+                _BackfillTile(
+                  icon: Icons.face_retouching_natural_outlined,
+                  title: strings.actressAliasesManage,
+                  subtitle: strings.actressAliasesManage,
+                  onTap: _runningTask ? null : () => _openAliasManager(actressMode: true),
+                ),
+                _BackfillTile(
+                  icon: Icons.label_outline_rounded,
+                  title: strings.tagAliasesManage,
+                  subtitle: strings.tagAliasesManage,
+                  onTap: _runningTask ? null : () => _openAliasManager(actressMode: false),
+                ),
+                _BackfillTile(
+                  icon: Icons.delete_sweep_outlined,
+                  title: strings.clearCache,
+                  subtitle: strings.clearCacheDesc,
+                  onTap: _runningTask ? null : _confirmClearCache,
+                ),
+              ],
             ),
           ],
         ),
@@ -1037,13 +1026,13 @@ class _BackfillTile extends StatelessWidget {
   const _BackfillTile({
     required this.icon,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
     required this.onTap,
   });
 
   final IconData icon;
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final VoidCallback? onTap;
 
   @override
@@ -1054,7 +1043,7 @@ class _BackfillTile extends StatelessWidget {
       child: ListTile(
         leading: Icon(icon, color: palette.accent),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: palette.textMuted)),
+        subtitle: subtitle == null ? null : Text(subtitle!, style: TextStyle(fontSize: 12, color: palette.textMuted)),
         trailing: const Icon(Icons.play_circle_outline_rounded),
         onTap: onTap,
       ),

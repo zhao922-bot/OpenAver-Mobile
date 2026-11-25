@@ -3514,7 +3514,7 @@
        "cancel": "Cancel",
        "discard": "Discard Changes",
        "save": "Save and Leave"
-@@ -1041,10 +1543,22 @@
+@@ -1041,10 +1543,34 @@
        "confirm": "Delete"
      },
      "leave_warning": {
@@ -3523,6 +3523,18 @@
        "image_check": "Image check is in progress — leaving will interrupt it!",
        "folder_dirty": "You have unsaved folder changes",
        "confirm": "{message} Leave anyway?"
++    },
++    "elements": {
++      "title": "Fill missing metadata",
++      "hint": "Choose a source for each field you want to fill. Existing values are kept.",
++      "cover": "Cover",
++      "plot": "Synopsis",
++      "samples": "Sample images",
++      "tags": "Tags",
++      "skip": "Skip",
++      "run": "Run",
++      "summary": "Filled {success} · Skipped {skipped} · Failed {failed}",
++      "create_nfos": "Create missing NFO files"
 +    },
 +    "plot_flow": {
 +      "title": "Synopses saved",
@@ -3538,7 +3550,7 @@
      }
    },
    "scraper": {
-@@ -1072,16 +1586,21 @@
+@@ -1072,16 +1598,21 @@
      "update_available": "A new version of OpenAver is available",
      "auto_organize_summary": "Scheduled Organize",
      "auto_organize_aborted": "Scheduled organize aborted",
@@ -3564,7 +3576,7 @@
    },
    "similar_mode": {
      "button_aria_label": "Explore similar videos",
-@@ -1092,9 +1611,10 @@
+@@ -1092,14 +1623,22 @@
      "page_title": "Browse",
      "state": {
        "loading": "Loading video list...",
@@ -3578,7 +3590,19 @@
      },
      "error": {
        "server_error": "Server error ({status})",
-@@ -1197,6 +1717,7 @@
+       "load_failed": "Load failed",
+       "cannot_connect": "Cannot connect to server"
++    },
++    "elements": {
++      "updated": "Updated",
++      "title": "Re-scrape metadata",
++      "hint": "Choose a source for each field you want to replace for this video.",
++      "summary": "Updated {success} · Skipped {skipped} · Failed {failed}",
++      "interrupted": "The connection ended before the task finished."
+     },
+     "rescrape": {
+       "modal_title": "Advanced Re-scrape",
+@@ -1197,6 +1736,7 @@
        "mdate": "Modified",
        "random": "Random",
        "actress": {
@@ -3586,7 +3610,7 @@
          "video_count": "Film Count",
          "name": "Name",
          "added_at": "Date Added",
-@@ -1246,7 +1767,13 @@
+@@ -1246,7 +1786,13 @@
        "source_unreachable_list": "Unreachable: {list}",
        "source_unreachable_count": "{n} location(s) unreachable",
        "source_no_permission_list": "No permission to read: {list}",
@@ -3601,7 +3625,7 @@
      },
      "nav": {
        "prev_page": "Previous",
-@@ -1291,6 +1818,7 @@
+@@ -1291,6 +1837,7 @@
        "tag_nfo_write_blocked": "Tag saved, but there's no permission to write the NFO",
        "translate_tooltip": "Translate title",
        "translate_done": "Title translated",
@@ -3609,7 +3633,7 @@
        "translate_undo": "Undo",
        "translate_skipped": "Nothing in the title needs translating",
        "translate_undone": "Title restored",
-@@ -1298,7 +1826,7 @@
+@@ -1298,7 +1845,7 @@
        "translate_no_nfo": "This title has no NFO yet. Enrich it first, then translate the title",
        "user_tags_label": "Custom Tags",
        "alias_label": "Aliases",
@@ -3618,7 +3642,7 @@
        "mask_toggle": "Cover crop preview",
        "mask_detect_failed": "Focal detection failed. Please try again later.",
        "mask_focal_too_slow_auto_disabled": "Detecting the face on this cover took longer than 5 seconds, so we've turned off Auto Face Focus for you. Just drag to adjust the position directly — you can turn it back on anytime in Settings.",
-@@ -1307,9 +1835,58 @@
+@@ -1307,9 +1854,58 @@
        "mask_save_failed": "Failed to save crop settings. Please try again later.",
        "mask_cover_changed": "Cover has changed. Please reopen the crop tool and try again.",
        "cover_unavailable": "This cover can’t be loaded right now — the file location may be unreachable, or the cover file may be missing",
@@ -3679,7 +3703,7 @@
      },
      "pick": {
        "add_aria": "Add to picks",
-@@ -1410,10 +1987,107 @@
+@@ -1410,10 +2006,107 @@
        "fetching": "Fetching...",
        "success": "Stills fetched successfully",
        "fetch_failed": "Failed to fetch stills, please try again",
@@ -3787,7 +3811,7 @@
      "hero": {
        "copy_curl": "Copy Command",
        "page_title": "Help Guide",
-@@ -1434,7 +2108,8 @@
+@@ -1434,7 +2127,8 @@
        "this_computer_unavailable": "Cannot read this computer's update info right now. Please reopen the Help page and try again",
        "client_up_to_date": "OpenAver on this computer is up to date",
        "client_update_available_prefix": "This computer has a new version",
@@ -3797,7 +3821,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2122,7 @@
+@@ -1447,7 +2141,7 @@
        "title": "First time? Follow these 3 steps",
        "subtitle": "From adding your folder to filling metadata — three steps to get started",
        "step1_title": "Add Your Library Folder",
@@ -3806,7 +3830,7 @@
        "step2_title": "Generate Page",
        "step2_desc": "Scan and build a browsable collection page in one click",
        "step3_title": "NFO Fill",
-@@ -1464,7 +2139,7 @@
+@@ -1464,7 +2158,7 @@
      "tag_alias": {
        "title": "Tag Alias Management",
        "intro": "Manage Chinese/Japanese/English synonyms in one place so the search box, chip filters, and fuzzy exploration all speak the same language.",
@@ -3815,7 +3839,7 @@
        "scanner_chipwall": "The chip wall lists all tag alias groups. Click \"+\" to add an alias; the primary name is shown in pink, aliases in grey.",
        "scanner_ai_hint": "Click \"?\" to open the AI suggestion panel: describe your tag needs to the AI and it returns suggested alias groups for direct import.",
        "h6_showcase": "Auto-expand in Showcase",
-@@ -1501,16 +2176,16 @@
+@@ -1501,16 +2195,16 @@
      "batch": {
        "title": "Batch File Search",
        "h6_add": "Add Multiple Files",
@@ -3836,7 +3860,7 @@
        "fav_auto": "Automatically begins searching the first 20 files",
        "fav_nfo_skip": "If a same-name .nfo already exists, the file is treated as organized and the scraper is skipped",
        "pause_pause": "Click the 'Pause' button during batch search",
-@@ -1563,17 +2238,17 @@
+@@ -1563,17 +2257,17 @@
        "h6_manage": "Favorites Management",
        "manage_add": "Add favorites from Search or Showcase; profile photo is downloaded locally automatically",
        "manage_library": "The <strong>+</strong> next to the search bar opens an \"Add from library\" list: actresses already in your library sorted by title count, with aliases merged into a single person — tap the heart on any row to favorite her",
@@ -3858,7 +3882,7 @@
        "feat_nfo": "Automatically reads NFO files and displays metadata",
        "feat_nfo_fill": "Supports 'NFO Fill': automatically searches for missing NFO files",
        "feat_terminal": "Built-in Mini Terminal shows real-time processing progress",
-@@ -1587,7 +2262,7 @@
+@@ -1587,7 +2281,7 @@
        "jellyfin_canonical": "With a media-manager mode selected, OpenAver <strong>no longer writes a same-name cover file</strong> — Jellyfin / Emby prefer that file, which is what puts landscape images on the poster wall. Existing titles keep whatever cover location they already have (so manual focal crops are not wiped); to fix one, delete its same-name cover yourself and regenerate.",
        "jellyfin_showcase": "After scanning, browse results on the <code>/showcase</code> page",
        "h6_strm_deploy": "Read-only source + letting Emby / Jellyfin / Kodi find your titles (cross-machine setup)",
@@ -3867,7 +3891,7 @@
        "strm_deploy_step2": "Under \"Output to,\" specify a folder <strong>this machine can write to</strong> (which can be a writable NAS share mounted on this machine) — the generated <code>.strm</code> + NFO + covers go here, and you point Emby / Jellyfin / Kodi at it to build the library. This output folder is not the read-only source itself.",
        "strm_deploy_step4": "If you later change the mapping rules, the existing <code>.strm</code> files are rewritten automatically in one pass — no need to rebuild the whole library.",
        "h6_multiversion": "Multi-version manual merge (native Emby / Jellyfin feature)",
-@@ -1601,7 +2276,7 @@
+@@ -1601,7 +2295,7 @@
        "h6_modes": "Display Modes",
        "h6_sort": "Sort & Search",
        "h6_other": "Other Features",
@@ -3876,7 +3900,7 @@
        "mode_grid": "<strong>Full Cover</strong>: cover wall showing the whole cover image; click to open the Lightbox (default)",
        "mode_poster": "<strong>Poster</strong>: shows only the right half of the cover (the front), so cards are narrower and more fit per row; phones and narrow windows always use this layout",
        "mode_list": "<strong>List Mode</strong>: Compact list, ideal for quick browsing",
-@@ -1632,7 +2307,7 @@
+@@ -1632,7 +2326,7 @@
        "beta_compilation": "More complete tags (series / maker / cast) means better accuracy; videos with few tags should have their NFO filled in first",
        "h6_manage": "Tips",
        "manage_enable": "No configuration needed — works out of the box",
@@ -3885,7 +3909,7 @@
      },
      "shortcuts": {
        "title": "Keyboard Shortcuts",
-@@ -1809,6 +2484,66 @@
+@@ -1809,6 +2503,66 @@
        "client_title": "About to update OpenAver on this computer",
        "client_case_a_body": "This updates OpenAver on this computer, not the server. After you confirm, a terminal opens on this computer to run the installation. Please close OpenAver first, and reopen it yourself once the installation finishes.",
        "client_case_b_body": "OpenAver on this computer is not installed in the default location.\nThe installer will first install the new version to the default directory; you do not need to close the current OpenAver during installation.\n\nWhen the installation finishes, do the following in order:\n1. Close OpenAver\n2. Delete the python folder in the old installation directory\n3. Copy all files of the new version over your original installation location on this computer\n\nNo reinstall or reconfiguration is needed; just overwrite the files and use it."
@@ -3952,7 +3976,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2551,18 @@
+@@ -1816,20 +2570,18 @@
      "skip": "Skip",
      "next": "Next →",
      "done": "Done 🎉",
@@ -3985,7 +4009,7 @@
    },
    "updater": {
      "page_title": "Updater",
-@@ -1845,6 +2578,12 @@
+@@ -1845,6 +2597,12 @@
      "unit": "videos",
      "all_years": "All Years",
      "clear_year": "Clear Year",
@@ -3998,7 +4022,7 @@
      "row": {
        "years": "Year",
        "makers": "Makers",
-@@ -1860,16 +2599,24 @@
+@@ -1860,16 +2618,24 @@
        "actress_top_rest": "Ranks {from}–{to}"
      },
      "donut": {
@@ -4026,7 +4050,7 @@
      },
      "age": {
        "median": "Median {age}"
-@@ -1878,11 +2625,15 @@
+@@ -1878,11 +2644,15 @@
        "age_label": "{age}y",
        "tooltip_main": "{label} · {total} videos in your collection, {count} from {maker}",
        "tooltip_dot": "{label} · {total} videos in your collection",
@@ -4044,7 +4068,7 @@
      },
      "costar": {
        "count_label": "{n} videos"
-@@ -1892,7 +2643,17 @@
+@@ -1892,7 +2662,17 @@
      "all_maker": "All studios",
      "clear_actress": "Clear actress",
      "clear_maker": "Clear studio",
@@ -4063,7 +4087,7 @@
    },
    "connect": {
      "nobridge": "Please open this in the desktop version",
-@@ -1957,7 +2718,7 @@
+@@ -1957,7 +2737,7 @@
        "intro": "The left column is the folder on the server; in the right column enter the path as seen from this computer. You can leave it empty and fill it in later.",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -4072,7 +4096,7 @@
        "readonly": "Read-only",
        "test_btn": "Test",
        "found": "Found",
-@@ -1968,7 +2729,7 @@
+@@ -1968,7 +2748,7 @@
        "loading": "Loading the server's scan sources...",
        "load_failed": "Could not read the server's scan sources",
        "reload_btn": "Reload",
@@ -4081,13 +4105,14 @@
        "stale": "(no longer on the server)",
        "remove": "Remove",
        "save_btn": "Save Mapping Table",
-@@ -1976,5 +2737,448 @@
+@@ -1976,5 +2756,449 @@
        "saved": "Mapping table saved",
        "save_failed": "Failed to save the mapping table"
      }
 +  },
 +  "runtime": {
 +    "scanner": {
++      "shared_detail_asset": "This file is shared by multiple videos and cannot be replaced for this video alone.",
 +      "readonly_start": "Read-only generation: {path}",
 +      "readonly_output_missing": "{path}: output folder is not configured; skipped",
 +      "readonly_unreachable": "{path}: source is unreachable; skipped",
@@ -5384,7 +5409,7 @@
        "cancel": "キャンセル",
        "discard": "変更を破棄",
        "save": "保存して終了"
-@@ -1041,10 +1543,22 @@
+@@ -1041,10 +1543,34 @@
        "confirm": "削除する"
      },
      "leave_warning": {
@@ -5393,6 +5418,18 @@
        "image_check": "画像チェックが進行中です。移動すると中断されます！",
        "folder_dirty": "保存していないフォルダの変更があります",
        "confirm": "{message}移動してもよろしいですか？"
++    },
++    "elements": {
++      "title": "不足しているメタデータを補完",
++      "hint": "補完する項目ごとに取得元を選択してください。既存の値は保持されます。",
++      "cover": "ジャケット",
++      "plot": "あらすじ",
++      "samples": "サンプル画像",
++      "tags": "タグ",
++      "skip": "スキップ",
++      "run": "実行",
++      "summary": "補完 {success} · スキップ {skipped} · 失敗 {failed}",
++      "create_nfos": "不足している NFO ファイルを作成"
 +    },
 +    "plot_flow": {
 +      "title": "あらすじを保存しました",
@@ -5408,7 +5445,7 @@
      }
    },
    "scraper": {
-@@ -1072,16 +1586,21 @@
+@@ -1072,16 +1598,21 @@
      "update_available": "OpenAver の新しいバージョンがあります",
      "auto_organize_summary": "定期整理",
      "auto_organize_aborted": "定期整理を中止しました",
@@ -5434,7 +5471,7 @@
    },
    "similar_mode": {
      "button_aria_label": "類似動画を探索",
-@@ -1092,9 +1611,10 @@
+@@ -1092,14 +1623,22 @@
      "page_title": "動画ブラウズ",
      "state": {
        "loading": "動画リストを読み込み中...",
@@ -5448,7 +5485,19 @@
      },
      "error": {
        "server_error": "サーバーエラー ({status})",
-@@ -1197,6 +1717,7 @@
+       "load_failed": "読み込みに失敗しました",
+       "cannot_connect": "サーバーに接続できません"
++    },
++    "elements": {
++      "updated": "更新済み",
++      "title": "メタデータを再取得",
++      "hint": "この動画で上書きする項目ごとに取得元を選択してください。",
++      "summary": "更新 {success} 件 · スキップ {skipped} 件 · 失敗 {failed} 件",
++      "interrupted": "処理が完了する前に接続が切れました。"
+     },
+     "rescrape": {
+       "modal_title": "高度な再スクレイプ",
+@@ -1197,6 +1736,7 @@
        "mdate": "更新日時",
        "random": "ランダム",
        "actress": {
@@ -5456,7 +5505,7 @@
          "video_count": "作品数",
          "name": "名前",
          "added_at": "追加日時",
-@@ -1246,7 +1767,13 @@
+@@ -1246,7 +1786,13 @@
        "source_unreachable_list": "アクセスできません：{list}",
        "source_unreachable_count": "{n} 件の場所にアクセスできません",
        "source_no_permission_list": "読み取り権限がありません：{list}",
@@ -5471,7 +5520,7 @@
      },
      "nav": {
        "prev_page": "前のページ",
-@@ -1291,6 +1818,7 @@
+@@ -1291,6 +1837,7 @@
        "tag_nfo_write_blocked": "タグは保存されましたが、NFO への書き込み権限がありません",
        "translate_tooltip": "タイトルを翻訳",
        "translate_done": "タイトルを翻訳しました",
@@ -5479,7 +5528,7 @@
        "translate_undo": "元に戻す",
        "translate_skipped": "翻訳が必要な内容はありません",
        "translate_undone": "タイトルを元に戻しました",
-@@ -1298,7 +1826,7 @@
+@@ -1298,7 +1845,7 @@
        "translate_no_nfo": "この作品にはまだ NFO がありません。先に補完してから翻訳してください",
        "user_tags_label": "カスタムタグ",
        "alias_label": "別名",
@@ -5488,7 +5537,7 @@
        "mask_toggle": "カバーの切り抜きプレビュー",
        "mask_detect_failed": "焦点の検出に失敗しました。しばらくしてからもう一度お試しください。",
        "mask_focal_too_slow_auto_disabled": "このカバーの顔検出に5秒以上かかったため、自動フォーカスを先にオフにしました。位置を調整したい場合は直接ドラッグしてください。いつでも設定から再度オンにできます。",
-@@ -1307,9 +1835,58 @@
+@@ -1307,9 +1854,58 @@
        "mask_save_failed": "切り抜き設定の保存に失敗しました。しばらくしてからもう一度お試しください。",
        "mask_cover_changed": "カバーが変更されました。切り抜きツールを開き直してもう一度お試しください。",
        "cover_unavailable": "このカバー画像を読み込めません。ファイルの場所にアクセスできないか、カバー画像自体が失われている可能性があります",
@@ -5549,7 +5598,7 @@
      },
      "pick": {
        "add_aria": "★を付ける",
-@@ -1410,10 +1987,107 @@
+@@ -1410,10 +2006,107 @@
        "fetching": "取得中...",
        "success": "サンプル画像を取得しました",
        "fetch_failed": "画像の取得に失敗しました。後でもう一度お試しください",
@@ -5657,7 +5706,7 @@
      "hero": {
        "copy_curl": "コマンドをコピー",
        "page_title": "使い方",
-@@ -1434,7 +2108,8 @@
+@@ -1434,7 +2127,8 @@
        "this_computer_unavailable": "このPCの更新情報を一時的に読み取れません。ヘルプページを開き直してもう一度お試しください",
        "client_up_to_date": "このPCの OpenAver は最新です",
        "client_update_available_prefix": "このPCに新バージョン",
@@ -5667,7 +5716,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2122,7 @@
+@@ -1447,7 +2141,7 @@
        "title": "初めてですか？3ステップで始めましょう",
        "subtitle": "フォルダ追加からメタデータ補完まで、3ステップで始める",
        "step1_title": "ライブラリフォルダを追加",
@@ -5676,7 +5725,7 @@
        "step2_title": "ページを生成",
        "step2_desc": "ワンクリックでスキャンして閲覧可能なコレクションページを作成",
        "step3_title": "NFO 補完",
-@@ -1464,7 +2139,7 @@
+@@ -1464,7 +2158,7 @@
      "tag_alias": {
        "title": "Tag エイリアス管理",
        "intro": "中日英の同義語を一元管理することで、検索ボックス・chip フィルター・あいまい探索がすべて同じ言語で動きます。",
@@ -5685,7 +5734,7 @@
        "scanner_chipwall": "chip ウォールにすべての Tag エイリアスグループが表示されます。「+」をクリックして alias を追加。プライマリ名はピンク、エイリアスはグレーで表示されます。",
        "scanner_ai_hint": "「?」をクリックすると AI 提案パネルが開きます。tag の要件を AI に説明すると、提案エイリアスグループをそのままインポートできます。",
        "h6_showcase": "Showcase で自動展開",
-@@ -1501,16 +2176,16 @@
+@@ -1501,16 +2195,16 @@
      "batch": {
        "title": "バッチファイル検索",
        "h6_add": "複数ファイルの追加",
@@ -5706,7 +5755,7 @@
        "fav_auto": "自動的に最初の 20 ファイルの検索を開始",
        "fav_nfo_skip": "同名の .nfo が存在する場合は整理済みとみなし、scraper を再実行しません",
        "pause_pause": "バッチ検索中に「一時停止」ボタンをクリック",
-@@ -1563,17 +2238,17 @@
+@@ -1563,17 +2257,17 @@
        "h6_manage": "お気に入り管理",
        "manage_add": "検索ページまたはショーケースページからお気に入りに追加。プロフィール写真は自動でローカルに保存",
        "manage_library": "検索バー横の <strong>+</strong> で「ライブラリから女優を追加」一覧を開けます。ライブラリ内の女優が作品数の多い順に並び、別名は同一人物としてまとめられます。行のハートをタップすればお気に入りに追加されます",
@@ -5728,7 +5777,7 @@
        "feat_nfo": "NFO ファイルを自動で読み込みメタデータを表示",
        "feat_nfo_fill": "「NFO 補完」に対応：欠損した NFO ファイルを自動検索",
        "feat_terminal": "内蔵 Mini Terminal でリアルタイム処理進捗を表示",
-@@ -1587,7 +2262,7 @@
+@@ -1587,7 +2281,7 @@
        "jellyfin_canonical": "メディアマネージャーモードを選ぶと<strong>同名のカバー画像は生成されなくなります</strong>——そのファイルは Jellyfin／Emby が優先的に読み込むため、ポスターウォールに横長画像が並ぶ原因になります。既存の作品はカバーの場所をそのまま維持します（手動で調整したフォーカス位置を消さないため）。修正したい場合は該当作品の同名カバーを削除してから再生成してください。",
        "jellyfin_showcase": "スキャン完了後、<code>/showcase</code> ページで生成結果を閲覧可能",
        "h6_strm_deploy": "読み取り専用ソース + Emby／Jellyfin／Kodi に作品をスキャンさせる（マシンをまたぐ配置）",
@@ -5737,7 +5786,7 @@
        "strm_deploy_step2": "「出力先」に<strong>このマシンで書き込める</strong>フォルダー（このマシンにマウントした NAS の書き込み可能な共有でも可）を指定します——生成される <code>.strm</code>＋NFO＋表紙がここに置かれ、それを Emby／Jellyfin／Kodi に指定してライブラリを作らせます。この出力フォルダーは読み取り専用ソースそのものではありません。",
        "strm_deploy_step4": "その後マッピングルールを変更すると、既存の <code>.strm</code> が一括で自動的に書き換えられ、ライブラリ全体を作り直す必要はありません。",
        "h6_multiversion": "同一作品の複数版（流出 / 4K / 字幕）を Emby/Jellyfin で結合するには？",
-@@ -1601,7 +2276,7 @@
+@@ -1601,7 +2295,7 @@
        "h6_modes": "表示モード",
        "h6_sort": "ソートと検索",
        "h6_other": "その他の機能",
@@ -5746,7 +5795,7 @@
        "mode_grid": "<strong>カバー全体</strong>：ジャケット全体を並べるカバーウォール。クリックで Lightbox を開きます（既定）",
        "mode_poster": "<strong>縦型ポスター</strong>：ジャケットの右半分（表面）だけを表示。カードが細くなり 1 行に多く並びます。スマホ／狭いウィンドウでは常にこのレイアウトです",
        "mode_list": "<strong>リストモード</strong>：コンパクトなリスト、素早い閲覧に最適",
-@@ -1632,7 +2307,7 @@
+@@ -1632,7 +2326,7 @@
        "beta_compilation": "tag が多いほど（シリーズ / メーカー / cast）精度が上がる；tag が少ない動画は先に NFO を補完することを推奨",
        "h6_manage": "使用ヒント",
        "manage_enable": "設定不要、すぐ使える",
@@ -5755,7 +5804,7 @@
      },
      "shortcuts": {
        "title": "キーボードショートカット",
-@@ -1809,6 +2484,66 @@
+@@ -1809,6 +2503,66 @@
        "client_title": "このPCの OpenAver を更新します",
        "client_case_a_body": "更新するのはこのPCの OpenAver で、サーバーではありません。確認を押すとこのPCでターミナルが開いてインストールが実行されます。先に OpenAver を閉じ、インストール完了後に手動で開き直してください。",
        "client_case_b_body": "このPCの OpenAver は既定の場所にインストールされていません。\nインストーラーはまず新バージョンを既定のディレクトリにインストールします。インストール中に現在の OpenAver を閉じる必要はありません。\n\nインストール完了後、次の順に操作してください：\n1. OpenAver を閉じる\n2. 旧インストールディレクトリの python フォルダを削除する\n3. 新バージョンのすべてのファイルを、このPCの元のインストール場所にコピーして上書きする\n\n再インストールや再設定は不要で、ファイルを上書きするだけで使えます。"
@@ -5822,7 +5871,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2551,18 @@
+@@ -1816,20 +2570,18 @@
      "skip": "スキップ",
      "next": "次へ →",
      "done": "完了 🎉",
@@ -5855,7 +5904,7 @@
    },
    "updater": {
      "page_title": "アップデーター",
-@@ -1845,6 +2578,12 @@
+@@ -1845,6 +2597,12 @@
      "unit": "本",
      "all_years": "すべての年",
      "clear_year": "年をクリア",
@@ -5868,7 +5917,7 @@
      "row": {
        "years": "年別",
        "makers": "メーカー",
-@@ -1860,16 +2599,24 @@
+@@ -1860,16 +2618,24 @@
        "actress_top_rest": "{from}–{to} 位"
      },
      "donut": {
@@ -5896,7 +5945,7 @@
      },
      "age": {
        "median": "中央値 {age}"
-@@ -1878,11 +2625,15 @@
+@@ -1878,11 +2644,15 @@
        "age_label": "{age}歳",
        "tooltip_main": "{label} ・ コレクション {total} 本、うち {maker} {count} 本",
        "tooltip_dot": "{label} ・ コレクション {total} 本",
@@ -5914,7 +5963,7 @@
      },
      "costar": {
        "count_label": "{n} 本"
-@@ -1892,7 +2643,17 @@
+@@ -1892,7 +2662,17 @@
      "all_maker": "すべてのメーカー",
      "clear_actress": "女優をクリア",
      "clear_maker": "メーカーをクリア",
@@ -5933,7 +5982,7 @@
    },
    "connect": {
      "nobridge": "デスクトップ版で開いてください",
-@@ -1957,7 +2718,7 @@
+@@ -1957,7 +2737,7 @@
        "intro": "左の欄はサーバー上のフォルダ、右の欄はこのPCから見えるパスです。後で入力することもできるので、空欄のままでも構いません。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -5942,7 +5991,7 @@
        "readonly": "読み取り専用",
        "test_btn": "テスト",
        "found": "見つかりました",
-@@ -1968,7 +2729,7 @@
+@@ -1968,7 +2748,7 @@
        "loading": "サーバーのスキャンソースを読み込み中…",
        "load_failed": "サーバーのスキャンソースを読み込めません",
        "reload_btn": "再読み込み",
@@ -5951,13 +6000,14 @@
        "stale": "（サーバーにこのソースはもうありません）",
        "remove": "削除",
        "save_btn": "パス対応表を保存",
-@@ -1976,5 +2737,448 @@
+@@ -1976,5 +2756,449 @@
        "saved": "パス対応表を保存しました",
        "save_failed": "パス対応表の保存に失敗しました"
      }
 +  },
 +  "runtime": {
 +    "scanner": {
++      "shared_detail_asset": "このファイルは複数の動画で共有されているため、この動画だけで置き換えることはできません。",
 +      "readonly_start": "読み取り専用の生成：{path}",
 +      "readonly_output_missing": "{path}：出力フォルダーが未設定のためスキップしました",
 +      "readonly_unreachable": "{path}：ソースに接続できないためスキップしました",
@@ -6402,7 +6452,7 @@
  }
 --- /dev/null
 +++ b/locales/ko.json
-@@ -0,0 +1,3184 @@
+@@ -0,0 +1,3204 @@
 +{
 +  "nav": {
 +    "app_tools": "앱 도구",
@@ -7953,6 +8003,18 @@
 +      "folder_dirty": "저장되지 않은 폴더 변경 사항이 있습니다",
 +      "confirm": "{message}나가시겠습니까?"
 +    },
++    "elements": {
++      "title": "누락된 메타데이터 채우기",
++      "hint": "채울 항목마다 출처를 선택하세요. 기존 값은 유지됩니다.",
++      "cover": "표지",
++      "plot": "줄거리",
++      "samples": "샘플 이미지",
++      "tags": "태그",
++      "skip": "건너뛰기",
++      "run": "실행",
++      "summary": "완료 {success} · 건너뜀 {skipped} · 실패 {failed}",
++      "create_nfos": "누락된 NFO 파일 만들기"
++    },
 +    "plot_flow": {
 +      "title": "줄거리가 저장되었습니다",
 +      "confirm": "이번 검색에서 영상 {n}편의 줄거리 원문을 찾아 저장했습니다. 현재 앱 언어로 번역할까요? 번역에 실패해도 원문은 유지됩니다.",
@@ -8025,6 +8087,13 @@
 +      "server_error": "서버 오류 ({status})",
 +      "load_failed": "불러오기 실패",
 +      "cannot_connect": "서버에 연결할 수 없습니다"
++    },
++    "elements": {
++      "updated": "업데이트됨",
++      "title": "메타데이터 다시 가져오기",
++      "hint": "이 동영상에서 덮어쓸 항목별로 출처를 선택하세요.",
++      "summary": "업데이트 {success}개 · 건너뜀 {skipped}개 · 실패 {failed}개",
++      "interrupted": "작업이 끝나기 전에 연결이 끊어졌습니다."
 +    },
 +    "rescrape": {
 +      "modal_title": "고급 스크래핑",
@@ -9145,6 +9214,7 @@
 +  },
 +  "runtime": {
 +    "scanner": {
++      "shared_detail_asset": "여러 동영상이 이 파일을 공유하므로 이 동영상에 대해서만 교체할 수 없습니다.",
 +      "readonly_start": "읽기 전용 생성: {path}",
 +      "readonly_output_missing": "{path}: 출력 폴더가 구성되지 않았습니다. 건너뛰었습니다",
 +      "readonly_unreachable": "{path}: 소스에 연결할 수 없습니다. 건너뛰었습니다",
@@ -10441,7 +10511,7 @@
        "cancel": "取消",
        "discard": "放弃更改",
        "save": "保存并离开"
-@@ -1041,10 +1543,22 @@
+@@ -1041,10 +1543,34 @@
        "confirm": "确认删除"
      },
      "leave_warning": {
@@ -10450,6 +10520,18 @@
        "image_check": "图片检查进行中，离开将会中断！",
        "folder_dirty": "您有未保存的文件夹变更",
        "confirm": "{message}确定要离开吗？"
++    },
++    "elements": {
++      "title": "补全缺失资料",
++      "hint": "为要补全的项目选择来源，已有内容会保留。",
++      "cover": "封面",
++      "plot": "简介",
++      "samples": "剧照",
++      "tags": "标签",
++      "skip": "跳过",
++      "run": "执行",
++      "summary": "已补全 {success} · 已跳过 {skipped} · 失败 {failed}",
++      "create_nfos": "创建缺失的 NFO 文件"
 +    },
 +    "plot_flow": {
 +      "title": "简介已保存",
@@ -10465,7 +10547,7 @@
      }
    },
    "scraper": {
-@@ -1072,16 +1586,21 @@
+@@ -1072,16 +1598,21 @@
      "update_available": "OpenAver 有新版本",
      "auto_organize_summary": "定时整理",
      "auto_organize_aborted": "定时整理已中止",
@@ -10491,7 +10573,7 @@
    },
    "similar_mode": {
      "button_aria_label": "探索相似视频",
-@@ -1092,9 +1611,10 @@
+@@ -1092,14 +1623,22 @@
      "page_title": "视频浏览",
      "state": {
        "loading": "加载视频列表中...",
@@ -10505,7 +10587,19 @@
      },
      "error": {
        "server_error": "服务器错误 ({status})",
-@@ -1197,6 +1717,7 @@
+       "load_failed": "加载失败",
+       "cannot_connect": "无法连接到服务器"
++    },
++    "elements": {
++      "updated": "已更新",
++      "title": "重刮元数据",
++      "hint": "为这部影片中需要覆盖的每个项目选择来源。",
++      "summary": "已更新 {success} 项 · 已跳过 {skipped} 项 · 失败 {failed} 项",
++      "interrupted": "任务尚未完成，连接已中断。"
+     },
+     "rescrape": {
+       "modal_title": "高级重新刮削",
+@@ -1197,6 +1736,7 @@
        "mdate": "修改时间",
        "random": "随机",
        "actress": {
@@ -10513,7 +10607,7 @@
          "video_count": "作品数",
          "name": "姓名",
          "added_at": "收藏时间",
-@@ -1246,7 +1767,13 @@
+@@ -1246,7 +1786,13 @@
        "source_unreachable_list": "无法访问：{list}",
        "source_unreachable_count": "{n} 个位置无法访问",
        "source_no_permission_list": "没有权限读取：{list}",
@@ -10528,7 +10622,7 @@
      },
      "nav": {
        "prev_page": "上一页",
-@@ -1291,6 +1818,7 @@
+@@ -1291,6 +1837,7 @@
        "tag_nfo_write_blocked": "标签已保存，但没有权限写入 NFO",
        "translate_tooltip": "翻译标题",
        "translate_done": "已翻译标题",
@@ -10536,7 +10630,7 @@
        "translate_undo": "复原",
        "translate_skipped": "标题没有需要翻译的内容",
        "translate_undone": "已复原标题",
-@@ -1298,7 +1826,7 @@
+@@ -1298,7 +1845,7 @@
        "translate_no_nfo": "这部影片还没有 NFO，请先补全再翻译标题",
        "user_tags_label": "自定义标签",
        "alias_label": "别名",
@@ -10545,7 +10639,7 @@
        "mask_toggle": "封面裁切预览",
        "mask_detect_failed": "焦点检测失败，请稍后再试",
        "mask_focal_too_slow_auto_disabled": "这张封面找脸花了超过 5 秒，已经先帮你关掉自动对焦。想调整位置直接拖就可以，随时能到设置开回来。",
-@@ -1307,9 +1835,58 @@
+@@ -1307,9 +1854,58 @@
        "mask_save_failed": "裁切设置保存失败，请稍后再试",
        "mask_cover_changed": "封面已变更，请重新打开裁切工具再试一次",
        "cover_unavailable": "这部视频的封面现在读不到——可能是文件位置目前无法访问，或者封面文件本身不见了",
@@ -10606,7 +10700,7 @@
      },
      "pick": {
        "add_aria": "加入精选",
-@@ -1410,10 +1987,107 @@
+@@ -1410,10 +2006,107 @@
        "fetching": "抓取中...",
        "success": "剧照补抓完成",
        "fetch_failed": "补抓剧照失败，请稍后再试",
@@ -10714,7 +10808,7 @@
      "hero": {
        "copy_curl": "复制命令",
        "page_title": "使用说明",
-@@ -1434,7 +2108,8 @@
+@@ -1434,7 +2127,8 @@
        "this_computer_unavailable": "暂时读不到这台电脑的更新信息，请重新打开帮助页再试",
        "client_up_to_date": "这台电脑的 OpenAver 已是最新",
        "client_update_available_prefix": "这台电脑有新版",
@@ -10724,7 +10818,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2122,7 @@
+@@ -1447,7 +2141,7 @@
        "title": "第一次使用？先看这 3 步",
        "subtitle": "从加入文件夹到补全资料，三步上手",
        "step1_title": "加入片库文件夹",
@@ -10733,7 +10827,7 @@
        "step2_title": "生成网页",
        "step2_desc": "一键扫描并建立可浏览的收藏页",
        "step3_title": "NFO 补全",
-@@ -1464,7 +2139,7 @@
+@@ -1464,7 +2158,7 @@
      "tag_alias": {
        "title": "Tag 别名管理",
        "intro": "中日英同义词集中管理，让搜索框、chip 筛选、模糊探索全部说同一种语言。",
@@ -10742,7 +10836,7 @@
        "scanner_chipwall": "chip 墙列出所有 Tag 别名组。点「+」新增 alias，主名（primary）以粉红色显示，别名以灰色显示。",
        "scanner_ai_hint": "点「?」开启 AI 建议框：把你的 tag 需求描述给 AI，它会回传建议的别名组供你直接汇入。",
        "h6_showcase": "Showcase 自动展开",
-@@ -1501,16 +2176,16 @@
+@@ -1501,16 +2195,16 @@
      "batch": {
        "title": "批次文件搜索",
        "h6_add": "加入多个文件",
@@ -10763,7 +10857,7 @@
        "fav_auto": "自动开始搜索前 20 个文件",
        "fav_nfo_skip": "同名 .nfo 存在则视为已整理，不重打 scraper",
        "pause_pause": "批次搜索时可点击「暂停」按钮",
-@@ -1563,17 +2238,17 @@
+@@ -1563,17 +2257,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "从搜索页或浏览页加入收藏，照片自动下载至本地",
        "manage_library": "搜索栏旁的 <strong>+</strong> 可打开「从片库加入女优」列表：库内女优按片数由多到少排序，别名自动合并成同一人，逐行点爱心即可加入收藏",
@@ -10785,7 +10879,7 @@
        "feat_nfo": "自动读取 NFO 文件并显示元数据",
        "feat_nfo_fill": "支持「NFO 补全」：自动搜索缺失的 NFO 文件",
        "feat_terminal": "内建 Mini Terminal 显示即时处理进度",
-@@ -1587,7 +2262,7 @@
+@@ -1587,7 +2281,7 @@
        "jellyfin_canonical": "选了媒体管理器模式后<strong>不再另外生成同名封面</strong>——那张图会被 Jellyfin／Emby 优先读取，导致封面墙出现横版图。既有的片维持原本的封面位置（以免清掉你已调整过的对焦），要修正请自行删掉该片的同名封面后重新生成。",
        "jellyfin_showcase": "扫描完成后可至 <code>/showcase</code> 页面浏览生成结果",
        "h6_strm_deploy": "只读来源 + 让 Emby／Jellyfin／Kodi 扫到片（跨机器部署）",
@@ -10794,7 +10888,7 @@
        "strm_deploy_step2": "在「输出到」指定一个<strong>这台能写入</strong>的文件夹（可以是挂载到这台的 NAS 可写共享）——生成的 <code>.strm</code>＋NFO＋封面会放这里，再让 Emby／Jellyfin／Kodi 指向它建媒体库。这个输出夹不是只读来源本身。",
        "strm_deploy_step4": "之后改了映射规则，既有的 <code>.strm</code> 会自动一次改写，不用重建整个媒体库。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎么在 Emby/Jellyfin 合并？",
-@@ -1601,7 +2276,7 @@
+@@ -1601,7 +2295,7 @@
        "h6_modes": "显示模式",
        "h6_sort": "排序与搜索",
        "h6_other": "其他功能",
@@ -10803,7 +10897,7 @@
        "mode_grid": "<strong>完整封面</strong>：整张封面的封面墙，点击开启 Lightbox（默认）",
        "mode_poster": "<strong>竖版海报</strong>：只显示封面右半（正面），卡片变窄、一行放得更多；手机／窄窗口一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精简列表，适合快速浏览",
-@@ -1632,7 +2307,7 @@
+@@ -1632,7 +2326,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越准；tag 很少的视频建议先补完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "无需设置，开箱即用",
@@ -10812,7 +10906,7 @@
      },
      "shortcuts": {
        "title": "快捷键",
-@@ -1809,6 +2484,66 @@
+@@ -1809,6 +2503,66 @@
        "client_title": "即将更新这台电脑的 OpenAver",
        "client_case_a_body": "更新的是这台电脑上的 OpenAver，不是服务器。点击确认后会在这台电脑打开终端运行安装，请先关闭 OpenAver，安装完成后再自行重新打开。",
        "client_case_b_body": "这台电脑的 OpenAver 不是安装在默认位置。\n安装程序会先把新版本安装到默认目录，安装期间不需要先关闭当前的 OpenAver。\n\n安装完成后，请依次操作：\n1. 关闭 OpenAver\n2. 删除旧安装目录中的 python 文件夹\n3. 将新版本的所有文件复制覆盖回这台电脑原本的安装位置\n\n不需要重新安装或重新设置，直接覆盖文件即可使用。"
@@ -10879,7 +10973,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2551,18 @@
+@@ -1816,20 +2570,18 @@
      "skip": "跳过",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -10912,7 +11006,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1845,6 +2578,12 @@
+@@ -1845,6 +2597,12 @@
      "unit": "部",
      "all_years": "全部年份",
      "clear_year": "清除年份",
@@ -10925,7 +11019,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1860,16 +2599,24 @@
+@@ -1860,16 +2618,24 @@
        "actress_top_rest": "第 {from}–{to} 名"
      },
      "donut": {
@@ -10953,7 +11047,7 @@
      },
      "age": {
        "median": "中位数 {age}"
-@@ -1878,11 +2625,15 @@
+@@ -1878,11 +2644,15 @@
        "age_label": "{age}岁",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -10971,7 +11065,7 @@
      },
      "costar": {
        "count_label": "{n} 部"
-@@ -1892,7 +2643,17 @@
+@@ -1892,7 +2662,17 @@
      "all_maker": "全部片商",
      "clear_actress": "清除女优",
      "clear_maker": "清除片商",
@@ -10990,7 +11084,7 @@
    },
    "connect": {
      "nobridge": "请在桌面版打开",
-@@ -1957,7 +2718,7 @@
+@@ -1957,7 +2737,7 @@
        "intro": "左栏是服务器上的文件夹，右栏填这台电脑看到的路径，可以先留空、之后再填。",
        "placeholder_windows": "\\\\192.168.1.190\\av",
        "placeholder_mac": "/Volumes/av",
@@ -10999,7 +11093,7 @@
        "readonly": "只读",
        "test_btn": "测试",
        "found": "找得到",
-@@ -1968,7 +2729,7 @@
+@@ -1968,7 +2748,7 @@
        "loading": "正在读取服务器的扫描来源…",
        "load_failed": "读不到服务器的扫描来源",
        "reload_btn": "重新读取",
@@ -11008,13 +11102,14 @@
        "stale": "（服务器已无此来源）",
        "remove": "移除",
        "save_btn": "保存对照表",
-@@ -1976,5 +2737,448 @@
+@@ -1976,5 +2756,449 @@
        "saved": "对照表已保存",
        "save_failed": "对照表保存失败"
      }
 +  },
 +  "runtime": {
 +    "scanner": {
++      "shared_detail_asset": "此文件由多部视频共用，无法只为当前视频替换。",
 +      "readonly_start": "只读生成：{path}",
 +      "readonly_output_missing": "{path}：请先设置输出文件夹，已跳过",
 +      "readonly_unreachable": "{path}：来源无法连接，已跳过",
@@ -12410,7 +12505,7 @@
        "nas_hint": "想餵給 NAS 上的 Emby／Jellyfin／Kodi？預設模式只生成 OpenAver 自己瀏覽用的本地庫、不會產生 .strm 捷徑檔。若你要讓媒體伺服器掃這批片，請先到「設定」把模式切到 Emby·Jellyfin·Kodi 模式。"
      },
      "clear_cache_modal": {
-@@ -1041,10 +1543,22 @@
+@@ -1041,10 +1543,34 @@
        "confirm": "確認刪除"
      },
      "leave_warning": {
@@ -12419,6 +12514,18 @@
        "image_check": "圖片檢查進行中，離開將會中斷！",
        "folder_dirty": "您有未儲存的資料夾變更",
        "confirm": "{message}確定要離開嗎？"
++    },
++    "elements": {
++      "title": "補齊缺少的資料",
++      "hint": "為要補齊的項目選擇來源，已有內容會保留。",
++      "cover": "封面",
++      "plot": "簡介",
++      "samples": "劇照",
++      "tags": "標籤",
++      "skip": "略過",
++      "run": "執行",
++      "summary": "已補齊 {success} · 已略過 {skipped} · 失敗 {failed}",
++      "create_nfos": "建立缺少的 NFO 檔案"
 +    },
 +    "plot_flow": {
 +      "title": "簡介已儲存",
@@ -12434,7 +12541,7 @@
      }
    },
    "scraper": {
-@@ -1073,15 +1587,20 @@
+@@ -1073,15 +1599,20 @@
      "update_available": "OpenAver 有新版本",
      "auto_organize_summary": "定時整理",
      "auto_organize_aborted": "定時整理已中止",
@@ -12459,7 +12566,7 @@
    },
    "similar_mode": {
      "button_aria_label": "探索相似影片",
-@@ -1093,8 +1612,9 @@
+@@ -1093,13 +1624,21 @@
      "state": {
        "loading": "載入影片列表中...",
        "empty": "尚未產生影片列表",
@@ -12471,7 +12578,19 @@
      },
      "error": {
        "server_error": "伺服器錯誤 ({status})",
-@@ -1123,7 +1643,7 @@
+       "load_failed": "載入失敗",
+       "cannot_connect": "無法連線到伺服器"
++    },
++    "elements": {
++      "updated": "已更新",
++      "title": "重新刮削中繼資料",
++      "hint": "為這部影片中需要覆寫的每個項目選擇來源。",
++      "summary": "已更新 {success} 項 · 已略過 {skipped} 項 · 失敗 {failed} 項",
++      "interrupted": "工作尚未完成，連線已中斷。"
+     },
+     "rescrape": {
+       "modal_title": "進階重新刮削",
+@@ -1123,7 +1662,7 @@
        "fail": "重新刮削失敗，請稍後再試。",
        "jl_desktop_only": "僅限桌面應用程式（standalone）可用",
        "cf_window_restart": "這個來源的驗證視窗沒有啟動成功，請重新啟動 OpenAver 再試。若重啟仍不行，到「連線」頁看原因",
@@ -12480,7 +12599,7 @@
        "cf_window_preparing": "驗證視窗正在準備，請幾秒後再試",
        "jl_cf_solving": "Cloudflare 驗證中……通過後將自動繼續",
        "versions_found": "找到 {count} 部同番號作品",
-@@ -1197,6 +1717,7 @@
+@@ -1197,6 +1736,7 @@
        "mdate": "修改時間",
        "random": "隨機",
        "actress": {
@@ -12488,7 +12607,7 @@
          "video_count": "作品數",
          "name": "姓名",
          "added_at": "收藏時間",
-@@ -1246,7 +1767,13 @@
+@@ -1246,7 +1786,13 @@
        "source_unreachable_list": "無法存取：{list}",
        "source_unreachable_count": "{n} 個位置無法存取",
        "source_no_permission_list": "沒有權限讀取：{list}",
@@ -12503,7 +12622,7 @@
      },
      "nav": {
        "prev_page": "上一頁",
-@@ -1291,6 +1818,7 @@
+@@ -1291,6 +1837,7 @@
        "tag_nfo_write_blocked": "標籤已存，但沒有權限寫入 NFO",
        "translate_tooltip": "翻譯標題",
        "translate_done": "已翻譯標題",
@@ -12511,7 +12630,7 @@
        "translate_undo": "復原",
        "translate_skipped": "標題沒有需要翻譯的內容",
        "translate_undone": "已復原標題",
-@@ -1298,18 +1826,67 @@
+@@ -1298,18 +1845,67 @@
        "translate_no_nfo": "這部片還沒有 NFO，請先補完再翻譯標題",
        "user_tags_label": "自訂標籤",
        "alias_label": "別名",
@@ -12582,7 +12701,7 @@
      },
      "pick": {
        "add_aria": "加入精選",
-@@ -1410,12 +1987,109 @@
+@@ -1410,12 +2006,109 @@
        "fetching": "抓取中...",
        "success": "劇照補抓完成",
        "fetch_failed": "補抓劇照失敗，請稍後再試",
@@ -12693,7 +12812,7 @@
        "copy_curl": "複製指令",
        "page_title": "使用說明",
        "subtitle": "JAV 影片元數據管理工具",
-@@ -1426,15 +2100,16 @@
+@@ -1426,15 +2119,16 @@
        "update_available_prefix": "新版本",
        "update_available_suffix": "可用",
        "up_to_date": "已是最新版本",
@@ -12713,7 +12832,7 @@
      },
      "agent_auth": {
        "title": "Agent Token",
-@@ -1447,7 +2122,7 @@
+@@ -1447,7 +2141,7 @@
        "title": "第一次使用？先看這 3 步",
        "subtitle": "從加入資料夾到補全資料，三步上手",
        "step1_title": "加入片庫資料夾",
@@ -12722,7 +12841,7 @@
        "step2_title": "產生網頁",
        "step2_desc": "一鍵掃描並建立可瀏覽的收藏頁",
        "step3_title": "NFO 補全",
-@@ -1464,7 +2139,7 @@
+@@ -1464,7 +2158,7 @@
      "tag_alias": {
        "title": "Tag 別名管理",
        "intro": "中日英同義詞集中管理，讓搜尋框、chip 篩選、模糊探索全部說同一種語言。",
@@ -12731,7 +12850,7 @@
        "scanner_chipwall": "chip 牆列出所有 Tag 別名組。點「+」新增 alias，主名（primary）以粉紅色顯示，別名以灰色顯示。",
        "scanner_ai_hint": "點「?」開啟 AI 建議框：把你的 tag 需求描述給 AI，它會回傳建議的別名組供你直接匯入。",
        "h6_showcase": "Showcase 自動展開",
-@@ -1501,16 +2176,16 @@
+@@ -1501,16 +2195,16 @@
      "batch": {
        "title": "批次檔案搜尋",
        "h6_add": "加入多個檔案",
@@ -12752,7 +12871,7 @@
        "fav_auto": "自動開始搜尋前 20 個檔案",
        "fav_nfo_skip": "同名 .nfo 存在則視為已整理，不重打 scraper",
        "pause_pause": "批次搜尋時可點擊「暫停」按鈕",
-@@ -1563,17 +2238,17 @@
+@@ -1563,17 +2257,17 @@
        "h6_manage": "收藏管理",
        "manage_add": "從搜尋頁或瀏覽頁加入收藏，照片自動下載至本地",
        "manage_library": "搜尋列旁的 <strong>+</strong> 可開啟「從片庫加入女優」清單：庫內女優依片數由多到少排序，別名自動合併成同一人，逐列點愛心即可加入收藏",
@@ -12774,7 +12893,7 @@
        "feat_nfo": "自動讀取 NFO 檔案並顯示元數據",
        "feat_nfo_fill": "「就地補資料」：原地補缺失的 NFO + 封面，不改名、不搬位 — 適合唯讀網盤、已有自己的資料夾結構，或只想瀏覽不被改檔案",
        "feat_terminal": "內建 Mini Terminal 顯示即時處理進度",
-@@ -1587,9 +2262,9 @@
+@@ -1587,9 +2281,9 @@
        "jellyfin_canonical": "選了媒體管理器模式後<strong>不再另外產生同名封面</strong>——那張圖會被 Jellyfin／Emby 優先讀取，造成封面牆出現橫式圖。既有的片維持原本的封面位置（以免清掉你已調整過的對焦），要修正請自行刪掉該片的同名封面後重新產生。",
        "jellyfin_showcase": "掃描完成後可至 <code>/showcase</code> 頁面瀏覽生成結果",
        "h6_strm_deploy": "唯讀來源 + 讓 Emby／Jellyfin／Kodi 掃到片（跨機器部署）",
@@ -12786,7 +12905,7 @@
        "strm_deploy_step4": "之後改了映射規則，既有的 <code>.strm</code> 會自動一次改寫，不用重建整個媒體庫。",
        "h6_multiversion": "同片多版本（流出 / 4K / 中文字幕）怎麼在 Emby/Jellyfin 合併？",
        "multiversion_intro": "多版本合併是 Emby 與 Jellyfin 共同支援的原生功能（同一套「資料夾名 - 標籤」規則），不是哪一家獨有。把同一片各版本放進以番號命名的資料夾，檔名都以資料夾名開頭加「 - 標籤」：",
-@@ -1601,7 +2276,7 @@
+@@ -1601,7 +2295,7 @@
        "h6_modes": "顯示模式",
        "h6_sort": "排序與搜尋",
        "h6_other": "其他功能",
@@ -12795,7 +12914,7 @@
        "mode_grid": "<strong>完整封面</strong>：整張封面的封面牆，點擊開啟 Lightbox（預設）",
        "mode_poster": "<strong>直式海報</strong>：只顯示封面右半（正面），卡片變窄、一列放得更多；手機／窄視窗一律使用此排版",
        "mode_list": "<strong>文字模式（List）</strong>：精簡列表，適合快速瀏覽（預設不顯示；可至「設定」→「列表顯示預設」開啟「顯示表格與清單」）",
-@@ -1632,7 +2307,7 @@
+@@ -1632,7 +2326,7 @@
        "beta_compilation": "tag 越完整（系列 / 片商 / cast）相似度越準；tag 很少的影片建議先補完 NFO",
        "h6_manage": "使用提示",
        "manage_enable": "無需設定，開箱即用",
@@ -12804,7 +12923,7 @@
      },
      "shortcuts": {
        "title": "快捷鍵",
-@@ -1736,26 +2411,26 @@
+@@ -1736,26 +2430,26 @@
      "server_mode": {
        "title": "伺服器模式 — 讓手機/平板連進來",
        "h6_what": "這是什麼",
@@ -12838,7 +12957,7 @@
        "h6_recover": "不小心按了「取消 / 拒絕」怎麼救回",
        "recover_win_intro": "Windows 救回步驟：",
        "recover_win_1": "按 <code>Win + R</code>，輸入 <code>wf.msc</code> 後 Enter，開啟「Windows Defender 防火牆 進階安全性」。",
-@@ -1800,15 +2475,75 @@
+@@ -1800,15 +2494,75 @@
      "update_modal": {
        "trigger_btn": "更新",
        "title": "即將開啟安裝視窗",
@@ -12917,7 +13036,7 @@
      }
    },
    "tutorial": {
-@@ -1816,20 +2551,18 @@
+@@ -1816,20 +2570,18 @@
      "skip": "跳過",
      "next": "下一步 →",
      "done": "完成 🎉",
@@ -12950,7 +13069,7 @@
    },
    "updater": {
      "page_title": "更新器",
-@@ -1850,6 +2583,12 @@
+@@ -1850,6 +2602,12 @@
      "clear_actress": "清除女優",
      "clear_maker": "清除片商",
      "count_open_browse": "在瀏覽頁查看",
@@ -12963,7 +13082,7 @@
      "row": {
        "years": "年份",
        "makers": "片商",
-@@ -1861,20 +2600,28 @@
+@@ -1861,20 +2619,28 @@
        "series": "系列",
        "deep_dive": "深入：女優與片商",
        "gantt": "主要片商年表",
@@ -12996,7 +13115,7 @@
      },
      "age": {
        "median": "中位數 {age}"
-@@ -1883,20 +2630,34 @@
+@@ -1883,20 +2649,34 @@
        "age_label": "{age} 歲",
        "tooltip_main": "{label} · 收藏 {total} 部，其中 {maker} {count} 部",
        "tooltip_dot": "{label} · 收藏 {total} 部",
@@ -13035,7 +13154,7 @@
      "status_connected": "已連線 {host}",
      "status_down": "連不到 {host}",
      "version_line": "版本 {version}（{kind}）",
-@@ -1906,69 +2667,69 @@
+@@ -1906,69 +2686,69 @@
      "kind_windows": "Windows 桌面版",
      "kind_mac": "Mac 桌面版",
      "last_ok": "上次成功連線：{time}",
@@ -13126,13 +13245,14 @@
        "stale": "（伺服器已無此來源）",
        "remove": "移除",
        "save_btn": "儲存對照表",
-@@ -1976,5 +2737,448 @@
+@@ -1976,5 +2756,449 @@
        "saved": "對照表已儲存",
        "save_failed": "對照表儲存失敗"
      }
 +  },
 +  "runtime": {
 +    "scanner": {
++      "shared_detail_asset": "此檔案由多部影片共用，無法只為目前的影片替換。",
 +      "readonly_start": "唯讀生成：{path}",
 +      "readonly_output_missing": "{path}：請先設定輸出夾，已略過",
 +      "readonly_unreachable": "{path}：來源無法連線，已略過",
@@ -30413,7 +30533,7 @@ HcmV?d00001
  
          // ===== T7b: State Machine =====
 -        state: 'idle',  // 'idle' | 'generating' | 'nfoUpdating' | 'done' | 'error'
-+        state: 'idle',  // idle | generating | nfoUpdating | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | titleBackfilling | sampleBackfilling | plotBackfilling | done | error | cancelled
++        state: 'idle',  // idle | generating | nfoUpdating | tagSourceUpdating | renamePreviewing | jellyfinUpdating | enriching | titleBackfilling | elementBackfilling | plotTranslating | done | error | cancelled
  
          // ===== T7b: Progress =====
          progressStatus: '',
@@ -30459,7 +30579,7 @@ HcmV?d00001
  
          // ===== T6d: Jellyfin Image Update =====
          jellyfinImageCount: 0,
-@@ -102,9 +131,91 @@
+@@ -102,9 +131,90 @@
              return (this.progressCurrent / this.progressTotal) * 100;
          },
  
@@ -30489,7 +30609,7 @@ HcmV?d00001
 +        },
 +
 +        get taskEtaText() {
-+            if (!this.isGenerating || !['nfo-update', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind)) {
++            if (!this.isGenerating || !['nfo-update', 'tag-update', 'rename-preview', 'enrich', 'title-backfill', 'element-backfill', 'plot-translate'].includes(this.taskKind)) {
 +                return '';
 +            }
 +            let seconds = this.taskEtaSeconds;
@@ -30507,7 +30627,7 @@ HcmV?d00001
 +        get taskCanRetry() {
 +            return !this.isGenerating
 +                && this.taskFailedItems.length > 0
-+                && ['nfo-update', 'tag-update', 'jellyfin-update', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(this.taskKind);
++                && ['nfo-update', 'tag-update', 'jellyfin-update', 'title-backfill', 'element-backfill', 'plot-translate'].includes(this.taskKind);
 +        },
 +
 +        get maintenanceSummaryText() {
@@ -30547,12 +30667,11 @@ HcmV?d00001
 +                || this.state === 'tagSourceUpdating'
 +                || this.state === 'renamePreviewing'
 +                || this.state === 'jellyfinUpdating' || this.state === 'enriching'
-+                || this.state === 'titleBackfilling' || this.state === 'sampleBackfilling'
-+                || this.state === 'plotBackfilling' || this.state === 'plotTranslating';
++                || this.state === 'titleBackfilling' || this.state === 'elementBackfilling' || this.state === 'plotTranslating';
          },
  
          get isBusy() {
-@@ -119,6 +230,67 @@
+@@ -119,6 +229,67 @@
  
          get doneActionsVisible() {
              return this.state === 'done' && this.outputPath !== '';
@@ -30620,7 +30739,7 @@ HcmV?d00001
          },
  
          get generateButtonText() {
-@@ -173,14 +345,6 @@
+@@ -173,14 +344,6 @@
  
          // ===== Lifecycle =====
          async init() {
@@ -30635,7 +30754,7 @@ HcmV?d00001
              // T5.1: 接入統一 page lifecycle
              // 提前到所有 await 之前註冊：closure 讀的都是 this.* runtime state，
              // 提前註冊不改變行為；但避免 loadConfig fetch 卡住時離頁 dirty-guard /
-@@ -212,13 +376,18 @@
+@@ -212,13 +375,18 @@
                      },
                      onBeforeUnload: () => {
                          const guard = this.shouldWarnBeforeLeave();
@@ -30655,7 +30774,7 @@ HcmV?d00001
                          // T2(40c): abort jellyfin check fetch
                          if (this._jellyfinCheckController) {
                              this._jellyfinCheckController.abort();
-@@ -233,6 +402,10 @@
+@@ -233,6 +401,10 @@
                              this._enrichAbortController.abort();
                              this._enrichAbortController = null;
                          }
@@ -30666,7 +30785,7 @@ HcmV?d00001
                          // TASK-94 Codex P1：離頁時清最後一片 flush dwell timer，避免 timer 事後
                          // 觸發 finalize（checkMissing fetch / state 變更）clobber 已離頁狀態。
                          if (this._flushTimer) {
-@@ -246,6 +419,7 @@
+@@ -246,6 +418,7 @@
              // 初始載入
              await this.loadConfig();
              this.loadStats();
@@ -30674,7 +30793,16 @@ HcmV?d00001
  
              // T7b: 恢復日誌（logOutput 為 scanner.html 靜態 x-ref 元素，
              // init 時早已 mount，直接同步還原、無需等 $nextTick）
-@@ -305,6 +479,14 @@
+@@ -260,7 +433,7 @@
+                 try {
+                     const items = JSON.parse(pending);
+                     if (Array.isArray(items) && items.length > 0) {
+-                        this.missingItems = items;
++                        this.pendingEnrichItems = items;
+                         this.resumePillVisible = true;
+                     }
+                 } catch { localStorage.removeItem('avlist_enrich_pending'); }
+@@ -305,6 +478,14 @@
                  if (result.success) {
                      this.config = result.data;
                      this.directories = this.config.gallery?.directories || [];
@@ -30689,7 +30817,7 @@ HcmV?d00001
                      // response-only：後端解析出的實際輸出路徑，供「輸出到」顯示
                      this.resolvedGalleryOutputPath = result.resolved?.gallery_output_path || '';
  
-@@ -358,7 +540,8 @@
+@@ -358,7 +539,8 @@
  
                          if (stats.last_run) {
                              const lastRun = new Date(stats.last_run);
@@ -30699,7 +30827,7 @@ HcmV?d00001
                                  month: 'numeric',
                                  day: 'numeric',
                                  hour: '2-digit',
-@@ -377,6 +560,25 @@
+@@ -377,6 +559,25 @@
              }
          },
  
@@ -30725,7 +30853,7 @@ HcmV?d00001
          async clearCache() {
              this.clearCacheLoading = true;
              try {
-@@ -387,6 +589,10 @@
+@@ -387,6 +588,10 @@
                      this.statTotal = 0;
                      this.statsVisible = false;
                      this.nfoUpdateVisible = false;
@@ -30736,7 +30864,16 @@ HcmV?d00001
                      this.jellyfinImageVisible = false;
                      this.jellyfinCheckState = 'idle';
                      this.clearCacheModalOpen = false;
-@@ -455,27 +661,7 @@
+@@ -394,6 +599,8 @@
+                     this.missingPillVisible = false;
+                     this.resumePillVisible = false;
+                     this.missingItems = [];
++                    this.missingCoverItems = [];
++                    this.pendingEnrichItems = [];
+                     localStorage.removeItem('avlist_enrich_pending');
+                 } else {
+                     this.showToast(window.t('scanner.toast.clear_failed', { error: result.error || window.t('common.unknown_error') }), 'error');
+@@ -455,27 +662,7 @@
  
          // ===== Folder Management =====
          async selectFolder() {
@@ -30765,7 +30902,7 @@ HcmV?d00001
          },
  
          addFolderPath(folderPath) {
-@@ -536,8 +722,6 @@
+@@ -536,8 +723,6 @@
              clearTimeout(_dragTimeoutHandle);
              _dragTimeoutHandle = null;
              if (this.showDragOverlay) this.showDragOverlay = false;
@@ -30774,7 +30911,7 @@ HcmV?d00001
              this.showToast(window.t('scanner.toast.browse_dir_fallback'), 'info');
              this.openBrowseDir('scanner', (path) => { this.addFolderPath(path); });
          },
-@@ -636,6 +820,9 @@
+@@ -636,6 +821,9 @@
          addLog(level, message) {
              // T7d: 加入結構化陣列
              this.logEntries.push({ level, message, timestamp: Date.now() });
@@ -30784,7 +30921,7 @@ HcmV?d00001
  
              const cls = level === 'error' ? 'log-error' :
                          level === 'warn' ? 'log-warn' : 'log-info';
-@@ -662,13 +849,30 @@
+@@ -662,13 +850,30 @@
  
              // 儲存到 localStorage
              localStorage.setItem('avlist_logs', this.logHtml);
@@ -30815,7 +30952,7 @@ HcmV?d00001
              const wasGenerating = localStorage.getItem('avlist_generating') === 'true';
  
              if (savedLogs) {
-@@ -709,14 +913,27 @@
+@@ -709,14 +914,27 @@
  
          clearLogs() {
              localStorage.removeItem('avlist_logs');
@@ -30843,7 +30980,7 @@ HcmV?d00001
          clearLogsDisplay() {
              this.logHtml = '';
              this.logEntries = [];
-@@ -758,7 +975,11 @@
+@@ -758,7 +976,11 @@
          },
  
          confirmClearAll() {
@@ -30856,7 +30993,7 @@ HcmV?d00001
              if (!hasLogs) {
                  this.showToast(window.t('scanner.toast.no_logs'), 'info');
                  return;
-@@ -768,6 +989,157 @@
+@@ -768,6 +990,155 @@
              if (confirm(window.t('scanner.toast.confirm_clear_logs'))) {
                  this.clearLogs();
                  this.showToast(window.t('scanner.toast.logs_cleared'), 'success');
@@ -31002,19 +31139,17 @@ HcmV?d00001
 +                this.runTitleBackfill();
 +                return;
 +            }
-+            if (this.taskKind === 'sample-backfill') {
-+                this.runSampleBackfill();
++            if (this.taskKind === 'element-backfill') {
++                this.openElementPicker(this.lastElementSources);
++                return;
 +            }
 +            if (this.taskKind === 'plot-translate') {
 +                this.runPlotTranslation();
 +                return;
-+            }
-+            if (this.taskKind === 'plot-backfill') {
-+                this.runPlotBackfill();
              }
          },
  
-@@ -792,9 +1164,7 @@
+@@ -792,9 +1163,7 @@
  
              // 重置狀態
              this.state = 'generating';
@@ -31025,7 +31160,7 @@ HcmV?d00001
              this.outputPath = '';
              this.nfoUpdateVisible = false;
              this.clearLogs();
-@@ -812,19 +1182,24 @@
+@@ -812,19 +1181,24 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -31053,7 +31188,7 @@ HcmV?d00001
                          localStorage.removeItem('avlist_state');  // 清除 viewer 狀態
  
                          // 處理 NFO 更新提示
-@@ -868,6 +1243,15 @@
+@@ -868,6 +1242,15 @@
                              this.showToast(window.t('scanner.toast.generate_success', { count: data.video_count }), 'success');
                          }
  
@@ -31069,7 +31204,7 @@ HcmV?d00001
                          // a5: Windows 長路徑警告
                          if (data.long_paths && data.long_paths.length > 0) {
                              this.showToast(
-@@ -890,24 +1274,24 @@
+@@ -890,24 +1273,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -31098,7 +31233,7 @@ HcmV?d00001
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] generate error:', e);
                  this.showToast(window.t('scanner.toast.generate_error'), 'error', 4000);
-@@ -915,26 +1299,64 @@
+@@ -915,26 +1298,64 @@
          },
  
          // ===== T7b: NFO Update Flow =====
@@ -31170,7 +31305,7 @@ HcmV?d00001
  
                  this.eventSource.onmessage = (event) => {
                      const data = JSON.parse(event.data);
-@@ -943,55 +1365,162 @@
+@@ -943,55 +1364,162 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -31345,7 +31480,7 @@ HcmV?d00001
          // ===== T6d: Jellyfin Image Update Flow =====
          async runJellyfinImageUpdate() {
              if (this.isGenerating) return;
-@@ -1002,9 +1531,7 @@
+@@ -1002,9 +1530,7 @@
              }
  
              this.state = 'jellyfinUpdating';
@@ -31356,7 +31491,7 @@ HcmV?d00001
              this.clearLogs();
  
              localStorage.setItem('avlist_generating', 'true');
-@@ -1019,14 +1546,13 @@
+@@ -1019,14 +1545,13 @@
                          this.progressStatus = data.status;
                          this.progressCurrent = data.current;
                          this.progressTotal = data.total;
@@ -31373,7 +31508,7 @@ HcmV?d00001
                          // TASK-111 P2-b 後續（codex delta review）：done 不再必然代表「全數完成」——
                          // 批次跑到一半若把 external_manager 切成 off，後端會在下一部片 break 並送
                          // done(updated=已完成筆數)。這裡若無條件補滿 progressTotal，UI 會顯示 3/3
-@@ -1035,9 +1561,14 @@
+@@ -1035,9 +1560,14 @@
                          this.progressCurrent = (typeof data.updated === 'number')
                              ? data.updated
                              : this.progressTotal;
@@ -31389,7 +31524,7 @@ HcmV?d00001
  
                          // T3(40c) Codex fix: update 完成後重設 jellyfin check 狀態，讓觸發列重新出現
                          this.jellyfinImageVisible = false;
-@@ -1045,7 +1576,13 @@
+@@ -1045,7 +1575,13 @@
                          this.jellyfinItems = [];
                          this.jellyfinCheckState = 'idle';
  
@@ -31404,7 +31539,7 @@ HcmV?d00001
                          if (data.message) {
                              this.addLog('info', data.message);
                          }
-@@ -1053,24 +1590,24 @@
+@@ -1053,24 +1589,24 @@
                      } else if (data.type === 'error') {
                          this.eventSource.close();
                          this.eventSource = null;
@@ -31433,7 +31568,7 @@ HcmV?d00001
                  localStorage.setItem('avlist_generating', 'false');
                  console.error('[Scanner] runJellyfinImageUpdate error:', e);
                  this.showToast(window.t('scanner.toast.jellyfin_update_error'), 'error', 4000);
-@@ -1078,6 +1615,21 @@
+@@ -1078,6 +1614,21 @@
          },
  
          // ===== T7b: Utility =====
@@ -31455,7 +31590,7 @@ HcmV?d00001
          copyOutputPath() {
              if (!this.outputPath) return;
  
-@@ -1097,5 +1649,6 @@
+@@ -1097,5 +1648,6 @@
                  }
              });
          },
@@ -31470,7 +31605,7 @@ HcmV?d00001
  /** TASK-147b-T3 / CD-147b-5：四項判準——真的補到 NFO／封面／欄位／劇照才算成功。
   * 與 core/enrich_contract.py 的 did_enrich_something() 同一判準；改一邊必須改另一邊。
   *
-@@ -11,8 +13,24 @@
+@@ -11,20 +13,166 @@
          || (event.fields_filled?.length > 0) || event.extrafanart_written > 0);
  }
  
@@ -31495,7 +31630,11 @@ HcmV?d00001
          // ===== T10: Missing NFO/Cover Enrich =====
          missingPillVisible: false,
          missingBothCount: 0,
-@@ -22,9 +40,110 @@
+         missingNfoCount: 0,
+         missingCoverCount: 0,
++        pendingEnrichItems: [],
++        missingCoverItems: [],
+         missingItems: [],           // [{file_path, number}]
          missingEnrichOffset: 0,     // batch offset
          missingEnrichSuccess: 0,
          missingEnrichFailed: 0,
@@ -31528,17 +31667,52 @@ HcmV?d00001
 +        maintenanceSourceAction: '',
 +        nfoUpdateSource: '',
 +        missingEnrichSource: '',
-+        sampleBackfillSource: '',
-+        plotBackfillSource: '',
++        elementOptions: {},
++        elementSelection: {},
++        elementSourcesLoading: false,
++        lastElementSources: {},
++
++        async openElementPicker(previous = {}) {
++            if (this.isBusy || this.elementSourcesLoading) return;
++            this.elementOptions = {};
++            this.elementSelection = {cover: '', plot: '', samples: '', tags: ''};
++            this.elementSourcesLoading = true;
++            const dialog = this.$refs.elementPicker;
++            dialog.showModal();
++            try {
++                const response = await fetch('/api/gallery/backfill-elements/sources');
++                if (!response.ok) throw new Error(`HTTP ${response.status}`);
++                const result = await response.json();
++                if (!result.success || !result.sources) throw new Error('sources');
++                this.elementOptions = result.sources;
++                await this.$nextTick();
++                for (const [field, id] of Object.entries(previous)) {
++                    if (this.elementOptions[field]?.some(option => option.id === id)) {
++                        this.elementSelection[field] = id;
++                    }
++                }
++            } catch {
++                if (dialog.open) {
++                    dialog.close();
++                    this.showToast(window.t('scanner.sources.load_failed'), 'error');
++                }
++            } finally {
++                this.elementSourcesLoading = false;
++            }
++        },
++
++        get selectedElementSources() {
++            return Object.fromEntries(Object.entries(this.elementSelection).filter(([field, id]) =>
++                id && this.elementOptions[field]?.some(option => option.id === id)
++            ));
++        },
 +
 +        get maintenanceSourceTitle() {
 +            const keys = {
 +                nfo: 'scanner.stats.nfo_update_title',
 +                rename: 'scanner.rename.source_row_title',
 +                'tag-update': 'scanner.stats.tag_source_label',
-+                enrich: 'scanner.stats.missing_enrich_idle',
-+                samples: 'scanner.stats.sample_backfill_idle',
-+                plots: 'scanner.stats.plot_backfill_idle',
++                enrich: 'scanner.elements.create_nfos',
 +                resume: 'scanner.stats.missing_resume_btn',
 +            };
 +            return window.t(keys[this.maintenanceSourceAction] || 'scanner.sources.title');
@@ -31593,27 +31767,27 @@ HcmV?d00001
 +                    if (action === 'resume') this.resumeMissingEnrich();
 +                    else await this.runMissingEnrich();
 +                    break;
-+                case 'samples':
-+                    this.sampleBackfillSource = sourceId;
-+                    await this.runSampleBackfill();
-+                    break;
-+                case 'plots':
-+                    this.plotBackfillSource = sourceId;
-+                    await this.runPlotBackfill();
-+                    break;
 +            }
 +        },
  
          // ===== TASK-94-T3: Scanner Enrich Fly 進度卡 + badge =====
          currentCard: null,          // {number, status, source, reason, coverSrc} | null
-@@ -66,6 +185,106 @@
+@@ -51,7 +199,7 @@
+                 }));
+         },
+         get missingCoverDrilldownItems() {
+-            return this.missingItems.filter(i => i.category === 'cover').map(i => ({
++            return this.missingCoverItems.map(i => ({
+                     number: i.number,
+                     path: i.file_path,
+                     note: window.t('scanner.stats.missing_cover_tag'),
+@@ -66,38 +214,646 @@
          get missingCoverDrilldownPayload() {
              return { title: window.t('scanner.stats.missing_cover_prefix'), items: this.missingCoverDrilldownItems, footnote: window.t('scanner.stats.missing_list_footnote') };
          },
 +        get missingEstimateMinutes() {
 +            return estimateEnrichMinutes(
-+                this.missingBothCount + this.missingNfoCount,
-+                this.missingCoverCount,
++                this.missingItems.length, 0,
 +            );
 +        },
 +
@@ -31683,40 +31857,15 @@ HcmV?d00001
 +                || this.untranslatedTitleCount === 0
 +                || this.config?.translate?.enabled !== true;
 +        },
-+
-+        get sampleBackfillButtonText() {
-+            if (this.state === 'sampleBackfilling') {
-+                return '<span class="loading loading-spinner loading-sm"></span> '
-+                    + window.t('scanner.stats.sample_backfill_loading');
-+            }
-+            return '<i class="bi bi-images"></i> '
-+                + window.t('scanner.stats.sample_backfill_idle');
-+        },
-+
-+        get sampleBackfillDisabled() {
-+            return this.isBusy || this.missingSampleCount === 0;
-+        },
-+
-+        get plotBackfillButtonText() {
-+            if (this.state === 'plotBackfilling') {
-+                return '<span class="loading loading-spinner loading-sm"></span> '
-+                    + window.t('scanner.stats.plot_backfill_loading');
-+            }
-+            return '<i class="bi bi-card-text"></i> '
-+                + window.t('scanner.stats.plot_backfill_idle');
-+        },
-+
-+        get plotBackfillDisabled() {
-+            return this.isBusy
-+                || this.missingPlotCount === 0;
-+        },
  
          get missingEnrichButtonText() {
              if (this.state === 'enriching') {
-@@ -74,13 +293,297 @@
-             return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
-         },
- 
+                 return '<span class="loading loading-spinner loading-sm"></span> ' + window.t('scanner.stats.missing_enrich_loading');
+             }
+-            return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
++            return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.elements.create_nfos');
++        },
++
 +        get renameReadyItems() {
 +            return (this.renamePlan?.items || []).filter(item => item.status === 'ready');
 +        },
@@ -31980,8 +32129,8 @@ HcmV?d00001
 +                window.t(ok ? 'scanner.rename.copy_success' : 'scanner.rename.copy_failed'),
 +                ok ? 'success' : 'error'
 +            );
-+        },
-+
+         },
+ 
          // ===== T10: Missing NFO/Cover Enrich Methods =====
          async checkMissing() {
 +            const requestId = (this._missingCheckRequestId || 0) + 1;
@@ -31992,6 +32141,15 @@ HcmV?d00001
 +                if (requestId !== this._missingCheckRequestId) return;
                  if (!result.success) return;
                  const d = result.data;
+-                if (d.total_missing > 0) {
+-                    // TASK-13: 後端永遠回傳完整 items 清單；前端於 runMissingEnrich 內做 > 500 confirm gate
+-                    this.missingBothCount = d.missing_both || 0;
+-                    this.missingNfoCount = d.missing_nfo || 0;
+-                    this.missingCoverCount = d.missing_cover || 0;
+-                    this.missingItems = Array.isArray(d.items) ? d.items : [];
+-                    this.missingPillVisible = true;
+-                } else {
+-                    this.missingPillVisible = false;
 +                this.untranslatedTitleCount = d.untranslated_titles || 0;
 +                this.missingSampleCount = d.missing_samples || 0;
 +                this.missingPlotCount = d.missing_plots || 0;
@@ -32008,23 +32166,13 @@ HcmV?d00001
 +                this.missingPlotItems = Array.isArray(d.missing_plot_items)
 +                    ? d.missing_plot_items
 +                    : [];
-                 if (d.total_missing > 0) {
-                     // TASK-13: 後端永遠回傳完整 items 清單；前端於 runMissingEnrich 內做 > 500 confirm gate
-                     this.missingBothCount = d.missing_both || 0;
-@@ -88,16 +591,292 @@
-                     this.missingCoverCount = d.missing_cover || 0;
-                     this.missingItems = Array.isArray(d.items) ? d.items : [];
-                     this.missingPillVisible = true;
-+                    // Make a completed scan actionable immediately instead of
-+                    // hiding the "fill missing" row inside a collapsed section.
-+                    this.maintenanceExpanded = true;
-                 } else {
-                     this.missingPillVisible = false;
-+                    this.missingBothCount = 0;
-+                    this.missingNfoCount = 0;
-+                    this.missingCoverCount = 0;
-+                    this.missingItems = [];
-+                }
++                const missing = Array.isArray(d.items) ? d.items : [];
++                this.missingBothCount = d.missing_both || 0;
++                this.missingNfoCount = d.missing_nfo || 0;
++                this.missingCoverCount = d.missing_cover || 0;
++                this.missingCoverItems = missing.filter(item => item.category === 'both' || item.category === 'cover');
++                this.missingItems = missing.filter(item => item.category !== 'cover');
++                this.missingPillVisible = this.missingItems.length > 0;
 +                if (
 +                    (d.total_missing || 0) > 0
 +                    || this.untranslatedTitleCount > 0
@@ -32052,35 +32200,22 @@ HcmV?d00001
 +            });
 +        },
 +
-+        async runSampleBackfill() {
-+            if (this.sampleBackfillDisabled) return;
-+            if (!this.sampleBackfillSource) return this.openMaintenanceSourcePicker('samples');
-+            await this._runBackfillStream({
-+                url: '/api/gallery/backfill-samples',
-+                source: this.sampleBackfillSource,
-+                taskState: 'sampleBackfilling',
-+                taskKind: 'sample-backfill',
-+                startStatus: window.t('scanner.stats.sample_backfill_preparing'),
-+                total: this.missingSampleCount,
-+                doneToastKey: 'scanner.stats.sample_backfill_toast_success',
-+                mixedToastKey: 'scanner.stats.sample_backfill_toast_mixed',
-+                errorText: window.t('scanner.stats.sample_backfill_error'),
-+            });
-+        },
-+
-+        async runPlotBackfill() {
-+            if (this.plotBackfillDisabled) return;
-+            if (!this.plotBackfillSource) return this.openMaintenanceSourcePicker('plots');
++        async runElementBackfill() {
++            const dialog = this.$refs.elementPicker;
++            const sources = this.selectedElementSources;
++            if (!dialog.open || this.isBusy || this.elementSourcesLoading || !Object.keys(sources).length) return;
++            this.lastElementSources = {...sources};
++            dialog.close();
 +            const event = await this._runBackfillStream({
-+                url: '/api/gallery/backfill-plots',
-+                source: this.plotBackfillSource,
-+                taskState: 'plotBackfilling',
-+                taskKind: 'plot-backfill',
-+                startStatus: window.t('scanner.stats.plot_backfill_preparing'),
-+                total: this.missingPlotCount,
-+                doneToastKey: 'scanner.stats.plot_backfill_toast_success',
-+                mixedToastKey: 'scanner.stats.plot_backfill_toast_mixed',
-+                errorText: window.t('scanner.stats.plot_backfill_error'),
++                url: '/api/gallery/backfill-elements',
++                body: {sources},
++                taskState: 'elementBackfilling',
++                taskKind: 'element-backfill',
++                startStatus: window.t('scanner.elements.title'),
++                total: 0,
++                doneToastKey: 'scanner.elements.summary',
++                mixedToastKey: 'scanner.elements.summary',
++                errorText: window.t('scanner.task.failed'),
 +            });
 +            if (event?.summary?.translation_batch && event.summary.translation_count > 0) {
 +                this._setPendingPlotTranslation({batch_id:event.summary.translation_batch,count:event.summary.translation_count});
@@ -32133,7 +32268,6 @@ HcmV?d00001
 +
 +        async _runBackfillStream({
 +            url,
-+            source,
 +            body,
 +            taskState,
 +            taskKind,
@@ -32148,14 +32282,7 @@ HcmV?d00001
 +            this.state = taskState;
 +            this._startTask(taskKind, startStatus, total);
 +            this.clearLogs();
-+            if (
-+                taskKind === 'title-backfill'
-+                || taskKind === 'sample-backfill'
-+                || taskKind === 'plot-backfill'
-+                || taskKind === 'plot-translate'
-+            ) {
-+                this.logPanelExpanded = true;
-+            }
++            this.logPanelExpanded = true;
 +
 +            const controller = new AbortController();
 +            this._backfillAbortController = controller;
@@ -32164,11 +32291,12 @@ HcmV?d00001
 +            let completionEvent = null;
 +
 +            try {
-+                const endpoint = source ? `${url}?${new URLSearchParams({ source })}` : url;
-+                const resp = await fetch(endpoint, {
++                const resp = await fetch(url, {
 +                    method: 'POST',
-+                    headers: { Accept: 'text/event-stream' },
-+                    ...(body ? {headers:{Accept:'text/event-stream','Content-Type':'application/json'},body:JSON.stringify(body)} : {}),
++                    headers: body
++                        ? {Accept: 'text/event-stream', 'Content-Type': 'application/json'}
++                        : {Accept: 'text/event-stream'},
++                    ...(body && {body: JSON.stringify(body)}),
 +                    signal: controller.signal,
 +                });
 +                if (!resp.ok) {
@@ -32201,7 +32329,7 @@ HcmV?d00001
 +                        }
 +
 +                        if (event.type === 'progress') {
-+                            this.progressStatus = event.status || startStatus;
++                            this.progressStatus = event.status || event.message || startStatus;
 +                            this.progressCurrent = event.current || 0;
 +                            this.progressTotal = event.total || total;
 +                            this._applyTaskMetrics({
@@ -32227,7 +32355,13 @@ HcmV?d00001
 +                                failed: event.failed_count,
 +                                skipped: event.skipped_count,
 +                            });
-+                            if (!event.success && !event.skipped) {
++                            if (event.element) {
++                                const field = window.t(`scanner.elements.${event.element}`);
++                                const item = event.number || event.file_path || '';
++                                const reason = event.error || event.message || '';
++                                const level = event.skipped ? 'warn' : (event.success ? 'info' : 'error');
++                                this.addLog(level, `${progressPrefix}${item} · ${field} · ${event.source} — ${reason}`);
++                            } else if (!event.success && !event.skipped) {
 +                                this.addLog(
 +                                    'error',
 +                                    progressPrefix + window.t('scanner.stats.backfill_item_failed', {
@@ -32304,7 +32438,7 @@ HcmV?d00001
  
              // TASK-13: 大批量 confirm gate — > 500 筆彈 modal，等用戶按確認才繼續
              if (!skipConfirm && this.missingItems.length > 500) {
-@@ -109,14 +888,17 @@
+@@ -109,14 +865,17 @@
              this.missingEnrichOffset = 0;
              this.missingEnrichSuccess = 0;
              this.missingEnrichFailed = 0;
@@ -32325,7 +32459,7 @@ HcmV?d00001
              this.clearLogs();
  
              const controller = new AbortController();
-@@ -136,7 +918,10 @@
+@@ -136,7 +895,10 @@
                          resp = await fetch('/api/batch-enrich', {
                              method: 'POST',
                              headers: { 'Content-Type': 'application/json' },
@@ -32337,7 +32471,7 @@ HcmV?d00001
                              signal: controller.signal,
                          });
                      } catch (fetchErr) {
-@@ -146,7 +931,7 @@
+@@ -146,7 +908,7 @@
                          }
                          this.addLog('error', window.t('scanner.stats.missing_enrich_connection_failed', { message: fetchErr.message }));
                          this.flushLogs();
@@ -32346,7 +32480,7 @@ HcmV?d00001
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          // Save remaining
-@@ -159,7 +944,7 @@
+@@ -159,7 +921,7 @@
                          const errText = await resp.text().catch(() => '');
                          this.addLog('error', window.t('scanner.stats.missing_enrich_batch_fail', { status: resp.status, error: errText }));
                          this.flushLogs();
@@ -32355,7 +32489,7 @@ HcmV?d00001
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -200,6 +985,12 @@
+@@ -200,6 +962,12 @@
                                  this.progressCurrent = this.missingEnrichOffset + (event.current || 0);
                                  this.progressTotal = items.length;
                                  this.currentCard = { number: event.number, status: 'searching', source: '', reason: '', coverSrc: '' };
@@ -32368,7 +32502,7 @@ HcmV?d00001
                              } else if (event.type === 'result-item') {
                                  // badge 在 handler 本體算，與動畫（T5 playInboundFly）解耦（G-5）
                                  // pre-merge SA-pre-9 P3-4：改用與成功數同一個判準。147b-T3 把成功數
-@@ -234,7 +1025,18 @@
+@@ -234,7 +1002,18 @@
                                      this.missingEnrichSuccess++;
                                  } else {
                                      this.missingEnrichFailed++;
@@ -32387,7 +32521,7 @@ HcmV?d00001
                                  // log reason-gate（U-2）：only error 記詳情，not_found 安靜不記
                                  if (event.reason === 'error') {
                                      this.addLog('error', window.t('scanner.stats.missing_enrich_item_failed', { number: event.number || '', error: event.error || '' }));
-@@ -246,7 +1048,7 @@
+@@ -246,7 +1025,7 @@
                              } else if (event.type === 'error') {
                                  this.addLog('error', window.t('scanner.stats.missing_enrich_error_prefix', { message: event.message || '' }));
                                  this.flushLogs();
@@ -32396,7 +32530,7 @@ HcmV?d00001
                                  this.currentCard = null;
                                  this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -258,7 +1060,7 @@
+@@ -258,7 +1037,7 @@
  
                      // P1 fix: only advance offset if batch actually completed (got 'done' SSE event)
                      if (!batchDone) {
@@ -32405,7 +32539,7 @@ HcmV?d00001
                          this.currentCard = null;
                          this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                          localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
-@@ -284,11 +1086,19 @@
+@@ -284,11 +1063,19 @@
                      if (lastCover) {
                          this._flyCover(lastCover);  // 待命格容器恆渲染（state 仍 'enriching'）→ rect 有效
                      }
@@ -32427,7 +32561,7 @@ HcmV?d00001
                      const summary = this.missingEnrichFailed > 0
                          ? window.t('scanner.stats.missing_enrich_toast_mixed', { success: this.missingEnrichSuccess, failed: this.missingEnrichFailed })
                          : window.t('scanner.stats.missing_enrich_toast_success', { success: this.missingEnrichSuccess });
-@@ -312,7 +1122,7 @@
+@@ -312,7 +1099,7 @@
                  if (e.name === 'AbortError') return;
                  console.error('runMissingEnrich error:', e);
                  this._clearFlushTimer();  // TASK-94 Codex P1：防禦性清 flush timer（正常路徑 timer 只在 try 尾排程）
@@ -32436,6 +32570,23 @@ HcmV?d00001
                  this.currentCard = null;
                  this.onDeckCard = null;  // TASK-94-T8：error 路徑不殘留待命封面
                  localStorage.setItem('avlist_enrich_pending', JSON.stringify(items.slice(this.missingEnrichOffset)));
+@@ -380,6 +1167,8 @@
+             // TASK-13: 不在此清 localStorage；交由 runMissingEnrich 成功完成時統一清除。
+             // 若補完途中失敗或用戶取消，pending 保留、下次 reload 仍可恢復。
+             // skipConfirm:true — 用戶前一次已明確按過「一鍵補完」，resume 視為延續既有意圖。
++            this.missingItems = this.pendingEnrichItems;
++            this.pendingEnrichItems = [];
+             this.resumePillVisible = false;
+             this.runMissingEnrich({ skipConfirm: true });
+         },
+@@ -396,6 +1185,7 @@
+         },
+ 
+         dismissResume() {
++            this.pendingEnrichItems = [];
+             this.resumePillVisible = false;
+             localStorage.removeItem('avlist_enrich_pending');
+             // P2 fix: re-fetch DB state to repopulate missingItems (不清空，讓 pill 按鈕可用)
 --- /dev/null
 +++ b/web/static/js/pages/search/batch-search-rules.js
 @@ -0,0 +1,16 @@
@@ -35034,6 +35185,157 @@ HcmV?d00001
 +    return true;
 +}
 --- /dev/null
++++ b/web/static/js/pages/showcase/state-lightbox-elements.js
+@@ -0,0 +1,148 @@
++const fields = ['cover', 'plot', 'samples', 'tags'];
++
++async function readResults(response, onEvent) {
++    const reader = response.body?.getReader();
++    const interrupted = () => new Error(window.t('showcase.elements.interrupted'));
++    if (!reader) throw interrupted();
++    const decoder = new TextDecoder();
++    let buffer = '';
++    try {
++        while (true) {
++            const {value, done} = await reader.read();
++            buffer += decoder.decode(value, {stream: !done});
++            const lines = buffer.split('\n');
++            buffer = done ? '' : lines.pop();
++            for (const line of lines) {
++                if (!line.startsWith('data:')) continue;
++                const event = JSON.parse(line.slice(5));
++                if (event.type === 'error') throw new Error(event.message || window.t('scanner.task.failed'));
++                onEvent(event);
++                if (event.type === 'done') return;
++            }
++            if (done) throw interrupted();
++        }
++    } finally {
++        reader.releaseLock();
++    }
++}
++
++export function stateLightboxElements() {
++    let controller = null;
++    let disposed = false;
++    return {
++        videoElementsOpen: false,
++        videoElementsLoading: false,
++        videoElementsRunning: false,
++        videoElementsSubmitted: false,
++        videoElementsPath: '',
++        elementOptions: {},
++        elementSelection: {},
++        videoElementsStatus: '',
++        videoElementResults: [],
++
++        get selectedVideoElements() {
++            return Object.fromEntries(fields.filter(field => this.elementSelection[field] &&
++                this.elementOptions[field]?.some(option => option.id === this.elementSelection[field])
++            ).map(field => [field, this.elementSelection[field]]));
++        },
++
++        async openVideoElements() {
++            const video = this.currentLightboxVideo;
++            if (!this.lightboxOpen || !video?.path || this.videoElementsOpen) return;
++            this.videoElementsPath = video.path;
++            this.elementOptions = {};
++            this.elementSelection = {cover: '', plot: '', samples: '', tags: ''};
++            this.videoElementsStatus = '';
++            this.videoElementResults = [];
++            this.videoElementsSubmitted = false;
++            this.videoElementsOpen = true;
++            this.videoElementsLoading = true;
++            this.videoElementsRunning = false;
++            const request = controller = new AbortController();
++            this.$refs.videoElementsDialog.showModal();
++            try {
++                const response = await fetch('/api/gallery/backfill-elements/sources', {signal: request.signal});
++                if (!response.ok) throw new Error();
++                const data = await response.json();
++                if (!data.success || !data.sources) throw new Error();
++                if (controller !== request) return;
++                this.elementOptions = Object.fromEntries(fields.map(field => [field,
++                    Array.isArray(data.sources[field]) ? data.sources[field] : [],
++                ]));
++                if (!Object.values(this.elementOptions).some(options => options.length)) {
++                    this.videoElementsStatus = window.t('scanner.sources.empty');
++                }
++            } catch {
++                if (controller === request) this.videoElementsStatus = window.t('scanner.sources.load_failed');
++            } finally {
++                if (controller === request) this.videoElementsLoading = false;
++            }
++        },
++
++        closeVideoElements() {
++            controller?.abort();
++            controller = null;
++            this.videoElementsOpen = false;
++            if (this.$refs.videoElementsDialog?.open) this.$refs.videoElementsDialog.close();
++        },
++
++        cancelVideoElements() {
++            controller?.abort();
++        },
++
++        disposeVideoElements() {
++            disposed = true;
++            this.closeVideoElements();
++        },
++
++        async runVideoElements() {
++            const video = this.currentLightboxVideo;
++            const path = this.videoElementsPath;
++            const sources = this.selectedVideoElements;
++            if (!this.videoElementsOpen || this.videoElementsLoading || this.videoElementsSubmitted ||
++                    !this.lightboxOpen || !path || video?.path !== path || !Object.keys(sources).length) return;
++            const request = controller = new AbortController();
++            this.videoElementsRunning = true;
++            this.videoElementsSubmitted = true;
++            this.videoElementsStatus = '';
++            let accepted = false;
++            try {
++                const response = await fetch('/api/gallery/rescrape-elements', {
++                    method: 'POST', headers: {'Content-Type': 'application/json', Accept: 'text/event-stream'},
++                    body: JSON.stringify({file_path: path, sources}), signal: request.signal,
++                });
++                if (!response.ok) {
++                    const error = await response.json().catch(() => ({}));
++                    throw new Error(error.message || (typeof error.detail === 'string' && error.detail) || `HTTP ${response.status}`);
++                }
++                accepted = true;
++                await readResults(response, event => {
++                    if (controller !== request) return;
++                    if (event.type === 'progress') this.videoElementsStatus = event.message || event.status || '';
++                    if (event.type === 'result-item' && sources[event.element]) {
++                        const message = event.success && !event.skipped ? window.t('showcase.elements.updated') :
++                            event.error || event.message || window.t(event.skipped ? 'scanner.elements.skip' : 'scanner.task.failed');
++                        this.videoElementResults.push({field: event.element, message});
++                    }
++                    if (event.type === 'done') this.videoElementsStatus = event.cancelled
++                        ? window.t('scanner.task.cancelled_log')
++                        : window.t('showcase.elements.summary', event.summary || {});
++                });
++            } catch (error) {
++                if (controller === request) this.videoElementsStatus = request.signal.aborted
++                    ? window.t('scanner.task.cancelled_log') : error.message;
++            } finally {
++                // A disconnected stream can already have committed an earlier field.
++                if (!disposed && (accepted || request.signal.aborted)) {
++                    const refreshed = await this.refreshVideoData(video);
++                    if (refreshed && sources.plot && this.lightboxOpen && this.currentLightboxVideo?.path === path) {
++                        if (this.lbPlotOpen || this._lbPlotInline) this._lbPlotLoad();
++                        else this._lbPlotAutoLoad();
++                    }
++                    if (!refreshed && controller === request) this.videoElementsStatus += ' · ' + window.t('runtime.api.video_data_load_failed');
++                }
++                if (controller === request) this.videoElementsRunning = false;
++            }
++        },
++    };
++}
+--- /dev/null
 +++ b/web/static/js/pages/showcase/state-lightbox-plot.js
 @@ -0,0 +1,526 @@
 +/**
@@ -35846,6 +36148,15 @@ HcmV?d00001
          // 復原：只用按下當下的 snapshot 與當時捕獲的那一片；不佔 _lbTrInFlight（plan 已接受的併發 residual）
 --- a/web/static/js/pages/showcase/state-lightbox.js
 +++ b/web/static/js/pages/showcase/state-lightbox.js
+@@ -10,7 +10,7 @@
+  * 從 state-base.js import 共用大陣列（F1：移出 Alpine reactive scope）。
+  */
+ 
+-import { _filteredVideos, _filteredActresses, _killLightboxTimelines, _NO_COVER_PLACEHOLDER, _recomputeVideoBadges, _recomputeCardActorAges, _actresses, _nameToGroup } from '@/showcase/state-base.js';
++import { _videos, _filteredVideos, _filteredActresses, _killLightboxTimelines, _NO_COVER_PLACEHOLDER, _recomputeVideoBadges, _recomputeCardActorAges, _actresses, _nameToGroup } from '@/showcase/state-base.js';
+ import { POSTER_CROP_MAX_W } from '@/shared/breakpoints.js';
+ import { detectSwipe } from '@/shared/swipe.js';
+ import { isHorizontalWheel, isVerticalWheel, createWheelNav } from '@/shared/wheel-nav.js';
 @@ -28,7 +28,14 @@
  
  // 排除清單容器（橫向捲動列表/表格）：命中即整條 wheel handler 提早 return，
@@ -35862,7 +36173,15 @@ HcmV?d00001
  // 102d P2b（owner 拍板 2026-07-19）：overlay 內可垂直捲動的子容器（lightbox metadata 面板，
  // showcase.css:785/946 `.lightbox-metadata{overflow-y:auto}`）——垂直滾輪命中時交還原生捲動，
  // 不吃導航（僅 vertical 分支檢查，horizontal 分支不受影響、行為不變）。
-@@ -127,6 +134,13 @@
+@@ -41,6 +48,7 @@
+     const wheelNavLightboxActress = createWheelNav();
+     const wheelNavSampleGallery = createWheelNav();
+     const wheelNavPage = createWheelNav();
++    const refreshRequests = new Map();
+     // 102d P2b（owner 拍板 2026-07-19）：overlay 垂直滾輪＝上/下一張。獨立軸別累積器
+     // （非取代上面三個水平版——同一接線點兩軸各自累積/冷卻，見 wheel-nav.js 頂部說明）。
+     // 牆翻頁（wheelNavPage）無垂直版：牆是「垂直捲動有意義」的頁面主體，不吃垂直滾輪。
+@@ -127,6 +135,13 @@
              }
          },
  
@@ -35876,7 +36195,7 @@ HcmV?d00001
          // 71c-P2: helper — blur-up state reset + same-URL complete-check（DRY；供 _setLightboxIndex 與
          // slip-through 路徑（state-similar.js closeSimilarMode）共用，避免兩處邏輯漂移）。
          // 呼叫時機：currentLightboxVideo 已更新、Alpine reactive patch 尚未跑完（$nextTick 前）。
-@@ -183,6 +197,33 @@
+@@ -183,6 +198,33 @@
              return this._isNarrow || this.cardShape === 'poster';
          },
  
@@ -35910,7 +36229,7 @@ HcmV?d00001
          // F1: helper — 更新 lightboxIndex + currentLightboxVideo 一致性
          _setLightboxIndex(idx) {
              // 123-T4 / C27：燈箱星是常駐節點，切換影片必須先殺掉進行中的 --pick-fill
-@@ -190,6 +231,8 @@
+@@ -190,6 +232,8 @@
              // 123-T4b：GSAP 呼叫收斂進 animations.js（TestMotionInfra 守衛，見該檔
              // killPickStarTweens 註解）。不清 --pick-fill（沿用搬移前行為）。
              window.ShowcaseAnimations?.killPickStarTweens?.({ clearTransform: true });
@@ -35919,7 +36238,7 @@ HcmV?d00001
              this.lightboxIndex = idx;
              this.currentLightboxVideo = (idx >= 0 && idx < _filteredVideos.length)
                  ? _filteredVideos[idx] : null;
-@@ -202,10 +245,33 @@
+@@ -202,10 +246,33 @@
              // 71c-P2: 抽至 _refreshLbFullBlurUp helper（slip-through 路徑共用）
              this._refreshLbFullBlurUp();
              this._refreshLbActorAges();
@@ -35954,7 +36273,7 @@ HcmV?d00001
              // F2: cancel pending delayed clear from previous close
              if (this.lightboxCloseTimer) {
                  clearTimeout(this.lightboxCloseTimer);
-@@ -319,6 +385,7 @@
+@@ -319,6 +386,7 @@
          openHeroCardLightbox() {
              if (this._lightboxAnimating) return;
              if (!this._matchedActress) return;
@@ -35962,7 +36281,7 @@ HcmV?d00001
              this._actressChipsExpanded = { aliases: false, info: false };
              // ★ 直接賦值（不走 _setLightboxIndex(-1)）
              this.lightboxIndex = -1;
-@@ -361,6 +428,8 @@
+@@ -361,6 +429,8 @@
                  clearTimeout(this.lightboxCloseTimer);
                  this.lightboxCloseTimer = null;
              }
@@ -35971,7 +36290,7 @@ HcmV?d00001
  
              // 49b T4 fix: 若 picker 開啟中，先關閉 picker
              if (this._pickerOpen) {
-@@ -369,7 +438,6 @@
+@@ -369,7 +439,6 @@
  
              this.addingLbTag = false;    // 關閉 lightbox 時重置 user tag 輸入框
              this._resetMask();           // 98b-T4：關燈箱丟棄未提交遮罩態（不 commit）
@@ -35979,7 +36298,7 @@ HcmV?d00001
  
              // ★ C11: fly-back — 必須在 generation++ / lightboxOpen = false 之前捕獲
              // 56c-fix-v3: standalone similar-exit（similarExitVideo set，lightboxIndex 仍是進 similar mode 前舊值）
-@@ -560,6 +628,7 @@
+@@ -560,6 +629,7 @@
                  // 掛載），必須在賦值前同步 _resetMask()——姊妹 $watch 是非同步 effect flush，
                  // 對掛載那一幀擋不住（gotchas-frontend §8b／T1 CDP 2/2 重現）。
                  this._resetMask();
@@ -35987,7 +36306,7 @@ HcmV?d00001
                  this.currentLightboxActress = this._matchedActress;
                  this.currentLightboxVideo = null;
                  this.addingLbTag = false;
-@@ -680,6 +749,11 @@
+@@ -680,6 +750,11 @@
          // 呼叫點搶在方法定義前出現，誤導以 first-occurrence 定位方法體的既有 sentinel 守衛。
  
          _lbTouchStart(e) {
@@ -35999,7 +36318,7 @@ HcmV?d00001
              if (e.touches && e.touches.length > 0) {
                  this._lbTouchStartX = e.touches[0].clientX;
                  this._lbTouchStartY = e.touches[0].clientY;
-@@ -688,6 +762,11 @@
+@@ -688,6 +763,11 @@
  
          _lbTouchEnd(e) {
              if (this._lbTouchStartX === null) return;
@@ -36011,7 +36330,16 @@ HcmV?d00001
              var endX = e.changedTouches && e.changedTouches.length > 0
                  ? e.changedTouches[0].clientX
                  : null;
-@@ -912,19 +991,42 @@
+@@ -709,7 +789,7 @@
+             if (this._pickerOpen) {
+                 this._lbTouchStartX = null; this._lbTouchStartY = null; return;
+             }
+-            if (this.rescrapeOpen) {
++            if (this.rescrapeOpen || this.videoElementsOpen) {
+                 this._lbTouchStartX = null; this._lbTouchStartY = null; return;
+             }
+             if (this.deleteVideoModalOpen) {
+@@ -912,63 +992,102 @@
                      headers: { 'Content-Type': 'application/json' },
                      body: JSON.stringify({ file_path: video.path, number: video.number })
                  });
@@ -36062,25 +36390,88 @@ HcmV?d00001
              } finally {
                  this._fetchSamplesLoading = false;
              }
-@@ -948,7 +1050,13 @@
-                     }
-                     // 67-A2/CD-67-3b: data.video 不帶 _imgLoaded → 舊 true 殘留會讓新封面跳過 skeleton/fade。
-                     // Object.assign 前 reset，讓補封面/重抓的新 cover_url（含上面 &t= cache-bust）重走 skeleton→@load→淡入。
+         },
+ 
+         async refreshVideoData(video) {
++            const path = video?.path;
++            if (!path) return false;
++            const request = Symbol();
++            refreshRequests.set(path, request);
+             try {
+-                const resp = await fetch(`/api/showcase/video?path=${encodeURIComponent(video.path)}`);
+-                if (!resp.ok) return;
++                const resp = await fetch(`/api/showcase/video?path=${encodeURIComponent(path)}`);
++                if (!resp.ok) return false;
+                 const data = await resp.json();
+-                if (data.success && data.video) {
+-                    // BUGfix-lightbox-cover-stale: 共用同一個 timestamp，確保 grid 與 lightbox overlay 同步 bust。
+-                    const _t = Date.now();
+-                    if (data.video.cover_url) {
+-                        data.video.cover_url = data.video.cover_url + '&t=' + _t;
+-                    }
+-                    // cover_full_url 恆為 /api/gallery/image（max-age=86400），URL 不變瀏覽器吃舊快取。
+-                    // 同步追加 &t= cache-bust，確保 lightbox overlay（.lb-full）顯示新封面。
+-                    if (data.video.cover_full_url) {
+-                        data.video.cover_full_url = data.video.cover_full_url + '&t=' + _t;
+-                    }
+-                    // 67-A2/CD-67-3b: data.video 不帶 _imgLoaded → 舊 true 殘留會讓新封面跳過 skeleton/fade。
+-                    // Object.assign 前 reset，讓補封面/重抓的新 cover_url（含上面 &t= cache-bust）重走 skeleton→@load→淡入。
 -                    if (data.video.cover_url) video._imgLoaded = false;
-+                    if (data.video.cover_url) {
-+                        // An explicit cover refresh should not wait for the card
-+                        // to re-enter the image window.
-+                        video._coverRequested = true;
-+                        video._imgLoaded = false;
-+                        video._coverRetryCount = 0;
+-                    Object.assign(video, data.video);
+-                    _recomputeVideoBadges(video);
+-                    _recomputeCardActorAges(video);
+-                    // BUGfix-lightbox-cover-stale: 若燈箱正開在這支影片，重置 blur-up overlay，
+-                    // 讓 cover_full_url（已 bust）重新觸發 @load → _lbFullLoaded 淡入。
+-                    // 用 === video 守住：燈箱開在別支影片時不誤 reset。
+-                    // 必須在 Object.assign 之後呼叫（src 已更新，$nextTick complete-check 才讀到新 URL）。
+-                    if (this.currentLightboxVideo === video) {
+-                        this._refreshLbFullBlurUp();
+-                        this._refreshLbActorAges();
+-                    }
+-                }
+-            } catch (e) {
+-                // refresh 失敗不顯示額外 toast
+-            }
+-        },
+-
++                if (refreshRequests.get(path) !== request || !data.success || data.video?.path !== path) return false;
++                const updated = data.video;
++                const version = Date.now();
++                const versioned = url => url?.startsWith('/api/gallery/')
++                    ? `${url}${url.includes('?') ? '&' : '?'}t=${version}` : url;
++                updated.cover_url = versioned(updated.cover_url);
++                updated.cover_full_url = versioned(updated.cover_full_url);
++                if (Array.isArray(updated.sample_images)) updated.sample_images = updated.sample_images.map(versioned);
++                // Reactive card/detail copies may differ from the collection's backing row.
++                const copies = new Set([video, this.currentLightboxVideo,
++                    this.paginatedVideos?.find(row => row.path === path),
++                    _videos.find(row => row.path === path), _filteredVideos.find(row => row.path === path)]);
++                for (const copy of copies) {
++                    if (copy?.path !== path) continue;
++                    if (updated.cover_url) {
++                        copy._coverRequested = true;
++                        copy._imgLoaded = false;
++                        copy._coverRetryCount = 0;
 +                    }
-                     Object.assign(video, data.video);
-                     _recomputeVideoBadges(video);
-                     _recomputeCardActorAges(video);
-@@ -969,6 +1077,14 @@
++                    Object.assign(copy, updated);
++                    _recomputeVideoBadges(copy);
++                    _recomputeCardActorAges(copy);
++                }
++                if (this.lightboxOpen && this.currentLightboxVideo?.path === path) {
++                    this._refreshLbFullBlurUp();
++                    this._refreshLbActorAges();
++                }
++                return true;
++            } catch {
++                return false;
++            } finally {
++                if (refreshRequests.get(path) === request) refreshRequests.delete(path);
++            }
++        },
  
          // --- 快捷鍵 (M4c 完整實作) ---
          handleKeydown(e) {
++            if (this.videoElementsOpen) return;
 +            // The display dialog owns its controls, including select arrows.
 +            if (this.displayOpen) {
 +                if (e.key === 'Escape') {
@@ -36092,7 +36483,16 @@ HcmV?d00001
              // 116b：浮層開啟時最高優先（必須在 INPUT early-return 之前——區間的 number input
              // 取得焦點時 e.target.tagName === 'INPUT'，放在後面 ESC 永遠到不了這裡）。
              // TASK-124a-T2：新增 _releaseEditor 分支（兩個 slot 依 §3.5 不變式恆不同時非
-@@ -1118,7 +1234,7 @@
+@@ -1049,7 +1168,7 @@
+                 e.stopPropagation();
+                 return;
+             }
+-            if (this.rescrapeOpen) return;
++            if (this.rescrapeOpen || this.videoElementsOpen) return;
+ 
+             // C-1: 刪除確認框開啟時，Esc 只關刪除框、其餘鍵不穿透到燈箱（鏡像 removeActressModalOpen）
+             if (e.key === 'Escape' && this.deleteVideoModalOpen) {
+@@ -1118,7 +1237,7 @@
                  if (this.showFavoriteActresses) return;          // AC-5.3：女優牆整條早退
                  const order = this._presentationOrder();
                  const idx = order.indexOf(this._currentPresentation());
@@ -36101,7 +36501,7 @@ HcmV?d00001
              } else if (key === 'ARROWLEFT') {
                  if (this.page > 1) {
                      this.prevPage();
-@@ -1140,6 +1256,7 @@
+@@ -1140,6 +1259,7 @@
           * @param {WheelEvent} event
           */
          handleWheel(event) {
@@ -36109,6 +36509,15 @@ HcmV?d00001
              // Opus 審核註記 #1：非 passive 監聽器每個 tick 都同步等 handler 跑完，
              // 第一行必須是純數值方向判斷，DOM 走訪（closest）排在其後。
              // 102d P2b（owner 拍板 2026-07-19）：軸向化——horizontal/vertical 互斥判斷，
+@@ -1171,7 +1291,7 @@
+             if (this._pickerOpen) return;
+ 
+             // 4. rescrape 彈窗開啟時鎖
+-            if (this.rescrapeOpen) return;
++            if (this.rescrapeOpen || this.videoElementsOpen) return;
+ 
+             // 5. 刪除確認框開啟時鎖
+             if (this.deleteVideoModalOpen) return;
 --- a/web/static/js/pages/showcase/state-lightbox-picker.js
 +++ b/web/static/js/pages/showcase/state-lightbox-picker.js
 @@ -8,6 +8,7 @@
@@ -36699,17 +37108,18 @@ HcmV?d00001
  
              // 接入 page lifecycle：清理 lightbox timer 和 body class
              if (window.__registerPage) {
-@@ -342,6 +359,9 @@
+@@ -342,6 +359,10 @@
                      cleanup: () => {
                          this._animGeneration++;       // B13: 使 pending deferred callback 失效
                          this._lightboxGeneration++;   // B19: invalidate pending $nextTick lightbox callbacks
 +                        this._videoFetchGeneration++; // 離頁後丟棄尚未回來的影片清單請求
++                        this.disposeVideoElements?.();
 +                        this._videoFetchAbort?.abort();
 +                        this._videoFetchAbort = null;
                          if (this.lightboxCloseTimer) clearTimeout(this.lightboxCloseTimer);  // F2: cleanup delayed clear timer
                          window.Alpine?.store?.('toast')?.hide?.();   // 131b-T3：cleanup 不得拋錯（拋了會跳過後面所有 teardown）
                          if (this.lightboxOpen) document.body.classList.remove('overflow-hidden');
-@@ -367,7 +387,10 @@
+@@ -367,7 +388,10 @@
              this._heroCardReconcilePending = true;   // CD-C5：init 作用域旗標，非持久化
              var heroCardPromise = this.showFavoriteActresses ? Promise.resolve() : this._reconcileHeroCard();  // 單行：pill-hero.test.mjs 以單行 regex 擷取本行並 eval，勿換行
  
@@ -36721,7 +37131,7 @@ HcmV?d00001
              // 57e hotfix：fire-and-forget warm-up SimilarRankerCache，避免 magic icon 首次點擊 cold-start race。
              // 失敗靜默（端點不存在的舊 server / 網路斷線都不影響 showcase 主流程）。
              fetch('/api/similar/warmup').catch(() => {});
-@@ -389,9 +412,14 @@
+@@ -389,9 +413,14 @@
              await _awaitHeroCardWithTimeout(heroCardPromise);
              this._heroCardReconcilePending = false;   // CD-C5：first-frame 窗口結束
  
@@ -36739,7 +37149,7 @@ HcmV?d00001
              this.updatePagination();        // 單次分頁（會 clamp 超出範圍的頁碼）
  
              // Settle: 初次載入用 settle（不碰 opacity → 不閃）
-@@ -530,13 +558,9 @@
+@@ -530,13 +559,9 @@
              // 1. 從 config 取得預設值
              const cfg = window.__SHOWCASE_CONFIG__ || {};
              // TASK-133b-T2：嚴格 === true（FE-JS-01；宣告在 state-videos.js）
@@ -36754,7 +37164,7 @@ HcmV?d00001
              // 2. 從 _persistedShowcase（$persist 自動讀的 localStorage 'showcase_state'）取
              //    53a-T2: 取代手寫 localStorage.getItem + JSON.parse，格式向後相容
              const state = this._persistedShowcase || {};
-@@ -550,29 +574,28 @@
+@@ -550,29 +575,28 @@
              const urlNum = (key) => { const v = urlParams.get(key); return v !== null && v !== '' ? v : undefined; };
              this.sort = urlParams.get('sort') || state.sort || defaultSort;
              this.order = urlParams.get('order') || state.order || defaultOrder;
@@ -36793,7 +37203,7 @@ HcmV?d00001
              // TASK-124b-T1: 嚴格 === true（鏡射 showFavoriteActresses 慣例，FE-JS-01：不可 || fallback）
              this.infoVisible = state.infoVisible === true;
          },
-@@ -580,7 +603,7 @@
+@@ -580,7 +604,7 @@
          // --- 狀態持久化 (M2c) ---
          saveState() {
              // 53a-T2: 寫入 reactive _persistedShowcase，$persist 自動同步 localStorage 'showcase_state'
@@ -36802,7 +37212,7 @@ HcmV?d00001
              this._persistedShowcase.sort = this.sort;
              this._persistedShowcase.order = this.order;
              this._persistedShowcase.page = this.page;
-@@ -589,6 +612,7 @@
+@@ -589,6 +613,7 @@
              this._persistedShowcase.showFavoriteActresses = this.showFavoriteActresses;  // ★ 44a
              this._persistedShowcase.actressSort = this.actressSort;                      // ★ 44a
              this._persistedShowcase.actressOrder = this.actressOrder;                    // ★ 44a
@@ -36810,7 +37220,7 @@ HcmV?d00001
              this._persistedShowcase.actressSearch = this.actressSearch;                  // ★ 129-T2
              this._persistedShowcase.pills = serializePills(this.pills);
              this._persistedShowcase.cardShape = this.cardShape;
-@@ -626,6 +650,16 @@
+@@ -626,6 +651,16 @@
          formatPartLabel,
          singleActorAge,
  
@@ -36827,7 +37237,7 @@ HcmV?d00001
          // 格式化檔案大小（bytes → GB/MB）
          formatSize(bytes) {
              if (!bytes || bytes === 0) return window.t('showcase.grid.unknown_size');
-@@ -642,6 +676,17 @@
+@@ -642,6 +677,17 @@
          // 點 enrich 後自動走 refresh_full 補封面。
          handleCoverError(video, event) {
              if (!video) return;
@@ -36934,7 +37344,7 @@ HcmV?d00001
 +}
 --- a/web/static/js/pages/showcase/main.js
 +++ b/web/static/js/pages/showcase/main.js
-@@ -10,14 +10,17 @@
+@@ -10,14 +10,18 @@
   * plain spread 會丟失 getter descriptor，必須用 Object.defineProperties。
   */
  
@@ -36944,6 +37354,7 @@ HcmV?d00001
 +import { stateDisplay } from '@/showcase/state-display.js';
  import { stateActress }  from '@/showcase/state-actress.js';
  import { stateLightbox } from '@/showcase/state-lightbox.js';
++import { stateLightboxElements } from '@/showcase/state-lightbox-elements.js';
  import { stateLightboxMask } from '@/showcase/state-lightbox-mask.js';
  import { stateLightboxPicker } from '@/showcase/state-lightbox-picker.js';
  import { stateLightboxTags } from '@/showcase/state-lightbox-tags.js';
@@ -36953,13 +37364,14 @@ HcmV?d00001
  import { stateLightboxSamples } from '@/showcase/state-lightbox-samples.js';
  import { stateSimilar }  from '@/showcase/state-similar.js';
  import { stateDelete }   from '@/showcase/state-delete.js';
-@@ -29,12 +32,15 @@
+@@ -29,12 +33,16 @@
      return mergeState(
          stateBase.call(this),
          stateVideos.call(this),
 +        stateDisplay.call(this),
          stateActress.call(this),
          stateLightbox.call(this),
++        stateLightboxElements.call(this),
          stateLightboxMask.call(this),
          stateLightboxPicker.call(this),
          stateLightboxTags.call(this),
@@ -37430,6 +37842,16 @@ HcmV?d00001
 +
 +window.openVideoPlayer = openVideoPlayer;
 +window.openLocalVideoStatus = openLocalVideoStatus;
+--- /dev/null
++++ b/web/templates/_element_source_select.html
+@@ -0,0 +1,7 @@
++<select id="element-{{ field }}" class="select select-bordered w-full"
++        x-model="elementSelection.{{ field }}">
++    <option value="">{{ t('scanner.elements.skip') }}</option>
++    <template x-for="source in (elementOptions.{{ field }} || [])" :key="source.id">
++        <option :value="source.id" x-text="source.label"></option>
++    </template>
++</select>
 --- /dev/null
 +++ b/web/templates/_macros/ui_state.html
 @@ -0,0 +1,107 @@
@@ -39051,7 +39473,7 @@ HcmV?d00001
              </div>
          </div>
  
-@@ -207,45 +253,162 @@
+@@ -207,45 +253,166 @@
              <span class="enrich-card-badge" x-show="enrichBadgeCount > 0" x-text="enrichBadgeCount"></span>
          </div>
  
@@ -39096,7 +39518,7 @@ HcmV?d00001
 +            </div>
 +            <div class="task-control-actions">
 +                <div class="task-metrics"
-+                     x-show="['nfo-update', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(taskKind)">
++                     x-show="['nfo-update', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'element-backfill', 'plot-translate'].includes(taskKind)">
 +                    <span class="task-metric is-success">
 +                        <i class="bi bi-check2"></i>
 +                        <span x-text="window.t('scanner.task.success_count', { count: taskSuccessDisplay })"></span>
@@ -39197,6 +39619,10 @@ HcmV?d00001
 +            <i class="bi bi-clock-history"></i>
 +            <span x-text="statLastRun"></span>
 +        </div>
++        <button type="button" class="btn btn-primary" @click="openElementPicker()"
++                :disabled="isBusy || elementSourcesLoading || statTotal === 0">
++            <i class="bi bi-collection" aria-hidden="true"></i> {{ t('scanner.elements.title') }}
++        </button>
 +        <div class="scanner-maintenance">
 +            <button type="button"
 +                    class="scanner-maintenance-head"
@@ -39220,7 +39646,7 @@ HcmV?d00001
 +            <span class="nfo-badge">
 +                <i class="bi bi-arrow-repeat"></i>
 +                <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-+                <strong x-text="missingItems.length"></strong>
++                <strong x-text="pendingEnrichItems.length"></strong>
 +                <span x-text="window.t('scanner.stats.missing_resume_suffix')"></span>
              </span>
 -            <button class="btn-nfo-update" @click="runNfoUpdate()" id="btnUpdate"
@@ -39242,14 +39668,28 @@ HcmV?d00001
 +            </div>
 +        </div>
 +
-+        <!-- Missing NFO/Cover Alert Row -->
++        <!-- Missing NFO files -->
 +        <div class="nfo-update-row maintenance-row maintenance-alert" x-show="missingPillVisible">
              <span class="nfo-badge">
                  <i class="bi bi-file-earmark-x"></i>
                  <span x-show="missingBothCount > 0">
-@@ -288,32 +451,148 @@
+@@ -274,46 +441,110 @@
+                     </span>
                      {{ t('scanner.stats.missing_suffix') }}
                  </span>
+-                <span x-show="missingCoverCount > 0">
+-                    {{ t('scanner.stats.missing_cover_prefix') }}
+-                    <span class="number-drilldown-anchor"
+-                          x-data="numberDrilldown"
+-                          @click.outside="close()">
+-                        <button type="button" class="number-drilldown-number-btn"
+-                                :aria-expanded="open"
+-                                @click="toggle(missingCoverDrilldownPayload)"
+-                                x-text="missingCoverCount"></button>
+-                        {{ number_drilldown_panel() }}
+-                    </span>
+-                    {{ t('scanner.stats.missing_suffix') }}
+-                </span>
              </span>
 -            <button class="btn-nfo-update" @click="runMissingEnrich()"
 +            <button class="btn-nfo-update maintenance-btn-accent" @click="openMaintenanceSourcePicker('enrich')"
@@ -39273,7 +39713,7 @@ HcmV?d00001
 -            <button class="btn btn-ghost btn-xs" @click="dismissResume()">
 -                {{ t('scanner.stats.missing_resume_dismiss') }}
 -            </button>
-+        <!-- Quick Backfill 2x2 Tile Grid (NFO fields / Titles / Samples / Plots) -->
++        <!-- NFO fields and title translations -->
 +        <div class="maintenance-backfill-grid">
 +            <div class="nfo-update-row maintenance-row maintenance-tile" id="statNeedUpdate" x-show="nfoUpdateVisible">
 +                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
@@ -39314,51 +39754,12 @@ HcmV?d00001
 +                </button>
 +            </div>
 +
-+            <div class="nfo-update-row maintenance-row maintenance-tile">
-+                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
-+                    <span class="nfo-badge">
-+                        <i class="bi bi-images"></i>
-+                        <span>{{ t('scanner.stats.sample_backfill_prefix') }}</span>
-+                    </span>
-+                    <button type="button" class="number-drilldown-number-btn maintenance-tile-count"
-+                            :aria-expanded="open"
-+                            @click="toggle(sampleBackfillDrilldownPayload)"
-+                            x-text="missingSampleCount"></button>
-+                    {{ number_drilldown_panel() }}
-+                </div>
-+                <button class="btn-nfo-update"
-+                        @click="openMaintenanceSourcePicker('samples')"
-+                        :disabled="sampleBackfillDisabled"
-+                        x-html="sampleBackfillButtonText"
-+                        :title="window.t('scanner.stats.sample_backfill_hint')">
-+                </button>
-+            </div>
-+
-+            <div class="nfo-update-row maintenance-row maintenance-tile">
-+                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
-+                    <span class="nfo-badge">
-+                        <i class="bi bi-card-text"></i>
-+                        <span>{{ t('scanner.stats.plot_backfill_prefix') }}</span>
-+                    </span>
-+                    <button type="button" class="number-drilldown-number-btn maintenance-tile-count"
-+                            :aria-expanded="open"
-+                            @click="toggle(plotBackfillDrilldownPayload)"
-+                            x-text="missingPlotCount"></button>
-+                    {{ number_drilldown_panel() }}
-+                </div>
-+                <button class="btn-nfo-update"
-+                        @click="openMaintenanceSourcePicker('plots')"
-+                        :disabled="plotBackfillDisabled"
-+                        x-html="plotBackfillButtonText"
-+                        :title="window.t('scanner.stats.plot_backfill_hint')">
-+                </button>
-+                <template x-for="batch in pendingPlotTranslations" :key="batch.batch_id">
-+                    <button type="button" class="btn btn-warning btn-sm"
-+                            :disabled="isBusy" :title="batch.numbers || ''"
-+                            @click="pendingPlotTranslation=batch; plotTranslationConfirmOpen = true"
-+                            x-text="window.t('scanner.plot_flow.pending', {n:batch.count}) + (batch.numbers ? ' · '+batch.numbers : '')"></button>
-+                </template>
-+            </div>
++            <template x-for="batch in pendingPlotTranslations" :key="batch.batch_id">
++                <button type="button" class="btn btn-warning btn-sm"
++                        :disabled="isBusy" :title="batch.numbers || ''"
++                        @click="pendingPlotTranslation=batch; plotTranslationConfirmOpen = true"
++                        x-text="window.t('scanner.plot_flow.pending', {n:batch.count}) + (batch.numbers ? ' · '+batch.numbers : '')"></button>
++            </template>
 +        </div>
 +
 +        <!-- Batch Structure & Full-Library Tools -->
@@ -39414,7 +39815,7 @@ HcmV?d00001
               x-show="['jellyfin', 'emby', 'kodi'].includes(config?.scraper?.external_manager) && !jellyfinImageVisible">
              <span class="nfo-badge">
                  <i class="bi bi-image"></i>
-@@ -339,7 +618,7 @@
+@@ -339,7 +570,7 @@
                    class="loading loading-spinner loading-sm"></span>
          </div>
          <!-- 補圖結果列（jellyfinImageVisible 由檢查結果驅動：偵測到缺漏才顯示，與 external_manager 模式無關） -->
@@ -39423,7 +39824,7 @@ HcmV?d00001
              <span class="nfo-badge" x-data="helpPopover">
                  <i class="bi bi-image"></i>
                  {{ t('scanner.stats.jellyfin_prefix') }}
-@@ -374,6 +653,9 @@
+@@ -374,6 +605,9 @@
                      x-html="jellyfinImageButtonText"
                      title="{{ t('scanner.stats.jellyfin_update_title') }}">
              </button>
@@ -39433,7 +39834,7 @@ HcmV?d00001
          </div>
      </div>
  
-@@ -519,26 +801,6 @@
+@@ -519,26 +753,6 @@
               @keydown.space.prevent="toggleTagAliasCard()">
              <div class="title">
                  <i class="bi bi-tags"></i> <span>{{ t('scanner.tag_alias.section_title') }}</span>
@@ -39460,10 +39861,53 @@ HcmV?d00001
              </div>
              <span class="btn-collapse" aria-hidden="true">
                  <i class="bi" :class="tagAliasCardCollapsed ? 'bi-chevron-down' : 'bi-chevron-up'"></i>
-@@ -782,6 +1044,120 @@
+@@ -782,6 +996,163 @@
          </div>
      </dialog>
  
++    <dialog class="modal fluent-modal" x-ref="elementPicker" aria-labelledby="elementPickerTitle"
++            @click.self="$refs.elementPicker.close()">
++        <div class="modal-box fluent-modal-box">
++            <h3 class="fluent-modal-title" id="elementPickerTitle">{{ t('scanner.elements.title') }}</h3>
++            <p class="fluent-modal-body">{{ t('scanner.elements.hint') }}</p>
++            <div x-show="elementSourcesLoading" role="status" class="maintenance-source-loading">
++                <span class="loading loading-spinner loading-sm"></span>
++            </div>
++            <p class="fluent-modal-body" x-show="!elementSourcesLoading && !Object.values(elementOptions).some(options => options.length)">
++                {{ t('scanner.sources.empty') }}
++            </p>
++            <div x-show="!elementSourcesLoading" class="grid gap-3">
++                {% for field, count, details in [
++                    ('cover', 'missingCoverItems.length', 'missingCoverDrilldownPayload'),
++                    ('plot', 'missingPlotCount', 'plotBackfillDrilldownPayload'),
++                    ('samples', 'missingSampleCount', 'sampleBackfillDrilldownPayload'),
++                    ('tags', '', '')
++                ] %}
++                <div>
++                    <label for="element-{{ field }}">{{ t('scanner.elements.' ~ field) }}</label>
++                    {% if count %}
++                    <span class="number-drilldown-anchor" x-data="numberDrilldown" x-show="{{ count }} > 0" @click.outside="close()">
++                        <button type="button" class="number-drilldown-number-btn" :aria-expanded="open"
++                                @click="toggle({{ details }})" x-text="{{ count }}"></button>
++                        {{ number_drilldown_panel() }}
++                    </span>
++                    {% endif %}
++                    {% include '_element_source_select.html' %}
++                </div>
++                {% endfor %}
++            </div>
++            <div class="modal-action fluent-modal-actions">
++                <button type="button" class="btn btn-ghost" @click="$refs.elementPicker.close()">
++                    {{ t('scanner.sources.cancel') }}
++                </button>
++                <button type="button" class="btn btn-primary" @click="runElementBackfill()"
++                        :disabled="elementSourcesLoading || isBusy || !Object.keys(selectedElementSources).length">
++                    {{ t('scanner.elements.run') }}
++                </button>
++            </div>
++        </div>
++    </dialog>
++
 +    <dialog class="modal fluent-modal maintenance-source-modal"
 +            :class="{ 'modal-open': maintenanceSourceModalOpen }"
 +            @click.self="closeMaintenanceSourcePicker()"
@@ -39581,7 +40025,7 @@ HcmV?d00001
      <!-- TASK-13: Missing Enrich Confirm Modal (大批量 > 500 筆) -->
      <dialog class="modal fluent-modal"
              :class="{ 'modal-open': missingConfirmModalOpen }"
-@@ -792,7 +1168,7 @@
+@@ -792,7 +1163,7 @@
                  <span x-text="window.t('scanner.stats.missing_enrich_confirm_title')"></span>
              </h3>
              <p class="fluent-modal-body">
@@ -39590,7 +40034,7 @@ HcmV?d00001
              </p>
              <div class="modal-action fluent-modal-actions">
                  <button type="button" class="btn btn-ghost" @click="cancelLargeMissingEnrich()">
-@@ -805,26 +1181,164 @@
+@@ -805,26 +1176,164 @@
          </div>
      </dialog>
  
@@ -42901,6 +43345,15 @@ HcmV?d00001
                                       @load="applyCellFocal($el, actress, '--actress-crop-ratio')"
                                       x-init="$watch('actress.auto_focal', () => applyCellFocal($el, actress, '--actress-crop-ratio'));
                                               $watch('actress.crop_mode', () => applyCellFocal($el, actress, '--actress-crop-ratio'))">
+@@ -846,7 +895,7 @@
+         <!-- Lightbox (M3a) -->
+         <div class="showcase-lightbox"
+              :class="{ 'show': lightboxOpen }"
+-             x-trap.inert="lightboxOpen && !sampleGalleryOpen && !removeActressModalOpen && !rescrapeOpen && !deleteVideoModalOpen && !similarModeMobileOpen"
++             x-trap.inert="lightboxOpen && !sampleGalleryOpen && !removeActressModalOpen && !rescrapeOpen && !videoElementsOpen && !deleteVideoModalOpen && !similarModeMobileOpen"
+              @touchstart.passive="_lbTouchStart($event)"
+              @touchend.passive="_lbTouchEnd($event)"
+              @click="handleLightboxBackdropClick($event)">
 @@ -1069,7 +1118,12 @@
                  <!-- Video Lightbox Branch (wrapped in x-if to prevent 44b hero card conflict) -->
                  <template x-if="currentLightboxVideo && !currentLightboxActress">
@@ -43125,9 +43578,9 @@ HcmV?d00001
 +                                        <!-- 62b-1: 進階重刮 ⚙ 入口（番號旁 inline 細鈕，常駐顯示）-->
 +                                        <button type="button"
 +                                                class="lb-rescrape-gear"
-+                                                @click.stop="openRescrape(currentLightboxVideo, 'lightbox')"
-+                                                data-tooltip="{{ t('showcase.rescrape.entry_tooltip') }}"
-+                                                aria-label="{{ t('showcase.rescrape.entry_tooltip') }}">
++                                                @click.stop="openVideoElements()"
++                                                data-tooltip="{{ t('showcase.elements.title') }}"
++                                                aria-label="{{ t('showcase.elements.title') }}">
 +                                            <i class="bi bi-gear" aria-hidden="true"></i>
 +                                        </button>
 +                                    </span>
@@ -43472,9 +43925,9 @@ HcmV?d00001
 +                                </button>
 +                                <button type="button"
 +                                        class="lb-mobile-action-btn"
-+                                        @click.stop="openRescrape(currentLightboxVideo, 'lightbox')">
++                                        @click.stop="openVideoElements()">
 +                                    <i class="bi bi-gear" aria-hidden="true"></i>
-+                                    <span>{{ t('showcase.rescrape.entry_tooltip') }}</span>
++                                    <span>{{ t('showcase.elements.title') }}</span>
 +                                </button>
 +                                <button type="button"
 +                                        class="lb-mobile-action-btn lb-mobile-action-btn--danger"
@@ -43638,9 +44091,12 @@ HcmV?d00001
                          </div>
                      </div>
                  </template>
-@@ -1472,8 +2003,8 @@
+@@ -1470,10 +2001,10 @@
+     <!-- Sample Gallery Overlay (T7) -->
+     <div class="sample-gallery"
           :class="{ 'show': sampleGalleryOpen }"
-          x-trap.inert="sampleGalleryOpen && !rescrapeOpen && !removeActressModalOpen && !deleteVideoModalOpen"
+-         x-trap.inert="sampleGalleryOpen && !rescrapeOpen && !removeActressModalOpen && !deleteVideoModalOpen"
++         x-trap.inert="sampleGalleryOpen && !rescrapeOpen && !videoElementsOpen && !removeActressModalOpen && !deleteVideoModalOpen"
           @click.self="closeSampleGallery()"
 -         @touchstart.passive="_sgTouchStart($event)"
 -         @touchend.passive="_sgTouchEnd($event)">
@@ -43724,7 +44180,7 @@ HcmV?d00001
  
      <!-- Footer 三段式 (49a-T4)：左 count + 中 shortcut + 右 pager -->
      <!-- ⚠️ 不可加 x-data（會建立 nested Alpine scope，讓 showFavoriteActresses / totalPages / filteredCount 等 state 全變 undefined）。
-@@ -2025,6 +2535,59 @@
+@@ -2025,6 +2535,91 @@
      </div>
  
      {# 進階重新刮削彈窗（62a-2）。放 showcase x-data 作用域內，使 rescrape* hook 在 showcase Alpine root 求值。 #}
@@ -43781,10 +44237,42 @@ HcmV?d00001
 +            <button type="button" class="btn btn-primary native-panel-done" @click="displayOpen = false">{{ t('showcase.display.done') }}</button>
 +        </section>
 +    </div>
++    <dialog class="modal fluent-modal" x-ref="videoElementsDialog" aria-labelledby="videoElementsTitle"
++            @close="if (!$el.open) closeVideoElements()" @click.self="closeVideoElements()" @keydown.stop @wheel.stop>
++        <div class="modal-box fluent-modal-box">
++            <h3 class="fluent-modal-title" id="videoElementsTitle">{{ t('showcase.elements.title') }}</h3>
++            <p class="fluent-modal-body">{{ t('showcase.elements.hint') }}</p>
++            <p class="text-sm break-all" dir="auto" x-text="videoElementsPath"></p>
++            <span x-show="videoElementsLoading || videoElementsRunning" class="loading loading-spinner loading-sm" role="status"></span>
++            <fieldset class="grid gap-3" x-show="!videoElementsLoading" :disabled="videoElementsSubmitted">
++                {% for field in ['cover', 'plot', 'samples', 'tags'] %}
++                <div>
++                    <label for="element-{{ field }}">{{ t('scanner.elements.' ~ field) }}</label>
++                    {% include '_element_source_select.html' %}
++                </div>
++                {% endfor %}
++            </fieldset>
++            <ul x-show="videoElementResults.length" aria-live="polite">
++                <template x-for="item in videoElementResults" :key="item.field">
++                    <li><strong x-text="t('scanner.elements.' + item.field)"></strong> · <span x-text="item.message"></span></li>
++                </template>
++            </ul>
++            <p class="fluent-modal-body" x-text="videoElementsStatus" role="status"></p>
++            <div class="modal-action fluent-modal-actions">
++                <button type="button" class="btn btn-ghost" x-show="!videoElementsRunning" @click="closeVideoElements()">{{ t('common.close') }}</button>
++                <button type="button" class="btn btn-ghost" x-show="videoElementsRunning" @click="cancelVideoElements()">{{ t('scanner.task.cancel') }}</button>
++                <button type="button" class="btn btn-primary" x-show="!videoElementsSubmitted" @click="runVideoElements()"
++                        :disabled="videoElementsLoading || !Object.keys(selectedVideoElements).length || videoElementsPath !== currentLightboxVideo?.path">
++                    {{ t('scanner.elements.run') }}
++                </button>
++            </div>
++        </div>
++    </dialog>
++
      {% include '_rescrape_modal.html' %}
  </div>
  {% endblock %}
-@@ -2033,7 +2596,9 @@
+@@ -2033,7 +2628,9 @@
  <!-- M2c: 傳遞 config 給 JS -->
  <script>
  window.__SHOWCASE_CONFIG__ = {{ (config.gallery or {}) | tojson | safe }};

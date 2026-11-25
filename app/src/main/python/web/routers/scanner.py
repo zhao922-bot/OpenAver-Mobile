@@ -4077,6 +4077,64 @@ def _plot_backfill_generator(
         })
 
 
+class ElementBackfillRequest(BaseModel):
+    sources: Dict[str, str]
+
+
+@router.get("/backfill-elements/sources")
+def get_element_backfill_sources(request: Request):
+    from core.element_sources import element_sources
+    from web.shell_identity import cf_availability_here
+
+    return {"success": True, "sources": element_sources(load_config(), cf_availability_here(request))}
+
+
+def _element_backfill_generator(cancel_event, sources, shell, file_path=None):
+    from core.element_backfill import backfill_events
+    from core.element_sources import element_sources
+
+    try:
+        config = load_config()
+        options = element_sources(config, shell)
+        if not sources or any(
+            source not in {item['id'] for item in options.get(field, ())}
+            for field, source in sources.items()
+        ):
+            yield _sse_event({"type": "error", "message": _runtime_text(
+                "scanner", "batch_unknown_source", _active_locale(config))})
+            return
+        for event in backfill_events(get_db_path(), config, sources, cancel_event, file_path=file_path):
+            yield _sse_event(event)
+    except Exception:
+        logger.exception("Element backfill failed")
+        yield _sse_event({"type": "error", "message": _runtime_text(
+            "scanner", "generate_failed", _active_locale())})
+
+
+@router.post("/backfill-elements")
+async def backfill_elements(request: Request, body: ElementBackfillRequest):
+    from web.shell_identity import cf_availability_here
+
+    shell = cf_availability_here(request)
+    return await _cancelable_sse_response(
+        request, lambda cancel: _element_backfill_generator(cancel, body.sources, shell),
+    )
+
+
+class ElementRescrapeRequest(ElementBackfillRequest):
+    file_path: str = Field(min_length=1)
+
+
+@router.post("/rescrape-elements")
+async def rescrape_elements(request: Request, body: ElementRescrapeRequest):
+    from web.shell_identity import cf_availability_here
+
+    shell = cf_availability_here(request)
+    return await _cancelable_sse_response(
+        request, lambda cancel: _element_backfill_generator(cancel, body.sources, shell, body.file_path),
+    )
+
+
 @router.post("/backfill-titles")
 async def backfill_titles(request: Request):
     """SSE: translate all titles that differ from the active UI language."""

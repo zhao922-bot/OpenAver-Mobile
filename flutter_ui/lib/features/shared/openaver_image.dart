@@ -29,10 +29,21 @@ class OpenAverNetworkImage extends StatelessWidget {
   final int? targetDecodeWidth;
   final IconData errorIcon;
 
+  static final _cacheKeys = Expando<Map<String, String>>();
+
   static Future<void> evictUrl(ApiClient api, String pathOrUrl) async {
     final resolved = api.resolveUrl(pathOrUrl);
     if (resolved.isEmpty) return;
-    await CachedNetworkImage.evictFromCache(resolved);
+    final keys = _cacheKeys[api] ??= {};
+    final previous = keys[resolved] ?? resolved;
+    // A new provider key refreshes all thumbnail decode sizes at the same URL.
+    keys[resolved] = '$resolved#${DateTime.now().microsecondsSinceEpoch}';
+    try {
+      await CachedNetworkImage.evictFromCache(resolved, cacheKey: previous);
+    } catch (error) {
+      // The fresh provider key still bypasses the previous disk and memory entries.
+      debugPrint('Image cache eviction failed: $error');
+    }
   }
 
   @override
@@ -63,7 +74,10 @@ class OpenAverNetworkImage extends StatelessWidget {
       }
     }
 
+    final cacheKey = _cacheKeys[api]?[resolved];
     return CachedNetworkImage(
+      key: ValueKey(cacheKey ?? resolved),
+      cacheKey: cacheKey,
       imageUrl: resolved,
       httpHeaders: api.authHeaders,
       fit: fit,

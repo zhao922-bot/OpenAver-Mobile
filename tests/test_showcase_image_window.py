@@ -67,5 +67,5 @@ def test_showcase_cover_refresh_remounts_image_window():
         / "app/src/main/python/web/static/js/pages/showcase/state-lightbox.js"
     ).read_text(encoding="utf-8")
 
-    assert "video._coverRequested = true;" in lightbox
-    assert "video._coverRetryCount = 0;" in lightbox
+    assert "copy._coverRequested = true;" in lightbox
+    assert "copy._coverRetryCount = 0;" in lightbox

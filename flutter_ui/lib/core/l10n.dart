@@ -81,6 +81,9 @@ class AppStrings {
       );
 
   // Showcase & Actress Wall
+  String get continueWatching => tr(zhCn: '继续观看', zhTw: '繼續觀看', ja: '続きを見る', en: 'Continue Watching', ko: '이어보기');
+  String get removeContinueWatching => tr(zhCn: '从继续观看中移除', zhTw: '從繼續觀看中移除', ja: '「続きを見る」から削除', en: 'Remove from Continue Watching', ko: '이어보기에서 삭제');
+  String playbackPart(int n) => tr(zhCn: '第 $n 段', zhTw: '第 $n 段', ja: 'パート $n', en: 'Part $n', ko: '파트 $n');
   String get searchLibraryHint => tr(
         zhCn: '搜索番号、标题、演员、片商、标签…',
         zhTw: '搜尋番號、標題、演員、片商、標籤…',
@@ -248,10 +251,21 @@ class AppStrings {
   String get builtinPlayer => tr(zhCn: '内置播放器', zhTw: '內建播放器', ja: '内蔵プレーヤー', en: 'Built-in Player', ko: '내장 플레이어');
   String get externalPlayer => tr(zhCn: '外部播放器', zhTw: '外部播放器', ja: '外部プレーヤー', en: 'External Player', ko: '외부 플레이어');
   String get rescrape => tr(zhCn: '重刮元数据', zhTw: '重刮中繼資料', ja: '再スクレイプ', en: 'Rescrape', ko: '재스크랩');
-  String get previewRescrape => tr(zhCn: '预览刮削结果', zhTw: '預覽刮削結果', ja: 'プレビュー', en: 'Preview', ko: '미리보기');
-  String get applyOverwrite => tr(zhCn: '覆盖更新', zhTw: '覆寫更新', ja: '上書き適用', en: 'Overwrite', ko: '덮어쓰기');
-  String get rescrapeUpdated => tr(zhCn: '重刮并更新成功', zhTw: '重刮並更新成功', ja: '再スクレイプが完了しました', en: 'Rescrape updated', ko: '재스크랩 업데이트 완료');
-  String get rescrapeNotFound => tr(zhCn: '未找到匹配元数据', zhTw: '未找到符合的中繼資料', ja: 'メタデータが見つかりません', en: 'Metadata not found', ko: '메타데이터를 찾을 수 없음');
+  String rescrapeFieldsHint(String video) => tr(
+        zhCn: '只替换「$video」中选了来源的项目，跳过的项目保留原值。',
+        zhTw: '只取代「$video」中選了來源的項目，略過的項目保留原值。',
+        ja: '「$video」で取得元を選んだ項目だけを置き換えます。スキップした項目は保持されます。',
+        en: 'Replace only the fields you select for “$video”. Skipped fields keep their current values.',
+        ko: '“$video”에서 소스를 선택한 항목만 교체합니다. 건너뛴 항목은 기존 값을 유지합니다.',
+      );
+  String get replaceSelectedFields => tr(zhCn: '替换所选项', zhTw: '取代所選項目', ja: '選択した項目を置き換える', en: 'Replace Selected Fields', ko: '선택한 항목 교체');
+  String rescrapeSummary(int replaced, int failed, int skipped) => tr(
+        zhCn: '已更新 $replaced 项，失败 $failed 项，跳过 $skipped 项',
+        zhTw: '已更新 $replaced 項，失敗 $failed 項，略過 $skipped 項',
+        ja: '更新 $replaced 件、失敗 $failed 件、スキップ $skipped 件',
+        en: '$replaced updated, $failed failed, $skipped skipped',
+        ko: '$replaced개 업데이트, $failed개 실패, $skipped개 건너뜀',
+      );
   String get addTag => tr(zhCn: '添加标签', zhTw: '新增標籤', ja: 'タグ追加', en: 'Add tag', ko: '태그 추가');
   String get addUserTagTitle => tr(zhCn: '添加个人标签', zhTw: '新增個人標籤', ja: 'カスタムタグを追加', en: 'Add Personal Tag', ko: '개인 태그 추가');
   String get tagNameHint => tr(zhCn: '输入标签名称', zhTw: '輸入標籤名稱', ja: 'タグ名を入力', en: 'Enter tag name', ko: '태그 이름 입력');
@@ -340,17 +354,17 @@ class AppStrings {
       );
   String get scanLibrary => tr(zhCn: '扫描片库', zhTw: '掃描片庫', ja: 'スキャン開始', en: 'Scan Library', ko: '라이브러리 스캔');
   String get stopTask => tr(zhCn: '停止任务', zhTw: '停止任務', ja: 'タスク停止', en: 'Stop Task', ko: '작업 중지');
-  String get checkMissing => tr(zhCn: '检查缺失项', zhTw: '檢查缺失項目', ja: '不足チェック', en: 'Check Missing', ko: '누락 항목 확인');
-  String get missingCheckTitle => tr(zhCn: '缺失检测与一键补全', zhTw: '缺失偵測與一鍵補全', ja: '不足検出と一括補完', en: 'Missing Check & Backfill', ko: '누락 감지 및 일괄 채우기');
-  String get backfillNfo => tr(zhCn: '补全 NFO / 封面', zhTw: '補全 NFO / 封面', ja: 'NFO / カバー補完', en: 'Backfill NFO / Covers', ko: 'NFO / 커버 채우기');
-  String backfillNfoDesc(int n) => tr(zhCn: '缺 NFO/封面共 $n 项', zhTw: '缺 NFO/封面共 $n 項', ja: 'NFO/カバー不足 $n 件', en: '$n missing NFO/cover', ko: 'NFO/커버 누락 $n건');
-  String get backfillPlots => tr(zhCn: '补全简介', zhTw: '補全簡介', ja: 'あらすじ補完', en: 'Backfill Plots', ko: '줄거리 채우기');
-  String backfillPlotsDesc(int n) => tr(zhCn: '待补简介 $n 项', zhTw: '待補簡介 $n 項', ja: 'あらすじ未取得 $n 件', en: '$n missing plots', ko: '줄거리 누락 $n건');
+  String get metadataBackfill => tr(zhCn: '元数据补全', zhTw: '中繼資料補全', ja: 'メタデータ補完', en: 'Metadata Backfill', ko: '메타데이터 채우기');
+  String get metadataFieldsDescription => tr(zhCn: '封面、简介、剧照和标签', zhTw: '封面、簡介、劇照和標籤', ja: 'カバー、あらすじ、サンプル画像、タグ', en: 'Cover, synopsis, samples and tags', ko: '커버, 줄거리, 샘플 이미지, 태그');
+  String get metadataBackfillHint => tr(zhCn: '选择每项缺失数据的来源，或跳过该项。', zhTw: '選擇每項缺失資料的來源，或略過該項。', ja: '不足している項目ごとに取得元を選ぶか、スキップしてください。', en: 'Choose a source for each missing field, or skip it.', ko: '비어 있는 항목마다 소스를 선택하거나 건너뛰세요.');
+  String get runMetadataBackfill => tr(zhCn: '一键补全', zhTw: '一鍵補全', ja: '一括補完', en: 'Fill Missing Fields', ko: '누락 항목 채우기');
+  String get coverLabel => tr(zhCn: '封面', zhTw: '封面', ja: 'カバー', en: 'Cover', ko: '커버');
+  String get skipField => tr(zhCn: '跳过', zhTw: '略過', ja: 'スキップ', en: 'Skip', ko: '건너뛰기');
+  String get invalidSourceList => tr(zhCn: '来源列表无效', zhTw: '來源清單無效', ja: '取得元の一覧が無効です', en: 'Invalid source list', ko: '소스 목록이 올바르지 않습니다');
+  String get noMetadataSources => tr(zhCn: '当前设置中没有可用来源', zhTw: '目前設定中沒有可用來源', ja: '現在の設定で利用できる取得元がありません', en: 'No sources are available with the current settings', ko: '현재 설정에서 사용할 수 있는 소스가 없습니다');
+  String get noPendingPlots => tr(zhCn: '没有待翻译的简介', zhTw: '沒有待翻譯的簡介', ja: '翻訳待ちのあらすじはありません', en: 'No plots are waiting for translation', ko: '번역할 줄거리가 없습니다');
   String get translatePendingPlots => tr(zhCn: '翻译已补全简介', zhTw: '翻譯已補全簡介', ja: '取得済みあらすじを翻訳', en: 'Translate Pending Plots', ko: '가져온 줄거리 번역');
   String get backfillTitles => tr(zhCn: '翻译标题', zhTw: '翻譯標題', ja: 'タイトル翻訳', en: 'Translate Titles', ko: '제목 번역');
-  String backfillTitlesDesc(int n) => tr(zhCn: '待翻译标题 $n 项', zhTw: '待翻譯標題 $n 項', ja: '未翻訳タイトル $n 件', en: '$n untranslated titles', ko: '미번역 제목 $n건');
-  String get backfillSamples => tr(zhCn: '补全剧照', zhTw: '補全劇照', ja: 'サンプル補完', en: 'Backfill Samples', ko: '샘플 채우기');
-  String backfillSamplesDesc(int n) => tr(zhCn: '缺剧照 $n 项', zhTw: '缺劇照 $n 項', ja: 'サンプル不足 $n 件', en: '$n missing samples', ko: '샘플 누락 $n건');
   String get backfillJellyfin => tr(zhCn: '补齐 Jellyfin 封面', zhTw: '補齊 Jellyfin 封面', ja: 'Jellyfin 画像補完', en: 'Jellyfin Art', ko: 'Jellyfin 이미지');
   String get backfillJellyfinDesc => tr(zhCn: '生成 -poster / -fanart 媒体服务器图像', zhTw: '產生 -poster / -fanart 媒體伺服器圖像', ja: 'poster / fanart 画像を生成', en: 'Generate -poster / -fanart media art', ko: '미디어 서버용 poster/fanart 생성');
   String get advancedMaintenance => tr(zhCn: '高级维护与别名管理', zhTw: '進階維護與別名管理', ja: 'メンテナンスと別名管理', en: 'Maintenance & Aliases', ko: '유지보수 및 별명 관리');
@@ -389,8 +403,6 @@ class AppStrings {
     en: 'Connection closed before the task reported a result',
     ko: '작업 결과를 받기 전에 연결이 끊겼습니다',
   );
-  String get checking => tr(zhCn: '检查中…', zhTw: '檢查中…', ja: '確認中…', en: 'Checking…', ko: '확인 중…');
-  String get scrapeSourceLabel => tr(zhCn: '补全来源', zhTw: '補全來源', ja: '補完ソース', en: 'Source', ko: '소스');
 
   // Insights
   String get insightsVideos => tr(zhCn: '影片', zhTw: '影片', ja: '動画', en: 'Videos', ko: '동영상');
@@ -665,6 +677,14 @@ class AppStrings {
         ja: '一括取得を開始',
         en: 'Run Batch Update',
         ko: '일괄 업데이트 시작',
+      );
+
+  String metadataSummary(int filled, int failed, int skipped) => tr(
+        zhCn: '已补全 $filled 项，失败 $failed 项，跳过 $skipped 项',
+        zhTw: '已補全 $filled 項，失敗 $failed 項，略過 $skipped 項',
+        ja: '補完 $filled 件、失敗 $failed 件、スキップ $skipped 件',
+        en: '$filled filled, $failed failed, $skipped skipped',
+        ko: '$filled개 채움, $failed개 실패, $skipped개 건너뜀',
       );
 
   // Task Center

@@ -36,6 +36,8 @@ export function stateBatch() {
         missingBothCount: 0,
         missingNfoCount: 0,
         missingCoverCount: 0,
+        pendingEnrichItems: [],
+        missingCoverItems: [],
         missingItems: [],           // [{file_path, number}]
         missingEnrichOffset: 0,     // batch offset
         missingEnrichSuccess: 0,
@@ -69,17 +71,52 @@ export function stateBatch() {
         maintenanceSourceAction: '',
         nfoUpdateSource: '',
         missingEnrichSource: '',
-        sampleBackfillSource: '',
-        plotBackfillSource: '',
+        elementOptions: {},
+        elementSelection: {},
+        elementSourcesLoading: false,
+        lastElementSources: {},
+
+        async openElementPicker(previous = {}) {
+            if (this.isBusy || this.elementSourcesLoading) return;
+            this.elementOptions = {};
+            this.elementSelection = {cover: '', plot: '', samples: '', tags: ''};
+            this.elementSourcesLoading = true;
+            const dialog = this.$refs.elementPicker;
+            dialog.showModal();
+            try {
+                const response = await fetch('/api/gallery/backfill-elements/sources');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const result = await response.json();
+                if (!result.success || !result.sources) throw new Error('sources');
+                this.elementOptions = result.sources;
+                await this.$nextTick();
+                for (const [field, id] of Object.entries(previous)) {
+                    if (this.elementOptions[field]?.some(option => option.id === id)) {
+                        this.elementSelection[field] = id;
+                    }
+                }
+            } catch {
+                if (dialog.open) {
+                    dialog.close();
+                    this.showToast(window.t('scanner.sources.load_failed'), 'error');
+                }
+            } finally {
+                this.elementSourcesLoading = false;
+            }
+        },
+
+        get selectedElementSources() {
+            return Object.fromEntries(Object.entries(this.elementSelection).filter(([field, id]) =>
+                id && this.elementOptions[field]?.some(option => option.id === id)
+            ));
+        },
 
         get maintenanceSourceTitle() {
             const keys = {
                 nfo: 'scanner.stats.nfo_update_title',
                 rename: 'scanner.rename.source_row_title',
                 'tag-update': 'scanner.stats.tag_source_label',
-                enrich: 'scanner.stats.missing_enrich_idle',
-                samples: 'scanner.stats.sample_backfill_idle',
-                plots: 'scanner.stats.plot_backfill_idle',
+                enrich: 'scanner.elements.create_nfos',
                 resume: 'scanner.stats.missing_resume_btn',
             };
             return window.t(keys[this.maintenanceSourceAction] || 'scanner.sources.title');
@@ -134,14 +171,6 @@ export function stateBatch() {
                     if (action === 'resume') this.resumeMissingEnrich();
                     else await this.runMissingEnrich();
                     break;
-                case 'samples':
-                    this.sampleBackfillSource = sourceId;
-                    await this.runSampleBackfill();
-                    break;
-                case 'plots':
-                    this.plotBackfillSource = sourceId;
-                    await this.runPlotBackfill();
-                    break;
             }
         },
 
@@ -170,7 +199,7 @@ export function stateBatch() {
                 }));
         },
         get missingCoverDrilldownItems() {
-            return this.missingItems.filter(i => i.category === 'cover').map(i => ({
+            return this.missingCoverItems.map(i => ({
                     number: i.number,
                     path: i.file_path,
                     note: window.t('scanner.stats.missing_cover_tag'),
@@ -187,8 +216,7 @@ export function stateBatch() {
         },
         get missingEstimateMinutes() {
             return estimateEnrichMinutes(
-                this.missingBothCount + this.missingNfoCount,
-                this.missingCoverCount,
+                this.missingItems.length, 0,
             );
         },
 
@@ -259,38 +287,11 @@ export function stateBatch() {
                 || this.config?.translate?.enabled !== true;
         },
 
-        get sampleBackfillButtonText() {
-            if (this.state === 'sampleBackfilling') {
-                return '<span class="loading loading-spinner loading-sm"></span> '
-                    + window.t('scanner.stats.sample_backfill_loading');
-            }
-            return '<i class="bi bi-images"></i> '
-                + window.t('scanner.stats.sample_backfill_idle');
-        },
-
-        get sampleBackfillDisabled() {
-            return this.isBusy || this.missingSampleCount === 0;
-        },
-
-        get plotBackfillButtonText() {
-            if (this.state === 'plotBackfilling') {
-                return '<span class="loading loading-spinner loading-sm"></span> '
-                    + window.t('scanner.stats.plot_backfill_loading');
-            }
-            return '<i class="bi bi-card-text"></i> '
-                + window.t('scanner.stats.plot_backfill_idle');
-        },
-
-        get plotBackfillDisabled() {
-            return this.isBusy
-                || this.missingPlotCount === 0;
-        },
-
         get missingEnrichButtonText() {
             if (this.state === 'enriching') {
                 return '<span class="loading loading-spinner loading-sm"></span> ' + window.t('scanner.stats.missing_enrich_loading');
             }
-            return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.stats.missing_enrich_idle');
+            return '<i class="bi bi-file-earmark-plus"></i> ' + window.t('scanner.elements.create_nfos');
         },
 
         get renameReadyItems() {
@@ -584,23 +585,13 @@ export function stateBatch() {
                 this.missingPlotItems = Array.isArray(d.missing_plot_items)
                     ? d.missing_plot_items
                     : [];
-                if (d.total_missing > 0) {
-                    // TASK-13: 後端永遠回傳完整 items 清單；前端於 runMissingEnrich 內做 > 500 confirm gate
-                    this.missingBothCount = d.missing_both || 0;
-                    this.missingNfoCount = d.missing_nfo || 0;
-                    this.missingCoverCount = d.missing_cover || 0;
-                    this.missingItems = Array.isArray(d.items) ? d.items : [];
-                    this.missingPillVisible = true;
-                    // Make a completed scan actionable immediately instead of
-                    // hiding the "fill missing" row inside a collapsed section.
-                    this.maintenanceExpanded = true;
-                } else {
-                    this.missingPillVisible = false;
-                    this.missingBothCount = 0;
-                    this.missingNfoCount = 0;
-                    this.missingCoverCount = 0;
-                    this.missingItems = [];
-                }
+                const missing = Array.isArray(d.items) ? d.items : [];
+                this.missingBothCount = d.missing_both || 0;
+                this.missingNfoCount = d.missing_nfo || 0;
+                this.missingCoverCount = d.missing_cover || 0;
+                this.missingCoverItems = missing.filter(item => item.category === 'both' || item.category === 'cover');
+                this.missingItems = missing.filter(item => item.category !== 'cover');
+                this.missingPillVisible = this.missingItems.length > 0;
                 if (
                     (d.total_missing || 0) > 0
                     || this.untranslatedTitleCount > 0
@@ -628,35 +619,22 @@ export function stateBatch() {
             });
         },
 
-        async runSampleBackfill() {
-            if (this.sampleBackfillDisabled) return;
-            if (!this.sampleBackfillSource) return this.openMaintenanceSourcePicker('samples');
-            await this._runBackfillStream({
-                url: '/api/gallery/backfill-samples',
-                source: this.sampleBackfillSource,
-                taskState: 'sampleBackfilling',
-                taskKind: 'sample-backfill',
-                startStatus: window.t('scanner.stats.sample_backfill_preparing'),
-                total: this.missingSampleCount,
-                doneToastKey: 'scanner.stats.sample_backfill_toast_success',
-                mixedToastKey: 'scanner.stats.sample_backfill_toast_mixed',
-                errorText: window.t('scanner.stats.sample_backfill_error'),
-            });
-        },
-
-        async runPlotBackfill() {
-            if (this.plotBackfillDisabled) return;
-            if (!this.plotBackfillSource) return this.openMaintenanceSourcePicker('plots');
+        async runElementBackfill() {
+            const dialog = this.$refs.elementPicker;
+            const sources = this.selectedElementSources;
+            if (!dialog.open || this.isBusy || this.elementSourcesLoading || !Object.keys(sources).length) return;
+            this.lastElementSources = {...sources};
+            dialog.close();
             const event = await this._runBackfillStream({
-                url: '/api/gallery/backfill-plots',
-                source: this.plotBackfillSource,
-                taskState: 'plotBackfilling',
-                taskKind: 'plot-backfill',
-                startStatus: window.t('scanner.stats.plot_backfill_preparing'),
-                total: this.missingPlotCount,
-                doneToastKey: 'scanner.stats.plot_backfill_toast_success',
-                mixedToastKey: 'scanner.stats.plot_backfill_toast_mixed',
-                errorText: window.t('scanner.stats.plot_backfill_error'),
+                url: '/api/gallery/backfill-elements',
+                body: {sources},
+                taskState: 'elementBackfilling',
+                taskKind: 'element-backfill',
+                startStatus: window.t('scanner.elements.title'),
+                total: 0,
+                doneToastKey: 'scanner.elements.summary',
+                mixedToastKey: 'scanner.elements.summary',
+                errorText: window.t('scanner.task.failed'),
             });
             if (event?.summary?.translation_batch && event.summary.translation_count > 0) {
                 this._setPendingPlotTranslation({batch_id:event.summary.translation_batch,count:event.summary.translation_count});
@@ -709,7 +687,6 @@ export function stateBatch() {
 
         async _runBackfillStream({
             url,
-            source,
             body,
             taskState,
             taskKind,
@@ -724,14 +701,7 @@ export function stateBatch() {
             this.state = taskState;
             this._startTask(taskKind, startStatus, total);
             this.clearLogs();
-            if (
-                taskKind === 'title-backfill'
-                || taskKind === 'sample-backfill'
-                || taskKind === 'plot-backfill'
-                || taskKind === 'plot-translate'
-            ) {
-                this.logPanelExpanded = true;
-            }
+            this.logPanelExpanded = true;
 
             const controller = new AbortController();
             this._backfillAbortController = controller;
@@ -740,11 +710,12 @@ export function stateBatch() {
             let completionEvent = null;
 
             try {
-                const endpoint = source ? `${url}?${new URLSearchParams({ source })}` : url;
-                const resp = await fetch(endpoint, {
+                const resp = await fetch(url, {
                     method: 'POST',
-                    headers: { Accept: 'text/event-stream' },
-                    ...(body ? {headers:{Accept:'text/event-stream','Content-Type':'application/json'},body:JSON.stringify(body)} : {}),
+                    headers: body
+                        ? {Accept: 'text/event-stream', 'Content-Type': 'application/json'}
+                        : {Accept: 'text/event-stream'},
+                    ...(body && {body: JSON.stringify(body)}),
                     signal: controller.signal,
                 });
                 if (!resp.ok) {
@@ -777,7 +748,7 @@ export function stateBatch() {
                         }
 
                         if (event.type === 'progress') {
-                            this.progressStatus = event.status || startStatus;
+                            this.progressStatus = event.status || event.message || startStatus;
                             this.progressCurrent = event.current || 0;
                             this.progressTotal = event.total || total;
                             this._applyTaskMetrics({
@@ -803,7 +774,13 @@ export function stateBatch() {
                                 failed: event.failed_count,
                                 skipped: event.skipped_count,
                             });
-                            if (!event.success && !event.skipped) {
+                            if (event.element) {
+                                const field = window.t(`scanner.elements.${event.element}`);
+                                const item = event.number || event.file_path || '';
+                                const reason = event.error || event.message || '';
+                                const level = event.skipped ? 'warn' : (event.success ? 'info' : 'error');
+                                this.addLog(level, `${progressPrefix}${item} · ${field} · ${event.source} — ${reason}`);
+                            } else if (!event.success && !event.skipped) {
                                 this.addLog(
                                     'error',
                                     progressPrefix + window.t('scanner.stats.backfill_item_failed', {
@@ -1190,6 +1167,8 @@ export function stateBatch() {
             // TASK-13: 不在此清 localStorage；交由 runMissingEnrich 成功完成時統一清除。
             // 若補完途中失敗或用戶取消，pending 保留、下次 reload 仍可恢復。
             // skipConfirm:true — 用戶前一次已明確按過「一鍵補完」，resume 視為延續既有意圖。
+            this.missingItems = this.pendingEnrichItems;
+            this.pendingEnrichItems = [];
             this.resumePillVisible = false;
             this.runMissingEnrich({ skipConfirm: true });
         },
@@ -1206,6 +1185,7 @@ export function stateBatch() {
         },
 
         dismissResume() {
+            this.pendingEnrichItems = [];
             this.resumePillVisible = false;
             localStorage.removeItem('avlist_enrich_pending');
             // P2 fix: re-fetch DB state to repopulate missingItems (不清空，讓 pill 按鈕可用)

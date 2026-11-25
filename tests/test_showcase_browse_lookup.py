@@ -116,6 +116,83 @@ def test_seeded_random_pages_are_repeatable_and_legacy_random_is_unpaged(library
     assert [item['path'] for item in classic['videos']][:10] == paths
 
 
+def test_scalar_page_decodes_only_the_visible_representative(library, monkeypatch):
+    from core.database import video as video_module
+
+    _, add = library
+
+    def add_marked(name, title, marker):
+        return add(name, title=title, tags=[marker + ' tag'], user_tags=[marker + ' pick'],
+                   actresses=[marker + ' actor'], sample_images=[marker + ' sample'])
+
+    part2 = add_marked('film-cd2.mp4', 'hidden', 'secondary')
+    part1 = add_marked('film-cd1.mp4', 'A', 'first')
+    other = add_marked('other.mp4', 'B', 'other')
+    decoded = []
+    original_decode = video_module._decode_video_json
+
+    def decode(raw):
+        value = original_decode(raw)
+        decoded.extend(value)
+        return value
+
+    monkeypatch.setattr(video_module, '_decode_video_json', decode)
+    first = _data(_browse())
+    assert first['videos'][0]['part_paths'] == [part1, part2]
+    assert sorted(decoded) == ['first actor', 'first pick', 'first sample', 'first tag']
+
+    decoded.clear()
+    assert _data(_browse()) == first
+    assert decoded == []
+    assert _data(_browse(page=2))['videos'][0]['path'] == other
+    assert sorted(decoded) == ['other actor', 'other pick', 'other sample', 'other tag']
+
+
+def test_legacy_json_values_match_the_hydrated_projection(library):
+    from core.database import connection
+
+    db_path, add = library
+    path = add('legacy.mp4')
+    conn = connection.get_connection(db_path)
+    try:
+        with conn:
+            conn.execute("UPDATE videos SET tags=?, actresses=?, user_tags=?, sample_images=?",
+                         ('invalid', None, '"legacy string"', 'null'))
+    finally:
+        conn.close()
+
+    repo = VideoRepository(db_path)
+    roots = {path.rsplit('/', 1)[0]}
+    hydrated, = repo.get_showcase_rows(roots)
+    deferred, = repo.get_showcase_browse_rows(roots)
+    for row in (hydrated, deferred):
+        assert (row.tags, row.actresses, row.user_tags, row.sample_images) == (
+            [], [], 'legacy string', None,
+        )
+
+
+def test_bucket_order_and_actress_scope_before_paging(library):
+    _, add = library
+    # The two different first parts collide. Even with another id between them,
+    # both must appear at the position of their bucket's first row.
+    duplicate = add('A-cd1.mp4')
+    between = add('B.mp4')
+    alternate = add('A-pt1.mkv')
+    solo = add('C-pt2.mp4')
+    part2 = add('D-disc2.mp4', actresses=['Actor'], size_bytes=70)
+    part1 = add('D-disc1.mp4', actresses=['Other'], size_bytes=30)
+    order = [duplicate, alternate, between, solo, part1]
+    classic = _data(_browse(sort='random'))
+    assert [v['path'] for v in classic['videos']] == order
+    assert [v['part_tokens'] for v in classic['videos']] == [[], [], [], [], ['disc1', 'disc2']]
+    assert [v['path'] for v in _data(_browse(per_page=10, sort='date', order='desc'))['videos']] == order
+
+    filtered = _data(_browse(actress='Actor'))
+    assert filtered['total'] == 1
+    video, = filtered['videos']
+    assert (video['path'], video['size'], video['part_paths']) == (part2, 70, [])
+
+
 def test_lookup_uses_exact_identity_scope_fallback_and_multipart(library, monkeypatch):
     _, add = library
     outside = add('outside.mp4', outside=True, title='Outside', number='ÄBX-001')
@@ -129,6 +206,7 @@ def test_lookup_uses_exact_identity_scope_fallback_and_multipart(library, monkey
         pytest.fail('direct lookup must not load the Showcase list')
 
     monkeypatch.setattr(VideoRepository, 'get_showcase_rows', forbid_full_list)
+    monkeypatch.setattr(VideoRepository, 'get_showcase_browse_rows', forbid_full_list)
     video = _data(showcase.lookup_video(path=part2, number='ÄBX-001'))['video']
     assert video['path'] == part1
     assert video['part_paths'] == [part1, part2]

@@ -123,7 +123,9 @@ class _SearchResultDetailPageState extends ConsumerState<SearchResultDetailPage>
             builder: (_) => VideoDetailPage(
               videos: [video],
               initialIndex: 0,
-              onVideoUpdated: (_) {},
+              onVideoUpdated: (_) {
+                if (mounted) ref.read(libraryRevisionProvider.notifier).bump();
+              },
               onVideoDeleted: (_) {},
               onSelectActress: (name) {
                 Navigator.of(context).pop();

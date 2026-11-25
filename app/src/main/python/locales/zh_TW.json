@@ -1548,6 +1548,18 @@
       "folder_dirty": "您有未儲存的資料夾變更",
       "confirm": "{message}確定要離開嗎？"
     },
+    "elements": {
+      "title": "補齊缺少的資料",
+      "hint": "為要補齊的項目選擇來源，已有內容會保留。",
+      "cover": "封面",
+      "plot": "簡介",
+      "samples": "劇照",
+      "tags": "標籤",
+      "skip": "略過",
+      "run": "執行",
+      "summary": "已補齊 {success} · 已略過 {skipped} · 失敗 {failed}",
+      "create_nfos": "建立缺少的 NFO 檔案"
+    },
     "plot_flow": {
       "title": "簡介已儲存",
       "confirm": "本次已找到並儲存 {n} 部影片的簡介原文。是否依目前軟體語言翻譯這些簡介？翻譯失敗會保留原文。",
@@ -1620,6 +1632,13 @@
       "server_error": "伺服器錯誤 ({status})",
       "load_failed": "載入失敗",
       "cannot_connect": "無法連線到伺服器"
+    },
+    "elements": {
+      "updated": "已更新",
+      "title": "重新刮削中繼資料",
+      "hint": "為這部影片中需要覆寫的每個項目選擇來源。",
+      "summary": "已更新 {success} 項 · 已略過 {skipped} 項 · 失敗 {failed} 項",
+      "interrupted": "工作尚未完成，連線已中斷。"
     },
     "rescrape": {
       "modal_title": "進階重新刮削",
@@ -2740,6 +2759,7 @@
   },
   "runtime": {
     "scanner": {
+      "shared_detail_asset": "此檔案由多部影片共用，無法只為目前的影片替換。",
       "readonly_start": "唯讀生成：{path}",
       "readonly_output_missing": "{path}：請先設定輸出夾，已略過",
       "readonly_unreachable": "{path}：來源無法連線，已略過",

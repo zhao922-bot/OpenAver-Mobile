@@ -360,6 +360,7 @@ export function stateBase() {
                         this._animGeneration++;       // B13: 使 pending deferred callback 失效
                         this._lightboxGeneration++;   // B19: invalidate pending $nextTick lightbox callbacks
                         this._videoFetchGeneration++; // 離頁後丟棄尚未回來的影片清單請求
+                        this.disposeVideoElements?.();
                         this._videoFetchAbort?.abort();
                         this._videoFetchAbort = null;
                         if (this.lightboxCloseTimer) clearTimeout(this.lightboxCloseTimer);  // F2: cleanup delayed clear timer

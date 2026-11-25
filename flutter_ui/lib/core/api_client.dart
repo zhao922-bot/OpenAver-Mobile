@@ -133,6 +133,21 @@ class ApiClient {
     final body = response.data;
     if (body == null) return;
 
+    final status = response.statusCode ?? 200;
+    if (status >= 400) {
+      final text = await utf8.decoder.bind(body.stream).join();
+      String message = 'HTTP $status';
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map) {
+          message = (decoded['detail'] ?? decoded['error'] ?? message).toString();
+        }
+      } on FormatException {
+        // Some servers return an empty or HTML error response.
+      }
+      yield SseEvent({'type': 'error', 'message': message, 'rejected': true});
+      return;
+    }
     final buffer = StringBuffer();
     var pendingEventType = '';
     await for (final chunk in utf8.decoder.bind(body.stream)) {

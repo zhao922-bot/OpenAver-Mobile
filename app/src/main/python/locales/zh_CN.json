@@ -1548,6 +1548,18 @@
       "folder_dirty": "您有未保存的文件夹变更",
       "confirm": "{message}确定要离开吗？"
     },
+    "elements": {
+      "title": "补全缺失资料",
+      "hint": "为要补全的项目选择来源，已有内容会保留。",
+      "cover": "封面",
+      "plot": "简介",
+      "samples": "剧照",
+      "tags": "标签",
+      "skip": "跳过",
+      "run": "执行",
+      "summary": "已补全 {success} · 已跳过 {skipped} · 失败 {failed}",
+      "create_nfos": "创建缺失的 NFO 文件"
+    },
     "plot_flow": {
       "title": "简介已保存",
       "confirm": "本次已找到并保存 {n} 部影片的简介原文。是否按当前软件语言翻译这些简介？翻译失败会保留原文。",
@@ -1620,6 +1632,13 @@
       "server_error": "服务器错误 ({status})",
       "load_failed": "加载失败",
       "cannot_connect": "无法连接到服务器"
+    },
+    "elements": {
+      "updated": "已更新",
+      "title": "重刮元数据",
+      "hint": "为这部影片中需要覆盖的每个项目选择来源。",
+      "summary": "已更新 {success} 项 · 已跳过 {skipped} 项 · 失败 {failed} 项",
+      "interrupted": "任务尚未完成，连接已中断。"
     },
     "rescrape": {
       "modal_title": "高级重新刮削",
@@ -2740,6 +2759,7 @@
   },
   "runtime": {
     "scanner": {
+      "shared_detail_asset": "此文件由多部视频共用，无法只为当前视频替换。",
       "readonly_start": "只读生成：{path}",
       "readonly_output_missing": "{path}：请先设置输出文件夹，已跳过",
       "readonly_unreachable": "{path}：来源无法连接，已跳过",

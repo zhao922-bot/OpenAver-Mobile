@@ -46,15 +46,22 @@ def run_tests(args, parser):
         command("install", str(args.apk), check=True, timeout=120)
         command("install", str(args.test_apk), check=True, timeout=120)
 
-        report_path = args.artifacts / "instrumentation.txt"
-        with report_path.open("w", encoding="utf-8") as output:
-            result = command("shell", "am", "instrument", "-w", "-r", RUNNER,
-                             stdout=output, stderr=subprocess.STDOUT, timeout=420)
-        report = report_path.read_text(encoding="utf-8")
-        print(report, end="")
-        if (result.returncode != 0 or "OpenAver emulator smoke passed" not in report
-                or "INSTRUMENTATION_CODE: -1" not in report):
-            raise RuntimeError("OpenAver emulator smoke failed")
+        # Each am instrument invocation starts a fresh target process. The cold case
+        # retains the first run's storage grant, so its first activity can bootstrap.
+        for filename, options, marker, timeout in (
+            ("instrumentation.txt", (), "OpenAver emulator smoke passed", 420),
+            ("cold-notification.txt", ("-e", "scenario", "cold-notification"),
+             "Cold notification opened Task Center", 150),
+        ):
+            report_path = args.artifacts / filename
+            with report_path.open("w", encoding="utf-8") as output:
+                result = command("shell", "am", "instrument", "-w", "-r", *options, RUNNER,
+                                 stdout=output, stderr=subprocess.STDOUT, timeout=timeout)
+            report = report_path.read_text(encoding="utf-8")
+            print(report, end="")
+            if (result.returncode != 0 or marker not in report
+                    or "INSTRUMENTATION_CODE: -1" not in report):
+                raise RuntimeError(f"OpenAver emulator smoke failed ({filename})")
     except Exception:
         for filename, adb_args in (
             ("screen.png", ("exec-out", "screencap", "-p")),

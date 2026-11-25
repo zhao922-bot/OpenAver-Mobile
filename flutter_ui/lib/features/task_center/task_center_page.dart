@@ -141,6 +141,7 @@ class _TaskCardState extends State<_TaskCard> {
     );
     final (title, icon) = switch (job.kind) {
       TaskKind.scan => (strings.taskCenterScan, Icons.radar_rounded),
+      TaskKind.metadataBackfill => (strings.metadataBackfill, Icons.library_books_outlined),
       TaskKind.batchTag => (strings.taskCenterBatchTag, Icons.sell_outlined),
       TaskKind.batchTagPreview => (
         strings.taskCenterBatchTagPreview,

@@ -26,6 +26,11 @@ class _FakeApi extends ApiClient {
 
   final reads = <String, int>{};
   final posts = <String>[];
+  final streamRequests = <(String, Object?)>[];
+  Map<String, dynamic> sourceCatalog = {
+    'success': false,
+    'error': 'Catalog unavailable',
+  };
   final streams =
       <(String, Map<String, dynamic>?, StreamController<SseEvent>)>[];
   Completer<void>? delaySimilarStatus;
@@ -38,6 +43,7 @@ class _FakeApi extends ApiClient {
     CancelToken? cancelToken,
   }) async {
     reads.update(path, (value) => value + 1, ifAbsent: () => 1);
+    if (path == '/api/gallery/backfill-elements/sources') return sourceCatalog;
     if (path == _similarStatus) {
       await delaySimilarStatus?.future;
       return similar;
@@ -80,6 +86,7 @@ class _FakeApi extends ApiClient {
   }) {
     final events = StreamController<SseEvent>();
     streams.add((path, queryParameters, events));
+    streamRequests.add((method, data));
     unawaited(
       cancelToken?.whenCancel.then((error) {
         if (!events.isClosed) {
@@ -229,6 +236,190 @@ void main() {
   });
 
   testWidgets(
+    'metadata source picker refreshes, skips fields and retries a cancellable POST',
+    (tester) async {
+      final api = _FakeApi();
+      final page = ValueNotifier(0);
+      addTearDown(page.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(api),
+            stringsProvider.overrideWithValue(_strings),
+          ],
+          child: MaterialApp(
+            home: ValueListenableBuilder<int>(
+              valueListenable: page,
+              builder: (_, index, _) => IndexedStack(
+                index: index,
+                children: const [ScannerPage(), TaskCenterPage()],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final old in [
+        'Missing Check & Backfill',
+        'Check Missing',
+        'Backfill NFO / Covers',
+        'Backfill Plots',
+        'Backfill Samples',
+        'Batch Fetch / Replace Tags',
+      ]) {
+        expect(find.text(old), findsNothing);
+      }
+      const catalogPath = '/api/gallery/backfill-elements/sources';
+      expect(api.reads.containsKey(catalogPath), isFalse);
+      expect(api.reads.containsKey('/api/gallery/missing-check'), isFalse);
+      Future<void> open() async {
+        await tester.tap(find.text(_strings.metadataBackfill));
+        await tester.pumpAndSettle();
+      }
+
+      Future<void> select(String field, String label) async {
+        final input = find.byKey(ValueKey(field));
+        await tester.ensureVisible(input);
+        await tester.tap(input);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(label).hitTestable().last);
+        await tester.pumpAndSettle();
+      }
+
+      final confirm = find.widgetWithText(
+        FilledButton,
+        _strings.runMetadataBackfill,
+      );
+      await open();
+      expect(find.textContaining('Catalog unavailable'), findsOneWidget);
+      expect(confirm, findsNothing);
+      api.sourceCatalog = {
+        'success': true,
+        'sources': {'cover': [], 'plot': [], 'samples': [], 'tags': []},
+      };
+      await tester.tap(find.text(_strings.retry));
+      await tester.pumpAndSettle();
+      expect(find.text(_strings.noMetadataSources), findsOneWidget);
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+      await tester.tap(find.byType(CloseButton));
+      await tester.pumpAndSettle();
+      api.sourceCatalog = {
+        'success': true,
+        'sources': {
+          'cover': [
+            {'id': 'javbus', 'label': 'JavBus'},
+            {'id': 'auto', 'label': 'Automatic fallback'},
+          ],
+          'plot': [
+            {'id': 'dmm', 'label': 'DMM'},
+          ],
+          'samples': [
+            {'id': 'javdb', 'label': 'JavDB'},
+          ],
+          'tags': [
+            {'id': 'jable', 'label': 'Jable'},
+          ],
+        },
+      };
+      await open();
+      expect(find.text('Automatic fallback'), findsNothing);
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+      final cover = tester.widget<DropdownButton<String>>(
+        find.descendant(
+          of: find.byKey(const ValueKey('cover')),
+          matching: find.byType(DropdownButton<String>),
+        ),
+      );
+      expect(cover.items!.map((item) => item.value), ['', 'javbus']);
+      await select('cover', 'JavBus');
+      await tester.tap(find.byType(CloseButton));
+      await tester.pumpAndSettle();
+      expect(api.streams, isEmpty);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 320);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pump();
+      await open();
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+      await select('plot', 'DMM');
+      await select('plot', _strings.skipField);
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+      await select('cover', 'JavBus');
+      await select('samples', 'JavDB');
+      await select('tags', 'Jable');
+      await tester.ensureVisible(confirm);
+      final submit = tester.widget<FilledButton>(confirm).onPressed!;
+      await tester.tap(confirm);
+      submit();
+      await tester.pump();
+      expect(api.reads[catalogPath], 4);
+      final (path, _, events) = api.streams.single;
+      expect(path, '/api/gallery/backfill-elements');
+      final (method, body) = api.streamRequests.single;
+      expect(method, 'POST');
+      expect(body, {
+        'sources': {'cover': 'javbus', 'samples': 'javdb', 'tags': 'jable'},
+      });
+      events.add(
+        const SseEvent({'type': 'progress', 'current': 1, 'total': 3}),
+      );
+      tester.view.physicalSize = const Size(800, 720);
+      page.value = 1;
+      await tester.pump();
+      expect(
+        TaskCenter.forApi(api).jobs.single.kind,
+        TaskKind.metadataBackfill,
+      );
+      expect(
+        bridgeCalls
+            .where((call) => call.method == 'updateTaskNotification')
+            .last
+            .arguments['progressCurrent'],
+        1,
+      );
+      _finish(events, {
+        'type': 'done',
+        'summary': {
+          'total': 6,
+          'success': 4,
+          'failed': 1,
+          'skipped': 1,
+          'failed_items': [
+            {
+              'number': 'A-01',
+              'element': 'tags',
+              'source': 'jable',
+              'error': 'Timed out',
+            },
+          ],
+        },
+      });
+      await tester.pumpAndSettle();
+      expect(find.text(_strings.metadataSummary(4, 1, 1)), findsOneWidget);
+      expect(find.text(_strings.taskCenterProgress(3, 3)), findsOneWidget);
+      await tester.tap(find.text(_strings.taskCenterDetails));
+      await tester.pumpAndSettle();
+      expect(find.text('A-01 · Tags · jable · Timed out'), findsOneWidget);
+      await tester.tap(find.text(_strings.retry));
+      await tester.pump();
+      expect(api.streamRequests, hasLength(2));
+      expect(api.streamRequests.last.$1, method);
+      expect(api.streamRequests.last.$2, body);
+      await tester.tap(find.text(_strings.cancel));
+      await tester.pumpAndSettle();
+      expect(TaskCenter.forApi(api).jobs.first.status, TaskStatus.cancelled);
+      expect(
+        bridgeCalls
+            .where((c) => c.method == 'setTaskKeepAlive')
+            .map((c) => c.arguments['active']),
+        [true, false, true, false],
+      );
+      expect(api.reads.containsKey('/api/gallery/missing-check'), isFalse);
+    },
+  );
+
+  testWidgets(
     'batch tags preserve partial failures and retry only failed numbers',
     (tester) async {
       final api = _FakeApi();
@@ -254,6 +445,10 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
+      final maintenance = find.text(_strings.advancedMaintenance);
+      await tester.ensureVisible(maintenance);
+      await tester.tap(maintenance);
       await tester.pumpAndSettle();
       final batch = find.text(_strings.batchTagSourceTitle);
       await tester.ensureVisible(batch);

@@ -292,7 +292,7 @@
             </div>
             <div class="task-control-actions">
                 <div class="task-metrics"
-                     x-show="['nfo-update', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'sample-backfill', 'plot-backfill', 'plot-translate'].includes(taskKind)">
+                     x-show="['nfo-update', 'tag-update', 'jellyfin-update', 'enrich', 'title-backfill', 'element-backfill', 'plot-translate'].includes(taskKind)">
                     <span class="task-metric is-success">
                         <i class="bi bi-check2"></i>
                         <span x-text="window.t('scanner.task.success_count', { count: taskSuccessDisplay })"></span>
@@ -370,6 +370,10 @@
             <i class="bi bi-clock-history"></i>
             <span x-text="statLastRun"></span>
         </div>
+        <button type="button" class="btn btn-primary" @click="openElementPicker()"
+                :disabled="isBusy || elementSourcesLoading || statTotal === 0">
+            <i class="bi bi-collection" aria-hidden="true"></i> {{ t('scanner.elements.title') }}
+        </button>
         <div class="scanner-maintenance">
             <button type="button"
                     class="scanner-maintenance-head"
@@ -393,7 +397,7 @@
             <span class="nfo-badge">
                 <i class="bi bi-arrow-repeat"></i>
                 <span x-text="window.t('scanner.stats.missing_resume_label')"></span>
-                <strong x-text="missingItems.length"></strong>
+                <strong x-text="pendingEnrichItems.length"></strong>
                 <span x-text="window.t('scanner.stats.missing_resume_suffix')"></span>
             </span>
             <div class="maintenance-alert-actions">
@@ -407,7 +411,7 @@
             </div>
         </div>
 
-        <!-- Missing NFO/Cover Alert Row -->
+        <!-- Missing NFO files -->
         <div class="nfo-update-row maintenance-row maintenance-alert" x-show="missingPillVisible">
             <span class="nfo-badge">
                 <i class="bi bi-file-earmark-x"></i>
@@ -437,19 +441,6 @@
                     </span>
                     {{ t('scanner.stats.missing_suffix') }}
                 </span>
-                <span x-show="missingCoverCount > 0">
-                    {{ t('scanner.stats.missing_cover_prefix') }}
-                    <span class="number-drilldown-anchor"
-                          x-data="numberDrilldown"
-                          @click.outside="close()">
-                        <button type="button" class="number-drilldown-number-btn"
-                                :aria-expanded="open"
-                                @click="toggle(missingCoverDrilldownPayload)"
-                                x-text="missingCoverCount"></button>
-                        {{ number_drilldown_panel() }}
-                    </span>
-                    {{ t('scanner.stats.missing_suffix') }}
-                </span>
             </span>
             <button class="btn-nfo-update maintenance-btn-accent" @click="openMaintenanceSourcePicker('enrich')"
                     x-bind:disabled="isBusy || missingItems.length === 0"
@@ -457,7 +448,7 @@
             </button>
         </div>
 
-        <!-- Quick Backfill 2x2 Tile Grid (NFO fields / Titles / Samples / Plots) -->
+        <!-- NFO fields and title translations -->
         <div class="maintenance-backfill-grid">
             <div class="nfo-update-row maintenance-row maintenance-tile" id="statNeedUpdate" x-show="nfoUpdateVisible">
                 <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
@@ -498,51 +489,12 @@
                 </button>
             </div>
 
-            <div class="nfo-update-row maintenance-row maintenance-tile">
-                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
-                    <span class="nfo-badge">
-                        <i class="bi bi-images"></i>
-                        <span>{{ t('scanner.stats.sample_backfill_prefix') }}</span>
-                    </span>
-                    <button type="button" class="number-drilldown-number-btn maintenance-tile-count"
-                            :aria-expanded="open"
-                            @click="toggle(sampleBackfillDrilldownPayload)"
-                            x-text="missingSampleCount"></button>
-                    {{ number_drilldown_panel() }}
-                </div>
-                <button class="btn-nfo-update"
-                        @click="openMaintenanceSourcePicker('samples')"
-                        :disabled="sampleBackfillDisabled"
-                        x-html="sampleBackfillButtonText"
-                        :title="window.t('scanner.stats.sample_backfill_hint')">
-                </button>
-            </div>
-
-            <div class="nfo-update-row maintenance-row maintenance-tile">
-                <div class="maintenance-tile-top" x-data="numberDrilldown" @click.outside="close()">
-                    <span class="nfo-badge">
-                        <i class="bi bi-card-text"></i>
-                        <span>{{ t('scanner.stats.plot_backfill_prefix') }}</span>
-                    </span>
-                    <button type="button" class="number-drilldown-number-btn maintenance-tile-count"
-                            :aria-expanded="open"
-                            @click="toggle(plotBackfillDrilldownPayload)"
-                            x-text="missingPlotCount"></button>
-                    {{ number_drilldown_panel() }}
-                </div>
-                <button class="btn-nfo-update"
-                        @click="openMaintenanceSourcePicker('plots')"
-                        :disabled="plotBackfillDisabled"
-                        x-html="plotBackfillButtonText"
-                        :title="window.t('scanner.stats.plot_backfill_hint')">
-                </button>
-                <template x-for="batch in pendingPlotTranslations" :key="batch.batch_id">
-                    <button type="button" class="btn btn-warning btn-sm"
-                            :disabled="isBusy" :title="batch.numbers || ''"
-                            @click="pendingPlotTranslation=batch; plotTranslationConfirmOpen = true"
-                            x-text="window.t('scanner.plot_flow.pending', {n:batch.count}) + (batch.numbers ? ' · '+batch.numbers : '')"></button>
-                </template>
-            </div>
+            <template x-for="batch in pendingPlotTranslations" :key="batch.batch_id">
+                <button type="button" class="btn btn-warning btn-sm"
+                        :disabled="isBusy" :title="batch.numbers || ''"
+                        @click="pendingPlotTranslation=batch; plotTranslationConfirmOpen = true"
+                        x-text="window.t('scanner.plot_flow.pending', {n:batch.count}) + (batch.numbers ? ' · '+batch.numbers : '')"></button>
+            </template>
         </div>
 
         <!-- Batch Structure & Full-Library Tools -->
@@ -1039,6 +991,49 @@
             <div class="modal-action fluent-modal-actions">
                 <button type="button" class="btn btn-ghost" @click="closeCopyFailModal()">
                     {{ t('scanner.copy_fail_modal.close') }}
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog class="modal fluent-modal" x-ref="elementPicker" aria-labelledby="elementPickerTitle"
+            @click.self="$refs.elementPicker.close()">
+        <div class="modal-box fluent-modal-box">
+            <h3 class="fluent-modal-title" id="elementPickerTitle">{{ t('scanner.elements.title') }}</h3>
+            <p class="fluent-modal-body">{{ t('scanner.elements.hint') }}</p>
+            <div x-show="elementSourcesLoading" role="status" class="maintenance-source-loading">
+                <span class="loading loading-spinner loading-sm"></span>
+            </div>
+            <p class="fluent-modal-body" x-show="!elementSourcesLoading && !Object.values(elementOptions).some(options => options.length)">
+                {{ t('scanner.sources.empty') }}
+            </p>
+            <div x-show="!elementSourcesLoading" class="grid gap-3">
+                {% for field, count, details in [
+                    ('cover', 'missingCoverItems.length', 'missingCoverDrilldownPayload'),
+                    ('plot', 'missingPlotCount', 'plotBackfillDrilldownPayload'),
+                    ('samples', 'missingSampleCount', 'sampleBackfillDrilldownPayload'),
+                    ('tags', '', '')
+                ] %}
+                <div>
+                    <label for="element-{{ field }}">{{ t('scanner.elements.' ~ field) }}</label>
+                    {% if count %}
+                    <span class="number-drilldown-anchor" x-data="numberDrilldown" x-show="{{ count }} > 0" @click.outside="close()">
+                        <button type="button" class="number-drilldown-number-btn" :aria-expanded="open"
+                                @click="toggle({{ details }})" x-text="{{ count }}"></button>
+                        {{ number_drilldown_panel() }}
+                    </span>
+                    {% endif %}
+                    {% include '_element_source_select.html' %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="modal-action fluent-modal-actions">
+                <button type="button" class="btn btn-ghost" @click="$refs.elementPicker.close()">
+                    {{ t('scanner.sources.cancel') }}
+                </button>
+                <button type="button" class="btn btn-primary" @click="runElementBackfill()"
+                        :disabled="elementSourcesLoading || isBusy || !Object.keys(selectedElementSources).length">
+                    {{ t('scanner.elements.run') }}
                 </button>
             </div>
         </div>

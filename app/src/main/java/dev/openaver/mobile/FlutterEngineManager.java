@@ -74,7 +74,7 @@ final class FlutterEngineManager {
                     result.success(null);
                     break;
                 default:
-                    result.notImplemented();
+                    PlaybackStore.handle(appContext, call, result);
                     break;
             }
         });

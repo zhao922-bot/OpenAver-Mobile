@@ -5,7 +5,6 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
@@ -200,32 +199,6 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
                 result.success(FlutterEngineManager.buildBootstrapPayload(this));
                 break;
             }
-            case "readPlaybackPosition": {
-                String path = call.argument("path");
-                long milliseconds = path == null ? 0L : getSharedPreferences(
-                        "playback_positions", MODE_PRIVATE
-                ).getLong(Uri.encode(path), 0L);
-                result.success(milliseconds);
-                break;
-            }
-            case "savePlaybackPosition": {
-                String path = call.argument("path");
-                Number milliseconds = call.argument("milliseconds");
-                if (path != null && !path.isEmpty() && milliseconds != null) {
-                    String key = Uri.encode(path);
-                    SharedPreferences.Editor editor = getSharedPreferences(
-                            "playback_positions", MODE_PRIVATE
-                    ).edit();
-                    if (milliseconds.longValue() > 0L) {
-                        editor.putLong(key, milliseconds.longValue());
-                    } else {
-                        editor.remove(key);
-                    }
-                    editor.apply();
-                }
-                result.success(null);
-                break;
-            }
             case "openExternalPlayer": {
                 String path = call.argument("path");
                 String parts = call.argument("parts");
@@ -372,7 +345,7 @@ public final class OpenAverFlutterActivity extends FlutterActivity {
                 break;
             }
             default:
-                result.notImplemented();
+                PlaybackStore.handle(this, call, result);
                 break;
         }
     }

@@ -228,25 +228,7 @@ void main() {
     expect(violations, isEmpty, reason: 'Found hardcoded CJK strings:\n${violations.join('\n')}');
   });
 
-  test('MissingCheckSummary and BrowseDirResponse parse backend payloads', () {
-    final summary = MissingCheckSummary.fromJson({
-      'success': true,
-      'data': {
-        'missing_both': 1,
-        'missing_nfo': 2,
-        'missing_cover': 3,
-        'total_missing': 6,
-        'untranslated_titles': 4,
-        'missing_samples': 5,
-        'missing_plots': 7,
-        'pending_plot_translations': [
-          {'batch_id': '0123456789abcdef0123456789abcdef'},
-        ],
-      },
-    });
-    expect(summary.totalMissing, 6);
-    expect(summary.pendingTranslationBatchIds.single, '0123456789abcdef0123456789abcdef');
-
+  test('BrowseDirResponse parses directory entries', () {
     final dir = BrowseDirResponse.fromJson({
       'current_path': '/storage/emulated/0',
       'parent_path': '/storage/emulated',
@@ -433,6 +415,16 @@ void main() {
             ],
           });
         }
+        if (opts.path == '/api/showcase/video' && rescraped) {
+          expect(opts.queryParameters['path'], '/lib/ABC-001.mp4');
+          return _jsonResponse({
+            'success': true,
+            'video': {
+              'path': '/lib/ABC-001.mp4', 'number': 'ABC-001', 'title': 'First Video',
+              'actresses': ['Sakura'], 'tags': ['Drama', 'Fresh Tag'], 'user_tags': ['Keep', 'Solo'],
+            },
+          });
+        }
         if (opts.path == '/api/showcase/video/lookup') {
           expect(opts.queryParameters['path'], secondVideo['path']);
           expect(opts.queryParameters['number'], secondVideo['number']);
@@ -517,24 +509,25 @@ void main() {
           aiTagged = true;
           return _jsonResponse({'success': true, 'added': ['Solo'], 'user_tags': ['Keep', 'Solo']});
         }
-        if (opts.path == '/api/rescrape/preview') {
+        if (opts.path == '/api/gallery/backfill-elements/sources') {
           return _jsonResponse({
             'success': true,
-            'number': 'ABC-001',
-            'title': 'Fresh Title',
-            'maker': 'S1',
-            'date': '2025-02-01',
+            'sources': {
+              'cover': [], 'plot': [], 'samples': [],
+              'tags': [{'id': 'jable', 'label': 'Jable'}],
+            },
           });
         }
-        if (opts.path == '/api/enrich-single') {
-          final map = Map<String, dynamic>.from(opts.data as Map);
-          expect(map['mode'], 'refresh_full');
-          expect(map['write_cover'], true);
-          expect(map['overwrite_existing'], true);
-          expect(map['allow_number_change'], false);
-          expect((map['metadata'] as Map).containsKey('success'), false);
+        if (opts.path == '/api/gallery/rescrape-elements') {
+          expect(opts.method, 'POST');
+          expect(opts.data, {
+            'file_path': '/lib/ABC-001.mp4',
+            'sources': {'tags': 'jable'},
+          });
           rescraped = true;
-          return _jsonResponse({'success': true});
+          return _sseResponse([
+            'data: {"type":"done","summary":{"success":1,"failed":0,"skipped":0,"fields_filled":{"tags":1},"failed_items":[]}}\n\n',
+          ]);
         }
         if (opts.path == '/api/actresses/Sakura/photo-candidates') {
           return _sseResponse([
@@ -624,12 +617,20 @@ void main() {
 
     await tester.tap(find.text('Rescrape'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Preview'));
+    expect(find.text('Preview'), findsNothing);
+    expect(find.text('Overwrite'), findsNothing);
+    final tagsField = find.byKey(const ValueKey('tags'));
+    await tester.ensureVisible(tagsField);
+    await tester.tap(tagsField);
     await tester.pumpAndSettle();
-    expect(find.text('Fresh Title'), findsOneWidget);
-    await tester.tap(find.text('Overwrite'));
+    await tester.tap(find.text('Jable').hitTestable().last);
+    await tester.pumpAndSettle();
+    final replace = find.text('Replace Selected Fields');
+    await tester.ensureVisible(replace);
+    await tester.tap(replace);
     await tester.pumpAndSettle();
     expect(rescraped, true);
+    expect(find.text('Fresh Tag'), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.text('Drama'),
@@ -808,25 +809,24 @@ void main() {
             'data: {"type":"done","message":"Tag source updated (42)"}\n\n',
           ]);
         }
-        if (opts.path == '/api/gallery/backfill-plots') {
-          return _sseResponse([
-            'data: {"type":"progress","current":0,"total":2,"status":"Starting..."}\n\n',
-            'data: {"type":"result-item","current":1,"total":2,"status":"1 / 2","error":"SSIS-001 skipped"}\n\n',
-            'data: {"type":"result-item","current":2,"total":2,"status":"2 / 2"}\n\n',
-            'data: {"type":"done","message":"Plots done (2)"}\n\n',
-          ]);
-        }
-        if (opts.path == '/api/gallery/missing-check') {
+        if (opts.path == '/api/gallery/backfill-elements/sources') {
           return _jsonResponse({
             'success': true,
-            'data': {
-              'total_missing': 1,
-              'missing_plots': 2,
-              'untranslated_titles': 3,
-              'missing_samples': 4,
-              'pending_plot_translations': [],
+            'sources': {
+              'cover': [{'id': 'javbus', 'label': 'JavBus'}],
+              'plot': [{'id': 'dmm', 'label': 'DMM'}],
+              'samples': [],
+              'tags': [{'id': 'jable', 'label': 'Jable'}],
             },
           });
+        }
+        if (opts.path == '/api/gallery/backfill-elements') {
+          expect(opts.method, 'POST');
+          expect(opts.data, {'sources': {'cover': 'javbus', 'plot': 'dmm', 'tags': 'jable'}});
+          return _sseResponse([
+            'data: {"type":"result-item","current":1,"total":2,"error":"SSIS-001 skipped"}\n\n',
+            'data: {"type":"done","summary":{"success":2,"failed":1,"skipped":3}}\n\n',
+          ]);
         }
         if (opts.path == '/api/insights/snapshot') {
           return _jsonResponse({
@@ -956,14 +956,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('42 videos (+3 / ~2 / -1)'), findsOneWidget);
 
-    // Scanner: Backfill Plots consumes `result-item` progress & error logs cleanly
-    await tester.tap(find.text('Backfill Plots'));
-    await tester.pumpAndSettle();
-    expect(find.text('100%'), findsOneWidget);
-    expect(find.text('SSIS-001 skipped'), findsOneWidget);
-    expect(find.text('Plots done (2)'), findsOneWidget);
-
-    // Scanner: Batch Fetch / Replace Tags opens source picker and streams /api/gallery/tag-source-update
     final scannerScroll = tester.state<ScrollableState>(find.byType(Scrollable).first).position;
     // Scroll the page directly because dragging its center can hit the task log.
     Future<void> showScannerItem(Finder item) async {
@@ -975,6 +967,27 @@ void main() {
       await tester.ensureVisible(item.first);
     }
 
+    await showScannerItem(find.text('Metadata Backfill'));
+    await tester.tap(find.text('Metadata Backfill'));
+    await tester.pumpAndSettle();
+    for (final (field, source) in [('cover', 'JavBus'), ('plot', 'DMM'), ('tags', 'Jable')]) {
+      await tester.tap(find.byKey(ValueKey(field)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(source).last);
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('Fill Missing Fields'));
+    await tester.pumpAndSettle();
+    scannerScroll.jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(find.text('100%'), findsOneWidget);
+    expect(find.text('SSIS-001 skipped'), findsOneWidget);
+    expect(find.text('2 filled, 1 failed, 3 skipped'), findsOneWidget);
+
+    // Existing tag replacement is a separate advanced maintenance action.
+    await showScannerItem(find.text('Maintenance & Aliases'));
+    await tester.tap(find.text('Maintenance & Aliases'));
+    await tester.pumpAndSettle();
     await showScannerItem(find.text('Batch Fetch / Replace Tags'));
     await tester.tap(find.text('Batch Fetch / Replace Tags').first);
     await tester.pumpAndSettle();

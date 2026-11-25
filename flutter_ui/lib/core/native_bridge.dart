@@ -116,6 +116,24 @@ class BuiltInPlayerPart {
   }
 }
 
+class LatestPlayback {
+  const LatestPlayback({
+    required this.path,
+    required this.title,
+    required this.partLabel,
+    required this.partIndex,
+    required this.position,
+    required this.revision,
+  });
+
+  final String path;
+  final String title;
+  final String partLabel;
+  final int partIndex;
+  final Duration position;
+  final int revision;
+}
+
 typedef BuiltInPlayerCallback = void Function(
   String path,
   int part,
@@ -192,11 +210,49 @@ class NativeBridge {
     }
   }
 
-  Future<void> savePlaybackPosition(String path, Duration position) async {
+  Future<LatestPlayback?> readLatestPlayback() async {
+    try {
+      final raw = await _channel.invokeMapMethod<Object?, Object?>('readLatestPlayback');
+      final path = raw?['path'];
+      final milliseconds = raw?['milliseconds'];
+      final revision = raw?['revision'];
+      if (path is! String || path.isEmpty || milliseconds is! int ||
+          milliseconds <= 0 || revision is! int) {
+        return null;
+      }
+      return LatestPlayback(
+        path: path,
+        position: Duration(milliseconds: milliseconds),
+        revision: revision,
+        title: raw?['title'] as String? ?? '',
+        partLabel: raw?['partLabel'] as String? ?? '',
+        partIndex: raw?['partIndex'] as int? ?? 0,
+      );
+    } catch (error) {
+      debugPrint('Unable to read latest playback: ${error.runtimeType}');
+      return null;
+    }
+  }
+
+  Future<bool> removeLatestPlayback(LatestPlayback entry) async {
+    return await _channel.invokeMethod<bool>('removeLatestPlayback', {
+      'path': entry.path,
+      'revision': entry.revision,
+    }) == true;
+  }
+
+  Future<void> savePlaybackPosition(String path, Duration position, {
+    String? title,
+    String? partLabel,
+    int? partIndex,
+  }) async {
     try {
       await _channel.invokeMethod<void>('savePlaybackPosition', {
         'path': path,
         'milliseconds': position.inMilliseconds,
+        'title': ?title,
+        'partLabel': ?partLabel,
+        'partIndex': ?partIndex,
       });
     } catch (error) {
       debugPrint('Unable to save playback position: ${error.runtimeType}');

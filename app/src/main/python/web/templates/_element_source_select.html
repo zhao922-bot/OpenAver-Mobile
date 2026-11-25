@@ -1,0 +1,7 @@
+<select id="element-{{ field }}" class="select select-bordered w-full"
+        x-model="elementSelection.{{ field }}">
+    <option value="">{{ t('scanner.elements.skip') }}</option>
+    <template x-for="source in (elementOptions.{{ field }} || [])" :key="source.id">
+        <option :value="source.id" x-text="source.label"></option>
+    </template>
+</select>

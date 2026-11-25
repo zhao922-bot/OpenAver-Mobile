@@ -205,18 +205,18 @@ def test_showcase_pagination_reuses_in_memory_group_cache_and_invalidates_on_db_
     showcase_router._clear_showcase_groups_cache()
 
     calls = 0
-    original_get_showcase_rows = VideoRepository.get_showcase_rows
+    original_get_showcase_browse_rows = VideoRepository.get_showcase_browse_rows
 
-    def counting_get_showcase_rows(self, configured_dir_uris, actress_names=None):
+    def counting_get_showcase_browse_rows(self, configured_dir_uris, actress_names=None):
         nonlocal calls
         calls += 1
-        return original_get_showcase_rows(self, configured_dir_uris, actress_names)
+        return original_get_showcase_browse_rows(self, configured_dir_uris, actress_names)
 
-    monkeypatch.setattr(VideoRepository, "get_showcase_rows", counting_get_showcase_rows)
+    monkeypatch.setattr(VideoRepository, "get_showcase_browse_rows", counting_get_showcase_browse_rows)
     monkeypatch.setattr(
         showcase_router,
-        "_DEFAULT_GET_SHOWCASE_ROWS",
-        counting_get_showcase_rows,
+        "_DEFAULT_GET_SHOWCASE_BROWSE_ROWS",
+        counting_get_showcase_browse_rows,
     )
 
     page_1 = json.loads(

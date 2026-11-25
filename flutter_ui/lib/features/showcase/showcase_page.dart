@@ -12,6 +12,7 @@ import '../../core/models/video_item.dart';
 import '../shared/openaver_image.dart';
 import '../shared/prompt_dialog.dart';
 import 'actress_detail_page.dart';
+import 'continue_watching_tile.dart';
 import 'video_detail_sheet.dart';
 
 class ShowcasePage extends ConsumerStatefulWidget {
@@ -754,6 +755,11 @@ class _ShowcasePageState extends ConsumerState<ShowcasePage> {
               ),
             ),
 
+            if (!_loading && !_actressMode && !_favoritesOnly &&
+                actressFilter == null && tagFilter == null &&
+                _searchCtrl.text.trim().isEmpty && ref.watch(activeTabProvider) == 0 &&
+                ModalRoute.isCurrentOf(context) == true)
+              ContinueWatchingTile(key: ValueKey((api, _loadCancel)), api: api),
             Expanded(
               child: LayoutBuilder(
                 builder: (_, constraints) {

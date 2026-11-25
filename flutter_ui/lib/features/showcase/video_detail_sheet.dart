@@ -9,6 +9,7 @@ import '../../core/l10n.dart';
 import '../../core/models/video_item.dart';
 import '../../core/native_bridge.dart';
 import '../player/builtin_player_page.dart';
+import '../scanner/metadata_source_sheet.dart';
 import '../shared/openaver_image.dart';
 import '../shared/prompt_dialog.dart';
 import 'sample_gallery_viewer.dart';
@@ -102,6 +103,7 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
     }
 
     final current = _videos[_currentIndex];
+    final notifyUpdated = widget.onVideoUpdated;
     return Scaffold(
       backgroundColor: palette.canvas,
       appBar: AppBar(
@@ -141,7 +143,7 @@ class _VideoDetailPageState extends ConsumerState<VideoDetailPage> {
                 final index = _videos.indexWhere((video) => video.path == updated.path);
                 if (index != -1) setState(() => _videos[index] = updated);
               }
-              widget.onVideoUpdated(updated);
+              notifyUpdated(updated);
             },
             onDeleted: (deletedPath) {
               widget.onVideoDeleted(deletedPath);
@@ -200,7 +202,16 @@ class _VideoDetailBody extends ConsumerStatefulWidget {
   ConsumerState<_VideoDetailBody> createState() => _VideoDetailBodyState();
 }
 
-class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
+class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody>
+    with AutomaticKeepAliveClientMixin {
+  bool _rescraping = false;
+  bool _pickerOpen = false;
+  String? _rescrapeStatus;
+  int _plotRequest = 0;
+
+  @override
+  bool get wantKeepAlive => _rescraping;
+
   // Dedicated ScrollController per video keeps sample scrolling reset to 0.0
   // on video transitions and prevents nested gesture leaks into the outer PageView.
   late final ScrollController _samplesScroll;
@@ -255,6 +266,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
   }
 
   Future<void> _loadPlot() async {
+    final request = ++_plotRequest;
     final api = ref.read(apiClientProvider);
     setState(() {
       _plotLoading = true;
@@ -265,7 +277,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
         '/api/showcase/video/plot',
         queryParameters: {'file_path': widget.video.path},
       );
-      if (!mounted) return;
+      if (!mounted || request != _plotRequest) return;
       if (resp['success'] == true) {
         setState(() {
           _plotText = (resp['plot'] as String?) ?? '';
@@ -282,7 +294,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
       }
     } catch (e) {
       debugPrint('loadPlot error: $e');
-      if (!mounted) return;
+      if (!mounted || request != _plotRequest) return;
       setState(() {
         _plotError = e.toString();
         _plotLoading = false;
@@ -700,27 +712,150 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
   }
 
   Future<void> _openRescrapeDialog() async {
-    final strings = ref.read(stringsProvider);
+    if (_rescraping || _pickerOpen) return;
     final api = ref.read(apiClientProvider);
-    final updated = await showModalBottomSheet<VideoItem>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => _RescrapeSheet(
-        api: api,
-        strings: strings,
-        video: widget.video,
-      ),
-    );
-    if (updated != null && mounted) {
-      await OpenAverNetworkImage.evictUrl(api, widget.video.coverUrl);
-      await OpenAverNetworkImage.evictUrl(api, widget.video.coverFullUrl);
-      await OpenAverNetworkImage.evictUrl(api, updated.coverUrl);
-      await OpenAverNetworkImage.evictUrl(api, updated.coverFullUrl);
-      if (!mounted) return;
-      widget.onUpdated(updated);
-      _showToast(strings.rescrapeUpdated);
+    final strings = ref.read(stringsProvider);
+    final video = widget.video;
+    final notifyUpdated = widget.onUpdated;
+    _pickerOpen = true;
+    SourceSelection? selected;
+    try {
+      selected = await showModalBottomSheet<SourceSelection>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (_) => MetadataSourceSheet(
+          api: api,
+          strings: strings,
+          videoLabel: video.number.isNotEmpty
+              ? video.number
+              : video.title.isNotEmpty ? video.title : video.path,
+        ),
+      );
+    } finally {
+      _pickerOpen = false;
     }
+    if (selected == null || selected.isEmpty || !mounted ||
+        !widget.isCurrentVideo() || ref.read(apiClientProvider) != api) {
+      return;
+    }
+    final sources = selected;
+    setState(() {
+      _rescraping = true;
+      _rescrapeStatus = strings.requesting;
+    });
+    updateKeepAlive();
+    final changed = <MetadataField>{};
+    final failures = <String>{};
+    String? summaryText;
+    bool finished = false;
+    bool streamError = false;
+    void recordFailure(Map item) {
+      final reason = item['error']?.toString();
+      if (reason == null || reason.isEmpty) return;
+      final field = MetadataField.values.asNameMap()[item['element']];
+      final source = sources[field]?.label ?? item['source'];
+      failures.add([field?.label(strings), source, reason].whereType<String>().join(' · '));
+    }
+    try {
+      await for (final event in api.streamSse(
+        '/api/gallery/rescrape-elements',
+        method: 'POST',
+        data: {'file_path': video.path, 'sources': {
+          for (final entry in sources.entries) entry.key.name: entry.value.id,
+        }},
+      )) {
+        if (finished || streamError) continue;
+        final data = event.data;
+        final field = MetadataField.values.asNameMap()[data['element']];
+        if (event.type == 'result-item') {
+          if (field != null && sources.containsKey(field) &&
+              (data['success'] == true || data['partial'] == true)) {
+            changed.add(field);
+          }
+          recordFailure(data);
+        } else if (event.type == 'progress' && mounted && field != null) {
+          setState(() => _rescrapeStatus = '${field.label(strings)} · ${sources[field]?.label ?? ''}');
+        } else if (event.type == 'error') {
+          streamError = true;
+          failures.add((data['error'] ?? data['message'] ?? strings.taskStreamInterrupted).toString());
+          if (data['rejected'] == true) finished = true;
+        } else if (event.type == 'done' && data['summary'] is Map) {
+          final summary = data['summary'] as Map;
+          final counts = summary['fields_filled'];
+          if (counts is Map) {
+            for (final field in sources.keys) {
+              final count = counts[field.name];
+              if (count is num && count > 0) changed.add(field);
+            }
+          }
+          if (summary['failed_items'] case final List items) {
+            for (final item in items.whereType<Map>()) {
+              recordFailure(item);
+            }
+          }
+          summaryText = strings.rescrapeSummary(changed.length,
+              (summary['failed'] as num?)?.toInt() ?? failures.length,
+              (summary['skipped'] as num?)?.toInt() ?? 0);
+          if (data['cancelled'] == true) failures.add(strings.taskCancelled);
+          finished = true;
+        }
+      }
+      if (!finished && !streamError) failures.add(strings.taskStreamInterrupted);
+    } catch (e) {
+      failures.add(strings.requestFailed('$e'));
+    }
+    // Confirmed writes stay attached to the original path even if its page closes.
+    // A lost stream may have committed a field before its result reached us.
+    if (changed.isNotEmpty || !finished) {
+      try {
+        await _refreshRescrapedVideo(
+          api: api,
+          strings: strings,
+          video: video,
+          fields: finished ? changed : sources.keys.toSet(),
+          notifyUpdated: notifyUpdated,
+        );
+      } catch (e) {
+        failures.add(strings.requestFailed('$e'));
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _rescraping = false;
+      _rescrapeStatus = [?summaryText, ...failures].join('\n');
+    });
+    updateKeepAlive();
+  }
+
+  Future<void> _refreshRescrapedVideo({
+    required ApiClient api,
+    required AppStrings strings,
+    required VideoItem video,
+    required Set<MetadataField> fields,
+    required ValueChanged<VideoItem> notifyUpdated,
+  }) async {
+    final response = await api.getJson(
+      '/api/showcase/video',
+      queryParameters: {'path': video.path},
+    );
+    final row = response['video'];
+    if (response['success'] != true || row is! Map<String, dynamic> || row['path'] != video.path) {
+      throw StateError((response['error'] ?? strings.loadLibraryFailed).toString());
+    }
+    final updated = VideoItem.fromJson(row);
+    final images = <String>{
+      if (fields.contains(MetadataField.cover)) ...[
+        video.coverUrl, video.coverFullUrl, updated.coverUrl, updated.coverFullUrl,
+      ],
+      if (fields.contains(MetadataField.samples)) ...[
+        ...video.sampleImages, ...updated.sampleImages,
+      ],
+    };
+    await Future.wait(images.map((url) => OpenAverNetworkImage.evictUrl(api, url)));
+    if (mounted && ref.read(apiClientProvider) != api) return;
+    notifyUpdated(updated);
+    if (mounted && fields.contains(MetadataField.plot)) await _loadPlot();
   }
 
   Future<void> _confirmDelete() async {
@@ -787,6 +922,7 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final api = ref.watch(apiClientProvider);
     final strings = ref.watch(stringsProvider);
     final palette = OpenAverPalette.of(context);
@@ -970,9 +1106,9 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
           runSpacing: 8,
           children: [
             ActionChip(
-              avatar: const Icon(Icons.auto_fix_high_rounded, size: 16),
+              avatar: Icon(_rescraping ? Icons.hourglass_top : Icons.auto_fix_high_rounded, size: 16),
               label: Text(strings.rescrape),
-              onPressed: _openRescrapeDialog,
+              onPressed: _rescraping ? null : _openRescrapeDialog,
             ),
             ActionChip(
               avatar: const Icon(Icons.crop_rounded, size: 16),
@@ -993,6 +1129,8 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
             ),
           ],
         ),
+        if (_rescrapeStatus != null)
+          Semantics(liveRegion: true, child: Text(_rescrapeStatus!)),
         const SizedBox(height: 14),
 
         Container(
@@ -1210,13 +1348,15 @@ class _VideoDetailBodyState extends ConsumerState<_VideoDetailBody> {
         ),
 
         const SizedBox(height: 16),
-        Row(
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
           children: [
             Text(
               '${strings.sampleImages} (${v.sampleImages.length})',
               style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary),
             ),
-            const Spacer(),
             TextButton.icon(
               onPressed: _fetchingSamples ? null : _fetchSamples,
               icon: _fetchingSamples
@@ -1723,249 +1863,6 @@ class _FocalCropSheetState extends State<_FocalCropSheet> {
                     child: Text(_saving ? widget.strings.saving : widget.strings.focalSaveBtn),
                   ),
                 ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RescrapeSheet extends StatefulWidget {
-  const _RescrapeSheet({
-    required this.api,
-    required this.strings,
-    required this.video,
-  });
-
-  final ApiClient api;
-  final AppStrings strings;
-  final VideoItem video;
-
-  @override
-  State<_RescrapeSheet> createState() => _RescrapeSheetState();
-}
-
-class _RescrapeSheetState extends State<_RescrapeSheet> {
-  late final TextEditingController _numCtrl;
-  String _source = 'auto';
-  bool _loading = false;
-  Map<String, dynamic>? _preview;
-  List<Map<String, dynamic>> _candidates = const [];
-  int _selectedCandidateIdx = 0;
-  String? _statusError;
-
-  @override
-  void initState() {
-    super.initState();
-    _numCtrl = TextEditingController(text: widget.video.number);
-  }
-
-  @override
-  void dispose() {
-    _numCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _doPreview() async {
-    setState(() {
-      _loading = true;
-      _statusError = null;
-    });
-    try {
-      final resp = await widget.api.postJson('/api/rescrape/preview', data: {
-        'number': _numCtrl.text.trim(),
-        'source': _source,
-      });
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        if (resp['success'] == true) {
-          final rawCands = (resp['candidates'] as List?)
-              ?.whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList();
-          if (rawCands != null && rawCands.isNotEmpty) {
-            _candidates = rawCands;
-            _selectedCandidateIdx = 0;
-            _preview = rawCands.first;
-          } else {
-            _candidates = const [];
-            _selectedCandidateIdx = 0;
-            _preview = resp;
-          }
-        } else {
-          _candidates = const [];
-          _preview = null;
-          _statusError = (resp['detail'] ?? resp['error'] ?? widget.strings.rescrapeNotFound).toString();
-        }
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _statusError = e.toString();
-      });
-    }
-  }
-
-  Future<void> _doApply() async {
-    final chosen = _preview;
-    if (chosen == null) return;
-    setState(() {
-      _loading = true;
-      _statusError = null;
-    });
-    try {
-      final targetNumber = _numCtrl.text.trim();
-      final cleanMetadata = Map<String, dynamic>.from(chosen)
-        ..remove('success')
-        ..remove('candidates');
-      final resp = await widget.api.postJson('/api/enrich-single', data: {
-        'file_path': widget.video.path,
-        'number': targetNumber,
-        'source': _source,
-        'mode': 'refresh_full',
-        'metadata': cleanMetadata,
-        'write_cover': true,
-        'overwrite_existing': true,
-        'allow_number_change':
-            targetNumber.toUpperCase() != widget.video.number.toUpperCase(),
-      });
-      if (!mounted) return;
-      if (resp['success'] == true) {
-        VideoItem updated = widget.video;
-        final fresh = await widget.api.getJson(
-          '/api/showcase/video',
-          queryParameters: {'path': widget.video.path},
-        );
-        if (fresh['success'] == true && fresh['video'] is Map) {
-          updated = VideoItem.fromJson(Map<String, dynamic>.from(fresh['video'] as Map));
-        }
-        if (mounted) Navigator.of(context).pop(updated);
-      } else {
-        setState(() {
-          _loading = false;
-          _statusError =
-              (resp['detail'] ?? resp['error'] ?? resp['reason'] ?? widget.strings.saveFailed).toString();
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _statusError = e.toString();
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = widget.strings;
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        16,
-        16,
-        MediaQuery.of(context).viewInsets.bottom + 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(strings.rescrape, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _numCtrl,
-                  decoration: InputDecoration(labelText: strings.numberLabel),
-                ),
-              ),
-              const SizedBox(width: 10),
-              DropdownButton<String>(
-                value: _source,
-                items: [
-                  DropdownMenuItem(value: 'auto', child: Text(strings.autoLabel)),
-                  const DropdownMenuItem(value: 'javbus', child: Text('JavBus')),
-                  const DropdownMenuItem(value: 'javdb', child: Text('JavDB')),
-                  const DropdownMenuItem(value: 'dmm', child: Text('DMM')),
-                  const DropdownMenuItem(value: 'jav321', child: Text('Jav321')),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _source = v);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_statusError != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(_statusError!, style: const TextStyle(color: Colors.redAccent)),
-            ),
-          if (_candidates.length > 1)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: List.generate(_candidates.length, (i) {
-                  final c = _candidates[i];
-                  final label = (c['date'] ?? c['maker'] ?? '#${i + 1}').toString();
-                  return ChoiceChip(
-                    label: Text('#${i + 1} $label', style: const TextStyle(fontSize: 11.5)),
-                    selected: _selectedCandidateIdx == i,
-                    visualDensity: VisualDensity.compact,
-                    onSelected: (_) => setState(() {
-                      _selectedCandidateIdx = i;
-                      _preview = _candidates[i];
-                    }),
-                  );
-                }),
-              ),
-            ),
-          if (_preview != null)
-            Container(
-              padding: const EdgeInsets.all(10),
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white24),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    (_preview!['title'] ?? '').toString(),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${strings.makerLabel}: ${_preview!['maker'] ?? '-'} · ${strings.releaseLabel}: ${_preview!['date'] ?? '-'}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _loading ? null : _doPreview,
-                  child: Text(_loading ? strings.requesting : strings.previewRescrape),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton(
-                  onPressed: (_loading || _preview == null) ? null : _doApply,
-                  child: Text(strings.applyOverwrite),
-                ),
               ),
             ],
           ),
